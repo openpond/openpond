@@ -6,6 +6,8 @@ import type {
   HarnessHistoryPayload,
   HarnessHistoryPendingReview,
   HarnessHistoryReleaseSummary,
+  RefinerHistoryPayload,
+  RefinerRelease,
 } from "@openpond/contracts";
 
 import { api, type ClientConnection } from "../../api";
@@ -14,6 +16,7 @@ import { AppDialog } from "../dialogs/AppDialog";
 import { Check, Columns2, Eye, MessageSquare, RotateCcw, X } from "../icons";
 import { HarnessEvaluationReviewSettings } from "./HarnessEvaluationReviewSettings";
 import type { HarnessReleaseDiffSelection } from "./HarnessReleaseDiffSidebar";
+import { RefinerProfileSettings } from "./RefinerProfileSettings";
 
 export type HarnessSettingsPage = "overview" | "refiner" | "continuous-review" | "contents" | "releases";
 
@@ -25,6 +28,7 @@ type Props = {
   onDefaultReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
   onOpenReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
   onOpenSourceSession?: (sessionId: string) => void;
+  onStartRefinerAuthoring?: (objective: string) => void;
   onAcceptEvaluationReview: (
     workspaceId: string,
     review: { id: string; contentHash: string },
@@ -269,16 +273,30 @@ function OverviewPage({
 
 function RefinerPage({
   history,
+  refiner,
+  busyReleaseHash,
+  onRequestRefinerRelease,
+  onStartRefinerAuthoring,
   onOpenChangeDiff,
   onOpenSourceSession,
 }: {
   history: HarnessHistoryPayload;
+  refiner: RefinerHistoryPayload;
+  busyReleaseHash: string | null;
+  onRequestRefinerRelease: (release: RefinerRelease, operation: "activate" | "rollback") => void;
+  onStartRefinerAuthoring?: (objective: string) => void;
   onOpenChangeDiff: (change: HarnessHistoryChange) => void;
   onOpenSourceSession?: (sessionId: string) => void;
 }) {
   const [detailsChange, setDetailsChange] = useState<HarnessHistoryChange | null>(null);
   return (
     <div className="harness-page-sections">
+      <RefinerProfileSettings
+        busyReleaseHash={busyReleaseHash}
+        history={refiner}
+        onRequestRelease={onRequestRefinerRelease}
+        onStartAuthoring={onStartRefinerAuthoring}
+      />
       <section className="harness-history-section">
         <div className="harness-section-heading"><div><h2>Applied changes</h2><p>Every release transition with exact edits and validation receipts.</p></div><span>{history.changes.length}</span></div>
         {history.changes.length ? (
@@ -421,10 +439,13 @@ export function HarnessHistorySettingsSection({
   onDefaultReleaseDiff,
   onOpenReleaseDiff,
   onOpenSourceSession,
+  onStartRefinerAuthoring,
   onToast,
   page,
 }: Props) {
   const [history, setHistory] = useState<HarnessHistoryPayload | null>(null);
+  const [refinerHistory, setRefinerHistory] = useState<RefinerHistoryPayload | null>(null);
+  const [refinerRollbackHash, setRefinerRollbackHash] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [rollbackHash, setRollbackHash] = useState<string | null>(null);
   const [reviewingProposalId, setReviewingProposalId] = useState<string | null>(null);
@@ -450,8 +471,12 @@ export function HarnessHistorySettingsSection({
     if (!connection) return;
     setLoading(true);
     try {
-      const payload = await api.harnessHistory(connection);
+      const [payload, refinerPayload] = await Promise.all([
+        api.harnessHistory(connection),
+        api.refinerHistory(connection),
+      ]);
       setHistory(payload);
+      setRefinerHistory(refinerPayload);
       const currentIndex = payload.releases.findIndex((release) => release.current);
       const currentRelease = currentIndex >= 0 ? payload.releases[currentIndex] : null;
       if (payload.workspace && currentRelease) {
@@ -570,6 +595,33 @@ export function HarnessHistorySettingsSection({
     if (confirmed) await rollback(release);
   }, [confirmAction, rollback]);
 
+  const requestRefinerRelease = useCallback(async (release: RefinerRelease, operation: "activate" | "rollback") => {
+    if (!connection) return;
+    const confirmed = await confirmAction({
+      title: operation === "activate" ? "Activate Refiner release?" : "Roll back Refiner release?",
+      body: `Future reviews will use ${release.profile.name} at ${shortHash(release.contentHash)}. Existing work remains pinned.`,
+      confirmLabel: operation === "activate" ? "Activate" : "Roll back",
+    });
+    if (!confirmed) return;
+    setRefinerRollbackHash(release.contentHash);
+    try {
+      const request = {
+        release: { id: release.id, contentHash: release.contentHash },
+        reason: `${operation === "activate" ? "Activate" : "Rollback"} from Settings to ${release.profile.id}@${release.profile.version}.`,
+        actor: "settings-user",
+      };
+      setRefinerHistory(await (operation === "activate"
+        ? api.activateRefinerRelease(connection, request)
+        : api.rollbackRefinerRelease(connection, request)));
+      onError(null);
+      onToast?.(`Refiner ${operation === "activate" ? "activated" : "rolled back"}. Existing work remains pinned.`, "success");
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRefinerRollbackHash(null);
+    }
+  }, [confirmAction, connection, onError, onToast]);
+
   const reviewProposal = useCallback(async (review: HarnessHistoryPendingReview, decision: "approve" | "decline") => {
     if (!connection || !history?.workspace) return;
     setReviewingProposalId(review.proposal.id);
@@ -625,7 +677,7 @@ export function HarnessHistorySettingsSection({
       {history && !history.workspace ? <div className="harness-empty">No Personal Harness workspace has been created yet.</div> : null}
 
       {history?.workspace && page === "overview" ? <OverviewPage history={history} onReviewProposal={reviewProposal} reviewingProposalId={reviewingProposalId} /> : null}
-      {history?.workspace && page === "refiner" ? <RefinerPage history={history} onOpenChangeDiff={openChangeDiff} onOpenSourceSession={onOpenSourceSession} /> : null}
+      {history && refinerHistory && page === "refiner" ? <RefinerPage busyReleaseHash={refinerRollbackHash} history={history} refiner={refinerHistory} onOpenChangeDiff={openChangeDiff} onOpenSourceSession={onOpenSourceSession} onRequestRefinerRelease={(release, operation) => void requestRefinerRelease(release, operation)} onStartRefinerAuthoring={onStartRefinerAuthoring} /> : null}
       {history?.workspace && page === "continuous-review" ? (
         <HarnessEvaluationReviewSettings
           acceptingReviewId={acceptingEvaluationReviewId}

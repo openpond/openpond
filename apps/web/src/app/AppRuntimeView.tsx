@@ -518,6 +518,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     },
     [beginNewChat, setSidebarOpen]
   );
+  const startRefinerAuthoring = useCallback((objective: string) => {
+    beginNewChat(null);
+    setDraftExperience("work");
+    composerDraftStore.set(`/refiner ${objective}`);
+    setView("chat");
+    setSidebarOpen(true);
+  }, [beginNewChat, composerDraftStore, setDraftExperience, setSidebarOpen, setView]);
   const openExtensionFromSettings = useCallback(
     (extension: OpenPondExtension) => {
       setPendingExtensionSkillSidebar(extensionSourceSelection(extension));
@@ -693,6 +700,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             onError: setError,
             onToast: showToast,
             onOpenSourceSession: openSessionInChat,
+            onStartRefinerAuthoring: startRefinerAuthoring,
             onAcceptEvaluationReview: acceptHarnessEvaluationReview,
             onOpenSkill: openSkillFromSettings,
             onOpenExtension: openExtensionFromSettings,

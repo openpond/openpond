@@ -36,6 +36,12 @@ import {
 } from "./harness/local-harness-history.js";
 import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
 import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
+import {
+  activateRefinerRelease,
+  inspectRefinerProfile,
+  rollbackRefinerRelease,
+  updateRefinerProfile,
+} from "./refiner/refiner-profile-service.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
 import { listAppServerIntegrationConnections } from "./openpond/app-server-connected-apps.js";
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
@@ -297,7 +303,7 @@ export async function createOpenPondAppServer(
       loadLocalHarnessRuntimeForAgentRun(store, session.id),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
-    harnessModelTools: createLocalHarnessModelToolDefinitions({ store }),
+    harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }),
     loadBuiltInOpenPondSkills: loadBundledAuthoringSkills,
     readBuiltInOpenPondSkill: async (name) => {
       if (!isBundledAuthoringSkillName(name)) {
@@ -398,6 +404,10 @@ export async function createOpenPondAppServer(
         harnessSettings.updateHarnessBackgroundReviewPayload,
       diffHarness: harnessSettings.harnessDiffPayload,
       rollbackHarness: harnessSettings.rollbackHarnessPayload,
+      inspectRefiner: () => inspectRefinerProfile(storeDir),
+      updateRefiner: (payload) => updateRefinerProfile(storeDir, payload),
+      activateRefiner: (payload) => activateRefinerRelease(storeDir, payload),
+      rollbackRefiner: (payload) => rollbackRefinerRelease(storeDir, payload),
       subscribeRuntimeEvents,
       observeRuntimeOperation: (runtimeEvent) => {
         logger.info("agent runtime operation", runtimeEvent);

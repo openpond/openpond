@@ -83,6 +83,10 @@ export type HttpRouteDeps = {
   harnessDiffPayload: (payload: unknown) => Promise<unknown>;
   rollbackHarnessPayload: (payload: unknown) => Promise<unknown>;
   reviewHarnessProposalPayload: (payload: unknown) => Promise<unknown>;
+  refinerHistoryPayload: () => Promise<unknown>;
+  updateRefinerProfilePayload: (payload: unknown) => Promise<unknown>;
+  activateRefinerReleasePayload: (payload: unknown) => Promise<unknown>;
+  rollbackRefinerReleasePayload: (payload: unknown) => Promise<unknown>;
   listHostedSavedWorkPayload: () => Promise<unknown>;
   createHostedSavedWorkPayload: (payload: unknown) => Promise<unknown>;
   updateHostedSavedWorkPayload: (

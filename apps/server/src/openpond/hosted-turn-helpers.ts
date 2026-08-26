@@ -279,7 +279,7 @@ function buildOpenPondCapabilityIndexContext(
   return [
     "OpenPond capabilities:",
     "- workspace_context: use resource_search and resource_read for workspace, session, artifact, goal, sandbox, and git context.",
-    "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn. For matching natural-language authoring requests, load the relevant bundled profile skill from the catalog.",
+    "- authoring_skills: /skill preloads openpond-skill-authoring, /agent preloads openpond-agent-authoring, and /refiner preloads openpond-refiner-authoring into a normal model turn. For matching natural-language authoring requests, load the relevant bundled profile skill from the catalog.",
     ...(input.hybridWorkspace
       ? [
           "- In Hybrid workspace mode, use the ordinary scoped workspace capabilities exposed for that turn; authoring skills do not grant new filesystem authority.",

@@ -33,6 +33,10 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   updateHarnessBackgroundReview(payload: unknown): Promise<unknown>;
   diffHarness(payload: unknown): Promise<unknown>;
   rollbackHarness(payload: unknown): Promise<unknown>;
+  inspectRefiner(): Promise<unknown>;
+  updateRefiner(payload: unknown): Promise<unknown>;
+  activateRefiner(payload: unknown): Promise<unknown>;
+  rollbackRefiner(payload: unknown): Promise<unknown>;
   subscribeEvents?(listener: (event: TEvent) => void): () => void;
   eventNotification?(event: TEvent): JsonRpcNotification;
   telemetry?(event: AgentRuntimeTelemetryEvent): void;
@@ -45,7 +49,8 @@ export type AgentRuntimeTelemetryEvent = {
     "harness/review" | "harness/acceptEvaluationReview" |
     "harness/materializeEvaluationTaskset" | "harness/runEvaluationBaseline" |
     "harness/validate" |
-    "harness/backgroundReview" | "harness/diff" | "harness/rollback";
+    "harness/backgroundReview" | "harness/diff" | "harness/rollback" |
+    "refiner/inspect" | "refiner/update" | "refiner/activate" | "refiner/rollback";
   phase: "started" | "completed" | "failed";
   threadId: string | null;
   durationMs: number | null;
@@ -163,6 +168,10 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
       run("harness/diff", null, () => ports.diffHarness(params)),
     harnessRollback: (params) =>
       run("harness/rollback", null, () => ports.rollbackHarness(params)),
+    refinerInspect: () => run("refiner/inspect", null, () => ports.inspectRefiner()),
+    refinerUpdate: (params) => run("refiner/update", null, () => ports.updateRefiner(params)),
+    refinerActivate: (params) => run("refiner/activate", null, () => ports.activateRefiner(params)),
+    refinerRollback: (params) => run("refiner/rollback", null, () => ports.rollbackRefiner(params)),
     subscribe: ports.subscribeEvents && ports.eventNotification
       ? (listener) => ports.subscribeEvents!((event) => listener(ports.eventNotification!(event)))
       : undefined,

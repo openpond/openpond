@@ -40,4 +40,8 @@ export class AgentRpcClient {
   harnessBackgroundReview = (params: unknown = {}) => this.#request("harness/backgroundReview", params);
   harnessDiff = (params: unknown = {}) => this.#request("harness/diff", params);
   harnessRollback = (params: unknown = {}) => this.#request("harness/rollback", params);
+  refinerInspect = (params: unknown) => this.#request("refiner/inspect", params);
+  refinerUpdate = (params: unknown) => this.#request("refiner/update", params);
+  refinerActivate = (params: unknown) => this.#request("refiner/activate", params);
+  refinerRollback = (params: unknown) => this.#request("refiner/rollback", params);
 }

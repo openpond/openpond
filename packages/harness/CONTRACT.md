@@ -31,7 +31,11 @@ improvement evidence, public provider-neutral Refiner and continuous-review
 policy, bounded cross-Work review decisions, tools, model identities, and
 traces. It also owns portable Refiner evidence bases, display-safe activity
 receipts, bounded cross-run candidate state, candidate lifecycle receipts, and
-continuation deduplication identity. Hosts provide authorized evidence and
+continuation deduplication identity. Review Profiles, Refiner releases,
+bindings, and transition receipts are portable contracts, but their storage,
+selection, activation policy, and rollback execution remain host-owned. A
+Harness release and a Refiner release are adjacent identities: neither embeds
+or mutates the other, and a review receipt pins both. Hosts provide authorized evidence and
 model adapters. Models decide semantic grouping and smallest-layer routing;
 deterministic package code owns schema, identity, bounds, and receipt
 invariants.

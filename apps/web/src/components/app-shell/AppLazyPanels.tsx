@@ -32,6 +32,7 @@ export function AppSettingsRoute({
   onToast,
   onBack,
   onOpenSourceSession,
+  onStartRefinerAuthoring,
   onAcceptEvaluationReview,
   onOpenSkill,
   onOpenExtension,
@@ -59,6 +60,7 @@ export function AppSettingsRoute({
         onToast={onToast}
         onBack={onBack}
         onOpenSourceSession={onOpenSourceSession}
+        onStartRefinerAuthoring={onStartRefinerAuthoring}
         onAcceptEvaluationReview={onAcceptEvaluationReview}
         onOpenSkill={onOpenSkill}
         onOpenExtension={onOpenExtension}

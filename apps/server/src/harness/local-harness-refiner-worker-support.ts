@@ -3,6 +3,8 @@ import type {
   HarnessRefinerOutcome,
   HarnessTargetedValidationReceipt,
   RefinementTriggerDecision,
+  HostedHarnessRefinerRequest,
+  HostedHarnessRefinerResponse,
 } from "@openpond/harness";
 import { stableId } from "@openpond/harness/refiner-support";
 
@@ -20,6 +22,36 @@ export {
   stableId,
   uniqueEventRefs,
 } from "@openpond/harness/refiner-support";
+
+export function assertHostedResponseBinding(
+  request: HostedHarnessRefinerRequest,
+  response: HostedHarnessRefinerResponse,
+): void {
+  if (
+    response.requestId !== request.requestId ||
+    response.evidenceHash !== request.evidenceHash ||
+    response.admittedRelease.id !== request.harness.admittedRelease.id ||
+    response.admittedRelease.contentHash !== request.harness.admittedRelease.contentHash ||
+    response.currentRelease.id !== request.harness.currentRelease.id ||
+    response.currentRelease.contentHash !== request.harness.currentRelease.contentHash
+  ) {
+    throw new Error("Managed Harness Refiner response binding does not match the request.");
+  }
+}
+
+export function refinerReleaseMetadata(release: {
+  id: string;
+  contentHash: string;
+  coreHash: string;
+  profileHash: string;
+}): Record<string, unknown> {
+  return {
+    id: release.id,
+    contentHash: release.contentHash,
+    coreHash: release.coreHash,
+    profileHash: release.profileHash,
+  };
+}
 
 export async function findRefinerOutcome(
   store: SqliteStore,

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const AGENT_PROTOCOL_VERSION = "2026-08-06";
+export const AGENT_PROTOCOL_VERSION = "2026-08-26";
 
 export const AGENT_RPC_METHODS = [
   "initialize",
@@ -24,6 +24,10 @@ export const AGENT_RPC_METHODS = [
   "harness/backgroundReview",
   "harness/diff",
   "harness/rollback",
+  "refiner/inspect",
+  "refiner/update",
+  "refiner/activate",
+  "refiner/rollback",
 ] as const;
 
 export type AgentRpcMethod = (typeof AGENT_RPC_METHODS)[number];
@@ -104,6 +108,10 @@ export type AgentRuntimeHost = {
   harnessBackgroundReview(params: unknown): Promise<unknown>;
   harnessDiff(params: unknown): Promise<unknown>;
   harnessRollback(params: unknown): Promise<unknown>;
+  refinerInspect(params: unknown): Promise<unknown>;
+  refinerUpdate(params: unknown): Promise<unknown>;
+  refinerActivate(params: unknown): Promise<unknown>;
+  refinerRollback(params: unknown): Promise<unknown>;
   subscribe?(listener: (notification: JsonRpcNotification) => void): () => void;
 };
 
@@ -186,6 +194,10 @@ export class AgentJsonRpcDispatcher {
       case "harness/backgroundReview": return this.#host.harnessBackgroundReview(params);
       case "harness/diff": return this.#host.harnessDiff(params);
       case "harness/rollback": return this.#host.harnessRollback(params);
+      case "refiner/inspect": return this.#host.refinerInspect(params);
+      case "refiner/update": return this.#host.refinerUpdate(params);
+      case "refiner/activate": return this.#host.refinerActivate(params);
+      case "refiner/rollback": return this.#host.refinerRollback(params);
       default: throw new JsonRpcDispatchError(-32601, `Method not found: ${method}`);
     }
   }

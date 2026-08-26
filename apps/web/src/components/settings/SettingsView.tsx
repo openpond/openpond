@@ -90,6 +90,7 @@ export function SettingsView({
   onToast,
   onBack,
   onOpenSourceSession,
+  onStartRefinerAuthoring,
   onAcceptEvaluationReview,
   onOpenSkill,
   onOpenExtension,
@@ -114,6 +115,7 @@ export function SettingsView({
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onBack: () => void;
   onOpenSourceSession?: (sessionId: string) => void;
+  onStartRefinerAuthoring?: (objective: string) => void;
   onAcceptEvaluationReview: (
     workspaceId: string,
     review: { id: string; contentHash: string },
@@ -306,6 +308,7 @@ export function SettingsView({
             onError={onError}
             onDefaultReleaseDiff={setHarnessDiffSelection}
             onOpenSourceSession={onOpenSourceSession}
+            onStartRefinerAuthoring={onStartRefinerAuthoring}
             onOpenReleaseDiff={(selection) => {
               setHarnessDiffSelection(selection);
               setHarnessDiffOpen(true);

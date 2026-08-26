@@ -14,6 +14,12 @@ export type AuthoringIntent =
       objective: string;
       targetAgentId: string | null;
       source: "slash_command" | "authoring_entry";
+    }
+  | {
+      artifact: "refiner";
+      operation: "update";
+      objective: string;
+      source: "slash_command";
     };
 
 export type AuthoringCommandRoute = {
@@ -22,7 +28,7 @@ export type AuthoringCommandRoute = {
 };
 
 export function authoringCommandRoute(prompt: string): AuthoringCommandRoute | null {
-  return skillAuthoringRoute(prompt) ?? agentAuthoringRoute(prompt);
+  return skillAuthoringRoute(prompt) ?? agentAuthoringRoute(prompt) ?? refinerAuthoringRoute(prompt);
 }
 
 export function authoringCommandRouteFromLegacyAgentRun(run: {
@@ -127,6 +133,22 @@ function agentAuthoringRoute(prompt: string): AuthoringCommandRoute | null {
       operation: "create",
       objective: objective || "Create a source-backed Profile Agent from the current conversation.",
       targetAgentId: null,
+      source: "slash_command",
+    },
+  };
+}
+
+function refinerAuthoringRoute(prompt: string): AuthoringCommandRoute | null {
+  const match = /^\/refiner(?:\s+([\s\S]*))?$/i.exec(prompt.trim());
+  if (!match) return null;
+  const objective = match[1]?.trim() ?? "";
+  if (!objective || objective === "help") return null;
+  return {
+    skillName: "openpond-refiner-authoring",
+    intent: {
+      artifact: "refiner",
+      operation: "update",
+      objective,
       source: "slash_command",
     },
   };

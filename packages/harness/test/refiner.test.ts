@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import {
   admitLocalHarnessRefinerDecision,
+  admitRefinerProfileDecision,
+  DEFAULT_REFINER_REVIEW_PROFILE,
   authorLocalHarnessRefinementWithModel,
   refinerMessages,
   type HarnessRefinerMessage,
@@ -98,6 +100,33 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("Quality grades are a separate safety gate");
     expect(system).toContain("Prefer subtractive changes");
     expect(system).toContain("Reject a broad quality guardrail");
+  });
+
+  test("composes Review Profile instructions and deterministically narrows routes", () => {
+    const profile = {
+      ...DEFAULT_REFINER_REVIEW_PROFILE,
+      id: "customer.review",
+      version: "2",
+      instructions: [{ id: "pdf-completion", text: "Treat unreadable requested PDFs as material evidence." }],
+      allowedProposalRoutes: ["prompt"] as Array<"memory" | "prompt" | "skill" | "agent">,
+    };
+    expect(refinerMessages(evidence, profile)[0]?.content).toContain(
+      "[pdf-completion] Treat unreadable requested PDFs as material evidence.",
+    );
+    expect(admitRefinerProfileDecision({
+      schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+      decision: "propose",
+      route: "skill",
+      operation: "create",
+      target: "skills/pdf/SKILL.md",
+      summary: "Add PDF guidance.",
+      evidenceBasis: { kind: "single_deterministic", supportingEvidenceIds: ["observation-1"], counterevidence: [] },
+      createContent: "PDF guidance",
+      find: null,
+      replace: null,
+      expectedOutcome: "Fewer PDF failures.",
+      reason: "The profile excludes Skill proposals.",
+    }, profile)).toMatchObject({ decision: "no_action" });
   });
 
   test("authors and repairs validated public decisions", async () => {

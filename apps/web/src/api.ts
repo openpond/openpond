@@ -40,6 +40,9 @@ import type {
   HarnessProposalReviewResponse,
   HarnessRollbackRequest,
   HarnessRollbackResponse,
+  RefinerHistoryPayload,
+  ActivateRefinerReleaseRequest,
+  UpdateRefinerProfileRequest,
   CreateHostedSavedWorkRequest,
   UpdateHostedSavedWorkRequest,
   LocalProject,
@@ -577,6 +580,23 @@ export const api = {
     apiFetch<WorkOutputsResponse>(connection, "/v1/work/outputs"),
   harnessHistory: (connection: ClientConnection) =>
     apiFetch<HarnessHistoryPayload>(connection, "/v1/harness"),
+  refinerHistory: (connection: ClientConnection) =>
+    apiFetch<RefinerHistoryPayload>(connection, "/v1/refiner"),
+  updateRefinerProfile: (connection: ClientConnection, input: UpdateRefinerProfileRequest) =>
+    apiFetch<RefinerHistoryPayload>(connection, "/v1/refiner/update", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  activateRefinerRelease: (connection: ClientConnection, input: ActivateRefinerReleaseRequest) =>
+    apiFetch<RefinerHistoryPayload>(connection, "/v1/refiner/activate", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  rollbackRefinerRelease: (connection: ClientConnection, input: ActivateRefinerReleaseRequest) =>
+    apiFetch<RefinerHistoryPayload>(connection, "/v1/refiner/rollback", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   updateHarnessBackgroundReview: (
     connection: ClientConnection,
     input: HarnessBackgroundReviewRequest,

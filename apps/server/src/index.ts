@@ -59,6 +59,7 @@ import {
 import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
 import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
 import { createLocalHarnessSettingsRoutePayloads } from "./harness/local-harness-history.js";
+import { createRefinerProfileRoutePayloads } from "./refiner/refiner-profile-service.js";
 import type {
   OpenPondServerInstance,
   OpenPondServerOptions,
@@ -798,7 +799,7 @@ export async function createOpenPondServer(
       loadLocalHarnessRuntimeForAgentRun(store, session.id),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
-    harnessModelTools: createLocalHarnessModelToolDefinitions({ store }),
+    harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }),
     processHarnessImprovementBoundary: processLocalHarnessImprovementBoundary,
     resolveCreateImproveTaskset: (
       tasksetId: string,
@@ -1648,11 +1649,8 @@ export async function createOpenPondServer(
     throw new Error(result.error);
   }
 
-  const harnessSettingsRoutes = createLocalHarnessSettingsRoutePayloads({
-    store,
-    storeDir,
-    evaluationReviewStream: harnessEvaluationReviewStream,
-  });
+  const harnessSettingsRoutes = createLocalHarnessSettingsRoutePayloads({ store, storeDir, evaluationReviewStream: harnessEvaluationReviewStream });
+  const refinerSettingsRoutes = createRefinerProfileRoutePayloads(storeDir);
   const harnessEvaluationReviewScheduler = createLocalHarnessEvaluationReviewScheduler({
     store,
     storeDir,
@@ -1715,6 +1713,7 @@ export async function createOpenPondServer(
         harnessSettingsRoutes.updateHarnessBackgroundReviewPayload,
       diffHarness: harnessSettingsRoutes.harnessDiffPayload,
       rollbackHarness: harnessSettingsRoutes.rollbackHarnessPayload,
+      ...refinerSettingsRoutes,
       subscribeRuntimeEvents,
       observeRuntimeOperation: (runtimeEvent) => {
         logger.info("agent runtime operation", runtimeEvent);
@@ -1761,6 +1760,7 @@ export async function createOpenPondServer(
       listWorkEvidenceFeedbackPayload: workEvidenceApi.listFeedback,
       classifyWorkEvidencePayload: workEvidenceApi.eligibility,
       ...harnessSettingsRoutes,
+      ...refinerSettingsRoutes,
       listHostedSavedWorkPayload,
       createHostedSavedWorkPayload,
       updateHostedSavedWorkPayload,

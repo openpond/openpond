@@ -55,6 +55,7 @@ export * from "./harness-workspace-transitions.js";
 export * from "./harness-sources.js";
 export * from "./harness-improvements.js";
 export * from "./harness-history.js";
+export * from "./refiner-history.js";
 export * from "./harness-memory.js";
 export * from "./training-platform.js";
 export {

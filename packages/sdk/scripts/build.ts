@@ -21,6 +21,7 @@ await build({
     "project-actions": path.join(root, "src/project-actions.ts"),
     "profile-actions": path.join(root, "src/profile-actions.ts"),
     workflows: path.join(root, "src/workflows.ts"),
+    refiner: path.join(root, "src/refiner.ts"),
   },
   outdir: dist,
   bundle: true,

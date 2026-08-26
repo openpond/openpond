@@ -88,6 +88,7 @@ export type {
   OpenPondWorkflowUpdateResult,
   OpenPondWorkflowWeekday,
 } from "./workflows.js";
+export * from "./refiner.js";
 
 export * from "@openpond/cloud/sandbox/client";
 export * from "@openpond/cloud/sandbox/types";
