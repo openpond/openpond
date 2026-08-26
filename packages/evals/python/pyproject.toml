@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openpond-evals"
+version = "0.1.0"
+description = "Portable OpenPond evaluation and training telemetry contracts"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = ["pydantic>=2.11,<3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openpond_evals"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

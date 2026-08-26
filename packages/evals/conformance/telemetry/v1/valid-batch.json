@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "openpond.runTelemetryBatch.v1",
+  "events": [
+    {
+      "schemaVersion": "openpond.runTelemetryEvent.v1",
+      "eventId": "event-optimizer-step-1",
+      "sequence": 1,
+      "occurredAt": "2026-08-25T20:00:00.000Z",
+      "source": "optimizer",
+      "type": "optimizer_step_completed",
+      "visibility": "team_visible",
+      "lineage": {
+        "modelProjectId": "project-1",
+        "runId": "run-1",
+        "modelVersionId": "version-1",
+        "harnessReleaseHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tasksetReleaseHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "environmentReleaseHash": null,
+        "checkpointId": null,
+        "step": 1,
+        "rolloutGroupId": "group-1",
+        "attemptId": null,
+        "scenarioId": "scenario-1"
+      },
+      "attributes": {
+        "learningRate": 0.00001,
+        "runner": "openpond_direct_grpo_v1"
+      }
+    }
+  ],
+  "observations": [
+    {
+      "schemaVersion": "openpond.metricObservation.v1",
+      "observationId": "observation-learning-rate-1",
+      "metricId": "optimizer.learning_rate",
+      "eventId": "event-optimizer-step-1",
+      "sequence": 2,
+      "observedAt": "2026-08-25T20:00:00.000Z",
+      "value": 0.00001,
+      "lineage": {
+        "modelProjectId": "project-1",
+        "runId": "run-1",
+        "modelVersionId": "version-1",
+        "harnessReleaseHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tasksetReleaseHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "environmentReleaseHash": null,
+        "checkpointId": null,
+        "step": 1,
+        "rolloutGroupId": "group-1",
+        "attemptId": null,
+        "scenarioId": "scenario-1"
+      },
+      "dimensions": {
+        "split": "train"
+      }
+    }
+  ]
+}
