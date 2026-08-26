@@ -12,4 +12,8 @@ export * from "./model-improvement-qualification.js";
 export * from "./preferences.js";
 export * from "./review-conformance.js";
 export * from "./rollouts.js";
+export * from "./telemetry.js";
+export * from "./telemetry-catalog.js";
+export * from "./telemetry-analysis.js";
+export * from "./telemetry-bundle.js";
 export * from "./tasksets.js";

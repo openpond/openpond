@@ -8,6 +8,8 @@
   "types": "./dist/types/index.d.ts",
   "files": [
     "dist",
+    "conformance",
+    "schemas",
     "README.md",
     "CONTRACT.md",
     "RELEASING.md",
@@ -41,6 +43,10 @@
     "./rollouts": {
       "types": "./dist/types/rollouts.d.ts",
       "import": "./dist/rollouts.js"
+    },
+    "./telemetry": {
+      "types": "./dist/types/telemetry/index.d.ts",
+      "import": "./dist/telemetry/index.js"
     },
     "./preferences": {
       "types": "./dist/types/preferences.d.ts",
@@ -85,7 +91,7 @@
     "node": ">=22.14.0 <25"
   },
   "scripts": {
-    "build": "tsx scripts/build.ts",
+    "build": "tsx scripts/generate-telemetry-schemas.ts && tsx scripts/build.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project evals",
     "check:api": "tsx scripts/check-public-package.ts",

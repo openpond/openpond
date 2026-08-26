@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "openpond.runTelemetryBatch.v1",
+  "events": [
+    {
+      "schemaVersion": "openpond.runTelemetryEvent.v1",
+      "eventId": "event-invalid",
+      "sequence": -1,
+      "occurredAt": "not-a-timestamp",
+      "source": "unknown_source",
+      "type": "optimizer_step_completed",
+      "visibility": "team_visible",
+      "lineage": {},
+      "attributes": {}
+    }
+  ],
+  "observations": []
+}
