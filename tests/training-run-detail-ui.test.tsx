@@ -11,7 +11,10 @@ import {
   formatTrainingProgress,
 } from "../apps/web/src/components/labs/LabModelVersionDetailPage";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";
-import { TrainingRunMetrics } from "../apps/web/src/components/training/TrainingRunMetrics";
+import {
+  eventSeries,
+  TrainingRunMetrics,
+} from "../apps/web/src/components/training/TrainingRunMetrics";
 
 const detail = TrainingRunDetailSchema.parse({
   schemaVersion: "openpond.trainingRunDetail.v1",
@@ -381,6 +384,30 @@ describe("Training run detail UI", () => {
     expect(eventSummary(event)).toBe("Optimizer update · succeeded");
     expect(eventSummary(event)).not.toContain("errorCode");
     expect(eventSummary(event)).not.toContain("null");
+  });
+
+  test("does not count reward-pending rollout trajectories as failures", () => {
+    const events = [
+      TrainingJobEventSchema.parse({
+        schemaVersion: "openpond.trainingJobEvent.v1",
+        id: "event_pending_rollout",
+        jobId: "job_detail_fixture",
+        sequence: 1,
+        type: "metric",
+        timestamp: "2026-08-27T17:00:00.000Z",
+        payload: {
+          metricKind: "rollout_trajectory",
+          rolloutGroupId: "group_pending",
+          rolloutIndex: 1,
+          reward: null,
+          rewardEligible: true,
+        },
+      }),
+    ];
+
+    expect(eventSeries(events).map((series) => series.id)).not.toContain(
+      "attempt.failure_count",
+    );
   });
 
 });

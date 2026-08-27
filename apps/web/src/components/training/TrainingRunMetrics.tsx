@@ -82,13 +82,19 @@ function uniqueByStep<T extends { step: number }>(rows: T[]): T[] {
   return [...latest.values()].sort((left, right) => left.step - right.step);
 }
 
-function eventSeries(events: TrainingRunDetail["events"]): TrainingMetricSeries[] {
+export function eventSeries(events: TrainingRunDetail["events"]): TrainingMetricSeries[] {
   const metrics = new Map<string, Array<{ step: number; value: number }>>();
   const labels = new Map<string, string>();
   const append = (id: string, label: string, step: number, value: number) => {
     metrics.set(id, [...(metrics.get(id) ?? []), { step, value }]); labels.set(id, label);
   };
-  const groups = new Map<string, Array<{ reward: number | null; eligible: boolean; input: number; output: number }>>();
+  const groups = new Map<string, Array<{
+    reward: number | null;
+    eligible: boolean;
+    resolved: boolean;
+    input: number;
+    output: number;
+  }>>();
   for (const event of events) {
     if (event.type !== "metric") continue;
     if (event.payload.metricKind === "managed_telemetry") {
@@ -102,15 +108,27 @@ function eventSeries(events: TrainingRunDetail["events"]): TrainingMetricSeries[
       const reward = finiteNumber(event.payload.reward);
       if (reward !== null) append("rollout.reward", "Rollout reward", step, reward);
       const id = typeof event.payload.rolloutGroupId === "string" ? event.payload.rolloutGroupId : "group-0";
-      groups.set(id, [...(groups.get(id) ?? []), { reward, eligible: event.payload.rewardEligible === true, input: finiteNumber(event.payload.inputTokens) ?? 0, output: finiteNumber(event.payload.outputTokens) ?? 0 }]);
+      const explicitlyFailed =
+        event.payload.rewardEligible === false
+        || typeof event.payload.failureClass === "string"
+        || typeof event.payload.failureCode === "string";
+      groups.set(id, [...(groups.get(id) ?? []), {
+        reward,
+        eligible: event.payload.rewardEligible === true,
+        resolved: reward !== null || explicitlyFailed,
+        input: finiteNumber(event.payload.inputTokens) ?? 0,
+        output: finiteNumber(event.payload.outputTokens) ?? 0,
+      }]);
     }
   }
   [...groups.values()].forEach((group, step) => {
-    const rewards = group.flatMap((attempt) => attempt.eligible && attempt.reward !== null ? [attempt.reward] : []);
+    const resolved = group.filter((attempt) => attempt.resolved);
+    if (!resolved.length) return;
+    const rewards = resolved.flatMap((attempt) => attempt.eligible && attempt.reward !== null ? [attempt.reward] : []);
     const mean = rewards.length ? rewards.reduce((sum, value) => sum + value, 0) / rewards.length : 0;
     const variance = rewards.length ? rewards.reduce((sum, value) => sum + (value - mean) ** 2, 0) / rewards.length : 0;
-    append("attempt.valid_rate", "Valid attempt rate", step, group.length ? rewards.length / group.length : 0);
-    append("attempt.failure_count", "Attempt failures", step, group.length - rewards.length);
+    append("attempt.valid_rate", "Valid attempt rate", step, rewards.length / resolved.length);
+    append("attempt.failure_count", "Attempt failures", step, resolved.length - rewards.length);
     append("reward.variance", "Reward variance", step, variance);
     append("tokens.input", "Input tokens", step, group.reduce((sum, attempt) => sum + attempt.input, 0));
     append("tokens.output", "Output tokens", step, group.reduce((sum, attempt) => sum + attempt.output, 0));
