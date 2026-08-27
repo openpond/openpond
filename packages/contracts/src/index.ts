@@ -47,6 +47,7 @@ export * from "./training-benchmark.js";
 export * from "./training-sizing.js";
 export * from "./cross-system-operations.js";
 export * from "./release-core.js";
+export * from "./public-sdk-contracts.js";
 export * from "./learning-signals.js";
 export * from "./harness-releases.js";
 export * from "./harness-actions.js";

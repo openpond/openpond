@@ -380,6 +380,9 @@ importers:
       '@openpond/harness':
         specifier: workspace:*
         version: link:../harness
+      openpond-sdk:
+        specifier: workspace:*
+        version: link:../sdk
       zod:
         specifier: ^4.1.13
         version: 4.4.3

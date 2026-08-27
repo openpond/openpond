@@ -21,6 +21,7 @@
     "@openpond/harness": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@openpond/connected-apps": "workspace:*",
+    "openpond-sdk": "workspace:*",
     "zod": "^4.1.13"
   }
 }

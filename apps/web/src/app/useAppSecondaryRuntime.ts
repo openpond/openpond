@@ -35,6 +35,10 @@ import {
   isTaskDraftSession,
   withoutTaskDraftMetadata,
 } from "../lib/task-drafts";
+import {
+  navigateDesktopRoute,
+  navigateModelsRoute,
+} from "../components/labs/lab-primary-tab-state";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 
@@ -210,6 +214,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     });
   const openSessionInChat = useCallback(
     (sessionId: string) => {
+      navigateDesktopRoute({ kind: "chat", sessionId });
       setSelectedSessionId(sessionId);
       setSelectedAppId(null);
       setSelectedProjectId(null);
@@ -686,7 +691,10 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     advanceTrainingTurn: advanceTrainingModelChatAfterTurn,
     bindTrainingSession: bindTrainingModelChatSession,
     composerDraftStore,
-    onSessionCreated: () => setDraftSubagentDelegationMode(null),
+    onSessionCreated: (session) => {
+      navigateDesktopRoute({ kind: "chat", sessionId: session.id });
+      setDraftSubagentDelegationMode(null);
+    },
     onSubmitted: async () => {
       const currentSession = selectedSession;
       if (!connection || !currentSession || !isTaskDraftSession(currentSession)) return;
@@ -794,6 +802,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
         objective: input.objective,
         initialSessionIds: input.sessionId ? [input.sessionId] : [],
       });
+      navigateModelsRoute({ kind: "index" });
       setView("labs");
     },
     [setView]
@@ -849,6 +858,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setSectionMenuOpen(null);
     setSettingsSection("profile");
     setView("settings");
+    navigateDesktopRoute({ kind: "settings", section: "profile" });
   }, [setSectionMenuOpen, setSettingsSection, setView]);
   const diagnosticEvents = useMemo(
     () =>

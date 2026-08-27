@@ -42,6 +42,7 @@ import {
   SidebarTaskProjectGroup,
   type SidebarTaskGroupKind,
 } from "./SidebarTaskProjectGroup";
+import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
 const EMPTY_GOAL_RUNTIME_BY_SESSION_ID = new Map<string, GoalRuntimeStatus>();
@@ -383,6 +384,7 @@ export function SidebarSectionList({
   }
 
   function selectSession(session: Session) {
+    navigateDesktopRoute({ kind: "chat", sessionId: session.id });
     setSelectedSessionId(session.id);
     const projectId = sidebarProjectIdBySessionId[session.id] ?? null;
     setSelectedAppId(projectId ? null : session.appId);

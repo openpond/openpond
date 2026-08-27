@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import {
   TrainingArtifactSchema,
   TrainingArtifactsSchema,
-  type ModelRunDraft,
   type TrainingArtifact,
   type TrainingArtifacts,
   type TrainingExecutionRef,
   type TrainingJob,
+  type TrainingJobSourceSnapshot,
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 
@@ -18,9 +18,7 @@ import type { SqliteStore } from "../store/store.js";
 export async function importPortableModelRunArtifacts(input: {
   store: SqliteStore;
   job: TrainingJob;
-  draft: ModelRunDraft & {
-    baseModel: NonNullable<ModelRunDraft["baseModel"]>;
-  };
+  source: TrainingJobSourceSnapshot;
   executionRef: TrainingExecutionRef;
   completedAt: string;
   portable: TrainingArtifacts;
@@ -131,9 +129,7 @@ function assertArtifacts(
 async function persistPortableArtifacts(input: {
   store: SqliteStore;
   job: TrainingJob;
-  draft: ModelRunDraft & {
-    baseModel: NonNullable<ModelRunDraft["baseModel"]>;
-  };
+  source: TrainingJobSourceSnapshot;
   executionRef: TrainingExecutionRef;
   provider: string;
   completedAt: string;
@@ -188,7 +184,7 @@ async function persistPortableArtifacts(input: {
           }
         : {}),
     };
-    if (input.draft.method === "grpo" && isWeights) {
+    if (input.source.method === "grpo" && isWeights) {
       metadata.groupedGrpoReceiptHash = optimizerReceiptHash;
     }
     const artifact = await input.store.saveTrainingArtifact(
@@ -204,10 +200,10 @@ async function persistPortableArtifacts(input: {
         path: artifactPath,
         sha256: portable.sha256,
         sizeBytes: portable.sizeBytes,
-        baseModelId: input.draft.baseModel.modelId,
-        baseModelRevision: input.draft.baseModel.revision,
-        tokenizerRevision: input.draft.baseModel.tokenizerRevision,
-        chatTemplateHash: input.draft.baseModel.chatTemplateHash,
+        baseModelId: input.source.baseModel.modelId,
+        baseModelRevision: input.source.baseModel.revision,
+        tokenizerRevision: input.source.baseModel.tokenizerRevision,
+        chatTemplateHash: input.source.baseModel.chatTemplateHash,
         nonProduction: input.job.nonProduction,
         createdAt: input.completedAt,
         metadata,

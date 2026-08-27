@@ -22,6 +22,8 @@ await build({
     "profile-actions": path.join(root, "src/profile-actions.ts"),
     workflows: path.join(root, "src/workflows.ts"),
     refiner: path.join(root, "src/refiner.ts"),
+    "model-projects": path.join(root, "src/model-projects.ts"),
+    training: path.join(root, "src/training.ts"),
   },
   outdir: dist,
   bundle: true,
@@ -29,7 +31,7 @@ await build({
   target: "node22.14",
   format: "esm",
   legalComments: "none",
-  external: ["esbuild"],
+  external: ["esbuild", "zod"],
   sourcemap: true,
   logLevel: "info",
 });
