@@ -49,44 +49,15 @@ import {
   requiredStringValue,
   toExecutionStatus,
 } from "./openpond-managed-training-adapter-projection.js";
+import {
+  localTrainingEventType,
+  type ManagedTrainingAccess as Access,
+  type ManagedTrainingJob as ManagedJob,
+} from "./openpond-managed-training-adapter-support.js";
 
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
 const ACTIVE_EVIDENCE_REFRESH_TTL_MS = 1_500;
-
-type Access = {
-  apiBaseUrl: string;
-  token: string;
-  teamId: string;
-};
-
-type ManagedJob = {
-  id: string;
-  state: string;
-  version: number;
-  completedGroups?: number;
-  targetGroups?: number;
-  terminalReason?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  resources?: Array<{
-    kind: string;
-    state: string;
-    metadata: Record<string, unknown>;
-  }>;
-  inputBundle?: {
-    rewardModelTraining?: Record<string, unknown>;
-    harnessRelease?: {
-      contentHash?: string;
-    };
-    harnessRunManifest?: {
-      runtimeTarget?: {
-        placement?: string;
-      };
-    } & Record<string, unknown>;
-  };
-  cleanupAttestation?: unknown;
-};
 
 export type OpenPondManagedTrainingAdapterDependencies = {
   store: SqliteStore;
@@ -1001,18 +972,4 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     this.localExecutors.set(ref.runId, executor);
     executor.start();
   }
-}
-
-function localTrainingEventType(event: {
-  type: string;
-  phase: string;
-  data: Record<string, unknown>;
-}): "queued" | "start" | "progress" | "metric" | "checkpoint" | "cancel" | "complete" | "failure" | "reconcile" {
-  if (typeof event.data.metricKind === "string") return "metric";
-  if (event.type.includes("checkpoint")) return "checkpoint";
-  if (event.type === "provision_gpu" || event.type === "start_inference") return "start";
-  if (event.type === "cancel" || event.type === "stop") return "cancel";
-  if (event.type === "complete") return "complete";
-  if (event.type === "failure") return "failure";
-  return "progress";
 }
