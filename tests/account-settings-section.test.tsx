@@ -291,7 +291,7 @@ describe("AccountSettingsSection", () => {
     expect(html).not.toContain("https://api.qa.openpond.example");
   });
 
-  test("keeps account endpoints behind Advanced when adding an account", () => {
+  test("uses production endpoints when adding an account", () => {
     const html = renderToStaticMarkup(
       createElement(AccountEndpointDialog, {
         account: {
@@ -317,7 +317,7 @@ describe("AccountSettingsSection", () => {
     expect(html).toContain("Add account");
     expect(html).toContain("API key");
     expect(html).toContain('value="opk_test"');
-    expect(html).toContain("Advanced");
+    expect(html).not.toContain("Advanced");
     expect(html).not.toContain("Base URL");
     expect(html).not.toContain("API base URL");
     expect(html).not.toContain("https://qa.openpond.example");
@@ -325,7 +325,7 @@ describe("AccountSettingsSection", () => {
     expect(html).toContain("Connect account");
   });
 
-  test("keeps the endpoint update dialog focused on endpoints only", () => {
+  test("uses production endpoints when updating an account", () => {
     const html = renderToStaticMarkup(
       createElement(AccountEndpointDialog, {
         account: {
@@ -347,9 +347,11 @@ describe("AccountSettingsSection", () => {
     );
 
     expect(html).toContain("Account environment");
-    expect(html).toContain("Base URL");
-    expect(html).toContain("API base URL");
     expect(html).toContain("Update account");
     expect(html).not.toContain("API key");
+    expect(html).not.toContain("Base URL");
+    expect(html).not.toContain("API base URL");
+    expect(html).not.toContain("https://qa.openpond.example");
+    expect(html).not.toContain("https://api.qa.openpond.example");
   });
 });
