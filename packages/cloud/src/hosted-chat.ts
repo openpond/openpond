@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_OPENPOND_OPCHAT_API_BASE_URL } from "./urls.js";
-import { withVercelProtectionBypass } from "./api/vercel-protection.js";
 
 export type HostedChatRole = "system" | "user" | "assistant" | "tool";
 
@@ -270,7 +269,6 @@ function requireToken(value: string): string {
 }
 
 function hostedHeaders(
-  requestUrl: string,
   token: string,
   accept: string,
   requestId?: string
@@ -281,7 +279,7 @@ function hostedHeaders(
   headers.set("Accept", accept);
   headers.set("x-openpond-client", "openpond-code");
   headers.set("x-openpond-request-id", requestId || randomUUID());
-  return withVercelProtectionBypass(requestUrl, headers);
+  return headers;
 }
 
 async function readError(response: Response): Promise<string> {
@@ -362,7 +360,7 @@ export async function listOpChatModels(
   const requestUrl = `${apiBaseUrl}/models`;
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: hostedHeaders(requestUrl, options.token, "application/json"),
+    headers: hostedHeaders(options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -384,7 +382,7 @@ export async function getOpChatModel(
     requestUrl,
     {
       method: "GET",
-      headers: hostedHeaders(requestUrl, options.token, "application/json"),
+      headers: hostedHeaders(options.token, "application/json"),
       signal: options.signal,
     }
   );
@@ -407,7 +405,7 @@ export async function listOpChatProviders(
   const requestUrl = `${apiBaseUrl}/providers`;
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: hostedHeaders(requestUrl, options.token, "application/json"),
+    headers: hostedHeaders(options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -429,7 +427,7 @@ export async function getOpChatProvider(
     requestUrl,
     {
       method: "GET",
-      headers: hostedHeaders(requestUrl, options.token, "application/json"),
+      headers: hostedHeaders(options.token, "application/json"),
       signal: options.signal,
     }
   );
@@ -453,7 +451,6 @@ export async function sendHostedChatTurn(
   const response = await fetch(requestUrl, {
     method: "POST",
     headers: hostedHeaders(
-      requestUrl,
       options.token,
       "application/json",
       options.requestId
@@ -532,7 +529,6 @@ export async function* streamHostedChatTurn(
   const response = await fetch(requestUrl, {
     method: "POST",
     headers: hostedHeaders(
-      requestUrl,
       options.token,
       "text/event-stream",
       options.requestId

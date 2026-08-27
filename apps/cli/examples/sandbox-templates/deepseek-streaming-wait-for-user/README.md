@@ -26,4 +26,4 @@ Run a live smoke with a saved sandbox secret:
 openpond sandbox-template start --file openpond.yaml --env-ref DEEPSEEK_API_KEY_SANDBOX=openpond://secret/... --env-literal DEEPSEEK_LIVE=1 --runtime-mode attempt --runtime-base-branch master --runtime-promotion-policy manual --budget-usd 0.05
 ```
 
-For staging, set `OPENPOND_API_URL=https://api.staging-api.openpond.ai` and pass `--env staging` explicitly.
+Set `OPENPOND_API_URL=https://api.openpond.ai` when an explicit API origin is required.

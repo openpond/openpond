@@ -76,9 +76,6 @@ function normalizeOpChatApiBaseUrl(value?: string | null): string | null {
   if (!normalized) return null;
   try {
     const url = new URL(normalized);
-    if (url.hostname.toLowerCase() === "api-new.staging-api.openpond.ai") {
-      url.hostname = "staging-api.openpond.ai";
-    }
     const segments = url.pathname.split("/").filter(Boolean);
     const opChatIndex = segments.findIndex((segment) => segment.toLowerCase() === "opchat");
     if (opChatIndex >= 0) {

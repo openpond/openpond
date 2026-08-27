@@ -689,8 +689,7 @@ function sanitizeAccount(value: unknown): LocalAccountConfig | null {
   if (typeof input.apiKey === "string") out.apiKey = input.apiKey;
   if (typeof input.baseUrl === "string") out.baseUrl = input.baseUrl;
   if (typeof input.apiBaseUrl === "string") out.apiBaseUrl = input.apiBaseUrl;
-  if (typeof input.chatApiBaseUrl === "string")
-    out.chatApiBaseUrl = input.chatApiBaseUrl;
+  if (typeof input.chatApiBaseUrl === "string") out.chatApiBaseUrl = input.chatApiBaseUrl;
   if (typeof input.environment === "string")
     out.environment = input.environment;
   const session = sanitizeSession(input.session);
@@ -720,8 +719,7 @@ function extractLegacyAccount(
   if (typeof raw.apiKey === "string") out.apiKey = raw.apiKey;
   if (typeof raw.baseUrl === "string") out.baseUrl = raw.baseUrl;
   if (typeof raw.apiBaseUrl === "string") out.apiBaseUrl = raw.apiBaseUrl;
-  if (typeof raw.chatApiBaseUrl === "string")
-    out.chatApiBaseUrl = raw.chatApiBaseUrl;
+  if (typeof raw.chatApiBaseUrl === "string") out.chatApiBaseUrl = raw.chatApiBaseUrl;
   const session = extractLegacySession(raw);
   if (session) out.session = session;
   return out;

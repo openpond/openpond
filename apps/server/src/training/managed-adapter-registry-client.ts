@@ -4,7 +4,6 @@ import type {
   HostedChatToolCall,
   HostedChatToolChoice,
 } from "@openpond/cloud";
-import { withVercelProtectionBypass } from "@openpond/cloud";
 import type { ModelBinding } from "@openpond/contracts";
 import {
   registryArtifacts,
@@ -87,11 +86,7 @@ export function createManagedAdapterRegistryClient(
     const access = await resolveAccess(teamId);
     assertResolvedTeam(access.teamId, teamId);
     const requestUrl = `${access.apiBaseUrl}${path}`;
-    const headers = withVercelProtectionBypass(
-      requestUrl,
-      hostedApiAuthHeaders(access.token),
-      dependencies.env
-    );
+    const headers = hostedApiAuthHeaders(access.token);
     headers.set("accept", "application/json");
     headers.set("x-openpond-team-id", access.teamId);
     if (init.body) headers.set("content-type", "application/json");
@@ -214,11 +209,7 @@ export function createManagedAdapterRegistryClient(
     const access = await resolveInferenceAccess(input.teamId);
     assertResolvedTeam(access.teamId, input.teamId);
     const requestUrl = `${access.apiBaseUrl}/v1/chat/completions`;
-    const headers = withVercelProtectionBypass(
-      requestUrl,
-      hostedApiAuthHeaders(access.token),
-      dependencies.env
-    );
+    const headers = hostedApiAuthHeaders(access.token);
     headers.set("accept", "text/event-stream");
     headers.set("content-type", "application/json");
     headers.set("x-openpond-team-id", access.teamId);

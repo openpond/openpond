@@ -9,7 +9,6 @@ import type {
   HostedModel,
   HostedProvider,
 } from "@openpond/cloud";
-import { withVercelProtectionBypass } from "@openpond/cloud";
 import type {
   HostedChatModel,
   HostedChatModelsResult,
@@ -205,7 +204,7 @@ export async function listOpChatModels(options: {
   const requestUrl = opChatEndpointUrl(options.apiBaseUrl, "models");
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: opChatHeaders(requestUrl, options.token, "application/json"),
+    headers: opChatHeaders(options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -222,7 +221,7 @@ export async function listOpChatProviders(options: {
   const requestUrl = opChatEndpointUrl(options.apiBaseUrl, "providers");
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: opChatHeaders(requestUrl, options.token, "application/json"),
+    headers: opChatHeaders(options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -239,7 +238,7 @@ export async function listOpChatProviderCatalog(options: {
   const requestUrl = opChatEndpointUrl(options.apiBaseUrl, "provider-catalog");
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: opChatHeaders(requestUrl, options.token, "application/json"),
+    headers: opChatHeaders(options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -261,7 +260,6 @@ export async function* streamOpChatChatCompletion(
   const response = await fetch(requestUrl, {
     method: "POST",
     headers: opChatHeaders(
-      requestUrl,
       options.token,
       "text/event-stream",
       options.requestId
@@ -595,7 +593,6 @@ function opChatEndpointUrl(
 }
 
 function opChatHeaders(
-  requestUrl: string,
   token: string,
   accept: string,
   requestId?: string
@@ -608,7 +605,7 @@ function opChatHeaders(
   headers.set("Accept", accept);
   headers.set("x-openpond-client", "openpond-app");
   headers.set("x-openpond-request-id", requestId || randomUUID());
-  return withVercelProtectionBypass(requestUrl, headers);
+  return headers;
 }
 
 async function readOpChatError(response: Response): Promise<string> {

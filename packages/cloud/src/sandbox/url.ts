@@ -39,7 +39,6 @@ export function apiRootUrlFromSandboxApiUrl(sandboxApiUrl: string): string {
 function isOpenPondHostedApiHost(hostname: string): boolean {
   return (
     hostname === "api.openpond.ai" ||
-    hostname === "staging-api.openpond.ai" ||
     (hostname.startsWith("api") && hostname.endsWith(".openpond.ai"))
   );
 }

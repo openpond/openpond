@@ -97,7 +97,7 @@ describe("AccountSettingsSection", () => {
   test("derives a new account identity when connecting another key to the same environment", () => {
     const activeAccount = {
       handle: "qa-user-3",
-      baseUrl: "https://staging.openpond.ai",
+      baseUrl: "https://openpond.ai",
     };
 
     expect(accountEndpointSelectorForMode("connect", activeAccount)).toEqual({
@@ -106,7 +106,7 @@ describe("AccountSettingsSection", () => {
     });
     expect(accountEndpointSelectorForMode("update", activeAccount)).toEqual({
       handle: "qa-user-3",
-      currentBaseUrl: "https://staging.openpond.ai",
+      currentBaseUrl: "https://openpond.ai",
     });
   });
 
@@ -160,17 +160,16 @@ describe("AccountSettingsSection", () => {
   });
 
   test("shows one concise wrapped account error at the bottom", () => {
-    const rawError =
-      'Apps list failed: 401 {"protection":{"vercel_auth_enabled":true,"vercel_auth_callback":"https://vercel.com/sso-api?nonce=secret"}}';
+    const rawError = "Apps list failed: 401 protected deployment";
     const html = renderAccountSettings(
       accountState({
         state: "auth_error",
         activeProfile: {
           handle: "qa",
-          baseUrl: "https://staging.openpond.ai",
+          baseUrl: "https://openpond.ai",
         },
         label: "qa",
-        environment: "staging",
+        environment: "production",
         error: rawError,
       })
     );
@@ -182,11 +181,8 @@ describe("AccountSettingsSection", () => {
     expect(html).not.toContain(
       "Paste a fresh OpenPond API key for the active account."
     );
-    expect(html).not.toContain("vercel_auth_callback");
     expect(html).toContain("account-error-footnote");
-    expect(html).toContain(
-      "Staging is protected by Vercel. Restart OpenPond after signing in to Vercel, then try again."
-    );
+    expect(html).toContain("Restart and try again.");
     expect(html.indexOf("account-error-footnote")).toBeGreaterThan(
       html.indexOf("Runtime loading")
     );
@@ -221,10 +217,10 @@ describe("AccountSettingsSection", () => {
           },
           {
             handle: "stale-qa",
-            baseUrl: "https://staging.openpond.ai",
-            apiBaseUrl: "https://api-new.staging-api.openpond.ai",
+            baseUrl: "https://openpond.ai",
+            apiBaseUrl: "https://api.openpond.ai",
             chatApiBaseUrl: null,
-            environment: "staging",
+            environment: "production",
             isActive: false,
             authHealth: "auth_error",
             displayLabel: "Stale QA",
@@ -295,7 +291,7 @@ describe("AccountSettingsSection", () => {
     expect(html).not.toContain("https://api.qa.openpond.example");
   });
 
-  test("keeps account endpoints behind Advanced when adding an account", () => {
+  test("uses production endpoints when adding an account", () => {
     const html = renderToStaticMarkup(
       createElement(AccountEndpointDialog, {
         account: {
@@ -321,7 +317,7 @@ describe("AccountSettingsSection", () => {
     expect(html).toContain("Add account");
     expect(html).toContain("API key");
     expect(html).toContain('value="opk_test"');
-    expect(html).toContain("Advanced");
+    expect(html).not.toContain("Advanced");
     expect(html).not.toContain("Base URL");
     expect(html).not.toContain("API base URL");
     expect(html).not.toContain("https://qa.openpond.example");
@@ -329,7 +325,7 @@ describe("AccountSettingsSection", () => {
     expect(html).toContain("Connect account");
   });
 
-  test("keeps the endpoint update dialog focused on endpoints only", () => {
+  test("uses production endpoints when updating an account", () => {
     const html = renderToStaticMarkup(
       createElement(AccountEndpointDialog, {
         account: {
@@ -351,9 +347,11 @@ describe("AccountSettingsSection", () => {
     );
 
     expect(html).toContain("Account environment");
-    expect(html).toContain("Base URL");
-    expect(html).toContain("API base URL");
     expect(html).toContain("Update account");
     expect(html).not.toContain("API key");
+    expect(html).not.toContain("Base URL");
+    expect(html).not.toContain("API base URL");
+    expect(html).not.toContain("https://qa.openpond.example");
+    expect(html).not.toContain("https://api.qa.openpond.example");
   });
 });

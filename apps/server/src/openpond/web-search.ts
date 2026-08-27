@@ -1,6 +1,5 @@
 import {
   DEFAULT_OPENPOND_API_BASE_URL,
-  withVercelProtectionBypass,
 } from "@openpond/cloud";
 import { loadOpenPondAccountContext, type RuntimeAccountContext } from "@openpond/runtime";
 
@@ -64,7 +63,7 @@ export function createHostedWebSearchExecutor(input: {
     }
     const response = await fetchImpl(endpoint, {
       method: "POST",
-      headers: withVercelProtectionBypass(endpoint, headers),
+      headers,
       body: JSON.stringify(body),
       signal: options?.signal,
     });
@@ -136,12 +135,6 @@ export function normalizeSearchApiUrl(value: string): string {
   const url = new URL(trimmed);
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Hosted web search endpoint must use http or https.");
-  }
-  if (
-    url.hostname === "api.staging-api.openpond.ai" ||
-    url.hostname === "api-new.staging-api.openpond.ai"
-  ) {
-    url.hostname = "staging-api.openpond.ai";
   }
   const segments = url.pathname.split("/").filter(Boolean);
   const opchatIndex = segments.findIndex((segment) => segment.toLowerCase() === "opchat");

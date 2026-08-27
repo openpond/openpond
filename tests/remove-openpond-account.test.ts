@@ -58,12 +58,12 @@ describe("removeOpenPondAccount", () => {
         {
           handle: "stale",
           apiKey: "opk_stale",
-          baseUrl: "https://staging.openpond.ai",
+          baseUrl: "https://openpond.ai",
         },
       ],
     });
 
-    const result = await runRemove("stale", "https://staging.openpond.ai");
+    const result = await runRemove("stale", "https://openpond.ai");
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("removed");

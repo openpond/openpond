@@ -11,7 +11,7 @@ OPENPOND_API_KEY=opk_... pnpm exec tsx examples/runtime-vibecode-platform/vibeco
 Useful environment variables:
 
 ```bash
-OPENPOND_SANDBOX_API_URL=https://api.staging-api.openpond.ai
+OPENPOND_SANDBOX_API_URL=https://api.openpond.ai
 OPENPOND_TEAM_ID=team_...
 OPENPOND_APP_ID=app_...
 OPENPOND_BASE_BRANCH=main

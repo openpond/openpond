@@ -65,9 +65,8 @@ describe("managed adapter registry client", () => {
     });
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as unknown as typeof fetch,
-      env: { VERCEL_AUTOMATION_BYPASS_SECRET: "staging-bypass" },
       resolveRegistryAccess: async (teamId) => ({
-        apiBaseUrl: "https://api-new.staging-api.openpond.ai",
+        apiBaseUrl: "https://api.openpond.ai",
         token: "opk_user",
         teamId,
       }),
@@ -95,7 +94,6 @@ describe("managed adapter registry client", () => {
       const headers = new Headers(request.init.headers);
       expect(headers.get("openpond-api-key")).toBe("opk_user");
       expect(headers.get("x-openpond-team-id")).toBe("team_customer");
-      expect(headers.get("x-vercel-protection-bypass")).toBe("staging-bypass");
     }
   });
 

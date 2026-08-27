@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-import { withVercelProtectionBypass } from "@openpond/cloud";
 
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
@@ -234,7 +233,7 @@ export class ManagedRlLocalRolloutExecutor {
     const requestUrl = `${this.input.access.apiBaseUrl}${path}`;
     return requestJson<T>(this.input.fetchImpl ?? fetch, requestUrl, {
       ...init,
-      headers: withVercelProtectionBypass(requestUrl, headers, this.input.env),
+      headers,
       signal: this.abortController.signal,
     });
   }
@@ -256,7 +255,7 @@ export class ManagedRlLocalRolloutExecutor {
       requestUrl,
       {
         method: "POST",
-        headers: withVercelProtectionBypass(requestUrl, headers, this.input.env),
+        headers,
         body: JSON.stringify(request),
         signal,
       },

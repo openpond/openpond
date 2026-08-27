@@ -1,5 +1,3 @@
-import { withVercelProtectionBypass } from "./vercel-protection.js";
-
 const DEFAULT_API_TIMEOUT_MS = 30_000;
 const DEFAULT_API_RESPONSE_BYTES = 8 * 1024 * 1024;
 export const LONG_STREAM_API_OPTIONS = { timeoutMs: 15 * 60 * 1000, maxResponseBytes: 64 * 1024 * 1024 } as const;
@@ -51,7 +49,7 @@ export async function apiFetch(
 ): Promise<Response> {
   const { timeoutMs = DEFAULT_API_TIMEOUT_MS, maxResponseBytes = DEFAULT_API_RESPONSE_BYTES, ...init } = options;
   const requestUrl = `${baseUrl}${requestPath}`;
-  const headers = withVercelProtectionBypass(requestUrl, init.headers);
+  const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   const apiKey = process.env.OPENPOND_API_KEY;
   const trimmedToken = token?.trim() || "";

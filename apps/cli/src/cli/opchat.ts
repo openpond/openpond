@@ -16,9 +16,6 @@ import {
   resolveChatApiBaseUrlOption,
 } from "./common";
 
-const STAGING_OPCHAT_API_BASE_URL =
-  "https://staging-api.openpond.ai/opchat/v1";
-
 export async function runOpChatCommand(
   options: Record<string, string | boolean>,
   rest: string[]
@@ -47,7 +44,7 @@ export async function runOpChatCommand(
   if (subcommand === "model" || subcommand === "model-get") {
     const model = rest[1] || optionString(options, "model");
     if (!model) {
-      throw new Error("usage: opchat model <model> [--env staging]");
+      throw new Error("usage: opchat model <model>");
     }
     const result = await getOpChatModel({ apiBaseUrl, token: apiKey, model });
     console.log(JSON.stringify(result, null, 2));
@@ -115,7 +112,7 @@ export async function runOpChatCommand(
   }
 
   throw new Error(
-    "usage: opchat <provider-catalog|models|model|chat|smoke> [--env staging] [--opchat-api-base-url <url>]"
+    "usage: opchat <provider-catalog|models|model|chat|smoke> [--opchat-api-base-url <url>]"
   );
 }
 
@@ -177,9 +174,6 @@ function resolveOpChatCliBaseUrl(
   },
   options: Record<string, string | boolean>
 ): string {
-  const envName =
-    optionString(options, "env").toLowerCase() ||
-    optionString(options, "environment").toLowerCase();
   const explicit =
     optionString(options, "opchatApiBaseUrl") ||
     optionString(options, "opchatApiBaseurl") ||
@@ -189,12 +183,6 @@ function resolveOpChatCliBaseUrl(
     optionString(options, "opChatApiUrl");
   if (explicit) {
     return resolveOpChatApiBaseUrl({ opChatApiBaseUrl: explicit });
-  }
-  if (envName === "staging") {
-    return STAGING_OPCHAT_API_BASE_URL;
-  }
-  if (envName && envName !== "production") {
-    throw new Error("opchat env must be staging or production");
   }
   return resolveOpChatApiBaseUrl({
     apiBaseUrl: resolveApiBaseUrlOption(options) || config.apiBaseUrl,
