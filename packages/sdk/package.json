@@ -8,7 +8,9 @@
   "types": "./dist/types/packages/sdk/src/index.d.ts",
   "files": [
     "dist",
+    "fixtures",
     "README.md",
+    "TRAINING_PROTOCOL.md",
     "LICENSE"
   ],
   "exports": {
@@ -76,7 +78,7 @@
     "build": "tsx scripts/build.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project sdk",
-    "check": "pnpm run typecheck && pnpm run test && pnpm run build && npm pack --dry-run"
+    "check": "pnpm run typecheck && pnpm run test && tsx scripts/check-protocol-fixtures.ts && pnpm run build && tsx scripts/check-published-consumer.ts && npm pack --dry-run"
   },
   "devDependencies": {
     "@openpond/actions": "workspace:*",
@@ -88,7 +90,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
-    "@openpond/harness": "workspace:*",
+    "@openpond/harness": "^0.2.5",
     "esbuild": "0.28.1",
     "zod": "^4.1.13"
   }

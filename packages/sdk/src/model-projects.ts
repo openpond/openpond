@@ -1,5 +1,20 @@
 import { z } from "zod";
 
+import {
+  MODEL_PROJECT_API_RESPONSE_MAX_BYTES,
+  MODEL_PROJECT_SYNC_MAX_BYTES,
+  OPENPOND_MODEL_PROJECT_MEDIA_TYPE,
+  OpenPondProtocolError,
+  assertCanonicalPayloadSize,
+  parseBoundedJson,
+} from "./protocol.js";
+
+export {
+  MODEL_PROJECT_API_RESPONSE_MAX_BYTES,
+  MODEL_PROJECT_SYNC_MAX_BYTES,
+  OPENPOND_MODEL_PROJECT_MEDIA_TYPE,
+} from "./protocol.js";
+
 const IdSchema = z.string().trim().min(1).max(500);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const TimestampSchema = z.string().datetime({ offset: true });
@@ -201,6 +216,35 @@ export const HostedModelProjectDetailSchema = z
   })
   .strict();
 
+export const ModelProjectApiErrorSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.modelProjectApiError.v2"),
+    code: z.string().trim().min(1).max(200),
+    message: z.string().trim().min(1).max(5_000),
+    retryable: z.boolean().default(false),
+    requestId: z.string().trim().min(1).max(500).nullable().default(null),
+    details: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
+
+export class OpenPondModelProjectApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly retryable: boolean;
+  readonly requestId: string | null;
+  readonly details: Record<string, unknown>;
+
+  constructor(status: number, error: z.infer<typeof ModelProjectApiErrorSchema>) {
+    super(error.message);
+    this.name = "OpenPondModelProjectApiError";
+    this.status = status;
+    this.code = error.code;
+    this.retryable = error.retryable;
+    this.requestId = error.requestId;
+    this.details = error.details;
+  }
+}
+
 export type ModelProject = z.infer<typeof ModelProjectSchema>;
 export type ModelProjectTrainingSetup = z.infer<
   typeof ModelProjectTrainingSetupSchema
@@ -241,25 +285,39 @@ export function createModelProjectsClient(input: {
     const response = await fetchImpl(`${baseUrl}${pathname}`, {
       ...init,
       headers: {
-        accept: "application/json",
-        ...(init?.body ? { "content-type": "application/json" } : {}),
+        accept: OPENPOND_MODEL_PROJECT_MEDIA_TYPE,
+        ...(init?.body
+          ? { "content-type": OPENPOND_MODEL_PROJECT_MEDIA_TYPE }
+          : {}),
         ...headersRecord(configuredHeaders),
         ...headersRecord(init?.headers),
       },
     });
-    const body = (await response.json()) as unknown;
+    const body = parseBoundedJson(
+      await response.text(),
+      MODEL_PROJECT_API_RESPONSE_MAX_BYTES,
+      "Model Project API response",
+    );
     if (!response.ok) {
-      const message =
-        body && typeof body === "object" && "error" in body
-          ? String((body as { error: unknown }).error)
-          : `Model Project request failed with HTTP ${response.status}.`;
-      throw new Error(message);
+      const parsed = ModelProjectApiErrorSchema.safeParse(body);
+      if (parsed.success) {
+        throw new OpenPondModelProjectApiError(response.status, parsed.data);
+      }
+      throw new OpenPondProtocolError(
+        "invalid_error_response",
+        `Model Project request failed with HTTP ${response.status} and an invalid error envelope.`,
+      );
     }
     return body;
   }
 
   return {
     async upsert(project: HostedModelProjectSync) {
+      assertCanonicalPayloadSize(
+        project,
+        MODEL_PROJECT_SYNC_MAX_BYTES,
+        "Model Project sync",
+      );
       const parsed = HostedModelProjectSyncSchema.parse(project);
       const body = await request(
         `/v1/model-projects/${encodeURIComponent(parsed.portableProjectId)}`,

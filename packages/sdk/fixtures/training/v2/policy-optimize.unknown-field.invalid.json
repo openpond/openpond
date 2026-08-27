@@ -1,0 +1,10 @@
+{
+  "extends": "policy-optimize.valid.json",
+  "mutation": {
+    "path": ["unexpectedRuntimeAuthority"],
+    "value": {
+      "providerId": "must-not-cross-the-public-boundary"
+    }
+  },
+  "expectedError": "unrecognized_keys"
+}

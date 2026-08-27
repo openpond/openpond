@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  OPENPOND_TRAINING_MEDIA_TYPE,
+  TrainingApiErrorSchema,
   TrainingJobSubmissionSchema,
+  canonicalJson,
   createTrainingClient,
+  parseAndVerifyTrainingJobSubmission,
+  trainingJobSubmissionHash,
 } from "../src/training.js";
 
 const HASH = "b".repeat(64);
@@ -109,7 +114,11 @@ describe("Training SDK contracts", () => {
 
   it("lists Jobs by Project through the public API", async () => {
     const fetch = vi.fn(async () =>
-      new Response(JSON.stringify({ jobs: [job()] }), {
+      new Response(JSON.stringify({
+        schemaVersion: "openpond.trainingJobPage.v2",
+        jobs: [job()],
+        nextCursor: "cursor-2",
+      }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -118,11 +127,45 @@ describe("Training SDK contracts", () => {
       baseUrl: "https://api.openpond.test",
       fetch,
     });
-    const jobs = await client.listJobs("hosted-project-1");
-    expect(jobs).toHaveLength(1);
+    const page = await client.listJobs({
+      modelProjectId: "hosted-project-1",
+      limit: 25,
+    });
+    expect(page.jobs).toHaveLength(1);
+    expect(page.nextCursor).toBe("cursor-2");
     expect(fetch).toHaveBeenCalledWith(
-      "https://api.openpond.test/v1/training/jobs?modelProjectId=hosted-project-1",
-      expect.any(Object),
+      "https://api.openpond.test/v1/training/jobs?modelProjectId=hosted-project-1&limit=25",
+      expect.objectContaining({
+        headers: expect.objectContaining({ accept: OPENPOND_TRAINING_MEDIA_TYPE }),
+      }),
     );
+  });
+
+  it("canonicalizes object keys and verifies the submission content hash", async () => {
+    expect(canonicalJson({ z: 1, a: { y: true, b: null } })).toBe(
+      '{"a":{"b":null,"y":true},"z":1}',
+    );
+    const unsigned = submission();
+    const contentHash = await trainingJobSubmissionHash(unsigned);
+    await expect(
+      parseAndVerifyTrainingJobSubmission({ ...unsigned, contentHash }),
+    ).resolves.toMatchObject({ contentHash });
+    await expect(
+      parseAndVerifyTrainingJobSubmission(unsigned),
+    ).rejects.toMatchObject({
+      code: "content_hash_mismatch",
+    });
+  });
+
+  it("requires strict versioned error envelopes", () => {
+    expect(() => TrainingApiErrorSchema.parse({ error: "failed" })).toThrow();
+    expect(TrainingApiErrorSchema.parse({
+      schemaVersion: "openpond.trainingApiError.v2",
+      code: "budget_exceeded",
+      message: "Budget exceeded.",
+      retryable: false,
+      requestId: null,
+      details: {},
+    }).code).toBe("budget_exceeded");
   });
 });
