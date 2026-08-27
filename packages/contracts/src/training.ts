@@ -671,6 +671,7 @@ export const PolicyOptimizationMetricSchema = z.object({
   learningRate: z.number().nonnegative().nullable().default(null),
   policyLoss: z.number().nullable(),
   valueLoss: z.number().nullable(),
+  gradientNorm: z.number().nonnegative().nullable().default(null),
   meanReward: z.number().nullable(),
   meanReturn: z.number().nullable(),
   kl: z.number().nullable(),
@@ -682,6 +683,7 @@ export const PolicyOptimizationMetricSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   environmentExecutions: z.number().int().nonnegative(),
+  trajectoryCount: z.number().int().nonnegative().nullable().default(null),
   costUsd: z.number().nonnegative().nullable(),
 });
 

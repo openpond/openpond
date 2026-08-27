@@ -12,6 +12,7 @@ const POLICY_SERIES: Array<SeriesDefinition<PolicyOptimizationMetric>> = [
   { key: "learningRate", id: "optimizer.learning_rate", label: "Learning rate", format: "scientific" },
   { key: "policyLoss", id: "optimizer.policy_loss", label: "Policy loss" },
   { key: "valueLoss", id: "optimizer.value_loss", label: "Value loss" },
+  { key: "gradientNorm", id: "optimizer.gradient_norm", label: "Gradient norm" },
   { key: "kl", id: "optimizer.kl", label: "KL divergence" },
   { key: "entropy", id: "optimizer.entropy", label: "Entropy" },
   { key: "policyClipFraction", id: "optimizer.policy_clip_fraction", label: "Policy clip fraction", format: "percent" },

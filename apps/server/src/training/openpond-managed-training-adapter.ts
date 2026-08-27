@@ -52,6 +52,7 @@ import {
 
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
+const ACTIVE_EVIDENCE_REFRESH_TTL_MS = 1_500;
 
 type Access = {
   apiBaseUrl: string;
@@ -102,6 +103,8 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   private readonly resolveAccess: (teamId?: string) => Promise<Access>;
   private readonly readFileImpl: typeof readFile;
   private readonly localExecutors = new Map<string, ManagedRlLocalRolloutExecutor>();
+  private readonly evidenceRefreshes = new Map<string, Promise<void>>();
+  private readonly evidenceRefreshedAt = new Map<string, number>();
 
   constructor(private readonly dependencies: OpenPondManagedTrainingAdapterDependencies) {
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
@@ -721,23 +724,60 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
 
   async refreshEvidence(ref: TrainingExecutionRef): Promise<void> {
     const localJob = await this.dependencies.store.getTrainingJob(ref.runId);
+    const terminal = localJob
+      ? ["succeeded", "failed", "cancelled"].includes(localJob.status)
+      : false;
+    const snapshot = recordOrEmpty(
+      localJob?.metadata.managedEvidenceSnapshot,
+    );
     if (
-      localJob &&
-      ["succeeded", "failed", "cancelled"].includes(localJob.status) &&
-      (await this.dependencies.store.listTrainingJobEvents(ref.runId)).some(
-        (event) => typeof event.payload.remoteEventType === "string",
-      )
+      terminal
+      && snapshot.syncedJobUpdatedAt === localJob?.updatedAt
     ) {
       return;
     }
+    const active = this.evidenceRefreshes.get(ref.runId);
+    if (active) return active;
+    const refreshedAt = this.evidenceRefreshedAt.get(ref.runId) ?? 0;
+    if (
+      !terminal
+      && Date.now() - refreshedAt < ACTIVE_EVIDENCE_REFRESH_TTL_MS
+    ) return;
+    const refresh = this.refreshEvidenceOnce(ref).finally(() => {
+      if (this.evidenceRefreshes.get(ref.runId) === refresh) {
+        this.evidenceRefreshes.delete(ref.runId);
+        this.evidenceRefreshedAt.set(ref.runId, Date.now());
+      }
+    });
+    this.evidenceRefreshes.set(ref.runId, refresh);
+    return refresh;
+  }
+
+  private async refreshEvidenceOnce(ref: TrainingExecutionRef): Promise<void> {
+    const storedEvents = await this.dependencies.store.listTrainingJobEvents(ref.runId);
     const client = this.trainingClient(await this.resolveBoundAccess(ref.tenantId));
     const events = await client.events(ref.runId);
+    const storedById = new Map(storedEvents.map((event) => [event.id, event]));
+    const occupiedSequences = new Set(storedEvents.map((event) => event.sequence));
+    let nextSequence = Math.max(
+      REMOTE_TRAINING_EVENT_SEQUENCE_BASE - 1,
+      ...storedEvents.map((event) => event.sequence),
+    );
     for (const event of events) {
+      const stored = storedById.get(event.id);
+      const projectedSequence = REMOTE_TRAINING_EVENT_SEQUENCE_BASE + event.sequence;
+      const sequence = stored?.sequence ?? (
+        occupiedSequences.has(projectedSequence)
+          ? ++nextSequence
+          : projectedSequence
+      );
+      occupiedSequences.add(sequence);
+      nextSequence = Math.max(nextSequence, sequence);
       await this.dependencies.store.saveTrainingJobEvent(TrainingJobEventSchema.parse({
         schemaVersion: "openpond.trainingJobEvent.v1",
         id: event.id,
         jobId: ref.runId,
-        sequence: REMOTE_TRAINING_EVENT_SEQUENCE_BASE + event.sequence,
+        sequence,
         type: localTrainingEventType(event),
         timestamp: event.createdAt,
         payload: {
@@ -747,6 +787,24 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           ...(event.message ? { message: event.message } : {}),
         },
       }));
+    }
+    const refreshedJob = await this.dependencies.store.getTrainingJob(ref.runId);
+    if (
+      refreshedJob
+      && ["succeeded", "failed", "cancelled"].includes(refreshedJob.status)
+    ) {
+      await this.dependencies.store.saveTrainingJob({
+        ...refreshedJob,
+        metadata: {
+          ...refreshedJob.metadata,
+          managedEvidenceSnapshot: {
+            schemaVersion: "openpond.managedEvidenceSnapshot.v1",
+            syncedJobUpdatedAt: refreshedJob.updatedAt,
+            eventCount: events.length,
+            syncedAt: new Date().toISOString(),
+          },
+        },
+      });
     }
   }
 

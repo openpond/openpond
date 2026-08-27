@@ -313,6 +313,7 @@ describe("Training run detail UI", () => {
           timestamp: "2026-07-13T00:00:30.000Z",
           policyLoss: -1.3397,
           valueLoss: 0.5474,
+          gradientNorm: 0.72,
           meanReward: 0,
           meanReturn: 0,
           kl: 0.1392,
@@ -324,6 +325,7 @@ describe("Training run detail UI", () => {
           inputTokens: 36,
           outputTokens: 1,
           environmentExecutions: 1,
+          trajectoryCount: 4,
           costUsd: 0,
         },
       ],
@@ -331,10 +333,11 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={ppoDetail} loading={false} />
     );
-    expect(html).toContain("9 recorded metric series");
+    expect(html).toContain("10 recorded metric series");
     expect(html).toContain("1 point");
     expect(html).toContain("Policy loss");
     expect(html).toContain("Value loss");
+    expect(html).toContain("Gradient norm");
     expect(html).toContain("KL divergence");
     expect(html).toContain('aria-label="Mean reward by optimizer step"');
   });

@@ -342,6 +342,40 @@ describe("OpenPond Managed training adapter", () => {
             events: [
               {
                 schemaVersion: "openpond.trainingJobEvent.v2",
+                id: "remote-score-event",
+                jobId: "managed-job-2",
+                sequence: 0,
+                type: "score_reward_model",
+                phase: "succeeded",
+                message: null,
+                data: { errorCode: null },
+                createdAt: FIXED_TIME,
+              },
+              {
+                schemaVersion: "openpond.trainingJobEvent.v2",
+                id: "remote-rollout-event",
+                jobId: "managed-job-2",
+                sequence: 1,
+                type: "rollout_metric",
+                phase: "eligible",
+                message: null,
+                data: {
+                  metricKind: "rollout_trajectory",
+                  rolloutGroupId: "group-1",
+                  rolloutGroupIndex: 0,
+                  rolloutIndex: 0,
+                  workerSlot: 0,
+                  policyVersion: 0,
+                  reward: 0.75,
+                  rewardEligible: true,
+                  terminalClass: "policy",
+                  inputTokens: 10,
+                  outputTokens: 2,
+                },
+                createdAt: FIXED_TIME,
+              },
+              {
+                schemaVersion: "openpond.trainingJobEvent.v2",
                 id: "optimizer-event-2",
                 jobId: "managed-job-2",
                 sequence: 2,
@@ -445,6 +479,24 @@ describe("OpenPond Managed training adapter", () => {
         timestamp: FIXED_TIME,
         payload: {},
       });
+      await store.saveTrainingJobEvent({
+        schemaVersion: "openpond.trainingJobEvent.v1",
+        id: "remote-rollout-event",
+        jobId: ref.runId,
+        sequence: 1_000_000,
+        type: "metric",
+        timestamp: FIXED_TIME,
+        payload: { metricKind: "rollout_trajectory", reward: null },
+      });
+      await store.saveTrainingJobEvent({
+        schemaVersion: "openpond.trainingJobEvent.v1",
+        id: "remote-score-event",
+        jobId: ref.runId,
+        sequence: 1_000_001,
+        type: "progress",
+        timestamp: FIXED_TIME,
+        payload: { remoteEventType: "score_reward_model" },
+      });
 
       await expect(adapter.status(ref)).resolves.toMatchObject({
         state: "running",
@@ -478,6 +530,11 @@ describe("OpenPond Managed training adapter", () => {
               remotePhase: "committed",
             }),
           }),
+          expect.objectContaining({
+            id: "remote-rollout-event",
+            sequence: 1_000_000,
+            payload: expect.objectContaining({ reward: 0.75 }),
+          }),
         ]),
       );
       expect(
@@ -503,7 +560,13 @@ describe("OpenPond Managed training adapter", () => {
         request.mock.calls.filter(([input]) =>
           new URL(String(input)).pathname.endsWith("/events"),
         ),
-      ).toHaveLength(1);
+      ).toHaveLength(2);
+      await adapter.refreshEvidence(ref);
+      expect(
+        request.mock.calls.filter(([input]) =>
+          new URL(String(input)).pathname.endsWith("/events"),
+        ),
+      ).toHaveLength(2);
       await expect(adapter.cancel(ref)).resolves.toBeUndefined();
       await expect(adapter.collect(ref)).resolves.toMatchObject({
         runId: "managed-job-2",
