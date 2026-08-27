@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_PROVIDER,
@@ -45,6 +45,10 @@ import {
   readLastChatTaskModeFromBrowser,
 } from "../lib/product-area";
 import { useTaskDraftActions } from "../hooks/useTaskDraftActions";
+import {
+  modelsRouteFromLocation,
+  navigateModelsRoute,
+} from "../components/labs/lab-primary-tab-state";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
@@ -55,6 +59,10 @@ const EMPTY_CLOUD_PROJECTS: CloudProject[] = [];
 
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
+  const [initialModelsRoute] = useState(() =>
+    typeof window === "undefined" ? null : modelsRouteFromLocation(window.location),
+  );
+  const initialModelsRouteHandled = useRef(false);
   const {
     composerDraftStore,
     appDispatch,
@@ -636,6 +644,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     sidebarFileOpenRequest,
   ]);
   const productArea = productAreaForAppView(view, activeExperience);
+  useEffect(() => {
+    if (initialModelsRouteHandled.current || !initialModelsRoute) return;
+    initialModelsRouteHandled.current = true;
+    if (view !== "labs") setView("labs");
+  }, [initialModelsRoute, setView, view]);
   const changeProductArea = useCallback(
     (nextProductArea: ProductArea) => {
       setSectionMenuOpen(null);
@@ -643,6 +656,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       setSelectedProjectId(null);
       setSelectedSessionId(null);
       if (nextProductArea === "models") {
+        navigateModelsRoute({ kind: "index" });
         setView("labs");
         return;
       }

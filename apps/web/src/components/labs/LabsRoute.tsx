@@ -49,12 +49,12 @@ import {
   trainingModelRunSyncKey,
 } from "./LabsRouteSections";
 import {
-  LAB_PRIMARY_TAB_CHANGE_EVENT,
-  LAB_MODEL_PROJECT_CHANGE_EVENT,
-  labModelProjectIdFromSearch,
-  labPrimaryTabFromSearch,
-  searchWithLabPrimaryTab,
-  searchWithLabModelProject,
+  modelProjectRoute,
+  modelsPath,
+  modelsSectionFromRoute,
+  navigateModelsRoute,
+  useModelsRoute,
+  type ModelSection,
 } from "./lab-primary-tab-state";
 
 export type LabsRouteProps = {
@@ -128,6 +128,18 @@ export type LabsRouteProps = {
   ) => Promise<void>;
 };
 
+function labTabForModelsSection(section: ModelSection): LabPrimaryTab {
+  if (section === "runs") return "training";
+  if (section === "versions") return "evals";
+  return section;
+}
+
+function modelsSectionForLabTab(tab: LabPrimaryTab): ModelSection {
+  if (tab === "training") return "runs";
+  if (tab === "evals") return "versions";
+  return tab;
+}
+
 export function LabsRoute({
   closeDetailKind,
   closeDetailRequestId,
@@ -174,15 +186,21 @@ export function LabsRoute({
       .join("|"),
     [createImprove.runs]
   );
-  const [activeTab, setActiveTab] = useState<LabPrimaryTab>(() =>
-    typeof window === "undefined"
-      ? "overview"
-      : labPrimaryTabFromSearch(window.location.search),
+  const modelsRoute = useModelsRoute();
+  const selectedProjectRouteId =
+    modelsRoute?.kind === "project" ? modelsRoute.projectId : null;
+  const activeTab = labTabForModelsSection(
+    modelsSectionFromRoute(modelsRoute ?? { kind: "index" }),
+  );
+  const setActiveTab = useCallback(
+    (tab: LabPrimaryTab) => {
+      navigateModelsRoute(
+        modelProjectRoute(selectedProjectRouteId, modelsSectionForLabTab(tab)),
+      );
+    },
+    [selectedProjectRouteId],
   );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [selectedProjectRouteId, setSelectedProjectRouteId] = useState<string | null>(
-    () => typeof window === "undefined" ? null : labModelProjectIdFromSearch(window.location.search),
-  );
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(
     null,
   );
@@ -238,9 +256,6 @@ export function LabsRoute({
   const selected =
     models.find((workproduct) => workproduct.key === selectedKey) ?? null;
   const modelProjects = training.training.payload?.modelProjects ?? [];
-  const selectedModelProject = selected
-    ? modelProjects.find((project) => project.id === selected.id) ?? null
-    : null;
   const activeHostedTeamId =
     training.settingsPreferences.defaultTeamId?.trim() ?? null;
   const scopedModelProjects = useMemo(
@@ -270,63 +285,28 @@ export function LabsRoute({
     };
   }, [profileView.connection, profileView.onError, profileView.onPayload]);
   useEffect(() => {
-    const onPopState = () => {
-      setSelectedKey(null);
-      setSelectedDatasetId(null);
-      setActiveTab(labPrimaryTabFromSearch(window.location.search));
-      setSelectedProjectRouteId(labModelProjectIdFromSearch(window.location.search));
-    };
-    const onPrimaryTabChange = () => {
-      setSelectedDatasetId(null);
-      setActiveTab(labPrimaryTabFromSearch(window.location.search));
-    };
-    window.addEventListener("popstate", onPopState);
-    window.addEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, onPrimaryTabChange);
-    const onModelProjectChange = () => {
-      setSelectedProjectRouteId(labModelProjectIdFromSearch(window.location.search));
-      setSelectedDatasetId(null);
-    };
-    window.addEventListener(LAB_MODEL_PROJECT_CHANGE_EVENT, onModelProjectChange);
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-      window.removeEventListener(
-        LAB_PRIMARY_TAB_CHANGE_EVENT,
-        onPrimaryTabChange,
-      );
-      window.removeEventListener(LAB_MODEL_PROJECT_CHANGE_EVENT, onModelProjectChange);
-    };
-  }, []);
+    if (!modelsRoute || typeof window === "undefined") return;
+    const canonicalPath = modelsPath(modelsRoute);
+    if (
+      window.location.pathname !== canonicalPath ||
+      window.location.search
+    ) {
+      navigateModelsRoute(modelsRoute, "replace");
+    }
+  }, [modelsRoute]);
   useEffect(() => {
-    if (selectedProjectRouteId || !scopedModelProjects.length) return;
-    const defaultProjectId = scopedModelProjects[0].id;
-    const search = searchWithLabModelProject(window.location.search, defaultProjectId);
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${window.location.pathname}${search}${window.location.hash}`,
+    setSelectedKey(null);
+    setSelectedDatasetId(
+      modelsRoute?.kind === "project" && modelsRoute.section === "tasksets"
+        ? modelsRoute.resourceId
+        : null,
     );
-    setSelectedProjectRouteId(defaultProjectId);
-    window.dispatchEvent(new Event(LAB_MODEL_PROJECT_CHANGE_EVENT));
-  }, [scopedModelProjects, selectedProjectRouteId]);
+  }, [modelsRoute]);
   useEffect(() => {
     if (!selectedProjectRouteId) return;
     const project = scopedModelProjects.find((candidate) => candidate.id === selectedProjectRouteId);
     if (project) setSelectedKey(workproductKey("model", project.id));
   }, [scopedModelProjects, selectedProjectRouteId]);
-  useEffect(() => {
-    if (activeTab !== "tasksets" || selectedDatasetId || !selected) return;
-    const attachedTasksetId = selectedModelProject?.tasksetSyncs[0]?.localTasksetId ?? null;
-    if (attachedTasksetId) setSelectedDatasetId(attachedTasksetId);
-  }, [activeTab, selected, selectedDatasetId, selectedModelProject]);
-  useEffect(() => {
-    const search = searchWithLabPrimaryTab(window.location.search, activeTab);
-    const nextUrl = `${window.location.pathname}${search}${window.location.hash}`;
-    const currentUrl =
-      `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (nextUrl === currentUrl) return;
-    window.history.replaceState(window.history.state, "", nextUrl);
-    window.dispatchEvent(new Event(LAB_PRIMARY_TAB_CHANGE_EVENT));
-  }, [activeTab]);
   useEffect(() => {
     if (!modelRunSyncKey) return;
     void createImprove.refresh();
@@ -483,8 +463,16 @@ export function LabsRoute({
   function finishDatasetCreation(tasksetId: string | null) {
     setDatasetCreateRoute(null);
     setDatasetDraftId(null);
-    setSelectedKey(null);
-    setActiveTab("tasksets");
+    if (selectedProjectRouteId) {
+      navigateModelsRoute({
+        kind: "project",
+        projectId: selectedProjectRouteId,
+        section: "tasksets",
+        resourceId: tasksetId,
+        detailTab: null,
+      });
+      return;
+    }
     setSelectedDatasetId(tasksetId);
   }
 
@@ -505,8 +493,7 @@ export function LabsRoute({
     const saved = await training.training.actions.saveModelProject(project);
     if (!saved) return false;
     setModelCreateOpen(false);
-    setActiveTab("overview");
-    setSelectedKey(workproductKey("model", saved.id));
+    navigateModelsRoute(modelProjectRoute(saved.id));
     if (input.purpose === "benchmark") {
       setBenchmarkLaunch({
         modelId: saved.id,
@@ -516,7 +503,10 @@ export function LabsRoute({
     profileView.onToast?.(`${saved.name} created.`, "success");
     return true;
   }
-  const closeSelectedWorkproduct = useCallback(() => setSelectedKey(null), []);
+  const closeSelectedWorkproduct = useCallback(
+    () => navigateModelsRoute({ kind: "index" }),
+    [],
+  );
 
   function renderLaunchEditor(returnToTasksetId: string | null) {
     const request = training.launchRequest;
@@ -541,8 +531,7 @@ export function LabsRoute({
             setSelectedDatasetId(tasksetId);
             setActiveTab("tasksets");
           } else {
-            setSelectedKey(workproductKey("model", modelId));
-            setActiveTab("overview");
+            navigateModelsRoute(modelProjectRoute(modelId));
           }
           await createImprove.refresh();
         }}
@@ -554,8 +543,7 @@ export function LabsRoute({
             setSelectedDatasetId(returnToTasksetId);
             setActiveTab("tasksets");
           } else {
-            setSelectedKey(workproductKey("model", modelId));
-            setActiveTab("overview");
+            navigateModelsRoute(modelProjectRoute(modelId));
           }
         }}
         onOpenProviderSettings={training.onOpenProviderSettings}
@@ -607,7 +595,19 @@ export function LabsRoute({
             onToast={(message, tone) =>
               profileView.onToast?.(message, tone) ?? 0
             }
-            onSelectedIdChange={setSelectedDatasetId}
+            onSelectedIdChange={(tasksetId) => {
+              if (!selectedProjectRouteId) {
+                setSelectedDatasetId(tasksetId);
+                return;
+              }
+              navigateModelsRoute({
+                kind: "project",
+                projectId: selectedProjectRouteId,
+                section: "tasksets",
+                resourceId: tasksetId,
+                detailTab: null,
+              });
+            }}
             modelProjectId={selected?.id ?? null}
             onOpenDraft={(draftId) => {
               setDatasetDraftId(draftId);
@@ -650,9 +650,15 @@ export function LabsRoute({
           onLocationChange={onDetailOpenChange}
           onRenameAgent={() => undefined}
           onOpenDataset={(tasksetId) => {
-            setSelectedKey(null);
-            setSelectedDatasetId(tasksetId);
-            setActiveTab("tasksets");
+            if (selectedProjectRouteId) {
+              navigateModelsRoute({
+                kind: "project",
+                projectId: selectedProjectRouteId,
+                section: "tasksets",
+                resourceId: tasksetId,
+                detailTab: null,
+              });
+            }
           }}
           onPause={onPause}
           onReconcilePullRequest={onReconcilePullRequest}
@@ -717,7 +723,10 @@ export function LabsRoute({
           providerSettings={training.providerSettings}
           runs={createImprove.runs}
           state={training.training.payload}
-          onSelect={setSelectedKey}
+          onSelect={(key) => {
+            const project = models.find((item) => item.key === key);
+            if (project) navigateModelsRoute(modelProjectRoute(project.id));
+          }}
           onUseModel={useModel}
         />
       )}
