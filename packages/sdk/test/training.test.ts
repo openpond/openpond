@@ -3,10 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import {
   OPENPOND_TRAINING_MEDIA_TYPE,
   TrainingApiErrorSchema,
+  TrainingInputArtifactSchema,
   TrainingJobSubmissionSchema,
   canonicalJson,
   createTrainingClient,
   parseAndVerifyTrainingJobSubmission,
+  parseAndVerifyTrainingInputArtifactUpload,
+  parseAndVerifyTrainingExecutionReceipt,
+  trainingExecutionReceiptHash,
+  trainingInputArtifactUploadHash,
   trainingJobSubmissionHash,
 } from "../src/training.js";
 
@@ -92,6 +97,89 @@ function job() {
 }
 
 describe("Training SDK contracts", () => {
+  it("verifies receipt identity, authority, Job binding, hash, and cleanup", async () => {
+    const receipt = {
+      schemaVersion: "openpond.trainingExecutionReceipt.v2" as const,
+      id: "receipt-1",
+      teamId: "team-1",
+      jobId: "job-1",
+      submissionHash: HASH,
+      manifestHash: HASH,
+      recipeHash: HASH,
+      capabilityHash: HASH,
+      runtimeRelease: { id: "runtime-1", contentHash: HASH },
+      inputs: [],
+      outputs: [],
+      spendUsd: 0.5,
+      durationSeconds: 60,
+      cleanupComplete: true,
+      issuer: "sandbox-managed-training",
+      issuedAt: NOW,
+      signature: null,
+    };
+    const contentHash = await trainingExecutionReceiptHash(receipt);
+    await expect(parseAndVerifyTrainingExecutionReceipt(receipt, {
+      id: receipt.id,
+      contentHash,
+      teamId: receipt.teamId,
+      jobId: receipt.jobId,
+    })).resolves.toEqual(receipt);
+    await expect(parseAndVerifyTrainingExecutionReceipt(
+      { ...receipt, cleanupComplete: false },
+      {
+        id: receipt.id,
+        contentHash: await trainingExecutionReceiptHash({
+          ...receipt,
+          cleanupComplete: false,
+        }),
+      },
+    )).rejects.toMatchObject({ code: "execution_cleanup_incomplete" });
+  });
+
+  it("stages a bounded content-addressed portable input without starting a Job", async () => {
+    const unsigned = {
+      schemaVersion: "openpond.trainingInputArtifactUpload.v2" as const,
+      kind: "portable_training_bundle" as const,
+      idempotencyKey: "stage-manifest-1",
+      sourceManifest: { id: "manifest-1", contentHash: HASH },
+      payload: { schemaVersion: "openpond.managedRlPortableSubmission.v1" },
+    };
+    const upload = {
+      ...unsigned,
+      contentHash: await trainingInputArtifactUploadHash(unsigned),
+    };
+    await expect(parseAndVerifyTrainingInputArtifactUpload(upload)).resolves.toEqual(upload);
+
+    const fetch = vi.fn(async () =>
+      new Response(JSON.stringify({
+        artifact: {
+          schemaVersion: "openpond.trainingInputArtifact.v2",
+          kind: upload.kind,
+          sourceManifest: upload.sourceManifest,
+          artifactRef: "r2://team/training-inputs/hash.json",
+          contentHash: upload.contentHash,
+          sizeBytes: 128,
+          createdAt: NOW,
+        },
+      }), { status: 201 }),
+    );
+    const client = createTrainingClient({
+      baseUrl: "https://api.openpond.test",
+      fetch,
+    });
+    await expect(client.stageArtifact(upload)).resolves.toEqual(
+      TrainingInputArtifactSchema.parse({
+        schemaVersion: "openpond.trainingInputArtifact.v2",
+        kind: upload.kind,
+        sourceManifest: upload.sourceManifest,
+        artifactRef: "r2://team/training-inputs/hash.json",
+        contentHash: upload.contentHash,
+        sizeBytes: 128,
+        createdAt: NOW,
+      }),
+    );
+  });
+
   it("binds every immutable Job to an exact Project revision and approval", () => {
     const parsed = TrainingJobSubmissionSchema.parse(submission());
     expect(parsed.source.modelProject).toEqual({

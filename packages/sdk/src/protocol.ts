@@ -13,6 +13,7 @@ export const OPENPOND_MODEL_PROJECT_MEDIA_TYPE =
   "application/vnd.openpond.model-project+json;version=2" as const;
 
 export const TRAINING_JOB_SUBMISSION_MAX_BYTES = 1_048_576;
+export const TRAINING_INPUT_ARTIFACT_MAX_BYTES = 67_108_864;
 export const TRAINING_API_RESPONSE_MAX_BYTES = 8_388_608;
 export const MODEL_PROJECT_SYNC_MAX_BYTES = 524_288;
 export const MODEL_PROJECT_API_RESPONSE_MAX_BYTES = 8_388_608;

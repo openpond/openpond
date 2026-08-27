@@ -44,12 +44,13 @@ export function createModelProjectHostingService(input: {
     const project = await requireProject(input.store, projectId);
     const access = await input.resolveAccess();
     const syncBody = {
-      schemaVersion: "openpond.hostedModelProjectSync.v1" as const,
+      schemaVersion: "openpond.hostedModelProjectSync.v2" as const,
       portableProjectId: project.id,
       name: project.name,
       objective: project.objective,
       defaultBaseModel: project.defaultBaseModel,
       defaultDestinationId: project.defaultDestinationId,
+      trainingSetup: project.trainingSetup,
       sourceRevision: project.revision,
       sourceUpdatedAt: project.updatedAt,
     };
