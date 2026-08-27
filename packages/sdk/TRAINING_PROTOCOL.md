@@ -16,9 +16,9 @@ their placement, worker, lease, credential, or storage internals.
   `data`; a provider must preserve recipe fields it does not interpret and
   reject a recipe version it cannot execute.
 - A Training Job submission is at most 1 MiB of canonical JSON. Model Project
-  sync is at most 512 KiB. SDK responses are bounded at 8 MiB. Artifact bytes
-  are not embedded in these documents; they are transferred through immutable,
-  content-addressed artifact references.
+  sync is at most 512 KiB. SDK responses are bounded at 8 MiB. A staged input
+  artifact envelope is bounded at 64 MiB and is stored by hash before Job
+  admission; Jobs carry only immutable, content-addressed artifact references.
 - `contentHash` on `openpond.trainingJobSubmission.v2` is lowercase SHA-256 of
   the canonical JSON object with the top-level `contentHash` member omitted.
   Canonical JSON sorts object keys, preserves array order, rejects non-JSON and
@@ -35,6 +35,7 @@ their placement, worker, lease, credential, or storage internals.
 
 ```text
 GET  /v1/training/capabilities
+POST /v1/training/artifacts
 POST /v1/training/jobs
 GET  /v1/training/jobs?modelProjectId=&cursor=&limit=
 GET  /v1/training/jobs/{jobId}
@@ -49,7 +50,10 @@ GET  /v1/model-projects
 GET  /v1/model-projects/{projectId}
 ```
 
-Every route is authenticated and team-scoped. The provider stores the exact
+Every route is authenticated and team-scoped. `POST /artifacts` stages bytes
+or an executable portable bundle without creating compute or a Job; retrying
+the same idempotency key and hash returns the original artifact. The provider
+stores the exact
 portable Project ID, source revision/hash, Harness/Taskset/Dataset refs,
 submission hash, and approval/budget facts. It resolves those public facts to
 private execution state only after validation and admission.

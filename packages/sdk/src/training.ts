@@ -9,6 +9,7 @@ import {
 import {
   OPENPOND_TRAINING_MEDIA_TYPE,
   TRAINING_API_RESPONSE_MAX_BYTES,
+  TRAINING_INPUT_ARTIFACT_MAX_BYTES,
   TRAINING_JOB_SUBMISSION_MAX_BYTES,
   OpenPondProtocolError,
   assertCanonicalPayloadSize,
@@ -20,6 +21,7 @@ export {
   OPENPOND_TRAINING_MEDIA_TYPE,
   OPENPOND_TRAINING_PROTOCOL_MAJOR,
   TRAINING_API_RESPONSE_MAX_BYTES,
+  TRAINING_INPUT_ARTIFACT_MAX_BYTES,
   TRAINING_JOB_SUBMISSION_MAX_BYTES,
   OpenPondProtocolError,
   assertCanonicalPayloadSize,
@@ -32,6 +34,61 @@ export {
 const IdSchema = z.string().trim().min(1).max(500);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const TimestampSchema = z.string().datetime({ offset: true });
+
+/**
+ * Stages a content-addressed immutable input before Job admission. The payload
+ * is deliberately opaque to the transport contract: its declared kind owns
+ * the executable schema, while the envelope provides bounded bytes,
+ * idempotency, and a stable manifest lookup key.
+ */
+export const TrainingInputArtifactUploadSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.trainingInputArtifactUpload.v2"),
+    kind: z.enum(["portable_training_bundle", "reward_model_dataset"]),
+    idempotencyKey: z.string().trim().min(1).max(500),
+    sourceManifest: ModelProjectImmutableRefSchema,
+    payload: z.unknown(),
+    contentHash: HashSchema,
+  })
+  .strict();
+
+export const TrainingInputArtifactSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.trainingInputArtifact.v2"),
+    kind: z.enum(["portable_training_bundle", "reward_model_dataset"]),
+    sourceManifest: ModelProjectImmutableRefSchema,
+    artifactRef: z.string().trim().min(1).max(2_000),
+    contentHash: HashSchema,
+    sizeBytes: z.number().int().positive(),
+    createdAt: TimestampSchema,
+  })
+  .strict();
+
+export async function trainingInputArtifactUploadHash(
+  upload: Omit<TrainingInputArtifactUpload, "contentHash"> | TrainingInputArtifactUpload,
+): Promise<string> {
+  const { contentHash: _contentHash, ...content } = upload as TrainingInputArtifactUpload;
+  return canonicalSha256(content);
+}
+
+export async function parseAndVerifyTrainingInputArtifactUpload(
+  value: unknown,
+): Promise<TrainingInputArtifactUpload> {
+  assertCanonicalPayloadSize(
+    value,
+    TRAINING_INPUT_ARTIFACT_MAX_BYTES,
+    "Training input artifact",
+  );
+  const parsed = TrainingInputArtifactUploadSchema.parse(value);
+  const expectedHash = await trainingInputArtifactUploadHash(parsed);
+  if (parsed.contentHash !== expectedHash) {
+    throw new OpenPondProtocolError(
+      "content_hash_mismatch",
+      `Training input artifact contentHash ${parsed.contentHash} does not match ${expectedHash}.`,
+    );
+  }
+  return parsed;
+}
 
 export const TrainingJobKindSchema = z.enum([
   "reward_model_train",
@@ -305,6 +362,53 @@ export const TrainingExecutionReceiptSchema = z
   })
   .strict();
 
+export async function trainingExecutionReceiptHash(
+  receipt: TrainingExecutionReceipt,
+): Promise<string> {
+  return canonicalSha256(TrainingExecutionReceiptSchema.parse(receipt));
+}
+
+export async function parseAndVerifyTrainingExecutionReceipt(
+  value: unknown,
+  expected: {
+    id: string;
+    contentHash: string;
+    teamId?: string;
+    jobId?: string;
+    requireCleanup?: boolean;
+  },
+): Promise<TrainingExecutionReceipt> {
+  const receipt = TrainingExecutionReceiptSchema.parse(value);
+  const expectedId = IdSchema.parse(expected.id);
+  const expectedHash = HashSchema.parse(expected.contentHash);
+  const actualHash = await trainingExecutionReceiptHash(receipt);
+  if (receipt.id !== expectedId || actualHash !== expectedHash) {
+    throw new OpenPondProtocolError(
+      "execution_receipt_mismatch",
+      "The execution receipt identity or canonical content hash did not match.",
+    );
+  }
+  if (expected.teamId !== undefined && receipt.teamId !== IdSchema.parse(expected.teamId)) {
+    throw new OpenPondProtocolError(
+      "execution_receipt_team_mismatch",
+      "The execution receipt belongs to a different team.",
+    );
+  }
+  if (expected.jobId !== undefined && receipt.jobId !== IdSchema.parse(expected.jobId)) {
+    throw new OpenPondProtocolError(
+      "execution_receipt_job_mismatch",
+      "The execution receipt belongs to a different Training Job.",
+    );
+  }
+  if ((expected.requireCleanup ?? true) && !receipt.cleanupComplete) {
+    throw new OpenPondProtocolError(
+      "execution_cleanup_incomplete",
+      "The execution receipt does not attest complete terminal cleanup.",
+    );
+  }
+  return receipt;
+}
+
 export const TrainingJobOutputsSchema = z
   .object({
     schemaVersion: z.literal("openpond.trainingJobOutputs.v2"),
@@ -373,6 +477,10 @@ export const TrainingCapabilitiesSchema = z
 export type TrainingJobSubmission = z.infer<
   typeof TrainingJobSubmissionSchema
 >;
+export type TrainingInputArtifactUpload = z.infer<
+  typeof TrainingInputArtifactUploadSchema
+>;
+export type TrainingInputArtifact = z.infer<typeof TrainingInputArtifactSchema>;
 export type TrainingJob = z.infer<typeof TrainingJobSchema>;
 export type TrainingJobPage = z.infer<typeof TrainingJobPageSchema>;
 export type TrainingJobEvent = z.infer<typeof TrainingJobEventSchema>;
@@ -427,6 +535,18 @@ export function createTrainingClient(input: {
     async capabilities() {
       return TrainingCapabilitiesSchema.parse(
         unwrapObject(await request("/v1/training/capabilities"), "capabilities"),
+      );
+    },
+    async stageArtifact(upload: TrainingInputArtifactUpload) {
+      const parsed = await parseAndVerifyTrainingInputArtifactUpload(upload);
+      return TrainingInputArtifactSchema.parse(
+        unwrapObject(
+          await request("/v1/training/artifacts", {
+            method: "POST",
+            body: JSON.stringify(parsed),
+          }),
+          "artifact",
+        ),
       );
     },
     async createJob(submission: TrainingJobSubmission) {
