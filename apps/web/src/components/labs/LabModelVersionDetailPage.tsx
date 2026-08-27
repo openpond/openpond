@@ -194,8 +194,26 @@ export function LabModelVersionDetailPage({
   );
   const latestActivity = detail.detail?.events.at(-1);
   const runStatus = statusLabel(currentRunStatus);
+  const optimizerStepsTarget =
+    (selectedPlan &&
+    (selectedPlan.recipe.method === "sft" ||
+      selectedPlan.recipe.method === "dpo" ||
+      selectedPlan.recipe.method === "grpo")
+      ? selectedPlan.recipe.optimizer.maxSteps
+      : null) ??
+    managedEvidence?.progress.targetOptimizerSteps ??
+    null;
+  const locallyReconciledSteps =
+    optimizerStepsTarget !== null &&
+    typeof selectedJob?.metadata.progress === "number" &&
+    Number.isFinite(selectedJob.metadata.progress)
+      ? Math.floor(
+          Math.max(0, selectedJob.metadata.progress) * optimizerStepsTarget,
+        )
+      : 0;
   const optimizerStepsObserved = Math.max(
     0,
+    locallyReconciledSteps,
     detail.detail?.policyMetrics.reduce(
       (maximum, metric) => Math.max(maximum, metric.step),
       0,
@@ -206,15 +224,6 @@ export function LabModelVersionDetailPage({
     ) ?? 0,
     managedEvidence?.progress.committedOptimizerSteps ?? 0,
   );
-  const optimizerStepsTarget =
-    (selectedPlan &&
-    (selectedPlan.recipe.method === "sft" ||
-      selectedPlan.recipe.method === "dpo" ||
-      selectedPlan.recipe.method === "grpo")
-      ? selectedPlan.recipe.optimizer.maxSteps
-      : null) ??
-    managedEvidence?.progress.targetOptimizerSteps ??
-    null;
   const progressMetric = formatTrainingProgress(
     optimizerStepsObserved,
     optimizerStepsTarget,
@@ -827,7 +836,7 @@ function eventLabel(type: TrainingJobEvent["type"]): string {
     .replace(/^./, (value) => value.toUpperCase());
 }
 
-function eventSummary(event: TrainingJobEvent): string {
+export function eventSummary(event: TrainingJobEvent): string {
   const payload = event.payload;
   const step = finiteNumber(payload.step);
   const maxSteps = finiteNumber(payload.maxSteps);
@@ -843,6 +852,25 @@ function eventSummary(event: TrainingJobEvent): string {
     return `${message ?? payload.telemetryType.replaceAll("_", " ")}${
       step == null ? "" : ` · step ${step}`
     }${source}${errorCode ? ` · ${errorCode}` : ""}`;
+  }
+  if (typeof payload.remoteEventType === "string") {
+    const label = remoteEventLabel(payload.remoteEventType);
+    const phase =
+      typeof payload.remotePhase === "string"
+        ? remotePhaseLabel(payload.remotePhase)
+        : null;
+    const errorCode =
+      typeof payload.errorCode === "string" && payload.errorCode.trim()
+        ? payload.errorCode.trim()
+        : null;
+    return [
+      label,
+      phase,
+      step == null ? null : `step ${step}`,
+      errorCode ? `error ${errorCode}` : null,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ");
   }
   if (event.type === "start") {
     return typeof payload.device === "string"
@@ -905,6 +933,40 @@ function eventSummary(event: TrainingJobEvent): string {
     return payload.message;
   }
   return Object.keys(payload).length ? JSON.stringify(payload) : "Recorded.";
+}
+
+function remoteEventLabel(value: string): string {
+  const known: Record<string, string> = {
+    drain: "Rollout drain",
+    infer: "Model inference",
+    materialize_checkpoint: "Checkpoint materialization",
+    optimizer_metric: "Optimizer metric",
+    provision_gpu: "GPU provisioning",
+    rollout_metric: "Rollout trajectory",
+    score_reward_model: "Reward scoring",
+    start_inference: "Policy server",
+    train_step: "Optimizer update",
+    upload_checkpoint: "Checkpoint upload",
+  };
+  return known[value] ?? humanizeEventValue(value);
+}
+
+function remotePhaseLabel(value: string): string {
+  const known: Record<string, string> = {
+    committed: "committed",
+    completed: "completed",
+    eligible: "recorded",
+    failed: "failed",
+    running: "running",
+    succeeded: "succeeded",
+  };
+  return known[value] ?? humanizeEventValue(value).toLocaleLowerCase();
+}
+
+function humanizeEventValue(value: string): string {
+  return value
+    .replaceAll("_", " ")
+    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function numericSummary(

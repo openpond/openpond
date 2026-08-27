@@ -2,10 +2,14 @@ import { describe, expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   ManagedTrainingRunEvidenceSchema,
+  TrainingJobEventSchema,
   TrainingRunDetailSchema,
 } from "../packages/contracts/src";
 import { LabModelRunSummary } from "../apps/web/src/components/labs/LabModelRunSummary";
-import { formatTrainingProgress } from "../apps/web/src/components/labs/LabModelVersionDetailPage";
+import {
+  eventSummary,
+  formatTrainingProgress,
+} from "../apps/web/src/components/labs/LabModelVersionDetailPage";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";
 import { TrainingRunMetrics } from "../apps/web/src/components/training/TrainingRunMetrics";
 
@@ -357,6 +361,26 @@ describe("Training run detail UI", () => {
       hint: "completed / planned",
     });
     expect(formatTrainingProgress(17, 16).value).toBe("17 / 16");
+  });
+
+  test("renders managed progress as a human status without null debug fields", () => {
+    const event = TrainingJobEventSchema.parse({
+      schemaVersion: "openpond.trainingJobEvent.v1",
+      id: "event_progress_fixture",
+      jobId: "job_detail_fixture",
+      sequence: 42,
+      type: "progress",
+      timestamp: "2026-08-27T16:55:54.155Z",
+      payload: {
+        errorCode: null,
+        remoteEventType: "train_step",
+        remotePhase: "succeeded",
+      },
+    });
+
+    expect(eventSummary(event)).toBe("Optimizer update · succeeded");
+    expect(eventSummary(event)).not.toContain("errorCode");
+    expect(eventSummary(event)).not.toContain("null");
   });
 
 });
