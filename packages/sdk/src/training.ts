@@ -6,6 +6,28 @@ import {
   ModelProjectRecipeDocumentSchema,
   ModelProjectVersionedRefSchema,
 } from "./model-projects.js";
+import {
+  OPENPOND_TRAINING_MEDIA_TYPE,
+  TRAINING_API_RESPONSE_MAX_BYTES,
+  TRAINING_JOB_SUBMISSION_MAX_BYTES,
+  OpenPondProtocolError,
+  assertCanonicalPayloadSize,
+  canonicalSha256,
+  parseBoundedJson,
+} from "./protocol.js";
+
+export {
+  OPENPOND_TRAINING_MEDIA_TYPE,
+  OPENPOND_TRAINING_PROTOCOL_MAJOR,
+  TRAINING_API_RESPONSE_MAX_BYTES,
+  TRAINING_JOB_SUBMISSION_MAX_BYTES,
+  OpenPondProtocolError,
+  assertCanonicalPayloadSize,
+  canonicalJson,
+  canonicalJsonByteLength,
+  canonicalSha256,
+  parseBoundedJson,
+} from "./protocol.js";
 
 const IdSchema = z.string().trim().min(1).max(500);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -155,6 +177,32 @@ export const TrainingJobSubmissionSchema = z
     }
   });
 
+export async function trainingJobSubmissionHash(
+  submission: Omit<TrainingJobSubmission, "contentHash"> | TrainingJobSubmission,
+): Promise<string> {
+  const { contentHash: _contentHash, ...content } = submission as TrainingJobSubmission;
+  return canonicalSha256(content);
+}
+
+export async function parseAndVerifyTrainingJobSubmission(
+  value: unknown,
+): Promise<TrainingJobSubmission> {
+  assertCanonicalPayloadSize(
+    value,
+    TRAINING_JOB_SUBMISSION_MAX_BYTES,
+    "Training Job submission",
+  );
+  const parsed = TrainingJobSubmissionSchema.parse(value);
+  const expectedHash = await trainingJobSubmissionHash(parsed);
+  if (parsed.contentHash !== expectedHash) {
+    throw new OpenPondProtocolError(
+      "content_hash_mismatch",
+      `Training Job contentHash ${parsed.contentHash} does not match ${expectedHash}.`,
+    );
+  }
+  return parsed;
+}
+
 export const TrainingJobSchema = z
   .object({
     schemaVersion: z.literal("openpond.trainingJob.v2"),
@@ -174,6 +222,14 @@ export const TrainingJobSchema = z
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
     completedAt: TimestampSchema.nullable(),
+  })
+  .strict();
+
+export const TrainingJobPageSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.trainingJobPage.v2"),
+    jobs: z.array(TrainingJobSchema).max(1_000),
+    nextCursor: z.string().trim().min(1).max(2_000).nullable(),
   })
   .strict();
 
@@ -200,6 +256,10 @@ export const TrainingJobLogSchema = z
     message: z.string().max(20_000),
     createdAt: TimestampSchema,
   })
+  .strict();
+
+export const TrainingJobControlRequestSchema = z
+  .object({ expectedVersion: z.number().int().nonnegative() })
   .strict();
 
 export const TrainingJobOutputSchema = z
@@ -245,6 +305,43 @@ export const TrainingExecutionReceiptSchema = z
   })
   .strict();
 
+export const TrainingJobOutputsSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.trainingJobOutputs.v2"),
+    outputs: z.array(TrainingJobOutputSchema).max(10_000),
+    receipt: TrainingExecutionReceiptSchema.nullable(),
+  })
+  .strict();
+
+export const TrainingApiErrorSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.trainingApiError.v2"),
+    code: z.string().trim().min(1).max(200),
+    message: z.string().trim().min(1).max(5_000),
+    retryable: z.boolean().default(false),
+    requestId: z.string().trim().min(1).max(500).nullable().default(null),
+    details: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
+
+export class OpenPondTrainingApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly retryable: boolean;
+  readonly requestId: string | null;
+  readonly details: Record<string, unknown>;
+
+  constructor(status: number, error: z.infer<typeof TrainingApiErrorSchema>) {
+    super(error.message);
+    this.name = "OpenPondTrainingApiError";
+    this.status = status;
+    this.code = error.code;
+    this.retryable = error.retryable;
+    this.requestId = error.requestId;
+    this.details = error.details;
+  }
+}
+
 export const TrainingCapabilitiesSchema = z
   .object({
     schemaVersion: z.literal("openpond.trainingCapabilities.v2"),
@@ -277,8 +374,14 @@ export type TrainingJobSubmission = z.infer<
   typeof TrainingJobSubmissionSchema
 >;
 export type TrainingJob = z.infer<typeof TrainingJobSchema>;
+export type TrainingJobPage = z.infer<typeof TrainingJobPageSchema>;
 export type TrainingJobEvent = z.infer<typeof TrainingJobEventSchema>;
+export type TrainingJobLog = z.infer<typeof TrainingJobLogSchema>;
 export type TrainingJobOutput = z.infer<typeof TrainingJobOutputSchema>;
+export type TrainingJobOutputs = z.infer<typeof TrainingJobOutputsSchema>;
+export type TrainingExecutionReceipt = z.infer<
+  typeof TrainingExecutionReceiptSchema
+>;
 export type TrainingCapabilities = z.infer<typeof TrainingCapabilitiesSchema>;
 
 function headersRecord(headers: HeadersInit | undefined): Record<string, string> {
@@ -305,14 +408,18 @@ export function createTrainingClient(input: {
     const response = await fetchImpl(`${baseUrl}${pathname}`, {
       ...init,
       headers: {
-        accept: "application/json",
-        ...(init?.body ? { "content-type": "application/json" } : {}),
+        accept: OPENPOND_TRAINING_MEDIA_TYPE,
+        ...(init?.body ? { "content-type": OPENPOND_TRAINING_MEDIA_TYPE } : {}),
         ...headersRecord(configuredHeaders),
         ...headersRecord(init?.headers),
       },
     });
-    const body = (await response.json()) as unknown;
-    if (!response.ok) throw new Error(errorMessage(body, response.status));
+    const body = parseBoundedJson(
+      await response.text(),
+      TRAINING_API_RESPONSE_MAX_BYTES,
+      "Training API response",
+    );
+    if (!response.ok) throw trainingApiError(body, response.status);
     return body;
   }
 
@@ -323,7 +430,7 @@ export function createTrainingClient(input: {
       );
     },
     async createJob(submission: TrainingJobSubmission) {
-      const parsed = TrainingJobSubmissionSchema.parse(submission);
+      const parsed = await parseAndVerifyTrainingJobSubmission(submission);
       return TrainingJobSchema.parse(
         unwrapObject(
           await request("/v1/training/jobs", {
@@ -334,13 +441,28 @@ export function createTrainingClient(input: {
         ),
       );
     },
-    async listJobs(modelProjectId?: string) {
-      const query = modelProjectId
-        ? `?modelProjectId=${encodeURIComponent(IdSchema.parse(modelProjectId))}`
-        : "";
-      return z
-        .array(TrainingJobSchema)
-        .parse(unwrapObject(await request(`/v1/training/jobs${query}`), "jobs"));
+    async listJobs(options: {
+      modelProjectId?: string;
+      cursor?: string;
+      limit?: number;
+    } = {}) {
+      const parameters = new URLSearchParams();
+      if (options.modelProjectId) {
+        parameters.set("modelProjectId", IdSchema.parse(options.modelProjectId));
+      }
+      if (options.cursor) {
+        parameters.set("cursor", z.string().trim().min(1).max(2_000).parse(options.cursor));
+      }
+      if (options.limit !== undefined) {
+        parameters.set(
+          "limit",
+          String(z.number().int().min(1).max(1_000).parse(options.limit)),
+        );
+      }
+      const query = parameters.size > 0 ? `?${parameters.toString()}` : "";
+      return TrainingJobPageSchema.parse(
+        await request(`/v1/training/jobs${query}`),
+      );
     },
     async getJob(jobId: string) {
       return TrainingJobSchema.parse(
@@ -350,12 +472,25 @@ export function createTrainingClient(input: {
         ),
       );
     },
-    async cancelJob(jobId: string) {
+    async cancelJob(jobId: string, expectedVersion: number) {
+      const control = TrainingJobControlRequestSchema.parse({ expectedVersion });
       return TrainingJobSchema.parse(
         unwrapObject(
           await request(
             `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/cancel`,
-            { method: "POST" },
+            { method: "POST", body: JSON.stringify(control) },
+          ),
+          "job",
+        ),
+      );
+    },
+    async stopAfterGroup(jobId: string, expectedVersion: number) {
+      const control = TrainingJobControlRequestSchema.parse({ expectedVersion });
+      return TrainingJobSchema.parse(
+        unwrapObject(
+          await request(
+            `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/stop-after-group`,
+            { method: "POST", body: JSON.stringify(control) },
           ),
           "job",
         ),
@@ -374,16 +509,21 @@ export function createTrainingClient(input: {
         );
     },
     async outputs(jobId: string) {
-      return z
-        .array(TrainingJobOutputSchema)
-        .parse(
-          unwrapObject(
-            await request(
-              `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/outputs`,
-            ),
-            "outputs",
+      return TrainingJobOutputsSchema.parse(
+        await request(
+          `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/outputs`,
+        ),
+      );
+    },
+    async logs(jobId: string) {
+      return z.array(TrainingJobLogSchema).max(100_000).parse(
+        unwrapObject(
+          await request(
+            `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/logs`,
           ),
-        );
+          "logs",
+        ),
+      );
     },
   };
 }
@@ -393,9 +533,13 @@ function unwrapObject(value: unknown, key: string): unknown {
   return key in value ? (value as Record<string, unknown>)[key] : value;
 }
 
-function errorMessage(value: unknown, status: number): string {
-  if (value && typeof value === "object" && "error" in value) {
-    return String((value as { error: unknown }).error);
+function trainingApiError(value: unknown, status: number): Error {
+  const parsed = TrainingApiErrorSchema.safeParse(value);
+  if (parsed.success) {
+    return new OpenPondTrainingApiError(status, parsed.data);
   }
-  return `Training request failed with HTTP ${status}.`;
+  return new OpenPondProtocolError(
+    "invalid_error_response",
+    `Training request failed with HTTP ${status} and an invalid error envelope.`,
+  );
 }

@@ -258,7 +258,10 @@ identity and explicit approval is captured for that submission only.
 `createTrainingClient` reads capabilities and creates or observes immutable
 Jobs, including Project-filtered Run history. These clients require an
 authenticated server-side API context; the schemas themselves contain no
-database, provider, credential, Electron, or UI dependencies.
+database, provider, credential, Electron, or UI dependencies. See
+[TRAINING_PROTOCOL.md](./TRAINING_PROTOCOL.md) for media types, hashing, size
+limits, compatibility rules, provider routes, receipts, and the published
+conformance fixtures.
 
 ## Development
 

@@ -449,8 +449,8 @@ importers:
   packages/sdk:
     dependencies:
       '@openpond/harness':
-        specifier: ^0.2.4
-        version: 0.2.4
+        specifier: ^0.2.5
+        version: 0.2.5
       esbuild:
         specifier: 0.28.1
         version: 0.28.1
@@ -897,8 +897,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@openpond/harness@0.2.4':
-    resolution: {integrity: sha512-Wr6DwNSHX7fo5+07CNH4AuV/EG8VeJWMmUHAOIWYXilRxt17gwZ9P6IflbjAT1S/TgE9IV2Zj7Hp5SUYiQfnDQ==}
+  '@openpond/harness@0.2.5':
+    resolution: {integrity: sha512-rLntF/IOMofcnzGH0GRSTSaKpuT8pgjyY1HlM1KESKafKSnJNT776oEkbYprNsFblFL6LzAVcOzHOHi3KrV8UQ==}
     engines: {node: '>=22.14.0 <25'}
 
   '@peculiar/asn1-schema@2.8.0':
@@ -3621,7 +3621,7 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
 
-  '@openpond/harness@0.2.4':
+  '@openpond/harness@0.2.5':
     dependencies:
       zod: 4.4.3
 

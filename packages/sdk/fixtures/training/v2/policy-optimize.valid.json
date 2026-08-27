@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "openpond.trainingJobSubmission.v2",
+  "idempotencyKey": "fixture-policy-project-r3",
+  "name": "Policy optimization fixture",
+  "source": {
+    "modelProject": {
+      "id": "hosted-project-fixture",
+      "portableProjectId": "project-fixture",
+      "revision": 3,
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "harnessRunManifest": {
+      "id": "manifest-fixture",
+      "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "harnessRelease": {
+      "id": "harness-fixture",
+      "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "taskset": {
+      "id": "taskset-fixture",
+      "revision": 2,
+      "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "tasksetRelease": {
+      "id": "taskset-release-fixture",
+      "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "dataset": {
+      "id": "dataset-fixture",
+      "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "evidenceSets": []
+  },
+  "job": {
+    "kind": "policy_optimize",
+    "baseModel": {
+      "schemaVersion": "openpond.baseModelPreference.v1",
+      "modelId": "model-fixture",
+      "revision": "revision-fixture",
+      "tokenizerRevision": "tokenizer-fixture",
+      "chatTemplateHash": "template-fixture",
+      "modelAssetId": null,
+      "source": "managed"
+    },
+    "recipe": {
+      "schemaVersion": "openpond.rftRecipe.v1",
+      "method": "grpo",
+      "parameterization": "lora",
+      "optimizer": {
+        "maximumSteps": 1
+      }
+    },
+    "rewardSource": {
+      "kind": "deterministic",
+      "grader": {
+        "id": "grader-fixture",
+        "contentHash": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "composer": null
+    },
+    "resumeFrom": null
+  },
+  "requestedCapabilities": [
+    {
+      "id": "managed_rl.policy.grpo",
+      "version": "1",
+      "required": true
+    }
+  ],
+  "budget": {
+    "maximumSpendUsd": 1,
+    "maximumWallSeconds": 900
+  },
+  "approval": {
+    "approvalHash": "2222222222222222222222222222222222222222222222222222222222222222",
+    "approvedAt": "2026-08-27T00:00:00.000Z",
+    "exportApproved": true,
+    "maximumSpendUsd": 1,
+    "retentionDays": 7,
+    "region": null
+  },
+  "contentHash": "0d85f9767886924fae6cf16409ebee02089c0c77e6aa1e9c69bac33c9f3bd22b"
+}
