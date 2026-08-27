@@ -23,6 +23,7 @@ import {
 
 import type { SqliteStore } from "../store/store.js";
 import { readRecoveredPortableArtifacts } from "./portable-model-run-artifacts.js";
+import { shouldCollectPortableTrainingArtifacts } from "./portable-model-run-terminal.js";
 import {
   failPreparedPortableModelRun,
   markPortableModelRunRunning,
@@ -388,6 +389,18 @@ export function createPortableModelRunService(deps: {
           status: executionStatus,
         });
         return executionStatus;
+      }
+      if (!shouldCollectPortableTrainingArtifacts(executionStatus.state)) {
+        const modelRun = await reconcilePortableModelRunLifecycle({
+          store: deps.store,
+          storeDir: deps.storeDir,
+          modelRunId,
+          job,
+          executionRef: parsed.data,
+          status: executionStatus,
+          failure: executionStatus.errorCode,
+        });
+        return portableStatusFromModelRun(modelRun);
       }
       let artifacts = null;
       try {
