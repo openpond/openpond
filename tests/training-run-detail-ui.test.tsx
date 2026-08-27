@@ -5,6 +5,7 @@ import {
   TrainingRunDetailSchema,
 } from "../packages/contracts/src";
 import { LabModelRunSummary } from "../apps/web/src/components/labs/LabModelRunSummary";
+import { formatTrainingProgress } from "../apps/web/src/components/labs/LabModelVersionDetailPage";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";
 import { TrainingRunMetrics } from "../apps/web/src/components/training/TrainingRunMetrics";
 
@@ -345,6 +346,13 @@ describe("Training run detail UI", () => {
     expect(html).toContain(
       "Evaluation will appear here after the first eligible checkpoint is scored."
     );
+  });
+
+  test("formats committed rollout-group progress against the planned updates", () => {
+    expect(formatTrainingProgress(4, 16)).toEqual({
+      value: "4 / 16",
+      hint: "completed / planned",
+    });
   });
 
 });

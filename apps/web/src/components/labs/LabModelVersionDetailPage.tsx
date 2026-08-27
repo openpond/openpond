@@ -194,6 +194,31 @@ export function LabModelVersionDetailPage({
   );
   const latestActivity = detail.detail?.events.at(-1);
   const runStatus = statusLabel(currentRunStatus);
+  const optimizerStepsObserved = Math.max(
+    0,
+    detail.detail?.policyMetrics.reduce(
+      (maximum, metric) => Math.max(maximum, metric.step),
+      0,
+    ) ?? 0,
+    detail.detail?.stepMetrics.reduce(
+      (maximum, metric) => Math.max(maximum, metric.step),
+      0,
+    ) ?? 0,
+    managedEvidence?.progress.committedOptimizerSteps ?? 0,
+  );
+  const optimizerStepsTarget =
+    (selectedPlan &&
+    (selectedPlan.recipe.method === "sft" ||
+      selectedPlan.recipe.method === "dpo" ||
+      selectedPlan.recipe.method === "grpo")
+      ? selectedPlan.recipe.optimizer.maxSteps
+      : null) ??
+    managedEvidence?.progress.targetOptimizerSteps ??
+    null;
+  const progressMetric = formatTrainingProgress(
+    optimizerStepsObserved,
+    optimizerStepsTarget,
+  );
   const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
     { id: "overview", label: "Overview" },
     ...(selectedJob ? [{ id: "metrics" as const, label: "Metrics" }] : []),
@@ -252,6 +277,11 @@ export function LabModelVersionDetailPage({
           value={currentRunStatus}
         />}
         metrics={[
+          {
+            label: selectedPlan?.recipe.method === "grpo" ? "Rollout groups" : "Training steps",
+            value: progressMetric.value,
+            hint: progressMetric.hint,
+          },
           { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
           { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
           { label: "Output", value: selectedVersion ? `Version ${selectedVersion.number}` : "No version" },
@@ -493,6 +523,24 @@ export function LabModelVersionDetailPage({
       </section>
     </div>
   );
+}
+
+export function formatTrainingProgress(
+  observed: number,
+  target: number | null,
+): { value: string; hint: string } {
+  const completed = Math.max(0, Math.floor(observed));
+  if (target === null || !Number.isFinite(target) || target <= 0) {
+    return {
+      value: completed.toLocaleString(),
+      hint: completed === 1 ? "completed update" : "completed updates",
+    };
+  }
+  const planned = Math.max(1, Math.floor(target));
+  return {
+    value: `${Math.min(completed, planned).toLocaleString()} / ${planned.toLocaleString()}`,
+    hint: "completed / planned",
+  };
 }
 
 function LabModelEvaluationRunDetail({

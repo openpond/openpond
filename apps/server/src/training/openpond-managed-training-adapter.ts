@@ -7,6 +7,7 @@ import {
   TrainingArtifactsSchema,
   TrainingEngineCapabilitiesSchema,
   TrainingExecutionStatusSchema,
+  TrainingJobEventSchema,
   type AdapterValidationReceipt,
   type LearningSignalBatch,
   type RewardModelRecipe,
@@ -50,6 +51,7 @@ import {
 } from "./openpond-managed-training-adapter-projection.js";
 
 const ADAPTER_ID = "sandbox-managed-rl";
+const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
 
 type Access = {
   apiBaseUrl: string;
@@ -719,7 +721,23 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
 
   async refreshEvidence(ref: TrainingExecutionRef): Promise<void> {
     const client = this.trainingClient(await this.resolveBoundAccess(ref.tenantId));
-    await Promise.all([client.events(ref.runId), client.logs(ref.runId)]);
+    const [events] = await Promise.all([client.events(ref.runId), client.logs(ref.runId)]);
+    for (const event of events) {
+      await this.dependencies.store.saveTrainingJobEvent(TrainingJobEventSchema.parse({
+        schemaVersion: "openpond.trainingJobEvent.v1",
+        id: event.id,
+        jobId: ref.runId,
+        sequence: REMOTE_TRAINING_EVENT_SEQUENCE_BASE + event.sequence,
+        type: localTrainingEventType(event),
+        timestamp: event.createdAt,
+        payload: {
+          ...event.data,
+          remoteEventType: event.type,
+          remotePhase: event.phase,
+          ...(event.message ? { message: event.message } : {}),
+        },
+      }));
+    }
   }
 
   async logs(ref: TrainingExecutionRef, cursor?: string) {
@@ -915,4 +933,18 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     this.localExecutors.set(ref.runId, executor);
     executor.start();
   }
+}
+
+function localTrainingEventType(event: {
+  type: string;
+  phase: string;
+  data: Record<string, unknown>;
+}): "queued" | "start" | "progress" | "metric" | "checkpoint" | "cancel" | "complete" | "failure" | "reconcile" {
+  if (typeof event.data.metricKind === "string") return "metric";
+  if (event.type.includes("checkpoint")) return "checkpoint";
+  if (event.type === "provision_gpu" || event.type === "start_inference") return "start";
+  if (event.type === "cancel" || event.type === "stop") return "cancel";
+  if (event.type === "complete") return "complete";
+  if (event.type === "failure") return "failure";
+  return "progress";
 }

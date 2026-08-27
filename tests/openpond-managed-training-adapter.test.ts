@@ -337,6 +337,44 @@ describe("OpenPond Managed training adapter", () => {
             ],
           });
         }
+        if (method === "GET" && url.pathname === "/v1/training/jobs/managed-job-2/events") {
+          return json({
+            events: [
+              {
+                schemaVersion: "openpond.trainingJobEvent.v2",
+                id: "optimizer-event-2",
+                jobId: "managed-job-2",
+                sequence: 2,
+                type: "optimizer_metric",
+                phase: "committed",
+                message: null,
+                data: {
+                  schemaVersion: "openpond.policyOptimizationMetric.v1",
+                  metricKind: "policy_optimization",
+                  method: "grpo",
+                  step: 2,
+                  timestamp: FIXED_TIME,
+                  learningRate: null,
+                  policyLoss: 0.2,
+                  valueLoss: null,
+                  meanReward: 0.75,
+                  meanReturn: 0.7,
+                  kl: 0.01,
+                  entropy: null,
+                  policyClipFraction: 0.1,
+                  valueClipFraction: null,
+                  explainedVariance: null,
+                  rolloutLearnerLag: 0,
+                  inputTokens: 100,
+                  outputTokens: 25,
+                  environmentExecutions: 4,
+                  costUsd: null,
+                },
+                createdAt: FIXED_TIME,
+              },
+            ],
+          });
+        }
         if (method === "POST" && url.pathname === "/v1/training/jobs/managed-job-2/cancel") {
           expect(JSON.parse(String(init?.body))).toEqual({
             expectedVersion: 4,
@@ -381,6 +419,32 @@ describe("OpenPond Managed training adapter", () => {
         inputBundleHash: "b".repeat(64),
         createdAt: FIXED_TIME,
       };
+      await store.saveTrainingJob({
+        schemaVersion: "openpond.trainingJob.v1",
+        id: ref.runId,
+        planId: "plan-managed-job-2",
+        bundleHash: "a".repeat(64),
+        approvalId: "approval-managed-job-2",
+        destinationId: "openpond_managed",
+        status: "running",
+        nonProduction: false,
+        workerPid: null,
+        startedAt: FIXED_TIME,
+        completedAt: null,
+        error: null,
+        createdAt: FIXED_TIME,
+        updatedAt: FIXED_TIME,
+        metadata: {},
+      });
+      await store.saveTrainingJobEvent({
+        schemaVersion: "openpond.trainingJobEvent.v1",
+        id: "local-start-event",
+        jobId: ref.runId,
+        sequence: 2,
+        type: "start",
+        timestamp: FIXED_TIME,
+        payload: {},
+      });
 
       await expect(adapter.status(ref)).resolves.toMatchObject({
         state: "running",
@@ -400,6 +464,22 @@ describe("OpenPond Managed training adapter", () => {
           },
         ],
       });
+      await adapter.refreshEvidence(ref);
+      await expect(store.listTrainingJobEvents(ref.runId)).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "local-start-event", sequence: 2 }),
+          expect.objectContaining({
+            id: "optimizer-event-2",
+            sequence: 1_000_002,
+            type: "metric",
+            payload: expect.objectContaining({
+              metricKind: "policy_optimization",
+              meanReward: 0.75,
+              remotePhase: "committed",
+            }),
+          }),
+        ]),
+      );
       await expect(adapter.cancel(ref)).resolves.toBeUndefined();
       await expect(adapter.collect(ref)).resolves.toMatchObject({
         runId: "managed-job-2",
