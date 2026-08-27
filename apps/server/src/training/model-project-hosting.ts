@@ -4,6 +4,7 @@ import {
   type Taskset,
 } from "@openpond/contracts";
 import { TasksetReleaseSchema, type TasksetRelease } from "@openpond/evals";
+import { OPENPOND_MODEL_PROJECT_MEDIA_TYPE } from "openpond-sdk/model-projects";
 import { z } from "zod";
 
 import type { SqliteStore } from "../store/store.js";
@@ -226,12 +227,18 @@ export function createModelProjectHostingService(input: {
   }): Promise<T> {
     const url = `${request.access.apiBaseUrl}${request.pathname}`;
     const headers = hostedApiAuthHeaders(request.access.token);
-    headers.set("accept", "application/json");
+    const isModelProjectRequest = request.pathname.startsWith("/v1/model-projects/");
+    headers.set(
+      "accept",
+      isModelProjectRequest ? OPENPOND_MODEL_PROJECT_MEDIA_TYPE : "application/json",
+    );
     headers.set(
       "content-type",
       request.gzip
         ? PORTABLE_TASKSET_PUBLICATION_CONTENT_TYPE
-        : "application/json",
+        : isModelProjectRequest
+          ? OPENPOND_MODEL_PROJECT_MEDIA_TYPE
+          : "application/json",
     );
     headers.set("x-openpond-team-id", request.access.teamId);
     const response = await fetchImpl(url, {
@@ -249,8 +256,10 @@ export function createModelProjectHostingService(input: {
       const endpoint = new URL(url);
       throw new Error(
         `${
-          typeof payload.error === "string"
-            ? payload.error
+          typeof payload.message === "string"
+            ? payload.message
+            : typeof payload.error === "string"
+              ? payload.error
             : "Hosted Model Project request failed"
         } (${response.status} ${endpoint.origin}${endpoint.pathname}).`,
       );

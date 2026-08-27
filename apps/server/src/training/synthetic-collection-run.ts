@@ -55,7 +55,7 @@ export const SyntheticCollectionRunRequestSchema = z.object({
 export type SyntheticCollectionRunRequest = z.infer<typeof SyntheticCollectionRunRequestSchema>;
 
 /**
- * Fixture-only C0 materialization. It creates normal Task Attempts from
+ * Fixture-only preference-data materialization. It creates normal Task Attempts from
  * compact structured output. An optional preview image may be retained for a
  * visual review protocol, but learned-reward training never depends on it.
  * Labels are fixture metadata only; the preference service later turns them

@@ -12,6 +12,7 @@ import {
 } from "@openpond/contracts";
 import type { PreferenceDatasetRelease, TasksetRelease } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
+import { OpenPondTrainingApiError } from "openpond-sdk/training";
 import {
   TrainingAdapterRegistry,
   TrainingDestinationRegistry,
@@ -236,13 +237,13 @@ export function createTrainingService(deps: {
       input.recipe.tasksetRelease.id !== input.dataset.tasksetRelease.id ||
       input.recipe.tasksetRelease.contentHash !== input.dataset.tasksetRelease.contentHash
     ) {
-      throw new Error("Reward Model recipe and D0 must pin the same Taskset release.");
+      throw new Error("Reward Model recipe and preference dataset must pin the same Taskset release.");
     }
     if (
       input.tasksetRelease.id !== input.dataset.tasksetRelease.id ||
       input.tasksetRelease.contentHash !== input.dataset.tasksetRelease.contentHash
     ) {
-      throw new Error("Reward Model Run must use the exact Taskset release pinned by D0.");
+      throw new Error("Reward Model Run must use the exact Taskset release pinned by the preference dataset.");
     }
     const now = new Date().toISOString();
     const recipeHash = contentHash(input.recipe);
@@ -316,11 +317,16 @@ export function createTrainingService(deps: {
         updatedAt: new Date().toISOString(),
       });
     } catch (error) {
+      const failure = error instanceof OpenPondTrainingApiError
+        ? `${error.message} (${error.code})`
+        : error instanceof Error
+          ? error.message
+          : "Reward Model launch failed.";
       return deps.store.saveRewardModelRun({
         ...prepared,
         status: "failed",
         failureOwner: "authoring",
-        failure: error instanceof Error ? error.message : "Reward Model launch failed.",
+        failure,
         completedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });

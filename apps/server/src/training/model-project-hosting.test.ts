@@ -22,6 +22,12 @@ describe("Model Project hosting", () => {
     };
     const saveModelProject = vi.fn(async (value: unknown) => value);
     const request = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("accept")).toBe(
+        "application/vnd.openpond.model-project+json;version=2",
+      );
+      expect(new Headers(init?.headers).get("content-type")).toBe(
+        "application/vnd.openpond.model-project+json;version=2",
+      );
       expect(JSON.parse(String(init?.body))).toMatchObject({
         portableProjectId: project.id,
         sourceRevision: project.revision,
