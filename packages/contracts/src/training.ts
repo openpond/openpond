@@ -461,6 +461,24 @@ export const ModelRunPresetSchema = z.enum([
   "small_experiment",
 ]);
 
+export const ModelProjectTrainingSetupSchema = z.object({
+  tasksetRef: z.object({
+    id: IdSchema,
+    revision: z.number().int().positive(),
+    contentHash: HashSchema,
+  }).nullable().default(null),
+  harnessRelease: ImmutableReleaseRefSchema.nullable().default(null),
+  tasksetRelease: ImmutableReleaseRefSchema.nullable().default(null),
+  baseModel: BaseModelPreferenceSchema.nullable().default(null),
+  method: TrainingMethodSchema.nullable().default(null),
+  destinationId: TrainingDestinationIdSchema.nullable().default(null),
+  managedRolloutPlacement: z.enum(["local", "remote"]).default("remote"),
+  runPreset: ModelRunPresetSchema.nullable().default(null),
+  recipe: TrainingRecipeSchema.nullable().default(null),
+  preferredMaximumSpendUsd: z.number().nonnegative().nullable().default(null),
+  preferredRetentionDays: z.number().int().nonnegative().nullable().default(null),
+}).strict();
+
 export const ModelProjectSchema = z.object({
   schemaVersion: z.literal("openpond.modelProject.v1"),
   id: IdSchema,
@@ -470,6 +488,19 @@ export const ModelProjectSchema = z.object({
   objective: z.string().trim().max(5_000).nullable(),
   defaultBaseModel: BaseModelPreferenceSchema.nullable(),
   defaultDestinationId: TrainingDestinationIdSchema.nullable(),
+  trainingSetup: ModelProjectTrainingSetupSchema.default({
+    tasksetRef: null,
+    harnessRelease: null,
+    tasksetRelease: null,
+    baseModel: null,
+    method: null,
+    destinationId: null,
+    managedRolloutPlacement: "remote",
+    runPreset: null,
+    recipe: null,
+    preferredMaximumSpendUsd: null,
+    preferredRetentionDays: null,
+  }),
   hosted: z
     .object({
       schemaVersion: z.literal("openpond.hostedModelProjectLink.v1"),
@@ -1038,6 +1069,9 @@ export type TrainingMethodAvailability = z.infer<
 >;
 export type ModelRunPreset = z.infer<typeof ModelRunPresetSchema>;
 export type ModelProject = z.infer<typeof ModelProjectSchema>;
+export type ModelProjectTrainingSetup = z.infer<
+  typeof ModelProjectTrainingSetupSchema
+>;
 export type ModelRunDraft = z.infer<typeof ModelRunDraftSchema>;
 export type TrainingPlan = z.infer<typeof TrainingPlanSchema>;
 export type TrainingBundleManifest = z.infer<

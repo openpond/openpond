@@ -23,6 +23,7 @@ import { ModelRunEditorHeader } from "./ModelRunEditorHeader";
 import { ModelRunSetupContent } from "./ModelRunSetupContent";
 import { labModelTasksets } from "./lab-models";
 import {
+  applyProjectTrainingSetup,
   bindTaskset,
   buildPageReason,
   cloneRunDraft,
@@ -102,6 +103,13 @@ export function ModelRunEditorPage({
     null;
   const initialTaskset =
     availableTasksets.find((candidate) => candidate.id === initialTasksetId) ??
+    availableTasksets.find(
+      (candidate) =>
+        candidate.id === persistedProject?.trainingSetup.tasksetRef?.id &&
+        candidate.revision === persistedProject.trainingSetup.tasksetRef.revision &&
+        candidate.contentHash ===
+          persistedProject.trainingSetup.tasksetRef.contentHash,
+    ) ??
     availableTasksets[0] ??
     null;
   const previousLaunchedDraft = useMemo(() => {
@@ -137,7 +145,10 @@ export function ModelRunEditorPage({
     const baseDraft = restoredDraft
       ?? (previousLaunchedDraft
         ? cloneRunDraft(previousLaunchedDraft)
-        : newDraft(profileId, initialProjectRef.current.id));
+        : applyProjectTrainingSetup(
+            newDraft(profileId, initialProjectRef.current.id),
+            initialProjectRef.current,
+          ));
     initialDraftRef.current = initialTaskset
       ? bindTaskset(baseDraft, initialTaskset)
       : baseDraft;
@@ -168,8 +179,10 @@ export function ModelRunEditorPage({
   });
   const [runApproval, setRunApproval] = useState<TrainingStartApproval>({
     exportApproved: true,
-    maximumCostUsd: 0,
-    retentionDays: null,
+    maximumCostUsd:
+      initialProjectRef.current.trainingSetup.preferredMaximumSpendUsd ?? 0,
+    retentionDays:
+      initialProjectRef.current.trainingSetup.preferredRetentionDays,
     region: null,
   });
   const selectedTaskset =
@@ -270,6 +283,19 @@ export function ModelRunEditorPage({
     const timestamp = new Date().toISOString();
     const nextProject: ModelProject = {
       ...project,
+      trainingSetup: {
+        tasksetRef: draft.tasksetRef,
+        harnessRelease: draft.harnessRelease ?? null,
+        tasksetRelease: draft.tasksetRelease ?? null,
+        baseModel: draft.baseModel,
+        method: draft.method,
+        destinationId: draft.destinationId,
+        managedRolloutPlacement: draft.managedRolloutPlacement ?? "remote",
+        runPreset: draft.runPreset,
+        recipe: draft.recipe,
+        preferredMaximumSpendUsd: runApproval.maximumCostUsd,
+        preferredRetentionDays: runApproval.retentionDays,
+      },
       updatedAt: timestamp,
     };
     const savedProject = await training.actions.saveModelProject(nextProject);

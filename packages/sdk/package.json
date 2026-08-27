@@ -40,6 +40,14 @@
       "types": "./dist/types/packages/sdk/src/refiner.d.ts",
       "import": "./dist/refiner.js"
     },
+    "./model-projects": {
+      "types": "./dist/types/packages/sdk/src/model-projects.d.ts",
+      "import": "./dist/model-projects.js"
+    },
+    "./training": {
+      "types": "./dist/types/packages/sdk/src/training.d.ts",
+      "import": "./dist/training.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {

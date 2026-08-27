@@ -10,6 +10,7 @@ import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
 import { HarnessLearningSidebarCard } from "./HarnessLearningSidebarCard";
+import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 
 export function Sidebar(props: SidebarProps) {
   const {
@@ -93,6 +94,7 @@ export function Sidebar(props: SidebarProps) {
               setSectionMenuOpen(null);
               setSettingsSection("harness");
               setView("settings");
+              navigateDesktopRoute({ kind: "settings", section: "harness" });
             }}
           />
         )}
@@ -103,11 +105,13 @@ export function Sidebar(props: SidebarProps) {
               setSectionMenuOpen(null);
               setSettingsSection("usage");
               setView("settings");
+              navigateDesktopRoute({ kind: "settings", section: "usage" });
             }}
             onOpenSettings={() => {
               setSectionMenuOpen(null);
               setSettingsSection("account");
               setView("settings");
+              navigateDesktopRoute({ kind: "settings", section: "account" });
             }}
           />
           <SidebarUtilityNavigation

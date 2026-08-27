@@ -30,6 +30,19 @@ export function newProject(
     objective,
     defaultBaseModel: null,
     defaultDestinationId: null,
+    trainingSetup: {
+      tasksetRef: null,
+      harnessRelease: null,
+      tasksetRelease: null,
+      baseModel: null,
+      method: null,
+      destinationId: null,
+      managedRolloutPlacement: "remote",
+      runPreset: null,
+      recipe: null,
+      preferredMaximumSpendUsd: null,
+      preferredRetentionDays: null,
+    },
     hosted: null,
     tasksetSyncs: [],
     createdAt: timestamp,
@@ -93,6 +106,27 @@ export function newDraft(
     recipe: null,
     createdAt: timestamp,
     updatedAt: timestamp,
+  };
+}
+
+export function applyProjectTrainingSetup(
+  draft: ModelRunDraft,
+  project: ModelProject,
+): ModelRunDraft {
+  const setup = project.trainingSetup;
+  return {
+    ...draft,
+    datasetMode: setup.tasksetRef ? "existing" : null,
+    tasksetRef: setup.tasksetRef,
+    harnessRelease: setup.harnessRelease,
+    tasksetRelease: setup.tasksetRelease,
+    baseModel: setup.baseModel,
+    method: setup.method,
+    destinationId: setup.destinationId,
+    managedRolloutPlacement: setup.managedRolloutPlacement,
+    runPreset: setup.runPreset,
+    recipe: setup.recipe,
+    updatedAt: project.updatedAt,
   };
 }
 

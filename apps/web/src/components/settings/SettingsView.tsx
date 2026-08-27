@@ -59,6 +59,7 @@ import { useDatasetStorageState } from "./useDatasetStorageState";
 import { useDatasetStorageSettings } from "./useDatasetStorageSettings";
 import { WindowControls, isDesktopShell, isMacPlatform } from "../app-shell/WindowControls";
 import { PanelRight } from "../icons";
+import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import type { SkillSourceDocument } from "../app-shell/skill-source-document";
 
 const HARNESS_SECTIONS = new Set<SettingsSection>([
@@ -227,6 +228,7 @@ export function SettingsView({
       setHarnessDiffOpen(false);
       onDiffPanelExpandedChange(false);
       setSection(nextSection);
+      navigateDesktopRoute({ kind: "settings", section: nextSection });
     },
     [confirmSubagentsNavigation, onDiffPanelExpandedChange, section],
   );

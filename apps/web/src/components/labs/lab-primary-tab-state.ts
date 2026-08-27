@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { SettingsSection } from "../../lib/app-models";
 
 export const MODEL_SECTIONS = [
   "overview",
@@ -20,6 +21,11 @@ export type ModelsRoute =
       detailTab: string | null;
     };
 
+export type DesktopRoute =
+  | { kind: "models"; route: ModelsRoute }
+  | { kind: "settings"; section: SettingsSection }
+  | { kind: "chat"; sessionId: string | null };
+
 type NavigationMode = "push" | "replace";
 
 const SECTION_SET = new Set<string>(MODEL_SECTIONS);
@@ -38,10 +44,34 @@ const LEGACY_TAB_TO_SECTION: Record<string, ModelSection> = {
   training: "runs",
   versions: "versions",
 };
+const SETTINGS_SECTIONS = new Set<SettingsSection>([
+  "account",
+  "notifications",
+  "harness",
+  "harness-refiner",
+  "harness-continuous-review",
+  "harness-contents",
+  "harness-releases",
+  "profile",
+  "skills",
+  "defaults",
+  "context",
+  "training",
+  "subagents",
+  "editor",
+  "providers",
+  "dataset-storage",
+  "remote",
+  "usage",
+  "personalization",
+  "diagnostics",
+]);
 const listeners = new Set<() => void>();
 let browserListening = false;
 let cachedLocation = "";
 let cachedRoute: ModelsRoute | null = null;
+let cachedDesktopLocation = "";
+let cachedDesktopRoute: DesktopRoute | null = null;
 
 function decodeSegment(value: string): string {
   try {
@@ -119,6 +149,34 @@ export function modelsPath(route: ModelsRoute): string {
   return parts.join("/");
 }
 
+export function desktopRouteFromLocation(input: {
+  pathname: string;
+  search?: string;
+}): DesktopRoute | null {
+  const modelsRoute = modelsRouteFromLocation(input);
+  if (modelsRoute) return { kind: "models", route: modelsRoute };
+  const parts = input.pathname.split("/").filter(Boolean);
+  if (parts[0] === "settings" && parts.length === 2) {
+    const section = decodeSegment(parts[1]);
+    return SETTINGS_SECTIONS.has(section as SettingsSection)
+      ? { kind: "settings", section: section as SettingsSection }
+      : null;
+  }
+  if (parts[0] === "chat" && parts.length <= 2) {
+    return {
+      kind: "chat",
+      sessionId: parts[1] && parts[1] !== "new" ? decodeSegment(parts[1]) : null,
+    };
+  }
+  return null;
+}
+
+export function desktopPath(route: DesktopRoute): string {
+  if (route.kind === "models") return modelsPath(route.route);
+  if (route.kind === "settings") return `/settings/${route.section}`;
+  return route.sessionId ? `/chat/${encodeURIComponent(route.sessionId)}` : "/chat/new";
+}
+
 export function modelsSectionFromRoute(route: ModelsRoute): ModelSection {
   return route.kind === "project" ? route.section : "overview";
 }
@@ -131,6 +189,16 @@ function currentModelsRoute(): ModelsRoute | null {
     cachedRoute = modelsRouteFromLocation(window.location);
   }
   return cachedRoute;
+}
+
+function currentDesktopRoute(): DesktopRoute | null {
+  if (typeof window === "undefined") return null;
+  const locationKey = `${window.location.pathname}${window.location.search}`;
+  if (locationKey !== cachedDesktopLocation) {
+    cachedDesktopLocation = locationKey;
+    cachedDesktopRoute = desktopRouteFromLocation(window.location);
+  }
+  return cachedDesktopRoute;
 }
 
 function notify(): void {
@@ -161,12 +229,16 @@ export function useModelsRoute(): ModelsRoute | null {
   return useSyncExternalStore(subscribe, currentModelsRoute, () => null);
 }
 
-export function navigateModelsRoute(
-  route: ModelsRoute,
+export function useDesktopRoute(): DesktopRoute | null {
+  return useSyncExternalStore(subscribe, currentDesktopRoute, () => null);
+}
+
+export function navigateDesktopRoute(
+  route: DesktopRoute,
   mode: NavigationMode = "push",
 ): void {
   if (typeof window === "undefined") return;
-  const path = modelsPath(route);
+  const path = desktopPath(route);
   if (window.location.pathname === path && !window.location.search) return;
   window.history[mode === "replace" ? "replaceState" : "pushState"](
     window.history.state,
@@ -174,6 +246,13 @@ export function navigateModelsRoute(
     path,
   );
   notify();
+}
+
+export function navigateModelsRoute(
+  route: ModelsRoute,
+  mode: NavigationMode = "push",
+): void {
+  navigateDesktopRoute({ kind: "models", route }, mode);
 }
 
 export function modelProjectRoute(

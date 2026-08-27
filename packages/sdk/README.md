@@ -232,6 +232,34 @@ await openpond.work.deleteSandbox(sandboxId);
 
 The sandbox's 15-minute idle timeout is crash protection, not the normal successful-turn cleanup path. Use conservative budgets and application-level retention. API keys, provider credentials, and bypass secrets must remain in server-side configuration.
 
+## Model Projects and training
+
+The SDK exposes dependency-light contracts and API clients without importing
+the OpenPond application server:
+
+```ts
+import {
+  ModelProjectSchema,
+  createModelProjectsClient,
+} from "openpond-sdk/model-projects";
+import {
+  TrainingJobSubmissionSchema,
+  createTrainingClient,
+} from "openpond-sdk/training";
+```
+
+A Model Project is the mutable authoring object and owns one current training
+setup. Tasksets, Harnesses, evidence, Jobs, and Model Versions remain separate
+resources connected by immutable references. Submitting training snapshots the
+exact Project revision into an immutable Job; the Job is the durable Run
+identity and explicit approval is captured for that submission only.
+
+`createModelProjectsClient` synchronizes and reads hosted Project projections.
+`createTrainingClient` reads capabilities and creates or observes immutable
+Jobs, including Project-filtered Run history. These clients require an
+authenticated server-side API context; the schemas themselves contain no
+database, provider, credential, Electron, or UI dependencies.
+
 ## Development
 
 From the OpenPond monorepo:

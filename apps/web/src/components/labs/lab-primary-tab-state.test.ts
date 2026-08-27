@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  desktopPath,
+  desktopRouteFromLocation,
   modelProjectRoute,
   modelsPath,
   modelsRouteFromLocation,
@@ -52,5 +54,33 @@ describe("Models path routing", () => {
     const route = modelProjectRoute("project with spaces", "versions");
     expect(modelsPath(route)).toBe("/models/project%20with%20spaces/versions");
     expect(modelsSectionFromRoute({ kind: "index" })).toBe("overview");
+  });
+});
+
+describe("Settings and chat path routing", () => {
+  it("parses canonical settings and chat paths", () => {
+    expect(desktopRouteFromLocation({ pathname: "/settings/providers" })).toEqual({
+      kind: "settings",
+      section: "providers",
+    });
+    expect(desktopRouteFromLocation({ pathname: "/settings/unknown" })).toBeNull();
+    expect(desktopRouteFromLocation({ pathname: "/chat/session%201" })).toEqual({
+      kind: "chat",
+      sessionId: "session 1",
+    });
+    expect(desktopRouteFromLocation({ pathname: "/chat/new" })).toEqual({
+      kind: "chat",
+      sessionId: null,
+    });
+  });
+
+  it("serializes settings and chat paths without query strings", () => {
+    expect(desktopPath({ kind: "settings", section: "dataset-storage" })).toBe(
+      "/settings/dataset-storage",
+    );
+    expect(desktopPath({ kind: "chat", sessionId: "session 1" })).toBe(
+      "/chat/session%201",
+    );
+    expect(desktopPath({ kind: "chat", sessionId: null })).toBe("/chat/new");
   });
 });

@@ -20,6 +20,7 @@ import { modelRefForTurn, normalizeBranchPrefix, projectSelectionKey } from "../
 import type { AppView, SettingsSection } from "../lib/app-models";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
+import { navigateDesktopRoute } from "../components/labs/lab-primary-tab-state";
 
 type ShowToast = (
   message: string,
@@ -140,6 +141,7 @@ export function useWorkspaceActions({
     if (!workspaceBusy) setBranchDialogOpen(false);
     setSettingsSection("defaults");
     setView("settings");
+    navigateDesktopRoute({ kind: "settings", section: "defaults" });
   }
 
   async function changeWorkspaceBranch(branch: string) {

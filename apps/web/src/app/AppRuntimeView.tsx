@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_PROVIDER,
@@ -46,8 +46,9 @@ import {
 } from "../lib/product-area";
 import { useTaskDraftActions } from "../hooks/useTaskDraftActions";
 import {
-  modelsRouteFromLocation,
+  navigateDesktopRoute,
   navigateModelsRoute,
+  useDesktopRoute,
 } from "../components/labs/lab-primary-tab-state";
 
 interface AppRuntimeViewProps {
@@ -59,10 +60,7 @@ const EMPTY_CLOUD_PROJECTS: CloudProject[] = [];
 
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
-  const [initialModelsRoute] = useState(() =>
-    typeof window === "undefined" ? null : modelsRouteFromLocation(window.location),
-  );
-  const initialModelsRouteHandled = useRef(false);
+  const desktopRoute = useDesktopRoute();
   const {
     composerDraftStore,
     appDispatch,
@@ -480,6 +478,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       setDraftProvider(provider);
       setDraftModel(model);
       composerDraftStore.set(input.prompt);
+      navigateDesktopRoute({ kind: "chat", sessionId: session.id });
       appDispatch({
         type: "selectSession",
         sessionId: session.id,
@@ -645,10 +644,32 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   ]);
   const productArea = productAreaForAppView(view, activeExperience);
   useEffect(() => {
-    if (initialModelsRouteHandled.current || !initialModelsRoute) return;
-    initialModelsRouteHandled.current = true;
-    if (view !== "labs") setView("labs");
-  }, [initialModelsRoute, setView, view]);
+    if (!desktopRoute) return;
+    if (desktopRoute.kind === "models") {
+      if (view !== "labs") setView("labs");
+      return;
+    }
+    if (desktopRoute.kind === "settings") {
+      setSelectedAppId(null);
+      setSelectedProjectId(null);
+      setSelectedSessionId(null);
+      setSettingsSection(desktopRoute.section);
+      if (view !== "settings") setView("settings");
+      return;
+    }
+    setSelectedAppId(null);
+    setSelectedProjectId(null);
+    setSelectedSessionId(desktopRoute.sessionId);
+    if (view !== "chat") setView("chat");
+  }, [
+    desktopRoute,
+    setSelectedAppId,
+    setSelectedProjectId,
+    setSelectedSessionId,
+    setSettingsSection,
+    setView,
+    view,
+  ]);
   const changeProductArea = useCallback(
     (nextProductArea: ProductArea) => {
       setSectionMenuOpen(null);
@@ -660,10 +681,14 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         setView("labs");
         return;
       }
+      if (nextProductArea === "chat") {
+        navigateDesktopRoute({ kind: "chat", sessionId: null });
+      }
       changeNewExperience(readLastChatTaskModeFromBrowser());
     },
     [
       changeNewExperience,
+      navigateDesktopRoute,
       setSectionMenuOpen,
       setSelectedAppId,
       setSelectedProjectId,
@@ -730,6 +755,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             onDiffPanelResizeStart: startDiffPanelResize,
             onDiffPanelExpandedChange: setDiffPanelExpanded,
             onBack: () => {
+              navigateDesktopRoute({ kind: "chat", sessionId: null });
               setView("chat");
               setSidebarOpen(true);
             },
@@ -1067,6 +1093,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             onOpenProviderSettings: () => {
               setSettingsSection("providers");
               setView("settings");
+              navigateDesktopRoute({ kind: "settings", section: "providers" });
             },
             onSendMessage: teamChat.sendMessage,
             onPublishProfileAgent: publishTeamProfileAgent,
@@ -1227,14 +1254,17 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           onOpenProviderSettings: () => {
             setSettingsSection("providers");
             setView("settings");
+            navigateDesktopRoute({ kind: "settings", section: "providers" });
           },
           onOpenTrainingSettings: () => {
             setSettingsSection("training");
             setView("settings");
+            navigateDesktopRoute({ kind: "settings", section: "training" });
           },
           onOpenDatasetStorageSettings: () => {
             setSettingsSection("dataset-storage");
             setView("settings");
+            navigateDesktopRoute({ kind: "settings", section: "dataset-storage" });
           },
           changeDraftProvider,
           changeProjectTarget,

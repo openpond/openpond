@@ -51,6 +51,7 @@ import { useAppShellEffects } from "../hooks/useAppShellEffects";
 import { useApprovalResolver } from "../hooks/useApprovalResolver";
 import { useAppDerivedRows } from "../hooks/useAppDerivedRows";
 import { useBeginNewChat } from "../hooks/useBeginNewChat";
+import { navigateDesktopRoute } from "../components/labs/lab-primary-tab-state";
 import { useAppConversationContext } from "../hooks/useAppConversationContext";
 import { useCodexPreferenceActions } from "../hooks/useCodexPreferenceActions";
 import { useCodexHistoryEvents } from "../hooks/useCodexHistoryEvents";
@@ -600,6 +601,7 @@ export function useAppPrimaryRuntime() {
     linkedProjectByAppId,
     requestComposerFocus: requestMainComposerFocus,
     onBeginNewChat: () => {
+      navigateDesktopRoute({ kind: "chat", sessionId: null });
       setDraftSubagentDelegationMode(null);
       setDraftExperience((current) => current === "development" ? "work" : current);
     },

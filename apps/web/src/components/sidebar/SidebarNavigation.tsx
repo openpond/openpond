@@ -22,6 +22,7 @@ import type { AppView } from "../../lib/app-models";
 import { newExperienceTitle } from "../../lib/experience-options";
 import {
   modelProjectRoute,
+  navigateDesktopRoute,
   modelsSectionFromRoute,
   navigateModelsRoute,
   useModelsRoute,
@@ -95,7 +96,10 @@ export function SidebarNavigation({
         <button
           className="nav-command nav-command-new-task"
           type="button"
-          onClick={() => beginNewChat(null)}
+          onClick={() => {
+            navigateDesktopRoute({ kind: "chat", sessionId: null });
+            beginNewChat(null);
+          }}
         >
           <SquarePen size={18} />
           <span>{newExperienceTitle(experience)}</span>
