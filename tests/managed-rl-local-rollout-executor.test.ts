@@ -30,9 +30,6 @@ describe("Managed RL desktop rollout executor", () => {
           return json({ jobState: "completed", claim: null });
         }
         expect(new Headers(init?.headers).get("x-openpond-team-id")).toBe("team-test");
-        expect(new Headers(init?.headers).get("x-vercel-protection-bypass")).toBe(
-          "staging-bypass",
-        );
         return json({
           jobState: "rollout_phase",
           claim: {
@@ -107,14 +104,13 @@ describe("Managed RL desktop rollout executor", () => {
     const executor = new ManagedRlLocalRolloutExecutor({
       runId: "job-local-1",
       access: {
-        apiBaseUrl: "https://api-new.staging-api.openpond.ai",
+        apiBaseUrl: "https://api.openpond.ai",
         token: "user-token",
         teamId: "team-test",
       },
       fetchImpl: request,
       executorId: "openpond-desktop:test-executor",
       env: {
-        VERCEL_AUTOMATION_BYPASS_SECRET: "staging-bypass",
       },
       store: {} as never,
       storeDir: "/tmp/openpond-test-store",
@@ -241,7 +237,7 @@ describe("Managed RL desktop rollout executor", () => {
     const executor = new ManagedRlLocalRolloutExecutor({
       runId: "job-retry-1",
       access: {
-        apiBaseUrl: "https://api-new.staging-api.openpond.ai",
+        apiBaseUrl: "https://api.openpond.ai",
         token: "user-token",
         teamId: "team-test",
       },

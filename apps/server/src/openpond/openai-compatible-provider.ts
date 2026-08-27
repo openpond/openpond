@@ -14,7 +14,6 @@ import type {
   HostedChatToolCall,
   HostedChatToolChoice,
 } from "@openpond/cloud";
-import { withVercelProtectionBypass } from "@openpond/cloud";
 import {
   credentialFromRefreshResponse,
   refreshOpenAiSubscriptionToken,
@@ -162,10 +161,7 @@ export async function listOpenAiCompatibleProviderModels(input: {
     const requestUrl = providerEndpointUrl(provider.baseUrl, "models");
     const response = await fetch(requestUrl, {
       method: "GET",
-      headers: withVercelProtectionBypass(
-        requestUrl,
-        providerHeaders(provider.auth.apiKey, "application/json")
-      ),
+      headers: providerHeaders(provider.auth.apiKey, "application/json"),
       signal: requestSignal.signal,
     });
     if (!response.ok) {
@@ -280,10 +276,7 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
     );
     const response = await fetch(requestUrl, {
       method: "POST",
-      headers: withVercelProtectionBypass(
-        requestUrl,
-        providerHeaders(provider.auth.apiKey, "text/event-stream")
-      ),
+      headers: providerHeaders(provider.auth.apiKey, "text/event-stream"),
       body: JSON.stringify(buildChatCompletionBody({
         providerId: provider.providerId,
         model: provider.model,

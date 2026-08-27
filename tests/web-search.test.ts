@@ -16,7 +16,6 @@ const ENV_NAMES = [
   "OPENPOND_PUBLIC_API_URL",
   "OPENPOND_OPCHAT_API_URL",
   "OPENPOND_CHAT_API_URL",
-  "VERCEL_AUTOMATION_BYPASS_SECRET",
 ] as const;
 const originalEnv = Object.fromEntries(ENV_NAMES.map((name) => [name, process.env[name]]));
 
@@ -112,12 +111,6 @@ describe("hosted web search executor", () => {
     expect(normalizeSearchApiUrl("https://api.example.test/opchat/v1")).toBe(
       "https://api.example.test/v1/search",
     );
-    expect(normalizeSearchApiUrl("https://api.staging-api.openpond.ai")).toBe(
-      "https://staging-api.openpond.ai/v1/search",
-    );
-    expect(normalizeSearchApiUrl("https://api-new.staging-api.openpond.ai")).toBe(
-      "https://staging-api.openpond.ai/v1/search",
-    );
     expect(
       resolveWebSearchEndpoint(
         {},
@@ -147,8 +140,8 @@ describe("hosted web search executor", () => {
       {
         loadAccountContext: async () => ({
           token: "opk_account_search",
-          apiBaseUrl: "https://api-new.staging-api.openpond.ai",
-          chatApiBaseUrl: "https://api-new.staging-api.openpond.ai/opchat/v1",
+          apiBaseUrl: "https://api.openpond.ai",
+          chatApiBaseUrl: "https://api.openpond.ai/opchat/v1",
         }),
         fetchImpl: async (input, init) => {
           const headers = new Headers(init?.headers);
@@ -182,7 +175,7 @@ describe("hosted web search executor", () => {
 
     expect(requests).toEqual([
       {
-        url: "https://staging-api.openpond.ai/v1/search",
+        url: "https://api.openpond.ai/v1/search",
         authorization: "Bearer opk_account_search",
         apiKey: "opk_account_search",
         body: { query: "OpenPond Search", limit: 4 },
@@ -190,25 +183,6 @@ describe("hosted web search executor", () => {
     ]);
   });
 
-  test("includes the Vercel bypass header for protected staging search", async () => {
-    process.env.VERCEL_AUTOMATION_BYPASS_SECRET = "staging-bypass";
-    let bypassHeader: string | null = null;
-    const execute = createHostedWebSearchExecutor({
-      endpoint: "https://api-new.staging-api.openpond.ai/v1/search",
-      fetchImpl: async (_input, init) => {
-        bypassHeader = new Headers(init?.headers).get(
-          "x-vercel-protection-bypass",
-        );
-        return new Response(JSON.stringify({ results: [] }), {
-          headers: { "content-type": "application/json" },
-        });
-      },
-    });
-
-    await execute({ query: "OpenCode Reddit" });
-
-    expect(bypassHeader).toBe("staging-bypass");
-  });
 
   test("reports hosted failures", async () => {
     const execute = createHostedWebSearchExecutor({

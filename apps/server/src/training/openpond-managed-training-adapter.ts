@@ -14,7 +14,6 @@ import {
   type TrainingExecutionStatus,
 } from "@openpond/contracts";
 import type { ModelImprovementQualificationReceipt } from "@openpond/evals";
-import { withVercelProtectionBypass } from "@openpond/cloud";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import type { TrainingEngineAdapter } from "@openpond/training-sdk";
 
@@ -644,11 +643,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   ): Promise<T> {
     const access = suppliedAccess ?? (await this.resolveBoundAccess());
     const requestUrl = `${access.apiBaseUrl}${pathname}`;
-    const headers = withVercelProtectionBypass(
-      requestUrl,
-      hostedApiAuthHeaders(access.token),
-      this.dependencies.env,
-    );
+    const headers = hostedApiAuthHeaders(access.token);
     headers.set("accept", "application/json");
     headers.set("x-openpond-team-id", access.teamId);
     if (init.body) headers.set("content-type", "application/json");

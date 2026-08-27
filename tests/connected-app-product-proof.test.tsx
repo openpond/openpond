@@ -176,14 +176,14 @@ describe("connected app product proof", () => {
     const fallbackUrl = new URL(
       buildConnectedAppInstallUrl({
         appId: "x",
-        baseUrl: "https://staging.openpond.ai",
+        baseUrl: "https://openpond.ai",
         teamId: fallbackTeamId,
       }),
     );
     const explicitUrl = new URL(
       buildConnectedAppInstallUrl({
         appId: "github",
-        baseUrl: "https://staging.openpond.ai",
+        baseUrl: "https://openpond.ai",
         teamId: explicitTeamId,
       }),
     );

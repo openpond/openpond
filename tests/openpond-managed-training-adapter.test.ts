@@ -23,7 +23,7 @@ const MANAGED_MODEL = {
 describe("OpenPond Managed training adapter", () => {
   test("cancels a managed Reward Model job with optimistic version protection", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (request, init) => {
-      expect(String(request)).toBe("https://staging-api.openpond.ai/v1/managed-rl/jobs/job-rm0/cancel");
+      expect(String(request)).toBe("https://api.openpond.ai/v1/managed-rl/jobs/job-rm0/cancel");
       expect(init?.method).toBe("POST");
       expect(JSON.parse(String(init?.body))).toEqual({ expectedVersion: 7 });
       return new Response(JSON.stringify({ job: { id: "job-rm0", state: "cancelling", version: 8, createdAt: FIXED_TIME, updatedAt: FIXED_TIME } }));
@@ -32,7 +32,7 @@ describe("OpenPond Managed training adapter", () => {
       store: {} as never,
       storeDir: "/unused",
       fetchImpl,
-      resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test-token", teamId: "team-test" }),
+      resolveAccess: async () => ({ apiBaseUrl: "https://api.openpond.ai", token: "test-token", teamId: "team-test" }),
     });
 
     await expect(adapter.cancelRewardModelJob("job-rm0", 7)).resolves.toMatchObject({ job: { state: "cancelling", version: 8 } });
@@ -208,12 +208,9 @@ describe("OpenPond Managed training adapter", () => {
         contentHash: contentHash(base),
       });
       const request = vi.fn<typeof fetch>(async (input, init) => {
-        expect(String(input)).toBe("https://api-new.staging-api.openpond.ai/v1/managed-rl/portable-launches");
+        expect(String(input)).toBe("https://api.openpond.ai/v1/managed-rl/portable-launches");
         const headers = new Headers(init?.headers);
         expect(headers.get("x-openpond-team-id")).toBe("team-test");
-        expect(headers.get("x-vercel-protection-bypass")).toBe(
-          "staging-bypass",
-        );
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         const serialized = JSON.stringify(body);
         expect(serialized).not.toContain("lambdalabs");
@@ -251,10 +248,9 @@ describe("OpenPond Managed training adapter", () => {
         storeDir: directory,
         fetchImpl: request,
         env: {
-          VERCEL_AUTOMATION_BYPASS_SECRET: "staging-bypass",
         },
         resolveAccess: async () => ({
-          apiBaseUrl: "https://api-new.staging-api.openpond.ai",
+          apiBaseUrl: "https://api.openpond.ai",
           token: "opk_test",
           teamId: "team-test",
         }),

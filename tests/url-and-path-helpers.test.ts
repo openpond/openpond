@@ -39,15 +39,11 @@ describe("URL normalization", () => {
 
   test.each([
     ["https://api.openpond.ai", "https://api.openpond.ai/v1/sandboxes"],
-    ["https://staging-api.openpond.ai", "https://staging-api.openpond.ai/v1/sandboxes"],
-    ["https://api.staging-api.openpond.ai", "https://api.staging-api.openpond.ai/v1/sandboxes"],
   ])("normalizes sandbox API route %s", (input, expected) => {
     expect(normalizeSandboxApiUrl(input)).toBe(expected);
   });
 
   test("maps API hosts to the hosted app and honors an explicit origin", () => {
-    expect(hostedWebBaseUrl({ OPENPOND_API_URL: "https://staging-api.openpond.ai" }))
-      .toBe("https://staging.openpond.ai");
     expect(hostedWebBaseUrl({ OPENPOND_API_URL: "https://api.openpond.ai/v1" }))
       .toBe("https://openpond.ai");
     expect(hostedWebBaseUrl({ OPENPOND_HOSTED_WEB_URL: "https://preview.openpond.example/sandboxes" }))

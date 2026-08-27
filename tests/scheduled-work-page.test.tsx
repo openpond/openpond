@@ -110,8 +110,8 @@ describe("ScheduledWorkPage", () => {
 
   test("builds external hosted conversation links", () => {
     expect(
-      hostedConversationUrl("https://staging.openpond.ai", "conversation/1")
-    ).toBe("https://staging.openpond.ai/sandboxes/work/conversation%2F1");
+      hostedConversationUrl("https://openpond.ai", "conversation/1")
+    ).toBe("https://openpond.ai/sandboxes/work/conversation%2F1");
     expect(hostedConversationUrl("https://openpond.ai", null)).toBe(
       "https://openpond.ai/sandboxes/work"
     );

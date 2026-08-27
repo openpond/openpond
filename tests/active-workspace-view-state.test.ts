@@ -5,14 +5,14 @@ import { accountWelcomeIdentity } from "../apps/web/src/hooks/useActiveWorkspace
 function accountState(overrides: Partial<AccountState> = {}): AccountState {
   return {
     state: "signed_in",
-    activeProfile: { handle: "sam+sandbox-test@openpond.ai", baseUrl: "https://staging.openpond.ai" },
+    activeProfile: { handle: "sam+sandbox-test@openpond.ai", baseUrl: "https://openpond.ai" },
     label: "user-e6e4aw",
     email: "sam+qa-user-4@openpond.ai",
     avatarUrl: null,
-    environment: "staging",
-    baseUrl: "https://staging.openpond.ai",
-    apiBaseUrl: "https://staging.openpond.ai/api",
-    chatApiBaseUrl: "https://staging.openpond.ai/api",
+    environment: "production",
+    baseUrl: "https://openpond.ai",
+    apiBaseUrl: "https://api.openpond.ai",
+    chatApiBaseUrl: "https://api.openpond.ai/opchat/v1",
     creditsLabel: null,
     profile: null,
     products: [],
@@ -50,13 +50,13 @@ describe("accountWelcomeIdentity", () => {
   test("does not expose an email when no display name is available", () => {
     expect(accountWelcomeIdentity(accountState({
       label: "sam+qa-user-4@openpond.ai",
-      activeProfile: { handle: "sam+sandbox-test@openpond.ai", baseUrl: "https://staging.openpond.ai" },
+      activeProfile: { handle: "sam+sandbox-test@openpond.ai", baseUrl: "https://openpond.ai" },
       accounts: [{
         handle: "sam+qa-user-4@openpond.ai",
-        baseUrl: "https://staging.openpond.ai",
-        apiBaseUrl: "https://staging.openpond.ai/api",
-        chatApiBaseUrl: "https://staging.openpond.ai/api",
-        environment: "staging",
+        baseUrl: "https://openpond.ai",
+        apiBaseUrl: "https://api.openpond.ai",
+        chatApiBaseUrl: "https://api.openpond.ai/opchat/v1",
+        environment: "production",
         isActive: true,
         authHealth: "signed_in",
         displayLabel: "sam+qa-user-4@openpond.ai",

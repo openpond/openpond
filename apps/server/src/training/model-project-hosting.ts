@@ -1,4 +1,3 @@
-import { withVercelProtectionBypass } from "@openpond/cloud";
 import {
   ModelProjectSchema,
   type ModelProject,
@@ -225,11 +224,7 @@ export function createModelProjectHostingService(input: {
     gzip?: boolean;
   }): Promise<T> {
     const url = `${request.access.apiBaseUrl}${request.pathname}`;
-    const headers = withVercelProtectionBypass(
-      url,
-      hostedApiAuthHeaders(request.access.token),
-      input.env ?? process.env,
-    );
+    const headers = hostedApiAuthHeaders(request.access.token);
     headers.set("accept", "application/json");
     headers.set(
       "content-type",

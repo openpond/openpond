@@ -1,7 +1,7 @@
 export type OpenPondClientOptions = {
   /** OpenPond server API key. Keep this value on the server. */
   apiKey: string;
-  /** API origin, such as https://api.openpond.ai or the staging API origin. */
+  /** API origin, such as https://api.openpond.ai. */
   baseUrl?: string;
   /** Optional full sandbox API URL. Overrides the URL derived from baseUrl. */
   sandboxApiUrl?: string;

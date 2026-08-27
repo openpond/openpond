@@ -602,18 +602,14 @@ export function conciseAccountError(
   const error = value?.trim();
   if (!error) return null;
   const normalized = error.toLowerCase();
-  if (
-    normalized.includes("protected deployment") ||
-    normalized.includes("vercel_auth_enabled")
-  ) {
-    return "Staging is protected by Vercel. Restart OpenPond after signing in to Vercel, then try again.";
+  if (normalized.includes("protected deployment")) {
+    return "OpenPond could not reach the account service. Restart and try again.";
   }
   if (
     normalized.includes("unexpected token '<'") ||
-    normalized.includes("<!doctype") ||
-    normalized.includes("vercel.com/sso-api")
+    normalized.includes("<!doctype")
   ) {
-    return "OpenPond received a web login page instead of account data. Restart after signing in to Vercel, then try again.";
+    return "OpenPond received a web login page instead of account data. Restart and try again.";
   }
   if (
     normalized.includes("401") ||

@@ -70,12 +70,6 @@ export function hostedWebBaseUrl(
     "https://api.openpond.ai";
   const url = new URL(configured);
   if (
-    url.hostname === "staging-api.openpond.ai" ||
-    url.hostname.endsWith(".staging-api.openpond.ai")
-  ) {
-    return "https://staging.openpond.ai";
-  }
-  if (
     url.hostname === "api.openpond.ai" ||
     url.hostname.endsWith(".api.openpond.ai")
   ) {
