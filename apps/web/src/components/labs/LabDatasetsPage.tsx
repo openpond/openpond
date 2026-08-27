@@ -883,12 +883,14 @@ function TasksetVersions({
   state: TrainingStateResponse | null;
   taskset: Taskset;
 }) {
+  const [selectedRewardVersionId, setSelectedRewardVersionId] = useState<string | null>(null);
   const policyVersions = (state?.modelVersions ?? [])
     .filter((version) => version.taskset.id === taskset.id)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const rewardVersions = (state?.rewardModelVersions ?? [])
     .filter((version) => version.taskset.id === taskset.id)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const rewardRuns = state?.rewardModelRuns ?? [];
   return (
     <>
       <section className="labs-dataset-run-intro">
@@ -908,15 +910,48 @@ function TasksetVersions({
             <table className="training-data-table">
               <thead><tr><th>Version</th><th>Role</th><th>Status</th><th>Scope</th><th>Created</th></tr></thead>
               <tbody>
-                {rewardVersions.map((version) => (
-                  <tr key={version.id}>
-                    <td><code>{version.id}</code></td>
-                    <td>Reward</td>
-                    <td>{statusLabel(version.status)}</td>
-                    <td>{statusLabel(version.scope)}</td>
-                    <td>{formatCompactDate(version.createdAt)}</td>
-                  </tr>
-                ))}
+                {rewardVersions.map((version) => {
+                  const expanded = selectedRewardVersionId === version.id;
+                  const sourceRun = rewardRuns.find(
+                    (run) => run.rewardModelVersionId === version.id,
+                  );
+                  const executionReceipt = sourceRun?.receipt?.managedExecutionReceipt ?? null;
+                  const qualificationReport = version.qualificationReport ?? sourceRun?.qualificationReport ?? null;
+                  return (
+                    <Fragment key={version.id}>
+                      <tr>
+                        <td>
+                          <button
+                            aria-expanded={expanded}
+                            className="labs-workproduct-link"
+                            onClick={() => setSelectedRewardVersionId(expanded ? null : version.id)}
+                            type="button"
+                          >
+                            <code>{version.id}</code>
+                          </button>
+                        </td>
+                        <td>Reward</td>
+                        <td>{statusLabel(version.status)}</td>
+                        <td>{statusLabel(version.scope)}</td>
+                        <td>{formatCompactDate(version.createdAt)}</td>
+                      </tr>
+                      {expanded ? (
+                        <tr className="labs-attempt-detail-row">
+                          <td colSpan={5}>
+                            <dl className="training-configuration-list">
+                              <div><dt>Checkpoint</dt><dd><code>{version.artifacts.checkpoint.contentHash}</code></dd></div>
+                              <div><dt>Execution receipt</dt><dd>{executionReceipt ? <code>{executionReceipt.id}</code> : "Unavailable"}</dd></div>
+                              <div><dt>Qualification report</dt><dd>{qualificationReport ? <code>{qualificationReport.id}</code> : "Unavailable"}</dd></div>
+                            </dl>
+                            <p className="labs-detail-copy">
+                              The execution receipt proves what Sandbox ran and which bytes it produced. The qualification report records OpenPond&apos;s separate decision about suitable use.
+                            </p>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
                 {policyVersions.map((version) => (
                   <tr key={version.id}>
                     <td><code>{version.id}</code></td>
@@ -1069,7 +1104,8 @@ function TasksetHistory({
                             <div><dt>Failure owner</dt><dd>{run.failureOwner ? statusLabel(run.failureOwner) : "—"}</dd></div>
                             <div><dt>Cleanup</dt><dd>{run.receipt ? (run.receipt.cleanup.computeReleased && run.receipt.cleanup.providerTerminalObserved ? "Verified" : "Incomplete") : "Pending"}</dd></div>
                             <div><dt>Checkpoint</dt><dd>{run.receipt ? <code>{run.receipt.finalCheckpoint.contentHash}</code> : "Pending"}</dd></div>
-                            <div><dt>Qualification</dt><dd>{run.qualificationReport ? <code>{run.qualificationReport.id}</code> : "Pending"}</dd></div>
+                            <div><dt>Execution receipt</dt><dd>{run.receipt?.managedExecutionReceipt ? <code>{run.receipt.managedExecutionReceipt.id}</code> : "Pending"}</dd></div>
+                            <div><dt>Qualification report</dt><dd>{run.qualificationReport ? <code>{run.qualificationReport.id}</code> : "Pending"}</dd></div>
                           </dl>
                           {run.failure ? <p className="training-banner error" role="alert">{run.failure}</p> : null}
                           <div className="labs-dataset-advanced-action">
