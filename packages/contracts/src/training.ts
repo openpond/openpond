@@ -680,6 +680,27 @@ export const TrainingApprovalSchema = z.object({
   approvedAt: TimestampSchema,
 });
 
+/**
+ * Immutable product lineage copied onto a Training Job when a Model Project
+ * setup is submitted. Runtime reconciliation must read this snapshot instead
+ * of mutable Project authoring state.
+ */
+export const TrainingJobSourceSnapshotSchema = z.object({
+  schemaVersion: z.literal("openpond.trainingJobSourceSnapshot.v1"),
+  modelProjectId: IdSchema,
+  sourceProjectRevision: z.number().int().positive(),
+  profileId: IdSchema,
+  taskset: z.object({
+    id: IdSchema,
+    revision: z.number().int().positive(),
+    contentHash: HashSchema,
+  }).strict(),
+  tasksetRelease: ImmutableReleaseRefSchema,
+  harnessRelease: ImmutableReleaseRefSchema,
+  baseModel: BaseModelPreferenceSchema,
+  method: TrainingMethodSchema,
+}).strict();
+
 export const TrainingJobStatusSchema = z.enum([
   "queued",
   "starting",
@@ -1080,6 +1101,9 @@ export type TrainingBundleManifest = z.infer<
 export type TrainingBundleExport = z.infer<typeof TrainingBundleExportSchema>;
 export type TrainingPreparedStart = z.infer<typeof TrainingPreparedStartSchema>;
 export type TrainingApproval = z.infer<typeof TrainingApprovalSchema>;
+export type TrainingJobSourceSnapshot = z.infer<
+  typeof TrainingJobSourceSnapshotSchema
+>;
 export type TrainingJob = z.infer<typeof TrainingJobSchema>;
 export type TrainingJobEvent = z.infer<typeof TrainingJobEventSchema>;
 export type SftStepMetric = z.infer<typeof SftStepMetricSchema>;

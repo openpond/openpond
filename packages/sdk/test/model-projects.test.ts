@@ -124,4 +124,25 @@ describe("Model Project SDK contracts", () => {
       expect.objectContaining({ method: "PUT" }),
     );
   });
+
+  it("keeps the Project detail envelope intact", async () => {
+    const detail = {
+      project: hostedProject(),
+      resources: [],
+      jobCount: 2,
+      latestJobIds: ["job-2", "job-1"],
+    };
+    const fetch = vi.fn(async () =>
+      new Response(JSON.stringify(detail), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = createModelProjectsClient({
+      baseUrl: "https://api.openpond.test",
+      fetch,
+    });
+
+    await expect(client.get("project-1")).resolves.toEqual(detail);
+  });
 });

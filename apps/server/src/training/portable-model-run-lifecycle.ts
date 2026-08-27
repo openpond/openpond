@@ -4,6 +4,7 @@ import {
   ModelArtifactLineageSchema,
   ModelRunSchema,
   ModelVersionSchema,
+  TrainingJobSourceSnapshotSchema,
   TrainingJobSchema,
   type ModelRun,
   type ModelRunDraft,
@@ -12,6 +13,7 @@ import {
   type TrainingExecutionRef,
   type TrainingExecutionStatus,
   type TrainingJob,
+  type TrainingJobSourceSnapshot,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 
@@ -48,12 +50,14 @@ export async function preparePortableModelRunLifecycle(input: {
   store: SqliteStore;
   draft: ModelRunDraft;
   taskset: Taskset;
+  sourceProjectRevision: number;
   releaseGraph: PortableReleaseGraph;
   maximumSpendUsd: number | null;
   startedAt: string;
 }): Promise<{
   modelRun: ModelRun;
   targetVersion: PortableModelVersionReservation;
+  sourceSnapshot: TrainingJobSourceSnapshot;
 }> {
   const baseModel = input.draft.baseModel;
   const method = input.draft.method;
@@ -156,7 +160,18 @@ export async function preparePortableModelRunLifecycle(input: {
       updatedAt: input.startedAt,
     }),
   );
-  return { modelRun, targetVersion };
+  const sourceSnapshot = TrainingJobSourceSnapshotSchema.parse({
+    schemaVersion: "openpond.trainingJobSourceSnapshot.v1",
+    modelProjectId: input.draft.modelId,
+    sourceProjectRevision: input.sourceProjectRevision,
+    profileId: input.draft.profileId,
+    taskset: input.draft.tasksetRef,
+    tasksetRelease: input.draft.tasksetRelease,
+    harnessRelease: input.draft.harnessRelease,
+    baseModel,
+    method,
+  });
+  return { modelRun, targetVersion, sourceSnapshot };
 }
 
 export async function markPortableModelRunRunning(input: {
@@ -268,24 +283,19 @@ export async function reconcilePortableModelRunLifecycle(input: {
       "Successful portable training requires collected artifacts.",
     );
   }
-  const [draft, plan] = await Promise.all([
-    input.store.getModelRunDraft(input.modelRunId),
+  const [source, plan] = await Promise.all([
+    resolveTrainingJobSourceSnapshot(input.store, input.job, input.modelRunId),
     input.store.getTrainingPlan(input.job.planId),
   ]);
-  if (
-    !draft
-    || !draft.baseModel
-    || !draft.tasksetRef
-    || !plan
-  ) {
+  if (!plan) {
     throw new Error(
       "Portable training lineage disappeared before artifact import.",
     );
   }
-  const taskset = await input.store.getTaskset(draft.tasksetRef.id);
+  const taskset = await input.store.getTaskset(source.taskset.id);
   if (
     !taskset
-    || taskset.contentHash !== draft.tasksetRef.contentHash
+    || taskset.contentHash !== source.taskset.contentHash
   ) {
     throw new Error(
       "Portable training Taskset changed before artifact import.",
@@ -295,7 +305,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
   const imported = await importPortableModelRunArtifacts({
     store: input.store,
     job: input.job,
-    draft: { ...draft, baseModel: draft.baseModel },
+    source,
     executionRef: input.executionRef,
     completedAt,
     portable: input.artifacts,
@@ -314,11 +324,11 @@ export async function reconcilePortableModelRunLifecycle(input: {
       ModelArtifactLineageSchema.parse({
         schemaVersion: "openpond.modelArtifactLineage.v1",
         id: `model_lineage_${contentHash([
-          draft.modelId,
+          source.modelProjectId,
           weights.sha256,
           plan.contentHash,
         ]).slice(0, 24)}`,
-        modelId: draft.modelId,
+        modelId: source.modelProjectId,
         artifactId: weights.id,
         jobId: input.job.id,
         tasksetId: taskset.id,
@@ -355,13 +365,13 @@ export async function reconcilePortableModelRunLifecycle(input: {
   const versionCore = {
     schemaVersion: "openpond.modelVersion.v1" as const,
     id: reservation.id,
-    modelId: draft.modelId,
-    profileId: draft.profileId,
+    modelId: source.modelProjectId,
+    profileId: source.profileId,
     version: reservation.version,
     kind: "lora_adapter" as const,
     status: "available" as const,
-    baseModel: draft.baseModel,
-    taskset: draft.tasksetRef,
+    baseModel: source.baseModel,
+    taskset: source.taskset,
     releaseGraph,
     artifactLineageId: lineage.id,
     adapterStatus: "trained" as const,
@@ -477,6 +487,45 @@ async function requiredModelRun(
     throw new Error(`Canonical Model Run ${id} was not found.`);
   }
   return modelRun;
+}
+
+async function resolveTrainingJobSourceSnapshot(
+  store: SqliteStore,
+  job: TrainingJob,
+  modelRunId: string,
+): Promise<TrainingJobSourceSnapshot> {
+  const current = TrainingJobSourceSnapshotSchema.safeParse(
+    job.metadata.sourceSnapshot,
+  );
+  if (current.success) return current.data;
+
+  // Jobs submitted before source snapshots were introduced must remain
+  // terminally reconcilable. This path only upgrades their already-saved
+  // launch lineage; newly submitted Jobs always carry sourceSnapshot.
+  const draft = await store.getModelRunDraft(modelRunId);
+  if (
+    !draft
+    || !draft.tasksetRef
+    || !draft.tasksetRelease
+    || !draft.harnessRelease
+    || !draft.baseModel
+    || !draft.method
+  ) {
+    throw new Error(
+      "Training Job source snapshot is missing or invalid.",
+    );
+  }
+  return TrainingJobSourceSnapshotSchema.parse({
+    schemaVersion: "openpond.trainingJobSourceSnapshot.v1",
+    modelProjectId: draft.modelId,
+    sourceProjectRevision: 1,
+    profileId: draft.profileId,
+    taskset: draft.tasksetRef,
+    tasksetRelease: draft.tasksetRelease,
+    harnessRelease: draft.harnessRelease,
+    baseModel: draft.baseModel,
+    method: draft.method,
+  });
 }
 
 function engineMetadata(

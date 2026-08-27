@@ -271,9 +271,7 @@ export function createModelProjectsClient(input: {
       const body = await request(
         `/v1/model-projects/${encodeURIComponent(IdSchema.parse(projectId))}`,
       );
-      return HostedModelProjectDetailSchema.parse(
-        unwrapObject(body, "project"),
-      );
+      return HostedModelProjectDetailSchema.parse(body);
     },
   };
 }

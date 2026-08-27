@@ -83,6 +83,10 @@ export function createPortableModelRunService(deps: {
     if (!loadedModelRun || loadedModelRun.status !== "ready_to_run") {
       throw new Error("A ready saved Model Run is required.");
     }
+    const sourceProject = await deps.store.getModelProject(loadedModelRun.modelId);
+    if (!sourceProject || sourceProject.profileId !== loadedModelRun.profileId) {
+      throw new Error("The Model Project for this training setup is unavailable.");
+    }
     let modelRun = loadedModelRun;
     if (
       !modelRun.tasksetRef ||
@@ -218,6 +222,7 @@ export function createPortableModelRunService(deps: {
       store: deps.store,
       draft: modelRun,
       taskset,
+      sourceProjectRevision: sourceProject.revision,
       releaseGraph: portableReleaseGraph,
       maximumSpendUsd: approval.maximumCostUsd,
       startedAt: approval.approvedAt,
@@ -269,6 +274,7 @@ export function createPortableModelRunService(deps: {
         portableValidationReceipt: validation,
         portableModelVersion: portableModelVersionMetadata(lifecycle.targetVersion),
         portableReleaseGraph,
+        sourceSnapshot: lifecycle.sourceSnapshot,
       },
     });
     await markPortableModelRunRunning({

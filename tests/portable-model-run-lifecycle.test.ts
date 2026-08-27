@@ -37,6 +37,14 @@ describe("portable Model Run lifecycle", () => {
           revision: taskset.revision,
           contentHash: taskset.contentHash,
         },
+        harnessRelease: {
+          id: "harness-release-fixture",
+          contentHash: sha256("harness-release-fixture"),
+        },
+        tasksetRelease: {
+          id: "taskset-release-fixture",
+          contentHash: sha256(taskset.contentHash),
+        },
         datasetCreationId: null,
         buildIntent: null,
         buildSpecification: null,
@@ -114,6 +122,7 @@ describe("portable Model Run lifecycle", () => {
         store,
         draft,
         taskset,
+        sourceProjectRevision: 3,
         releaseGraph,
         maximumSpendUsd: 2,
         startedAt: FIXED_TIME,
@@ -161,6 +170,7 @@ describe("portable Model Run lifecycle", () => {
             harnessRunManifestHash: graph.manifest.contentHash,
             portableModelVersion: portableModelVersionMetadata(prepared.targetVersion),
             portableReleaseGraph: releaseGraph,
+            sourceSnapshot: prepared.sourceSnapshot,
             portableAdapterBindings: {
               compute: graph.manifest.computeTarget,
               engine: graph.manifest.engine,
@@ -190,6 +200,7 @@ describe("portable Model Run lifecycle", () => {
         createdAt: FIXED_TIME,
       };
       const completedAt = "2026-07-12T00:10:00.000Z";
+      await store.deleteModelRunDraft(draft.id);
       const terminal = await reconcilePortableModelRunLifecycle({
         store,
         storeDir: directory,
