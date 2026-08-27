@@ -658,7 +658,6 @@ export function LabsRoute({
           onRevise={onRevise}
           renderModelRunEditor={({
             initialTasksetId,
-            draftId,
             modelId,
             modelName,
             onCancel: cancelBuild,
@@ -669,7 +668,6 @@ export function LabsRoute({
               connection={profileView.connection}
               initialModelId={modelId}
               initialName={modelName}
-              initialDraftId={draftId ?? undefined}
               initialObjective={selected.description}
               initialTasksetId={initialTasksetId ?? undefined}
               profileId={profileId}

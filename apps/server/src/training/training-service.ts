@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   type GradeResult,
   type OpenPondProfileState,
+  type ModelProject,
   type RewardModelVersion,
   RewardModelRunSchema,
   type RewardModelRecipe,
@@ -188,7 +189,7 @@ export function createTrainingService(deps: {
     prepare: prepareModelRun,
     prepareStart,
     approve,
-    resolveReleasedHarness: async ({ taskset, modelRun }) => {
+    resolveReleasedHarness: async ({ taskset, modelProject }) => {
       const releasedHarness = await deps.resolveReleasedHarness?.() ?? null;
       const profile = !releasedHarness && deps.loadProfileState ? await deps.loadProfileState() : null;
       const context = compileDesktopHarnessContext({
@@ -197,7 +198,7 @@ export function createTrainingService(deps: {
         releasedHarness,
         model: {
           providerId: "openpond",
-          modelId: modelRun.baseModel!.modelId,
+          modelId: modelProject.trainingSetup.baseModel!.modelId,
         },
       });
       if (profile?.sourcePath) {
@@ -224,6 +225,7 @@ export function createTrainingService(deps: {
   async function launchRewardModel(input: {
     id: string;
     rewardModelId: string;
+    modelProject: ModelProject;
     taskset: Taskset;
     tasksetRelease: TasksetRelease;
     dataset: PreferenceDatasetRelease;
@@ -300,7 +302,13 @@ export function createTrainingService(deps: {
         managedBaseModel: input.managedBaseModel,
         attempts,
       });
-      const launched = await portableAdapters.createRewardModelLaunch(request);
+      const launched = await portableAdapters.createRewardModelLaunch({
+        request,
+        modelProjectId: input.modelProject.id,
+        processorRelease: input.recipe.processorRelease,
+        recipe: input.recipe,
+        approvedAt: prepared.startedAt,
+      });
       return deps.store.saveRewardModelRun({
         ...prepared,
         status: "running",
@@ -329,7 +337,7 @@ export function createTrainingService(deps: {
     }
     const run = (await deps.store.listRewardModelRuns({ tasksetId: input.tasksetId }))
       .find((candidate) => candidate.rewardModelVersionId === version.id && candidate.status === "succeeded");
-    if (!run?.qualificationReport) {
+    if (!run?.qualificationReport || !run.receipt?.managedExecutionReceipt) {
       throw new Error("Reward Model Version has no immutable qualification report.");
     }
     const report = await loadRewardModelQualificationReport({
@@ -354,6 +362,7 @@ export function createTrainingService(deps: {
         id: `reward-composer:${rewardComposerHash.slice(0, 24)}`,
         contentHash: rewardComposerHash,
       },
+      executionReceipt: run.receipt.managedExecutionReceipt,
     });
   }
 
@@ -429,7 +438,8 @@ export function createTrainingService(deps: {
         const upload = remote.resources.find((resource) =>
           resource.kind === "artifact_upload" && resource.state === "consumed",
         );
-        const evidence = upload?.metadata.evidence;
+        const uploadMetadata = recordOrNull(upload?.metadata);
+        const evidence = uploadMetadata?.evidence;
         const evidenceRecord = evidence && typeof evidence === "object" && !Array.isArray(evidence)
           ? evidence as Record<string, unknown>
           : null;
@@ -460,7 +470,7 @@ export function createTrainingService(deps: {
         }
         if (remote.job.state === "completed") {
           try {
-            const resourceMetadata = upload?.metadata;
+            const resourceMetadata = uploadMetadata;
             const inventory = Array.isArray(resourceMetadata?.inventory)
               ? resourceMetadata.inventory.filter(isInventoryFile)
               : [];
@@ -470,13 +480,11 @@ export function createTrainingService(deps: {
             const artifactSha256 = typeof resourceMetadata?.artifactSha256 === "string"
               ? resourceMetadata.artifactSha256
               : "";
-            const inputBundle = remote.job.inputBundle;
-            const rewardTraining = recordOrNull(inputBundle?.rewardModelTraining);
-            const rewardBase = recordOrNull(rewardTraining?.baseModel);
-            const rewardProcessor = recordOrNull(rewardTraining?.processor);
-            const harness = recordOrNull(inputBundle?.harnessRunManifest);
+            const rewardBase = recordOrNull(resourceMetadata?.baseModel);
+            const rewardProcessor = recordOrNull(resourceMetadata?.processor);
+            const harness = recordOrNull(resourceMetadata?.harnessRunManifest);
             const taskset = await deps.store.getTaskset(run.taskset.id);
-            if (!taskset || !rewardBase || !rewardProcessor || !harness || !checkpointPrefix || !artifactSha256) {
+            if (!taskset || !rewardBase || !rewardProcessor || !harness || !checkpointPrefix || !artifactSha256 || !remote.executionReceiptRef) {
               throw new Error("Completed managed Reward Model job is missing immutable launch lineage.");
             }
             const versionNumber = nextRewardModelVersionNumber(
@@ -511,6 +519,7 @@ export function createTrainingService(deps: {
                 computeReleased: remote.resources.every((resource) => resource.state !== "active"),
                 providerTerminalObserved: remote.job.cleanupAttestation !== null && remote.job.cleanupAttestation !== undefined,
               },
+              managedExecutionReceipt: remote.executionReceiptRef,
               createdAt: new Date().toISOString(),
             });
             await saveRewardModelQualificationReport({

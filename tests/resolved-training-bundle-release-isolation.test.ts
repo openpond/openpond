@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { ModelRunDraftSchema } from "@openpond/contracts";
+import { ModelProjectSchema } from "@openpond/contracts";
 import { describe, expect, test } from "vitest";
 
 import {
@@ -20,35 +20,39 @@ describe("resolved training bundle release isolation", () => {
   test("rejects mutable Taskset bytes that no longer match the selected authoring hash", async () => {
     const taskset = tasksetFixture({ ready: true });
     const recipe = sftRecipeFixture();
-    const modelRun = ModelRunDraftSchema.parse({
-      schemaVersion: "openpond.modelRunDraft.v1",
-      id: "model-run-release-isolation",
-      profileId: taskset.profileId,
-      modelId: "model-release-isolation",
-      status: "ready_to_run",
-      title: "Release isolation",
-      datasetMode: "existing",
-      tasksetRef: {
-        id: taskset.id,
-        revision: taskset.revision,
-        contentHash: taskset.contentHash,
-      },
-      datasetCreationId: null,
-      buildIntent: null,
-      buildSpecification: null,
-      baseModel: {
+    const baseModel = {
         schemaVersion: "openpond.baseModelPreference.v1",
         modelId: recipe.baseModel.id,
         revision: recipe.baseModel.revision,
         tokenizerRevision: recipe.baseModel.tokenizerRevision,
         chatTemplateHash: sha256("release-isolation-chat-template"),
         modelAssetId: null,
-        source: "local",
+        source: "local" as const,
+    };
+    const modelProject = ModelProjectSchema.parse({
+      schemaVersion: "openpond.modelProject.v2",
+      id: "model-release-isolation",
+      profileId: taskset.profileId,
+      revision: 1,
+      name: "Release isolation",
+      objective: null,
+      defaultBaseModel: baseModel,
+      defaultDestinationId: "openpond_managed",
+      trainingSetup: {
+        tasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash },
+        tasksetRelease: null,
+        harnessRelease: null,
+        baseModel,
+        method: "sft",
+        destinationId: "openpond_managed",
+        managedRolloutPlacement: "local",
+        runPreset: "small",
+        recipe,
+        preferredMaximumSpendUsd: 0,
+        preferredRetentionDays: null,
       },
-      method: "sft",
-      destinationId: "openpond_managed",
-      runPreset: "small",
-      recipe,
+      hosted: null,
+      tasksetSyncs: [],
       createdAt: FIXED_TIME,
       updatedAt: FIXED_TIME,
     });
@@ -56,7 +60,8 @@ describe("resolved training bundle release isolation", () => {
     const build = (selectedTaskset: typeof taskset) =>
       buildTasksetTrainingBundle({
         taskset: selectedTaskset,
-        modelRun,
+        modelProject,
+        modelRunId: "model-run-release-isolation",
         runtime: {
           adapterId: "local-harness",
           placement: "local",

@@ -15,8 +15,7 @@ export function createDestinationTrainingEngineRegistry(input: {
     refreshManagedEvidence(job: TrainingJob): Promise<void>;
     createCalibrationBatch(request: unknown): ReturnType<OpenPondManagedTrainingAdapter["createCalibrationBatch"]>;
     calibrationBatch(jobId: string): ReturnType<OpenPondManagedTrainingAdapter["calibrationBatch"]>;
-    uploadRewardModelArtifact(input: Parameters<OpenPondManagedTrainingAdapter["uploadRewardModelArtifact"]>[0]): ReturnType<OpenPondManagedTrainingAdapter["uploadRewardModelArtifact"]>;
-    createRewardModelLaunch(request: unknown): ReturnType<OpenPondManagedTrainingAdapter["createRewardModelLaunch"]>;
+    createRewardModelLaunch(request: Parameters<OpenPondManagedTrainingAdapter["createRewardModelLaunch"]>[0]): ReturnType<OpenPondManagedTrainingAdapter["createRewardModelLaunch"]>;
     rewardModelJob(jobId: string): ReturnType<OpenPondManagedTrainingAdapter["rewardModelJob"]>;
     cancelRewardModelJob(jobId: string, expectedVersion: number): ReturnType<OpenPondManagedTrainingAdapter["cancelRewardModelJob"]>;
   };
@@ -35,7 +34,6 @@ export function createDestinationTrainingEngineRegistry(input: {
   };
   adapters.createCalibrationBatch = (request) => managed.createCalibrationBatch(request);
   adapters.calibrationBatch = (jobId) => managed.calibrationBatch(jobId);
-  adapters.uploadRewardModelArtifact = (input) => managed.uploadRewardModelArtifact(input);
   adapters.createRewardModelLaunch = (request) => managed.createRewardModelLaunch(request);
   adapters.rewardModelJob = (jobId) => managed.rewardModelJob(jobId);
   adapters.cancelRewardModelJob = (jobId, expectedVersion) => managed.cancelRewardModelJob(jobId, expectedVersion);

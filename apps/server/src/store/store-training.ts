@@ -3,7 +3,6 @@ import type {
   GraderAuditReport,
   ModelArtifactLineage,
   ModelProject,
-  ModelRunDraft,
   RuntimeEvent,
   Session,
   TaskAttemptArtifact,
@@ -30,7 +29,6 @@ import {
   GraderAuditReportSchema,
   ModelArtifactLineageSchema,
   ModelProjectSchema,
-  ModelRunDraftSchema,
   TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
   TaskCandidateSchema,
@@ -680,56 +678,6 @@ export class SqliteTrainingStore extends SqliteTasksetDraftStore {
       profileId ? [profileId] : [],
       parseStoredModelProject,
     );
-  }
-
-  async saveModelRunDraft(draftInput: ModelRunDraft): Promise<ModelRunDraft> {
-    const draft = ModelRunDraftSchema.parse(draftInput);
-    await this.upsertPayload(
-      `INSERT INTO model_run_drafts (id, profile_id, model_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, model_id = excluded.model_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [draft.id, draft.profileId, draft.modelId, draft.status, JSON.stringify(draft), draft.createdAt, draft.updatedAt],
-    );
-    return draft;
-  }
-
-  async getModelRunDraft(id: string): Promise<ModelRunDraft | null> {
-    return this.getParsedPayload(
-      `SELECT payload FROM model_run_drafts
-       WHERE id = ?
-         AND (
-           json_extract(payload, '$.destinationId') IS NULL
-           OR json_extract(payload, '$.destinationId') IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}
-         )`,
-      [id],
-      ModelRunDraftSchema.parse,
-    );
-  }
-
-  async listModelRunDrafts(profileId?: string): Promise<ModelRunDraft[]> {
-    return this.listParsedPayloads(
-      profileId
-        ? `SELECT payload FROM model_run_drafts
-           WHERE profile_id = ?
-             AND (
-               json_extract(payload, '$.destinationId') IS NULL
-               OR json_extract(payload, '$.destinationId') IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}
-             )
-           ORDER BY updated_at DESC`
-        : `SELECT payload FROM model_run_drafts
-           WHERE json_extract(payload, '$.destinationId') IS NULL
-              OR json_extract(payload, '$.destinationId') IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}
-           ORDER BY updated_at DESC`,
-      profileId ? [profileId] : [],
-      ModelRunDraftSchema.parse,
-    );
-  }
-
-  async deleteModelRunDraft(id: string): Promise<void> {
-    await this.ready;
-    const write = this.writeQueue.then(() =>
-      this.run("DELETE FROM model_run_drafts WHERE id = ?", [id]));
-    this.writeQueue = write.catch(() => undefined);
-    await write;
   }
 
   async saveTrainingPlan(planInput: TrainingPlan): Promise<TrainingPlan> {

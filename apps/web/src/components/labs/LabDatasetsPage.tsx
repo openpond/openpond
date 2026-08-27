@@ -224,6 +224,7 @@ export function LabDatasetsPage({
         </div>
         {detailTab === "runs" ? (
           <TasksetRuns
+            modelProjectId={modelProjectId ?? null}
             readOnly={readOnly}
             state={state}
             taskset={selected}
@@ -410,12 +411,14 @@ export function LabDatasetsPage({
 }
 
 function TasksetRuns({
+  modelProjectId,
   readOnly,
   state,
   taskset,
   training,
   onCreateRun,
 }: {
+  modelProjectId: string | null;
   readOnly: boolean;
   state: TrainingStateResponse | null;
   taskset: Taskset;
@@ -461,6 +464,7 @@ function TasksetRuns({
       <FixtureCollectionImporter
         actorKey={state?.profileId ?? taskset.profileId}
         disabled={readOnly || training.busyAction !== null}
+        modelProjectId={modelProjectId}
         taskset={taskset}
         training={training}
       />
@@ -499,11 +503,13 @@ function TasksetRuns({
 function FixtureCollectionImporter({
   actorKey,
   disabled,
+  modelProjectId,
   taskset,
   training,
 }: {
   actorKey: string;
   disabled: boolean;
+  modelProjectId: string | null;
   taskset: Taskset;
   training: ReturnType<typeof useTraining>;
 }) {
@@ -601,8 +607,10 @@ function FixtureCollectionImporter({
 
   async function launchSmokeRewardModel(dataset: { id: string; contentHash: string }): Promise<void> {
     try {
+      if (!modelProjectId) throw new Error("Select a Model Project before launching a managed Reward Model Run.");
       const run = await training.actions.launchRewardModelRun({
         tasksetId: taskset.id,
+        modelProjectId,
         rewardModelId: `reward-model-${taskset.id}-smoke`,
         preferenceDatasetReleaseId: dataset.id,
       });

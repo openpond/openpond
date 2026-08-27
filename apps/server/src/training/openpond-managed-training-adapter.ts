@@ -2,12 +2,15 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  type LearnedPreferenceRewardBinding,
+  ModelProjectSchema,
   AdapterValidationReceiptSchema,
   TrainingArtifactsSchema,
   TrainingEngineCapabilitiesSchema,
   TrainingExecutionStatusSchema,
   type AdapterValidationReceipt,
   type LearningSignalBatch,
+  type RewardModelRecipe,
   type ResolvedTrainingPlan,
   type TrainingArtifacts,
   type TrainingExecutionRef,
@@ -16,6 +19,16 @@ import {
 import type { ModelImprovementQualificationReceipt } from "@openpond/evals";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import type { TrainingEngineAdapter } from "@openpond/training-sdk";
+import {
+  createTrainingClient,
+  parseAndVerifyTrainingExecutionReceipt,
+  trainingExecutionReceiptHash,
+  trainingInputArtifactUploadHash,
+  trainingJobSubmissionHash,
+  type TrainingJob as PublicTrainingJob,
+  type TrainingJobSubmission,
+} from "openpond-sdk/training";
+import { createModelProjectsClient } from "openpond-sdk/model-projects";
 
 import type { SqliteStore } from "../store/store.js";
 import {
@@ -24,23 +37,8 @@ import {
 } from "../openpond/hosted-api-access.js";
 import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
 import { supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
-import {
-  parseManagedJobDetail,
-  persistManagedRunEvidence,
-} from "./openpond-managed-run-evidence.js";
 
 const ADAPTER_ID = "sandbox-managed-rl";
-const QUALIFIED_MODEL = {
-  source: "Qwen/Qwen3-0.6B",
-  revision: "c1899de289a04d12100db370d81485cdf75e47ca",
-  chatTemplateHash: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
-} as const;
-const QUALIFIED_RECIPE = {
-  loraRank: 16,
-  rolloutGroupSize: 4,
-  rolloutConcurrency: 4,
-  maxPromptTokens: 4_096,
-} as const;
 
 type Access = {
   apiBaseUrl: string;
@@ -74,16 +72,6 @@ type ManagedJob = {
     } & Record<string, unknown>;
   };
   cleanupAttestation?: unknown;
-};
-
-type ManagedCandidateBundle = {
-  jobId: string;
-  artifact: {
-    modelArtifactId: string;
-    uri: string;
-    sha256: string;
-    sizeBytes: number;
-  };
 };
 
 export type OpenPondManagedTrainingAdapterDependencies = {
@@ -125,93 +113,190 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     );
   }
 
-  /** Uploads an immutable rendered artifact for a managed Reward Model run. */
-  async uploadRewardModelArtifact(input: {
-    bytes: Uint8Array;
-    mediaType: string;
-    idempotencyKey: string;
+  async createRewardModelLaunch(input: {
+    request: unknown;
+    modelProjectId: string;
+    processorRelease: { id: string; contentHash: string };
+    recipe: RewardModelRecipe;
+    approvedAt: string;
   }) {
-    const bytes = Buffer.from(input.bytes);
-    return this.requestJson<{
-      objectRef: string;
-      sha256: string;
-      sizeBytes: number;
-      mediaType: string;
-    }>(
-      "/v1/managed-rl/reward-model-artifacts",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          contentBase64: bytes.toString("base64"),
-          expectedSha256: sha256(bytes),
-          idempotencyKey: input.idempotencyKey,
-          mediaType: input.mediaType,
-        }),
+    const request = requiredRecord(input.request, "Reward Model launch request");
+    const requestHash = requiredHash(request.requestHash, "Reward Model request hash");
+    const rewardModelTraining = requiredRecord(
+      request.rewardModelTraining,
+      "Reward Model training payload",
+    );
+    const taskset = requiredRecord(request.taskset, "Reward Model Taskset");
+    const preferenceDataset = requiredRef(
+      request.preferenceDatasetRelease,
+      "Reward Model preference dataset",
+    );
+    const base = requiredRecord(rewardModelTraining.baseModel, "Reward Model base Model");
+    const projectValue = await this.dependencies.store.getModelProject(input.modelProjectId);
+    if (!projectValue) throw new Error("Reward Model Model Project was not found.");
+    const access = await this.resolveBoundAccess();
+    const project = await this.syncProjectForSubmission(projectValue, access);
+    if (!project.hosted || !project.trainingSetup.harnessRelease) {
+      throw new Error("Reward Model training requires a synchronized Project Harness release.");
+    }
+    const tasksetRelease = project.trainingSetup.tasksetRelease;
+    if (
+      !tasksetRelease ||
+      tasksetRelease.id !== requiredStringValue(taskset.id, "Reward Model Taskset id") ||
+      tasksetRelease.contentHash !== requiredHash(taskset.contentHash, "Reward Model Taskset hash")
+    ) {
+      throw new Error("Reward Model training does not match the Model Project Taskset release.");
+    }
+    const client = this.trainingClient(access);
+    const artifactContent = {
+      schemaVersion: "openpond.trainingInputArtifactUpload.v2" as const,
+      kind: "reward_model_dataset" as const,
+      idempotencyKey: `stage:${requestHash}`,
+      sourceManifest: {
+        id: requiredStringValue(request.sourceRunRef, "Reward Model source Run"),
+        contentHash: requestHash,
       },
-      await this.resolveBoundAccess(),
+      payload: rewardModelTraining,
+    };
+    const staged = await client.stageArtifact({
+      ...artifactContent,
+      contentHash: await trainingInputArtifactUploadHash(artifactContent),
+    });
+    const maximumSpendUsd = requiredFiniteNumber(
+      request.maximumSpendUsd,
+      "Reward Model maximum spend",
     );
-  }
-
-  async createRewardModelLaunch(request: unknown) {
-    return this.requestJson<{ job: ManagedJob; requestHash: string }>(
-      "/v1/managed-rl/reward-model-launches",
-      { method: "POST", body: JSON.stringify(request) },
-      await this.resolveBoundAccess(),
-    );
+    const approvalHash = contentHash({
+      sourceRunRef: request.sourceRunRef,
+      requestHash,
+      maximumSpendUsd,
+      approvedAt: input.approvedAt,
+    });
+    const jobContent: Omit<TrainingJobSubmission, "contentHash"> = {
+      schemaVersion: "openpond.trainingJobSubmission.v2",
+      idempotencyKey: requiredStringValue(request.idempotencyKey, "Reward Model idempotency key"),
+      name: requiredStringValue(request.name, "Reward Model name").slice(0, 200),
+      source: {
+        modelProject: {
+          id: project.hosted.projectId,
+          portableProjectId: project.id,
+          revision: project.revision,
+          contentHash: project.hosted.etag,
+        },
+        harnessRunManifest: artifactContent.sourceManifest,
+        harnessRelease: project.trainingSetup.harnessRelease,
+        taskset: {
+          id: tasksetRelease.id,
+          revision: requiredPositiveInteger(taskset.revision, "Reward Model Taskset revision"),
+          contentHash: tasksetRelease.contentHash,
+        },
+        tasksetRelease,
+        dataset: { id: staged.artifactRef, contentHash: staged.contentHash },
+        evidenceSets: [preferenceDataset],
+      },
+      job: {
+        kind: "reward_model_train",
+        baseModel: {
+          schemaVersion: "openpond.baseModelPreference.v1",
+          modelId: requiredStringValue(base.repoId, "Reward Model repository"),
+          revision: requiredStringValue(base.revision, "Reward Model revision"),
+          tokenizerRevision: requiredStringValue(base.revision, "Reward Model tokenizer revision"),
+          chatTemplateHash: requiredHash(base.tokenizerHash, "Reward Model tokenizer hash"),
+          modelAssetId: null,
+          source: "managed",
+        },
+        preferenceDatasetRelease: preferenceDataset,
+        processorRelease: input.processorRelease,
+        recipe: input.recipe,
+      },
+      requestedCapabilities: [
+        { id: "managed_rl.reward_model", version: "1", required: true },
+      ],
+      budget: {
+        maximumSpendUsd,
+        maximumWallSeconds: Math.ceil(input.recipe.resourceLimits.wallTimeMs / 1_000),
+      },
+      approval: {
+        approvalHash,
+        approvedAt: input.approvedAt,
+        exportApproved: true,
+        maximumSpendUsd,
+        retentionDays: project.trainingSetup.preferredRetentionDays,
+        region: null,
+      },
+    };
+    const submission = {
+      ...jobContent,
+      contentHash: await trainingJobSubmissionHash(jobContent),
+    };
+    const job = await client.createJob(submission);
+    return { job: managedJobFromPublic(job), requestHash: submission.contentHash };
   }
 
   async rewardModelJob(jobId: string) {
-    const payload = await this.requestJson<{
+    const access = await this.resolveBoundAccess();
+    const client = this.trainingClient(access);
+    const job = await client.getJob(jobId);
+    const output = job.state === "succeeded" ? await client.outputs(jobId) : null;
+    const scorer = output?.outputs.find((candidate) => candidate.kind === "scorer");
+    return {
       job: {
-        job: ManagedJob;
-        resources: Array<{
-          kind: string;
-          state: string;
-          metadata: Record<string, unknown>;
-        }>;
-      };
-    }>(
-      `/v1/managed-rl/jobs/${encodeURIComponent(jobId)}`,
-      {},
-      await this.resolveBoundAccess(),
-    );
-    return payload.job;
+        ...managedJobFromPublic(job),
+        cleanupAttestation: output?.receipt?.cleanupComplete === true ? { complete: true } : null,
+      },
+      resources: scorer
+        ? [{
+            kind: "artifact_upload",
+            state: "consumed",
+            metadata: {
+              ...scorer.metadata,
+              objectPrefix: scorer.artifactRef,
+              artifactSha256: scorer.contentHash,
+            },
+          }]
+        : [],
+      outputs: output,
+      executionReceiptRef: output?.receipt
+        ? {
+            id: output.receipt.id,
+            contentHash: await trainingExecutionReceiptHash(output.receipt),
+          }
+        : null,
+    };
   }
 
   async cancelRewardModelJob(jobId: string, expectedVersion: number) {
-    return this.requestJson<{ job: ManagedJob }>(
-      `/v1/managed-rl/jobs/${encodeURIComponent(jobId)}/cancel`,
-      { method: "POST", body: JSON.stringify({ expectedVersion }) },
-      await this.resolveBoundAccess(),
-    );
+    const client = this.trainingClient(await this.resolveBoundAccess());
+    return { job: managedJobFromPublic(await client.cancelJob(jobId, expectedVersion)) };
   }
 
   async capabilities() {
-    const checkedAt = new Date().toISOString();
+    const access = await this.resolveBoundAccess();
+    const capabilities = await this.trainingClient(access).capabilities();
+    const available = Date.parse(capabilities.expiresAt) > Date.now();
     return TrainingEngineCapabilitiesSchema.parse({
       schemaVersion: "openpond.trainingEngineCapabilities.v1",
       adapterId: this.id,
-      available: true,
-      methods: ["grpo"],
+      available,
+      methods: capabilities.methods,
       signalKinds: ["trajectory", "reward", "grader_evidence", "infrastructure_failure"],
       modelFamilies: ["transformers"],
       precisions: ["bf16"],
-      topologies: ["single_gpu_phased"],
-      workerProtocolVersion: "openpond.managedRlWorker.v2",
-      upstreamRevision: "e0d60e4d85ea636873acb2e7083e794740d20226",
+      topologies: capabilities.placements.map((placement) => `managed_${placement}`),
+      workerProtocolVersion: "openpond.training.v2",
+      upstreamRevision: capabilities.capabilityHash,
       workerImageDigest: null,
-      capabilityReceipt: contentHash({
-        adapterId: this.id,
-        contract: "openpond.managedRlPortableSubmission.v1",
-        qualifiedModel: QUALIFIED_MODEL,
-      }),
-      checkedAt,
-      unavailableReason: null,
+      capabilityReceipt: capabilities.capabilityHash,
+      checkedAt: capabilities.checkedAt,
+      unavailableReason: available ? null : "Managed Training capabilities expired.",
     });
   }
 
   async validate(plan: ResolvedTrainingPlan): Promise<AdapterValidationReceipt> {
     const issues: AdapterValidationReceipt["issues"] = [];
+    const publicCapabilities = await this.trainingClient(
+      await this.resolveBoundAccess(),
+    ).capabilities();
     if (
       plan.engine.adapterId !== this.id ||
       plan.compute.adapterId !== "openpond-managed" ||
@@ -229,35 +314,28 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         message: "The resolved plan is not bound to OpenPond Managed.",
       });
     }
-    if (
-      plan.manifest.model.source !== QUALIFIED_MODEL.source ||
-      plan.manifest.model.revision !== QUALIFIED_MODEL.revision ||
-      plan.manifest.model.tokenizerRevision !== QUALIFIED_MODEL.revision ||
-      plan.manifest.model.chatTemplateHash !== QUALIFIED_MODEL.chatTemplateHash
-    ) {
-      issues.push({
-        code: "managed_base_profile_unsupported",
-        path: "manifest.model",
-        message: "OpenPond Managed currently requires the qualified Qwen3-0.6B profile.",
-      });
-    }
-    if (plan.recipe.method !== "grpo") {
+    if (!publicCapabilities.methods.includes(plan.recipe.method)) {
       issues.push({
         code: "managed_method_unsupported",
         path: "recipe.method",
-        message: "OpenPond Managed currently accepts GRPO runs.",
+        message: `OpenPond Managed does not currently advertise ${plan.recipe.method}.`,
       });
-    } else if (
-      plan.recipe.lora.rank !== QUALIFIED_RECIPE.loraRank ||
-      plan.recipe.rollout.groupSize !== QUALIFIED_RECIPE.rolloutGroupSize ||
-      plan.recipe.rollout.concurrency !== QUALIFIED_RECIPE.rolloutConcurrency ||
-      plan.recipe.dataset.maxPromptTokens !== QUALIFIED_RECIPE.maxPromptTokens
+    }
+    if (!publicCapabilities.placements.includes(plan.runtime.placement)) {
+      issues.push({
+        code: "managed_placement_unsupported",
+        path: "runtime.placement",
+        message: `OpenPond Managed does not currently advertise ${plan.runtime.placement} rollout placement.`,
+      });
+    }
+    if (
+      plan.maximumSpendUsd === null ||
+      plan.maximumSpendUsd > publicCapabilities.limits.maximumSpendUsd
     ) {
       issues.push({
-        code: "managed_recipe_profile_unsupported",
-        path: "recipe",
-        message:
-          "OpenPond Managed requires the qualified 0.6B recipe profile: LoRA rank 16, group size 4, rollout concurrency 4, and 4096 prompt tokens.",
+        code: "managed_budget_unsupported",
+        path: "maximumSpendUsd",
+        message: "The approved spend exceeds the current managed-training capability.",
       });
     }
     if (!plan.execution) {
@@ -419,6 +497,8 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     ) as {
       files: Array<{ path: string; sha256: string; sizeBytes: number }>;
       contentHash: string;
+      datasetRelease: { id: string; contentHash: string };
+      evidenceSetRelease: { id: string; contentHash: string } | null;
     };
     if (bundleManifest.contentHash !== plan.manifest.resolvedBundleHash) {
       throw new Error("The managed resolved bundle changed before upload.");
@@ -436,20 +516,45 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         };
       }),
     );
-    const project = await this.dependencies.store.getModelProject(
+    let project = await this.dependencies.store.getModelProject(
       trainingPlan.modelId,
     );
-    const submission = {
+    if (!project) {
+      throw new Error("The managed Model Project is no longer available.");
+    }
+    const access = await this.resolveBoundAccess();
+    project = await this.syncProjectForSubmission(project, access);
+    if (
+      !project?.hosted ||
+      project.hosted.syncedSourceRevision !== project.revision ||
+      project.hosted.portableProjectId !== project.id
+    ) {
+      throw new Error(
+        "Sync the exact Model Project revision before creating managed training.",
+      );
+    }
+    if (plan.recipe.method !== "grpo" || plan.maximumSpendUsd === null) {
+      throw new Error("Managed Training V2 requires GRPO and an approved spend ceiling.");
+    }
+    const baseModel = project.trainingSetup.baseModel;
+    if (
+      !baseModel ||
+      baseModel.modelId !== plan.manifest.model.source ||
+      baseModel.revision !== plan.manifest.model.revision ||
+      baseModel.tokenizerRevision !== plan.manifest.model.tokenizerRevision ||
+      baseModel.chatTemplateHash !== plan.manifest.model.chatTemplateHash
+    ) {
+      throw new Error("The synced Model Project base Model does not match the Run manifest.");
+    }
+    const portableSubmission = {
       schemaVersion: "openpond.managedRlPortableSubmission.v1" as const,
       sourceRunRef: `openpond:model-run:${plan.manifest.id}`,
       name: `OpenPond Managed · ${trainingPlan.modelId}`.slice(0, 191),
       idempotencyKey: `openpond-managed:${plan.manifest.contentHash}`.slice(0, 191),
-      modelProject: project?.hosted
-        ? {
-            id: project.hosted.projectId,
-            portableProjectId: project.hosted.portableProjectId,
-          }
-        : null,
+      modelProject: {
+        id: project.hosted.projectId,
+        portableProjectId: project.hosted.portableProjectId,
+      },
       manifest: plan.manifest,
       sourceTaskset: {
         id: taskset.id,
@@ -465,28 +570,106 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       },
       validationTasks,
     };
-    const access = await this.resolveBoundAccess();
-    const response = await this.requestJson<{
-      job: ManagedJob;
-      sourceManifestHash: string;
-      submissionHash: string;
-    }>(
-      "/v1/managed-rl/portable-launches",
-      {
-        method: "POST",
-        body: JSON.stringify(submission),
+    const client = this.trainingClient(access);
+    const stagedContent = {
+      schemaVersion: "openpond.trainingInputArtifactUpload.v2" as const,
+      kind: "portable_training_bundle" as const,
+      idempotencyKey: `stage:${plan.manifest.contentHash}`,
+      sourceManifest: {
+        id: plan.manifest.id,
+        contentHash: plan.manifest.contentHash,
       },
-      access,
-    );
+      payload: portableSubmission,
+    };
+    const staged = {
+      ...stagedContent,
+      contentHash: await trainingInputArtifactUploadHash(stagedContent),
+    };
+    await client.stageArtifact(staged);
+    const grader = taskset.graders[0];
+    if (!grader) throw new Error("Managed training requires an immutable grader.");
+    const learnedPreference = plan.recipe.reward.learnedPreference ?? null;
+    const rewardSource = learnedPreference
+      ? learnedRewardSource(learnedPreference)
+      : {
+          kind: "deterministic" as const,
+          grader: { id: grader.id, contentHash: contentHash(grader) },
+          composer: null,
+        };
+    const jobContent: Omit<TrainingJobSubmission, "contentHash"> = {
+      schemaVersion: "openpond.trainingJobSubmission.v2",
+      idempotencyKey: `openpond-training-v2:${plan.manifest.contentHash}`,
+      name: `OpenPond Managed · ${trainingPlan.modelId}`.slice(0, 200),
+      source: {
+        modelProject: {
+          id: project.hosted.projectId,
+          portableProjectId: project.hosted.portableProjectId,
+          revision: project.revision,
+          contentHash: project.hosted.etag,
+        },
+        harnessRunManifest: {
+          id: plan.manifest.id,
+          contentHash: plan.manifest.contentHash,
+        },
+        harnessRelease: plan.manifest.harnessRelease,
+        taskset: {
+          id: taskset.id,
+          revision: taskset.revision,
+          contentHash: taskset.contentHash,
+        },
+        tasksetRelease: {
+          id: taskset.id,
+          contentHash: taskset.contentHash,
+        },
+        dataset: bundleManifest.datasetRelease,
+        evidenceSets: bundleManifest.evidenceSetRelease
+          ? [bundleManifest.evidenceSetRelease]
+          : [],
+      },
+      job: {
+        kind: "policy_optimize",
+        baseModel,
+        recipe: plan.recipe,
+        rewardSource,
+        resumeFrom: null,
+      },
+      requestedCapabilities: [
+        { id: "managed_rl.policy.grpo", version: "1", required: true },
+        {
+          id: `managed_rl.rollouts.${plan.runtime.placement}`,
+          version: "1",
+          required: true,
+        },
+      ],
+      budget: {
+        maximumSpendUsd: plan.maximumSpendUsd,
+        maximumWallSeconds: Math.ceil(plan.recipe.resourceLimits.wallTimeMs / 1_000),
+      },
+      approval: {
+        approvalHash: plan.approvalHash,
+        approvedAt: plan.manifest.approval.approvedAt,
+        exportApproved: true,
+        maximumSpendUsd: plan.maximumSpendUsd,
+        retentionDays: trainingPlan.dataPolicy.retentionDays,
+        region: trainingPlan.dataPolicy.region,
+      },
+    };
+    const publicSubmission = {
+      ...jobContent,
+      contentHash: await trainingJobSubmissionHash(jobContent),
+    };
+    const job = await client.createJob(publicSubmission);
     const ref = {
-      runId: response.job.id,
+      runId: job.id,
       adapterId: this.id,
-      providerJobId: response.job.id,
+      protocolVersion: "openpond.training.v2" as const,
+      routeFamily: "training_v2" as const,
+      providerJobId: job.id,
       tenantId: access.teamId,
       leaseId: null,
-      manifestHash: response.sourceManifestHash,
-      inputBundleHash: response.submissionHash,
-      createdAt: dateString(response.job.createdAt),
+      manifestHash: plan.manifest.contentHash,
+      inputBundleHash: publicSubmission.contentHash,
+      createdAt: dateString(job.createdAt),
     };
     if (plan.runtime.placement === "local") {
       this.ensureLocalExecutor(ref, access, plan.manifest.harnessRelease.contentHash);
@@ -499,69 +682,49 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   }
 
   async status(ref: TrainingExecutionRef): Promise<TrainingExecutionStatus> {
-    const payload = await this.requestJson<{ job: unknown }>(
-      `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}`,
-      {},
-      await this.resolveBoundAccess(ref.tenantId),
-    );
-    const detail = parseManagedJobDetail(payload.job);
-    await persistManagedRunEvidence({
-      store: this.dependencies.store,
-      ref,
-      detail,
-    }).catch(() => undefined);
-    const placement =
-      detail.job.inputBundle?.harnessRunManifest?.runtimeTarget?.placement;
+    const access = await this.resolveBoundAccess(ref.tenantId);
+    const job = await this.trainingClient(access).getJob(ref.runId);
+    const localJob = await this.dependencies.store.getTrainingJob(ref.runId);
+    const bindings = recordOrEmpty(localJob?.metadata.portableAdapterBindings);
+    const runtime = recordOrEmpty(bindings.runtime);
+    const placement = runtime.placement;
     if (placement === "local") {
-      const localJob = await this.dependencies.store.getTrainingJob(ref.runId);
       const storedHarnessHash = localJob?.metadata.harnessReleaseHash;
       this.ensureLocalExecutor(
         ref,
-        await this.resolveBoundAccess(ref.tenantId),
-        detail.job.inputBundle?.harnessRelease?.contentHash
-          ?? detail.job.inputBundle?.harnessRunManifest?.harnessRelease?.contentHash
-          ?? (typeof storedHarnessHash === "string" ? storedHarnessHash : undefined),
+        access,
+        typeof storedHarnessHash === "string" ? storedHarnessHash : undefined,
       );
     }
     if (
-      ["completed", "cancelled", "budget_exhausted", "failed"].includes(
-        detail.job.state,
-      )
+      ["succeeded", "cancelled", "failed"].includes(job.state)
     ) {
       const executor = this.localExecutors.get(ref.runId);
       this.localExecutors.delete(ref.runId);
       void executor?.stop();
     }
-    return TrainingExecutionStatusSchema.parse(toExecutionStatus(detail.job));
+    return TrainingExecutionStatusSchema.parse(toExecutionStatus(job));
   }
 
   async refreshEvidence(ref: TrainingExecutionRef): Promise<void> {
-    const payload = await this.requestJson<{ job: unknown }>(
-      `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}`,
-      {},
-      await this.resolveBoundAccess(ref.tenantId),
-    );
-    await persistManagedRunEvidence({
-      store: this.dependencies.store,
-      ref,
-      detail: parseManagedJobDetail(payload.job),
-    });
+    const client = this.trainingClient(await this.resolveBoundAccess(ref.tenantId));
+    await Promise.all([client.events(ref.runId), client.logs(ref.runId)]);
   }
 
   async logs(ref: TrainingExecutionRef, cursor?: string) {
-    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-    return this.requestJson<{
-      cursor: string;
-      entries: Array<{
-        timestamp: string;
-        level: string;
-        message: string;
-      }>;
-    }>(
-      `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}/logs${query}`,
-      {},
+    const logs = await this.trainingClient(
       await this.resolveBoundAccess(ref.tenantId),
-    );
+    ).logs(ref.runId);
+    const after = cursor === undefined ? -1 : Number.parseInt(cursor, 10);
+    const entries = logs
+      .filter((entry) => !Number.isFinite(after) || entry.sequence >= after)
+      .map((entry) => ({
+        timestamp: entry.createdAt,
+        level: entry.level,
+        message: entry.message,
+      }));
+    const next = logs.length === 0 ? Math.max(after, 0) : logs.at(-1)!.sequence + 1;
+    return { cursor: String(next), entries };
   }
 
   async cancel(ref: TrainingExecutionRef): Promise<void> {
@@ -569,20 +732,9 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     this.localExecutors.delete(ref.runId);
     void executor?.stop();
     const access = await this.resolveBoundAccess(ref.tenantId);
-    const current = await this.requestJson<{ job: unknown }>(
-      `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}`,
-      {},
-      access,
-    );
-    const detail = parseManagedJobDetail(current.job);
-    await this.requestJson(
-      `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}/cancel`,
-      {
-        method: "POST",
-        body: JSON.stringify({ expectedVersion: detail.job.version }),
-      },
-      access,
-    );
+    const client = this.trainingClient(access);
+    const current = await client.getJob(ref.runId);
+    await client.cancelJob(ref.runId, current.version);
   }
 
   async close(): Promise<void> {
@@ -592,35 +744,36 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   }
 
   async collect(ref: TrainingExecutionRef): Promise<TrainingArtifacts> {
-    const payload = await this.requestJson<{
-      candidateBundle: ManagedCandidateBundle | null;
-    }>(
-      `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}/artifacts`,
-      {},
-      await this.resolveBoundAccess(ref.tenantId),
-    );
-    const candidate = payload.candidateBundle;
-    if (
-      !candidate ||
-      candidate.jobId !== ref.runId ||
-      !candidate.artifact.modelArtifactId.trim() ||
-      !candidate.artifact.uri.startsWith("r2://") ||
-      !/^[a-f0-9]{64}$/.test(candidate.artifact.sha256) ||
-      !Number.isSafeInteger(candidate.artifact.sizeBytes) ||
-      candidate.artifact.sizeBytes <= 0
-    ) {
-      throw new Error("Sandbox completed managed training without a valid candidate artifact.");
+    const access = await this.resolveBoundAccess(ref.tenantId);
+    const output = await this.trainingClient(access).outputs(ref.runId);
+    if (!output.receipt) {
+      throw new Error("Sandbox completed managed training without an execution receipt.");
     }
-    const artifacts = [
-      {
-        kind: "adapter" as const,
+    const receiptOutput = output.outputs.find((candidate) => candidate.kind === "receipt");
+    if (!receiptOutput) {
+      throw new Error("Sandbox completed managed training without a receipt artifact.");
+    }
+    await parseAndVerifyTrainingExecutionReceipt(output.receipt, {
+      id: output.receipt.id,
+      contentHash: receiptOutput.contentHash,
+      teamId: access.teamId,
+      jobId: ref.runId,
+      requireCleanup: true,
+    });
+    const adapterOutput = output.outputs.find((candidate) => candidate.kind === "adapter");
+    if (!adapterOutput) {
+      throw new Error("Sandbox completed managed training without an adapter artifact.");
+    }
+    const artifacts = output.outputs
+      .filter((candidate) => candidate.kind !== "scorer")
+      .map((candidate) => ({
+        kind: candidate.kind,
         objectRef:
           `sandbox-managed-rl://${encodeURIComponent(ref.runId)}/` +
-          encodeURIComponent(candidate.artifact.modelArtifactId),
-        sha256: candidate.artifact.sha256,
-        sizeBytes: candidate.artifact.sizeBytes,
-      },
-    ];
+          encodeURIComponent(candidate.id),
+        sha256: candidate.contentHash,
+        sizeBytes: candidate.sizeBytes,
+      }));
     const base = {
       runId: ref.runId,
       manifestHash:
@@ -670,6 +823,58 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       throw new Error("OpenPond Managed resolved a different workspace than the execution.");
     }
     return access;
+  }
+
+  private trainingClient(access: Access) {
+    const headers = hostedApiAuthHeaders(access.token);
+    headers.set("x-openpond-team-id", access.teamId);
+    return createTrainingClient({
+      baseUrl: access.apiBaseUrl,
+      fetch: this.fetchImpl,
+      headers,
+    });
+  }
+
+  private async syncProjectForSubmission(
+    project: import("@openpond/contracts").ModelProject,
+    access: Access,
+  ) {
+    const headers = hostedApiAuthHeaders(access.token);
+    headers.set("x-openpond-team-id", access.teamId);
+    const client = createModelProjectsClient({
+      baseUrl: access.apiBaseUrl,
+      fetch: this.fetchImpl,
+      headers,
+    });
+    const hosted = await client.upsert({
+      schemaVersion: "openpond.hostedModelProjectSync.v2",
+      portableProjectId: project.id,
+      name: project.name,
+      objective: project.objective,
+      defaultBaseModel: project.defaultBaseModel,
+      defaultDestinationId: project.defaultDestinationId,
+      trainingSetup: project.trainingSetup,
+      sourceRevision: project.revision,
+      sourceUpdatedAt: project.updatedAt,
+      expectedEtag: project.hosted?.teamId === access.teamId ? project.hosted.etag : null,
+    });
+    const syncedAt = new Date().toISOString();
+    const saved = ModelProjectSchema.parse({
+      ...project,
+      hosted: {
+        schemaVersion: "openpond.hostedModelProjectLink.v1",
+        teamId: access.teamId,
+        projectId: hosted.id,
+        portableProjectId: hosted.portableProjectId,
+        revision: hosted.revision,
+        etag: hosted.etag,
+        syncedSourceRevision: project.revision,
+        syncedAt,
+        tasksets: project.hosted?.teamId === access.teamId ? project.hosted.tasksets : [],
+      },
+    });
+    await this.dependencies.store.saveModelProject(saved);
+    return saved;
   }
 
   private ensureLocalExecutor(
@@ -728,39 +933,25 @@ function dateString(value: string | Date): string {
   return new Date(value).toISOString();
 }
 
-function toExecutionStatus(job: ManagedJob) {
-  const terminal = new Set(["completed", "cancelled", "budget_exhausted", "failed"]);
-  const preparing = new Set([
-    "draft",
-    "validating",
-    "admitted",
-    "provisioning_gpu",
-    "provisioning_rollouts",
-  ]);
+function toExecutionStatus(job: PublicTrainingJob) {
+  const preparing = new Set(["queued", "admitting", "provisioning"]);
   const state =
-    job.state === "completed"
+    job.state === "succeeded"
       ? ("succeeded" as const)
       : job.state === "cancelled"
         ? ("cancelled" as const)
-        : job.state === "failed" || job.state === "budget_exhausted"
+        : job.state === "failed"
           ? ("failed" as const)
           : job.state === "cancelling"
             ? ("cancelling" as const)
             : preparing.has(job.state)
               ? ("preparing" as const)
               : ("running" as const);
-  const progress = terminal.has(job.state)
-    ? 1
-    : typeof job.completedGroups === "number" &&
-        typeof job.targetGroups === "number" &&
-        job.targetGroups > 0
-      ? job.completedGroups / job.targetGroups
-      : null;
   return {
     runId: job.id,
     state,
     phase: job.state,
-    progress,
+    progress: job.progress,
     updatedAt: dateString(job.updatedAt),
     errorCode:
       state === "failed"
@@ -768,5 +959,86 @@ function toExecutionStatus(job: ManagedJob) {
             .replace(/[^A-Za-z0-9_-]/g, "_")
             .slice(0, 191)
         : null,
+  };
+}
+
+function learnedRewardSource(binding: LearnedPreferenceRewardBinding) {
+  return {
+    kind: "learned_reward" as const,
+    rewardModelVersion: binding.rewardModelVersion,
+    qualificationReport: binding.qualificationReport,
+    scorerArtifact: {
+      artifactRef: binding.checkpoint.objectRef,
+      contentHash: binding.checkpoint.contentHash,
+      executionReceipt: binding.executionReceipt,
+    },
+    processorRelease: binding.processorRelease,
+    rewardComposerRelease: binding.rewardComposerRelease,
+  };
+}
+
+function recordOrEmpty(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function managedJobFromPublic(job: PublicTrainingJob): ManagedJob {
+  const state = job.state === "succeeded"
+    ? "completed"
+    : job.state === "queued" || job.state === "admitting"
+      ? "admitted"
+      : job.state === "provisioning"
+        ? "provisioning_gpu"
+        : job.state === "stopping"
+          ? "stop_after_group"
+          : job.state;
+  return {
+    id: job.id,
+    state,
+    version: job.version,
+    terminalReason: job.terminalReason,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
+function requiredRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function requiredStringValue(value: unknown, label: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${label} is invalid.`);
+  return value;
+}
+
+function requiredHash(value: unknown, label: string): string {
+  const parsed = requiredStringValue(value, label);
+  if (!/^[a-f0-9]{64}$/.test(parsed)) throw new Error(`${label} is invalid.`);
+  return parsed;
+}
+
+function requiredFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value;
+}
+
+function requiredPositiveInteger(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value;
+}
+
+function requiredRef(value: unknown, label: string) {
+  const record = requiredRecord(value, label);
+  return {
+    id: requiredStringValue(record.id, `${label} id`),
+    contentHash: requiredHash(record.contentHash, `${label} hash`),
   };
 }

@@ -41,9 +41,6 @@ export const TRAINING_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS task_miner_runs_status_updated_idx ON task_miner_runs(status, updated_at DESC);
   CREATE TABLE IF NOT EXISTS model_projects (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS model_projects_profile_updated_idx ON model_projects(profile_id, updated_at DESC);
-  CREATE TABLE IF NOT EXISTS model_run_drafts (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, model_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-  CREATE INDEX IF NOT EXISTS model_run_drafts_profile_updated_idx ON model_run_drafts(profile_id, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS model_run_drafts_model_idx ON model_run_drafts(model_id, updated_at DESC);
   CREATE TABLE IF NOT EXISTS model_versions (id TEXT PRIMARY KEY, model_id TEXT NOT NULL, profile_id TEXT NOT NULL, version_number INTEGER NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(model_id, version_number));
   CREATE INDEX IF NOT EXISTS model_versions_profile_created_idx ON model_versions(profile_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS model_versions_model_idx ON model_versions(model_id, version_number DESC);

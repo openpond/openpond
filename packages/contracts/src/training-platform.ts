@@ -173,6 +173,12 @@ export const TrainingExecutionRefSchema = z
   .object({
     runId: ReleaseIdSchema,
     adapterId: ReleaseIdSchema,
+    protocolVersion: z
+      .enum(["openpond.training.v2", "adapter.native.v1"])
+      .default("adapter.native.v1"),
+    routeFamily: z
+      .enum(["training_v2", "adapter_native"])
+      .default("adapter_native"),
     routeId: ReleaseIdSchema.optional(),
     providerJobId: z.string().trim().min(1).max(1_000).nullable(),
     tenantId: ReleaseIdSchema.optional(),

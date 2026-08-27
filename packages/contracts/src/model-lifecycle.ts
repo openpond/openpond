@@ -166,6 +166,7 @@ export const RewardModelRunReceiptSchema = z.object({
   bucketHead: ImmutableReleaseRefSchema.nullable(),
   processorRelease: ImmutableReleaseRefSchema,
   optimizerEvidence: ImmutableReleaseRefSchema,
+  managedExecutionReceipt: ImmutableReleaseRefSchema.nullable().default(null),
   parameterDeltaHash: ReleaseHashSchema,
   cleanup: z.object({
     computeReleased: z.boolean(),

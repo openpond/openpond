@@ -22,7 +22,7 @@ import {
   type HarnessRunManifest,
   type HarnessRuntimeTargetBinding,
   type ImmutableReleaseRef,
-  type ModelRunDraft,
+  type ModelProject,
   type OpaqueSecretLeaseRef,
   type ResolvedTrainingBundleManifest,
   type Taskset,
@@ -54,7 +54,8 @@ export type TasksetTrainingBundle = {
  */
 export function buildTasksetTrainingBundle(input: {
   taskset: Taskset;
-  modelRun: ModelRunDraft;
+  modelProject: ModelProject;
+  modelRunId: string;
   runtime: HarnessRuntimeTargetBinding;
   compute: ComputeTargetBinding;
   engine: TrainingEngineBinding;
@@ -69,7 +70,8 @@ export function buildTasksetTrainingBundle(input: {
   harnessRelease: ImmutableReleaseRef;
   tasksetRelease: ImmutableReleaseRef;
 }): TasksetTrainingBundle {
-  const { taskset, modelRun, harnessRelease, tasksetRelease } = input;
+  const { taskset, modelProject, harnessRelease, tasksetRelease } = input;
+  const setup = modelProject.trainingSetup;
   const releasedHarness = ImmutableReleaseRefSchema.parse(harnessRelease);
   const releasedTaskset = ImmutableReleaseRefSchema.parse(tasksetRelease);
   // These remain part of the preparation API for adapter compatibility; the
@@ -84,13 +86,13 @@ export function buildTasksetTrainingBundle(input: {
     );
   }
   if (
-    !modelRun.baseModel?.revision ||
-    !modelRun.baseModel.tokenizerRevision ||
-    !modelRun.baseModel.chatTemplateHash ||
-    !modelRun.recipe ||
-    !modelRun.tasksetRef ||
-    modelRun.tasksetRef.id !== taskset.id ||
-    modelRun.tasksetRef.contentHash !== taskset.contentHash
+    !setup.baseModel?.revision ||
+    !setup.baseModel.tokenizerRevision ||
+    !setup.baseModel.chatTemplateHash ||
+    !setup.recipe ||
+    !setup.tasksetRef ||
+    setup.tasksetRef.id !== taskset.id ||
+    setup.tasksetRef.contentHash !== taskset.contentHash
   ) {
     throw new Error(
       "Model Run must bind an exact Taskset, Model revision, tokenizer, chat template, and Recipe.",
@@ -190,21 +192,21 @@ export function buildTasksetTrainingBundle(input: {
   });
   const manifestContent = HarnessRunManifestContentSchema.parse({
     schemaVersion: "openpond.harnessRunManifest.v1",
-    id: `manifest_${modelRun.id}_${input.approval.approvalHash.slice(0, 16)}`,
+    id: `manifest_${input.modelRunId}_${input.approval.approvalHash.slice(0, 16)}`,
     harnessRelease,
     datasetRelease,
     evidenceSets: evidenceSetRelease ? [evidenceSetRelease] : [],
     model: {
-      source: modelRun.baseModel.modelId,
-      revision: modelRun.baseModel.revision,
+      source: setup.baseModel.modelId,
+      revision: setup.baseModel.revision,
       artifactHash: null,
-      tokenizerRevision: modelRun.baseModel.tokenizerRevision,
-      chatTemplateHash: modelRun.baseModel.chatTemplateHash,
+      tokenizerRevision: setup.baseModel.tokenizerRevision,
+      chatTemplateHash: setup.baseModel.chatTemplateHash,
     },
     recipe: {
-      method: modelRun.recipe.method,
+      method: setup.recipe.method,
       version: "openpond.trainingRecipe.v1",
-      configHash: contentHash(modelRun.recipe),
+      configHash: contentHash(setup.recipe),
     },
     runtimeTarget: input.runtime,
     computeTarget: input.compute,
@@ -212,7 +214,7 @@ export function buildTasksetTrainingBundle(input: {
     resolvedBundleHash: resolvedBundleManifest.contentHash,
     secretLeaseRefs: input.secretLeaseRefs ?? [],
     approval: input.approval,
-    createdAt: modelRun.updatedAt,
+    createdAt: modelProject.updatedAt,
   });
   const manifest = HarnessRunManifestSchema.parse({
     ...manifestContent,

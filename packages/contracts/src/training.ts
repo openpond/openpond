@@ -5,9 +5,11 @@ import type {
   EvaluationResult,
 } from "@openpond/evals";
 import {
+  ModelProjectSchema as PublicModelProjectSchema,
+  ModelProjectTrainingSetupSchema as PublicModelProjectTrainingSetupSchema,
+} from "openpond-sdk/model-projects";
+import {
   BaseModelPreferenceSchema,
-  DatasetBuildIntentSchema,
-  DatasetBuildSpecificationSchema,
   GraderAuditReportSchema,
   GradeResultSchema,
   TaskAttemptArtifactSchema,
@@ -461,122 +463,9 @@ export const ModelRunPresetSchema = z.enum([
   "small_experiment",
 ]);
 
-export const ModelProjectTrainingSetupSchema = z.object({
-  tasksetRef: z.object({
-    id: IdSchema,
-    revision: z.number().int().positive(),
-    contentHash: HashSchema,
-  }).nullable().default(null),
-  harnessRelease: ImmutableReleaseRefSchema.nullable().default(null),
-  tasksetRelease: ImmutableReleaseRefSchema.nullable().default(null),
-  baseModel: BaseModelPreferenceSchema.nullable().default(null),
-  method: TrainingMethodSchema.nullable().default(null),
-  destinationId: TrainingDestinationIdSchema.nullable().default(null),
-  managedRolloutPlacement: z.enum(["local", "remote"]).default("remote"),
-  runPreset: ModelRunPresetSchema.nullable().default(null),
-  recipe: TrainingRecipeSchema.nullable().default(null),
-  preferredMaximumSpendUsd: z.number().nonnegative().nullable().default(null),
-  preferredRetentionDays: z.number().int().nonnegative().nullable().default(null),
-}).strict();
-
-export const ModelProjectSchema = z.object({
-  schemaVersion: z.literal("openpond.modelProject.v1"),
-  id: IdSchema,
-  profileId: IdSchema,
-  revision: z.number().int().positive().default(1),
-  name: z.string().trim().min(1).max(200),
-  objective: z.string().trim().max(5_000).nullable(),
-  defaultBaseModel: BaseModelPreferenceSchema.nullable(),
-  defaultDestinationId: TrainingDestinationIdSchema.nullable(),
-  trainingSetup: ModelProjectTrainingSetupSchema.default({
-    tasksetRef: null,
-    harnessRelease: null,
-    tasksetRelease: null,
-    baseModel: null,
-    method: null,
-    destinationId: null,
-    managedRolloutPlacement: "remote",
-    runPreset: null,
-    recipe: null,
-    preferredMaximumSpendUsd: null,
-    preferredRetentionDays: null,
-  }),
-  hosted: z
-    .object({
-      schemaVersion: z.literal("openpond.hostedModelProjectLink.v1"),
-      teamId: IdSchema,
-      projectId: IdSchema,
-      portableProjectId: IdSchema,
-      revision: z.number().int().positive(),
-      etag: HashSchema,
-      syncedSourceRevision: z.number().int().positive(),
-      syncedAt: TimestampSchema,
-      tasksets: z
-        .array(
-          z.object({
-            localTasksetId: IdSchema,
-            releaseId: IdSchema,
-            releaseRevision: z.number().int().positive(),
-            releaseHash: HashSchema,
-            hostedTasksetId: IdSchema,
-            syncedAt: TimestampSchema,
-          }).strict(),
-        )
-        .max(10_000)
-        .default([]),
-    })
-    .strict()
-    .nullable()
-    .default(null),
-  tasksetSyncs: z
-    .array(
-      z.object({
-        localTasksetId: IdSchema,
-        releaseId: IdSchema,
-        releaseRevision: z.number().int().positive(),
-        releaseHash: HashSchema,
-        state: z.enum(["syncing", "synced", "sync_failed"]),
-        hostedTasksetId: IdSchema.nullable().default(null),
-        lastAttemptAt: TimestampSchema,
-        syncedAt: TimestampSchema.nullable().default(null),
-        lastError: z.string().trim().min(1).max(5_000).nullable().default(null),
-      }).strict(),
-    )
-    .max(10_000)
-    .default([]),
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema,
-});
-
-export const ModelRunDraftSchema = z.object({
-  schemaVersion: z.literal("openpond.modelRunDraft.v1"),
-  id: IdSchema,
-  profileId: IdSchema,
-  modelId: IdSchema,
-  status: z.enum(["draft", "ready_to_run", "launched", "cancelled"]),
-  title: z.string().trim().min(1).max(200),
-  datasetMode: z.enum(["existing", "build"]).nullable(),
-  tasksetRef: z
-    .object({
-      id: IdSchema,
-      revision: z.number().int().positive(),
-      contentHash: HashSchema,
-    })
-    .nullable(),
-  harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
-  tasksetRelease: ImmutableReleaseRefSchema.nullable().optional(),
-  datasetCreationId: IdSchema.nullable(),
-  buildIntent: DatasetBuildIntentSchema.nullable(),
-  buildSpecification: DatasetBuildSpecificationSchema.nullable(),
-  baseModel: BaseModelPreferenceSchema.nullable(),
-  method: TrainingMethodSchema.nullable(),
-  destinationId: TrainingDestinationIdSchema.nullable(),
-  managedRolloutPlacement: z.enum(["local", "remote"]).optional(),
-  runPreset: ModelRunPresetSchema.nullable(),
-  recipe: TrainingRecipeSchema.nullable(),
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema,
-});
+export const ModelProjectTrainingSetupSchema =
+  PublicModelProjectTrainingSetupSchema;
+export const ModelProjectSchema = PublicModelProjectSchema;
 
 export const TrainingPlanSchema = z.object({
   schemaVersion: z.literal("openpond.trainingPlan.v1"),
@@ -1031,7 +920,6 @@ export const TrainingStateResponseSchema = z.object({
   minerConfig: TaskMinerConfigSchema,
   minerRuns: z.array(TaskMinerRunSchema).default([]),
   modelProjects: z.array(ModelProjectSchema).default([]),
-  modelRunDrafts: z.array(ModelRunDraftSchema).default([]),
   modelVersions: z.array(ModelVersionSchema).default([]),
   modelRuns: z.array(ModelRunSchema).default([]),
   rewardModelVersions: z.array(RewardModelVersionSchema).default([]),
@@ -1093,7 +981,6 @@ export type ModelProject = z.infer<typeof ModelProjectSchema>;
 export type ModelProjectTrainingSetup = z.infer<
   typeof ModelProjectTrainingSetupSchema
 >;
-export type ModelRunDraft = z.infer<typeof ModelRunDraftSchema>;
 export type TrainingPlan = z.infer<typeof TrainingPlanSchema>;
 export type TrainingBundleManifest = z.infer<
   typeof TrainingBundleManifestSchema

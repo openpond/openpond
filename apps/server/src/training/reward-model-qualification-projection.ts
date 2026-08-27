@@ -30,6 +30,7 @@ export function projectQualifiedRewardModel(input: {
   inventory: InventoryFile[];
   evidence: Record<string, unknown>;
   cleanup: { computeReleased: boolean; providerTerminalObserved: boolean };
+  managedExecutionReceipt: { id: string; contentHash: string };
   createdAt: string;
 }): {
   version: RewardModelVersion;
@@ -144,6 +145,7 @@ export function projectQualifiedRewardModel(input: {
     bucketHead: version.artifacts.bucketHead,
     processorRelease: version.artifacts.processorRelease,
     optimizerEvidence: ref(optimizer),
+    managedExecutionReceipt: input.managedExecutionReceipt,
     parameterDeltaHash: contentHash({ before: input.evidence.parameterHashBefore, after: input.evidence.parameterHashAfter }),
     cleanup: input.cleanup,
   };

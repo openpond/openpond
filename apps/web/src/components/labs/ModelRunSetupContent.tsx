@@ -4,7 +4,6 @@ import {
 } from "react";
 import type {
   BaseModelCandidate,
-  ModelRunDraft,
   LearnedPreferenceRewardBinding,
   ModelRunPreset,
   Taskset,
@@ -29,6 +28,7 @@ import {
   presetFor,
   presetsFor,
   setupStepComplete,
+  type ModelProjectEditorState,
 } from "./model-run-editor-helpers";
 
 const RUN_CONTROL_ID = "model-build-run-control";
@@ -40,7 +40,7 @@ type LaunchState = {
 };
 
 type TrainingConfiguration = {
-  baseModel: ModelRunDraft["baseModel"];
+  baseModel: ModelProjectEditorState["baseModel"];
   method: "sft" | "dpo" | "grpo" | "ppo";
   destinationId: TrainingDestinationId;
   recipe: TrainingRecipe;
@@ -50,9 +50,9 @@ type TrainingConfiguration = {
 export function ModelRunSetupContent({
   activeStep,
   onStepChange,
-  draft,
+  setup,
   learnedPreferenceReward,
-  setDraft,
+  setSetup,
   selectedTaskset,
   methodCards,
   tasksets,
@@ -70,9 +70,9 @@ export function ModelRunSetupContent({
 }: {
   activeStep: ModelSetupStepId;
   onStepChange: (step: ModelSetupStepId) => void;
-  draft: ModelRunDraft;
+  setup: ModelProjectEditorState;
   learnedPreferenceReward: LearnedPreferenceRewardBinding | null;
-  setDraft: Dispatch<SetStateAction<ModelRunDraft>>;
+  setSetup: Dispatch<SetStateAction<ModelProjectEditorState>>;
   selectedTaskset: Taskset | null;
   methodCards: ReturnType<typeof methodAvailability>;
   tasksets: Taskset[];
@@ -96,7 +96,7 @@ export function ModelRunSetupContent({
           ...step,
           complete: setupStepComplete(
             step.id,
-            draft,
+            setup,
             selectedTaskset,
             canRun,
           ),
@@ -149,7 +149,7 @@ export function ModelRunSetupContent({
                 type="button"
                 onClick={onOpenDatasetBuilder}
               >
-                {draft.datasetMode === "build"
+                {setup.datasetMode === "build"
                   ? "Continue building Taskset"
                   : "Build a Taskset"}
               </button>
@@ -165,7 +165,7 @@ export function ModelRunSetupContent({
             {methodCards.map((candidate) => (
               <button
                 className={
-                  draft.method === candidate.method
+                  setup.method === candidate.method
                     ? "model-build-method selected"
                     : "model-build-method"
                 }
@@ -176,7 +176,7 @@ export function ModelRunSetupContent({
                   candidate.available ? undefined : candidate.reason
                 }
                 onClick={() => {
-                  setDraft((current) => ({
+                  setSetup((current) => ({
                     ...current,
                     method: candidate.method,
                     runPreset: "standard",
@@ -234,21 +234,21 @@ export function ModelRunSetupContent({
           </div>
           {selectedTaskset
           && (
-            draft.method === "sft"
-            || draft.method === "dpo"
-            || draft.method === "grpo"
-            || draft.method === "ppo"
+            setup.method === "sft"
+            || setup.method === "dpo"
+            || setup.method === "grpo"
+            || setup.method === "ppo"
           ) ? (
             <TrainingStartDialog
-              key={`${selectedTaskset.id}:${selectedTaskset.revision}:${draft.method}:${draft.runPreset}`}
+              key={`${selectedTaskset.id}:${selectedTaskset.revision}:${setup.method}:${setup.runPreset}`}
               baseModelCandidates={baseModelCandidates}
               connection={connection}
               taskset={selectedTaskset}
               learnedPreferenceReward={learnedPreferenceReward}
-              modelId={draft.modelId}
+              modelId={setup.projectId}
               destinations={destinations}
-              initialMethod={draft.method}
-              preferredBaseModel={draft.baseModel}
+              initialMethod={setup.method}
+              preferredBaseModel={setup.baseModel}
               busy={[
                 "prepare-training",
                 "prepare-model-run",
@@ -260,7 +260,7 @@ export function ModelRunSetupContent({
               presentation="embedded"
               hideActions
               runControlId={RUN_CONTROL_ID}
-              runPreset={draft.runPreset ?? "standard"}
+              runPreset={setup.runPreset ?? "standard"}
               hideMethodTabs
               approvalPresentation="dialog"
               configurationContent={
@@ -268,7 +268,7 @@ export function ModelRunSetupContent({
                   <summary>
                     <span>Training configuration</span>
                     <strong>
-                      {presetFor(draft.method, draft.runPreset)?.label
+                      {presetFor(setup.method, setup.runPreset)?.label
                         ?? "Recommended"}
                     </strong>
                   </summary>
@@ -276,13 +276,13 @@ export function ModelRunSetupContent({
                     <span>Training budget</span>
                     <DropdownSelect
                       label="Training budget"
-                      value={draft.runPreset ?? "standard"}
-                      options={presetsFor(draft.method).map((preset) => ({
+                      value={setup.runPreset ?? "standard"}
+                      options={presetsFor(setup.method).map((preset) => ({
                         value: preset.id,
                         label: preset.label,
                       }))}
                       onChange={(value) =>
-                        setDraft((current) => ({
+                        setSetup((current) => ({
                           ...current,
                           runPreset: value as ModelRunPreset,
                           recipe: null,
@@ -290,23 +290,23 @@ export function ModelRunSetupContent({
                         }))}
                     />
                     <small>
-                      {presetFor(draft.method, draft.runPreset)
+                      {presetFor(setup.method, setup.runPreset)
                         ?.description
                         ?? "Use Taskset-aware recommended limits."}
                     </small>
                   </div>
-                  {draft.destinationId === "openpond_managed" ? (
+                  {setup.destinationId === "openpond_managed" ? (
                     <div className="model-build-field">
                       <span>Rollout execution</span>
                       <DropdownSelect
                         label="Rollout execution"
-                        value={draft.managedRolloutPlacement ?? "local"}
+                        value={setup.managedRolloutPlacement}
                         options={[
                           { value: "local", label: "This desktop" },
                           { value: "remote", label: "Hosted Sandboxes" },
                         ]}
                         onChange={(value) =>
-                          setDraft((current) => ({
+                          setSetup((current) => ({
                             ...current,
                             managedRolloutPlacement:
                               value === "remote"
@@ -330,10 +330,10 @@ export function ModelRunSetupContent({
               onOpenProviderSettings={onOpenProviderSettings}
               onPrepare={(destinationId, recipe, approval) =>
                 training.actions.prepareTraining({
-                  modelId: draft.modelId,
+                  modelId: setup.projectId,
                   tasksetId: selectedTaskset.id,
                   destinationId,
-                  environmentPlacement: draft.managedRolloutPlacement,
+                  environmentPlacement: setup.managedRolloutPlacement,
                   recipe,
                   exportApproved: approval.exportApproved,
                   retentionDays: approval.retentionDays,
@@ -347,12 +347,7 @@ export function ModelRunSetupContent({
                     maximumCostUsd,
                   });
                 if (!started) return false;
-                await training.actions.saveModelRunDraft({
-                  ...draft,
-                  status: "launched",
-                  updatedAt: new Date().toISOString(),
-                });
-                await onFinished(draft.modelId, selectedTaskset.id);
+                await onFinished(setup.projectId, selectedTaskset.id);
                 return true;
               }}
               onStart={async (
@@ -361,20 +356,15 @@ export function ModelRunSetupContent({
                 approval: TrainingStartApproval,
               ) => {
                 const started = await training.actions.startTraining({
-                  modelId: draft.modelId,
+                  modelId: setup.projectId,
                   tasksetId: selectedTaskset.id,
                   destinationId,
-                  environmentPlacement: draft.managedRolloutPlacement,
+                  environmentPlacement: setup.managedRolloutPlacement,
                   recipe,
                   ...approval,
                 });
                 if (!started) return false;
-                await training.actions.saveModelRunDraft({
-                  ...draft,
-                  status: "launched",
-                  updatedAt: new Date().toISOString(),
-                });
-                await onFinished(draft.modelId, selectedTaskset.id);
+                await onFinished(setup.projectId, selectedTaskset.id);
                 return true;
               }}
             />

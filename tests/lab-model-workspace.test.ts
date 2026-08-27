@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  ModelRunDraftSchema,
   ModelRunSchema,
   type TrainingJob,
   type TrainingStateResponse,
@@ -50,36 +49,13 @@ describe("Lab Model workspace organization", () => {
       completedAt: TIMESTAMP,
       updatedAt: TIMESTAMP,
     });
-    const draft = ModelRunDraftSchema.parse({
-      schemaVersion: "openpond.modelRunDraft.v1",
-      id: "run_draft_fixture",
-      profileId: "default",
-      modelId: "model_fixture",
-      status: "draft",
-      title: "Run draft",
-      datasetMode: null,
-      tasksetRef: null,
-      datasetCreationId: null,
-      buildIntent: null,
-      buildSpecification: null,
-      baseModel: null,
-      method: null,
-      destinationId: null,
-      runPreset: null,
-      recipe: null,
-      createdAt: TIMESTAMP,
-      updatedAt: TIMESTAMP,
-    });
-
     const entries = modelRunEntries(
       [linkedJob, standaloneJob],
       [],
-      [lifecycleRun],
-      [draft]
+      [lifecycleRun]
     );
 
     expect(entries.map((entry) => entry.key).sort()).toEqual([
-      "draft:run_draft_fixture",
       "job:training_job_standalone",
       "model-run:model_run_linked",
     ]);

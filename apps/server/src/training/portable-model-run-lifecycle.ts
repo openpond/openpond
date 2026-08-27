@@ -7,7 +7,7 @@ import {
   TrainingJobSourceSnapshotSchema,
   TrainingJobSchema,
   type ModelRun,
-  type ModelRunDraft,
+  type ModelProject,
   type Taskset,
   type TrainingArtifacts,
   type TrainingExecutionRef,
@@ -48,7 +48,8 @@ type PortableModelVersionReservation = {
 
 export async function preparePortableModelRunLifecycle(input: {
   store: SqliteStore;
-  draft: ModelRunDraft;
+  modelProject: ModelProject;
+  modelRunId: string;
   taskset: Taskset;
   sourceProjectRevision: number;
   releaseGraph: PortableReleaseGraph;
@@ -59,28 +60,29 @@ export async function preparePortableModelRunLifecycle(input: {
   targetVersion: PortableModelVersionReservation;
   sourceSnapshot: TrainingJobSourceSnapshot;
 }> {
-  const baseModel = input.draft.baseModel;
-  const method = input.draft.method;
-  const destinationId = input.draft.destinationId;
-  if (!baseModel || !method || !destinationId || !input.draft.tasksetRef) {
+  const setup = input.modelProject.trainingSetup;
+  const baseModel = setup.baseModel;
+  const method = setup.method;
+  const destinationId = setup.destinationId;
+  if (!baseModel || !method || !destinationId || !setup.tasksetRef) {
     throw new Error(
       "Portable Model Run lifecycle requires an exact saved run.",
     );
   }
-  const existingRun = await input.store.getModelRun(input.draft.id);
+  const existingRun = await input.store.getModelRun(input.modelRunId);
   if (existingRun) {
     throw new Error(
-      `Canonical Model Run ${input.draft.id} already exists with status ${existingRun.status}.`,
+      `Canonical Model Run ${input.modelRunId} already exists with status ${existingRun.status}.`,
     );
   }
   const versions = await input.store.listModelVersions({
-    modelId: input.draft.modelId,
+    modelId: input.modelProject.id,
   });
   const baseVersion = versions.find((version) => version.version === 0);
   if (baseVersion) {
     if (
       baseVersion.kind !== "base_reference"
-      || baseVersion.profileId !== input.draft.profileId
+      || baseVersion.profileId !== input.modelProject.profileId
       || baseVersion.baseModel.modelId !== baseModel.modelId
       || baseVersion.baseModel.revision !== baseModel.revision
       || baseVersion.baseModel.tokenizerRevision
@@ -95,14 +97,14 @@ export async function preparePortableModelRunLifecycle(input: {
   } else {
     const core = {
       schemaVersion: "openpond.modelVersion.v1" as const,
-      id: modelVersionId(input.draft.modelId, 0),
-      modelId: input.draft.modelId,
-      profileId: input.draft.profileId,
+      id: modelVersionId(input.modelProject.id, 0),
+      modelId: input.modelProject.id,
+      profileId: input.modelProject.profileId,
       version: 0,
       kind: "base_reference" as const,
       status: "available" as const,
       baseModel,
-      taskset: input.draft.tasksetRef,
+      taskset: setup.tasksetRef,
       releaseGraph: input.releaseGraph,
       artifactLineageId: null,
       adapterStatus: "not_trained" as const,
@@ -116,7 +118,7 @@ export async function preparePortableModelRunLifecycle(input: {
     );
   }
   const modelRuns = await input.store.listModelRuns({
-    modelId: input.draft.modelId,
+    modelId: input.modelProject.id,
   });
   const reservedIds = new Set([
     ...versions.map((version) => version.id),
@@ -125,27 +127,27 @@ export async function preparePortableModelRunLifecycle(input: {
   let targetVersionNumber = 1;
   while (
     reservedIds.has(
-      modelVersionId(input.draft.modelId, targetVersionNumber),
+      modelVersionId(input.modelProject.id, targetVersionNumber),
     )
   ) {
     targetVersionNumber += 1;
   }
   const targetVersion = {
-    id: modelVersionId(input.draft.modelId, targetVersionNumber),
+    id: modelVersionId(input.modelProject.id, targetVersionNumber),
     version: targetVersionNumber,
   };
   const modelRun = await input.store.saveModelRun(
     ModelRunSchema.parse({
       schemaVersion: "openpond.modelRun.v1",
-      id: input.draft.id,
-      modelId: input.draft.modelId,
+      id: input.modelRunId,
+      modelId: input.modelProject.id,
       modelVersionId: targetVersion.id,
-      profileId: input.draft.profileId,
+      profileId: input.modelProject.profileId,
       kind: "training",
       status: "prepared",
       method,
       destinationId,
-      taskset: input.draft.tasksetRef,
+      taskset: setup.tasksetRef,
       harnessRelease: input.releaseGraph.harnessRelease,
       quote: {
         maximumSpendUsd: input.maximumSpendUsd ?? 0,
@@ -162,12 +164,12 @@ export async function preparePortableModelRunLifecycle(input: {
   );
   const sourceSnapshot = TrainingJobSourceSnapshotSchema.parse({
     schemaVersion: "openpond.trainingJobSourceSnapshot.v1",
-    modelProjectId: input.draft.modelId,
+    modelProjectId: input.modelProject.id,
     sourceProjectRevision: input.sourceProjectRevision,
-    profileId: input.draft.profileId,
-    taskset: input.draft.tasksetRef,
-    tasksetRelease: input.draft.tasksetRelease,
-    harnessRelease: input.draft.harnessRelease,
+    profileId: input.modelProject.profileId,
+    taskset: setup.tasksetRef,
+    tasksetRelease: setup.tasksetRelease,
+    harnessRelease: setup.harnessRelease,
     baseModel,
     method,
   });
@@ -266,16 +268,6 @@ export async function reconcilePortableModelRunLifecycle(input: {
       completedAt,
       error: failure,
     });
-    if (input.status.state === "cancelled") {
-      const draft = await input.store.getModelRunDraft(input.modelRunId);
-      if (draft) {
-        await input.store.saveModelRunDraft({
-          ...draft,
-          status: "cancelled",
-          updatedAt: completedAt,
-        });
-      }
-    }
     return terminal;
   }
   if (!input.artifacts) {
@@ -499,33 +491,9 @@ async function resolveTrainingJobSourceSnapshot(
   );
   if (current.success) return current.data;
 
-  // Jobs submitted before source snapshots were introduced must remain
-  // terminally reconcilable. This path only upgrades their already-saved
-  // launch lineage; newly submitted Jobs always carry sourceSnapshot.
-  const draft = await store.getModelRunDraft(modelRunId);
-  if (
-    !draft
-    || !draft.tasksetRef
-    || !draft.tasksetRelease
-    || !draft.harnessRelease
-    || !draft.baseModel
-    || !draft.method
-  ) {
-    throw new Error(
-      "Training Job source snapshot is missing or invalid.",
-    );
-  }
-  return TrainingJobSourceSnapshotSchema.parse({
-    schemaVersion: "openpond.trainingJobSourceSnapshot.v1",
-    modelProjectId: draft.modelId,
-    sourceProjectRevision: 1,
-    profileId: draft.profileId,
-    taskset: draft.tasksetRef,
-    tasksetRelease: draft.tasksetRelease,
-    harnessRelease: draft.harnessRelease,
-    baseModel: draft.baseModel,
-    method: draft.method,
-  });
+  void store;
+  void modelRunId;
+  throw new Error("Training Job source snapshot is missing or invalid.");
 }
 
 function engineMetadata(

@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { ModelProjectSchema } from "@openpond/contracts";
 import {
-  applyProjectTrainingSetup,
-  newDraft,
   newProject,
+  projectEditorState,
 } from "../apps/web/src/components/labs/model-run-editor-helpers";
 
 const HASH = "a".repeat(64);
@@ -27,8 +26,8 @@ describe("Model Project current training setup", () => {
     });
   });
 
-  it("normalizes older stored Projects with an empty current setup", () => {
-    const project = ModelProjectSchema.parse({
+  it("rejects the retired Project shape instead of reviving a second setup object", () => {
+    const project = ModelProjectSchema.safeParse({
       schemaVersion: "openpond.modelProject.v1",
       id: "model-1",
       profileId: "personal",
@@ -42,11 +41,10 @@ describe("Model Project current training setup", () => {
       createdAt: "2026-08-26T20:00:00.000Z",
       updatedAt: "2026-08-26T20:00:00.000Z",
     });
-    expect(project.trainingSetup.tasksetRef).toBeNull();
-    expect(project.trainingSetup.method).toBeNull();
+    expect(project.success).toBe(false);
   });
 
-  it("resumes the Project setup through the temporary lifecycle bridge", () => {
+  it("opens the Project setup directly as editor state", () => {
     const project = newProject("personal", null, "model-1", "Support model");
     project.trainingSetup = {
       ...project.trainingSetup,
@@ -56,13 +54,10 @@ describe("Model Project current training setup", () => {
       managedRolloutPlacement: "remote",
       runPreset: "standard",
     };
-    const input = applyProjectTrainingSetup(
-      newDraft("personal", project.id),
-      project,
-    );
+    const input = projectEditorState(project);
     expect(input.tasksetRef).toEqual(project.trainingSetup.tasksetRef);
     expect(input.method).toBe("grpo");
     expect(input.destinationId).toBe("openpond_managed");
-    expect(input.status).toBe("draft");
+    expect(input.projectId).toBe(project.id);
   });
 });

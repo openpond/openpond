@@ -136,6 +136,7 @@ describe("learned preference training contracts", () => {
       version,
       qualificationReport: report,
       rewardComposerRelease: ref("reward-composer"),
+      executionReceipt: ref("training-receipt-rm0"),
     });
     expect(binding.runtime).toEqual(version.runtime);
   });
@@ -285,7 +286,7 @@ describe("learned preference training contracts", () => {
           },
           processorRelease: ref("processor-one"),
           rewardComposerRelease: ref("reward-composer-one"),
-          qualificationKind: "synthetic_smoke",
+          executionReceipt: ref("training-receipt-rm0"),
         },
       },
     });
@@ -309,7 +310,7 @@ describe("learned preference training contracts", () => {
       },
       processorRelease: ref("processor-one"),
       rewardComposerRelease: ref("reward-composer-one"),
-      qualificationKind: "synthetic_smoke" as const,
+      executionReceipt: ref("training-receipt-rm0"),
     };
     const recipe = RftRecipeSchema.parse({
       ...base,
