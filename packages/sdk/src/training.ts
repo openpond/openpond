@@ -336,6 +336,7 @@ export const TrainingJobOutputSchema = z
     artifactRef: z.string().trim().min(1).max(2_000),
     contentHash: HashSchema,
     sizeBytes: z.number().int().nonnegative(),
+    metadata: z.record(z.string(), z.unknown()).default({}),
     createdAt: TimestampSchema,
   })
   .strict();
