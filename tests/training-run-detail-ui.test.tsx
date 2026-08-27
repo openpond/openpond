@@ -353,6 +353,7 @@ describe("Training run detail UI", () => {
       value: "4 / 16",
       hint: "completed / planned",
     });
+    expect(formatTrainingProgress(17, 16).value).toBe("17 / 16");
   });
 
 });

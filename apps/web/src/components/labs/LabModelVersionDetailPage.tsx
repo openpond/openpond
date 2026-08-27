@@ -538,7 +538,7 @@ export function formatTrainingProgress(
   }
   const planned = Math.max(1, Math.floor(target));
   return {
-    value: `${Math.min(completed, planned).toLocaleString()} / ${planned.toLocaleString()}`,
+    value: `${completed.toLocaleString()} / ${planned.toLocaleString()}`,
     hint: "completed / planned",
   };
 }
