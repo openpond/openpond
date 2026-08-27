@@ -12,8 +12,9 @@ import { createTasksetDraft } from "@openpond/taskset-sdk";
 import { LabsView } from "../apps/web/src/components/labs/LabsView";
 import { labServingRows } from "../apps/web/src/components/labs/LabServingPage";
 import {
-  labPrimaryTabFromSearch,
-  searchWithLabPrimaryTab,
+  modelProjectRoute,
+  modelsPath,
+  modelsRouteFromLocation,
 } from "../apps/web/src/components/labs/lab-primary-tab-state";
 import {
   LabDatasetsPage,
@@ -154,17 +155,21 @@ describe("Lab workspace", () => {
     expect(markup).toContain("Unified inventory");
   });
 
-  test("keeps the primary Models tab addressable across refresh and history", () => {
-    expect(labPrimaryTabFromSearch("")).toBe("overview");
-    expect(labPrimaryTabFromSearch("?modelsTab=serving")).toBe("serving");
-    expect(labPrimaryTabFromSearch("?modelsTab=rollouts")).toBe("training");
-    expect(labPrimaryTabFromSearch("?modelsTab=unknown")).toBe("overview");
+  test("keeps primary Models destinations addressable across refresh and history", () => {
+    expect(modelsRouteFromLocation({ pathname: "/models" })).toEqual({
+      kind: "index",
+    });
     expect(
-      searchWithLabPrimaryTab("?profile=qa", "tasksets"),
-    ).toBe("?profile=qa&modelsTab=tasksets");
-    expect(
-      searchWithLabPrimaryTab("?profile=qa&modelsTab=rollouts", "overview"),
-    ).toBe("?profile=qa");
+      modelsRouteFromLocation({ pathname: "/models/project-1/serving" }),
+    ).toMatchObject({
+      kind: "project",
+      projectId: "project-1",
+      section: "serving",
+    });
+    expect(modelsPath(modelProjectRoute("project-1", "tasksets"))).toBe(
+      "/models/project-1/tasksets",
+    );
+    expect(modelsRouteFromLocation({ pathname: "/models/project-1/unknown" })).toBeNull();
   });
 
   test("summarizes availability and recent run status on the Models index", () => {
