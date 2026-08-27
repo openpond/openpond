@@ -480,6 +480,30 @@ describe("OpenPond Managed training adapter", () => {
           }),
         ]),
       );
+      expect(
+        request.mock.calls.filter(([input]) =>
+          new URL(String(input)).pathname.endsWith("/logs"),
+        ),
+      ).toHaveLength(1);
+      expect(
+        request.mock.calls.filter(([input]) =>
+          new URL(String(input)).pathname.endsWith("/events"),
+        ),
+      ).toHaveLength(1);
+      const terminalJob = await store.getTrainingJob(ref.runId);
+      expect(terminalJob).not.toBeNull();
+      await store.saveTrainingJob({
+        ...terminalJob!,
+        status: "failed",
+        completedAt: FIXED_TIME,
+        error: "test terminal failure",
+      });
+      await adapter.refreshEvidence(ref);
+      expect(
+        request.mock.calls.filter(([input]) =>
+          new URL(String(input)).pathname.endsWith("/events"),
+        ),
+      ).toHaveLength(1);
       await expect(adapter.cancel(ref)).resolves.toBeUndefined();
       await expect(adapter.collect(ref)).resolves.toMatchObject({
         runId: "managed-job-2",

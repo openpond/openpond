@@ -720,8 +720,18 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   }
 
   async refreshEvidence(ref: TrainingExecutionRef): Promise<void> {
+    const localJob = await this.dependencies.store.getTrainingJob(ref.runId);
+    if (
+      localJob &&
+      ["succeeded", "failed", "cancelled"].includes(localJob.status) &&
+      (await this.dependencies.store.listTrainingJobEvents(ref.runId)).some(
+        (event) => typeof event.payload.remoteEventType === "string",
+      )
+    ) {
+      return;
+    }
     const client = this.trainingClient(await this.resolveBoundAccess(ref.tenantId));
-    const [events] = await Promise.all([client.events(ref.runId), client.logs(ref.runId)]);
+    const events = await client.events(ref.runId);
     for (const event of events) {
       await this.dependencies.store.saveTrainingJobEvent(TrainingJobEventSchema.parse({
         schemaVersion: "openpond.trainingJobEvent.v1",
