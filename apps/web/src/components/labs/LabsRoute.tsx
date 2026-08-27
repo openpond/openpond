@@ -22,7 +22,6 @@ import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
 import { LabWorkproductDetail } from "./LabWorkproductDetail";
 import {
   labWorkproductProjection,
-  workproductKey,
 } from "./lab-workproducts";
 import type { LabSkillSourceSelection } from "./lab-skill-source";
 import type {
@@ -130,13 +129,12 @@ export type LabsRouteProps = {
 
 function labTabForModelsSection(section: ModelSection): LabPrimaryTab {
   if (section === "runs") return "training";
-  if (section === "versions") return "evals";
+  if (section === "evals") return "evals";
   return section;
 }
 
 function modelsSectionForLabTab(tab: LabPrimaryTab): ModelSection {
   if (tab === "training") return "runs";
-  if (tab === "evals") return "versions";
   return tab;
 }
 
@@ -200,7 +198,6 @@ export function LabsRoute({
     },
     [selectedProjectRouteId],
   );
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(
     null,
   );
@@ -253,8 +250,9 @@ export function LabsRoute({
       workproducts,
     ],
   );
-  const selected =
-    models.find((workproduct) => workproduct.key === selectedKey) ?? null;
+  const selected = models.find(
+    (workproduct) => workproduct.id === selectedProjectRouteId,
+  ) ?? null;
   const modelProjects = training.training.payload?.modelProjects ?? [];
   const activeHostedTeamId =
     training.settingsPreferences.defaultTeamId?.trim() ?? null;
@@ -268,6 +266,12 @@ export function LabsRoute({
       ),
     [activeHostedTeamId, modelProjects],
   );
+  useEffect(() => {
+    if (modelsRoute?.kind !== "index") return;
+    const firstProject = scopedModelProjects[0];
+    if (!firstProject) return;
+    navigateModelsRoute(modelProjectRoute(firstProject.id), "replace");
+  }, [modelsRoute, scopedModelProjects]);
   useEffect(() => {
     if (!profileView.connection) return;
     let cancelled = false;
@@ -286,6 +290,9 @@ export function LabsRoute({
   }, [profileView.connection, profileView.onError, profileView.onPayload]);
   useEffect(() => {
     if (!modelsRoute || typeof window === "undefined") return;
+    if (modelsRoute.kind === "index" && scopedModelProjects.length > 0) {
+      return;
+    }
     const canonicalPath = modelsPath(modelsRoute);
     if (
       window.location.pathname !== canonicalPath ||
@@ -293,20 +300,14 @@ export function LabsRoute({
     ) {
       navigateModelsRoute(modelsRoute, "replace");
     }
-  }, [modelsRoute]);
+  }, [modelsRoute, scopedModelProjects.length]);
   useEffect(() => {
-    setSelectedKey(null);
     setSelectedDatasetId(
       modelsRoute?.kind === "project" && modelsRoute.section === "tasksets"
         ? modelsRoute.resourceId
         : null,
     );
   }, [modelsRoute]);
-  useEffect(() => {
-    if (!selectedProjectRouteId) return;
-    const project = scopedModelProjects.find((candidate) => candidate.id === selectedProjectRouteId);
-    if (project) setSelectedKey(workproductKey("model", project.id));
-  }, [scopedModelProjects, selectedProjectRouteId]);
   useEffect(() => {
     if (!modelRunSyncKey) return;
     void createImprove.refresh();
@@ -328,19 +329,10 @@ export function LabsRoute({
     };
   }, [profileAgentRunSyncKey, profileView.connection, profileView.onError, profileView.onPayload]);
   useEffect(() => {
-    if (
-      selectedKey &&
-      !models.some((workproduct) => workproduct.key === selectedKey)
-    ) {
-      setSelectedKey(null);
-    }
-  }, [models, selectedKey]);
-  useEffect(() => {
     onSkillSelectionChange(null);
   }, [onSkillSelectionChange]);
   useEffect(() => {
     if (closeDetailRequestId <= 0) return;
-    setSelectedKey(null);
     setSelectedDatasetId(null);
     if (closeDetailKind === "dataset") {
       setActiveTab("tasksets");
@@ -481,7 +473,6 @@ export function LabsRoute({
     learnedPreferenceReward?: LearnedPreferenceRewardBinding | null,
   ) {
     setModelEditorSection("run");
-    setSelectedKey(null);
     onNewModel(initialTasksetId, learnedPreferenceReward);
   }
 

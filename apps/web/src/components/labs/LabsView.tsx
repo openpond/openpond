@@ -15,8 +15,7 @@ export type LabPrimaryTab =
   | "tasksets"
   | "training"
   | "evals"
-  | "serving"
-  ;
+  | "serving";
 
 export function LabsView({
   activeTab,

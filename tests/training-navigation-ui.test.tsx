@@ -8,7 +8,7 @@ import { TrainingDraftPanel } from "../apps/web/src/components/training/Training
 import { sourceFixture } from "./helpers/training-fixtures";
 
 describe("training navigation surfaces", () => {
-  test("keeps project-scoped training navigation behind a selected Model Project", () => {
+  test("keeps project-scoped training navigation behind the project picker", () => {
     const html = renderToStaticMarkup(createElement(SidebarNavigation, {
       beginNewChat: () => undefined,
       productArea: "models",
@@ -19,14 +19,15 @@ describe("training navigation surfaces", () => {
       setView: () => undefined,
       view: "labs",
     }));
-    expect(html).toContain("Model Projects");
-    expect(html).toContain("All Model Projects");
+    expect(html).toContain('class="sidebar-model-project-picker"');
+    expect(html).toContain('aria-label="Select Model Project"');
+    expect(html).not.toContain("Model Projects");
+    expect(html).not.toContain("All Model Projects");
     expect(html).not.toContain("Tasksets");
     expect(html).not.toContain("Versions");
     expect(html).not.toContain(">Runs<");
     expect(html).not.toContain("Serving");
     expect(html).not.toContain("Usage");
-    expect(html).toContain('class="nav-command active" aria-label="Model Projects"');
     expect(html).not.toContain("training-navigation-rail");
   });
 

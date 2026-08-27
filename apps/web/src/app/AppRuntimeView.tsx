@@ -657,6 +657,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       if (view !== "settings") setView("settings");
       return;
     }
+    if (desktopRoute.kind === "view") {
+      setSelectedAppId(null);
+      setSelectedProjectId(null);
+      setSelectedSessionId(null);
+      if (view !== desktopRoute.view) setView(desktopRoute.view);
+      return;
+    }
     setSelectedAppId(null);
     setSelectedProjectId(null);
     setSelectedSessionId(desktopRoute.sessionId);
@@ -711,12 +718,14 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       return false;
     }
     setTrainingDetailTasksetId(creation.materializedTasksetId ?? null);
+    navigateModelsRoute({ kind: "index" });
     setView("labs");
     return true;
   }, [
     activeModel,
     activeProvider,
     codexReasoningEffort,
+    navigateModelsRoute,
     setTrainingDetailTasksetId,
     setView,
     showToast,

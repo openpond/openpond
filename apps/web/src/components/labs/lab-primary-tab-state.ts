@@ -4,7 +4,7 @@ import type { SettingsSection } from "../../lib/app-models";
 export const MODEL_SECTIONS = [
   "overview",
   "tasksets",
-  "versions",
+  "evals",
   "runs",
   "serving",
 ] as const;
@@ -24,7 +24,11 @@ export type ModelsRoute =
 export type DesktopRoute =
   | { kind: "models"; route: ModelsRoute }
   | { kind: "settings"; section: SettingsSection }
-  | { kind: "chat"; sessionId: string | null };
+  | { kind: "chat"; sessionId: string | null }
+  | {
+      kind: "view";
+      view: "apps" | "outputs" | "projects" | "scheduled" | "get-started";
+    };
 
 type NavigationMode = "push" | "replace";
 
@@ -32,17 +36,20 @@ const SECTION_SET = new Set<string>(MODEL_SECTIONS);
 const DETAIL_TABS_BY_SECTION: Partial<Record<ModelSection, Set<string>>> = {
   runs: new Set(["overview", "metrics", "evaluation", "activity", "artifacts"]),
   tasksets: new Set(["overview", "scenarios", "rewards", "validation"]),
-  versions: new Set(["overview", "lineage", "evaluation", "activity"]),
+  evals: new Set(["overview", "lineage", "evaluation", "activity"]),
 };
 const LEGACY_TAB_TO_SECTION: Record<string, ModelSection> = {
-  evals: "versions",
+  evals: "evals",
   overview: "overview",
   rollouts: "runs",
   runs: "runs",
   serving: "serving",
   tasksets: "tasksets",
   training: "runs",
-  versions: "versions",
+  versions: "evals",
+};
+const LEGACY_PATH_SECTION_TO_SECTION: Partial<Record<string, ModelSection>> = {
+  versions: "evals",
 };
 const SETTINGS_SECTIONS = new Set<SettingsSection>([
   "account",
@@ -66,6 +73,19 @@ const SETTINGS_SECTIONS = new Set<SettingsSection>([
   "personalization",
   "diagnostics",
 ]);
+const VIEW_PATHS = {
+  apps: "/apps",
+  outputs: "/outputs",
+  projects: "/projects",
+  scheduled: "/workflows",
+  "get-started": "/get-started",
+} as const;
+type DesktopView = keyof typeof VIEW_PATHS;
+const VIEW_BY_PATH = new Map<string, DesktopView>(
+  (Object.entries(VIEW_PATHS) as Array<
+    [DesktopView, (typeof VIEW_PATHS)[DesktopView]]
+  >).map(([view, path]) => [path, view]),
+);
 const listeners = new Set<() => void>();
 let browserListening = false;
 let cachedLocation = "";
@@ -98,20 +118,26 @@ function routeFromParts(parts: string[]): ModelsRoute | null {
       detailTab: null,
     };
   }
-  if (!SECTION_SET.has(section) || section === "overview" || rest.length) {
+  const canonicalSection =
+    LEGACY_PATH_SECTION_TO_SECTION[section] ?? section;
+  if (
+    !SECTION_SET.has(canonicalSection) ||
+    canonicalSection === "overview" ||
+    rest.length
+  ) {
     return null;
   }
-  if (section === "serving" && (resourceId || detailTab)) return null;
+  if (canonicalSection === "serving" && (resourceId || detailTab)) return null;
   if (
     detailTab &&
-    !DETAIL_TABS_BY_SECTION[section as ModelSection]?.has(detailTab)
+    !DETAIL_TABS_BY_SECTION[canonicalSection as ModelSection]?.has(detailTab)
   ) {
     return null;
   }
   return {
     kind: "project",
     projectId: decodeSegment(projectId),
-    section: section as Exclude<ModelSection, "overview">,
+    section: canonicalSection as Exclude<ModelSection, "overview">,
     resourceId: resourceId ? decodeSegment(resourceId) : null,
     detailTab: detailTab ?? null,
   };
@@ -168,13 +194,25 @@ export function desktopRouteFromLocation(input: {
       sessionId: parts[1] && parts[1] !== "new" ? decodeSegment(parts[1]) : null,
     };
   }
+  const view = VIEW_BY_PATH.get(input.pathname);
+  if (view) {
+    return {
+      kind: "view",
+      view,
+    };
+  }
   return null;
 }
 
 export function desktopPath(route: DesktopRoute): string {
   if (route.kind === "models") return modelsPath(route.route);
   if (route.kind === "settings") return `/settings/${route.section}`;
-  return route.sessionId ? `/chat/${encodeURIComponent(route.sessionId)}` : "/chat/new";
+  if (route.kind === "chat") {
+    return route.sessionId
+      ? `/chat/${encodeURIComponent(route.sessionId)}`
+      : "/chat/new";
+  }
+  return VIEW_PATHS[route.view];
 }
 
 export function modelsSectionFromRoute(route: ModelsRoute): ModelSection {
@@ -203,6 +241,7 @@ function currentDesktopRoute(): DesktopRoute | null {
 
 function notify(): void {
   cachedLocation = "";
+  cachedDesktopLocation = "";
   for (const listener of listeners) listener();
 }
 

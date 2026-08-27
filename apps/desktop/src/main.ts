@@ -799,6 +799,10 @@ function configureApplicationMenu(): void {
   );
 }
 
+if (!app.isPackaged) {
+  app.setPath("userData", path.join(app.getPath("appData"), "openpond-dev"));
+}
+
 const ownsSingleInstanceLock = app.requestSingleInstanceLock();
 if (!ownsSingleInstanceLock) app.quit();
 app.on("second-instance", () => showMainWindow());

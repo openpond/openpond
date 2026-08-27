@@ -30,6 +30,13 @@ describe("Models path routing", () => {
       section: "runs",
     });
     expect(
+      modelsRouteFromLocation({ pathname: "/models/project_1/versions" }),
+    ).toMatchObject({
+      kind: "project",
+      projectId: "project_1",
+      section: "evals",
+    });
+    expect(
       modelsRouteFromLocation({
         pathname: "/models/project_1/runs/run_1/not-a-tab",
       }),
@@ -51,8 +58,8 @@ describe("Models path routing", () => {
   });
 
   it("serializes paths without query-string navigation state", () => {
-    const route = modelProjectRoute("project with spaces", "versions");
-    expect(modelsPath(route)).toBe("/models/project%20with%20spaces/versions");
+    const route = modelProjectRoute("project with spaces", "evals");
+    expect(modelsPath(route)).toBe("/models/project%20with%20spaces/evals");
     expect(modelsSectionFromRoute({ kind: "index" })).toBe("overview");
   });
 });
@@ -82,5 +89,18 @@ describe("Settings and chat path routing", () => {
       "/chat/session%201",
     );
     expect(desktopPath({ kind: "chat", sessionId: null })).toBe("/chat/new");
+  });
+
+  it("uses canonical paths for the other primary destinations", () => {
+    expect(desktopRouteFromLocation({ pathname: "/apps" })).toEqual({
+      kind: "view",
+      view: "apps",
+    });
+    expect(desktopRouteFromLocation({ pathname: "/workflows" })).toEqual({
+      kind: "view",
+      view: "scheduled",
+    });
+    expect(desktopPath({ kind: "view", view: "outputs" })).toBe("/outputs");
+    expect(desktopPath({ kind: "view", view: "projects" })).toBe("/projects");
   });
 });

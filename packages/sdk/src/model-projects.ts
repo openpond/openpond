@@ -217,6 +217,14 @@ export type HostedModelProjectDetail = z.infer<
 
 type ModelProjectsFetch = typeof fetch;
 
+function headersRecord(headers: HeadersInit | undefined): Record<string, string> {
+  const result: Record<string, string> = {};
+  new Headers(headers).forEach((value, key) => {
+    result[key] = value;
+  });
+  return result;
+}
+
 export function createModelProjectsClient(input: {
   baseUrl: string;
   fetch?: ModelProjectsFetch;
@@ -235,8 +243,8 @@ export function createModelProjectsClient(input: {
       headers: {
         accept: "application/json",
         ...(init?.body ? { "content-type": "application/json" } : {}),
-        ...Object.fromEntries(new Headers(configuredHeaders)),
-        ...Object.fromEntries(new Headers(init?.headers)),
+        ...headersRecord(configuredHeaders),
+        ...headersRecord(init?.headers),
       },
     });
     const body = (await response.json()) as unknown;

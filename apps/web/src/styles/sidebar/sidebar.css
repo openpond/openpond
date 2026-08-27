@@ -137,17 +137,13 @@
 }
 
 .sidebar-model-project-picker {
-  display: grid;
-  gap: 5px;
-  padding: 8px 12px 5px;
-  color: var(--muted);
-  font-size: 11px;
+  padding: 8px 12px;
 }
 
 .sidebar-model-project-picker select {
   width: 100%;
   min-width: 0;
-  height: 30px;
+  height: 34px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--panel);

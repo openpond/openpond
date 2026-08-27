@@ -86,6 +86,14 @@ export function SidebarNavigation({
     navigateModelsRoute(modelProjectRoute(modelProjectId || null));
   }
 
+  function selectDesktopView(
+    nextView: "apps" | "outputs" | "projects" | "scheduled",
+  ) {
+    clearWorkspaceSelection();
+    setView(nextView);
+    navigateDesktopRoute({ kind: "view", view: nextView });
+  }
+
   const selectedTrainingActivity = selectedModelProjectId
     ? modelTrainingActivityByProjectId[selectedModelProjectId] ?? null
     : null;
@@ -107,27 +115,16 @@ export function SidebarNavigation({
       )}
       {productArea === "models" ? (
         <>
-          <label className="sidebar-model-project-picker">
-            <span>Model Project</span>
+          <div className="sidebar-model-project-picker">
             <select
               aria-label="Select Model Project"
               disabled={!modelProjects.length}
-              value={selectedModelProjectId ?? ""}
+              value={selectedModelProjectId ?? modelProjects[0]?.id ?? ""}
               onChange={(event) => selectModelProject(event.target.value)}
             >
-              <option value="">All Model Projects</option>
               {modelProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
-          </label>
-          <button
-            className={`nav-command ${view === "labs" && !selectedModelProjectId ? "active" : ""}`}
-            aria-label="Model Projects"
-            type="button"
-            onClick={() => selectModelsSection("overview")}
-          >
-            <ChartColumnStacked size={16} />
-            <span>Model Projects</span>
-          </button>
+          </div>
           {selectedModelProjectId ? (
             <>
               <button
@@ -149,13 +146,13 @@ export function SidebarNavigation({
                 <span>Tasksets</span>
               </button>
               <button
-                className={`nav-command ${view === "labs" && activeModelsSection === "versions" ? "active" : ""}`}
-                aria-label="Versions"
+                className={`nav-command ${view === "labs" && activeModelsSection === "evals" ? "active" : ""}`}
+                aria-label="Evals"
                 type="button"
-                onClick={() => selectModelsSection("versions")}
+                onClick={() => selectModelsSection("evals")}
               >
                 <CheckCircle2 size={16} />
-                <span>Versions</span>
+                <span>Evals</span>
               </button>
               <button
                 className={`nav-command ${selectedTrainingActivity ? "nav-command-training-live " : ""}${view === "labs" && activeModelsSection === "runs" ? "active" : ""}`}
@@ -197,8 +194,7 @@ export function SidebarNavigation({
             aria-label="Workflows"
             type="button"
             onClick={() => {
-              clearWorkspaceSelection();
-              setView("scheduled");
+              selectDesktopView("scheduled");
             }}
           >
             <CalendarClock size={18} />
@@ -209,8 +205,7 @@ export function SidebarNavigation({
             aria-label="Outputs"
             type="button"
             onClick={() => {
-              clearWorkspaceSelection();
-              setView("outputs");
+              selectDesktopView("outputs");
             }}
           >
             <FileOutput size={18} />
@@ -221,8 +216,7 @@ export function SidebarNavigation({
             aria-label="Apps"
             type="button"
             onClick={() => {
-              clearWorkspaceSelection();
-              setView("apps");
+              selectDesktopView("apps");
             }}
           >
             <Shapes size={18} />
@@ -233,8 +227,7 @@ export function SidebarNavigation({
             aria-label="Projects"
             type="button"
             onClick={() => {
-              clearWorkspaceSelection();
-              setView("projects");
+              selectDesktopView("projects");
             }}
           >
             <FolderGit2 size={18} />
@@ -260,6 +253,7 @@ export function SidebarUtilityNavigation({
     setSelectedSessionId(null);
     setSectionMenuOpen(null);
     setView("get-started");
+    navigateDesktopRoute({ kind: "view", view: "get-started" });
   }
 
   return (
