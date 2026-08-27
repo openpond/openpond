@@ -108,4 +108,8 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     version: 49,
     run: (store) => store.consolidateModelProjectTrainingSetup(),
   },
+  {
+    version: 50,
+    run: (store) => store.repairUnverifiableLearnedPreferenceBindings(),
+  },
 ];
