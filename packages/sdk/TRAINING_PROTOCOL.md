@@ -64,6 +64,10 @@ submission, manifest, recipe, capability document, runtime release, all input
 and output hashes, duration, spend, issuer, and cleanup result. It attests to
 execution and artifact bytes; OpenPond remains responsible for evaluation,
 qualification, selection, promotion, rejection, and rollback semantics.
+Output resources may include bounded provider-neutral `metadata`, such as a
+checkpoint inventory or qualification metrics, when the portable client needs
+that evidence to validate the artifact. This metadata is immutable output
+evidence, not private worker-control, lease, or provider state.
 
 ## Conformance
 
