@@ -92,6 +92,7 @@ export function eventSeries(events: TrainingRunDetail["events"]): TrainingMetric
     reward: number | null;
     eligible: boolean;
     resolved: boolean;
+    attempt: number;
     input: number;
     output: number;
   }>>();
@@ -116,6 +117,7 @@ export function eventSeries(events: TrainingRunDetail["events"]): TrainingMetric
         reward,
         eligible: event.payload.rewardEligible === true,
         resolved: reward !== null || explicitlyFailed,
+        attempt: finiteNumber(event.payload.attempt) ?? 1,
         input: finiteNumber(event.payload.inputTokens) ?? 0,
         output: finiteNumber(event.payload.outputTokens) ?? 0,
       }]);
@@ -127,9 +129,12 @@ export function eventSeries(events: TrainingRunDetail["events"]): TrainingMetric
     const rewards = resolved.flatMap((attempt) => attempt.eligible && attempt.reward !== null ? [attempt.reward] : []);
     const mean = rewards.length ? rewards.reduce((sum, value) => sum + value, 0) / rewards.length : 0;
     const variance = rewards.length ? rewards.reduce((sum, value) => sum + (value - mean) ** 2, 0) / rewards.length : 0;
+    const best = rewards.length ? Math.max(...rewards) : 0;
     append("attempt.valid_rate", "Valid attempt rate", step, rewards.length / resolved.length);
     append("attempt.failure_count", "Attempt failures", step, resolved.length - rewards.length);
+    append("attempt.retry_count", "Attempt retries", step, resolved.reduce((sum, attempt) => sum + Math.max(0, attempt.attempt - 1), 0));
     append("reward.variance", "Reward variance", step, variance);
+    append("reward.best", "Best reward", step, best);
     append("tokens.input", "Input tokens", step, group.reduce((sum, attempt) => sum + attempt.input, 0));
     append("tokens.output", "Output tokens", step, group.reduce((sum, attempt) => sum + attempt.output, 0));
   });
