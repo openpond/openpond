@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   TaskCreationRequestSchema,
+  ModelProjectSchema,
   TasksetReadinessReportSchema,
-  ModelRunDraftSchema,
   TrainingMethodAvailabilitySchema,
   TrainingMethodSchema,
   TrainingRecipeSchema,
@@ -68,35 +68,40 @@ test("PPO is first-class and cannot fall back to an unsupported placeholder reci
   }).success, false);
 });
 
-test("Model run drafts keep Model and immutable Dataset identity separate", () => {
-  const draft = ModelRunDraftSchema.parse({
-    schemaVersion: "openpond.modelRunDraft.v1",
-    id: "run_draft_fixture",
-    profileId: "default",
-    modelId: "model_independent_fixture",
-    status: "draft",
-    title: "Run draft",
-    datasetMode: "existing",
-    tasksetRef: {
-      id: "dataset_fixture",
-      revision: 3,
-      contentHash: "a".repeat(64),
+test("Model Project keeps stable Model and immutable Dataset identity separate", () => {
+  const taskset = tasksetFixture({ ready: true });
+  const recipe = sftRecipeFixture();
+  const project = ModelProjectSchema.parse({
+    schemaVersion: "openpond.modelProject.v2",
+    id: "model_independent_fixture",
+    profileId: taskset.profileId,
+    revision: 1,
+    name: "Independent Fixture",
+    objective: null,
+    defaultBaseModel: null,
+    defaultDestinationId: null,
+    trainingSetup: {
+      tasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash },
+      tasksetRelease: null,
+      harnessRelease: null,
+      baseModel: null,
+      method: "sft",
+      destinationId: null,
+      managedRolloutPlacement: "remote",
+      runPreset: "small",
+      recipe,
+      preferredMaximumSpendUsd: null,
+      preferredRetentionDays: null,
     },
-    datasetCreationId: null,
-    buildIntent: null,
-    buildSpecification: null,
-    baseModel: null,
-    method: "sft",
-    destinationId: null,
-    runPreset: "small",
-    recipe: null,
+    hosted: null,
+    tasksetSyncs: [],
     createdAt: FIXED_TIME,
     updatedAt: FIXED_TIME,
   });
 
-  assert.notEqual(draft.modelId, draft.tasksetRef?.id);
-  assert.equal(draft.tasksetRef?.revision, 3);
-  assert.equal(draft.runPreset, "small");
+  assert.notEqual(project.id, project.trainingSetup.tasksetRef?.id);
+  assert.equal(project.trainingSetup.tasksetRef?.revision, taskset.revision);
+  assert.equal(project.trainingSetup.runPreset, "small");
 });
 
 test("method readiness and destination availability remain distinct", () => {

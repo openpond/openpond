@@ -179,11 +179,11 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
                 labelFormatter={(step) => `Step ${step}`}
               />
               <Line
-                activeDot={{ r: 5 }}
+                activeDot={{ fill: "var(--cyan, #06b6d4)", r: 5 }}
                 dataKey="value"
-                dot={{ r: 2.5 }}
+                dot={{ fill: "var(--cyan, #06b6d4)", r: 2.5 }}
                 isAnimationActive={false}
-                stroke="var(--accent, #f97316)"
+                stroke="var(--cyan, #06b6d4)"
                 strokeWidth={2}
                 type="monotone"
               />

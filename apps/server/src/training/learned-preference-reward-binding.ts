@@ -14,6 +14,7 @@ export function bindLearnedPreferenceReward(input: {
   version: RewardModelVersion;
   qualificationReport: RewardModelQualificationReport;
   rewardComposerRelease: { id: string; contentHash: string };
+  executionReceipt: { id: string; contentHash: string };
 }): LearnedPreferenceRewardBinding {
   if (input.version.status !== "available") {
     throw new Error("A Policy Run requires an available Reward Model Version.");
@@ -49,6 +50,6 @@ export function bindLearnedPreferenceReward(input: {
     runtime: input.version.runtime,
     processorRelease: input.version.artifacts.processorRelease,
     rewardComposerRelease: input.rewardComposerRelease,
-    qualificationKind: report.kind,
+    executionReceipt: input.executionReceipt,
   });
 }

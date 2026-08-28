@@ -16,20 +16,20 @@ describe("training API Model Run approval forwarding", () => {
     const startModelRun = vi.fn(async (input: unknown) => input);
     const api = createTrainingApi({
       store: {
-        getModelRunDraft: vi.fn(async () => ({ destinationId: "local", status: "ready_to_run" })),
+        getModelProject: vi.fn(async () => ({ trainingSetup: { destinationId: "local" } })),
       },
       training: { startModelRun },
     } as never);
 
     await api.request("start_model_run", {
-      modelRunId: "run_approved",
+      modelProjectId: "model_approved",
       maximumSpendUsd: 2,
       retentionDays: 1,
       exportApproved: true,
     });
 
     expect(startModelRun).toHaveBeenCalledWith({
-      modelRunId: "run_approved",
+      modelProjectId: "model_approved",
       maximumSpendUsd: 2,
       retentionDays: 1,
       exportApproved: true,
@@ -41,13 +41,13 @@ describe("training API Model Run approval forwarding", () => {
     const startModelRun = vi.fn(async (input: unknown) => input);
     const api = createTrainingApi({
       store: {
-        getModelRunDraft: vi.fn(async () => ({ destinationId: "local", status: "ready_to_run" })),
+        getModelProject: vi.fn(async () => ({ trainingSetup: { destinationId: "local" } })),
       },
       training: { startModelRun },
     } as never);
 
     await api.request("start_model_run", {
-      modelRunId: "run_unapproved",
+      modelProjectId: "model_unapproved",
       maximumSpendUsd: 2,
       retentionDays: 1,
     });
@@ -73,18 +73,19 @@ describe("training API Model Run approval forwarding", () => {
       },
       modelProjectHosting: { publishTaskset },
       store: {
-        getModelRunDraft: vi.fn(async () => ({
-          destinationId: "openpond_managed",
-          modelId: "model_1",
-          status: "ready_to_run",
-          tasksetRef: { id: "taskset_1" },
+        getModelProject: vi.fn(async () => ({
+          id: "model_1",
+          trainingSetup: {
+            destinationId: "openpond_managed",
+            tasksetRef: { id: "taskset_1" },
+          },
         })),
         getTaskset: vi.fn(async () => taskset),
       },
       training: { startModelRun },
     } as never);
 
-    await api.request("start_model_run", { modelRunId: "run_managed" });
+    await api.request("start_model_run", { modelProjectId: "model_1" });
 
     expect(publishTaskset).toHaveBeenCalledWith({
       projectId: "model_1",
@@ -138,6 +139,10 @@ describe("training API Model Run approval forwarding", () => {
           tasksetRelease,
           release: comparisonRelease,
         })),
+        getModelProject: vi.fn(async () => ({
+          id: "model-project-t0",
+          trainingSetup: { tasksetRef: { id: "taskset-t0" } },
+        })),
       },
       preferenceComparisons: {
         listPreferenceDatasets: vi.fn(async () => [{
@@ -153,6 +158,7 @@ describe("training API Model Run approval forwarding", () => {
     await api.request("reward_model_run_launch", {
       id: "reward-run-rm0",
       tasksetId: "taskset-t0",
+      modelProjectId: "model-project-t0",
       rewardModelId: "reward-model-r0",
       preferenceDatasetReleaseId: "preferences-d0",
     });

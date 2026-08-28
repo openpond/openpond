@@ -63,7 +63,7 @@ export const LearnedPreferenceRewardBindingSchema = z.object({
   runtime: RewardModelRuntimeSchema,
   processorRelease: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
   rewardComposerRelease: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
-  qualificationKind: z.enum(["synthetic_smoke", "human_heldout"]),
+  executionReceipt: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
 }).strict();
 
 export const PolicyOptimizationContractSchema = z.object({

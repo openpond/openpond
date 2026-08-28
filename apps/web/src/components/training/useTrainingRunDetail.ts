@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TrainingRunDetail } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 
@@ -8,21 +8,41 @@ export function useTrainingRunDetail(connection: ClientConnection | null, jobId:
   const [detail, setDetail] = useState<TrainingRunDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeJobId = useRef(jobId);
+  const refreshInFlight = useRef<{
+    jobId: string;
+    request: Promise<TrainingRunDetail | null>;
+  } | null>(null);
+  activeJobId.current = jobId;
 
-  const refresh = useCallback(async () => {
-    if (!connection || !jobId) return null;
-    setLoading(true);
-    try {
-      const next = await api.trainingRunDetail(connection, jobId);
-      setDetail(next);
-      setError(null);
-      return next;
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-      return null;
-    } finally {
-      setLoading(false);
+  const refresh = useCallback((): Promise<TrainingRunDetail | null> => {
+    if (!connection || !jobId) return Promise.resolve(null);
+    if (refreshInFlight.current?.jobId === jobId) {
+      return refreshInFlight.current.request;
     }
+    setLoading(true);
+    const request = api.trainingRunDetail(connection, jobId)
+      .then((next) => {
+        if (activeJobId.current === jobId) {
+          setDetail(next);
+          setError(null);
+        }
+        return next;
+      })
+      .catch((caught: unknown) => {
+        if (activeJobId.current === jobId) {
+          setError(caught instanceof Error ? caught.message : String(caught));
+        }
+        return null;
+      })
+      .finally(() => {
+        if (refreshInFlight.current?.request === request) {
+          refreshInFlight.current = null;
+          setLoading(false);
+        }
+      });
+    refreshInFlight.current = { jobId, request };
+    return request;
   }, [connection, jobId]);
 
   useEffect(() => {

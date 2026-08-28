@@ -151,12 +151,14 @@ export function labWorkproductProjection(input: {
   }
 
   for (const project of input.training?.modelProjects ?? []) {
-    const drafts = (input.training?.modelRunDrafts ?? []).filter(
-      (draft) =>
-        draft.modelId === project.id &&
-        (draft.status === "draft" || draft.status === "ready_to_run")
+    const setup = project.trainingSetup;
+    const setupReady = Boolean(
+      setup.tasksetRef &&
+      setup.baseModel &&
+      setup.method &&
+      setup.destinationId &&
+      setup.recipe,
     );
-    const latestDraft = drafts[0] ?? null;
     const lifecycleRuns = (input.training?.modelRuns ?? [])
       .filter((run) => run.modelId === project.id)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -189,21 +191,18 @@ export function labWorkproductProjection(input: {
       description: project.objective ?? "No description",
       status: latestLifecycleRun
         ? lifecycleModelRunStatus(latestLifecycleRun.status)
-        : latestDraft?.status === "ready_to_run"
+        : setupReady
         ? "Ready to run"
-        : latestDraft
-        ? "Draft"
         : baseVersion
         ? "Base ready"
-        : "Ready",
+        : "Setup required",
       updatedAt:
         latestLifecycleRun?.updatedAt ??
-        latestDraft?.updatedAt ??
         project.updatedAt,
       path: latestLifecycleRun
         ? `tasksets/${latestLifecycleRun.taskset.id}`
-        : latestDraft?.tasksetRef
-        ? `tasksets/${latestDraft.tasksetRef.id}`
+        : setup.tasksetRef
+        ? `tasksets/${setup.tasksetRef.id}`
         : baseVersion
         ? `tasksets/${baseVersion.taskset.id}`
         : null,
@@ -212,7 +211,7 @@ export function labWorkproductProjection(input: {
       conversationId: null,
       tasksetId:
         latestLifecycleRun?.taskset.id ??
-        latestDraft?.tasksetRef?.id ??
+        setup.tasksetRef?.id ??
         baseVersion?.taskset.id ??
         null,
       trainingRunCount: lifecycleRuns.length + submittedJobCount,

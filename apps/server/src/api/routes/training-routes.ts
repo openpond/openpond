@@ -85,7 +85,6 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/taskset-drafts", action: "init_taskset_draft", status: 201 },
     { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
     { method: "PUT", path: "/v1/training/models", action: "save_model_project" },
-    { method: "PUT", path: "/v1/training/model-run-drafts", action: "save_model_run_draft" },
     { method: "POST", path: "/v1/training/miner/run", action: "run_miner", status: 202 },
     { method: "PUT", path: "/v1/training/miner/config", action: "configure_miner" },
     { method: "POST", path: "/v1/training/grade", action: "grade" },
@@ -107,8 +106,8 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const dynamic = [
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/prepare$/, method: "POST", action: "prepare_model_run", key: "modelRunId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/start$/, method: "POST", action: "start_model_run", key: "modelRunId" },
+    { pattern: /^\/v1\/training\/model-projects\/([^/]+)\/training\/prepare$/, method: "POST", action: "prepare_model_run", key: "modelProjectId" },
+    { pattern: /^\/v1\/training\/model-projects\/([^/]+)\/training\/start$/, method: "POST", action: "start_model_run", key: "modelProjectId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/status$/, method: "GET", action: "model_run_status", key: "modelRunId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/events$/, method: "GET", action: "model_run_events", key: "modelRunId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/logs$/, method: "GET", action: "model_run_logs", key: "modelRunId" },
@@ -147,7 +146,6 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/models\/([^/]+)\/harness-refiner-benchmark$/, method: "POST", action: "start_harness_refiner_benchmark", key: "modelId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/sync$/, method: "POST", action: "sync_model_project", key: "modelId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/tasksets\/([^/]+)\/publish$/, method: "POST", action: "publish_model_project_taskset", key: "modelId", assignmentKey: "tasksetId" },
-    { pattern: /^\/v1\/training\/model-run-drafts\/([^/]+)$/, method: "DELETE", action: "delete_model_run_draft", key: "draftId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/, method: "POST", action: "materialize_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/cancel$/, method: "POST", action: "cancel_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/sources\/([^/]+)$/, method: "DELETE", action: "remove_source", key: "sourceId" },

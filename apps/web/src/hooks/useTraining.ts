@@ -18,7 +18,6 @@ import type {
   TrainingStateResponse,
   LocalModelChatConfiguration,
   ModelProject,
-  ModelRunDraft,
   CrossSystemExpertBootstrapPreview,
   CrossSystemExpertBootstrapApproval,
   DatasetImportJob,
@@ -203,13 +202,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         `/models/${encodeURIComponent(modelId)}/tasksets/${encodeURIComponent(tasksetId)}/publish`,
         {},
       ),
-    saveModelRunDraft: (draft: ModelRunDraft) =>
-      mutate<ModelRunDraft>(
-        "save-model-run-draft",
-        "/model-run-drafts",
-        draft,
-        "PUT",
-      ),
     createTasksetDraft: (name = "") =>
       mutate<TasksetDraft>(
         "create-taskset-draft",
@@ -255,13 +247,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       mutate<{ deleted: boolean; draftId: string }>(
         "delete-taskset-draft",
         `/taskset-drafts/${encodeURIComponent(draftId)}`,
-        {},
-        "DELETE",
-      ),
-    deleteModelRunDraft: (draftId: string) =>
-      mutate<{ deleted: boolean; draftId?: string }>(
-        "delete-model-run-draft",
-        `/model-run-drafts/${encodeURIComponent(draftId)}`,
         {},
         "DELETE",
       ),
@@ -509,6 +494,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     ),
     launchRewardModelRun: (input: {
       tasksetId: string;
+      modelProjectId: string;
       rewardModelId: string;
       preferenceDatasetReleaseId: string;
     }) => mutate<TrainingStateResponse["rewardModelRuns"][number]>(
@@ -661,18 +647,18 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       region: string | null;
     }) => mutate<TrainingPreparedStart>("prepare-training", "/prepare", body),
     prepareModelRun: (
-      modelRunId: string,
+      modelProjectId: string,
       input: {
         maximumSpendUsd: number | null;
         retentionDays: number | null;
       },
     ) => mutate<TrainingPreparationPlan>(
       "prepare-model-run",
-      `/model-runs/${encodeURIComponent(modelRunId)}/prepare`,
+      `/model-projects/${encodeURIComponent(modelProjectId)}/training/prepare`,
       input,
     ),
     startModelRun: (
-      modelRunId: string,
+      modelProjectId: string,
       input: {
         maximumSpendUsd: number | null;
         retentionDays: number | null;
@@ -684,7 +670,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       job: { id: string };
     }>(
       "start-model-run",
-      `/model-runs/${encodeURIComponent(modelRunId)}/start`,
+      `/model-projects/${encodeURIComponent(modelProjectId)}/training/start`,
       input,
     ),
     startPreparedTraining: (body: {

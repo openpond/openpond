@@ -1,6 +1,6 @@
 import type {
   ModelProject,
-  ModelRunDraft,
+  ModelProjectTrainingSetup,
   ModelRunPreset,
   Taskset,
   TrainingMethod,
@@ -13,6 +13,12 @@ import type { ModelSetupStepId } from "./ModelSetupSteps";
 
 const METHODS = ["sft", "dpo", "grpo", "ppo"] as const;
 
+export type ModelProjectEditorState = ModelProjectTrainingSetup & {
+  projectId: string;
+  datasetMode: "existing" | "build" | null;
+  updatedAt: string;
+};
+
 export function newProject(
   profileId: string,
   objective: string | null,
@@ -22,7 +28,7 @@ export function newProject(
   const timestamp = new Date().toISOString();
   const suffix = crypto.randomUUID();
   return {
-    schemaVersion: "openpond.modelProject.v1",
+    schemaVersion: "openpond.modelProject.v2",
     id: modelId ?? `model_${suffix}`,
     profileId,
     revision: 1,
@@ -51,21 +57,21 @@ export function newProject(
 }
 
 export function firstIncompleteSetupStep(
-  draft: ModelRunDraft,
+  setup: ModelProjectEditorState,
 ): ModelSetupStepId {
-  if (!draft.tasksetRef) return "dataset";
-  if (!draft.method) return "method";
+  if (!setup.tasksetRef) return "dataset";
+  if (!setup.method) return "method";
   return "configuration";
 }
 
 export function setupStepComplete(
   step: ModelSetupStepId,
-  draft: ModelRunDraft,
+  setup: ModelProjectEditorState,
   taskset: Taskset | null,
   canRun: boolean,
 ): boolean {
   if (step === "dataset") return Boolean(taskset);
-  if (step === "method") return Boolean(draft.method);
+  if (step === "method") return Boolean(setup.method);
   return canRun;
 }
 
@@ -80,82 +86,31 @@ export function nextModelName(
   return `Model #${highestNumber + 1}`;
 }
 
-export function newDraft(
-  profileId: string,
-  modelId: string,
-): ModelRunDraft {
-  const timestamp = new Date().toISOString();
-  const suffix = crypto.randomUUID();
-  return {
-    schemaVersion: "openpond.modelRunDraft.v1",
-    id: `run_draft_${suffix}`,
-    profileId,
-    modelId,
-    status: "draft",
-    title: "Run draft",
-    datasetMode: null,
-    tasksetRef: null,
-    datasetCreationId: null,
-    buildIntent: null,
-    buildSpecification: null,
-    baseModel: null,
-    method: null,
-    destinationId: null,
-    managedRolloutPlacement: "remote",
-    runPreset: null,
-    recipe: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-}
-
-export function applyProjectTrainingSetup(
-  draft: ModelRunDraft,
+export function projectEditorState(
   project: ModelProject,
-): ModelRunDraft {
+): ModelProjectEditorState {
   const setup = project.trainingSetup;
   return {
-    ...draft,
+    ...setup,
+    projectId: project.id,
     datasetMode: setup.tasksetRef ? "existing" : null,
-    tasksetRef: setup.tasksetRef,
-    harnessRelease: setup.harnessRelease,
-    tasksetRelease: setup.tasksetRelease,
-    baseModel: setup.baseModel,
-    method: setup.method,
-    destinationId: setup.destinationId,
-    managedRolloutPlacement: setup.managedRolloutPlacement,
-    runPreset: setup.runPreset,
-    recipe: setup.recipe,
     updatedAt: project.updatedAt,
   };
 }
 
 export function bindTaskset(
-  draft: ModelRunDraft,
+  setup: ModelProjectEditorState,
   taskset: Taskset,
-): ModelRunDraft {
+): ModelProjectEditorState {
   return {
-    ...draft,
+    ...setup,
     datasetMode: "existing",
     tasksetRef: {
       id: taskset.id,
       revision: taskset.revision,
       contentHash: taskset.contentHash,
     },
-    buildIntent: draft.buildIntent ?? buildIntentForTaskset(taskset),
     updatedAt: new Date().toISOString(),
-  };
-}
-
-export function cloneRunDraft(template: ModelRunDraft): ModelRunDraft {
-  const timestamp = new Date().toISOString();
-  return {
-    ...template,
-    id: `run_draft_${crypto.randomUUID()}`,
-    status: "draft",
-    title: "Run draft",
-    createdAt: timestamp,
-    updatedAt: timestamp,
   };
 }
 
@@ -181,38 +136,47 @@ export function buildIntentForTaskset(
 
 export function comparableEditor(
   project: ModelProject,
-  draft: ModelRunDraft,
+  setup: ModelProjectEditorState,
 ): string {
-  const { updatedAt: _projectUpdatedAt, ...projectValue } = project;
-  const { updatedAt: _draftUpdatedAt, status: _status, ...draftValue } = draft;
-  return JSON.stringify({ project: projectValue, draft: draftValue });
+  const {
+    updatedAt: _projectUpdatedAt,
+    trainingSetup: _projectTrainingSetup,
+    ...projectValue
+  } = project;
+  const {
+    updatedAt: _setupUpdatedAt,
+    datasetMode: _datasetMode,
+    projectId: _projectId,
+    ...setupValue
+  } = setup;
+  return JSON.stringify({ project: projectValue, trainingSetup: setupValue });
 }
 
 export function buildPageReason(
   project: ModelProject,
-  draft: ModelRunDraft,
+  setup: ModelProjectEditorState,
   taskset: Taskset | null,
   launchState: { ready: boolean; reason: string | null },
 ): string | null {
   if (!project.name.trim()) return "Name this Model.";
-  if (!draft.datasetMode) {
+  if (!setup.datasetMode) {
     return "Choose a Taskset.";
   }
   if (!taskset) return "Choose a Taskset to enable Run.";
-  if (!draft.method) return "Choose a training method.";
+  if (!setup.method) return "Choose a training method.";
   const readiness = taskset.readiness?.methodReadiness.find(
-    (item) => item.method === draft.method,
+    (item) => item.method === setup.method,
   );
   if (readiness?.status === "needs_dataset_work") {
     return readiness.reasons[0] ?? "Resolve Taskset readiness for this method.";
   }
-  if (!draft.runPreset) {
-    return draft.method === "grpo" || draft.method === "ppo"
+  if (!setup.runPreset) {
+    return setup.method === "grpo" || setup.method === "ppo"
       ? "Choose an experiment size."
       : "Choose a run size.";
   }
-  if (!draft.baseModel) return "Choose a base model.";
-  if (!draft.destinationId) return "Choose a compatible destination.";
+  if (!setup.baseModel) return "Choose a base model.";
+  if (!setup.destinationId) return "Choose a compatible destination.";
   return launchState.ready
     ? null
     : launchState.reason ?? "Complete the launch checks.";

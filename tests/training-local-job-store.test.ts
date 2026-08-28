@@ -13,13 +13,29 @@ describe("local training job store", () => {
   test("normalizes retired destinations in persisted training state", async () => withTrainingStore(async ({ store }) => {
     const taskset = tasksetFixture({ ready: true });
     const modelProject = ModelProjectSchema.parse({
-      schemaVersion: "openpond.modelProject.v1",
+      schemaVersion: "openpond.modelProject.v2",
       id: "model_project_fixture",
       profileId: "default",
       name: "Fixture model",
       objective: null,
       defaultBaseModel: null,
       defaultDestinationId: null,
+      revision: 1,
+      trainingSetup: {
+        tasksetRef: null,
+        tasksetRelease: null,
+        harnessRelease: null,
+        baseModel: null,
+        method: null,
+        destinationId: null,
+        managedRolloutPlacement: "remote",
+        runPreset: null,
+        recipe: null,
+        preferredMaximumSpendUsd: null,
+        preferredRetentionDays: null,
+      },
+      hosted: null,
+      tasksetSyncs: [],
       createdAt: "2026-07-12T00:00:00Z",
       updatedAt: "2026-07-12T00:00:00Z",
     });

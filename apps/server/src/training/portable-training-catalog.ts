@@ -5,7 +5,7 @@ import {
   type ComputeTargetCapabilities,
   type HarnessRuntimeCapabilities,
   type HarnessRuntimeTargetBinding,
-  type ModelRunDraft,
+  type ModelProject,
   type TrainingCatalog,
   type TrainingDestinationCapabilities,
   type TrainingEngineBinding,
@@ -283,7 +283,8 @@ function trainingTargets(input: {
 }
 
 export function preparePortableModelRun(input: {
-  modelRun: ModelRunDraft;
+  modelProject: ModelProject;
+  modelRunId?: string;
   catalog: TrainingCatalog;
   maximumSpendUsd?: number | null;
   quoteUsd?: number | null;
@@ -291,11 +292,11 @@ export function preparePortableModelRun(input: {
 }): TrainingPreparationPlan {
   const model = input.catalog.models.find(
     (candidate) =>
-      candidate.modelId === input.modelRun.baseModel?.modelId &&
-      candidate.revision === input.modelRun.baseModel?.revision,
+      candidate.modelId === input.modelProject.trainingSetup.baseModel?.modelId &&
+      candidate.revision === input.modelProject.trainingSetup.baseModel?.revision,
   );
   const bindings = resolvePortableBindings({
-    modelRun: input.modelRun,
+    modelProject: input.modelProject,
     catalog: input.catalog,
   });
   const engine = bindings.engine
@@ -309,7 +310,7 @@ export function preparePortableModelRun(input: {
       ) ?? null)
     : null;
   return prepareTrainingSelection({
-    modelRunId: input.modelRun.id,
+    modelRunId: input.modelRunId ?? input.modelProject.id,
     modelCached: model?.cached ?? false,
     modelBytes: model?.expectedBytes ?? 0,
     engine,
@@ -318,12 +319,13 @@ export function preparePortableModelRun(input: {
     maximumSpendUsd: input.maximumSpendUsd ?? null,
     quoteUsd: input.quoteUsd ?? null,
     retentionDays: input.retentionDays ?? null,
-    providerManaged: input.modelRun.destinationId === "openpond_managed",
+    providerManaged:
+      input.modelProject.trainingSetup.destinationId === "openpond_managed",
   });
 }
 
 export function resolvePortableBindings(input: {
-  modelRun: ModelRunDraft;
+  modelProject: ModelProject;
   catalog: TrainingCatalog;
   environmentPlacement?: "local" | "remote" | "provider_native" | "colocated" | "none";
 }): {
@@ -331,14 +333,15 @@ export function resolvePortableBindings(input: {
   compute: ComputeTargetBinding | null;
   engine: TrainingEngineBinding | null;
 } {
-  const destinationId = input.modelRun.destinationId;
+  const setup = input.modelProject.trainingSetup;
+  const destinationId = setup.destinationId;
   if (!destinationId) return { runtime: null, compute: null, engine: null };
   const computeId = computeIdForDestination(destinationId);
   const engineId = engineIdForDestination(destinationId);
   const runtimeId = destinationId === "openpond_managed"
     ? input.environmentPlacement === "remote" ||
       (input.environmentPlacement === undefined &&
-        input.modelRun.managedRolloutPlacement === "remote")
+        setup.managedRolloutPlacement === "remote")
       ? "openpond-managed-harness"
       : "local-harness"
     : "local-harness";

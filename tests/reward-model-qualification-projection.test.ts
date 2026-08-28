@@ -58,6 +58,7 @@ function input(overrides: Record<string, unknown> = {}) {
       },
     },
     cleanup: { computeReleased: true, providerTerminalObserved: true },
+    managedExecutionReceipt: { id: "training-receipt-rm0", contentHash: HASH },
     createdAt: "2026-08-25T12:00:00.000Z",
     ...overrides,
   } as never;

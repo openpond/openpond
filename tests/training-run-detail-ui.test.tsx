@@ -2,11 +2,19 @@ import { describe, expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   ManagedTrainingRunEvidenceSchema,
+  TrainingJobEventSchema,
   TrainingRunDetailSchema,
 } from "../packages/contracts/src";
 import { LabModelRunSummary } from "../apps/web/src/components/labs/LabModelRunSummary";
+import {
+  eventSummary,
+  formatTrainingProgress,
+} from "../apps/web/src/components/labs/LabModelVersionDetailPage";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";
-import { TrainingRunMetrics } from "../apps/web/src/components/training/TrainingRunMetrics";
+import {
+  eventSeries,
+  TrainingRunMetrics,
+} from "../apps/web/src/components/training/TrainingRunMetrics";
 
 const detail = TrainingRunDetailSchema.parse({
   schemaVersion: "openpond.trainingRunDetail.v1",
@@ -312,6 +320,7 @@ describe("Training run detail UI", () => {
           timestamp: "2026-07-13T00:00:30.000Z",
           policyLoss: -1.3397,
           valueLoss: 0.5474,
+          gradientNorm: 0.72,
           meanReward: 0,
           meanReturn: 0,
           kl: 0.1392,
@@ -323,6 +332,7 @@ describe("Training run detail UI", () => {
           inputTokens: 36,
           outputTokens: 1,
           environmentExecutions: 1,
+          trajectoryCount: 4,
           costUsd: 0,
         },
       ],
@@ -330,10 +340,11 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={ppoDetail} loading={false} />
     );
-    expect(html).toContain("9 recorded metric series");
+    expect(html).toContain("10 recorded metric series");
     expect(html).toContain("1 point");
     expect(html).toContain("Policy loss");
     expect(html).toContain("Value loss");
+    expect(html).toContain("Gradient norm");
     expect(html).toContain("KL divergence");
     expect(html).toContain('aria-label="Mean reward by optimizer step"');
   });
@@ -344,6 +355,58 @@ describe("Training run detail UI", () => {
     );
     expect(html).toContain(
       "Evaluation will appear here after the first eligible checkpoint is scored."
+    );
+  });
+
+  test("formats committed rollout-group progress against the planned updates", () => {
+    expect(formatTrainingProgress(4, 16)).toEqual({
+      value: "4 / 16",
+      hint: "completed / planned",
+    });
+    expect(formatTrainingProgress(17, 16).value).toBe("17 / 16");
+  });
+
+  test("renders managed progress as a human status without null debug fields", () => {
+    const event = TrainingJobEventSchema.parse({
+      schemaVersion: "openpond.trainingJobEvent.v1",
+      id: "event_progress_fixture",
+      jobId: "job_detail_fixture",
+      sequence: 42,
+      type: "progress",
+      timestamp: "2026-08-27T16:55:54.155Z",
+      payload: {
+        errorCode: null,
+        remoteEventType: "train_step",
+        remotePhase: "succeeded",
+      },
+    });
+
+    expect(eventSummary(event)).toBe("Optimizer update · succeeded");
+    expect(eventSummary(event)).not.toContain("errorCode");
+    expect(eventSummary(event)).not.toContain("null");
+  });
+
+  test("does not count reward-pending rollout trajectories as failures", () => {
+    const events = [
+      TrainingJobEventSchema.parse({
+        schemaVersion: "openpond.trainingJobEvent.v1",
+        id: "event_pending_rollout",
+        jobId: "job_detail_fixture",
+        sequence: 1,
+        type: "metric",
+        timestamp: "2026-08-27T17:00:00.000Z",
+        payload: {
+          metricKind: "rollout_trajectory",
+          rolloutGroupId: "group_pending",
+          rolloutIndex: 1,
+          reward: null,
+          rewardEligible: true,
+        },
+      }),
+    ];
+
+    expect(eventSeries(events).map((series) => series.id)).not.toContain(
+      "attempt.failure_count",
     );
   });
 

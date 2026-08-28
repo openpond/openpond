@@ -31,7 +31,7 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 26, run: (store) => store.createDatasetImportTables() },
   { version: 28, run: (store) => store.createSidebarFileBookmarkTables() },
   { version: 29, run: (store) => store.createModelBuildDraftTables() },
-  { version: 30, run: (store) => store.createModelProjectAndRunDraftTables() },
+  { version: 30, run: (store) => store.createModelProjectTables() },
   { version: 31, run: (store) => store.createModelLifecycleTables() },
   {
     version: 32,
@@ -103,5 +103,13 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     // so those stores receive the new lifecycle tables on startup.
     version: 48,
     run: (store) => store.createTrainingTables(),
+  },
+  {
+    version: 49,
+    run: (store) => store.consolidateModelProjectTrainingSetup(),
+  },
+  {
+    version: 50,
+    run: (store) => store.repairUnverifiableLearnedPreferenceBindings(),
   },
 ];

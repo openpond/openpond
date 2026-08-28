@@ -6,7 +6,7 @@ import { createModelProjectHostingService } from "./model-project-hosting.js";
 describe("Model Project hosting", () => {
   test("syncs the portable project identity and persists hosted lineage", async () => {
     const project = {
-      schemaVersion: "openpond.modelProject.v1" as const,
+      schemaVersion: "openpond.modelProject.v2" as const,
       id: "model_project_1",
       profileId: "default",
       revision: 4,
@@ -14,12 +14,20 @@ describe("Model Project hosting", () => {
       objective: "Learn a visual preference policy",
       defaultBaseModel: null,
       defaultDestinationId: "openpond_managed" as const,
+      trainingSetup: emptyTrainingSetup(),
       hosted: null,
+      tasksetSyncs: [],
       createdAt: "2026-08-25T12:00:00.000Z",
       updatedAt: "2026-08-25T12:30:00.000Z",
     };
     const saveModelProject = vi.fn(async (value: unknown) => value);
     const request = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("accept")).toBe(
+        "application/vnd.openpond.model-project+json;version=2",
+      );
+      expect(new Headers(init?.headers).get("content-type")).toBe(
+        "application/vnd.openpond.model-project+json;version=2",
+      );
       expect(JSON.parse(String(init?.body))).toMatchObject({
         portableProjectId: project.id,
         sourceRevision: project.revision,
@@ -62,7 +70,7 @@ describe("Model Project hosting", () => {
 
   test("retries a stale hosted container ETag with the local source revision", async () => {
     const project = {
-      schemaVersion: "openpond.modelProject.v1" as const,
+      schemaVersion: "openpond.modelProject.v2" as const,
       id: "model_project_1",
       profileId: "default",
       revision: 4,
@@ -70,6 +78,7 @@ describe("Model Project hosting", () => {
       objective: "Learn a visual preference policy",
       defaultBaseModel: null,
       defaultDestinationId: "openpond_managed" as const,
+      trainingSetup: emptyTrainingSetup(),
       hosted: {
         schemaVersion: "openpond.hostedModelProjectLink.v1" as const,
         teamId: "team_1",
@@ -81,6 +90,7 @@ describe("Model Project hosting", () => {
         syncedAt: "2026-08-25T12:00:00.000Z",
         tasksets: [],
       },
+      tasksetSyncs: [],
       createdAt: "2026-08-25T12:00:00.000Z",
       updatedAt: "2026-08-25T12:30:00.000Z",
     };
@@ -120,7 +130,7 @@ describe("Model Project hosting", () => {
 
   test("publishes immutable Taskset releases with compressed transport", async () => {
     const project = {
-      schemaVersion: "openpond.modelProject.v1" as const,
+      schemaVersion: "openpond.modelProject.v2" as const,
       id: "model_project_1",
       profileId: "default",
       revision: 1,
@@ -128,7 +138,9 @@ describe("Model Project hosting", () => {
       objective: "Learn taste",
       defaultBaseModel: null,
       defaultDestinationId: "openpond_managed" as const,
+      trainingSetup: emptyTrainingSetup(),
       hosted: null,
+      tasksetSyncs: [],
       createdAt: "2026-08-25T12:00:00.000Z",
       updatedAt: "2026-08-25T12:00:00.000Z",
     };
@@ -245,3 +257,19 @@ describe("Model Project hosting", () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 });
+
+function emptyTrainingSetup() {
+  return {
+    tasksetRef: null,
+    tasksetRelease: null,
+    harnessRelease: null,
+    baseModel: null,
+    method: null,
+    destinationId: null,
+    managedRolloutPlacement: "remote" as const,
+    runPreset: null,
+    recipe: null,
+    preferredMaximumSpendUsd: null,
+    preferredRetentionDays: null,
+  };
+}

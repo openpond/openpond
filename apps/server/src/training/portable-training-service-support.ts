@@ -12,7 +12,7 @@ import {
 } from "./portable-training-catalog.js";
 
 export function createPortableTrainingServiceSupport(input: {
-  store: Pick<SqliteStore, "getModelRunDraft">;
+  store: Pick<SqliteStore, "getModelProject">;
   destinations: () => Promise<TrainingDestinationCapabilities[]>;
   adapters: TrainingAdapterRegistry;
   searchTrainingModels?: (
@@ -41,19 +41,19 @@ export function createPortableTrainingServiceSupport(input: {
   }
 
   async function prepare(inputPlan: {
-    modelRunId: string;
+    modelProjectId: string;
     maximumSpendUsd?: number | null;
     retentionDays?: number | null;
   }) {
-    const modelRun = await input.store.getModelRunDraft(
-      inputPlan.modelRunId,
+    const modelProject = await input.store.getModelProject(
+      inputPlan.modelProjectId,
     );
-    if (!modelRun || modelRun.status !== "ready_to_run") {
-      throw new Error("A ready saved Model Run is required.");
+    if (!modelProject) {
+      throw new Error("A saved Model Project is required.");
     }
     const trainingCatalog = await catalog();
     return preparePortableModelRun({
-      modelRun,
+      modelProject,
       catalog: trainingCatalog,
       maximumSpendUsd: inputPlan.maximumSpendUsd,
       retentionDays: inputPlan.retentionDays,

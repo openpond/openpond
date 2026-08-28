@@ -1,4 +1,4 @@
-import { ModelRunDraftSchema, TrainingJobSchema } from "@openpond/contracts";
+import { ModelProjectSchema, TrainingJobSchema } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import { buildTasksetTrainingBundle, createTrainingPlan } from "@openpond/training-sdk";
 import { describe, expect, test } from "vitest";
@@ -24,52 +24,59 @@ describe("portable Model Run lifecycle", () => {
           chatTemplateHash: sha256("portable-chat-template"),
         },
       };
-      const draft = ModelRunDraftSchema.parse({
-        schemaVersion: "openpond.modelRunDraft.v1",
-        id: "portable-model-run-1",
+      const modelRunId = "portable-model-run-1";
+      const modelProject = ModelProjectSchema.parse({
+        schemaVersion: "openpond.modelProject.v2",
+        id: "portable-model-project-1",
         profileId: taskset.profileId,
-        modelId: "portable-model-project-1",
-        status: "ready_to_run",
-        title: "Portable GRPO",
-        datasetMode: "existing",
-        tasksetRef: {
-          id: taskset.id,
-          revision: taskset.revision,
-          contentHash: taskset.contentHash,
+        revision: 1,
+        name: "Portable GRPO",
+        objective: "Verify portable managed lifecycle.",
+        defaultBaseModel: null,
+        defaultDestinationId: "openpond_managed",
+        trainingSetup: {
+          tasksetRef: {
+            id: taskset.id,
+            revision: taskset.revision,
+            contentHash: taskset.contentHash,
+          },
+          harnessRelease: {
+            id: "harness-release-fixture",
+            contentHash: sha256("harness-release-fixture"),
+          },
+          tasksetRelease: {
+            id: "taskset-release-fixture",
+            contentHash: sha256(taskset.contentHash),
+          },
+          baseModel: {
+            schemaVersion: "openpond.baseModelPreference.v1",
+            modelId: recipe.baseModel.id,
+            revision: recipe.baseModel.revision,
+            tokenizerRevision: recipe.baseModel.tokenizerRevision,
+            chatTemplateHash: recipe.baseModel.chatTemplateHash,
+            modelAssetId: null,
+            source: "managed",
+          },
+          method: "grpo",
+          destinationId: "openpond_managed",
+          managedRolloutPlacement: "remote",
+          runPreset: "small",
+          recipe,
+          preferredMaximumSpendUsd: 2,
+          preferredRetentionDays: null,
         },
-        harnessRelease: {
-          id: "harness-release-fixture",
-          contentHash: sha256("harness-release-fixture"),
-        },
-        tasksetRelease: {
-          id: "taskset-release-fixture",
-          contentHash: sha256(taskset.contentHash),
-        },
-        datasetCreationId: null,
-        buildIntent: null,
-        buildSpecification: null,
-        baseModel: {
-          schemaVersion: "openpond.baseModelPreference.v1",
-          modelId: recipe.baseModel.id,
-          revision: recipe.baseModel.revision,
-          tokenizerRevision: recipe.baseModel.tokenizerRevision,
-          chatTemplateHash: recipe.baseModel.chatTemplateHash,
-          modelAssetId: null,
-          source: "managed",
-        },
-        method: "grpo",
-        destinationId: "openpond_managed",
-        runPreset: "small",
-        recipe,
+        hosted: null,
+        tasksetSyncs: [],
         createdAt: FIXED_TIME,
         updatedAt: FIXED_TIME,
       });
       await store.upsertTaskset(taskset);
-      await store.saveModelRunDraft(draft);
+      await store.saveModelProject(modelProject);
       const capabilityReceipt = sha256("portable-lifecycle-capability");
       const graph = buildTasksetTrainingBundle({
         taskset,
-        modelRun: draft,
+        modelProject,
+        modelRunId,
         runtime: {
           adapterId: "openpond-managed-harness",
           placement: "remote",
@@ -120,7 +127,8 @@ describe("portable Model Run lifecycle", () => {
       });
       const prepared = await preparePortableModelRunLifecycle({
         store,
-        draft,
+        modelProject,
+        modelRunId,
         taskset,
         sourceProjectRevision: 3,
         releaseGraph,
@@ -132,7 +140,7 @@ describe("portable Model Run lifecycle", () => {
       expect(
         await store.getModelVersion(
           `model_version_${contentHash({
-            modelId: draft.modelId,
+            modelId: modelProject.id,
             version: 0,
           }).slice(0, 24)}`,
         ),
@@ -142,7 +150,7 @@ describe("portable Model Run lifecycle", () => {
       });
 
       const plan = createTrainingPlan({
-        modelId: draft.modelId,
+        modelId: modelProject.id,
         taskset,
         destinationId: "openpond_managed",
         recipe,
@@ -200,11 +208,10 @@ describe("portable Model Run lifecycle", () => {
         createdAt: FIXED_TIME,
       };
       const completedAt = "2026-07-12T00:10:00.000Z";
-      await store.deleteModelRunDraft(draft.id);
       const terminal = await reconcilePortableModelRunLifecycle({
         store,
         storeDir: directory,
-        modelRunId: draft.id,
+        modelRunId,
         job,
         executionRef,
         status: {
@@ -249,7 +256,7 @@ describe("portable Model Run lifecycle", () => {
               providerFilename: "managed-rl-candidate",
               managedRlCandidate: true,
               managedRlJobId: "managed-provider-job-1",
-              managedRlModelArtifactId: "model-artifact-1",
+              managedRlOutputId: "model-artifact-1",
               managedRlTeamId: "team_managed",
             }),
           }),

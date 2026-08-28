@@ -6,7 +6,6 @@ import {
   CreateHuggingFaceDatasetImportRequestSchema,
   DatasetCatalogResponseSchema,
   ModelProjectSchema,
-  ModelRunDraftSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
@@ -436,6 +435,13 @@ export function createTrainingApi(deps: {
       const tasksetId = requiredString(input.tasksetId, "tasksetId");
       const datasetId = requiredString(input.preferenceDatasetReleaseId, "preferenceDatasetReleaseId");
       const taskset = await requireTaskset(deps.store, tasksetId);
+      const modelProject = await deps.store.getModelProject(
+        requiredString(input.modelProjectId, "modelProjectId"),
+      );
+      if (!modelProject) throw new Error("Model Project was not found.");
+      if (modelProject.trainingSetup.tasksetRef?.id !== taskset.id) {
+        throw new Error("Reward Model Run must use the Taskset selected by the Model Project.");
+      }
       const dataset = (await requirePreferenceComparisons(deps.preferenceComparisons)
         .listPreferenceDatasets(tasksetId))
         .find((candidate) => candidate.id === datasetId);
@@ -462,6 +468,7 @@ export function createTrainingApi(deps: {
       return deps.training.launchRewardModel({
         id: requiredString(input.id, "id"),
         rewardModelId: requiredString(input.rewardModelId, "rewardModelId"),
+        modelProject,
         taskset,
         tasksetRelease: comparisonRelease.tasksetRelease,
         dataset,
@@ -572,42 +579,6 @@ export function createTrainingApi(deps: {
         createdAt: existing?.createdAt ?? project.createdAt,
         updatedAt: new Date().toISOString(),
       });
-    }
-    if (action === "save_model_run_draft") {
-      const draft = ModelRunDraftSchema.parse(input);
-      const existing = await deps.store.getModelRunDraft(draft.id);
-      if (existing && existing.profileId !== draft.profileId) {
-        throw new Error("Model run draft profile does not match the active Profile.");
-      }
-      if (existing && existing.modelId !== draft.modelId) {
-        throw new Error("A saved Model run draft cannot change Model identity.");
-      }
-      if (existing && (existing.status === "launched" || existing.status === "cancelled")) {
-        if (JSON.stringify(existing) !== JSON.stringify(draft)) {
-          throw new Error("Launched and cancelled Model runs are immutable.");
-        }
-        return existing;
-      }
-      const project = await deps.store.getModelProject(draft.modelId);
-      if (!project || project.profileId !== draft.profileId) {
-        throw new Error("Save the Model before saving its run draft.");
-      }
-      return deps.store.saveModelRunDraft({
-        ...draft,
-        createdAt: existing?.createdAt ?? draft.createdAt,
-        updatedAt: new Date().toISOString(),
-      });
-    }
-    if (action === "delete_model_run_draft") {
-      const draft = await deps.store.getModelRunDraft(
-        requiredString(input.draftId, "draftId"),
-      );
-      if (!draft) return { deleted: false };
-      if (draft.status === "launched") {
-        throw new Error("A launched Model run cannot be deleted.");
-      }
-      await deps.store.deleteModelRunDraft(draft.id);
-      return { deleted: true, draftId: draft.id };
     }
     if (action === "add_source") return deps.taskCreator.addSessionSource({ profileId: requiredString(input.profileId, "profileId"), sessionId: requiredString(input.sessionId, "sessionId"), turnIds: stringArray(input.turnIds), consentScope: input.consentScope === "selected_turns" ? "selected_turns" : "full_session" });
     if (action === "add_sources") {
@@ -1125,36 +1096,35 @@ export function createTrainingApi(deps: {
       return { qualification, prepared };
     }
     if (action === "prepare_model_run") return deps.training.prepareModelRun({
-      modelRunId: requiredString(input.modelRunId, "modelRunId"),
+      modelProjectId: requiredString(input.modelProjectId, "modelProjectId"),
       maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
       retentionDays: nullableNumber(input.retentionDays),
     });
     if (action === "start_model_run") {
-      const modelRunId = requiredString(input.modelRunId, "modelRunId");
-      const modelRun = await deps.store.getModelRunDraft(modelRunId);
-      if (!modelRun || modelRun.status !== "ready_to_run") {
-        throw new Error("A ready saved Model Run is required.");
-      }
-      if (modelRun.destinationId === "openpond_managed") {
+      const modelProjectId = requiredString(input.modelProjectId, "modelProjectId");
+      const modelProject = await deps.store.getModelProject(modelProjectId);
+      if (!modelProject) throw new Error("A saved Model Project is required.");
+      const setup = modelProject.trainingSetup;
+      if (setup.destinationId === "openpond_managed") {
         if (!deps.modelProjectHosting) {
           throw new Error("Managed runs require hosted Model Project sync.");
         }
-        if (!modelRun.tasksetRef) {
-          throw new Error("The saved Model Run has no Taskset.");
+        if (!setup.tasksetRef) {
+          throw new Error("The Model Project training setup has no Taskset.");
         }
-        const taskset = await requireTaskset(deps.store, modelRun.tasksetRef.id);
+        const taskset = await requireTaskset(deps.store, setup.tasksetRef.id);
         const release = await requireReleasedTaskset(
           deps.benchmarkTasksets,
           taskset,
         );
         await deps.modelProjectHosting.publishTaskset({
-          projectId: modelRun.modelId,
+          projectId: modelProject.id,
           taskset,
           release,
         });
       }
       return deps.training.startModelRun({
-        modelRunId,
+        modelProjectId,
         maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
         retentionDays: nullableNumber(input.retentionDays),
         exportApproved: input.exportApproved === true,
@@ -1335,7 +1305,6 @@ export function createTrainingApi(deps: {
       minerConfig,
       minerRuns,
       modelProjects,
-      modelRunDrafts,
       modelVersions,
       modelRuns,
       modelTasksets,
@@ -1351,7 +1320,6 @@ export function createTrainingApi(deps: {
       deps.taskMiner.config(profileId),
       deps.store.listTaskMinerRuns(profileId),
       deps.store.listModelProjects(),
-      deps.store.listModelRunDrafts(),
       deps.store.listModelVersions(),
       deps.store.listModelRuns(),
       deps.store.listTasksets(),
@@ -1392,7 +1360,6 @@ export function createTrainingApi(deps: {
       minerConfig,
       minerRuns,
       modelProjects,
-      modelRunDrafts,
       modelVersions,
       modelRuns,
       modelTasksets,

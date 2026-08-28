@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 48;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 50;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -511,17 +511,6 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS model_projects_profile_updated_idx ON model_projects(profile_id, updated_at DESC);
-  CREATE TABLE IF NOT EXISTS model_run_drafts (
-    id TEXT PRIMARY KEY,
-    profile_id TEXT NOT NULL,
-    model_id TEXT NOT NULL,
-    status TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS model_run_drafts_profile_updated_idx ON model_run_drafts(profile_id, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS model_run_drafts_model_idx ON model_run_drafts(model_id, updated_at DESC);
   CREATE TABLE IF NOT EXISTS model_versions (
     id TEXT PRIMARY KEY,
     model_id TEXT NOT NULL,

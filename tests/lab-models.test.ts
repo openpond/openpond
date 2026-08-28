@@ -6,11 +6,10 @@ import type {
   TrainingJob,
   TrainingStateResponse,
 } from "@openpond/contracts";
+
 import {
   ModelProjectSchema,
-  ModelRunDraftSchema,
 } from "@openpond/contracts";
-
 import {
   currentModelBinding,
   labModelDatasets,
@@ -291,53 +290,20 @@ describe("Lab Model workspace projection", () => {
     );
   });
 
-  test("projects stable Models and saved run drafts into the Model workspace", () => {
-    const timestamp = "2026-07-23T12:00:00.000Z";
-    const project = ModelProjectSchema.parse({
-      schemaVersion: "openpond.modelProject.v1",
-      id: "model_fixture_draft",
-      profileId: "default",
+  test("projects a stable Model and its current training setup into the Model workspace", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const project = modelProject({
+      id: "model_fixture_project",
       name: "Renewal Risk Model",
       objective: "Classify renewal risk.",
-      defaultBaseModel: null,
-      defaultDestinationId: null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-    const draft = ModelRunDraftSchema.parse({
-      schemaVersion: "openpond.modelRunDraft.v1",
-      id: "run_draft_fixture",
-      profileId: "default",
-      modelId: "model_fixture_draft",
-      status: "draft",
-      title: "Run draft",
-      datasetMode: null,
-      tasksetRef: null,
-      datasetCreationId: null,
-      buildIntent: null,
-      buildSpecification: null,
-      baseModel: null,
-      method: null,
-      destinationId: null,
-      runPreset: null,
-      recipe: null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-    const readyDraft = ModelRunDraftSchema.parse({
-      ...draft,
-      id: "run_draft_ready_fixture",
-      status: "ready_to_run",
-      title: "Second run draft",
-      updatedAt: "2026-07-23T12:05:00.000Z",
+      taskset,
     });
 
     const [projected] = labWorkproductProjection({
       profile: null,
       training: {
         modelProjects: [project],
-        modelRunDrafts: [readyDraft, draft],
-        tasksets: [],
+        tasksets: [taskset],
         plans: [],
         jobs: [],
         models: [],
@@ -347,7 +313,7 @@ describe("Lab Model workspace projection", () => {
 
     expect(projected).toMatchObject({
       kind: "model",
-      id: draft.modelId,
+      id: project.id,
       name: project.name,
       status: "Ready to run",
       trainingRunCount: 0,
@@ -355,18 +321,12 @@ describe("Lab Model workspace projection", () => {
   });
 
   test("preserves a stable Model name and counts only its own launched runs", () => {
-    const timestamp = "2026-07-23T12:00:00.000Z";
     const taskset = tasksetFixture({ ready: true });
-    const project = ModelProjectSchema.parse({
-      schemaVersion: "openpond.modelProject.v1",
+    const project = modelProject({
       id: "model_local_sft_smoke",
-      profileId: "default",
       name: "Local SFT Smoke",
       objective: "Verify local SFT training.",
-      defaultBaseModel: null,
-      defaultDestinationId: null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
+      taskset,
     });
     const olderPlan = {
       ...planFixture(taskset),
@@ -382,7 +342,6 @@ describe("Lab Model workspace projection", () => {
     };
     const state = {
       modelProjects: [project],
-      modelRunDrafts: [],
       tasksets: [taskset],
       plans: [olderPlan, projectPlan],
       jobs: [
@@ -425,6 +384,55 @@ describe("Lab Model workspace projection", () => {
     });
   });
 });
+
+function modelProject(input: {
+  id: string;
+  name: string;
+  objective: string;
+  taskset: Taskset;
+}) {
+  const recipe = planFixture(input.taskset).recipe;
+  const baseModel = {
+    schemaVersion: "openpond.baseModelPreference.v1" as const,
+    modelId: recipe.baseModel.id,
+    revision: recipe.baseModel.revision,
+    tokenizerRevision: recipe.baseModel.tokenizerRevision,
+    chatTemplateHash: recipe.baseModel.chatTemplateHash,
+    modelAssetId: null,
+    source: "builtin" as const,
+  };
+  return ModelProjectSchema.parse({
+    schemaVersion: "openpond.modelProject.v2",
+    id: input.id,
+    profileId: input.taskset.profileId,
+    revision: 1,
+    name: input.name,
+    objective: input.objective,
+    defaultBaseModel: baseModel,
+    defaultDestinationId: "local",
+    trainingSetup: {
+      tasksetRef: {
+        id: input.taskset.id,
+        revision: input.taskset.revision,
+        contentHash: input.taskset.contentHash,
+      },
+      tasksetRelease: null,
+      harnessRelease: null,
+      baseModel,
+      method: "sft",
+      destinationId: "local",
+      managedRolloutPlacement: "remote",
+      runPreset: "small",
+      recipe,
+      preferredMaximumSpendUsd: null,
+      preferredRetentionDays: null,
+    },
+    hosted: null,
+    tasksetSyncs: [],
+    createdAt: "2026-07-23T12:00:00.000Z",
+    updatedAt: "2026-07-23T12:00:00.000Z",
+  });
+}
 
 function job(
   id: string,

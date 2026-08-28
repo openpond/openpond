@@ -1,9 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 
 import {
   HarnessRunManifestSchema,
   ResolvedTrainingPlanSchema,
+  TrainingRecipeSchema,
   TrainingExecutionRefSchema,
   TrainingJobSchema,
   type TrainingApproval,
@@ -21,6 +23,7 @@ import {
 
 import type { SqliteStore } from "../store/store.js";
 import { readRecoveredPortableArtifacts } from "./portable-model-run-artifacts.js";
+import { shouldCollectPortableTrainingArtifacts } from "./portable-model-run-terminal.js";
 import {
   failPreparedPortableModelRun,
   markPortableModelRunRunning,
@@ -38,7 +41,7 @@ export function createPortableModelRunService(deps: {
   adapters: TrainingAdapterRegistry;
   catalog(): Promise<TrainingCatalog>;
   prepare(input: {
-    modelRunId: string;
+    modelProjectId: string;
     maximumSpendUsd?: number | null;
     retentionDays?: number | null;
   }): Promise<TrainingPreparationPlan>;
@@ -46,8 +49,8 @@ export function createPortableModelRunService(deps: {
     modelId: string;
     tasksetId: string;
     destinationId: NonNullable<
-      Awaited<ReturnType<SqliteStore["getModelRunDraft"]>>
-    >["destinationId"];
+      Awaited<ReturnType<SqliteStore["getModelProject"]>>
+    >["trainingSetup"]["destinationId"];
     recipe: unknown;
     environmentPlacement?: "local" | "remote";
     exportApproved?: boolean;
@@ -62,7 +65,7 @@ export function createPortableModelRunService(deps: {
   prepareModel?: (input: { modelId: string; revision: string | null }) => Promise<unknown>;
   resolveReleasedHarness: (input: {
     taskset: NonNullable<Awaited<ReturnType<SqliteStore["getTaskset"]>>>;
-    modelRun: NonNullable<Awaited<ReturnType<SqliteStore["getModelRunDraft"]>>>;
+    modelProject: NonNullable<Awaited<ReturnType<SqliteStore["getModelProject"]>>>;
   }) => Promise<{
     harnessRelease: { id: string; contentHash: string };
     tasksetRelease: { id: string; contentHash: string };
@@ -73,44 +76,47 @@ export function createPortableModelRunService(deps: {
   let lastReconciledAt = 0;
 
   async function start(input: {
-    modelRunId: string;
+    modelProjectId: string;
     maximumSpendUsd: number | null;
     exportApproved: boolean;
     retentionDays?: number | null;
     manifest?: unknown;
   }) {
-    const loadedModelRun = await deps.store.getModelRunDraft(input.modelRunId);
-    if (!loadedModelRun || loadedModelRun.status !== "ready_to_run") {
-      throw new Error("A ready saved Model Run is required.");
-    }
-    const sourceProject = await deps.store.getModelProject(loadedModelRun.modelId);
-    if (!sourceProject || sourceProject.profileId !== loadedModelRun.profileId) {
-      throw new Error("The Model Project for this training setup is unavailable.");
-    }
-    let modelRun = loadedModelRun;
+    let sourceProject = await deps.store.getModelProject(input.modelProjectId);
+    if (!sourceProject) throw new Error("A saved Model Project is required.");
+    let setup = sourceProject.trainingSetup;
     if (
-      !modelRun.tasksetRef ||
-      !modelRun.baseModel ||
-      !modelRun.recipe ||
-      !modelRun.destinationId
+      !setup.tasksetRef ||
+      !setup.baseModel ||
+      !setup.recipe ||
+      !setup.destinationId
     ) {
-      throw new Error("The saved Model Run is incomplete.");
+      throw new Error("The Model Project training setup is incomplete.");
     }
-    const baseModel = modelRun.baseModel;
-    const tasksetRef = modelRun.tasksetRef;
-    const taskset = await deps.store.getTaskset(modelRun.tasksetRef.id);
-    if (!taskset || taskset.contentHash !== modelRun.tasksetRef.contentHash) {
-      throw new Error("The saved Model Run Taskset release is stale.");
+    const baseModel = setup.baseModel;
+    const tasksetRef = setup.tasksetRef;
+    const taskset = await deps.store.getTaskset(setup.tasksetRef.id);
+    if (!taskset || taskset.contentHash !== setup.tasksetRef.contentHash) {
+      throw new Error("The Model Project Taskset release is stale.");
     }
-    const releasedHarness = await deps.resolveReleasedHarness({ taskset, modelRun });
-    modelRun = await deps.store.saveModelRunDraft({
-      ...modelRun,
-      harnessRelease: releasedHarness.harnessRelease,
-      tasksetRelease: releasedHarness.tasksetRelease,
+    const releasedHarness = await deps.resolveReleasedHarness({
+      taskset,
+      modelProject: sourceProject,
+    });
+    sourceProject = await deps.store.saveModelProject({
+      ...sourceProject,
+      revision: sourceProject.revision + 1,
+      trainingSetup: {
+        ...setup,
+        harnessRelease: releasedHarness.harnessRelease,
+        tasksetRelease: releasedHarness.tasksetRelease,
+      },
       updatedAt: new Date().toISOString(),
     });
+    setup = sourceProject.trainingSetup;
+    const recipe = TrainingRecipeSchema.parse(setup.recipe);
     const preparation = await deps.prepare({
-      modelRunId: modelRun.id,
+      modelProjectId: sourceProject.id,
       maximumSpendUsd: input.maximumSpendUsd,
       retentionDays: input.retentionDays,
     });
@@ -122,18 +128,18 @@ export function createPortableModelRunService(deps: {
         throw new Error("This Model requires a verified downloader before training can start.");
       }
       await deps.prepareModel({
-        modelId: baseModel.modelId,
+      modelId: baseModel.modelId,
         revision: baseModel.revision,
       });
     }
     const prepared = await deps.prepareStart({
-      modelId: modelRun.modelId,
+      modelId: sourceProject.id,
       tasksetId: tasksetRef.id,
-      destinationId: modelRun.destinationId,
-      recipe: modelRun.recipe,
+      destinationId: setup.destinationId,
+      recipe,
       environmentPlacement:
-        modelRun.destinationId === "openpond_managed"
-          ? (modelRun.managedRolloutPlacement ?? "local")
+        setup.destinationId === "openpond_managed"
+          ? setup.managedRolloutPlacement
           : undefined,
       exportApproved: input.exportApproved,
       retentionDays: input.retentionDays,
@@ -145,16 +151,18 @@ export function createPortableModelRunService(deps: {
       maximumCostUsd: input.maximumSpendUsd,
     });
     const bindings = resolvePortableBindings({
-      modelRun,
+      modelProject: sourceProject,
       catalog: await deps.catalog(),
       environmentPlacement: prepared.plan.environmentPlacement,
     });
     if (!bindings.runtime || !bindings.compute || !bindings.engine) {
-      throw new Error("The saved Model Run has no complete portable adapter binding.");
+      throw new Error("The Model Project has no complete portable adapter binding.");
     }
+    const modelRunId = `model_run_${randomUUID()}`;
     const graph = buildTasksetTrainingBundle({
       taskset,
-      modelRun,
+      modelProject: sourceProject,
+      modelRunId,
       runtime: bindings.runtime,
       compute: bindings.compute,
       engine: bindings.engine,
@@ -174,7 +182,7 @@ export function createPortableModelRunService(deps: {
     const resolvedPlanBase = {
       schemaVersion: "openpond.resolvedTrainingPlan.v1" as const,
       manifest: graph.manifest,
-      recipe: modelRun.recipe,
+      recipe,
       runtime: bindings.runtime,
       compute: bindings.compute,
       engine: bindings.engine,
@@ -220,7 +228,8 @@ export function createPortableModelRunService(deps: {
     });
     const lifecycle = await preparePortableModelRunLifecycle({
       store: deps.store,
-      draft: modelRun,
+      modelProject: sourceProject,
+      modelRunId,
       taskset,
       sourceProjectRevision: sourceProject.revision,
       releaseGraph: portableReleaseGraph,
@@ -233,7 +242,7 @@ export function createPortableModelRunService(deps: {
     } catch (error) {
       await failPreparedPortableModelRun({
         store: deps.store,
-        modelRunId: modelRun.id,
+        modelRunId,
         error,
       });
       throw error;
@@ -246,7 +255,7 @@ export function createPortableModelRunService(deps: {
         planId: prepared.plan.id,
         bundleHash: prepared.bundle.contentHash,
         approvalId: approval.id,
-        destinationId: modelRun.destinationId,
+        destinationId: setup.destinationId,
         status: "queued",
         nonProduction: false,
         workerPid: null,
@@ -261,7 +270,8 @@ export function createPortableModelRunService(deps: {
       ...launched,
       metadata: {
         ...launched.metadata,
-        modelRunId: modelRun.id,
+        modelRunId,
+        modelProjectId: sourceProject.id,
         harnessRunManifestId: graph.manifest.id,
         harnessRunManifestHash: graph.manifest.contentHash,
         harnessReleaseHash: graph.harnessRelease.contentHash,
@@ -279,13 +289,8 @@ export function createPortableModelRunService(deps: {
     });
     await markPortableModelRunRunning({
       store: deps.store,
-      modelRunId: modelRun.id,
+      modelRunId,
       startedAt: executionRef.createdAt,
-    });
-    await deps.store.saveModelRunDraft({
-      ...modelRun,
-      status: "launched",
-      updatedAt: new Date().toISOString(),
     });
     return {
       preparation,
@@ -384,6 +389,18 @@ export function createPortableModelRunService(deps: {
           status: executionStatus,
         });
         return executionStatus;
+      }
+      if (!shouldCollectPortableTrainingArtifacts(executionStatus.state)) {
+        const modelRun = await reconcilePortableModelRunLifecycle({
+          store: deps.store,
+          storeDir: deps.storeDir,
+          modelRunId,
+          job,
+          executionRef: parsed.data,
+          status: executionStatus,
+          failure: executionStatus.errorCode,
+        });
+        return portableStatusFromModelRun(modelRun);
       }
       let artifacts = null;
       try {

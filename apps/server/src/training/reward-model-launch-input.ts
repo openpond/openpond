@@ -43,7 +43,7 @@ export async function buildManagedRewardModelLaunchInput(input: {
     input.dataset.tasksetRelease.id !== input.tasksetRelease.id ||
     input.dataset.tasksetRelease.contentHash !== input.tasksetRelease.contentHash
   ) {
-    throw new Error("Reward Model launch must use the exact Taskset release pinned by D0 and the recipe.");
+    throw new Error("Reward Model launch must use the exact Taskset release pinned by the preference dataset and the recipe.");
   }
   if (
     input.recipe.preferenceDatasetRelease.id !== input.dataset.id ||
@@ -106,7 +106,7 @@ export async function buildManagedRewardModelLaunchInput(input: {
       }),
   );
   if (!groups.some((group) => group.partition === "reward_train") || !groups.some((group) => group.partition === "reward_validation")) {
-    throw new Error("Reward Model launch requires D0 train and validation groups.");
+    throw new Error("Reward Model launch requires preference-dataset train and validation groups.");
   }
   const content = {
     schemaVersion: "openpond.managedRlRewardModelLaunchRequest.v1",

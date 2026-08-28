@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import type {
   CreateImproveRun,
   ModelRun,
-  ModelRunDraft,
   TrainingJob,
 } from "@openpond/contracts";
 import {
@@ -37,14 +36,12 @@ type VersionEntry = {
   key: string;
   job: TrainingJob | null;
   version: LabModelVersion | null;
-  draft: ModelRunDraft | null;
 };
 export type RunEntry = {
   key: string;
   job: TrainingJob | null;
   lifecycleRun: ModelRun | null;
   version: LabModelVersion | null;
-  draft: ModelRunDraft | null;
 };
 
 export type ModelWorkspaceProps = {
@@ -61,13 +58,11 @@ export function LabModelRunsPage({
   onOpenDataset,
   onOpenEntry,
   onNewRun,
-  onResumeDraft,
   readOnly = false,
   mode = "training",
 }: ModelWorkspaceProps & {
   onOpenEntry: (entryKey: string) => void;
   onNewRun: () => void;
-  onResumeDraft: (draftId: string) => void;
   readOnly?: boolean;
   mode?: "training" | "evals";
 }) {
@@ -90,41 +85,23 @@ export function LabModelRunsPage({
   );
   const lifecycleRuns = labLifecycleModelRuns(workproduct, state);
   const tasksets = labModelTasksets(state);
-  const drafts = useMemo(
-    () =>
-      (state?.modelRunDrafts ?? [])
-        .filter(
-          (draft) =>
-            draft.modelId === workproduct.id &&
-            (draft.status === "draft" || draft.status === "ready_to_run")
-        )
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
-    [state?.modelRunDrafts, workproduct.id],
-  );
   const runEntries = useMemo(() => {
-    const entries = modelRunEntries(
-      jobs,
-      versions,
-      lifecycleRuns,
-      readOnly ? [] : drafts,
-    );
+    const entries = modelRunEntries(jobs, versions, lifecycleRuns);
     return entries.filter((entry) =>
       mode === "evals"
         ? entry.lifecycleRun?.kind === "evaluation"
         : entry.lifecycleRun?.kind !== "evaluation",
     );
-  }, [drafts, jobs, lifecycleRuns, mode, planById, readOnly, versions]);
+  }, [jobs, lifecycleRuns, mode, versions]);
   const [showAllRuns, setShowAllRuns] = useState(false);
   const visibleRunEntries = showAllRuns
     ? runEntries
     : runEntries.slice(0, 5);
-  const submittedRunCount = runEntries.filter((entry) => !entry.draft).length;
-  const draftCount = runEntries.length - submittedRunCount;
+  const submittedRunCount = runEntries.length;
   const runNumberByKey = useMemo(() => {
     let runNumber = submittedRunCount;
     const numbers = new Map<string, number>();
     for (const entry of runEntries) {
-      if (entry.draft) continue;
       numbers.set(entry.key, runNumber);
       runNumber -= 1;
     }
@@ -132,10 +109,6 @@ export function LabModelRunsPage({
   }, [runEntries, submittedRunCount]);
 
   function selectEntry(entry: RunEntry) {
-    if (entry.draft) {
-      onResumeDraft(entry.draft.id);
-      return;
-    }
     onOpenEntry(entry.key);
   }
 
@@ -145,10 +118,9 @@ export function LabModelRunsPage({
         title={mode === "evals" ? "Evals" : "Training"}
         description={mode === "evals"
           ? "Evaluation-only runs, held-out results, and grader evidence."
-          : "Training runs, optimizer progress, checkpoints, and unfinished drafts."}
+          : "Training runs, optimizer progress, checkpoints, and immutable outputs."}
         metrics={[
           { label: mode === "evals" ? "Eval runs" : "Training runs", value: submittedRunCount },
-          { label: "Drafts", value: draftCount },
           { label: "Latest activity", value: runEntries[0] ? formatDateTime(entryTimestamp(runEntries[0])) : "None" },
         ]}
         actions={!readOnly && mode === "training" ? (
@@ -165,7 +137,7 @@ export function LabModelRunsPage({
         <table className="training-data-table labs-model-runs-table">
           <thead>
             <tr>
-              <th>Run or draft</th>
+              <th>Run</th>
               <th>Status</th>
               <th>Method</th>
               <th>Dataset</th>
@@ -178,7 +150,7 @@ export function LabModelRunsPage({
               <tr>
                 <td colSpan={6}>
                   <div className="training-run-placeholder">
-                    No runs or drafts yet.
+                    No runs yet.
                   </div>
                 </td>
               </tr>
@@ -193,8 +165,7 @@ export function LabModelRunsPage({
                 tasksets.find(
                   (taskset) =>
                     taskset.id ===
-                    (entry.draft?.tasksetRef?.id ??
-                      entry.lifecycleRun?.taskset.id ??
+                    (entry.lifecycleRun?.taskset.id ??
                       plan?.tasksetId)
                 ) ??
                 null;
@@ -202,7 +173,6 @@ export function LabModelRunsPage({
 
               return (
                 <tr
-                  className={entry.draft ? "labs-model-run-draft" : undefined}
                   key={entry.key}
                   onClick={() => selectEntry(entry)}
                 >
@@ -215,17 +185,9 @@ export function LabModelRunsPage({
                         selectEntry(entry);
                       }}
                     >
-                      <strong>
-                        {entry.draft
-                          ? entry.draft.title || "Run draft"
-                          : `Run ${runNumber}`}
-                      </strong>
+                      <strong>{`Run ${runNumber}`}</strong>
                       <small>
-                        {entry.draft
-                          ? entry.draft.status === "ready_to_run"
-                            ? "Review and run"
-                            : "Resume draft"
-                          : version
+                        {version
                           ? `Created Version ${version.number}`
                           : entry.lifecycleRun?.kind === "evaluation"
                           ? "Evaluation"
@@ -238,18 +200,13 @@ export function LabModelRunsPage({
                   <td>
                     <LabStatusBadge
                       label={
-                        entry.draft
-                          ? entry.draft.status === "ready_to_run"
-                            ? "Ready to run"
-                            : "Draft"
-                          : entry.job
+                        entry.job
                           ? statusLabel(entry.job.status)
                           : entry.lifecycleRun
                           ? statusLabel(entry.lifecycleRun.status)
                           : "Not started"
                       }
                       value={
-                        entry.draft?.status ??
                         entry.job?.status ??
                         entry.lifecycleRun?.status ??
                         "not_run"
@@ -260,8 +217,7 @@ export function LabModelRunsPage({
                     {entry.lifecycleRun?.kind === "evaluation"
                       ? "Evaluation"
                       : trainingMethodLabel(
-                          entry.draft?.method ??
-                            entry.lifecycleRun?.method ??
+                          entry.lifecycleRun?.method ??
                             plan?.recipe.method
                         )}
                   </td>
@@ -285,7 +241,6 @@ export function LabModelRunsPage({
                   <td>
                     {formatDateTime(
                       entry.lifecycleRun?.updatedAt ??
-                        entry.draft?.updatedAt ??
                         version?.lineage.importedAt ??
                         entry.job?.updatedAt ??
                       ""
@@ -534,7 +489,6 @@ export function LabModelVersionsPage({
 export function modelVersionEntries(
   jobs: TrainingJob[],
   versions: LabModelVersion[],
-  drafts: ModelRunDraft[] = []
 ): VersionEntry[] {
   const versionByJobId = new Map(
     versions.flatMap((version) =>
@@ -545,7 +499,6 @@ export function modelVersionEntries(
     key: `job:${job.id}`,
     job,
     version: versionByJobId.get(job.id) ?? null,
-    draft: null,
   }));
   const knownJobIds = new Set(jobs.map((job) => job.id));
   for (const version of versions) {
@@ -554,15 +507,6 @@ export function modelVersionEntries(
       key: `version:${version.lineage.id}`,
       job: version.job,
       version,
-      draft: null,
-    });
-  }
-  for (const draft of drafts) {
-    entries.push({
-      key: `draft:${draft.id}`,
-      job: null,
-      version: null,
-      draft,
     });
   }
   return entries.sort((left, right) =>
@@ -574,7 +518,6 @@ export function modelRunEntries(
   jobs: TrainingJob[],
   versions: LabModelVersion[],
   lifecycleRuns: ModelRun[],
-  drafts: ModelRunDraft[] = []
 ): RunEntry[] {
   const jobByLifecycleRunId = new Map(
     jobs.flatMap((job) =>
@@ -608,7 +551,6 @@ export function modelRunEntries(
           ? versionByLineageId.get(lifecycleRun.adapterArtifactLineageId) ??
             null
           : null),
-      draft: null,
     };
   });
   for (const job of jobs) {
@@ -618,16 +560,6 @@ export function modelRunEntries(
       job,
       lifecycleRun: null,
       version: versionByJobId.get(job.id) ?? null,
-      draft: null,
-    });
-  }
-  for (const draft of drafts) {
-    entries.push({
-      key: `draft:${draft.id}`,
-      job: null,
-      lifecycleRun: null,
-      version: null,
-      draft,
     });
   }
   return entries.sort((left, right) =>
@@ -638,7 +570,6 @@ export function modelRunEntries(
 function entryTimestamp(entry: VersionEntry): string {
   return (
     entry.version?.lineage.importedAt ??
-    entry.draft?.updatedAt ??
     entry.job?.updatedAt ??
     entry.job?.createdAt ??
     ""
@@ -647,7 +578,6 @@ function entryTimestamp(entry: VersionEntry): string {
 
 function runEntryTimestamp(entry: RunEntry): string {
   return (
-    entry.draft?.updatedAt ??
     entry.lifecycleRun?.updatedAt ??
     entry.job?.updatedAt ??
     entry.job?.createdAt ??
@@ -656,11 +586,6 @@ function runEntryTimestamp(entry: RunEntry): string {
 }
 
 function runResult(entry: RunEntry) {
-  if (entry.draft) {
-    return entry.draft.status === "ready_to_run"
-      ? "Review and run"
-      : "Resume draft";
-  }
   if (entry.version) return `Version ${entry.version.number}`;
   if (
     entry.lifecycleRun?.kind === "evaluation"

@@ -38,8 +38,12 @@ import {
   resetLegacySubagentTransportState as resetLegacySubagentTransportStateMigration,
 } from "./store-subagent-migrations.js";
 import {
-  createModelProjectAndRunDraftTables as migrateModelProjectAndRunDraftTables,
+  createModelProjectTables as migrateModelProjectTables,
 } from "./store-model-run-migration.js";
+import {
+  consolidateModelProjectTrainingSetup as consolidateModelProjectTrainingSetupMigration,
+  repairUnverifiableLearnedPreferenceBindings as repairUnverifiableLearnedPreferenceBindingsMigration,
+} from "./store-model-project-training-setup-migration.js";
 import {
   createModelLifecycleTables as migrateModelLifecycleTables,
 } from "./store-model-lifecycle-migration.js";
@@ -589,11 +593,27 @@ export class SqliteStoreCore {
     `);
   }
 
-  async createModelProjectAndRunDraftTables(): Promise<void> {
-    await migrateModelProjectAndRunDraftTables({
+  async createModelProjectTables(): Promise<void> {
+    await migrateModelProjectTables({
       all: <T>(sql: string, params: unknown[] = []) => this.all<T>(sql, params),
       exec: (sql) => this.exec(sql),
       run: (sql, params = []) => this.run(sql, params),
+    });
+  }
+
+  async consolidateModelProjectTrainingSetup(): Promise<void> {
+    await consolidateModelProjectTrainingSetupMigration({
+      all: <T>(sql: string, params: unknown[] = []) => this.all<T>(sql, params),
+      exec: (sql) => this.exec(sql),
+      run: (sql, params = []) => this.run(sql, params),
+    });
+  }
+
+  async repairUnverifiableLearnedPreferenceBindings(): Promise<void> {
+    await repairUnverifiableLearnedPreferenceBindingsMigration({
+      all: (sql, params) => this.all(sql, params ?? []),
+      exec: (sql) => this.exec(sql),
+      run: (sql, params) => this.run(sql, params ?? []),
     });
   }
 

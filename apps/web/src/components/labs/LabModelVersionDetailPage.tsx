@@ -194,6 +194,40 @@ export function LabModelVersionDetailPage({
   );
   const latestActivity = detail.detail?.events.at(-1);
   const runStatus = statusLabel(currentRunStatus);
+  const optimizerStepsTarget =
+    (selectedPlan &&
+    (selectedPlan.recipe.method === "sft" ||
+      selectedPlan.recipe.method === "dpo" ||
+      selectedPlan.recipe.method === "grpo")
+      ? selectedPlan.recipe.optimizer.maxSteps
+      : null) ??
+    managedEvidence?.progress.targetOptimizerSteps ??
+    null;
+  const locallyReconciledSteps =
+    optimizerStepsTarget !== null &&
+    typeof selectedJob?.metadata.progress === "number" &&
+    Number.isFinite(selectedJob.metadata.progress)
+      ? Math.floor(
+          Math.max(0, selectedJob.metadata.progress) * optimizerStepsTarget,
+        )
+      : 0;
+  const optimizerStepsObserved = Math.max(
+    0,
+    locallyReconciledSteps,
+    detail.detail?.policyMetrics.reduce(
+      (maximum, metric) => Math.max(maximum, metric.step),
+      0,
+    ) ?? 0,
+    detail.detail?.stepMetrics.reduce(
+      (maximum, metric) => Math.max(maximum, metric.step),
+      0,
+    ) ?? 0,
+    managedEvidence?.progress.committedOptimizerSteps ?? 0,
+  );
+  const progressMetric = formatTrainingProgress(
+    optimizerStepsObserved,
+    optimizerStepsTarget,
+  );
   const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
     { id: "overview", label: "Overview" },
     ...(selectedJob ? [{ id: "metrics" as const, label: "Metrics" }] : []),
@@ -252,6 +286,11 @@ export function LabModelVersionDetailPage({
           value={currentRunStatus}
         />}
         metrics={[
+          {
+            label: selectedPlan?.recipe.method === "grpo" ? "Rollout groups" : "Training steps",
+            value: progressMetric.value,
+            hint: progressMetric.hint,
+          },
           { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
           { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
           { label: "Output", value: selectedVersion ? `Version ${selectedVersion.number}` : "No version" },
@@ -493,6 +532,24 @@ export function LabModelVersionDetailPage({
       </section>
     </div>
   );
+}
+
+export function formatTrainingProgress(
+  observed: number,
+  target: number | null,
+): { value: string; hint: string } {
+  const completed = Math.max(0, Math.floor(observed));
+  if (target === null || !Number.isFinite(target) || target <= 0) {
+    return {
+      value: completed.toLocaleString(),
+      hint: completed === 1 ? "completed update" : "completed updates",
+    };
+  }
+  const planned = Math.max(1, Math.floor(target));
+  return {
+    value: `${completed.toLocaleString()} / ${planned.toLocaleString()}`,
+    hint: "completed / planned",
+  };
 }
 
 function LabModelEvaluationRunDetail({
@@ -779,7 +836,7 @@ function eventLabel(type: TrainingJobEvent["type"]): string {
     .replace(/^./, (value) => value.toUpperCase());
 }
 
-function eventSummary(event: TrainingJobEvent): string {
+export function eventSummary(event: TrainingJobEvent): string {
   const payload = event.payload;
   const step = finiteNumber(payload.step);
   const maxSteps = finiteNumber(payload.maxSteps);
@@ -795,6 +852,25 @@ function eventSummary(event: TrainingJobEvent): string {
     return `${message ?? payload.telemetryType.replaceAll("_", " ")}${
       step == null ? "" : ` · step ${step}`
     }${source}${errorCode ? ` · ${errorCode}` : ""}`;
+  }
+  if (typeof payload.remoteEventType === "string") {
+    const label = remoteEventLabel(payload.remoteEventType);
+    const phase =
+      typeof payload.remotePhase === "string"
+        ? remotePhaseLabel(payload.remotePhase)
+        : null;
+    const errorCode =
+      typeof payload.errorCode === "string" && payload.errorCode.trim()
+        ? payload.errorCode.trim()
+        : null;
+    return [
+      label,
+      phase,
+      step == null ? null : `step ${step}`,
+      errorCode ? `error ${errorCode}` : null,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ");
   }
   if (event.type === "start") {
     return typeof payload.device === "string"
@@ -857,6 +933,40 @@ function eventSummary(event: TrainingJobEvent): string {
     return payload.message;
   }
   return Object.keys(payload).length ? JSON.stringify(payload) : "Recorded.";
+}
+
+function remoteEventLabel(value: string): string {
+  const known: Record<string, string> = {
+    drain: "Rollout drain",
+    infer: "Model inference",
+    materialize_checkpoint: "Checkpoint materialization",
+    optimizer_metric: "Optimizer metric",
+    provision_gpu: "GPU provisioning",
+    rollout_metric: "Rollout trajectory",
+    score_reward_model: "Reward scoring",
+    start_inference: "Policy server",
+    train_step: "Optimizer update",
+    upload_checkpoint: "Checkpoint upload",
+  };
+  return known[value] ?? humanizeEventValue(value);
+}
+
+function remotePhaseLabel(value: string): string {
+  const known: Record<string, string> = {
+    committed: "committed",
+    completed: "completed",
+    eligible: "recorded",
+    failed: "failed",
+    running: "running",
+    succeeded: "succeeded",
+  };
+  return known[value] ?? humanizeEventValue(value).toLocaleLowerCase();
+}
+
+function humanizeEventValue(value: string): string {
+  return value
+    .replaceAll("_", " ")
+    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function numericSummary(

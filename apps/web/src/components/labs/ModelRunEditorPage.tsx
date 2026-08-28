@@ -8,7 +8,6 @@ import {
 } from "react";
 import type {
   ModelProject,
-  ModelRunDraft,
   LearnedPreferenceRewardBinding,
   Taskset,
   TrainingDestinationId,
@@ -23,17 +22,16 @@ import { ModelRunEditorHeader } from "./ModelRunEditorHeader";
 import { ModelRunSetupContent } from "./ModelRunSetupContent";
 import { labModelTasksets } from "./lab-models";
 import {
-  applyProjectTrainingSetup,
   bindTaskset,
   buildPageReason,
-  cloneRunDraft,
   comparableEditor,
   firstIncompleteSetupStep,
   methodAvailability,
-  newDraft,
   nextModelName,
   newProject,
   preparationReview,
+  projectEditorState,
+  type ModelProjectEditorState,
 } from "./model-run-editor-helpers";
 
 export { nextModelName } from "./model-run-editor-helpers";
@@ -43,7 +41,6 @@ export function ModelRunEditorPage({
   initialObjective,
   initialModelId,
   initialName,
-  initialDraftId,
   initialTasksetId,
   initialLearnedPreferenceReward = null,
   profileId,
@@ -60,7 +57,6 @@ export function ModelRunEditorPage({
   initialObjective: string | null;
   initialModelId?: string;
   initialName?: string;
-  initialDraftId?: string;
   initialTasksetId?: string;
   initialLearnedPreferenceReward?: LearnedPreferenceRewardBinding | null;
   profileId: string;
@@ -88,16 +84,6 @@ export function ModelRunEditorPage({
     );
     return tasksets.filter((taskset) => attachedIds.has(taskset.id));
   }, [initialModelId, state]);
-  const restoredDraft = useMemo(
-    () =>
-      state?.modelRunDrafts.find(
-        (candidate) =>
-          (candidate.status === "draft" ||
-            candidate.status === "ready_to_run") &&
-          candidate.id === initialDraftId
-      ) ?? null,
-    [initialDraftId, state?.modelRunDrafts]
-  );
   const persistedProject =
     state?.modelProjects.find((candidate) => candidate.id === initialModelId) ??
     null;
@@ -112,22 +98,6 @@ export function ModelRunEditorPage({
     ) ??
     availableTasksets[0] ??
     null;
-  const previousLaunchedDraft = useMemo(() => {
-    if (!initialModelId || initialDraftId) return null;
-    return [...(state?.modelRunDrafts ?? [])]
-      .filter(
-        (candidate) =>
-          candidate.modelId === initialModelId &&
-          candidate.status === "launched" &&
-          availableTasksets.some(
-            (taskset) =>
-              taskset.id === candidate.tasksetRef?.id &&
-              taskset.revision === candidate.tasksetRef.revision &&
-              taskset.contentHash === candidate.tasksetRef.contentHash
-          )
-      )
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
-  }, [availableTasksets, initialDraftId, initialModelId, state?.modelRunDrafts]);
   const initialProjectRef = useRef<ModelProject | null>(null);
   if (!initialProjectRef.current) {
     initialProjectRef.current =
@@ -140,30 +110,21 @@ export function ModelRunEditorPage({
       );
   }
   const [project, setProject] = useState(initialProjectRef.current);
-  const initialDraftRef = useRef<ModelRunDraft | null>(null);
-  if (!initialDraftRef.current) {
-    const baseDraft = restoredDraft
-      ?? (previousLaunchedDraft
-        ? cloneRunDraft(previousLaunchedDraft)
-        : applyProjectTrainingSetup(
-            newDraft(profileId, initialProjectRef.current.id),
-            initialProjectRef.current,
-          ));
-    initialDraftRef.current = initialTaskset
-      ? bindTaskset(baseDraft, initialTaskset)
-      : baseDraft;
+  const initialSetupRef = useRef<ModelProjectEditorState | null>(null);
+  if (!initialSetupRef.current) {
+    const current = projectEditorState(initialProjectRef.current);
+    initialSetupRef.current = initialTaskset
+      ? bindTaskset(current, initialTaskset)
+      : current;
   }
-  const [draft, setDraft] = useState(initialDraftRef.current);
+  const [setup, setSetup] = useState(initialSetupRef.current);
   const [activeSetupStep, setActiveSetupStep] = useState<ModelSetupStepId>(() =>
-    firstIncompleteSetupStep(initialDraftRef.current!)
+    firstIncompleteSetupStep(initialSetupRef.current!)
   );
-  const [datasetBuilderOpen, setDatasetBuilderOpen] = useState(
-    initialDraftRef.current.datasetMode === "build" &&
-      !initialDraftRef.current.tasksetRef
-  );
+  const [datasetBuilderOpen, setDatasetBuilderOpen] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState(
-    restoredDraft && persistedProject
-      ? comparableEditor(persistedProject, restoredDraft)
+    persistedProject
+      ? comparableEditor(persistedProject, projectEditorState(persistedProject))
       : ""
   );
   const { confirmAction, confirmDialog, resolveConfirmDialog } =
@@ -188,19 +149,19 @@ export function ModelRunEditorPage({
   const selectedTaskset =
     availableTasksets.find(
       (taskset) =>
-        taskset.id === draft.tasksetRef?.id &&
-        taskset.revision === draft.tasksetRef.revision &&
-        taskset.contentHash === draft.tasksetRef.contentHash
+        taskset.id === setup.tasksetRef?.id &&
+        taskset.revision === setup.tasksetRef.revision &&
+        taskset.contentHash === setup.tasksetRef.contentHash
     ) ?? null;
   const methodCards = useMemo(
     () => methodAvailability(selectedTaskset, state?.destinations ?? []),
     [selectedTaskset, state?.destinations]
   );
-  const dirty = comparableEditor(project, draft) !== savedSnapshot;
+  const dirty = comparableEditor(project, setup) !== savedSnapshot;
   const busy = Boolean(training.busyAction);
   const pageReason = buildPageReason(
     project,
-    draft,
+    setup,
     selectedTaskset,
     launchState
   );
@@ -225,12 +186,12 @@ export function ModelRunEditorPage({
   }, [dirty]);
 
   useEffect(() => {
-    if (!draft.method) return;
+    if (!setup.method) return;
     const selectedMethod = methodCards.find(
-      (candidate) => candidate.method === draft.method
+      (candidate) => candidate.method === setup.method
     );
     if (selectedMethod?.available) return;
-    setDraft((current) => ({
+    setSetup((current) => ({
       ...current,
       method: null,
       recipe: null,
@@ -239,27 +200,27 @@ export function ModelRunEditorPage({
       destinationId: null,
       updatedAt: new Date().toISOString(),
     }));
-  }, [draft.method, methodCards]);
+  }, [setup.method, methodCards]);
 
   useEffect(() => {
-    if (!draft.method || draft.runPreset) return;
-    setDraft((current) => ({
+    if (!setup.method || setup.runPreset) return;
+    setSetup((current) => ({
       ...current,
       runPreset: "standard",
       updatedAt: new Date().toISOString(),
     }));
-  }, [draft.method, draft.runPreset]);
+  }, [setup.method, setup.runPreset]);
 
   const updateConfiguration = useCallback(
     (configuration: {
-      baseModel: ModelRunDraft["baseModel"];
+      baseModel: ModelProjectEditorState["baseModel"];
       method: "sft" | "dpo" | "grpo" | "ppo";
       destinationId: TrainingDestinationId;
       recipe: TrainingRecipe;
       approval: TrainingStartApproval;
     }) => {
       setRunApproval(configuration.approval);
-      setDraft((current) => ({
+      setSetup((current) => ({
         ...current,
         baseModel: configuration.baseModel,
         // Method is chosen on the preceding step. An embedded configuration
@@ -279,20 +240,18 @@ export function ModelRunEditorPage({
     []
   );
 
-  async function save(notifySaved = true): Promise<ModelRunDraft | null> {
+  async function save(notifySaved = true): Promise<ModelProject | null> {
     const timestamp = new Date().toISOString();
+    const {
+      projectId: _projectId,
+      datasetMode: _datasetMode,
+      updatedAt: _setupUpdatedAt,
+      ...trainingSetup
+    } = setup;
     const nextProject: ModelProject = {
       ...project,
       trainingSetup: {
-        tasksetRef: draft.tasksetRef,
-        harnessRelease: draft.harnessRelease ?? null,
-        tasksetRelease: draft.tasksetRelease ?? null,
-        baseModel: draft.baseModel,
-        method: draft.method,
-        destinationId: draft.destinationId,
-        managedRolloutPlacement: draft.managedRolloutPlacement ?? "remote",
-        runPreset: draft.runPreset,
-        recipe: draft.recipe,
+        ...trainingSetup,
         preferredMaximumSpendUsd: runApproval.maximumCostUsd,
         preferredRetentionDays: runApproval.retentionDays,
       },
@@ -300,18 +259,12 @@ export function ModelRunEditorPage({
     };
     const savedProject = await training.actions.saveModelProject(nextProject);
     if (!savedProject) return null;
-    const next: ModelRunDraft = {
-      ...draft,
-      status: pageReason === null ? "ready_to_run" : "draft",
-      updatedAt: timestamp,
-    };
-    const saved = await training.actions.saveModelRunDraft(next);
-    if (!saved) return null;
     setProject(savedProject);
-    setDraft(saved);
-    setSavedSnapshot(comparableEditor(savedProject, saved));
-    if (notifySaved) await onSaved?.(saved.modelId);
-    return saved;
+    const savedSetup = projectEditorState(savedProject);
+    setSetup(savedSetup);
+    setSavedSnapshot(comparableEditor(savedProject, savedSetup));
+    if (notifySaved) await onSaved?.(savedProject.id);
+    return savedProject;
   }
 
   async function cancel() {
@@ -359,13 +312,13 @@ export function ModelRunEditorPage({
       exportApproved: approvedRun.exportApproved,
     });
     if (!started) return;
-    await onFinished(saved.modelId, selectedTaskset.id);
+    await onFinished(saved.id, selectedTaskset.id);
   }
 
   function selectTaskset(taskset: Taskset) {
     setDatasetBuilderOpen(false);
     setActiveSetupStep("method");
-    setDraft((current) => bindTaskset(current, taskset));
+    setSetup((current) => bindTaskset(current, taskset));
   }
 
   if (datasetBuilderOpen) {
@@ -383,7 +336,7 @@ export function ModelRunEditorPage({
             type="button"
             onClick={() => {
               setDatasetBuilderOpen(false);
-              setDraft((current) => ({
+              setSetup((current) => ({
                 ...current,
                 datasetMode: null,
                 updatedAt: new Date().toISOString(),
@@ -409,7 +362,7 @@ export function ModelRunEditorPage({
           },
           () => {
             setDatasetBuilderOpen(false);
-            setDraft((current) => ({
+            setSetup((current) => ({
               ...current,
               datasetMode: "existing",
               tasksetRef: null,
@@ -441,9 +394,9 @@ export function ModelRunEditorPage({
         <ModelRunSetupContent
           activeStep={activeSetupStep}
           onStepChange={setActiveSetupStep}
-          draft={draft}
+          setup={setup}
           learnedPreferenceReward={initialLearnedPreferenceReward}
-          setDraft={setDraft}
+          setSetup={setSetup}
           selectedTaskset={selectedTaskset}
           methodCards={methodCards}
           tasksets={availableTasksets}
@@ -454,7 +407,7 @@ export function ModelRunEditorPage({
           canRun={canRun}
           onSelectTaskset={selectTaskset}
           onOpenDatasetBuilder={() => {
-            setDraft((current) => ({
+            setSetup((current) => ({
               ...current,
               datasetMode: "build",
               tasksetRef: null,

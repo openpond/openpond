@@ -167,7 +167,6 @@ export function LabWorkproductDetail({
   ) => Promise<void>;
   renderModelRunEditor: (input: {
     initialTasksetId: string | null;
-    draftId: string | null;
     modelId: string;
     modelName: string;
     onCancel: () => void;
@@ -198,9 +197,7 @@ export function LabWorkproductDetail({
   const [activeTab, setActiveTab] = useState<WorkproductDetailTab>(
     "overview"
   );
-  const [editingRunDraftId, setEditingRunDraftId] = useState<
-    string | "new" | null
-  >(null);
+  const [editingTrainingSetup, setEditingTrainingSetup] = useState(false);
   const [editorSection, setEditorSection] = useState<"run" | "dataset">("run");
   const editorExitTargetRef = useRef<"overview" | "runs" | "collection">(
     "runs"
@@ -317,14 +314,14 @@ export function LabWorkproductDetail({
   const locationSegments = useMemo(
     () =>
       workproduct.kind === "model"
-        ? editingRunDraftId
+        ? editingTrainingSetup
           ? [
               {
                 label: "Training",
                 onSelect: () => requestEditorExit("runs"),
               },
               {
-                label: editingRunDraftId === "new" ? "New run" : "Resume draft",
+                label: "New run",
               },
               ...(editorSection === "dataset"
                 ? [{ label: "New Taskset" }]
@@ -364,7 +361,7 @@ export function LabWorkproductDetail({
     [
       activeTab,
       editorSection,
-      editingRunDraftId,
+      editingTrainingSetup,
       selectedChangeCommit,
       selectedChangeRunId,
       selectedModelEntryKey,
@@ -420,7 +417,7 @@ export function LabWorkproductDetail({
     setSelectedChangeRunId(null);
     setSelectedModelEntryKey(null);
     setActiveTab("overview");
-    setEditingRunDraftId(null);
+    setEditingTrainingSetup(false);
     setEditorSection("run");
   }, [workproduct.key]);
 
@@ -470,7 +467,7 @@ export function LabWorkproductDetail({
       kindOnSelect:
         workproduct.kind === "model"
           ? () => {
-              if (editingRunDraftId) {
+              if (editingTrainingSetup) {
                 requestEditorExit("collection");
                 return;
               }
@@ -481,11 +478,11 @@ export function LabWorkproductDetail({
       workproductOnSelect:
         workproduct.kind === "model"
           ? () => {
-              if (editingRunDraftId) {
+              if (editingTrainingSetup) {
                 requestEditorExit("overview");
                 return;
               }
-              setEditingRunDraftId(null);
+              setEditingTrainingSetup(false);
               setSelectedModelEntryKey(null);
               setActiveTab("overview");
             }
@@ -511,7 +508,7 @@ export function LabWorkproductDetail({
     document.getElementById("model-run-editor-cancel")?.click();
   }
 
-  if (workproduct.kind === "model" && editingRunDraftId) {
+  if (workproduct.kind === "model" && editingTrainingSetup) {
     return (
       <div className="labs-model-run-modal-backdrop" role="presentation">
         <section
@@ -522,12 +519,11 @@ export function LabWorkproductDetail({
         >
           {renderModelRunEditor({
             initialTasksetId: taskset?.id ?? null,
-            draftId: editingRunDraftId === "new" ? null : editingRunDraftId,
             modelId: workproduct.id,
             modelName: workproduct.name,
             onCancel: () => {
               const target = editorExitTargetRef.current;
-              setEditingRunDraftId(null);
+              setEditingTrainingSetup(false);
               setEditorSection("run");
               if (target === "collection") {
                 onClose();
@@ -536,7 +532,7 @@ export function LabWorkproductDetail({
               setActiveTab(target);
             },
             onFinished: async () => {
-              setEditingRunDraftId(null);
+              setEditingTrainingSetup(false);
               setEditorSection("run");
               setActiveTab("runs");
             },
@@ -710,8 +706,7 @@ export function LabWorkproductDetail({
                 mode={modelSection}
                 onOpenDataset={onOpenDataset}
                 onOpenEntry={setSelectedModelEntryKey}
-                onNewRun={() => setEditingRunDraftId("new")}
-                onResumeDraft={setEditingRunDraftId}
+                onNewRun={() => setEditingTrainingSetup(true)}
               />
             ) : null}
           </>

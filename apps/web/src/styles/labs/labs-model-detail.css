@@ -128,14 +128,6 @@
   min-width: 760px;
 }
 
-.labs-model-run-draft {
-  background: color-mix(in srgb, #6291d1 6%, var(--panel));
-}
-
-.labs-model-run-draft .labs-version-row-button small {
-  color: #7da9e4;
-}
-
 .labs-model-version-detail {
   display: grid;
   min-width: 0;
