@@ -13,9 +13,9 @@ const POLICY_SERIES: Array<SeriesDefinition<PolicyOptimizationMetric>> = [
   { key: "policyLoss", id: "optimizer.policy_loss", label: "Policy loss" },
   { key: "valueLoss", id: "optimizer.value_loss", label: "Value loss" },
   { key: "gradientNorm", id: "optimizer.gradient_norm", label: "Gradient norm" },
-  { key: "kl", id: "optimizer.kl", label: "KL divergence" },
+  { key: "kl", id: "optimizer.kl", label: "Policy update KL" },
   { key: "entropy", id: "optimizer.entropy", label: "Entropy" },
-  { key: "policyClipFraction", id: "optimizer.policy_clip_fraction", label: "Policy clip fraction", format: "percent" },
+  { key: "policyClipFraction", id: "optimizer.policy_clip_fraction", label: "Post-update clip fraction", format: "percent" },
   { key: "valueClipFraction", id: "optimizer.value_clip_fraction", label: "Value clip fraction", format: "percent" },
   { key: "explainedVariance", id: "optimizer.explained_variance", label: "Explained variance" },
 ];

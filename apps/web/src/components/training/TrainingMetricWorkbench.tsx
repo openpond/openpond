@@ -20,7 +20,7 @@ const LIVE_METRIC_PLACEHOLDERS: TrainingMetricSeries[] = [
   { id: "rollout.reward", label: "Rollout reward", points: [] },
   { id: "optimizer.reward", label: "Mean reward", points: [] },
   { id: "reward.variance", label: "Reward variance", points: [] },
-  { id: "optimizer.kl", label: "KL divergence", points: [] },
+  { id: "optimizer.kl", label: "Policy update KL", points: [] },
   { id: "optimizer.policy_loss", label: "Policy loss", points: [] },
   {
     id: "optimizer.learning_rate",
