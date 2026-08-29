@@ -44,6 +44,7 @@ import type {
   PreferenceComparisonReleaseRecord,
 } from "./preference-comparison-records.js";
 import type { createPreferenceComparisonModelJudge } from "./preference-comparison-model-judge.js";
+import { renderManagedCalibrationArtifact } from "./managed-calibration-artifact-renderer.js";
 
 export type PreferenceComparisonAuthorization = (input: {
   action: "publish" | "review" | "calibrate";
@@ -366,7 +367,8 @@ export function createPreferenceComparisonService(deps: {
       throw new Error("Managed calibration Run Manifest failed immutable verification.");
     }
     const taskset = await deps.store.getTaskset(input.tasksetId);
-    const task = taskset?.tasks.find((candidate) => candidate.id === assignment.taskRef.id);
+    if (!taskset) throw new Error("Managed calibration Taskset was not found.");
+    const task = taskset.tasks.find((candidate) => candidate.id === assignment.taskRef.id);
     if (!task) throw new Error("Managed calibration task is absent from the local Taskset.");
     const directory = path.join(
       deps.storeDir,
@@ -377,6 +379,7 @@ export function createPreferenceComparisonService(deps: {
       safeSegment(parsed.jobId),
     );
     await mkdir(directory, { recursive: true });
+    const renderedArtifactIds = new Map<string, string>();
     for (const candidate of parsed.candidates) {
       if (!verifyAttemptReceipt(candidate.attempt) || !verifyArtifactManifest(candidate.artifactManifest)) {
         throw new Error("Managed calibration candidate lineage failed immutable verification.");
@@ -427,6 +430,56 @@ export function createPreferenceComparisonService(deps: {
           },
         })));
       }
+      const rendered = await renderManagedCalibrationArtifact({
+        store: deps.store,
+        tasksetId: input.tasksetId,
+        task,
+        environment: taskset.environment,
+        output: candidate.output,
+      });
+      if (rendered) {
+        const artifactId = `managed-rl-review-image-${safeSegment(candidate.rolloutId)}`;
+        const artifactPath = path.join(directory, `${safeSegment(artifactId)}.png`);
+        const artifactHash = sha256(rendered.bytes);
+        await writeFile(artifactPath, rendered.bytes, { flag: "wx", mode: 0o600 }).catch(
+          async (error: NodeJS.ErrnoException) => {
+            if (error.code !== "EEXIST") throw error;
+            const existing = await readFile(artifactPath);
+            if (sha256(existing) !== artifactHash || existing.byteLength !== rendered.bytes.byteLength) {
+              throw new Error(`Managed calibration rendered artifact ${artifactId} changed after import.`);
+            }
+          },
+        );
+        localArtifacts.push(
+          await deps.store.saveTaskAttemptArtifact(
+            TaskAttemptArtifactSchema.parse({
+              schemaVersion: "openpond.taskAttemptArtifact.v1",
+              id: artifactId,
+              tasksetId: input.tasksetId,
+              taskId: task.id,
+              attemptId: candidate.attempt.id,
+              kind: "output_artifact",
+              path: artifactPath,
+              mediaType: rendered.mediaType,
+              sha256: artifactHash,
+              sizeBytes: rendered.bytes.byteLength,
+              createdAt: parsed.createdAt,
+              metadata: {
+                source: "managed-calibration-trusted-renderer",
+                managedRlJobId: parsed.jobId,
+                sourceAssignment: {
+                  id: assignment.id,
+                  contentHash: assignment.contentHash,
+                },
+                rendererResourceId: rendered.rendererResourceId,
+                rendererConfigPath: rendered.rendererConfigPath,
+                candidateOutputSha256: sha256(Buffer.from(candidate.output, "utf8")),
+              },
+            }),
+          ),
+        );
+        renderedArtifactIds.set(candidate.attempt.id, artifactId);
+      }
       await deps.store.saveTaskAttempt(TaskAttemptResultSchema.parse({
         schemaVersion: "openpond.taskAttempt.v1",
         id: candidate.attempt.id,
@@ -454,12 +507,16 @@ export function createPreferenceComparisonService(deps: {
         },
       }));
     }
-    enforceSplitPurpose({ assignment, tasksetRelease: release.tasksetRelease });
+    const projectedAssignment = assignmentWithRenderedArtifacts(
+      assignment,
+      renderedArtifactIds,
+    );
+    enforceSplitPurpose({ assignment: projectedAssignment, tasksetRelease: release.tasksetRelease });
     return deps.store.savePreferenceComparisonAssignment({
       schemaVersion: "openpond.preferenceComparisonAssignmentRecord.v1",
-      id: assignment.id,
+      id: projectedAssignment.id,
       tasksetId: input.tasksetId,
-      assignment,
+      assignment: projectedAssignment,
       state: "queued",
       reviewerKey: null,
       unreviewableReason: null,
@@ -722,6 +779,38 @@ export function createPreferenceComparisonService(deps: {
   };
 }
 
+function assignmentWithRenderedArtifacts(
+  assignment: z.infer<typeof ComparisonAssignmentSchema>,
+  renderedArtifactIds: ReadonlyMap<string, string>,
+): z.infer<typeof ComparisonAssignmentSchema> {
+  if (renderedArtifactIds.size === 0) return assignment;
+  const { contentHash: sourceContentHash, ...sourceContent } = assignment;
+  const content = {
+    ...sourceContent,
+    candidates: sourceContent.candidates.map((candidate) => {
+      const artifactId = renderedArtifactIds.get(candidate.attemptRef.id);
+      return artifactId
+        ? {
+            ...candidate,
+            visibleArtifactIds: [...new Set([...candidate.visibleArtifactIds, artifactId])],
+          }
+        : candidate;
+    }),
+    metadata: {
+      ...sourceContent.metadata,
+      managedSourceAssignment: {
+        id: assignment.id,
+        contentHash: sourceContentHash,
+      },
+      presentationProjection: "trusted_taskset_renderer_v1",
+    },
+  };
+  return ComparisonAssignmentSchema.parse({
+    ...content,
+    contentHash: contentHash(content),
+  });
+}
+
 function preferenceDatasetDirectory(storeDir: string, tasksetId: string): string {
   return path.join(
     storeDir,
@@ -745,7 +834,7 @@ const ManagedCalibrationBatchSchema = z.object({
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
       mediaType: z.literal("image/png"),
       dataUrl: z.string().startsWith("data:image/png;base64,"),
-    }).passthrough()),
+    }).passthrough()).default([]),
     attempt: AttemptReceiptSchema,
     artifactManifest: ArtifactManifestSchema,
   }).strict()).length(4),

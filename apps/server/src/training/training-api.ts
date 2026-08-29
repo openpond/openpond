@@ -55,6 +55,10 @@ import type { createPreferenceComparisonService } from "./preference-comparison-
 import type { createModelProjectHostingService } from "./model-project-hosting.js";
 import { trainingRunDetail } from "./run-detail.js";
 import {
+  managedStructuredOutputContract,
+  preferenceCalibrationSourceHash,
+} from "./managed-rl-calibration.js";
+import {
   materializeSyntheticCollectionRun,
   SyntheticCollectionRunRequestSchema,
 } from "./synthetic-collection-run.js";
@@ -219,10 +223,7 @@ export function createTrainingApi(deps: {
       const rubric = requiredString(input.rubric, "rubric");
       const minimumSamples = optionalPositiveInteger(input.minimumSamples) ?? 10;
       const taskset = await requireTaskset(deps.store, tasksetId);
-      const portable = materializePortableTasksetRelease({
-        taskset,
-        adapterId: "openpond-managed-calibration-v1",
-      });
+      const calibrationSourceTasksetHash = preferenceCalibrationSourceHash(taskset);
       const requestedTaskId = nullableString(input.taskId);
       const task = requestedTaskId
         ? taskset.tasks.find((candidate) => candidate.id === requestedTaskId) ?? null
@@ -232,16 +233,34 @@ export function createTrainingApi(deps: {
       if (!task || task.split === "frozen_eval") {
         throw new Error("Preference calibration requires a train or validation Taskset task.");
       }
-      const existing = (await deps.store.listPreferenceComparisonReleases(tasksetId)).find((record) =>
-        record.release.tasksetRelease.id === portable.tasksetRelease.id
-        && record.release.tasksetRelease.contentHash === portable.tasksetRelease.contentHash
-        && record.release.rubricRef.contentHash === contentHash(rubric)
-        && record.release.calibration.minimumSamples === minimumSamples,
+      const existing = (await deps.store.listPreferenceComparisonReleases(tasksetId)).find((candidateRelease) =>
+        record(candidateRelease.release.metadata).calibrationSourceTasksetHash === calibrationSourceTasksetHash
+        && candidateRelease.release.rubricRef.contentHash === contentHash(rubric)
+        && candidateRelease.release.calibration.minimumSamples === minimumSamples,
       ) ?? null;
+      const releaseTaskset = existing
+        ? await deps.store.getTasksetRevision(tasksetId, existing.release.revision)
+        : taskset;
+      if (!releaseTaskset) {
+        throw new Error("Preference calibration source Taskset revision was not found.");
+      }
+      const portable = materializePortableTasksetRelease({
+        taskset: releaseTaskset,
+        adapterId: "openpond-managed-calibration-v1",
+      });
+      if (
+        existing
+        && (
+          existing.release.tasksetRelease.id !== portable.tasksetRelease.id
+          || existing.release.tasksetRelease.contentHash !== portable.tasksetRelease.contentHash
+        )
+      ) {
+        throw new Error("Preference calibration release no longer matches its source Taskset revision.");
+      }
       const release = existing?.release ?? createPreferenceComparisonRelease({
         schemaVersion: "openpond.preferenceComparisonRelease.v1",
-        id: `preference-comparison-${tasksetId}-r${taskset.revision}-${contentHash({ rubric, minimumSamples }).slice(0, 16)}`,
-        revision: taskset.revision,
+        id: `preference-comparison-${tasksetId}-r${releaseTaskset.revision}-${contentHash({ rubric, minimumSamples }).slice(0, 16)}`,
+        revision: releaseTaskset.revision,
         tasksetRelease: {
           id: portable.tasksetRelease.id,
           contentHash: portable.tasksetRelease.contentHash,
@@ -256,7 +275,7 @@ export function createTrainingApi(deps: {
           hideModelIdentity: true,
           parts: [
             { source: "attempt_output", path: "/text", renderer: "markdown" },
-            ...(task.expectedOutput?.artifactRenderer
+            ...(task.expectedOutput?.artifactRenderer || task.expectedOutput?.artifactRendererRef
               ? [{ source: "artifact" as const, path: "candidate-image-1.png", renderer: "image" as const }]
               : []),
           ],
@@ -277,7 +296,10 @@ export function createTrainingApi(deps: {
           minimumTieAgreement: 0.8,
           minimumOrderSwapAgreement: 0.8,
         },
-        metadata: { source: "openpond-managed-calibration" },
+        metadata: {
+          source: "openpond-managed-calibration",
+          calibrationSourceTasksetHash,
+        },
       });
       if (!existing) {
         await preferenceComparisons.publishRelease({
@@ -300,6 +322,9 @@ export function createTrainingApi(deps: {
           rewardInput: candidate.input,
           expectedText: null,
           artifactRenderer: candidate.expectedOutput?.artifactRenderer ?? null,
+          outputContract: managedStructuredOutputContract(
+            taskset.metadata.tasksetOutputContract,
+          ),
         }));
       if (policyTasks.length === 1) policyTasks.push({ ...policyTasks[0]! });
       const requestContent = {
