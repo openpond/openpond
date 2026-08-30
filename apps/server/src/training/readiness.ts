@@ -100,8 +100,10 @@ export function buildTasksetReadiness(input: {
   if (input.graderAudit && !input.graderAudit.hackingChecksPassed) blockers.push({ code: "grader_hacking", message: "Grader hacking or prompt-injection checks failed.", path: "graders" });
   if (input.graderAudit && !input.graderAudit.leakageChecksPassed) blockers.push({ code: "environment_leakage", message: "Environment or privileged-state leakage checks failed.", path: "environment" });
   if (input.graderAudit && !input.graderAudit.infrastructureSafetyPassed) blockers.push({ code: "infrastructure_reward", message: "An infrastructure failure produced a score or eligible reward.", path: "graderFixtures" });
-  const hasRewardEligibleGrader = input.taskset.graders.some((grader) => grader.rewardEligible && (grader.kind !== "model_judge" || grader.calibrationStatus === "passed"));
-  if (requiresOnlineReward && !hasRewardEligibleGrader) blockers.push({ code: "online_reward_grader_missing", message: `${authoredTrainingMethod?.toUpperCase()} requires a calibrated reward-eligible grader.`, path: "graders" });
+  const hasRewardEligibleGrader = input.taskset.graders.some(
+    (grader) => grader.rewardEligible,
+  );
+  if (requiresOnlineReward && !hasRewardEligibleGrader) blockers.push({ code: "online_reward_grader_missing", message: `${authoredTrainingMethod?.toUpperCase()} requires a user-selected reward-eligible grader.`, path: "graders" });
   const recommendedMethod = authoredTrainingMethod
     ?? (trainTaskCount > 0 && input.taskset.capabilities.compatibleMethods.includes("sft") ? "sft" : "none");
   const demonstrationRefs = input.taskset.learningSignals.demonstrations.filter((signal) => signal.approved).map((signal) => signal.id);

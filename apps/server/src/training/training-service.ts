@@ -101,7 +101,7 @@ export function createTrainingService(deps: {
         "OpenPond Managed selects qualified compute capacity after approval.",
         "The approved maximum spend is enforced before provider resources start.",
       ],
-      modelAllowlist: ["Qwen/Qwen3-0.6B"],
+      modelAllowlist: ["Qwen/Qwen3-8B"],
     }),
   );
   const expertBootstrap = createCrossSystemExpertBootstrapService({

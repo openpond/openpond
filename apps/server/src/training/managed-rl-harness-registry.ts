@@ -57,6 +57,13 @@ export function resolveManagedRlHarnessAdapter(input: {
 }
 
 export function supportsManagedRlHarness(taskset: Taskset, placement: string): boolean {
+  if (
+    placement === "remote" &&
+    taskset.environment.kind === "work" &&
+    taskset.environment.entrypoint === "openpond-work-v1"
+  ) {
+    return true;
+  }
   if (placement !== "local") return false;
   const environmentId = declaredEnvironmentId(taskset);
   return adapters.filter((adapter) => adapter.supports({ taskset, environmentId })).length === 1;

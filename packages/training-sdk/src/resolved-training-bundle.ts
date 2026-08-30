@@ -69,6 +69,7 @@ export function buildTasksetTrainingBundle(input: {
   workerProtocol: string;
   harnessRelease: ImmutableReleaseRef;
   tasksetRelease: ImmutableReleaseRef;
+  tasksetAssetBytes?: ReadonlyMap<string, Uint8Array>;
 }): TasksetTrainingBundle {
   const { taskset, modelProject, harnessRelease, tasksetRelease } = input;
   const setup = modelProject.trainingSetup;
@@ -134,6 +135,11 @@ export function buildTasksetTrainingBundle(input: {
       schemaVersion: "openpond.datasetSplit.v1",
       split: "train",
       tasks: trainTasks,
+    });
+    addTasksetAssets({
+      assets,
+      tasks: trainTasks,
+      tasksetAssetBytes: input.tasksetAssetBytes ?? new Map(),
     });
   } else if (taskset.datasetArtifact) {
     addJsonAsset(assets, "dataset/artifact.json", taskset.datasetArtifact);
@@ -230,6 +236,43 @@ export function buildTasksetTrainingBundle(input: {
     datasetRelease,
     evidenceSetRelease,
   };
+}
+
+function addTasksetAssets(input: {
+  assets: Map<string, Uint8Array>;
+  tasks: Taskset["tasks"];
+  tasksetAssetBytes: ReadonlyMap<string, Uint8Array>;
+}): void {
+  const expected = new Set<string>();
+  for (const task of input.tasks) {
+    for (const asset of task.assets ?? []) {
+      if (expected.has(asset.artifactRef)) {
+        throw new Error(
+          `Training asset path ${asset.artifactRef} is shared by multiple tasks.`,
+        );
+      }
+      expected.add(asset.artifactRef);
+      const value = input.tasksetAssetBytes.get(asset.artifactRef);
+      if (!value) {
+        throw new Error(
+          `Resolved Training Bundle is missing Work asset ${asset.artifactRef}.`,
+        );
+      }
+      if (value.byteLength !== asset.sizeBytes || sha256(value) !== asset.sha256) {
+        throw new Error(
+          `Resolved Training Bundle Work asset ${asset.artifactRef} failed immutable verification.`,
+        );
+      }
+      input.assets.set(asset.artifactRef, value);
+    }
+  }
+  for (const assetPath of input.tasksetAssetBytes.keys()) {
+    if (!expected.has(assetPath)) {
+      throw new Error(
+        `Resolved Training Bundle received unexpected Work asset ${assetPath}.`,
+      );
+    }
+  }
 }
 
 export async function materializeResolvedTrainingBundle(input: {

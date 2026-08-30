@@ -34,6 +34,7 @@ import {
   reconcilePortableModelRunLifecycle,
 } from "./portable-model-run-lifecycle.js";
 import { resolvePortableBindings } from "./portable-training-catalog.js";
+import { resolveTasksetTrainingAssetBytes } from "./taskset-work-assets.js";
 
 export function createPortableModelRunService(deps: {
   store: SqliteStore;
@@ -159,6 +160,12 @@ export function createPortableModelRunService(deps: {
       throw new Error("The Model Project has no complete portable adapter binding.");
     }
     const modelRunId = `model_run_${randomUUID()}`;
+    const tasksetAssetBytes = taskset.environment.kind === "work"
+      ? await resolveTasksetTrainingAssetBytes({
+          storeDir: deps.storeDir,
+          taskset,
+        })
+      : new Map<string, Uint8Array>();
     const graph = buildTasksetTrainingBundle({
       taskset,
       modelProject: sourceProject,
@@ -178,6 +185,7 @@ export function createPortableModelRunService(deps: {
           : "openpond.localTrainingWorker.v1",
       harnessRelease: releasedHarness.harnessRelease,
       tasksetRelease: releasedHarness.tasksetRelease,
+      tasksetAssetBytes,
     });
     const resolvedPlanBase = {
       schemaVersion: "openpond.resolvedTrainingPlan.v1" as const,
