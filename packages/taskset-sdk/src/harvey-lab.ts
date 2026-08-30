@@ -259,7 +259,7 @@ export async function materializeHarveyLabLegalTaskset(input: {
   const draft = TasksetSchema.parse({
     schemaVersion: "openpond.taskset.v1",
     id: tasksetId,
-    revision: 1,
+    revision: 5,
     profileId,
     createImproveRunId: null,
     name: releaseStage === "week0"
@@ -280,7 +280,7 @@ export async function materializeHarveyLabLegalTaskset(input: {
         "requiredOutputs",
       ],
       privilegedFields: ["expectedOutput.criteria"],
-      hiddenGraderRefs: ["grader_harvey_lab_dual_judge"],
+      hiddenGraderRefs: ["grader_harvey_lab_rubric_judge"],
       connectedAppScopes: [],
     },
     environment: {
@@ -322,14 +322,14 @@ export async function materializeHarveyLabLegalTaskset(input: {
     },
     tasks,
     graders: [{
-      id: "grader_harvey_lab_dual_judge",
-      version: "1",
+      id: "grader_harvey_lab_rubric_judge",
+      version: "4",
       label: "Harvey LAB criterion judge",
       kind: "model_judge",
       rubric: legalCriterionJudgeRubric(),
       judge: {
         providerId: "openpond",
-        modelId: "gpt-5.5",
+        modelId: "gpt-5.6-luna",
       },
       calibrationFixtureRefs,
       calibrationStatus: "pending",
@@ -340,7 +340,7 @@ export async function materializeHarveyLabLegalTaskset(input: {
       privileged: true,
       metadata: {
         upstreamEvaluator: "harvey-labs-default-dual-judge",
-        secondaryJudgeModelId: "claude-sonnet-5",
+        rewardModelRole: "llm_as_judge",
         userSelectedReward: true,
         calibrationIsAdvisory: true,
       },
@@ -356,7 +356,7 @@ export async function materializeHarveyLabLegalTaskset(input: {
         kind: "reward",
         taskId: null,
         sourceRefs: sourceRefs.map((source) => source.id),
-        artifactRef: "grader_harvey_lab_dual_judge",
+        artifactRef: "grader_harvey_lab_rubric_judge",
         approved: true,
         confidence: 1,
         task: "Score every hidden Harvey LAB criterion against the produced redline and risk memo.",
@@ -403,7 +403,8 @@ export async function materializeHarveyLabLegalTaskset(input: {
       releaseOrder: releaseStage === "week0"
         ? ["week0-msa"]
         : ["week0-msa", "week1-saas"],
-      finalJudgeProtocol: "sonnet-4.6-plus-gpt-5.5-dual-judge",
+      trainingJudgeProtocol: "gpt-5.6-luna-cpu-rubric-judge",
+      finalJudgeProtocol: "independent-dual-judge-pending",
       tasksetOutputContract: {
         mode: "artifacts",
         requiredOutputSource: "task.requiredOutputs",

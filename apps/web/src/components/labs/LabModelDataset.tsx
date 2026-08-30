@@ -169,6 +169,8 @@ export function LabModelDataset({
   const workTask = taskset.environment.kind === "work"
     ? taskset.tasks.find((task) => task.split !== "frozen_eval") ?? null
     : null;
+  const rewardGraders = taskset.graders.filter((grader) => grader.rewardEligible);
+  const modelJudge = rewardGraders.find((grader) => grader.kind === "model_judge");
 
   async function runCheck(
     label: string,
@@ -206,6 +208,40 @@ export function LabModelDataset({
           <Fact label="Reward specs" value={String(approvedRewards)} />
           <Fact label="Rubrics" value={String(rubricLabels)} />
         </dl>
+        <section className="labs-dataset-method-readiness">
+          <strong>Reward &amp; grading</strong>
+          {rewardGraders.length ? (
+            <dl className="training-configuration-list">
+              <Fact
+                label="Reward source"
+                value={modelJudge ? "LLM-as-judge" : titleCase(rewardGraders[0]!.kind)}
+              />
+              <Fact
+                label="Grader"
+                value={modelJudge?.label ?? rewardGraders[0]!.label}
+              />
+              {modelJudge ? (
+                <Fact
+                  label="Judge model"
+                  value={`${titleCase(modelJudge.judge.providerId)} · ${modelJudge.judge.modelId}`}
+                />
+              ) : null}
+              <Fact label="Reward calculation" value={rewardCalculation(taskset)} />
+              {modelJudge ? (
+                <Fact
+                  label="Calibration"
+                  value={`${titleCase(modelJudge.calibrationStatus)}${modelJudge.metadata.calibrationIsAdvisory === true ? " · advisory" : ""}`}
+                />
+              ) : null}
+              <Fact
+                label="Policy boundary"
+                value={taskset.policy.privilegedFields.length ? "Grading criteria hidden from Policy" : "No privileged grading fields"}
+              />
+            </dl>
+          ) : (
+            <p className="labs-detail-copy">No reward-eligible grader is attached to this revision.</p>
+          )}
+        </section>
         {taskset.purpose === "benchmark" && taskset.benchmark ? (
           <div className="labs-dataset-method-readiness">
             <strong>Benchmark protocol</strong>
@@ -342,6 +378,12 @@ export function LabModelDataset({
                       <Fact label="Version" value={grader.version} />
                       <Fact label="Reward eligible" value={grader.rewardEligible ? "Yes" : "No"} />
                       <Fact label="Privileged" value={grader.privileged ? "Yes" : "No"} />
+                      {grader.kind === "model_judge" ? (
+                        <>
+                          <Fact label="Judge model" value={`${titleCase(grader.judge.providerId)} · ${grader.judge.modelId}`} />
+                          <Fact label="Calibration" value={titleCase(grader.calibrationStatus)} />
+                        </>
+                      ) : null}
                     </dl>
                     {"rubric" in grader ? <pre>{grader.rubric}</pre> : null}
                     {"config" in grader ? <pre>{JSON.stringify(grader.config, null, 2)}</pre> : null}
@@ -763,6 +805,16 @@ function countBy(values: string[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
   return counts;
+}
+
+function rewardCalculation(taskset: Taskset): string {
+  if (taskset.metrics?.primaryMetric === "criterion_pass_rate") {
+    return "Passed criteria ÷ total criteria";
+  }
+  if (taskset.metrics) {
+    return `${titleCase(taskset.metrics.primaryMetric)} · ${titleCase(taskset.metrics.aggregation)}`;
+  }
+  return "Declared grader reward";
 }
 
 function formatBytes(value: number): string {

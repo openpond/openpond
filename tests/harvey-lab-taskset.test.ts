@@ -92,10 +92,19 @@ describe("Harvey LAB legal Taskset materializer", () => {
     expect(persisted.contentHash).toBe(result.taskset.contentHash);
     expect(persisted.authoringProvenance.sourceCommit).toBe(HARVEY_LAB_REVISION);
     expect(persisted.graders[0]).toMatchObject({
+      id: "grader_harvey_lab_rubric_judge",
       kind: "model_judge",
+      judge: {
+        providerId: "openpond",
+        modelId: "gpt-5.6-luna",
+      },
       rewardEligible: true,
       calibrationStatus: "pending",
-      metadata: { userSelectedReward: true, calibrationIsAdvisory: true },
+      metadata: {
+        rewardModelRole: "llm_as_judge",
+        userSelectedReward: true,
+        calibrationIsAdvisory: true,
+      },
     });
 
     const week0 = await materializeHarveyLabLegalTaskset({

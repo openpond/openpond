@@ -81,7 +81,12 @@ export function findActiveAccount(
     if (exact) return exact;
 
     const sameHandle = accounts.filter((account) => handleEquals(account.handle, requestedProfile.handle));
-    if (!selectorBaseUrl(requestedProfile) && sameHandle.length === 1) return sameHandle[0] ?? null;
+    if (sameHandle.length === 1) return sameHandle[0] ?? null;
+
+    // A stale or malformed active selector must never silently select a
+    // different account. That can route authenticated operations to the wrong
+    // OpenPond environment (for example, production instead of staging).
+    return null;
   }
 
   if (accounts[0]) return accounts[0];

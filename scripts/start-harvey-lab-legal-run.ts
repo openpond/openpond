@@ -50,7 +50,7 @@ const recipe = RftRecipeSchema.parse({
   dataset: {
     trainSplit: "train",
     validationSplit: "validation",
-    maxPromptTokens: 8_192,
+    maxPromptTokens: 4_096,
     maxExamples: 4,
     selectionStrategy: "stable_hash_top_n",
   },
@@ -141,14 +141,31 @@ try {
 
 const token = (await readFile(path.join(storeDir, "token"), "utf8")).trim();
 if (!token) throw new Error("The local OpenPond capability token is empty.");
+const authorizationHeaders = {
+  Authorization: `Bearer ${token}`,
+  "Content-Type": "application/json",
+};
+const readinessResponse = await fetch(`${serverUrl}/v1/training/readiness`, {
+  method: "POST",
+  headers: authorizationHeaders,
+  body: JSON.stringify({ tasksetId: taskset.id }),
+  signal: AbortSignal.timeout(180_000),
+});
+const readinessPayload = await readinessResponse.json().catch(() => ({})) as Record<string, unknown>;
+if (!readinessResponse.ok || readinessPayload.ready !== true) {
+  throw new Error(
+    typeof readinessPayload.message === "string"
+      ? readinessPayload.message
+      : typeof readinessPayload.error === "string"
+        ? readinessPayload.error
+        : `Legal Taskset readiness failed with HTTP ${readinessResponse.status}`,
+  );
+}
 const response = await fetch(
   `${serverUrl}/v1/training/model-projects/${encodeURIComponent(project.id)}/training/start`,
   {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers: authorizationHeaders,
     body: JSON.stringify({
       maximumSpendUsd,
       retentionDays: null,

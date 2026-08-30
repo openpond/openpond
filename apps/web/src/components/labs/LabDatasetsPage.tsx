@@ -76,14 +76,18 @@ export function LabDatasetsPage({
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [detailTab, setDetailTab] = useState<DatasetDetailTab>("overview");
-  const tasksets = state?.tasksets ?? [];
+  const tasksets = useMemo(() => {
+    const merged = new Map<string, Taskset>();
+    for (const taskset of state?.tasksets ?? []) merged.set(taskset.id, taskset);
+    for (const taskset of state?.modelTasksets ?? []) {
+      if (!merged.has(taskset.id)) merged.set(taskset.id, taskset);
+    }
+    return [...merged.values()];
+  }, [state?.modelTasksets, state?.tasksets]);
   const project = modelProjectId
     ? state?.modelProjects.find((candidate) => candidate.id === modelProjectId)
     : null;
-  const selected =
-    [...tasksets, ...(state?.modelTasksets ?? [])].find(
-      (taskset) => taskset.id === selectedId,
-    ) ?? null;
+  const selected = tasksets.find((taskset) => taskset.id === selectedId) ?? null;
   const readOnly = Boolean(selected && selected.profileId !== state?.profileId);
   const selectedArtifact = selected?.datasetArtifact
     ? state?.datasetArtifacts.find(

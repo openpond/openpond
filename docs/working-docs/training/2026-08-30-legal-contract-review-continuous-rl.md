@@ -1,7 +1,9 @@
 # 2026-08-30 LAB Contract Review Continuous RL
 
-Status: Active flagship execution. Phases 0 through 2 are implemented and the
-Qwen3-8B worker image is building for the first paid Week 0 preflight.
+Status: Active flagship execution. Phases 0 through 3 are implemented. The
+Qwen3-8B Policy path and complete Work trajectory have run on staging; the
+team-scoped GPT-5.6 Luna CPU judge bridge is deployed and independently proven.
+The next action is a fresh Week 0 preflight using the final Taskset revision.
 
 Latest checkpoint: 2026-08-30. Legal is now the only active enterprise example.
 Pin Harvey LAB at commit `a2b429eb6c9683c4fdeced3bc6b3af36edf239a6`
@@ -13,7 +15,11 @@ runner now carries exact Work assets, executes a multi-turn tool loop on
 persistent resettable Latitude CPU lanes, seals output artifacts, retains
 per-turn Policy samples, and applies the user-declared rubric reward. The Week 0
 release is separately materialized so the first Run cannot observe Week 1
-tasks. No GPU Run has been launched for this example yet.
+tasks. Earlier staging attempts proved Qwen3-8B generation, native document
+tools, and immutable DOCX sealing, then stopped at the old control-plane judge
+boundary. That boundary has been replaced by a post-Policy Luna process in the
+retained CPU lane, using only a Model Project-attached `OPENAI_API_KEY` and
+explicit `api.openai.com` egress.
 
 Related docs:
 
@@ -51,9 +57,11 @@ non-public holdout.
 - Use Harvey LAB data, matter files, and rubrics; do not use Harvey's Harness.
 - Keep legal behavior in Profile, Skills, Taskset data, and grader releases.
   Add no legal-specific API or infrastructure resource types.
-- Use LAB's criterion rubric and a declared LLM judge as the first reward
-  source. Do not require a separately trained Reward Model before the first
-  Policy Run. Judgments may later be distilled into a cheaper scorer.
+- Use LAB's criterion rubric and GPT-5.6 Luna as the declared LLM-as-judge
+  Reward Model for the first Policy Run. Do not require a separately trained,
+  legal-specific Reward Model before the first Policy Run. Judgments may later
+  be distilled into a cheaper scorer after enough real trajectory evidence is
+  available.
 - Preserve every rubric criterion as hidden grader context. The Policy receives
   the partner instruction, matter files, Skills, tools, and prior tool results,
   never the rubric or expected findings.
@@ -63,10 +71,10 @@ non-public holdout.
 - Keep the initial learning protocol synchronous and on-policy. A trajectory
   may contain many Policy turns; each Policy turn contributes its own masked
   training sample with the trajectory-level advantage.
-- Use the official LAB dual-judge profile for final comparison when available:
-  Claude Sonnet 4.6 plus GPT-5.5, scored independently and averaged. A cheaper
-  declared judge may drive training only after agreement is measured on the
-  development matter.
+- Keep training reward and final comparison distinct. Training uses the pinned
+  GPT-5.6 Luna CPU rubric-judge release. A later final comparison may add an
+  independently pinned second judge and must preserve both verdicts rather
+  than claiming that a single training call was a dual-judge result.
 - Do not tune against either frozen matter. Week 1 training data becomes visible
   only after the Week 0 candidate and evaluation artifacts are sealed.
 
@@ -185,6 +193,25 @@ the following general Work trajectory contract before a legal Run can start.
 - feed the declared scalar reward to GRPO without platform-authored legal
   quality gates or hidden shaping.
 
+### CPU judge placement and credentials
+
+- Attach `OPENAI_API_KEY` to the legal Model Project for the exact team that
+  owns the Run; do not store or copy its value into OpenPond Taskset data,
+  receipts, GCP configuration, or GPU worker state.
+- Resolve attached Model Project secret references only when the managed
+  Latitude CPU lane is created. Record only secret names in infrastructure
+  metadata and retain the existing runtime output-redaction path.
+- Keep Policy inference on the Qwen GPU endpoint. After a rollout group has
+  produced and sealed candidate work, invoke Luna as a separate CPU process
+  with the hidden rubric, criteria, and blinded candidate outputs.
+- Restrict the CPU lane to the Policy gateway plus `api.openai.com`; never send
+  the OpenAI key, criteria, or judge response to RunPod or the Qwen Policy.
+- Require strict schema-valid criterion coverage, record the OpenAI request ID
+  and token usage, calculate Luna input/cached-input/output cost from the pinned
+  rate card, and preserve the result in rubric evidence.
+- Use the same CPU path for post-update candidate evaluation so training and
+  evaluation do not silently use different reward implementations.
+
 ## Model Profile
 
 Target: `Qwen/Qwen3-8B`, pinned to an immutable Hugging Face revision and
@@ -224,9 +251,10 @@ judge release. Optional efficiency shaping must be explicitly named and
 versioned; the first comparison uses no hidden length or turn penalty.
 
 Final evaluation runs both base and candidate artifacts through the same pinned
-dual-judge profile. Preserve per-judge results, disagreements, pooled criterion
-pass, strict both-judge all-pass, and bootstrap intervals where the sample count
-supports them.
+GPT-5.6 Luna CPU rubric-judge release. If the independent second judge is added,
+preserve per-judge results, disagreements, pooled criterion pass, strict
+both-judge all-pass, and bootstrap intervals where the sample count supports
+them.
 
 ## Run Plan
 
@@ -314,11 +342,14 @@ loading, context failure, or rollout retries.
 
 - [x] Add the generic artifact-rubric judge reward source and exact evidence
   schema; keep quality qualification optional and external to admission.
-- [ ] Add, lock, build, and qualify a distinct Qwen3-8B worker/model profile.
-- [ ] Prove tool-call parsing, context bounds, inference/training residency,
-  LoRA save/load, and cleanup on the admitted H100 topology.
-- [ ] Measure a cheaper training judge against the official dual judges on the
-  development matter; either pin it or use the dual pair for training.
+- [x] Add, lock, build, and qualify a distinct Qwen3-8B worker/model profile.
+- [x] Prove tool-call parsing, bounded multi-turn inference, complete document
+  output, artifact sealing, and cleanup on the admitted H100 topology.
+- [ ] Complete the first Qwen3-8B GRPO update and prove legal LoRA save/load in
+  the final real-task preflight.
+- [x] Pin GPT-5.6 Luna as the first training judge, move grading into the
+  retained CPU lane, inherit only explicitly attached Model Project secrets,
+  require strict criterion coverage, and preserve request usage and cost.
 
 ### Phase 4 — Complete Week 0 training
 
@@ -354,25 +385,27 @@ loading, context failure, or rollout retries.
   `worker.py`, `training-batch.ts`, and OpenPond's Taskset Work runner.
 - Passed: complete eleven-scenario ledger materialization at hash
   `b4531163449b8246e49b1489e25fd5eb622de591211d7b44fe1dd4cfedec85c6`.
-- Passed: isolated Week 0 materialization at hash
+- Passed: earlier isolated Week 0 materialization at hash
   `9ef434ddaf456c1641a230038f2f2a4a79f44fcf658d79eb1ec8d65b2bc5c8c6`.
 - Passed: hosted Work/multi-sample/rubric-reward contract and test suite.
-- In progress: Qwen3-8B immutable worker image build and paid real-task
-  preflight.
+- Passed: Qwen3-8B Work generation, native DOCX output creation, immutable
+  artifact sealing, and complete cleanup in staging attempts through Run 8.
+- Passed: team-scoped `OPENAI_API_KEY` injection and a real GPT-5.6 Luna strict
+  JSON request from a Latitude Work CPU sandbox; the proof used 46 input and 15
+  output tokens and the sandbox was deleted.
+- Deployed: Sandbox `develop` commit `8031622b5` in control-plane image
+  `sha256:74a9ad94daf02a1cd5cd60a7cd17ea5ad1c36145be9e9451c9f3ff5b9490959e`.
+- In progress: immutable legal Taskset revision 5 and a fresh paid real-task
+  preflight with the Luna CPU rubric judge.
 - Pending: paid Week 0 baseline, 16-group Run, frozen evaluation, and cleanup.
 - Pending: Week 1 Run and retention/adaptation evidence.
 
 ## Open Questions
 
-- Which exact immutable Qwen3-8B revision and vLLM-compatible tool parser pass
-  the worker qualification suite?
 - What bounded per-turn context and maximum turn count fit the admitted H100
   topology without truncating trainable completions?
 - Does the official dual-judge cost justify a calibrated cheaper training judge
   after development agreement is measured?
-- Is document-native tracked-change generation reliable in the current Work
-  image, or does the generic document toolchain need one additional bundled
-  dependency before the first real-task preflight?
 
 ## Progress Log
 
@@ -389,3 +422,11 @@ loading, context failure, or rollout retries.
   reward, hosted baseline/candidate evaluation, and the pinned Qwen3-8B
   profile. Materialized the isolated Week 0 release and started its immutable
   worker-image build; paid execution remains gated on the real-task preflight.
+- 2026-08-30: Staging Run 8 completed the hosted Qwen3-8B Work episode and
+  sealed both required DOCX files, then failed at the legacy control-plane
+  rubric judge with HTTP 403. GPU and CPU resources were released.
+- 2026-08-30: Added Model Project secret inheritance to managed CPU lanes,
+  placed GPT-5.6 Luna grading in a separate post-Policy CPU process, restricted
+  judge egress, added strict criterion coverage and cost evidence, deployed the
+  worker, and proved the attached team key against the real Luna API without
+  launching a GPU.
