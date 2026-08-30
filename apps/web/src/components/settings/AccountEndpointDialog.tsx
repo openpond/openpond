@@ -15,6 +15,7 @@ export type AccountEndpointUpdate = {
   currentBaseUrl: string | null;
   baseUrl: string;
   apiBaseUrl: string;
+  chatApiBaseUrl?: string | null;
   apiKey?: string;
   environment?: string | null;
 };
@@ -32,6 +33,32 @@ export function accountEndpointSelectorForMode(
   return {
     handle: account?.handle,
     currentBaseUrl: account?.baseUrl ?? null,
+  };
+}
+
+export function accountEndpointConfigForMode(
+  mode: AccountEndpointDialogMode,
+  account: Pick<
+    AccountRow,
+    "baseUrl" | "apiBaseUrl" | "chatApiBaseUrl" | "environment"
+  > | null | undefined,
+): Pick<
+  AccountEndpointUpdate,
+  "baseUrl" | "apiBaseUrl" | "chatApiBaseUrl" | "environment"
+> {
+  if (mode === "update" && account) {
+    return {
+      baseUrl: account.baseUrl ?? DEFAULT_OPENPOND_WEB_BASE_URL,
+      apiBaseUrl: account.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL,
+      chatApiBaseUrl: account.chatApiBaseUrl,
+      environment: account.environment ?? "production",
+    };
+  }
+
+  return {
+    baseUrl: DEFAULT_OPENPOND_WEB_BASE_URL,
+    apiBaseUrl: DEFAULT_OPENPOND_API_BASE_URL,
+    environment: "production",
   };
 }
 
@@ -76,12 +103,11 @@ export function AccountEndpointDialog({
     }
     try {
       const accountSelector = accountEndpointSelectorForMode(mode, account);
+      const endpointConfig = accountEndpointConfigForMode(mode, account);
       await onSave({
         ...accountSelector,
-        baseUrl: DEFAULT_OPENPOND_WEB_BASE_URL,
-        apiBaseUrl: DEFAULT_OPENPOND_API_BASE_URL,
+        ...endpointConfig,
         apiKey: connectMode ? trimmedApiKey : undefined,
-        environment: "production",
       });
     } catch (caught) {
       setRequestError(caught instanceof Error ? caught.message : String(caught));
