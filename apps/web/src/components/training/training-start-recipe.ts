@@ -42,7 +42,12 @@ export function trainingRecipe(input: {
     input.taskset.metadata.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH
     || input.taskset.environment.metadata.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH;
   const grader = input.taskset.graders.find((candidate) => candidate.rewardEligible);
-  const groupSize = 4;
+  const groupSize = input.rolloutGroupSize;
+  const rolloutConcurrency = input.rolloutConcurrency;
+  const wallTimeMs = Math.max(
+    30 * 60 * 1_000,
+    (2 + input.maxSteps * 8) * 60 * 1_000,
+  );
   return {
     schemaVersion: "openpond.rftRecipe.v1",
     method: "grpo",
@@ -60,7 +65,7 @@ export function trainingRecipe(input: {
     lora: { rank: 16 },
     rollout: {
       groupSize,
-      concurrency: 4,
+      concurrency: rolloutConcurrency,
       maxTurns: crossSystem ? 15 : 1,
       maxOutputTokens: 512,
       temperature: 0.8,
@@ -90,12 +95,35 @@ export function trainingRecipe(input: {
           learnedPreference: input.learnedPreferenceReward ?? null,
         },
     resourceLimits: {
-      wallTimeMs: 1_800_000,
+      wallTimeMs,
       maxRollouts: Math.max(groupSize, input.maxSteps * groupSize),
       maxPayloadBytes: 1_000_000,
     },
     policyOptimization: null,
   };
+}
+
+export function rolloutTopologyIncompatibility(input: {
+  groupSize: number;
+  concurrency: number;
+}): string | null {
+  if (!Number.isInteger(input.groupSize) || input.groupSize < 2 || input.groupSize > 16) {
+    return "Rollouts per prompt must be a whole number from 2 through 16.";
+  }
+  if (
+    !Number.isInteger(input.concurrency)
+    || input.concurrency < 1
+    || input.concurrency > 16
+  ) {
+    return "Concurrent rollouts must be a whole number from 1 through 16.";
+  }
+  if (
+    input.concurrency > input.groupSize
+    || input.groupSize % input.concurrency !== 0
+  ) {
+    return "Concurrent rollouts must divide the rollout group evenly without exceeding it.";
+  }
+  return null;
 }
 
 export function defaultRftLossMethod(taskset: Taskset): RftLossMethod {
