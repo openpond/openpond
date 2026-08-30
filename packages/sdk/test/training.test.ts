@@ -229,6 +229,38 @@ describe("Training SDK contracts", () => {
     );
   });
 
+  it("retries transient read failures without replaying mutations", async () => {
+    const readFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "upstream unavailable" }), { status: 500 }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ job: job() }), { status: 200 }));
+    const readClient = createTrainingClient({
+      baseUrl: "https://api.openpond.test",
+      fetch: readFetch,
+    });
+    await expect(readClient.getJob("job-1")).resolves.toEqual(job());
+    expect(readFetch).toHaveBeenCalledTimes(2);
+
+    const mutationFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "upstream unavailable" }), { status: 500 }),
+    );
+    const mutationClient = createTrainingClient({
+      baseUrl: "https://api.openpond.test",
+      fetch: mutationFetch,
+    });
+    const unsigned = submission();
+    const validSubmission = {
+      ...unsigned,
+      contentHash: await trainingJobSubmissionHash(unsigned),
+    };
+    await expect(mutationClient.createJob(validSubmission)).rejects.toMatchObject({
+      code: "invalid_error_response",
+    });
+    expect(mutationFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("canonicalizes object keys and verifies the submission content hash", async () => {
     expect(canonicalJson({ z: 1, a: { y: true, b: null } })).toBe(
       '{"a":{"b":null,"y":true},"z":1}',

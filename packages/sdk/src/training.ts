@@ -510,26 +510,54 @@ export function createTrainingClient(input: {
   const baseUrl = input.baseUrl.replace(/\/$/, "");
 
   async function request(pathname: string, init?: RequestInit): Promise<unknown> {
-    const configuredHeaders =
-      typeof input.headers === "function"
-        ? await input.headers()
-        : (input.headers ?? {});
-    const response = await fetchImpl(`${baseUrl}${pathname}`, {
-      ...init,
-      headers: {
-        accept: OPENPOND_TRAINING_MEDIA_TYPE,
-        ...(init?.body ? { "content-type": OPENPOND_TRAINING_MEDIA_TYPE } : {}),
-        ...headersRecord(configuredHeaders),
-        ...headersRecord(init?.headers),
-      },
-    });
-    const body = parseBoundedJson(
-      await response.text(),
-      TRAINING_API_RESPONSE_MAX_BYTES,
-      "Training API response",
+    const readOnly = init?.method === undefined || init.method.toUpperCase() === "GET";
+    const maximumAttempts = readOnly ? 3 : 1;
+    for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+      let response: Response;
+      try {
+        const configuredHeaders =
+          typeof input.headers === "function"
+            ? await input.headers()
+            : (input.headers ?? {});
+        response = await fetchImpl(`${baseUrl}${pathname}`, {
+          ...init,
+          headers: {
+            accept: OPENPOND_TRAINING_MEDIA_TYPE,
+            ...(init?.body ? { "content-type": OPENPOND_TRAINING_MEDIA_TYPE } : {}),
+            ...headersRecord(configuredHeaders),
+            ...headersRecord(init?.headers),
+          },
+        });
+      } catch (error) {
+        if (
+          attempt === maximumAttempts ||
+          init?.signal?.aborted ||
+          !trainingReadFailureIsRetryable(null, error)
+        ) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
+        continue;
+      }
+      const body = parseBoundedJson(
+        await response.text(),
+        TRAINING_API_RESPONSE_MAX_BYTES,
+        "Training API response",
+      );
+      if (response.ok) return body;
+      const error = trainingApiError(body, response.status);
+      if (
+        attempt === maximumAttempts ||
+        !trainingReadFailureIsRetryable(response.status, error)
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
+    }
+    throw new OpenPondProtocolError(
+      "training_read_retry_exhausted",
+      "Training read retry loop exhausted without a response.",
     );
-    if (!response.ok) throw trainingApiError(body, response.status);
-    return body;
   }
 
   return {
@@ -647,6 +675,17 @@ export function createTrainingClient(input: {
       );
     },
   };
+}
+
+function trainingReadFailureIsRetryable(status: number | null, error: unknown): boolean {
+  if (status !== null) {
+    return status === 408 || status === 429 || status >= 500;
+  }
+  if (error instanceof OpenPondTrainingApiError) return error.retryable;
+  if (error instanceof OpenPondProtocolError) {
+    return error.code === "invalid_error_response";
+  }
+  return error instanceof TypeError;
 }
 
 function unwrapObject(value: unknown, key: string): unknown {
