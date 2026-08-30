@@ -13,6 +13,7 @@ import {
   type Session,
 } from "@openpond/contracts";
 import { sandboxRequestPayload } from "../openpond/sandboxes.js";
+import { isManagedLocalWorkSession } from "./managed-local-work.js";
 
 export type SaveWorkOutputInput = {
   session: Session;
@@ -43,6 +44,92 @@ export function createWorkOutputService(input: {
   const outputRoot = path.join(input.storeDir, "work", "outputs");
   const sandboxRequest = input.sandboxRequest ?? sandboxRequestPayload;
 
+  async function persistWorkOutputBytes(request: {
+    session: Session;
+    sourceTurnId: string;
+    suggestedName: string;
+    bytes: Buffer;
+    validation: OutputValidationEvidence[];
+    validationPolicy: "strict" | "preserve";
+  }): Promise<SaveWorkOutputResult> {
+    const title = safeOutputName(request.suggestedName);
+    if (request.bytes.byteLength > WORK_OUTPUT_MAX_BYTES) {
+      throw new Error(
+        `Work output exceeds the ${WORK_OUTPUT_MAX_BYTES.toLocaleString()} byte limit.`,
+      );
+    }
+    const contentType =
+      WORK_OUTPUT_CONTENT_TYPES[path.extname(title).toLowerCase()];
+    if (!contentType) {
+      throw new Error(
+        `${title} is not an advertised Work output format. Save it as a supported file type or keep it in scratch space.`,
+      );
+    }
+    const validation = validateWorkOutput({
+      bytes: request.bytes,
+      contentType,
+      title,
+      supplied: request.validation,
+      policy: request.validationPolicy,
+    });
+    const identity = await nextOutputIdentity({
+      runtimeEventsForSession: input.runtimeEventsForSession,
+      sessionId: request.session.id,
+      title,
+    });
+    const taskDirectory = path.join(
+      outputRoot,
+      safePathSegment(request.session.id),
+    );
+    await fs.mkdir(taskDirectory, { recursive: true, mode: 0o700 });
+    const destination = path.join(
+      taskDirectory,
+      `${String(identity.revision).padStart(3, "0")}-${safePathSegment(
+        identity.id,
+      )}-${title}`,
+    );
+    const temporary = path.join(
+      taskDirectory,
+      `.${path.basename(destination)}.${randomUUID()}.tmp`,
+    );
+    await fs.writeFile(temporary, request.bytes, { mode: 0o600, flag: "wx" });
+    try {
+      await fs.rename(temporary, destination);
+    } catch (error) {
+      await fs.rm(temporary, { force: true });
+      throw error;
+    }
+
+    const outputRef = FileOutputRefSchema.parse({
+      kind: "file",
+      id: identity.id,
+      title,
+      contentType,
+      sizeBytes: request.bytes.byteLength,
+      sha256: createHash("sha256").update(request.bytes).digest("hex"),
+      sourceTaskId: request.session.id,
+      sourceTurnId: request.sourceTurnId,
+      revision: identity.revision,
+      createdAt: new Date().toISOString(),
+      location: {
+        kind: "local",
+        path: destination,
+        deviceId: input.deviceId,
+      },
+      validation,
+    });
+    return {
+      outputRef,
+      artifact: {
+        artifactRef: destination,
+        path: destination,
+        title,
+        contentType,
+        sizeBytes: request.bytes.byteLength,
+      },
+    };
+  }
+
   async function saveWorkOutput(
     request: SaveWorkOutputInput
   ): Promise<SaveWorkOutputResult> {
@@ -56,9 +143,6 @@ export function createWorkOutputService(input: {
       throw new Error("A running Work sandbox is required to save an output.");
     }
     const sandboxPath = normalizeOutputCandidatePath(request.sandboxPath);
-    const title = safeOutputName(
-      request.suggestedName || path.posix.basename(sandboxPath)
-    );
     const payload = asRecord(
       await sandboxRequest({
         type: "download_file",
@@ -95,84 +179,63 @@ export function createWorkOutputService(input: {
       throw new Error("Sandbox output download was incomplete.");
     }
 
-    const contentType =
-      WORK_OUTPUT_CONTENT_TYPES[path.extname(title).toLowerCase()];
-    if (!contentType) {
+    return persistWorkOutputBytes({
+      session: request.session,
+      sourceTurnId: request.sourceTurnId,
+      suggestedName:
+        request.suggestedName || path.posix.basename(sandboxPath),
+      bytes,
+      validation: request.validation ?? [],
+      validationPolicy: request.validationPolicy ?? "strict",
+    });
+  }
+
+  async function saveLocalWorkOutput(request: {
+    session: Session;
+    sourceTurnId: string;
+    localPath: string;
+    suggestedName?: string | null;
+  }): Promise<SaveWorkOutputResult> {
+    if (!isManagedLocalWorkSession(request.session) || !request.session.cwd) {
       throw new Error(
-        `${title} is not an advertised Work output format. Save it as a supported file type or keep it in scratch space.`
+        "A managed local Work task is required to save a local output.",
       );
     }
-    const validation = validateWorkOutput({
-      bytes,
-      contentType,
-      title,
-      supplied: request.validation ?? [],
-      policy: request.validationPolicy ?? "strict",
-    });
-    const identity = await nextOutputIdentity({
-      runtimeEventsForSession: input.runtimeEventsForSession,
-      sessionId: request.session.id,
-      title,
-    });
-    const outputId = identity.id;
-    const revision = identity.revision;
-    const taskDirectory = path.join(
-      outputRoot,
-      safePathSegment(request.session.id)
-    );
-    await fs.mkdir(taskDirectory, { recursive: true, mode: 0o700 });
-    const destination = path.join(
-      taskDirectory,
-      `${String(revision).padStart(3, "0")}-${safePathSegment(
-        outputId
-      )}-${title}`
-    );
-    const temporary = path.join(
-      taskDirectory,
-      `.${path.basename(destination)}.${randomUUID()}.tmp`
-    );
-    await fs.writeFile(temporary, bytes, { mode: 0o600, flag: "wx" });
-    try {
-      await fs.rename(temporary, destination);
-    } catch (error) {
-      await fs.rm(temporary, { force: true });
-      throw error;
+    const workspaceRoot = await fs.realpath(request.session.cwd);
+    const candidate = path.isAbsolute(request.localPath)
+      ? path.resolve(request.localPath)
+      : path.resolve(workspaceRoot, request.localPath);
+    const resolvedCandidate = await fs.realpath(candidate);
+    if (!isPathInside(workspaceRoot, resolvedCandidate)) {
+      throw new Error(
+        "Local Work outputs must stay inside the managed task workspace.",
+      );
     }
-
-    const outputRef = FileOutputRefSchema.parse({
-      kind: "file",
-      id: outputId,
-      title,
-      contentType,
-      sizeBytes: bytes.byteLength,
-      sha256: createHash("sha256").update(bytes).digest("hex"),
-      sourceTaskId: request.session.id,
+    const stats = await fs.stat(resolvedCandidate);
+    if (!stats.isFile()) throw new Error("A local Work output must be a file.");
+    if (stats.size > WORK_OUTPUT_MAX_BYTES) {
+      throw new Error(
+        `Work output exceeds the ${WORK_OUTPUT_MAX_BYTES.toLocaleString()} byte limit.`,
+      );
+    }
+    const bytes = await fs.readFile(resolvedCandidate);
+    return persistWorkOutputBytes({
+      session: request.session,
       sourceTurnId: request.sourceTurnId,
-      revision,
-      createdAt: new Date().toISOString(),
-      location: {
-        kind: "local",
-        path: destination,
-        deviceId: input.deviceId,
-      },
-      validation,
+      suggestedName: request.suggestedName ?? path.basename(resolvedCandidate),
+      bytes,
+      validation: [],
+      validationPolicy: "preserve",
     });
-    return {
-      outputRef,
-      artifact: {
-        artifactRef: destination,
-        path: destination,
-        title,
-        contentType,
-        sizeBytes: bytes.byteLength,
-      },
-    };
   }
 
   async function saveAllWorkOutputs(request: {
     session: Session;
     sourceTurnId: string;
   }): Promise<SaveWorkOutputResult[]> {
+    if (isManagedLocalWorkSession(request.session)) {
+      return saveReferencedLocalWorkOutputs(request);
+    }
     if (
       request.session.experience !== "work" ||
       request.session.workspaceKind !== "sandbox" ||
@@ -213,6 +276,47 @@ export function createWorkOutputService(input: {
           suggestedName: title,
           validationPolicy: "preserve",
         })
+      );
+      alreadySaved.add(title);
+    }
+    return saved;
+  }
+
+  async function saveReferencedLocalWorkOutputs(request: {
+    session: Session;
+    sourceTurnId: string;
+  }): Promise<SaveWorkOutputResult[]> {
+    if (!request.session.cwd) return [];
+    const events = await input.runtimeEventsForSession(request.session.id);
+    const assistantText = events
+      .filter(
+        (event) =>
+          event.turnId === request.sourceTurnId &&
+          event.name === "assistant.delta" &&
+          typeof event.output === "string",
+      )
+      .map((event) => event.output ?? "")
+      .join("");
+    const candidates = await resolveReferencedLocalFiles({
+      assistantText,
+      workspaceRoot: request.session.cwd,
+    });
+    const alreadySaved = new Set(
+      fileOutputRefs(events)
+        .filter((output) => output.sourceTurnId === request.sourceTurnId)
+        .map((output) => output.title),
+    );
+    const saved: SaveWorkOutputResult[] = [];
+    for (const candidate of candidates) {
+      const title = safeOutputName(path.basename(candidate));
+      if (alreadySaved.has(title)) continue;
+      saved.push(
+        await saveLocalWorkOutput({
+          session: request.session,
+          sourceTurnId: request.sourceTurnId,
+          localPath: candidate,
+          suggestedName: title,
+        }),
       );
       alreadySaved.add(title);
     }
@@ -346,9 +450,111 @@ export function createWorkOutputService(input: {
     listWorkOutputs,
     readWorkOutput,
     saveAllWorkOutputs,
+    saveLocalWorkOutput,
     saveWorkOutput,
     workInputsForSession,
   };
+}
+
+async function resolveReferencedLocalFiles(input: {
+  assistantText: string;
+  workspaceRoot: string;
+}): Promise<string[]> {
+  const root = await fs.realpath(input.workspaceRoot);
+  const resolved = new Set<string>();
+  for (const reference of markdownLinkTargets(input.assistantText)) {
+    const normalized = normalizeLocalFileReference(reference);
+    if (!normalized) continue;
+    const candidate = path.isAbsolute(normalized)
+      ? path.resolve(normalized)
+      : path.resolve(root, normalized);
+    let realCandidate: string;
+    try {
+      realCandidate = await fs.realpath(candidate);
+      const stats = await fs.stat(realCandidate);
+      if (!stats.isFile()) continue;
+    } catch {
+      continue;
+    }
+    if (!isPathInside(root, realCandidate)) continue;
+    if (!WORK_OUTPUT_CONTENT_TYPES[path.extname(realCandidate).toLowerCase()]) {
+      continue;
+    }
+    resolved.add(realCandidate);
+    if (resolved.size >= 100) break;
+  }
+  return [...resolved];
+}
+
+function markdownLinkTargets(markdown: string): string[] {
+  const targets: string[] = [];
+  for (let index = 0; index < markdown.length; index += 1) {
+    const labelStart = markdown[index] === "!" ? index + 1 : index;
+    if (markdown[labelStart] !== "[") continue;
+    const labelEnd = markdown.indexOf("]", labelStart + 1);
+    if (labelEnd < 0 || markdown[labelEnd + 1] !== "(") continue;
+    const hrefStart = labelEnd + 2;
+    if (markdown[hrefStart] === "<") {
+      const hrefEnd = markdown.indexOf(">", hrefStart + 1);
+      if (hrefEnd >= 0 && markdown[hrefEnd + 1] === ")") {
+        targets.push(markdown.slice(hrefStart + 1, hrefEnd));
+        index = hrefEnd + 1;
+      }
+      continue;
+    }
+    let depth = 0;
+    for (let cursor = hrefStart; cursor < markdown.length; cursor += 1) {
+      const character = markdown[cursor];
+      if (character === "\\") {
+        cursor += 1;
+        continue;
+      }
+      if (character === "(") {
+        depth += 1;
+        continue;
+      }
+      if (character !== ")") continue;
+      if (depth > 0) {
+        depth -= 1;
+        continue;
+      }
+      const href = markdown.slice(hrefStart, cursor).trim();
+      if (href) targets.push(href);
+      index = cursor;
+      break;
+    }
+  }
+  return targets;
+}
+
+function normalizeLocalFileReference(value: string): string | null {
+  let normalized = value.trim().replace(/^['"`]+|['"`]+$/g, "");
+  if (!normalized || /^(?:https?|data|mailto):/i.test(normalized)) return null;
+  normalized = normalized.replace(/^(?:workspace|sandbox):file:/i, "");
+  if (/^file:\/\//i.test(normalized)) {
+    try {
+      normalized = decodeURIComponent(new URL(normalized).pathname);
+    } catch {
+      normalized = normalized.replace(/^file:\/\//i, "");
+    }
+  } else {
+    try {
+      normalized = decodeURIComponent(normalized);
+    } catch {
+      // Keep malformed percent escapes literal so they simply fail lookup.
+    }
+  }
+  return normalized.replace(/:\d+(?::\d+)?$/, "");
+}
+
+function isPathInside(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
 }
 
 function activeFileOutputRefs(events: RuntimeEvent[]): FileOutputRef[] {

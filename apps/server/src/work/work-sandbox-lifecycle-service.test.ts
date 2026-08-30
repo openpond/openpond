@@ -85,6 +85,78 @@ describe("Work sandbox lifecycle service", () => {
     expect(updateSession).not.toHaveBeenCalled();
   });
 
+  test("persists managed local Work outputs without detaching or deleting the workspace", async () => {
+    const storeDir = await temporaryStore();
+    const session: Session = {
+      ...workSession(),
+      id: "local_task_1",
+      workspaceKind: undefined,
+      workspaceId: null,
+      workspaceName: null,
+      cwd: path.join(storeDir, "work", "tasks", "local_task_1"),
+      metadata: { workspaceTarget: "local" },
+    };
+    const events: RuntimeEvent[] = [];
+    const sandboxRequest = vi.fn();
+    const updateSession = vi.fn();
+    const service = createWorkSandboxLifecycleService({
+      storeDir,
+      saveAllWorkOutputs: async () => [
+        {
+          outputRef: {
+            kind: "file",
+            id: "output_1",
+            title: "report.csv",
+            contentType: "text/csv",
+            sizeBytes: 12,
+            sha256: "a".repeat(64),
+            sourceTaskId: session.id,
+            sourceTurnId: "turn_1",
+            revision: 1,
+            createdAt: "2026-08-30T14:00:00.000Z",
+            location: {
+              kind: "local",
+              path: path.join(storeDir, "work", "outputs", "report.csv"),
+              deviceId: "device_1",
+            },
+            validation: [],
+          },
+          artifact: {
+            artifactRef: path.join(storeDir, "work", "outputs", "report.csv"),
+            path: path.join(storeDir, "work", "outputs", "report.csv"),
+            title: "report.csv",
+            contentType: "text/csv",
+            sizeBytes: 12,
+          },
+        },
+      ],
+      sandboxRequest,
+      updateSession,
+      appendRuntimeEvent: async (event) => {
+        events.push(event);
+      },
+    });
+
+    await expect(
+      service.finalizeTurn({
+        session,
+        turnId: "turn_1",
+        outcome: "completed",
+      }),
+    ).resolves.toBe(session);
+    expect(sandboxRequest).not.toHaveBeenCalled();
+    expect(updateSession).not.toHaveBeenCalled();
+    expect(events).toEqual([
+      expect.objectContaining({
+        action: "work_output_save",
+        status: "completed",
+        data: expect.objectContaining({
+          outputRef: expect.objectContaining({ title: "report.csv" }),
+        }),
+      }),
+    ]);
+  });
+
   test("durably retries deletion without keeping the session attached", async () => {
     const storeDir = await temporaryStore();
     const session = workSession();

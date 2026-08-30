@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import type { SaveWorkOutputResult } from "./work-output-service.js";
+import { isManagedLocalWorkSession } from "./managed-local-work.js";
 
 type CleanupEntry = {
   sandboxId: string;
@@ -42,7 +43,8 @@ export function createWorkSandboxLifecycleService(input: {
       request.session.workspaceKind === "sandbox"
         ? request.session.workspaceId
         : null;
-    if (!sandboxId) return request.session;
+    const managedLocalWork = isManagedLocalWorkSession(request.session);
+    if (!sandboxId && !managedLocalWork) return request.session;
 
     let outputs: SaveWorkOutputResult[];
     try {
@@ -55,30 +57,39 @@ export function createWorkSandboxLifecycleService(input: {
           lifecycleEvent({
             sessionId: request.session.id,
             turnId: request.turnId,
-            action: "sandbox_save_output",
+            action: sandboxId ? "sandbox_save_output" : "work_output_save",
             status: "completed",
-            output: `Saved ${output.outputRef.title} outside the sandbox.`,
+            output: sandboxId
+              ? `Saved ${output.outputRef.title} outside the sandbox.`
+              : `Saved ${output.outputRef.title} as a managed Work output.`,
             data: output,
           })
         );
       }
     } catch (error) {
       const message = errorMessage(error);
-      await input.sandboxRequest({ type: "stop", sandboxId }).catch(() => undefined);
+      if (sandboxId) {
+        await input.sandboxRequest({ type: "stop", sandboxId }).catch(
+          () => undefined,
+        );
+      }
       await input.appendRuntimeEvent(
         lifecycleEvent({
           sessionId: request.session.id,
           turnId: request.turnId,
           action: "work_output_persistence",
           status: "failed",
-          output:
-            "Work output persistence failed. Compute was stopped and retained for recovery.",
+          output: sandboxId
+            ? "Work output persistence failed. Compute was stopped and retained for recovery."
+            : "Local Work output persistence failed. The managed task files remain available for recovery.",
           error: message,
-          data: { sandboxId, outcome: request.outcome },
+          data: { sandboxId, managedLocalWork, outcome: request.outcome },
         })
       );
       throw error;
     }
+
+    if (!sandboxId) return request.session;
 
     let cleanupStatus: "completed" | "pending" = "completed";
     let cleanupError: string | undefined;

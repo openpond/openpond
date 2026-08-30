@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { isManagedLocalWorkSession } from "../work/managed-local-work.js";
 import {
   DEFAULT_SESSION_EXPERIENCE,
   OPENPOND_MANIFEST_FILE_NAME,
@@ -152,6 +153,8 @@ export function createHostedTurnHelpers(deps: {
         ? buildChatExperienceContext()
         : experience === "work" && !repositoryWork
         ? buildWorkExperienceContext(session)
+        : isManagedLocalWorkSession(session)
+        ? buildManagedLocalWorkTurnContext(session.cwd)
         : session.workspaceKind === "local_project"
         ? (await looksLikeSandboxTemplateRepo(session.cwd))
           ? buildLocalSandboxTemplateTurnContext(
@@ -476,6 +479,21 @@ function buildWorkExperienceContext(session: Session): string {
     "- Connected writes, sharing, and publication require explicit user intent and provider readback. Otherwise create a reviewable local draft.",
     "- Repository, git, interactive terminal, source-promotion, and deployment capabilities require repository-aware Work and are not available in this projectless run.",
   ].join("\n");
+}
+
+function buildManagedLocalWorkTurnContext(
+  workspacePath: string | null | undefined,
+): string {
+  return [
+    "Local Work experience:",
+    workspacePath ? `- Managed task workspace: ${workspacePath}.` : null,
+    "- Work directly in this app-managed task directory. It is not a user-selected software repository.",
+    "- Keep scratch files organized, and do not read or write outside this task directory unless the user explicitly asks.",
+    "- In the final response, link every finished file the user should keep or download. Linked files are validated and copied into durable Outputs storage at turn completion.",
+    "- Do not label a file as downloadable unless it exists in this task directory and is ready for review.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildLocalProjectTurnContext(

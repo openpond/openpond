@@ -1,4 +1,11 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -118,6 +125,91 @@ describe("Work output service automatic preservation", () => {
       "Older.pdf",
     ]);
   });
+
+  test("preserves linked deliverables from managed local Work without collecting scratch or escaped files", async () => {
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-local-work-output-"),
+    );
+    temporaryDirectories.push(storeDir);
+    const workspace = path.join(storeDir, "work", "tasks", "local_task_1");
+    await mkdir(workspace, { recursive: true });
+    await writeFile(
+      path.join(workspace, "sales list.csv"),
+      "company,ticker\nAcme,ACME\n",
+    );
+    await writeFile(path.join(workspace, "README.md"), "# Sales list\n");
+    await writeFile(path.join(workspace, "scratch.py"), "print('scratch')\n");
+    await writeFile(path.join(workspace, "ignored.bin"), "not an output format\n");
+    const outside = path.join(storeDir, "outside.csv");
+    await writeFile(outside, "secret\n");
+    await symlink(outside, path.join(workspace, "escaped.csv"));
+
+    const session = localWorkSession(workspace);
+    const events: RuntimeEvent[] = [
+      {
+        id: "assistant_1",
+        sessionId: session.id,
+        turnId: "turn_local_1",
+        timestamp: "2026-08-30T14:00:00.000Z",
+        name: "assistant.delta",
+        output: "Created [the sales list](<sales%20",
+      },
+      {
+        id: "assistant_2",
+        sessionId: session.id,
+        turnId: "turn_local_1",
+        timestamp: "2026-08-30T14:00:01.000Z",
+        name: "assistant.delta",
+        output:
+          "list.csv>) and [methodology](README.md). " +
+          "Do not keep scratch.py, [unsupported](ignored.bin), " +
+          "[outside](../outside.csv), or [escaped](escaped.csv).",
+      },
+    ];
+    const service = createWorkOutputService({
+      deviceId: "device_local",
+      storeDir,
+      runtimeEventsForSession: async () => events,
+    });
+
+    const saved = await service.saveAllWorkOutputs({
+      session,
+      sourceTurnId: "turn_local_1",
+    });
+
+    expect(saved.map((item) => item.outputRef.title)).toEqual([
+      "sales list.csv",
+      "README.md",
+    ]);
+    expect(saved.map((item) => item.outputRef.location.kind)).toEqual([
+      "local",
+      "local",
+    ]);
+    expect(
+      await readFile(
+        saved[0]!.outputRef.location.kind === "local"
+          ? saved[0]!.outputRef.location.path
+          : "",
+        "utf8",
+      ),
+    ).toContain("Acme,ACME");
+    expect(saved.some((item) => item.outputRef.title === "escaped.csv")).toBe(
+      false,
+    );
+    expect(saved.some((item) => item.outputRef.title === "ignored.bin")).toBe(
+      false,
+    );
+
+    for (const [index, item] of saved.entries()) {
+      events.push(outputEvent(`saved_${index}`, item.outputRef));
+    }
+    await expect(service.listWorkOutputs([session])).resolves.toMatchObject({
+      outputs: expect.arrayContaining([
+        expect.objectContaining({ title: "sales list.csv" }),
+        expect.objectContaining({ title: "README.md" }),
+      ]),
+    });
+  });
 });
 
 function workSession(id = "work_task_1"): Session {
@@ -142,6 +234,17 @@ function workSession(id = "work_task_1"): Session {
     archived: false,
     order: 0,
     metadata: {},
+  };
+}
+
+function localWorkSession(cwd: string): Session {
+  return {
+    ...workSession("local_task_1"),
+    workspaceKind: undefined,
+    workspaceId: null,
+    workspaceName: null,
+    cwd,
+    metadata: { workspaceTarget: "local" },
   };
 }
 
