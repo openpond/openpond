@@ -47,6 +47,7 @@ import {
   MANAGED_REWARD_MODEL_PROFILE,
   managedSyntheticRewardSmokeRecipe,
 } from "./managed-reward-model-recipes.js";
+import { versionModelProjectOntoManagedRlBase } from "./managed-rl-base-profile.js";
 import type { createTrainingChatSearchService } from "./training-chat-search.js";
 import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
@@ -681,6 +682,30 @@ export function createTrainingApi(deps: {
         createdAt: existing?.createdAt ?? project.createdAt,
         updatedAt: new Date().toISOString(),
       });
+    }
+    if (action === "version_model_project_onto_managed_rl_base") {
+      const modelProjectId = requiredString(
+        input.modelProjectId,
+        "modelProjectId",
+      );
+      const expectedRevision = Number(input.expectedRevision);
+      if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+        throw new Error("A valid expected Model Project revision is required.");
+      }
+      const existing = await deps.store.getModelProject(modelProjectId);
+      if (!existing) throw new Error("Model Project not found.");
+      if (existing.revision !== expectedRevision) {
+        throw new Error(
+          "Model Project changed since it was opened. Refresh and try again.",
+        );
+      }
+      const versioned = versionModelProjectOntoManagedRlBase(
+        existing,
+        new Date().toISOString(),
+      );
+      return versioned.revision === existing.revision
+        ? existing
+        : deps.store.saveModelProject(versioned);
     }
     if (action === "add_source") return deps.taskCreator.addSessionSource({ profileId: requiredString(input.profileId, "profileId"), sessionId: requiredString(input.sessionId, "sessionId"), turnIds: stringArray(input.turnIds), consentScope: input.consentScope === "selected_turns" ? "selected_turns" : "full_session" });
     if (action === "add_sources") {
