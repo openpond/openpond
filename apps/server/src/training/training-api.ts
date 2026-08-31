@@ -18,7 +18,6 @@ import {
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
   type BaseModelPreference,
-  type TaskCreationRequest,
   type TaskCreationSnapshot,
 } from "@openpond/contracts";
 import {
@@ -110,6 +109,15 @@ import {
   runTasksetBenchmark,
   startHarnessRefinerBenchmark,
 } from "./training-benchmark-actions.js";
+import {
+  creationSurface,
+  datasetBuildIntent,
+  managedRolloutPlacement,
+  preferenceDatasetPartition,
+  preferenceRatings,
+  tasksetTargetIntent,
+  trainingMethodHint,
+} from "./training-api-taskset-inputs.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -1980,44 +1988,3 @@ function boundedNumber(
   }
   return value;
 }
-function managedRolloutPlacement(value: unknown): "local" | "remote" | undefined { return value === "local" || value === "remote" ? value : undefined; }
-
-function preferenceDatasetPartition(value: unknown): "reward_train" | "reward_validation" | "reward_qualification" {
-  if (value === "reward_train" || value === "reward_validation" || value === "reward_qualification") {
-    return value;
-  }
-  throw new Error("Preference dataset partition must be reward_train, reward_validation, or reward_qualification.");
-}
-
-function preferenceRatings(value: unknown): Record<string, "love" | "like" | "reject"> {
-  const ratings = record(value);
-  return Object.fromEntries(Object.entries(ratings).map(([attemptId, rating]) => {
-    if (rating !== "love" && rating !== "like" && rating !== "reject") {
-      throw new Error(`Preference rating for ${attemptId} must be love, like, or reject.`);
-    }
-    return [attemptId, rating];
-  }));
-}
-
-function datasetBuildIntent(value: unknown): TaskCreationRequest["buildIntent"] {
-  return value === "preferences" || value === "verifiable_reward" || value === "rubric" || value === "discovery"
-    ? value
-    : "demonstrations";
-}
-
-function trainingMethodHint(value: unknown): TaskCreationRequest["methodHint"] {
-  return value === "sft" || value === "dpo" || value === "grpo" || value === "ppo"
-    ? value
-    : null;
-}
-function tasksetTargetIntent(value: unknown): TaskCreationRequest["targetIntent"] {
-  const candidate = record(value);
-  const kind = candidate.kind;
-  return {
-    kind: kind === "agent" || kind === "skill" || kind === "extension" || kind === "model" || kind === "configuration" ? kind : null,
-    id: string(candidate.id),
-    displayName: string(candidate.displayName),
-    operation: candidate.operation === "improve" ? "improve" : "create",
-  };
-}
-function creationSurface(value: unknown) { return value === "session_menu" || value === "bulk_selection" || value === "training_page" || value === "task_candidate" ? value : "slash_train"; }

@@ -1,7 +1,20 @@
+import { readFile } from "node:fs/promises";
+
+import type { SqliteStore } from "../store/store.js";
+
 export type ManagedTrainingAccess = {
   apiBaseUrl: string;
   token: string;
   teamId: string;
+};
+
+export type OpenPondManagedTrainingAdapterDependencies = {
+  store: SqliteStore;
+  storeDir: string;
+  fetchImpl?: typeof fetch;
+  resolveAccess?: (teamId?: string) => Promise<ManagedTrainingAccess>;
+  readFileImpl?: typeof readFile;
+  env?: Record<string, string | undefined>;
 };
 
 export type ManagedTrainingJob = {
