@@ -58,6 +58,13 @@ type RunDetailTab =
   | "rollouts"
   | "activity";
 
+type ManagedRolloutProgress = {
+  groupsCompleted: number;
+  groupsTarget: number;
+  optimizerUpdatesApplied: number;
+  optimizerUpdatesSkipped: number;
+};
+
 export function LabModelVersionDetailPage({
   connection,
   detailTab,
@@ -196,6 +203,8 @@ export function LabModelVersionDetailPage({
   );
   const latestActivity = detail.detail?.events.at(-1);
   const runStatus = statusLabel(currentRunStatus);
+  const isGrpo = selectedPlan?.recipe.method === "grpo";
+  const rolloutProgress = managedRolloutProgress(selectedJob?.metadata);
   const optimizerStepsTarget =
     (selectedPlan &&
     (selectedPlan.recipe.method === "sft" ||
@@ -215,6 +224,7 @@ export function LabModelVersionDetailPage({
       : 0;
   const optimizerStepsObserved = Math.max(
     0,
+    rolloutProgress?.optimizerUpdatesApplied ?? 0,
     locallyReconciledSteps,
     detail.detail?.policyMetrics.reduce(
       (maximum, metric) => Math.max(maximum, metric.step),
@@ -227,8 +237,12 @@ export function LabModelVersionDetailPage({
     managedEvidence?.progress.committedOptimizerSteps ?? 0,
   );
   const progressMetric = formatTrainingProgress(
-    optimizerStepsObserved,
-    optimizerStepsTarget,
+    isGrpo && rolloutProgress
+      ? rolloutProgress.groupsCompleted
+      : optimizerStepsObserved,
+    isGrpo && rolloutProgress
+      ? rolloutProgress.groupsTarget
+      : optimizerStepsTarget,
   );
   const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
     { id: "overview", label: "Overview" },
@@ -290,10 +304,24 @@ export function LabModelVersionDetailPage({
         />}
         metrics={[
           {
-            label: selectedPlan?.recipe.method === "grpo" ? "Rollout groups" : "Training steps",
+            label: isGrpo ? "Rollout groups" : "Training steps",
             value: progressMetric.value,
             hint: progressMetric.hint,
           },
+          ...(isGrpo && rolloutProgress
+            ? [
+                {
+                  label: "Updates applied",
+                  value: rolloutProgress.optimizerUpdatesApplied.toLocaleString(),
+                  hint: "optimizer transitions",
+                },
+                {
+                  label: "Updates skipped",
+                  value: rolloutProgress.optimizerUpdatesSkipped.toLocaleString(),
+                  hint: "zero-signal groups",
+                },
+              ]
+            : []),
           { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
           { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
           { label: "Output", value: selectedVersion ? `Version ${selectedVersion.number}` : "No version" },
@@ -552,6 +580,36 @@ export function formatTrainingProgress(
   return {
     value: `${completed.toLocaleString()} / ${planned.toLocaleString()}`,
     hint: "completed / planned",
+  };
+}
+
+export function managedRolloutProgress(
+  metadata: Record<string, unknown> | null | undefined,
+): ManagedRolloutProgress | null {
+  const value = metadata?.rolloutProgress;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const progress = value as Record<string, unknown>;
+  const fields = [
+    "groupsCompleted",
+    "groupsTarget",
+    "optimizerUpdatesApplied",
+    "optimizerUpdatesSkipped",
+  ] as const;
+  if (
+    fields.some(
+      (field) =>
+        typeof progress[field] !== "number" ||
+        !Number.isInteger(progress[field]) ||
+        (progress[field] as number) < 0,
+    )
+  ) {
+    return null;
+  }
+  return {
+    groupsCompleted: progress.groupsCompleted as number,
+    groupsTarget: progress.groupsTarget as number,
+    optimizerUpdatesApplied: progress.optimizerUpdatesApplied as number,
+    optimizerUpdatesSkipped: progress.optimizerUpdatesSkipped as number,
   };
 }
 

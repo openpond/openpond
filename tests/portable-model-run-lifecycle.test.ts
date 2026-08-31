@@ -219,6 +219,12 @@ describe("portable Model Run lifecycle", () => {
           state: "succeeded",
           phase: "complete",
           progress: 1,
+          rolloutProgress: {
+            groupsCompleted: 4,
+            groupsTarget: 4,
+            optimizerUpdatesApplied: 3,
+            optimizerUpdatesSkipped: 1,
+          },
           updatedAt: completedAt,
           errorCode: null,
         },
@@ -267,6 +273,12 @@ describe("portable Model Run lifecycle", () => {
         metadata: {
           importedModelLineageId: terminal.adapterArtifactLineageId,
           modelVersionId: prepared.targetVersion.id,
+          rolloutProgress: {
+            groupsCompleted: 4,
+            groupsTarget: 4,
+            optimizerUpdatesApplied: 3,
+            optimizerUpdatesSkipped: 1,
+          },
         },
       });
     }));

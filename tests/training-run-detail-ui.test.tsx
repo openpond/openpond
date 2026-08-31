@@ -9,6 +9,7 @@ import { LabModelRunSummary } from "../apps/web/src/components/labs/LabModelRunS
 import {
   eventSummary,
   formatTrainingProgress,
+  managedRolloutProgress,
 } from "../apps/web/src/components/labs/LabModelVersionDetailPage";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";
 import {
@@ -364,6 +365,35 @@ describe("Training run detail UI", () => {
       hint: "completed / planned",
     });
     expect(formatTrainingProgress(17, 16).value).toBe("17 / 16");
+  });
+
+  test("keeps completed groups distinct from applied and skipped optimizer updates", () => {
+    const progress = managedRolloutProgress({
+      rolloutProgress: {
+        groupsCompleted: 8,
+        groupsTarget: 16,
+        optimizerUpdatesApplied: 6,
+        optimizerUpdatesSkipped: 2,
+      },
+    });
+    expect(progress).toEqual({
+      groupsCompleted: 8,
+      groupsTarget: 16,
+      optimizerUpdatesApplied: 6,
+      optimizerUpdatesSkipped: 2,
+    });
+    expect(formatTrainingProgress(progress!.groupsCompleted, progress!.groupsTarget)).toEqual({
+      value: "8 / 16",
+      hint: "completed / planned",
+    });
+    expect(managedRolloutProgress({
+      rolloutProgress: {
+        groupsCompleted: 8,
+        groupsTarget: 16,
+        optimizerUpdatesApplied: 6,
+        optimizerUpdatesSkipped: -1,
+      },
+    })).toBeNull();
   });
 
   test("renders managed progress as a human status without null debug fields", () => {

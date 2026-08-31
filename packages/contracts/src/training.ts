@@ -680,8 +680,15 @@ export const PolicyOptimizationMetricSchema = z.object({
   meanReward: z.number().nullable(),
   meanReturn: z.number().nullable(),
   kl: z.number().nullable(),
+  behaviorPolicyKlPreUpdate: z.number().nonnegative().nullable().default(null),
   entropy: z.number().nullable(),
   policyClipFraction: z.number().min(0).max(1).nullable(),
+  behaviorPolicyClipFractionPreUpdate: z
+    .number()
+    .min(0)
+    .max(1)
+    .nullable()
+    .default(null),
   valueClipFraction: z.number().min(0).max(1).nullable(),
   explainedVariance: z.number().nullable(),
   rolloutLearnerLag: z.number().int().nonnegative().nullable(),

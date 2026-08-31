@@ -10,6 +10,8 @@ export type ManagedTrainingJob = {
   version: number;
   completedGroups?: number;
   targetGroups?: number;
+  optimizerUpdatesApplied?: number;
+  optimizerUpdatesSkipped?: number;
   terminalReason?: string | null;
   createdAt: string;
   updatedAt: string;

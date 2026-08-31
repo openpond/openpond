@@ -510,6 +510,12 @@ describe("OpenPond Managed training adapter", () => {
       await expect(adapter.status(ref)).resolves.toMatchObject({
         state: "running",
         progress: 0.25,
+        rolloutProgress: {
+          groupsCompleted: 4,
+          groupsTarget: 16,
+          optimizerUpdatesApplied: 4,
+          optimizerUpdatesSkipped: 0,
+        },
       });
       await expect(adapter.rewardModelJob(ref.runId)).resolves.toMatchObject({
         job: { id: "managed-job-2", state: "running" },

@@ -14,8 +14,10 @@ const POLICY_SERIES: Array<SeriesDefinition<PolicyOptimizationMetric>> = [
   { key: "valueLoss", id: "optimizer.value_loss", label: "Value loss" },
   { key: "gradientNorm", id: "optimizer.gradient_norm", label: "Gradient norm" },
   { key: "kl", id: "optimizer.kl", label: "Policy update KL" },
+  { key: "behaviorPolicyKlPreUpdate", id: "optimizer.behavior_policy_kl", label: "Behavior-policy KL (pre-update)" },
   { key: "entropy", id: "optimizer.entropy", label: "Entropy" },
   { key: "policyClipFraction", id: "optimizer.policy_clip_fraction", label: "Post-update clip fraction", format: "percent" },
+  { key: "behaviorPolicyClipFractionPreUpdate", id: "optimizer.behavior_policy_clip_fraction", label: "Behavior-policy clip fraction (pre-update)", format: "percent" },
   { key: "valueClipFraction", id: "optimizer.value_clip_fraction", label: "Value clip fraction", format: "percent" },
   { key: "explainedVariance", id: "optimizer.explained_variance", label: "Explained variance" },
 ];

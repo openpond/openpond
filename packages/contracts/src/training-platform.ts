@@ -203,6 +203,15 @@ export const TrainingExecutionStatusSchema = z
     ]),
     phase: z.string().trim().min(1).max(200),
     progress: z.number().min(0).max(1).nullable(),
+    rolloutProgress: z
+      .object({
+        groupsCompleted: z.number().int().nonnegative(),
+        groupsTarget: z.number().int().nonnegative(),
+        optimizerUpdatesApplied: z.number().int().nonnegative(),
+        optimizerUpdatesSkipped: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
     updatedAt: ReleaseTimestampSchema,
     errorCode: ReleaseIdSchema.nullable(),
   })
