@@ -33,7 +33,7 @@ pnpm run test:all           # every deterministic non-live layer
 pnpm run test:live          # explicit external/live-provider checks
 ```
 
-`pnpm run verify:quick` runs typechecking plus the fast unit layer. `pnpm run verify:push` is the complete local push gate. Coverage and per-file timing are collected by `pnpm run test:observe`; they run weekly in CI instead of adding instrumentation to every pull request.
+`pnpm run verify:quick` runs typechecking plus the fast unit layer. The complete deterministic matrix runs in CI rather than behind a package-level push command. Coverage and per-file timing are collected by `pnpm run test:observe`; they run weekly in CI instead of adding instrumentation to every pull request.
 
 Pull requests use affected-test selection unless test infrastructure, shared contracts, production deletions, or broad cross-domain changes require the full matrix. Full CI runs static checks and artifact builds in parallel, shards unit and system coverage two ways, and starts integration/release consumers as soon as the verified build is available. CLI distribution installation proof runs for CLI, package, lockfile, and release changes.
 
