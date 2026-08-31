@@ -17,12 +17,40 @@ const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const EVALS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-evals.yml";
 const HARNESS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-harness.yml";
 const AGENT_SDK_RELEASE_WORKFLOW_PATH = ".github/workflows/release-agent-sdk.yml";
+const SDK_RELEASE_WORKFLOW_PATH = ".github/workflows/release-sdk.yml";
 const PYTHON_EVALS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-python-evals.yml";
 const ROOT_PACKAGE_PATH = "package.json";
 const RELEASE_COMMAND_PATH = "scripts/release-stable.ts";
 const LATEST_STABLE_TAG_SCRIPT_PATH = "scripts/latest-stable-release-tag.sh";
 
 describe("release workflow", () => {
+  test("treats package manifest maintenance without a release identity change as a successful no-op", () => {
+    for (const [workflowPath, manifestPath] of [
+      [SDK_RELEASE_WORKFLOW_PATH, "packages/sdk/package.json"],
+      [AGENT_SDK_RELEASE_WORKFLOW_PATH, "packages/agent-sdk/package.json"],
+      [HARNESS_RELEASE_WORKFLOW_PATH, "packages/harness/package.json"],
+      [EVALS_RELEASE_WORKFLOW_PATH, "packages/evals/package.json"],
+    ] as const) {
+      const workflow = readFileSync(workflowPath, "utf8");
+      const unchangedReleaseStart = workflow.indexOf(
+        'if [[ "${package_name}" == "${previous_name}" && "${version}" == "${previous_version}" ]]; then',
+      );
+
+      expect(unchangedReleaseStart).toBeGreaterThan(-1);
+      const unchangedReleaseBlock = workflow.slice(
+        unchangedReleaseStart,
+        unchangedReleaseStart + 500,
+      );
+      expect(unchangedReleaseBlock).toContain(
+        `${manifestPath} has no package name or version change; release will be skipped.`,
+      );
+      expect(unchangedReleaseBlock).toContain('should_publish="false"');
+      expect(unchangedReleaseBlock).toContain('should_release="false"');
+      expect(unchangedReleaseBlock).not.toContain("exit 1");
+      expect(workflow).not.toContain("changed without a version bump");
+    }
+  });
+
   test("retries protocol-package provenance verification while npm attestations propagate", () => {
     for (const workflowPath of [
       EVALS_RELEASE_WORKFLOW_PATH,
