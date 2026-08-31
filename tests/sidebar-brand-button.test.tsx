@@ -18,7 +18,7 @@ describe("Sidebar experience wordmark", () => {
     expect(markup).toContain('aria-label="OpenPond product: Models"');
     expect(markup).toContain('aria-haspopup="menu"');
     expect(markup).toContain('aria-expanded="false"');
-    expect(markup).toContain('src="./openpond-wordlogo-white.png" alt=""');
+    expect(markup).toContain('src="/openpond-wordlogo-white.png" alt=""');
     expect(markup).toContain(
       '<span class="sidebar-experience-label">Models</span>'
     );

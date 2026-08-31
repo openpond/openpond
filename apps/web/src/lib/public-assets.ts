@@ -1,4 +1,4 @@
-const PUBLIC_ASSET_PREFIX = "./";
+const PUBLIC_ASSET_PREFIX = "/";
 
 export function publicAssetUrl(path: string): string {
   return `${PUBLIC_ASSET_PREFIX}${path.replace(/^\.?\//, "")}`;

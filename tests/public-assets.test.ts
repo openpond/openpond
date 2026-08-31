@@ -14,9 +14,8 @@ import {
 } from "../apps/web/src/lib/public-video-assets";
 
 describe("web public asset URLs", () => {
-  test("resolve beside the packaged renderer instead of the filesystem root", () => {
-    const rendererUrl =
-      "file:///Applications/openpond.app/Contents/Resources/web/index.html";
+  test("resolve from the renderer root on nested application routes", () => {
+    const rendererUrl = "http://127.0.0.1:17876/chat/session-123";
     const assetUrls = [
       OPENPOND_ICON_URL,
       OPENPOND_WORDMARK_WHITE_URL,
@@ -26,18 +25,19 @@ describe("web public asset URLs", () => {
     ];
 
     for (const assetUrl of assetUrls) {
-      expect(assetUrl.startsWith("./")).toBe(true);
-      expect(
-        new URL(assetUrl, rendererUrl).pathname.startsWith(
-          "/Applications/openpond.app/Contents/Resources/web/"
-        )
-      ).toBe(true);
+      expect(assetUrl.startsWith("/")).toBe(true);
+      expect(new URL(assetUrl, rendererUrl).origin).toBe(
+        "http://127.0.0.1:17876"
+      );
+      expect(new URL(assetUrl, rendererUrl).pathname).not.toContain(
+        "/chat/"
+      );
     }
   });
 
   test("normalizes callers that pass a leading slash", () => {
-    expect(publicAssetUrl("/openpond-icon.png")).toBe("./openpond-icon.png");
-    expect(publicAssetUrl("./openpond-icon.png")).toBe("./openpond-icon.png");
+    expect(publicAssetUrl("/openpond-icon.png")).toBe("/openpond-icon.png");
+    expect(publicAssetUrl("./openpond-icon.png")).toBe("/openpond-icon.png");
   });
 
   test("uses local MP4s in development and immutable manifest keys in production", () => {
@@ -79,7 +79,7 @@ describe("web public asset URLs", () => {
     );
     expect(PUBLIC_VIDEO_MANIFEST.videos.length).toBeGreaterThan(0);
     for (const video of PUBLIC_VIDEO_MANIFEST.videos) {
-      expect(resolvePublicVideoUrl(video, false)).toBe(`./${video.localPath}`);
+      expect(resolvePublicVideoUrl(video, false)).toBe(`/${video.localPath}`);
       expect(resolvePublicVideoUrl(video, true)).toBe(
         `${PRODUCTION_MEDIA_ORIGIN}/media/videos/${video.sha256}.mp4`
       );
