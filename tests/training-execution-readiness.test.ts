@@ -27,6 +27,8 @@ describe("training execution readiness authority", () => {
       { code: "capability_diagnosis_missing", message: "no diagnosis", path: "metadata" },
       { code: "training_not_recommended", message: "not recommended", path: "metadata" },
       { code: "grader_audit_failed", message: "calibration failed", path: "graders" },
+      { code: "grader_hacking", message: "legacy calibration label", path: "graders" },
+      { code: "grader_adversarial_calibration_failed", message: "calibration failed", path: "graders" },
     ]);
 
     expect(trainingExecutionBlockers(taskset)).toEqual([]);
@@ -38,7 +40,6 @@ describe("training execution readiness authority", () => {
       { code: "online_reward_missing", message: "reward missing", path: "rewards" },
       { code: "sft_demonstrations_unapproved", message: "not approved", path: "signals" },
       { code: "example_provenance_missing", message: "origin missing", path: "tasks" },
-      { code: "grader_hacking", message: "injection", path: "graders" },
       { code: "environment_leakage", message: "leak", path: "environment" },
       { code: "infrastructure_reward", message: "unsafe", path: "fixtures" },
     ]);
@@ -47,7 +48,6 @@ describe("training execution readiness authority", () => {
       "online_reward_missing",
       "sft_demonstrations_unapproved",
       "example_provenance_missing",
-      "grader_hacking",
       "environment_leakage",
       "infrastructure_reward",
     ]);

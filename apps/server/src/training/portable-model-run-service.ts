@@ -146,6 +146,17 @@ export function createPortableModelRunService(deps: {
       retentionDays: input.retentionDays,
       harnessRelease: releasedHarness.harnessRelease,
     });
+    // Preparation resolves the caller-authored Recipe into the persisted,
+    // executable contract (authoritative hashes plus GRPO semantics). Export
+    // that exact projection instead of reverting to the mutable Project input.
+    const preparedRecipe = TrainingRecipeSchema.parse(prepared.plan.recipe);
+    const preparedProject = {
+      ...sourceProject,
+      trainingSetup: {
+        ...sourceProject.trainingSetup,
+        recipe: preparedRecipe,
+      },
+    };
     const approval = await deps.approve({
       planId: prepared.plan.id,
       bundleId: prepared.bundle.id,
@@ -168,7 +179,7 @@ export function createPortableModelRunService(deps: {
       : new Map<string, Uint8Array>();
     const graph = buildTasksetTrainingBundle({
       taskset,
-      modelProject: sourceProject,
+      modelProject: preparedProject,
       modelRunId,
       runtime: bindings.runtime,
       compute: bindings.compute,
@@ -190,7 +201,7 @@ export function createPortableModelRunService(deps: {
     const resolvedPlanBase = {
       schemaVersion: "openpond.resolvedTrainingPlan.v1" as const,
       manifest: graph.manifest,
-      recipe,
+      recipe: preparedRecipe,
       runtime: bindings.runtime,
       compute: bindings.compute,
       engine: bindings.engine,
