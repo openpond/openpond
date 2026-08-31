@@ -4,36 +4,23 @@ import {
   type LearnedPreferenceRewardBinding,
 } from "@openpond/contracts";
 
-import {
-  DatasetSourcePickerDialog,
-  type DatasetCreateSource,
-} from "../datasets/DatasetSourcePickerDialog";
+import { DatasetSourcePickerDialog, type DatasetCreateSource } from "../datasets/DatasetSourcePickerDialog";
 import { HuggingFaceDatasetImportDialog } from "../datasets/HuggingFaceDatasetImportDialog";
 import { TasksetDraftEditor } from "../datasets/TasksetDraftEditor";
-import { ModelUseDialog } from "../training/ModelUseDialog";
 import { api } from "../../api";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
 import { LabWorkproductDetail } from "./LabWorkproductDetail";
 import { labWorkproductProjection } from "./lab-workproducts";
 import { LabsView, type LabPrimaryTab } from "./LabsView";
-import {
-  LabDatasetsPage,
-  type TasksetDetailTab,
-} from "./LabDatasetsPage";
-import {
-  LabEvaluationsPage,
-  type EvaluationDetailTab,
-} from "./LabEvaluationsPage";
+import { LabDatasetsPage, type TasksetDetailTab } from "./LabDatasetsPage";
+import { LabEvaluationsPage, type EvaluationDetailTab } from "./LabEvaluationsPage";
 import { LabHumanReviewsPage } from "./LabHumanReviewsPage";
-import {
-  LabScoringPage,
-  type ScoringDetailTab,
-} from "./LabScoringPage";
-import {
-  LabModelCreateDialog,
-  type LabModelCreateInput,
-} from "./LabModelCreateDialog";
+import { LabScoringPage } from "./LabScoringPage";
+import type { LabScorerCreateInput } from "./LabScorerCreateDialog";
+import { LabModelCreateDialog, type LabModelCreateInput } from "./LabModelCreateDialog";
 import { LabModelsPage } from "./LabModelsPage";
+import { LabModelsOverviewPage } from "./LabModelsOverviewPage";
+import { LabsRouteModelUseDialog } from "./LabsRouteModelUseDialog";
 import { LabServingPage } from "./LabServingPage";
 import { ModelRunEditorPage } from "./ModelRunEditorPage";
 import { labModelVersions } from "./lab-models";
@@ -294,6 +281,7 @@ export function LabsRoute({
     }
     if (modelsRoute?.kind === "library") {
       const definitions = {
+        projects: { kind: "model" as const, label: "Model Projects" },
         tasksets: { kind: "dataset" as const, label: "Taskset Library" },
         scoring: { kind: "scoring" as const, label: "Scoring" },
         evaluations: { kind: "evaluation" as const, label: "Evaluations" },
@@ -516,6 +504,27 @@ export function LabsRoute({
     profileView.onToast?.(`${saved.name} created.`, "success");
     return true;
   }
+
+  async function createScorer(
+    input: LabScorerCreateInput,
+    modelProjectId: string | null,
+  ): Promise<boolean> {
+    const result = await training.training.actions.createScorer(
+      input.grader,
+      input.tasksetId,
+      modelProjectId,
+    );
+    if (!result) return false;
+    if (result.hostedSync.state === "sync_failed") {
+      profileView.onToast?.(
+        `${input.grader.label} was created locally, but its hosted Taskset release did not sync.`,
+        "info",
+      );
+    } else {
+      profileView.onToast?.(`${input.grader.label} created.`, "success");
+    }
+    return true;
+  }
   const closeSelectedWorkproduct = useCallback(
     () => navigateModelsRoute({ kind: "index" }),
     [],
@@ -581,13 +590,27 @@ export function LabsRoute({
       showHeader={
         !training.launchRequest
         && datasetCreateRoute !== "build"
-        && modelsRoute?.kind !== "library"
+        && (modelsRoute?.kind !== "library" || modelsRoute.section === "projects")
       }
       onCreateDataset={openDatasetCreation}
       onCreateModel={() => setModelCreateOpen(true)}
     >
       {modelsRoute?.kind === "library" ? (
-        modelsRoute.section === "tasksets" ? (
+        modelsRoute.section === "projects" ? (
+          <LabModelsPage
+            activeProfileId={profileId}
+            items={models}
+            loading={training.training.loading && !models.length}
+            providerSettings={training.providerSettings}
+            runs={createImprove.runs}
+            state={training.training.payload}
+            onSelect={(key) => {
+              const project = models.find((item) => item.key === key);
+              if (project) navigateModelsRoute(modelProjectRoute(project.id));
+            }}
+            onUseModel={useModel}
+          />
+        ) : modelsRoute.section === "tasksets" ? (
           datasetCreateRoute === "build" ? (
             <TasksetDraftEditor
               defaultModel={training.defaultModel}
@@ -632,15 +655,13 @@ export function LabsRoute({
           )
         ) : modelsRoute.section === "scoring" ? (
           <LabScoringPage
-            detailTab={modelsRoute.detailTab as ScoringDetailTab | null}
-            onDetailTabChange={(detailTab) => navigateModelsRoute(modelLibraryRoute(
-              "scoring",
-              modelsRoute.resourceId,
-              detailTab,
-            ))}
+            busy={training.training.busyAction === "create-scorer"}
+            defaultModel={training.defaultModel}
             onOpenTaskset={(tasksetId) => navigateModelsRoute(modelLibraryRoute("tasksets", tasksetId))}
+            onCreateScorer={(input) => createScorer(input, null)}
             onSelectedScorerIdChange={(scorerId) => navigateModelsRoute(modelLibraryRoute("scoring", scorerId))}
             selectedScorerId={modelsRoute.resourceId}
+            providerSettings={training.providerSettings}
             state={training.training.payload}
           />
         ) : modelsRoute.section === "evaluations" ? (
@@ -730,12 +751,10 @@ export function LabsRoute({
         )
       ) : activeTab === "scoring" && modelsRoute?.kind === "project" ? (
         <LabScoringPage
-          detailTab={modelsRoute.detailTab as ScoringDetailTab | null}
+          busy={training.training.busyAction === "create-scorer"}
+          defaultModel={training.defaultModel}
           modelProjectId={modelsRoute.projectId}
-          onDetailTabChange={(detailTab) => navigateModelsRoute({
-            ...modelsRoute,
-            detailTab,
-          })}
+          onCreateScorer={(input) => createScorer(input, modelsRoute.projectId)}
           onOpenTaskset={(tasksetId) => navigateModelsRoute({
             kind: "project",
             projectId: modelsRoute.projectId,
@@ -751,6 +770,7 @@ export function LabsRoute({
             detailTab: null,
           })}
           selectedScorerId={modelsRoute.resourceId}
+          providerSettings={training.providerSettings}
           state={training.training.payload}
         />
       ) : activeTab === "evals" && modelsRoute?.kind === "project" ? (
@@ -890,6 +910,20 @@ export function LabsRoute({
           initialBenchmarkOpen={benchmarkLaunch?.modelId === selected.id}
           onInitialBenchmarkOpenConsumed={() => setBenchmarkLaunch(null)}
         />
+      ) : modelsRoute?.kind === "index" ? (
+        <LabModelsOverviewPage
+          items={models}
+          state={training.training.payload}
+          onOpenProject={(projectId) => navigateModelsRoute(modelProjectRoute(projectId))}
+          onOpenRun={(run) => navigateModelsRoute({
+            kind: "project",
+            projectId: run.modelId,
+            section: "runs",
+            resourceId: modelEntryRouteId(`model-run:${run.id}`),
+            detailTab: null,
+          })}
+          onOpenServing={(projectId) => navigateModelsRoute(modelProjectRoute(projectId, "serving"))}
+        />
       ) : (
         <LabModelsPage
           activeProfileId={profileId}
@@ -955,26 +989,11 @@ export function LabsRoute({
           training={training.training}
         />
       ) : null}
-      {modelUseVersionId
-        ? (() => {
-            const lineage = training.training.payload?.models.find(
-              (candidate) => candidate.id === modelUseVersionId,
-            );
-            const taskset = training.training.payload?.tasksets.find(
-              (candidate) => candidate.id === lineage?.tasksetId,
-            );
-            if (!lineage || !taskset) return null;
-            return (
-              <ModelUseDialog
-                lineage={lineage}
-                taskset={taskset}
-                training={training.training}
-                onChat={training.onChatWithModel}
-                onClose={() => setModelUseVersionId(null)}
-              />
-            );
-          })()
-        : null}
+      <LabsRouteModelUseDialog
+        versionId={modelUseVersionId}
+        training={training}
+        onClose={() => setModelUseVersionId(null)}
+      />
     </LabsView>
   );
 }

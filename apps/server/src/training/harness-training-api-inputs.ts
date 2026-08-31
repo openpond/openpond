@@ -33,24 +33,6 @@ export function sameImmutableRef(value: unknown, expected: ImmutableRef): boolea
   return candidate.id === expected.id && candidate.contentHash === expected.contentHash;
 }
 
-export function recipeBaseModelId(recipe: Record<string, unknown>): string {
-  const method = recipe.method;
-  const base = record(recipe.baseModel);
-  if (method === "sft" || method === "grpo") {
-    return requiredString(base.id, "recipe.baseModel.id");
-  }
-  if (method === "dpo") {
-    return requiredString(record(recipe.policyModel).id, "recipe.policyModel.id");
-  }
-  if (method === "ppo") {
-    return requiredString(
-      record(record(recipe.policyOptimization).policyModel).id,
-      "recipe.policyOptimization.policyModel.id",
-    );
-  }
-  throw new Error("Qualified training recipe method is not executable.");
-}
-
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>

@@ -42,7 +42,7 @@ import {
   managedRewardModelIdempotencyKey,
   type ManagedRewardModelBase,
 } from "./reward-model-launch-input.js";
-import { projectQualifiedRewardModel } from "./reward-model-qualification-projection.js";
+import { projectRewardModelRelease } from "./reward-model-qualification-projection.js";
 import {
   loadRewardModelQualificationReport,
   saveRewardModelQualificationReport,
@@ -502,7 +502,7 @@ export function createTrainingService(deps: {
               await deps.store.listRewardModelVersions(),
               run.rewardModelId,
             );
-            const version = projectQualifiedRewardModel({
+            const version = projectRewardModelRelease({
               run,
               baseModel: {
                 schemaVersion: "openpond.baseModelPreference.v1",
@@ -533,17 +533,21 @@ export function createTrainingService(deps: {
               managedExecutionReceipt: remote.executionReceiptRef,
               createdAt: new Date().toISOString(),
             });
-            await saveRewardModelQualificationReport({
-              storeDir: deps.storeDir,
-              report: version.report,
-            });
+            if (version.report) {
+              await saveRewardModelQualificationReport({
+                storeDir: deps.storeDir,
+                report: version.report,
+              });
+            }
             await deps.store.saveRewardModelVersion(version.version);
             await deps.store.saveRewardModelRun({
               ...run,
               status: "succeeded",
               rewardModelVersionId: version.version.id,
               receipt: version.receipt,
-              qualificationReport: { id: version.report.id, contentHash: version.report.contentHash },
+              qualificationReport: version.report
+                ? { id: version.report.id, contentHash: version.report.contentHash }
+                : null,
               progress: { ...run.progress, completedSteps: run.progress.totalSteps, latestLoss },
               completedAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -552,8 +556,8 @@ export function createTrainingService(deps: {
             await deps.store.saveRewardModelRun({
               ...run,
               status: "failed",
-              failureOwner: "qualification",
-              failure: error instanceof Error ? error.message : "Reward Model qualification projection failed.",
+              failureOwner: "artifact",
+              failure: error instanceof Error ? error.message : "Reward Model release projection failed.",
               completedAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             });

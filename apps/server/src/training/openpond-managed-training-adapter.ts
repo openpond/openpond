@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-
 import {
   ModelProjectSchema,
   AdapterValidationReceiptSchema,
@@ -200,6 +199,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       requestedCapabilities: [
         { id: "managed_rl.reward_model", version: "1", required: true },
       ],
+      placementObjective: project.trainingSetup.managedGpuPlacementObjective,
       budget: {
         maximumSpendUsd,
         maximumWallSeconds: Math.ceil(input.recipe.resourceLimits.wallTimeMs / 1_000),
@@ -357,28 +357,34 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         });
       }
       if (taskset && trainingPlan && taskset.contentHash === trainingPlan.tasksetHash) {
-        if (taskset.metadata.harnessEvaluationReview !== undefined) {
+        if (trainingPlan.modelImprovementQualification) {
           const qualification = await managedQualification({
             store: this.dependencies.store,
             taskset,
             qualificationRef: trainingPlan.modelImprovementQualification ?? null,
           });
+          const approvalQualification =
+            approval?.modelImprovementQualification ?? null;
           if (
             !qualification ||
-            qualification.decision !== "rl" ||
-            approval?.modelImprovementQualification?.id !== qualification.id ||
-            approval.modelImprovementQualification.contentHash !== qualification.contentHash ||
-            qualification.metadata.sourceTasksetId !== taskset.id ||
-            qualification.metadata.sourceTasksetHash !== taskset.contentHash ||
-            (approval.maximumCostUsd !== null && approval.maximumCostUsd > qualification.maximumCostUsd)
+            !approvalQualification ||
+            approvalQualification.id !== qualification.id ||
+            approvalQualification.contentHash !== qualification.contentHash
           ) {
             issues.push({
-              code: "managed_qualification_invalid",
+              code: "managed_evaluation_reference_invalid",
               path: "execution",
               message:
-                "OpenPond Managed requires an exact qualified RL receipt on the immutable Taskset, plan, and approval.",
+                "The optional model-improvement evidence does not match the immutable plan and approval.",
             });
           }
+        } else if (approval?.modelImprovementQualification) {
+          issues.push({
+            code: "managed_evaluation_reference_invalid",
+            path: "execution",
+            message:
+              "The optional model-improvement evidence differs between the immutable plan and approval.",
+          });
         }
         const requiresHarness =
           taskset.capabilities.requiresState ||
@@ -645,6 +651,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           required: true,
         },
       ],
+      placementObjective: project.trainingSetup.managedGpuPlacementObjective,
       budget: {
         maximumSpendUsd: plan.maximumSpendUsd,
         maximumWallSeconds: Math.ceil(plan.recipe.resourceLimits.wallTimeMs / 1_000),

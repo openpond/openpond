@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectQualifiedRewardModel } from "../apps/server/src/training/reward-model-qualification-projection.js";
+import { projectRewardModelRelease } from "../apps/server/src/training/reward-model-qualification-projection.js";
 
 const HASH = "a".repeat(64);
 const REVISION = "b".repeat(40);
@@ -66,20 +66,22 @@ function input(overrides: Record<string, unknown> = {}) {
 
 describe("Reward Model qualification projection", () => {
   it("creates a smoke-only R0 only from terminal cleanup and reload evidence", () => {
-    const result = projectQualifiedRewardModel(input());
+    const result = projectRewardModelRelease(input());
     expect(result.version.runtime?.baseModel.revision).toBe(REVISION);
-    expect(result.report.kind).toBe("synthetic_smoke");
-    expect(result.report.productionRewardEligible).toBe(false);
+    expect(result.report?.kind).toBe("synthetic_smoke");
+    expect(result.report?.productionRewardEligible).toBe(false);
     expect(result.receipt.cleanup).toEqual({ computeReleased: true, providerTerminalObserved: true });
   });
 
-  it("rejects non-varying validation scores and incomplete cleanup", () => {
-    expect(() => projectQualifiedRewardModel(input({
+  it("publishes receipt-complete artifacts without optional qualification", () => {
+    const withoutQualification = projectRewardModelRelease(input({
       evidence: {
         qualification: { checkpointReloadPassed: true, finiteScoreRate: 1, sampleCount: 4, scoreVariance: 0 },
       },
-    }))).toThrow("reload, processor, invalid-exclusion, finite, and varying-score gates");
-    expect(() => projectQualifiedRewardModel(input({
+    }));
+    expect(withoutQualification.report).toBeNull();
+    expect(withoutQualification.version.status).toBe("available");
+    expect(() => projectRewardModelRelease(input({
       cleanup: { computeReleased: false, providerTerminalObserved: true },
     }))).toThrow("terminal managed cleanup");
   });

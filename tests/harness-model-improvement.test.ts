@@ -17,7 +17,7 @@ import {
 } from "./helpers/training-fixtures.js";
 import {
   qualifyHarnessModelImprovement,
-  requireQualifiedModelImprovement,
+  resolveModelImprovementQualificationEvidence,
   runHarnessReviewBaselineAndQualification,
 } from "../apps/server/src/training/harness-model-improvement.js";
 
@@ -267,7 +267,7 @@ describe("Harness model-improvement qualification", () => {
     expect(receipt.reasons).toContain("The real baseline already meets the protected success threshold.");
   });
 
-  it("requires exact method, base Model, Taskset, and cost before planning", async () => {
+  it("treats model-improvement qualification as optional identity-pinned evidence", async () => {
     const taskset = tasksetWithLineage();
     const evaluation = baseline({ tasksetId: taskset.id, tasksetHash: taskset.contentHash, score: 0.2, scoreVariance: 0.04 });
     const qualificationStore = storeFixture(taskset, evaluation);
@@ -285,33 +285,21 @@ describe("Harness model-improvement qualification", () => {
       getTaskset: vi.fn(async () => taskset),
       listHarnessImprovementArtifacts: vi.fn(async () => [receipt]),
     };
-    await expect(requireQualifiedModelImprovement({
+    await expect(resolveModelImprovementQualificationEvidence({
       store: store as never,
       workspaceId: "workspace-qualification",
       qualificationRef: { id: receipt.id, contentHash: receipt.contentHash },
-      tasksetId: taskset.id,
-      recipe: { method: "sft" },
-      baseModelId: receipt.model.model,
-      maximumCostUsd: 5,
     })).resolves.toEqual(receipt);
-    await expect(requireQualifiedModelImprovement({
+    await expect(resolveModelImprovementQualificationEvidence({
       store: store as never,
       workspaceId: "workspace-qualification",
-      qualificationRef: { id: receipt.id, contentHash: receipt.contentHash },
-      tasksetId: taskset.id,
-      recipe: { method: "ppo" },
-      baseModelId: receipt.model.model,
-      maximumCostUsd: 5,
-    })).rejects.toThrow("recipe method");
-    await expect(requireQualifiedModelImprovement({
+      qualificationRef: null,
+    })).resolves.toBeNull();
+    await expect(resolveModelImprovementQualificationEvidence({
       store: store as never,
       workspaceId: "workspace-qualification",
-      qualificationRef: { id: receipt.id, contentHash: receipt.contentHash },
-      tasksetId: taskset.id,
-      recipe: { method: "sft" },
-      baseModelId: receipt.model.model,
-      maximumCostUsd: 6,
-    })).rejects.toThrow("maximum cost");
+      qualificationRef: { id: receipt.id, contentHash: "wrong-hash" },
+    })).rejects.toThrow("immutable identity");
   });
 
   it("blocks RL when scalar reward has no baseline variance", async () => {

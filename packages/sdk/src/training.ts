@@ -218,6 +218,7 @@ export const TrainingJobSubmissionSchema = z
     requestedCapabilities: z
       .array(TrainingCapabilityRequirementSchema)
       .max(1_000),
+    placementObjective: z.enum(["fast", "balanced", "economical"]),
     budget: z
       .object({
         maximumSpendUsd: z.number().nonnegative(),

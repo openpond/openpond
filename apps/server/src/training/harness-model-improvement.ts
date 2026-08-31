@@ -226,45 +226,25 @@ export async function qualifyHarnessModelImprovement(input: {
   return receipt;
 }
 
-export async function requireQualifiedModelImprovement(input: {
+export async function resolveModelImprovementQualificationEvidence(input: {
   store: SqliteStore;
   workspaceId: string;
-  qualificationRef: ImmutableRef;
-  tasksetId: string;
-  recipe: { method?: unknown };
-  baseModelId: string;
-  maximumCostUsd?: number | null;
-}): Promise<ModelImprovementQualificationReceipt> {
+  qualificationRef?: ImmutableRef | null;
+}): Promise<ModelImprovementQualificationReceipt | null> {
+  if (!input.qualificationRef) return null;
+  const qualificationRef = input.qualificationRef;
   const receipt = (await input.store.listHarnessImprovementArtifacts(
     input.workspaceId,
     "training_qualification",
     1_000,
   ) as ModelImprovementQualificationReceipt[]).find((candidate) =>
-    candidate.id === input.qualificationRef.id &&
-    candidate.contentHash === input.qualificationRef.contentHash,
+    candidate.id === qualificationRef.id &&
+    candidate.contentHash === qualificationRef.contentHash,
   );
-  if (!receipt || receipt.decision === "no_training") {
-    throw new Error("A qualified model-improvement receipt is required before planning training.");
-  }
-  const taskset = await input.store.getTaskset(input.tasksetId);
-  if (!taskset || taskset.metadata.harnessEvaluationReview === undefined) {
-    throw new Error("Qualified Taskset was not found.");
-  }
-  if (receipt.metadata.sourceTasksetId !== taskset.id || receipt.metadata.sourceTasksetHash !== taskset.contentHash) {
-    throw new Error("Model-improvement qualification does not match the current immutable Taskset.");
-  }
-  if (!recipeMatches(receipt.decision, input.recipe.method)) {
-    throw new Error("Training recipe method does not match the qualification decision.");
-  }
-  if (receipt.model.model !== input.baseModelId) {
-    throw new Error("Training base Model does not match the qualified baseline Model.");
-  }
-  if (
-    input.maximumCostUsd !== null &&
-    input.maximumCostUsd !== undefined &&
-    input.maximumCostUsd > receipt.maximumCostUsd
-  ) {
-    throw new Error("Training approval exceeds the qualified maximum cost.");
+  if (!receipt) {
+    throw new Error(
+      "The supplied model-improvement qualification was not found at its immutable identity.",
+    );
   }
   return receipt;
 }
@@ -461,16 +441,6 @@ function hashMetadata(baseline: EvaluationResult, key: string): string {
   const value = baseline.metadata[key];
   if (typeof value !== "string") throw new Error(`Baseline Evaluation is missing ${key}.`);
   return value;
-}
-
-function recipeMatches(
-  decision: ModelImprovementQualificationReceipt["decision"],
-  method: unknown,
-): boolean {
-  if (decision === "sft") return method === "sft";
-  if (decision === "preference") return method === "dpo";
-  if (decision === "rl") return method === "grpo" || method === "ppo";
-  return false;
 }
 
 function sameRef(value: unknown, expected: ImmutableRef): boolean {

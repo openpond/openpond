@@ -44,6 +44,7 @@ export function newProject(
       method: null,
       destinationId: null,
       managedRolloutPlacement: "remote",
+      managedGpuPlacementObjective: "balanced",
       runPreset: null,
       recipe: null,
       preferredMaximumSpendUsd: null,

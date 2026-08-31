@@ -61,6 +61,7 @@ function submission() {
       resumeFrom: null,
     },
     requestedCapabilities: [],
+    placementObjective: "economical" as const,
     budget: { maximumSpendUsd: 10, maximumWallSeconds: 3_600 },
     approval: {
       approvalHash: HASH,
@@ -195,6 +196,7 @@ describe("Training SDK contracts", () => {
       contentHash: HASH,
     });
     expect(parsed.approval.maximumSpendUsd).toBe(parsed.budget.maximumSpendUsd);
+    expect(parsed.placementObjective).toBe("economical");
   });
 
   it("rejects an approval for a different spend ceiling", () => {

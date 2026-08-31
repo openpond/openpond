@@ -26,21 +26,24 @@
 
 .model-project-page-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
   margin: 0;
 }
 
 .model-project-page-metrics > div {
   display: grid;
   gap: 4px;
-  border-right: 1px solid var(--border);
-  padding: 0 16px;
+  align-content: start;
+  min-height: 72px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel) 82%, var(--bg));
+  padding: 12px 13px;
 }
-.model-project-page-metrics > div:first-child { padding-left: 0; }
-.model-project-page-metrics > div:last-child { border-right: 0; }
 .model-project-page-metrics dt,
-.model-project-page-metrics small { color: var(--muted); font-size: 10px; }
-.model-project-page-metrics dd { margin: 0; overflow-wrap: anywhere; font-size: 16px; font-weight: 620; }
+.model-project-page-metrics small { color: var(--muted); font-size: 10px; line-height: 1.35; }
+.model-project-page-metrics dd { margin: 0; overflow-wrap: anywhere; font-size: 17px; font-weight: 650; line-height: 1.25; }
 
 .labs-resource-page,
 .labs-model-overview {
@@ -212,6 +215,24 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.labs-scorer-detail-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.labs-scorer-detail-grid .training-detail-section-panel {
+  border-style: solid;
+  background: var(--panel);
+}
+
+.labs-scorer-detail-grid .training-detail-section-panel > h2 {
+  margin-top: 0;
+}
+
+.labs-scorer-evidence-section .labs-inline-facts {
+  margin-bottom: 4px;
+}
+
 .labs-resource-code {
   overflow: auto;
   max-height: 420px;
@@ -251,9 +272,85 @@
 }
 
 .labs-human-review-page {
-  width: 100%;
-  max-width: 1180px;
+  width: min(1180px, calc(100% - 56px));
 }
+
+.labs-models-operational-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.labs-operational-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.labs-operational-card > header {
+  border-bottom: 1px solid var(--border);
+  padding: 13px 14px 12px;
+}
+
+.labs-operational-card h2,
+.labs-operational-card p {
+  margin: 0;
+}
+
+.labs-operational-card h2 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.labs-operational-card header p,
+.labs-operational-empty {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.labs-operational-card-body {
+  display: grid;
+}
+
+.labs-operational-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  min-height: 58px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 10px 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.labs-operational-row:last-child { border-bottom: 0; }
+.labs-operational-row:hover { background: var(--panel-soft); }
+.labs-operational-row > span:first-child { display: grid; min-width: 0; gap: 3px; }
+.labs-operational-row strong,
+.labs-operational-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.labs-operational-row strong { font-size: 12px; }
+.labs-operational-row small { color: var(--muted); font-size: 10px; }
+.labs-operational-row .labs-status-badge { flex: 0 0 auto; }
+
+.labs-operational-empty {
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  text-align: center;
+}
+
+.labs-models-activity-table { min-width: 760px; }
+.labs-models-activity-table th:first-child { width: 34%; }
 
 .labs-human-review-queues .training-table-wrap,
 .labs-human-review-workspace .training-detail-section-panel,
@@ -404,9 +501,9 @@
 
 @media (max-width: 700px) {
   .model-project-page-heading { align-items: flex-start; flex-direction: column; }
-  .model-project-page-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; }
-  .model-project-page-metrics > div:nth-child(2) { border-right: 0; }
+  .model-project-page-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .labs-overview-decision-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .labs-models-operational-grid { grid-template-columns: 1fr; }
   .labs-project-chart-grid { grid-template-columns: 1fr; }
   .labs-evaluation-score-row-large { grid-template-columns: 1fr; }
   .labs-human-review-detail .labs-dataset-detail-heading {

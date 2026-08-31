@@ -6,6 +6,7 @@ import type {
   ProductArea,
 } from "@openpond/contracts";
 import {
+  Activity,
   Boxes,
   CalendarClock,
   ChartColumnStacked,
@@ -140,9 +141,18 @@ export function SidebarNavigation({
           <span className="sidebar-nav-group-label">Library</span>
           <button
             className={`nav-command ${view === "labs" && modelsRoute?.kind === "index" ? "active" : ""}`}
-            aria-label="Model Projects"
+            aria-label="Models Overview"
             type="button"
             onClick={selectModelsIndex}
+          >
+            <Activity size={16} />
+            <span>Overview</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeLibrarySection === "projects" ? "active" : ""}`}
+            aria-label="Model Projects"
+            type="button"
+            onClick={() => selectModelsLibrary("projects")}
           >
             <FolderGit2 size={16} />
             <span>Model Projects</span>

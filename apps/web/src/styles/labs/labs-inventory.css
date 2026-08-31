@@ -112,6 +112,58 @@
   overflow: visible;
 }
 
+.labs-scorer-create-dialog {
+  width: min(680px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: auto;
+}
+
+.labs-scorer-identity-grid,
+.labs-scorer-settings-row {
+  display: grid;
+  gap: 10px;
+}
+
+.labs-scorer-identity-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 0.32fr);
+}
+
+.labs-scorer-identity-grid > label,
+.labs-scorer-settings-row > label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.labs-scorer-settings-row {
+  grid-template-columns: 110px repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+
+.labs-scorer-settings-row .labs-scorer-checkbox {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.labs-scorer-settings-row .labs-scorer-checkbox input {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
+@media (max-width: 700px) {
+  .labs-scorer-settings-row { grid-template-columns: 1fr; }
+}
+
 .labs-model-create-purpose {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

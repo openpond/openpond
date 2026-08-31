@@ -20,6 +20,7 @@ import {
   toProjectedTrainingData,
 } from "./training-dataset-selection.js";
 import { withAuthoritativeRecipeHashes } from "./training-service-helpers.js";
+import { assertTasksetExecutableForTraining } from "./training-execution-readiness.js";
 
 export type TrainingStartInput = {
   modelId: string;
@@ -49,19 +50,7 @@ export function createTrainingPlanLifecycleService(deps: {
   ) {
     const taskset = await deps.store.getTaskset(input.tasksetId);
     if (!taskset) throw new Error("Taskset not found.");
-    if (!taskset.readiness?.ready) {
-      throw new Error(
-        "Taskset is not ready for training. Resolve readiness blockers first.",
-      );
-    }
-    if (
-      taskset.metadata.harnessEvaluationReview !== undefined &&
-      !input.modelImprovementQualification
-    ) {
-      throw new Error(
-        "Harness-origin Tasksets require an exact model-improvement qualification before training planning.",
-      );
-    }
+    assertTasksetExecutableForTraining(taskset);
     const recipe = TrainingRecipeSchema.parse(
       withAuthoritativeRecipeHashes(taskset, input.recipe),
     );
@@ -288,15 +277,12 @@ export function createTrainingPlanLifecycleService(deps: {
       throw new Error("Prepared Training Plan and Bundle do not match.");
     }
     const taskset = await deps.store.getTaskset(plan.tasksetId);
-    if (
-      !taskset
-      || taskset.contentHash !== plan.tasksetHash
-      || !taskset.readiness?.ready
-    ) {
+    if (!taskset || taskset.contentHash !== plan.tasksetHash) {
       throw new Error(
         "The prepared Training Plan is stale. Prepare a new quote from the current Taskset.",
       );
     }
+    assertTasksetExecutableForTraining(taskset);
     const approval = await approve({
       planId: plan.id,
       bundleId: bundle.id,
