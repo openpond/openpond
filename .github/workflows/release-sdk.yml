@@ -59,8 +59,9 @@ jobs:
                   <<<"${previous_manifest}"
               )"
               if [[ "${package_name}" == "${previous_name}" && "${version}" == "${previous_version}" ]]; then
-                echo "packages/sdk/package.json changed without a version bump." >&2
-                exit 1
+                echo "packages/sdk/package.json has no package name or version change; release will be skipped."
+                should_publish="false"
+                should_release="false"
               fi
             fi
           fi

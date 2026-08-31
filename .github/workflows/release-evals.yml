@@ -54,8 +54,9 @@ jobs:
               previous_name="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).name)" <<<"${previous_manifest}")"
               previous_version="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).version)" <<<"${previous_manifest}")"
               if [[ "${package_name}" == "${previous_name}" && "${version}" == "${previous_version}" ]]; then
-                echo "packages/evals/package.json changed without a version bump." >&2
-                exit 1
+                echo "packages/evals/package.json has no package name or version change; release will be skipped."
+                should_publish="false"
+                should_release="false"
               fi
             fi
           fi
