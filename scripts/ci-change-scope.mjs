@@ -46,12 +46,20 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
   const affectedTests = files.some((file) => /(?:^|\/)[^/]+\.(?:[cm]?[jt]sx?)$/.test(file));
   const nodeContracts = files.some((file) => file.endsWith(".test.mjs"));
   const image = files.some((file) => file.includes("local-image-tool-registry") || file === "tests/local-image-tool-registry.test.ts");
+  const distribution = !docsOnly && files.some((file) => (
+    file === "package.json"
+    || file === "pnpm-lock.yaml"
+    || file === "pnpm-workspace.yaml"
+    || file.startsWith("apps/cli/")
+    || /^packages\/[^/]+\/(?:package\.json|src\/)/.test(file)
+  ));
 
   return {
     affectedTests,
     agentSdk: !docsOnly && files.some((file) => file.startsWith("packages/agent-sdk/")),
     cli: !docsOnly && files.some((file) => file.startsWith("apps/cli/")),
     docsOnly,
+    distribution,
     files,
     full,
     image,
@@ -121,6 +129,7 @@ async function main() {
     agent_sdk: result.agentSdk,
     base,
     cli: result.cli,
+    distribution: result.distribution,
     full: result.full,
     head,
     image: result.image,

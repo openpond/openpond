@@ -35,4 +35,4 @@ jobs:
           name: unit-test-observability-${{ github.sha }}
           path: coverage
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90

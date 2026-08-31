@@ -118,7 +118,7 @@ async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
 
 async function runUnitTests(env: NodeJS.ProcessEnv, vitestArgs: string[] = []): Promise<void> {
   await ensurePackageRuntimeBuild(env);
-  await runVitestProjects([...UNIT_TEST_PROJECTS], env, vitestArgs);
+  await runVitestProjects([...UNIT_TEST_PROJECTS], env, [...shardArgs(env), ...vitestArgs]);
 }
 
 async function runSystemTests(env: NodeJS.ProcessEnv, vitestArgs: string[] = []): Promise<void> {

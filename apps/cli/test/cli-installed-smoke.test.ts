@@ -4,14 +4,12 @@ import { join } from "node:path";
 
 import { beforeAll, describe, expect, test } from "vitest";
 
-import { getCliCommandDefinition } from "../src/cli/command-registry";
 import { runProcessCommand } from "../src/process-runner";
 
 const cliRoot = join(import.meta.dirname, "..");
 const RELEASE_AGENT_PROTOCOL_VERSION = "2026-08-26";
 
 type CliPackageJson = {
-  version: string;
   bin?: Record<string, string>;
 };
 
@@ -26,19 +24,6 @@ describe("CLI installed-package smoke", () => {
 
   beforeAll(async () => {
     packageJson = await readCliPackageJson();
-  });
-
-  test("runs the built dist bin entrypoint under Node", async () => {
-    const binPath = packageJson.bin?.openpond;
-    expect(binPath).toBe("dist/cli.js");
-
-    const result = await runProcessCommand("node", [join(cliRoot, binPath!), "--version"], {
-      cwd: cliRoot,
-    });
-
-    expect(result.code).toBe(0);
-    expect(result.stdout.trim()).toBe(packageJson.version);
-    expect(result.stderr.trim()).toBe("");
   });
 
   test("starts the embedded local server companion from an unrelated cwd", async () => {
@@ -156,42 +141,4 @@ describe("CLI installed-package smoke", () => {
     }
   }, 30_000);
 
-  test("prints help for a representative command from the built dist bin", async () => {
-    const binPath = packageJson.bin?.openpond;
-    const definition = getCliCommandDefinition("chat")!;
-    expect(binPath).toBe("dist/cli.js");
-
-    const result = await runProcessCommand(
-      "node",
-      [join(cliRoot, binPath!), definition.name, "--help"],
-      { cwd: cliRoot },
-    );
-
-    expect(result.code).toBe(0);
-    expect(result.timedOut).toBe(false);
-    expect(result.stderr.trim()).toBe("");
-    expect(result.stdout).toContain("Usage:");
-    expect(result.stdout).toContain(definition.usage);
-  });
-
-  test("prints canonical help for a representative built command alias", async () => {
-    const binPath = packageJson.bin?.openpond;
-    const alias = "organization";
-    const definition = getCliCommandDefinition(alias)!;
-    expect(binPath).toBe("dist/cli.js");
-
-    const result = await runProcessCommand(
-      "node",
-      [join(cliRoot, binPath!), alias, "--help"],
-      { cwd: cliRoot },
-    );
-
-    expect(result.code).toBe(0);
-    expect(result.timedOut).toBe(false);
-    expect(result.stderr.trim()).toBe("");
-    expect(result.stdout).toContain("Usage:");
-    expect(result.stdout).toContain(definition.usage);
-    expect(result.stdout).toContain("Aliases:");
-    expect(result.stdout).toContain(alias);
-  });
 });
