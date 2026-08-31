@@ -245,9 +245,9 @@ export function PreferenceComparisonReview({
                   {candidate.artifacts.map((artifact) => previewUrls[artifact.id] ? (
                     <img
                       alt={`${candidate.label} artifact`}
+                      className="preference-review-artifact"
                       key={artifact.id}
                       src={previewUrls[artifact.id]}
-                      style={{ display: "block", maxWidth: "100%", maxHeight: 320, objectFit: "contain" }}
                     />
                   ) : null)}
                   <pre className="labs-detail-copy">{JSON.stringify(candidate.output, null, 2)}</pre>

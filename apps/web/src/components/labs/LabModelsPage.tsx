@@ -10,6 +10,7 @@ import { DropdownSelect } from "../DropdownSelect";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 import { ModelsTable, Pagination } from "./LabsRouteSections";
 import { LabModelComparisonDialog } from "./LabModelComparisonDialog";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 const PAGE_SIZE = 10;
 
@@ -77,6 +78,15 @@ export function LabModelsPage({
 
   return (
     <div className="labs-flat-body labs-models-page">
+      <ModelProjectPageHeader
+        title="Model Projects"
+        description="Compose Tasksets and scorers, run training and evaluations, and manage deployable Model Versions."
+        metrics={[
+          { label: "Projects", value: items.length },
+          { label: "Evaluation receipts", value: comparableRunCount },
+          { label: "Profiles", value: profileIds.length },
+        ]}
+      />
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">
           <Search size={14} />

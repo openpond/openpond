@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  type AccountState,
   type ChatModelRef,
-  type CreateImproveCandidate,
-  type CreateImproveRun,
   type LearnedPreferenceRewardBinding,
-  type WorkspaceDiffSummary,
 } from "@openpond/contracts";
 
-import type { ProfileViewProps } from "../profile/ProfileView";
-import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import {
   DatasetSourcePickerDialog,
   type DatasetCreateSource,
@@ -20,16 +14,21 @@ import { ModelUseDialog } from "../training/ModelUseDialog";
 import { api } from "../../api";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
 import { LabWorkproductDetail } from "./LabWorkproductDetail";
-import {
-  labWorkproductProjection,
-} from "./lab-workproducts";
-import type { LabSkillSourceSelection } from "./lab-skill-source";
-import type {
-  LabDetailKind,
-  LabDetailLocation,
-} from "./lab-detail-navigation";
+import { labWorkproductProjection } from "./lab-workproducts";
 import { LabsView, type LabPrimaryTab } from "./LabsView";
-import { LabDatasetsPage } from "./LabDatasetsPage";
+import {
+  LabDatasetsPage,
+  type TasksetDetailTab,
+} from "./LabDatasetsPage";
+import {
+  LabEvaluationsPage,
+  type EvaluationDetailTab,
+} from "./LabEvaluationsPage";
+import { LabHumanReviewsPage } from "./LabHumanReviewsPage";
+import {
+  LabScoringPage,
+  type ScoringDetailTab,
+} from "./LabScoringPage";
 import {
   LabModelCreateDialog,
   type LabModelCreateInput,
@@ -38,105 +37,29 @@ import { LabModelsPage } from "./LabModelsPage";
 import { LabServingPage } from "./LabServingPage";
 import { ModelRunEditorPage } from "./ModelRunEditorPage";
 import { labModelVersions } from "./lab-models";
-import {
-  newProject,
-  nextModelName,
-} from "./model-run-editor-helpers";
+import { newProject, nextModelName } from "./model-run-editor-helpers";
 import { buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { useErrorToast } from "../../app/AppToastContext";
-import {
-  trainingModelRunSyncKey,
-} from "./LabsRouteSections";
+import { trainingModelRunSyncKey } from "./LabsRouteSections";
 import {
   modelProjectRoute,
+  modelLibraryRoute,
   modelsPath,
   modelsSectionFromRoute,
   navigateModelsRoute,
   useModelsRoute,
-  type ModelSection,
 } from "./lab-primary-tab-state";
+import type { LabsRouteProps } from "./labs-route-types";
+import {
+  labTabForModelsSection,
+  libraryResourceLabel,
+  modelEntryKeyFromRoute,
+  modelEntryRouteId,
+  modelsSectionForLabTab,
+  titleCaseLabel,
+} from "./labs-route-models";
 
-export type LabsRouteProps = {
-  account: AccountState | null;
-  closeDetailKind: LabDetailKind | null;
-  closeDetailRequestId: number;
-  onNewModel: (
-    initialTasksetId?: string,
-    learnedPreferenceReward?: LearnedPreferenceRewardBinding | null,
-  ) => void;
-  onUseAgent: (actionId: string, agentName: string) => void;
-  onCreateAgent: (
-    objective: string,
-    authoringRunId?: string | null,
-    authoringModel?: ChatModelRef | null,
-  ) => Promise<void>;
-  onImproveAgent: (
-    agentId: string,
-    objective: string,
-    agentName?: string | null,
-    authoringRunId?: string | null,
-    authoringModel?: ChatModelRef | null,
-  ) => Promise<void>;
-  onOpenRunConversation: (conversationId: string) => void;
-  onDetailOpenChange: (location: LabDetailLocation | null) => void;
-  onSkillSelectionChange: (selection: LabSkillSourceSelection | null) => void;
-  profileView: ProfileViewProps;
-  training: TrainingWorkspaceProps;
-  onAnswerQuestion: (
-    input: { run: CreateImproveRun },
-    questionId: string,
-    answerValue: string
-  ) => Promise<void>;
-  onApprove: (input: { run: CreateImproveRun }) => Promise<void>;
-  onApplyCandidate: (
-    input: { run: CreateImproveRun },
-    candidateId: string
-  ) => Promise<void>;
-  onCancel: (input: { run: CreateImproveRun }) => Promise<void>;
-  candidateReview: {
-    diff: WorkspaceDiffSummary | null;
-    error: string | null;
-    loading: boolean;
-  };
-  onCandidateReviewChange: (
-    input: {
-      run: CreateImproveRun;
-      candidate: CreateImproveCandidate;
-      fileRootPath: string | null;
-      initialPath: string | null;
-    } | null
-  ) => void;
-  onOpenCandidateFiles: () => void;
-  onOpenPullRequest: (
-    input: { run: CreateImproveRun },
-    candidateId: string
-  ) => Promise<void>;
-  onPause: (input: { run: CreateImproveRun }) => Promise<void>;
-  onReconcilePullRequest: (
-    input: { run: CreateImproveRun },
-    candidateId: string
-  ) => Promise<void>;
-  onRejectCandidate: (
-    input: { run: CreateImproveRun },
-    candidateId: string
-  ) => Promise<void>;
-  onResume: (input: { run: CreateImproveRun }) => Promise<void>;
-  onRevise: (
-    input: { run: CreateImproveRun },
-    revision: string
-  ) => Promise<void>;
-};
-
-function labTabForModelsSection(section: ModelSection): LabPrimaryTab {
-  if (section === "runs") return "training";
-  if (section === "evals") return "evals";
-  return section;
-}
-
-function modelsSectionForLabTab(tab: LabPrimaryTab): ModelSection {
-  if (tab === "training") return "runs";
-  return tab;
-}
+export type { LabsRouteProps } from "./labs-route-types";
 
 export function LabsRoute({
   closeDetailKind,
@@ -267,12 +190,6 @@ export function LabsRoute({
     [activeHostedTeamId, modelProjects],
   );
   useEffect(() => {
-    if (modelsRoute?.kind !== "index") return;
-    const firstProject = scopedModelProjects[0];
-    if (!firstProject) return;
-    navigateModelsRoute(modelProjectRoute(firstProject.id), "replace");
-  }, [modelsRoute, scopedModelProjects]);
-  useEffect(() => {
     if (!profileView.connection) return;
     let cancelled = false;
     void api.bootstrap(profileView.connection)
@@ -303,7 +220,8 @@ export function LabsRoute({
   }, [modelsRoute, scopedModelProjects.length]);
   useEffect(() => {
     setSelectedDatasetId(
-      modelsRoute?.kind === "project" && modelsRoute.section === "tasksets"
+      (modelsRoute?.kind === "project" && modelsRoute.section === "tasksets") ||
+      (modelsRoute?.kind === "library" && modelsRoute.section === "tasksets")
         ? modelsRoute.resourceId
         : null,
     );
@@ -334,12 +252,29 @@ export function LabsRoute({
   useEffect(() => {
     if (closeDetailRequestId <= 0) return;
     setSelectedDatasetId(null);
-    if (closeDetailKind === "dataset") {
-      setActiveTab("tasksets");
+    if (closeDetailKind === null || closeDetailKind === "model") {
+      navigateModelsRoute({ kind: "index" });
       return;
     }
-    setActiveTab("overview");
-  }, [closeDetailKind, closeDetailRequestId]);
+    const resourceSection = closeDetailKind === "dataset"
+      ? "tasksets"
+      : closeDetailKind === "evaluation"
+        ? "evaluations"
+        : closeDetailKind === "review"
+          ? "reviews"
+          : "scoring";
+    if (
+      modelsRoute?.kind === "project" &&
+      resourceSection !== "reviews"
+    ) {
+      navigateModelsRoute(modelProjectRoute(
+        modelsRoute.projectId,
+        resourceSection === "evaluations" ? "evals" : resourceSection,
+      ));
+      return;
+    }
+    navigateModelsRoute(modelLibraryRoute(resourceSection));
+  }, [closeDetailKind, closeDetailRequestId, modelsRoute]);
   useEffect(() => {
     setModelEditorName(null);
   }, [training.launchRequest?.id]);
@@ -347,7 +282,7 @@ export function LabsRoute({
     if (training.launchRequest) {
       onDetailOpenChange({
          kind: "model",
-         kindLabel: "Models",
+         kindLabel: "Model Projects",
          kindOnSelect: () => document.getElementById("model-run-editor-cancel")?.click(),
          workproductLabel: null,
          segments: [
@@ -357,40 +292,121 @@ export function LabsRoute({
       });
       return;
     }
-    if (activeTab === "tasksets") {
-      onDetailOpenChange(
-        datasetCreateRoute === "build"
-          ? {
-              kind: "dataset",
-              kindLabel: "Tasksets",
-              workproductLabel: null,
-              segments: [{ label: "New Taskset" }],
-            }
-          : selectedDatasetId
-          ? {
-              kind: "dataset",
-              kindLabel: "Tasksets",
-              workproductLabel:
-                [
-                  ...(training.training.payload?.tasksets ?? []),
-                  ...(training.training.payload?.modelTasksets ?? []),
-                ].find(
-                  (taskset) => taskset.id === selectedDatasetId,
-                )?.name ?? "Taskset",
-              segments: [],
-            }
-          : null,
+    if (modelsRoute?.kind === "library") {
+      const definitions = {
+        tasksets: { kind: "dataset" as const, label: "Taskset Library" },
+        scoring: { kind: "scoring" as const, label: "Scoring" },
+        evaluations: { kind: "evaluation" as const, label: "Evaluations" },
+        reviews: { kind: "review" as const, label: "Human Review" },
+      };
+      const definition = definitions[modelsRoute.section];
+      const resourceLabel = libraryResourceLabel(
+        modelsRoute.section,
+        modelsRoute.resourceId,
+        training.training.payload,
       );
+      onDetailOpenChange({
+        kind: definition.kind,
+        kindLabel: definition.label,
+        kindOnSelect: () => navigateModelsRoute(modelLibraryRoute(modelsRoute.section)),
+        workproductLabel: resourceLabel,
+        workproductOnSelect: modelsRoute.resourceId
+          ? () => navigateModelsRoute(modelLibraryRoute(modelsRoute.section, modelsRoute.resourceId))
+          : undefined,
+        segments: modelsRoute.detailTab
+          ? [{ label: titleCaseLabel(modelsRoute.detailTab) }]
+          : [],
+      });
       return;
     }
-    if (!["overview", "training", "evals"].includes(activeTab)) {
-      onDetailOpenChange(null);
+    if (modelsRoute?.kind === "project" && modelsRoute.section === "tasksets") {
+      const tasksetLabel = selectedDatasetId
+        ? libraryResourceLabel("tasksets", selectedDatasetId, training.training.payload)
+        : null;
+      onDetailOpenChange({
+        kind: "dataset",
+        kindLabel: "Model Projects",
+        kindOnSelect: () => navigateModelsRoute({ kind: "index" }),
+        workproductLabel: selected?.name ?? modelsRoute.projectId,
+        workproductOnSelect: () => navigateModelsRoute(modelProjectRoute(modelsRoute.projectId)),
+        segments: [
+          {
+            label: "Tasksets",
+            onSelect: () => navigateModelsRoute(modelProjectRoute(modelsRoute.projectId, "tasksets")),
+          },
+          ...(datasetCreateRoute === "build"
+            ? [{ label: "New Taskset" }]
+            : tasksetLabel
+              ? [{
+                  label: tasksetLabel,
+                  onSelect: () => navigateModelsRoute({
+                    kind: "project",
+                    projectId: modelsRoute.projectId,
+                    section: "tasksets",
+                    resourceId: selectedDatasetId,
+                    detailTab: null,
+                  }),
+                }]
+              : []),
+          ...(modelsRoute.detailTab
+            ? [{ label: titleCaseLabel(modelsRoute.detailTab) }]
+            : []),
+        ],
+      });
+      return;
+    }
+    if (
+      modelsRoute?.kind === "project" &&
+      (modelsRoute.section === "scoring" || modelsRoute.section === "evals")
+    ) {
+      const scoring = modelsRoute.section === "scoring";
+      const resourceLabel = libraryResourceLabel(
+        scoring ? "scoring" : "evaluations",
+        modelsRoute.resourceId,
+        training.training.payload,
+      );
+      onDetailOpenChange({
+        kind: scoring ? "scoring" : "evaluation",
+        kindLabel: "Model Projects",
+        kindOnSelect: () => navigateModelsRoute({ kind: "index" }),
+        workproductLabel: selected?.name ?? modelsRoute.projectId,
+        workproductOnSelect: () => navigateModelsRoute(modelProjectRoute(modelsRoute.projectId)),
+        segments: [
+          {
+            label: scoring ? "Scoring" : "Evaluations",
+            onSelect: () => navigateModelsRoute(modelProjectRoute(
+              modelsRoute.projectId,
+              modelsRoute.section,
+            )),
+          },
+          ...(resourceLabel
+            ? [{
+                label: resourceLabel,
+                onSelect: () => navigateModelsRoute({ ...modelsRoute, detailTab: null }),
+              }]
+            : []),
+          ...(modelsRoute.detailTab
+            ? [{ label: titleCaseLabel(modelsRoute.detailTab) }]
+            : []),
+        ],
+      });
+      return;
+    }
+    if (modelsRoute?.kind === "project" && modelsRoute.section === "serving") {
+      onDetailOpenChange({
+        kind: "model",
+        kindLabel: "Model Projects",
+        kindOnSelect: () => navigateModelsRoute({ kind: "index" }),
+        workproductLabel: selected?.name ?? modelsRoute.projectId,
+        workproductOnSelect: () => navigateModelsRoute(modelProjectRoute(modelsRoute.projectId)),
+        segments: [{ label: "Serving" }],
+      });
       return;
     }
     if (!selected) onDetailOpenChange(null);
   }, [
-    activeTab,
     datasetCreateRoute,
+    modelsRoute,
     onDetailOpenChange,
     selected,
     selectedDatasetId,
@@ -398,6 +414,8 @@ export function LabsRoute({
     modelEditorName,
     training.launchRequest,
     training.training.payload?.modelTasksets,
+    training.training.payload?.modelRuns,
+    training.training.payload?.modelProjects,
     training.training.payload?.tasksets,
   ]);
   useEffect(() => () => onDetailOpenChange(null), [onDetailOpenChange]);
@@ -429,7 +447,11 @@ export function LabsRoute({
     setDatasetCreateRoute("source");
     setDatasetDraftId(null);
     setSelectedDatasetId(null);
-    setActiveTab("tasksets");
+    if (modelsRoute?.kind === "library") {
+      navigateModelsRoute(modelLibraryRoute("tasksets"));
+    } else {
+      setActiveTab("tasksets");
+    }
   }
 
   function closeDatasetCreation() {
@@ -465,7 +487,7 @@ export function LabsRoute({
       });
       return;
     }
-    setSelectedDatasetId(tasksetId);
+    navigateModelsRoute(modelLibraryRoute("tasksets", tasksetId));
   }
 
   function openModelRunEditor(
@@ -559,11 +581,90 @@ export function LabsRoute({
       showHeader={
         !training.launchRequest
         && datasetCreateRoute !== "build"
+        && modelsRoute?.kind !== "library"
       }
       onCreateDataset={openDatasetCreation}
       onCreateModel={() => setModelCreateOpen(true)}
     >
-      {activeTab === "tasksets" && training.launchRequest ? (
+      {modelsRoute?.kind === "library" ? (
+        modelsRoute.section === "tasksets" ? (
+          datasetCreateRoute === "build" ? (
+            <TasksetDraftEditor
+              defaultModel={training.defaultModel}
+              draftId={datasetDraftId}
+              modelProjectId={null}
+              training={training.training}
+              onBack={closeDatasetCreation}
+              onOpenChat={openDatasetBuilderChat}
+              onPublished={finishDatasetCreation}
+            />
+          ) : (
+            <LabDatasetsPage
+              defaultModel={training.defaultModel}
+              detailTab={modelsRoute.detailTab as TasksetDetailTab | null}
+              modelProjectId={null}
+              runs={createImprove.runs}
+              selectedId={modelsRoute.resourceId}
+              state={training.training.payload}
+              training={training.training}
+              onDetailTabChange={(detailTab) => navigateModelsRoute(modelLibraryRoute(
+                "tasksets",
+                modelsRoute.resourceId,
+                detailTab,
+              ))}
+              onImproveInChat={openDatasetBuilderChat}
+              onCreateTaskset={openDatasetCreation}
+              onOpenDraft={(draftId) => {
+                setDatasetDraftId(draftId);
+                setDatasetCreateRoute("build");
+              }}
+              onOpenFiles={(tasksetId) => {
+                training.onSelectedTasksetIdChange(tasksetId);
+                training.onOpenTasksetFiles();
+              }}
+              onSelectedIdChange={(tasksetId) => navigateModelsRoute(modelLibraryRoute(
+                "tasksets",
+                tasksetId,
+              ))}
+              onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
+              onTrainModel={openModelRunEditor}
+            />
+          )
+        ) : modelsRoute.section === "scoring" ? (
+          <LabScoringPage
+            detailTab={modelsRoute.detailTab as ScoringDetailTab | null}
+            onDetailTabChange={(detailTab) => navigateModelsRoute(modelLibraryRoute(
+              "scoring",
+              modelsRoute.resourceId,
+              detailTab,
+            ))}
+            onOpenTaskset={(tasksetId) => navigateModelsRoute(modelLibraryRoute("tasksets", tasksetId))}
+            onSelectedScorerIdChange={(scorerId) => navigateModelsRoute(modelLibraryRoute("scoring", scorerId))}
+            selectedScorerId={modelsRoute.resourceId}
+            state={training.training.payload}
+          />
+        ) : modelsRoute.section === "evaluations" ? (
+          <LabEvaluationsPage
+            detailTab={modelsRoute.detailTab as EvaluationDetailTab | null}
+            onDetailTabChange={(detailTab) => navigateModelsRoute(modelLibraryRoute(
+              "evaluations",
+              modelsRoute.resourceId,
+              detailTab,
+            ))}
+            onSelectedEvaluationIdChange={(evaluationId) => navigateModelsRoute(modelLibraryRoute("evaluations", evaluationId))}
+            selectedEvaluationId={modelsRoute.resourceId}
+            state={training.training.payload}
+          />
+        ) : (
+          <LabHumanReviewsPage
+            defaultModel={training.defaultModel}
+            onSelectedTasksetIdChange={(tasksetId) => navigateModelsRoute(modelLibraryRoute("reviews", tasksetId))}
+            selectedTasksetId={modelsRoute.resourceId}
+            state={training.training.payload}
+            training={training.training}
+          />
+        )
+      ) : activeTab === "tasksets" && training.launchRequest ? (
         renderLaunchEditor(selectedDatasetId)
       ) : activeTab === "tasksets" ? (
         datasetCreateRoute === "build" ? (
@@ -579,6 +680,11 @@ export function LabsRoute({
         ) : (
           <LabDatasetsPage
             defaultModel={training.defaultModel}
+            detailTab={
+              modelsRoute?.kind === "project" && modelsRoute.section === "tasksets"
+                ? modelsRoute.detailTab as TasksetDetailTab | null
+                : null
+            }
             runs={createImprove.runs}
             selectedId={selectedDatasetId}
             state={training.training.payload}
@@ -599,6 +705,16 @@ export function LabsRoute({
                 detailTab: null,
               });
             }}
+            onDetailTabChange={(detailTab) => {
+              if (!selectedProjectRouteId) return;
+              navigateModelsRoute({
+                kind: "project",
+                projectId: selectedProjectRouteId,
+                section: "tasksets",
+                resourceId: selectedDatasetId,
+                detailTab,
+              });
+            }}
             modelProjectId={selected?.id ?? null}
             onOpenDraft={(draftId) => {
               setDatasetDraftId(draftId);
@@ -612,6 +728,49 @@ export function LabsRoute({
             }}
           />
         )
+      ) : activeTab === "scoring" && modelsRoute?.kind === "project" ? (
+        <LabScoringPage
+          detailTab={modelsRoute.detailTab as ScoringDetailTab | null}
+          modelProjectId={modelsRoute.projectId}
+          onDetailTabChange={(detailTab) => navigateModelsRoute({
+            ...modelsRoute,
+            detailTab,
+          })}
+          onOpenTaskset={(tasksetId) => navigateModelsRoute({
+            kind: "project",
+            projectId: modelsRoute.projectId,
+            section: "tasksets",
+            resourceId: tasksetId,
+            detailTab: null,
+          })}
+          onSelectedScorerIdChange={(scorerId) => navigateModelsRoute({
+            kind: "project",
+            projectId: modelsRoute.projectId,
+            section: "scoring",
+            resourceId: scorerId,
+            detailTab: null,
+          })}
+          selectedScorerId={modelsRoute.resourceId}
+          state={training.training.payload}
+        />
+      ) : activeTab === "evals" && modelsRoute?.kind === "project" ? (
+        <LabEvaluationsPage
+          detailTab={modelsRoute.detailTab as EvaluationDetailTab | null}
+          modelProjectId={modelsRoute.projectId}
+          onDetailTabChange={(detailTab) => navigateModelsRoute({
+            ...modelsRoute,
+            detailTab,
+          })}
+          onSelectedEvaluationIdChange={(evaluationId) => navigateModelsRoute({
+            kind: "project",
+            projectId: modelsRoute.projectId,
+            section: "evals",
+            resourceId: evaluationId,
+            detailTab: null,
+          })}
+          selectedEvaluationId={modelsRoute.resourceId}
+          state={training.training.payload}
+        />
       ) : activeTab === "serving" ? (
         <LabServingPage
           modelProjectId={selected?.id ?? selectedProjectRouteId}
@@ -626,7 +785,34 @@ export function LabsRoute({
           runs={createImprove.runs}
           training={training.training}
           workproduct={selected}
-          modelSection={activeTab}
+          modelSection={
+            activeTab === "training" || activeTab === "versions"
+              ? activeTab
+              : "overview"
+          }
+          modelDetailTab={
+            modelsRoute?.kind === "project" ? modelsRoute.detailTab : null
+          }
+          onModelDetailTabChange={(detailTab) => {
+            if (modelsRoute?.kind !== "project" || !modelsRoute.resourceId) return;
+            navigateModelsRoute({ ...modelsRoute, detailTab });
+          }}
+          selectedModelEntryKey={
+            modelsRoute?.kind === "project" &&
+            (modelsRoute.section === "runs" || modelsRoute.section === "versions")
+              ? modelsRoute.resourceId
+                ? modelEntryKeyFromRoute(modelsRoute.resourceId)
+                : null
+              : null
+          }
+          onSelectedModelEntryKeyChange={(entryKey) => {
+            if (modelsRoute?.kind !== "project") return;
+            navigateModelsRoute({
+              ...modelsRoute,
+              resourceId: modelEntryRouteId(entryKey),
+              detailTab: null,
+            });
+          }}
           onAnswerQuestion={onAnswerQuestion}
           onApplyCandidate={onApplyCandidate}
           onApprove={onApprove}

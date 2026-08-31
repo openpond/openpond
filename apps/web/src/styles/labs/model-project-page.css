@@ -42,8 +42,381 @@
 .model-project-page-metrics small { color: var(--muted); font-size: 10px; }
 .model-project-page-metrics dd { margin: 0; overflow-wrap: anywhere; font-size: 16px; font-weight: 620; }
 
+.labs-resource-page,
+.labs-model-overview {
+  display: grid;
+  gap: 20px;
+}
+
+.labs-resource-page .training-detail-section,
+.labs-model-overview .training-detail-section {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.labs-resource-page .training-detail-section h2,
+.labs-model-overview .training-detail-section h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 640;
+}
+
+.labs-overview-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.labs-overview-decision-card,
+.labs-resource-card {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  padding: 13px;
+}
+
+.labs-overview-decision-card header,
+.labs-resource-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.labs-overview-decision-card header > span,
+.labs-resource-card header > span,
+.labs-resource-card > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.labs-overview-decision-card > strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.labs-project-trends-heading,
+.labs-project-chart-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.labs-project-trends-heading > div,
+.labs-project-chart-card > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.labs-project-trends-heading p,
+.labs-project-trends-heading > span,
+.labs-project-chart-card > header span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.labs-project-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.labs-project-chart-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.labs-project-chart-card > header {
+  border-bottom: 1px solid var(--border);
+  padding: 11px 13px;
+}
+
+.labs-project-chart-card h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.labs-project-chart-card > header strong {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 640;
+}
+
+.labs-project-chart-plot {
+  padding: 8px 10px 7px;
+}
+
+.labs-project-chart-plot svg {
+  display: block;
+  width: 100%;
+  height: 138px;
+  overflow: visible;
+}
+
+.labs-project-chart-grid-line {
+  stroke: var(--border);
+  stroke-dasharray: 3 5;
+  stroke-width: 1;
+}
+
+.labs-project-chart-area {
+  fill: color-mix(in srgb, var(--cyan) 12%, transparent);
+}
+
+.labs-project-chart-line {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.labs-project-chart-point {
+  fill: var(--cyan);
+  stroke: var(--panel);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.labs-project-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font: 9px/1.2 var(--mono);
+}
+
+.labs-project-chart-empty {
+  display: grid;
+  min-height: 170px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.labs-resource-stack,
+.labs-evaluation-matrix {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.labs-resource-code {
+  overflow: auto;
+  max-height: 420px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 12px;
+  font: 11px/1.55 monospace;
+  white-space: pre-wrap;
+}
+
+.labs-evaluation-score-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.labs-evaluation-score-row > div {
+  display: grid;
+  gap: 4px;
+  border-left: 2px solid var(--cyan);
+  padding-left: 9px;
+}
+
+.labs-evaluation-score-row span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.labs-evaluation-score-row strong {
+  font-size: 16px;
+}
+
+.labs-evaluation-score-row-large {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.labs-human-review-page {
+  width: 100%;
+  max-width: 1180px;
+}
+
+.labs-human-review-queues .training-table-wrap,
+.labs-human-review-workspace .training-detail-section-panel,
+.labs-human-review-datasets .training-detail-section-panel {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.labs-human-review-queues table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.labs-human-review-queues th:first-child { width: 48%; }
+.labs-human-review-queues th:nth-child(2) { width: 19%; }
+.labs-human-review-queues th:nth-child(3) { width: 10%; }
+.labs-human-review-queues th:nth-child(4) { width: 13%; }
+.labs-human-review-queues th:nth-child(5) { width: 10%; }
+
+.labs-human-review-queues .labs-version-row-button {
+  width: 100%;
+}
+
+.labs-human-review-queues .labs-version-row-button small {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.35;
+}
+
+.labs-human-review-detail .labs-dataset-detail-heading {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.labs-human-review-workspace .training-detail-section-panel,
+.labs-human-review-datasets .training-detail-section-panel {
+  padding: 16px;
+}
+
+.labs-human-review-workspace .training-detail-section-panel > h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.labs-human-review-workspace .training-detail-section-panel > h3:not(:first-child) {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
+.labs-human-review-workspace .training-table-wrap {
+  margin-top: 10px;
+}
+
+.labs-human-review-workspace .training-data-table {
+  min-width: 660px;
+}
+
+.preference-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.preference-review-card {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  align-content: start;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  padding: 13px;
+}
+
+.preference-review-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preference-review-card > header small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.preference-review-artifact {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  border-radius: 7px;
+  object-fit: contain;
+}
+
+.preference-review-card pre {
+  overflow: auto;
+  max-height: 300px;
+  margin: 0;
+  border-radius: 7px;
+  background: var(--panel);
+  padding: 10px;
+  font: 10px/1.5 var(--mono);
+  white-space: pre-wrap;
+}
+
+.preference-rating-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.preference-rating-options button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted-strong);
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.preference-rating-options button:hover,
+.preference-rating-options button.active {
+  border-color: color-mix(in srgb, var(--cyan) 70%, var(--border));
+  background: color-mix(in srgb, var(--cyan) 12%, var(--panel));
+  color: var(--text);
+}
+
+.preference-rating-options button.active.reject {
+  border-color: color-mix(in srgb, var(--danger) 70%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+}
+
+.labs-human-review-workspace .training-question-answer {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 12px;
+}
+
+.labs-human-review-workspace .labs-dataset-advanced-details {
+  margin-top: 18px;
+}
+
 @media (max-width: 700px) {
   .model-project-page-heading { align-items: flex-start; flex-direction: column; }
   .model-project-page-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; }
   .model-project-page-metrics > div:nth-child(2) { border-right: 0; }
+  .labs-overview-decision-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .labs-project-chart-grid { grid-template-columns: 1fr; }
+  .labs-evaluation-score-row-large { grid-template-columns: 1fr; }
+  .labs-human-review-detail .labs-dataset-detail-heading {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .labs-human-review-detail .labs-dataset-detail-actions {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .labs-human-review-workspace .training-question-answer {
+    grid-template-columns: 1fr;
+  }
 }

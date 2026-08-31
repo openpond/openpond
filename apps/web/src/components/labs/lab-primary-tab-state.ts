@@ -4,15 +4,32 @@ import type { SettingsSection } from "../../lib/app-models";
 export const MODEL_SECTIONS = [
   "overview",
   "tasksets",
+  "scoring",
   "evals",
   "runs",
+  "versions",
   "serving",
 ] as const;
 
 export type ModelSection = (typeof MODEL_SECTIONS)[number];
 
+export const MODEL_LIBRARY_SECTIONS = [
+  "tasksets",
+  "scoring",
+  "evaluations",
+  "reviews",
+] as const;
+
+export type ModelLibrarySection = (typeof MODEL_LIBRARY_SECTIONS)[number];
+
 export type ModelsRoute =
   | { kind: "index" }
+  | {
+      kind: "library";
+      section: ModelLibrarySection;
+      resourceId: string | null;
+      detailTab: string | null;
+    }
   | {
       kind: "project";
       projectId: string;
@@ -33,10 +50,28 @@ export type DesktopRoute =
 type NavigationMode = "push" | "replace";
 
 const SECTION_SET = new Set<string>(MODEL_SECTIONS);
+const LIBRARY_SECTION_SET = new Set<string>(MODEL_LIBRARY_SECTIONS);
 const DETAIL_TABS_BY_SECTION: Partial<Record<ModelSection, Set<string>>> = {
-  runs: new Set(["overview", "metrics", "evaluation", "activity", "artifacts"]),
-  tasksets: new Set(["overview", "scenarios", "rewards", "validation"]),
-  evals: new Set(["overview", "lineage", "evaluation", "activity"]),
+  runs: new Set(["overview", "metrics", "evaluation", "rollouts", "activity", "artifacts"]),
+  tasksets: new Set(["overview", "tasks", "scoring", "attempts", "releases"]),
+  scoring: new Set(["overview", "usage", "evidence"]),
+  evals: new Set(["overview", "comparison", "activity"]),
+  versions: new Set([
+    "overview",
+    "metrics",
+    "evaluation",
+    "rollouts",
+    "activity",
+    "artifacts",
+    "lineage",
+  ]),
+};
+const DETAIL_TABS_BY_LIBRARY_SECTION: Partial<
+  Record<ModelLibrarySection, Set<string>>
+> = {
+  tasksets: new Set(["overview", "tasks", "scoring", "attempts", "releases"]),
+  scoring: new Set(["overview", "usage", "evidence"]),
+  evaluations: new Set(["overview", "comparison", "activity"]),
 };
 const LEGACY_TAB_TO_SECTION: Record<string, ModelSection> = {
   evals: "evals",
@@ -46,10 +81,7 @@ const LEGACY_TAB_TO_SECTION: Record<string, ModelSection> = {
   serving: "serving",
   tasksets: "tasksets",
   training: "runs",
-  versions: "evals",
-};
-const LEGACY_PATH_SECTION_TO_SECTION: Partial<Record<string, ModelSection>> = {
-  versions: "evals",
+  versions: "versions",
 };
 const SETTINGS_SECTIONS = new Set<SettingsSection>([
   "account",
@@ -108,6 +140,23 @@ function routeFromParts(parts: string[]): ModelsRoute | null {
     modelsIndex + 1,
   );
   if (!projectId) return { kind: "index" };
+  if (LIBRARY_SECTION_SET.has(projectId)) {
+    if (detailTab || rest.length) return null;
+    if (
+      resourceId &&
+      !DETAIL_TABS_BY_LIBRARY_SECTION[
+        projectId as ModelLibrarySection
+      ]?.has(resourceId)
+    ) {
+      return null;
+    }
+    return {
+      kind: "library",
+      section: projectId as ModelLibrarySection,
+      resourceId: section ? decodeSegment(section) : null,
+      detailTab: resourceId ?? null,
+    };
+  }
   if (SECTION_SET.has(projectId)) return null;
   if (!section) {
     return {
@@ -118,8 +167,7 @@ function routeFromParts(parts: string[]): ModelsRoute | null {
       detailTab: null,
     };
   }
-  const canonicalSection =
-    LEGACY_PATH_SECTION_TO_SECTION[section] ?? section;
+  const canonicalSection = section;
   if (
     !SECTION_SET.has(canonicalSection) ||
     canonicalSection === "overview" ||
@@ -167,6 +215,12 @@ export function modelsRouteFromLocation(input: {
 
 export function modelsPath(route: ModelsRoute): string {
   if (route.kind === "index") return "/models";
+  if (route.kind === "library") {
+    const parts = ["/models", route.section];
+    if (route.resourceId) parts.push(encodeURIComponent(route.resourceId));
+    if (route.resourceId && route.detailTab) parts.push(route.detailTab);
+    return parts.join("/");
+  }
   const parts = ["/models", encodeURIComponent(route.projectId)];
   if (route.section === "overview") return parts.join("/");
   parts.push(route.section);
@@ -217,6 +271,12 @@ export function desktopPath(route: DesktopRoute): string {
 
 export function modelsSectionFromRoute(route: ModelsRoute): ModelSection {
   return route.kind === "project" ? route.section : "overview";
+}
+
+export function modelsLibrarySectionFromRoute(
+  route: ModelsRoute,
+): ModelLibrarySection | null {
+  return route.kind === "library" ? route.section : null;
 }
 
 function currentModelsRoute(): ModelsRoute | null {
@@ -301,4 +361,12 @@ export function modelProjectRoute(
   return projectId
     ? { kind: "project", projectId, section, resourceId: null, detailTab: null }
     : { kind: "index" };
+}
+
+export function modelLibraryRoute(
+  section: ModelLibrarySection,
+  resourceId: string | null = null,
+  detailTab: string | null = null,
+): ModelsRoute {
+  return { kind: "library", section, resourceId, detailTab };
 }

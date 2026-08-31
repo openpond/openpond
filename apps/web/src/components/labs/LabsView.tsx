@@ -13,8 +13,10 @@ import "../../styles/labs/labs-model-comparison.css";
 export type LabPrimaryTab =
   | "overview"
   | "tasksets"
+  | "scoring"
   | "training"
   | "evals"
+  | "versions"
   | "serving";
 
 export function LabsView({

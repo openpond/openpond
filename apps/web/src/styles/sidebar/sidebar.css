@@ -218,6 +218,16 @@
   font-family: var(--font-web);
 }
 
+.sidebar-nav-group-label {
+  padding: 12px 10px 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .sidebar-utility-nav {
   display: flex;
   flex: 0 0 auto;

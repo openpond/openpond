@@ -21,6 +21,7 @@ import {
 } from "../apps/web/src/components/labs/LabDatasetsPage";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
+import { LabProjectMetricCharts } from "../apps/web/src/components/labs/LabProjectMetricCharts";
 import {
   LabModelCreateDialog,
   labModelCreateCandidates,
@@ -94,6 +95,35 @@ function modelCandidate(input: {
 }
 
 describe("Lab workspace", () => {
+  test("renders project reward, rollout, runtime, and spend trends", () => {
+    const run = {
+      kind: "training",
+      reward: { raw: 0.625, components: {} },
+      evaluationProgress: {
+        completedAttempts: 3,
+        totalAttempts: 4,
+      },
+      quote: { maximumSpendUsd: 2.5 },
+      startedAt: "2026-08-30T12:00:00.000Z",
+      completedAt: "2026-08-30T12:08:00.000Z",
+      updatedAt: "2026-08-30T12:08:00.000Z",
+    } as unknown as ModelRun;
+
+    const markup = renderToStaticMarkup(
+      createElement(LabProjectMetricCharts, { runs: [run] }),
+    );
+
+    expect(markup).toContain("Run trends");
+    expect(markup).toContain("Mean reward");
+    expect(markup).toContain("Rollout completion");
+    expect(markup).toContain("Run duration");
+    expect(markup).toContain("Spend ceiling");
+    expect(markup).toContain("0.625");
+    expect(markup).toContain("75%");
+    expect(markup).toContain("8.0m");
+    expect(markup).toContain("$2.50");
+  });
+
   test("preflights generalized fixture collection manifests before writing Attempts", () => {
     const manifest = {
       schemaVersion: "openpond.syntheticCollectionRun.v1",
@@ -803,7 +833,7 @@ describe("Lab workspace", () => {
           providerId: "openrouter",
           modelId: "test/model",
         },
-        tab: "metrics",
+        tab: "scoring",
         taskset,
         onOpenFiles: noop,
         onToast: noop,
@@ -817,7 +847,7 @@ describe("Lab workspace", () => {
       }),
     );
 
-    expect(markup).toContain("Evaluation metrics");
+    expect(markup).toContain("Recorded scoring evidence");
     expect(markup).toContain("Graders and reward gates");
     expect(markup).toContain("Audit graders");
     expect(markup).toContain("Refresh readiness");
@@ -857,7 +887,7 @@ describe("Lab workspace", () => {
       createElement(LabModelDataset, {
         artifact: null,
         defaultModel: { providerId: "openpond", modelId: "openpond-chat" },
-        tab: "overview",
+        tab: "scoring",
         taskset,
         onOpenFiles: noop,
         onToast: noop,
@@ -865,7 +895,7 @@ describe("Lab workspace", () => {
       }),
     );
 
-    expect(markup).toContain("Reward &amp; grading");
+    expect(markup).toContain("Scoring contract");
     expect(markup).toContain("LLM-as-judge");
     expect(markup).toContain("gpt-5.6-sol");
     expect(markup).toContain("Passed criteria ÷ total criteria");
@@ -929,7 +959,7 @@ describe("Lab workspace", () => {
           providerId: "openpond",
           modelId: "openpond-chat",
         },
-        tab: "metrics",
+        tab: "scoring",
         taskset,
         onOpenFiles: noop,
         onToast: noop,

@@ -34,19 +34,6 @@ export function buildLabDetailBreadcrumbs(
   requestClose: (kind: LabDetailKind | null) => void,
 ) {
   if (!detailLocation) return [{ label: "Models" }];
-  if (detailLocation.kind === "dataset") {
-    return [
-      { label: "Models", onSelect: () => requestClose(null) },
-      { label: "Tasksets", onSelect: () => requestClose("dataset") },
-      ...(detailLocation.workproductLabel
-        ? [{
-            label: detailLocation.workproductLabel,
-            onSelect: detailLocation.workproductOnSelect,
-          }]
-        : []),
-      ...detailLocation.segments,
-    ];
-  }
   return [
     {
       label: "Models",
@@ -56,7 +43,7 @@ export function buildLabDetailBreadcrumbs(
       label: detailLocation.kindLabel,
       onSelect:
         detailLocation.kindOnSelect ??
-        (() => requestClose(detailLocation.kind === "model" ? null : detailLocation.kind)),
+        (() => requestClose(detailLocation.kind)),
     },
     ...(detailLocation.workproductLabel
       ? [{

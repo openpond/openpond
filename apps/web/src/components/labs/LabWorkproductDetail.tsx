@@ -61,7 +61,7 @@ import {
   WorkproductConfiguration,
 } from "./LabWorkproductDetailSections";
 import { SquarePen } from "../icons";
-import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { LabModelProjectOverview } from "./LabModelProjectOverview";
 
 const LabModelVersionDetailPage = lazy(() =>
   import("./LabModelVersionDetailPage").then((module) => ({
@@ -112,9 +112,17 @@ export function LabWorkproductDetail({
   initialBenchmarkModel = null,
   initialBenchmarkOpen = false,
   onInitialBenchmarkOpenConsumed,
+  selectedModelEntryKey,
+  onSelectedModelEntryKeyChange,
+  modelDetailTab,
+  onModelDetailTabChange,
 }: {
   workproduct: LabWorkproductSummary;
-  modelSection: "overview" | "training" | "evals";
+  modelSection: "overview" | "training" | "evals" | "versions";
+  selectedModelEntryKey: string | null;
+  onSelectedModelEntryKeyChange: (entryKey: string | null) => void;
+  modelDetailTab: string | null;
+  onModelDetailTabChange: (tab: string) => void;
   runs: CreateImproveRun[];
   profile: OpenPondProfileState | null;
   training: TrainingController;
@@ -202,12 +210,7 @@ export function LabWorkproductDetail({
   const editorExitTargetRef = useRef<"overview" | "runs" | "collection">(
     "runs"
   );
-  const [selectedModelEntryKey, setSelectedModelEntryKey] = useState<
-    string | null
-  >(null);
-  useEffect(() => {
-    setSelectedModelEntryKey(null);
-  }, [modelSection]);
+  const setSelectedModelEntryKey = onSelectedModelEntryKeyChange;
   const [benchmarkOpen, setBenchmarkOpen] = useState(initialBenchmarkOpen);
 
   useEffect(() => {
@@ -225,7 +228,9 @@ export function LabWorkproductDetail({
   const selectedChangeCandidate = selectedChangeRun
     ? latestReviewableCandidate(selectedChangeRun)
     : null;
-  const locationKindLabel = labWorkproductKindLabel(workproduct.kind);
+  const locationKindLabel = workproduct.kind === "model"
+    ? "Model Projects"
+    : labWorkproductKindLabel(workproduct.kind);
   const readOnlyModel =
     workproduct.kind === "model" &&
     Boolean(
@@ -351,7 +356,11 @@ export function LabWorkproductDetail({
                     : "Run details",
               },
             ]
-          : []
+          : modelSection === "training"
+            ? [{ label: "Training" }]
+            : modelSection === "versions"
+              ? [{ label: "Versions" }]
+              : []
         : detailBreadcrumbs(
             activeTab === "runs" ? "overview" : activeTab,
             selectedChangeRunId,
@@ -362,6 +371,7 @@ export function LabWorkproductDetail({
       activeTab,
       editorSection,
       editingTrainingSetup,
+      modelSection,
       selectedChangeCommit,
       selectedChangeRunId,
       selectedModelEntryKey,
@@ -415,7 +425,6 @@ export function LabWorkproductDetail({
     onCandidateReviewChange(null);
     setSelectedRunId(preferredRunId);
     setSelectedChangeRunId(null);
-    setSelectedModelEntryKey(null);
     setActiveTab("overview");
     setEditingTrainingSetup(false);
     setEditorSection("run");
@@ -631,10 +640,12 @@ export function LabWorkproductDetail({
           >
             <LabModelVersionDetailPage
               connection={connection}
+              detailTab={modelDetailTab}
               runs={runs}
               selectedEntryKey={selectedModelEntryKey}
               training={training}
               workproduct={workproduct}
+              onDetailTabChange={onModelDetailTabChange}
               onOpenDataset={onOpenDataset}
               onOpenConversation={onOpenConversation}
             />
@@ -642,60 +653,45 @@ export function LabWorkproductDetail({
         ) : workproduct.kind === "model" ? (
           <>
             {modelSection === "overview" ? (
-              <>
-                <ModelProjectPageHeader
-                  title="Overview"
-                  description="Project status, synchronized Tasksets, trained versions, and recent activity."
-                  status={modelProject ? (
+              <LabModelProjectOverview
+                actions={modelProject ? (
+                  <button
+                    className="training-button secondary"
+                    disabled={
+                      readOnlyModel ||
+                      training.busyAction === "sync-model-project"
+                    }
+                    type="button"
+                    onClick={async () => {
+                      const synced = await training.actions.syncModelProject(
+                        modelProject.id,
+                      );
+                      if (synced) {
+                        onToast(
+                          "Model Project synced to the active hosted Team.",
+                          "success",
+                        );
+                      }
+                    }}
+                  >
+                    {training.busyAction === "sync-model-project"
+                      ? "Syncing…"
+                      : modelProject.hosted
+                        ? "Sync project"
+                        : "Connect to hosted Team"}
+                  </button>
+                ) : undefined}
+                modelProject={modelProject}
+                modelRuns={modelLifecycleRuns}
+                state={training.payload}
+                status={modelProject ? (
                     <LabStatusBadge
                       label={modelProject.hosted ? "Hosted" : "Local"}
                       value={modelProject.hosted ? "available" : "not_run"}
                     />
-                  ) : undefined}
-                  actions={modelProject ? (
-                    <button
-                      className="training-button secondary"
-                      disabled={
-                        readOnlyModel ||
-                        training.busyAction === "sync-model-project"
-                      }
-                      type="button"
-                      onClick={async () => {
-                        const synced = await training.actions.syncModelProject(
-                          modelProject.id,
-                        );
-                        if (synced) {
-                          onToast(
-                            "Model Project synced to the active hosted Team.",
-                            "success",
-                          );
-                        }
-                      }}
-                    >
-                      {training.busyAction === "sync-model-project"
-                        ? "Syncing…"
-                        : modelProject.hosted
-                          ? "Sync project"
-                          : "Connect to hosted Team"}
-                    </button>
-                  ) : undefined}
-                  metrics={[
-                    { label: "Taskset releases", value: modelProject?.tasksetSyncs.length ?? 0 },
-                    { label: "Model versions", value: modelVersions.length },
-                    { label: "Runs", value: modelRunHistory.length },
-                    { label: "Hosted revision", value: modelProject?.hosted?.revision ?? "Local" },
-                  ]}
-                />
-                <LabModelVersionsPage
-                  runs={runs}
-                  training={training}
-                  workproduct={workproduct}
-                  readOnly={readOnlyModel}
-                  onOpenDataset={onOpenDataset}
-                  onOpenEntry={setSelectedModelEntryKey}
-                  onToast={onToast}
-                />
-              </>
+                ) : undefined}
+                versions={modelVersions}
+              />
             ) : null}
             {modelSection === "training" || modelSection === "evals" ? (
               <LabModelRunsPage
@@ -707,6 +703,17 @@ export function LabWorkproductDetail({
                 onOpenDataset={onOpenDataset}
                 onOpenEntry={setSelectedModelEntryKey}
                 onNewRun={() => setEditingTrainingSetup(true)}
+              />
+            ) : null}
+            {modelSection === "versions" ? (
+              <LabModelVersionsPage
+                runs={runs}
+                training={training}
+                workproduct={workproduct}
+                readOnly={readOnlyModel}
+                onOpenDataset={onOpenDataset}
+                onOpenEntry={setSelectedModelEntryKey}
+                onToast={onToast}
               />
             ) : null}
           </>

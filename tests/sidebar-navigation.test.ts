@@ -147,7 +147,7 @@ describe("Sidebar navigation", () => {
     expect(markup).toContain('aria-current="page" class="active"');
   });
 
-  test("highlights Workflows and Outputs while Models uses its project picker", () => {
+  test("highlights Workflows and Outputs while Models exposes its resource library", () => {
     const schedule = renderSidebarNavigation("scheduled", "work", "chat");
     const outputs = renderSidebarNavigation("outputs", "work", "chat");
     const models = renderSidebarNavigation("labs", "development", "models");
@@ -159,7 +159,11 @@ describe("Sidebar navigation", () => {
     expect(outputs).not.toContain('class="nav-command nav-command-prominent active" aria-label="Workflows"');
     expect(models).toContain('class="sidebar-model-project-picker"');
     expect(models).toContain('aria-label="Select Model Project"');
-    expect(models).not.toContain("Model Projects");
+    expect(models).toContain('aria-label="Model Projects"');
+    expect(models).toContain('aria-label="Taskset Library"');
+    expect(models).toContain('aria-label="Scoring"');
+    expect(models).toContain('aria-label="Evaluations"');
+    expect(models).toContain('aria-label="Human Review"');
     expect(models).not.toContain("All Model Projects");
     expect(models).not.toContain('aria-label="Workflows"');
     expect(models).not.toContain("sidebar-profile-change-dot");
