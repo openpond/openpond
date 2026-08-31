@@ -18,6 +18,7 @@ function setup() {
     method: "grpo" as const,
     destinationId: "openpond_managed",
     managedRolloutPlacement: "remote" as const,
+    managedGpuPlacementObjective: "balanced" as const,
     runPreset: "standard" as const,
     recipe: {
       schemaVersion: "openpond.rftRecipe.v1",

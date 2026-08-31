@@ -98,7 +98,7 @@ export function createTrainingService(deps: {
       methods: ["grpo"],
       environmentPlacements: ["local", "remote"],
       assumptions: [
-        "OpenPond Managed selects qualified compute capacity after approval.",
+        "OpenPond Managed selects supported compute capacity after approval.",
         "The approved maximum spend is enforced before provider resources start.",
       ],
       modelAllowlist: ["Qwen/Qwen3-8B"],

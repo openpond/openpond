@@ -6,7 +6,7 @@ import {
 } from "./training-service.js";
 
 describe("managed Reward Model runtime projection", () => {
-  test("preserves the qualified processor identity separately from model config", () => {
+  test("preserves the verified processor identity separately from model config", () => {
     const runtime = managedRewardModelRuntime(
       {
         source: "huggingface",

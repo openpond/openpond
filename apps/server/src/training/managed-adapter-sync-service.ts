@@ -260,7 +260,7 @@ async function reconcileLineage(input: {
       throw new Error("Select an OpenPond team before reconciling managed adapters.");
     }
     const baseProfiles = await input.baseProfilesForTeam(teamId);
-    assertQualifiedManagedBase(jobArtifacts, baseProfiles);
+    assertSupportedManagedBase(jobArtifacts, baseProfiles);
     const registry = await input.registryForTeam(teamId);
     let artifact =
       registry.artifacts.find(
@@ -370,18 +370,18 @@ function lineageSource(
   return null;
 }
 
-function assertQualifiedManagedBase(
+function assertSupportedManagedBase(
   artifacts: TrainingArtifact[],
   baseProfiles: ManagedRegistryBaseProfile[],
 ): string {
-  const qualifiedArtifacts = artifacts.filter(
+  const supportedArtifacts = artifacts.filter(
     (artifact) =>
       artifact.metadata.provider === "sandbox" && artifact.metadata.managedRlCandidate === true,
   );
-  if (qualifiedArtifacts.length < 1) {
+  if (supportedArtifacts.length < 1) {
     throw new Error("sandbox_managed_rl lineage has no managed adapter candidate.");
   }
-  const firstArtifact = qualifiedArtifacts[0]!;
+  const firstArtifact = supportedArtifacts[0]!;
   const openPondProfile = resolveManagedRlBaseProfile({
     schemaVersion: "openpond.baseModelPreference.v1",
     modelId: firstArtifact.baseModelId ?? "",
@@ -393,7 +393,7 @@ function assertQualifiedManagedBase(
   });
   if (!openPondProfile) {
     throw new Error(
-      "sandbox_managed_rl adapter does not match the qualified Qwen3 managed-training identity.",
+      "sandbox_managed_rl adapter does not match the supported Qwen3 managed-training identity.",
     );
   }
   const expected = {
@@ -404,16 +404,16 @@ function assertQualifiedManagedBase(
   };
   const matchedProfile = baseProfiles.find(
     (profile) =>
-      profile.status === "qualified" &&
+      profile.status === "supported" &&
       profile.repository === expected.model &&
       profile.revision === expected.revision &&
       profile.tokenizerRevision === expected.tokenizerRevision &&
       profile.chatTemplateHash === expected.chatTemplateHash,
   );
   if (!matchedProfile) {
-    throw new Error("sandbox_managed_rl adapter does not match a Sandbox-qualified base profile.");
+    throw new Error("sandbox_managed_rl adapter does not match a Sandbox-supported base profile.");
   }
-  for (const artifact of qualifiedArtifacts) {
+  for (const artifact of supportedArtifacts) {
     if (
       artifact.baseModelId !== expected.model ||
       artifact.baseModelRevision !== expected.revision ||

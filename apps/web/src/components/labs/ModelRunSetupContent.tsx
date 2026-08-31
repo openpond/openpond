@@ -296,31 +296,58 @@ export function ModelRunSetupContent({
                     </small>
                   </div>
                   {setup.destinationId === "openpond_managed" ? (
-                    <div className="model-build-field">
-                      <span>Rollout execution</span>
-                      <DropdownSelect
-                        label="Rollout execution"
-                        value={setup.managedRolloutPlacement}
-                        options={[
-                          { value: "local", label: "This desktop" },
-                          { value: "remote", label: "Hosted Sandboxes" },
-                        ]}
-                        onChange={(value) =>
-                          setSetup((current) => ({
-                            ...current,
-                            managedRolloutPlacement:
-                              value === "remote"
-                                ? "remote"
-                                : "local",
-                            updatedAt: new Date().toISOString(),
-                          }))}
-                      />
-                      <small>
-                        This desktop keeps local integrations and provider
-                        credentials on this device. Hosted Sandboxes can run
-                        unattended.
-                      </small>
-                    </div>
+                    <>
+                      <div className="model-build-field">
+                        <span>Rollout execution</span>
+                        <DropdownSelect
+                          label="Rollout execution"
+                          value={setup.managedRolloutPlacement}
+                          options={[
+                            { value: "local", label: "This desktop" },
+                            { value: "remote", label: "Hosted Sandboxes" },
+                          ]}
+                          onChange={(value) =>
+                            setSetup((current) => ({
+                              ...current,
+                              managedRolloutPlacement:
+                                value === "remote"
+                                  ? "remote"
+                                  : "local",
+                              updatedAt: new Date().toISOString(),
+                            }))}
+                        />
+                        <small>
+                          This desktop keeps local integrations and provider
+                          credentials on this device. Hosted Sandboxes can run
+                          unattended.
+                        </small>
+                      </div>
+                      <div className="model-build-field">
+                        <span>GPU placement objective</span>
+                        <DropdownSelect
+                          label="GPU placement objective"
+                          value={setup.managedGpuPlacementObjective}
+                          options={[
+                            { value: "balanced", label: "Balanced" },
+                            { value: "fast", label: "Fastest supported" },
+                            { value: "economical", label: "Most economical" },
+                          ]}
+                          onChange={(value) =>
+                            setSetup((current) => ({
+                              ...current,
+                              managedGpuPlacementObjective:
+                                value === "fast" || value === "economical"
+                                  ? value
+                                  : "balanced",
+                              updatedAt: new Date().toISOString(),
+                            }))}
+                        />
+                        <small>
+                          Sandbox returns supported quotes and applies this
+                          preference within the approved hard cost cap.
+                        </small>
+                      </div>
+                    </>
                   ) : null}
                 </details>
               }

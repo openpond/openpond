@@ -33,7 +33,7 @@ const MANAGED_TARGET_POLICY = {
     minimumRetentionDays: 1,
     maximumRetentionDays: 30,
     defaultRetentionDays: 7,
-    methodRequirement: "Managed training selects qualified compute capacity after approval.",
+    methodRequirement: "Managed training selects supported compute capacity after approval.",
   },
   limits: {
     maximumSequenceLength: 4_096,
