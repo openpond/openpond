@@ -30,13 +30,22 @@ const fast = {
 const forked = {
   ...common,
   pool: "forks" as const,
+  maxWorkers: process.env.CI ? 4 : "75%",
+};
+
+const constrained = {
+  ...common,
+  pool: "forks" as const,
   maxWorkers: process.env.CI ? 2 : "50%",
+  sequence: { groupOrder: 1 },
 };
 
 const memory = {
-  ...forked,
+  ...common,
+  pool: "forks" as const,
   execArgv: ["--expose-gc"],
   maxWorkers: 1,
+  sequence: { groupOrder: 2 },
 };
 
 export default defineConfig({
@@ -81,7 +90,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          ...forked,
+          ...constrained,
           name: "root-system",
           include: [...ROOT_SYSTEM_TESTS],
         },
@@ -97,7 +106,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          ...forked,
+          ...constrained,
           name: "root-image",
           include: [...ROOT_IMAGE_TESTS],
         },
@@ -114,7 +123,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          ...forked,
+          ...constrained,
           name: "cli-integration",
           include: [...cliIntegrationTests],
         },
@@ -122,7 +131,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          ...forked,
+          ...constrained,
           name: "cli-release",
           include: [...cliReleaseTests],
         },
@@ -146,7 +155,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          ...forked,
+          ...constrained,
           name: "actions",
           include: ["packages/actions/test/**/*.test.ts"],
         },
@@ -154,7 +163,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          ...forked,
+          ...constrained,
           name: "agent-sdk",
           include: ["packages/agent-sdk/test/**/*.test.{ts,tsx}"],
         },
