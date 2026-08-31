@@ -1,6 +1,11 @@
 import type { LabWorkproductKind } from "./lab-workproducts";
 
-export type LabDetailKind = LabWorkproductKind | "dataset";
+export type LabDetailKind =
+  | LabWorkproductKind
+  | "dataset"
+  | "scoring"
+  | "evaluation"
+  | "review";
 
 export type LabDetailLocation = {
   kind: LabDetailKind;

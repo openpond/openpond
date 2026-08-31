@@ -13,10 +13,9 @@ import type { ShowAppToast } from "../../app/app-state";
 import { DetailSection } from "../training/DetailSection";
 import type { useTraining } from "../../hooks/useTraining";
 import { LabStatusBadge } from "./LabStatusBadge";
-import { PreferenceComparisonReview } from "./PreferenceComparisonReview";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
-type DatasetDetailTab = "overview" | "scenarios" | "review" | "metrics";
+type DatasetDetailTab = "overview" | "tasks" | "scoring";
 type Task = Taskset["tasks"][number];
 
 const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
@@ -74,7 +73,7 @@ export function LabModelDataset({
     [taskset.sourceRefs],
   );
   useEffect(() => {
-    if (tab !== "scenarios" || !artifact) return undefined;
+    if (tab !== "tasks" || !artifact) return undefined;
     let cancelled = false;
     setRowsLoading(true);
     setRowsError(null);
@@ -101,7 +100,7 @@ export function LabModelDataset({
   }, [artifact, cursor, split, tab, taskset.id, training.actions]);
 
   useEffect(() => {
-    if (tab !== "metrics") return;
+    if (tab !== "scoring") return;
     let active = true;
     setMetricsLoading(true);
     void Promise.all([
@@ -153,19 +152,6 @@ export function LabModelDataset({
     (signal) => signal.approved && signal.labelKind === "rubric",
   ).length;
   const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
-  const reviewPolicy = taskset.metadata.tasksetReviewPolicy;
-  const storedReviewPolicy = reviewPolicy && typeof reviewPolicy === "object" && !Array.isArray(reviewPolicy)
-    ? reviewPolicy as Record<string, unknown>
-    : null;
-  const graderRubric = taskset.graders.find(
-    (grader) => grader.kind === "model_judge" || grader.kind === "human",
-  )?.rubric ?? "";
-  const preferenceRubric = typeof storedReviewPolicy?.rubric === "string"
-    ? storedReviewPolicy.rubric
-    : graderRubric;
-  const preferenceMinimumSamples = typeof storedReviewPolicy?.minimumSamples === "number"
-    ? storedReviewPolicy.minimumSamples
-    : 100;
   const workTask = taskset.environment.kind === "work"
     ? taskset.tasks.find((task) => task.split !== "frozen_eval") ?? null
     : null;
@@ -209,38 +195,10 @@ export function LabModelDataset({
           <Fact label="Rubrics" value={String(rubricLabels)} />
         </dl>
         <section className="labs-dataset-method-readiness">
-          <strong>Reward &amp; grading</strong>
-          {rewardGraders.length ? (
-            <dl className="training-configuration-list">
-              <Fact
-                label="Reward source"
-                value={modelJudge ? "LLM-as-judge" : titleCase(rewardGraders[0]!.kind)}
-              />
-              <Fact
-                label="Grader"
-                value={modelJudge?.label ?? rewardGraders[0]!.label}
-              />
-              {modelJudge ? (
-                <Fact
-                  label="Judge model"
-                  value={`${titleCase(modelJudge.judge.providerId)} · ${modelJudge.judge.modelId}`}
-                />
-              ) : null}
-              <Fact label="Reward calculation" value={rewardCalculation(taskset)} />
-              {modelJudge ? (
-                <Fact
-                  label="Calibration"
-                  value={`${titleCase(modelJudge.calibrationStatus)}${modelJudge.metadata.calibrationIsAdvisory === true ? " · advisory" : ""}`}
-                />
-              ) : null}
-              <Fact
-                label="Policy boundary"
-                value={taskset.policy.privilegedFields.length ? "Grading criteria hidden from Policy" : "No privileged grading fields"}
-              />
-            </dl>
-          ) : (
-            <p className="labs-detail-copy">No reward-eligible grader is attached to this revision.</p>
-          )}
+          <strong>Scoring</strong>
+          <p className="labs-detail-copy">
+            {taskset.graders.length} versioned grader{taskset.graders.length === 1 ? "" : "s"} · {rewardGraders.length} reward source{rewardGraders.length === 1 ? "" : "s"} · {taskset.policy.privilegedFields.length ? "privileged criteria hidden from the policy" : "no privileged grading fields"}.
+          </p>
         </section>
         {taskset.purpose === "benchmark" && taskset.benchmark ? (
           <div className="labs-dataset-method-readiness">
@@ -298,23 +256,7 @@ export function LabModelDataset({
     );
   }
 
-  if (tab === "review") {
-    return (
-      <>
-        <PreferenceComparisonReview
-          defaultModel={defaultModel}
-          defaultRubric={preferenceRubric}
-          defaultMinimumSamples={preferenceMinimumSamples}
-          reviewerKey={taskset.profileId}
-          tasksetId={taskset.id}
-          training={training}
-        />
-        <PreferenceDatasetSummary tasksetId={taskset.id} training={training} />
-      </>
-    );
-  }
-
-  if (tab === "metrics") {
+  if (tab === "scoring") {
     const metricPolicy = taskset.metrics ?? {
       primaryMetric: "score",
       aggregation: "mean_score" as const,
@@ -342,7 +284,32 @@ export function LabModelDataset({
             </p>
           </DetailSection>
         ) : null}
-        <DetailSection title="Evaluation metrics">
+        <DetailSection title="Scoring contract">
+          {rewardGraders.length ? (
+            <dl className="training-configuration-list">
+              <Fact
+                label="Reward source"
+                value={modelJudge ? "LLM-as-judge" : titleCase(rewardGraders[0]!.kind)}
+              />
+              <Fact label="Primary grader" value={modelJudge?.label ?? rewardGraders[0]!.label} />
+              {modelJudge ? (
+                <Fact label="Judge model" value={`${titleCase(modelJudge.judge.providerId)} · ${modelJudge.judge.modelId}`} />
+              ) : null}
+              <Fact label="Reward calculation" value={rewardCalculation(taskset)} />
+              {modelJudge ? (
+                <Fact
+                  label="Calibration"
+                  value={`${titleCase(modelJudge.calibrationStatus)}${modelJudge.metadata.calibrationIsAdvisory === true ? " · advisory" : ""}`}
+                />
+              ) : null}
+              <Fact
+                label="Policy boundary"
+                value={taskset.policy.privilegedFields.length ? "Grading criteria hidden from Policy" : "No privileged grading fields"}
+              />
+            </dl>
+          ) : <p className="labs-detail-copy">No reward-eligible grader is attached to this release.</p>}
+        </DetailSection>
+        <DetailSection title="Recorded scoring evidence">
           <p className="labs-detail-copy">
             This view summarizes recorded Attempt, grader, artifact, and preference evidence. Configure and start runs from the project’s Runs workspace.
           </p>
@@ -385,9 +352,15 @@ export function LabModelDataset({
                         </>
                       ) : null}
                     </dl>
-                    {"rubric" in grader ? <pre>{grader.rubric}</pre> : null}
-                    {"config" in grader ? <pre>{JSON.stringify(grader.config, null, 2)}</pre> : null}
-                    {"module" in grader ? <p><code>{grader.module}</code> · {grader.exportName}</p> : null}
+                    {!grader.privileged && "rubric" in grader ? (
+                      <pre>{grader.rubric}</pre>
+                    ) : null}
+                    {!grader.privileged && "config" in grader ? (
+                      <pre>{JSON.stringify(grader.config, null, 2)}</pre>
+                    ) : null}
+                    {!grader.privileged && "module" in grader ? (
+                      <p><code>{grader.module}</code> · {grader.exportName}</p>
+                    ) : null}
                   </div>
                 </details>
               ))}
@@ -469,7 +442,7 @@ export function LabModelDataset({
   }
 
   return (
-      <DetailSection title="Scenarios">
+      <DetailSection title="Tasks">
         <div className="labs-method-tabs labs-dataset-tabs" role="tablist" aria-label="Taskset splits">
           {SPLITS.map((item) => (
             <button
@@ -557,7 +530,7 @@ export function LabModelDataset({
   );
 }
 
-function PreferenceDatasetSummary({
+export function PreferenceDatasetSummary({
   tasksetId,
   training,
 }: {

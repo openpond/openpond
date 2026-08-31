@@ -115,7 +115,7 @@ export function LabModelRunsPage({
   return (
     <section className="labs-model-version-index" aria-label="Model runs">
       <ModelProjectPageHeader
-        title={mode === "evals" ? "Evals" : "Training"}
+        title={mode === "evals" ? "Evaluations" : "Training Runs"}
         description={mode === "evals"
           ? "Evaluation-only runs, held-out results, and grader evidence."
           : "Training runs, optimizer progress, checkpoints, and immutable outputs."}
@@ -140,7 +140,7 @@ export function LabModelRunsPage({
               <th>Run</th>
               <th>Status</th>
               <th>Method</th>
-              <th>Dataset</th>
+              <th>Taskset</th>
               <th>Result</th>
               <th>Updated</th>
             </tr>
@@ -332,7 +332,7 @@ export function LabModelVersionsPage({
     <section className="labs-model-version-index" aria-label="Model versions">
       <header className="labs-model-section-intro">
         <div>
-          <h2>Versions</h2>
+          <h1>Model Versions</h1>
           <p>
             Trained outputs that can be evaluated, served, and selected as the project default.
           </p>
@@ -347,7 +347,7 @@ export function LabModelVersionsPage({
               <th>Version</th>
               <th>Status</th>
               <th>Training</th>
-              <th>Dataset</th>
+              <th>Taskset</th>
               <th>Evaluation</th>
               <th>Created</th>
               <th>

@@ -60,6 +60,8 @@ type RunDetailTab =
 
 export function LabModelVersionDetailPage({
   connection,
+  detailTab,
+  onDetailTabChange,
   selectedEntryKey,
   workproduct,
   runs,
@@ -68,11 +70,11 @@ export function LabModelVersionDetailPage({
   onOpenConversation,
 }: ModelWorkspaceProps & {
   connection: ClientConnection | null;
+  detailTab: string | null;
+  onDetailTabChange: (tab: string) => void;
   selectedEntryKey: string;
   onOpenConversation: (conversationId: string) => void;
 }) {
-  const [requestedDetailTab, setRequestedDetailTab] =
-    useState<RunDetailTab>("overview");
   const state = training.payload;
   const jobs = useMemo(
     () => labModelJobs(workproduct, runs, state),
@@ -240,10 +242,11 @@ export function LabModelVersionDetailPage({
       ? [{ id: "activity" as const, label: "Activity" }]
       : []),
   ];
+  const requestedDetailTab = detailTab as RunDetailTab | null;
   const activeDetailTab = detailTabs.some(
     (tab) => tab.id === requestedDetailTab,
   )
-    ? requestedDetailTab
+    ? requestedDetailTab!
     : detailTabs[0]!.id;
   if (!selectedEntry && !selectedLifecycleRun) {
     return (
@@ -313,7 +316,7 @@ export function LabModelVersionDetailPage({
               key={tab.id}
               role="tab"
               type="button"
-              onClick={() => setRequestedDetailTab(tab.id)}
+              onClick={() => onDetailTabChange(tab.id)}
             >
               {tab.label}
             </button>

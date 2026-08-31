@@ -13,8 +13,11 @@ import {
   CheckCircle2,
   FileOutput,
   FolderGit2,
+  GitBranch,
+  Shield,
   Shapes,
   SquarePen,
+  UserRound,
 } from "../icons";
 import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import type { SidebarSectionMenuId } from "../../app/app-state";
@@ -22,11 +25,14 @@ import type { AppView } from "../../lib/app-models";
 import { newExperienceTitle } from "../../lib/experience-options";
 import {
   modelProjectRoute,
+  modelLibraryRoute,
   navigateDesktopRoute,
+  modelsLibrarySectionFromRoute,
   modelsSectionFromRoute,
   navigateModelsRoute,
   useModelsRoute,
   type ModelSection,
+  type ModelLibrarySection,
 } from "../labs/lab-primary-tab-state";
 
 type SidebarDestinationProps = {
@@ -66,6 +72,9 @@ export function SidebarNavigation({
   const activeModelsSection = modelsSectionFromRoute(
     modelsRoute ?? { kind: "index" },
   );
+  const activeLibrarySection = modelsLibrarySectionFromRoute(
+    modelsRoute ?? { kind: "index" },
+  );
 
   function clearWorkspaceSelection() {
     setSelectedAppId(null);
@@ -75,9 +84,22 @@ export function SidebarNavigation({
   }
 
   function selectModelsSection(section: ModelSection) {
+    if (!selectedModelProjectId) return;
     clearWorkspaceSelection();
     setView("labs");
     navigateModelsRoute(modelProjectRoute(selectedModelProjectId, section));
+  }
+
+  function selectModelsLibrary(section: ModelLibrarySection) {
+    clearWorkspaceSelection();
+    setView("labs");
+    navigateModelsRoute(modelLibraryRoute(section));
+  }
+
+  function selectModelsIndex() {
+    clearWorkspaceSelection();
+    setView("labs");
+    navigateModelsRoute({ kind: "index" });
   }
 
   function selectModelProject(modelProjectId: string) {
@@ -115,13 +137,61 @@ export function SidebarNavigation({
       )}
       {productArea === "models" ? (
         <>
+          <span className="sidebar-nav-group-label">Library</span>
+          <button
+            className={`nav-command ${view === "labs" && modelsRoute?.kind === "index" ? "active" : ""}`}
+            aria-label="Model Projects"
+            type="button"
+            onClick={selectModelsIndex}
+          >
+            <FolderGit2 size={16} />
+            <span>Model Projects</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeLibrarySection === "tasksets" ? "active" : ""}`}
+            aria-label="Taskset Library"
+            type="button"
+            onClick={() => selectModelsLibrary("tasksets")}
+          >
+            <Boxes size={16} />
+            <span>Taskset Library</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeLibrarySection === "scoring" ? "active" : ""}`}
+            aria-label="Scoring"
+            type="button"
+            onClick={() => selectModelsLibrary("scoring")}
+          >
+            <Shield size={16} />
+            <span>Scoring</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeLibrarySection === "evaluations" ? "active" : ""}`}
+            aria-label="Evaluations"
+            type="button"
+            onClick={() => selectModelsLibrary("evaluations")}
+          >
+            <CheckCircle2 size={16} />
+            <span>Evaluations</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeLibrarySection === "reviews" ? "active" : ""}`}
+            aria-label="Human Review"
+            type="button"
+            onClick={() => selectModelsLibrary("reviews")}
+          >
+            <UserRound size={16} />
+            <span>Human Review</span>
+          </button>
+          <span className="sidebar-nav-group-label">Current project</span>
           <div className="sidebar-model-project-picker">
             <select
               aria-label="Select Model Project"
               disabled={!modelProjects.length}
-              value={selectedModelProjectId ?? modelProjects[0]?.id ?? ""}
+              value={selectedModelProjectId ?? ""}
               onChange={(event) => selectModelProject(event.target.value)}
             >
+              <option disabled value="">Select a Model Project</option>
               {modelProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
           </div>
@@ -146,13 +216,22 @@ export function SidebarNavigation({
                 <span>Tasksets</span>
               </button>
               <button
+                className={`nav-command ${view === "labs" && activeModelsSection === "scoring" ? "active" : ""}`}
+                aria-label="Project Scoring"
+                type="button"
+                onClick={() => selectModelsSection("scoring")}
+              >
+                <Shield size={16} />
+                <span>Scoring</span>
+              </button>
+              <button
                 className={`nav-command ${view === "labs" && activeModelsSection === "evals" ? "active" : ""}`}
                 aria-label="Evals"
                 type="button"
                 onClick={() => selectModelsSection("evals")}
               >
                 <CheckCircle2 size={16} />
-                <span>Evals</span>
+                <span>Evaluations</span>
               </button>
               <button
                 className={`nav-command ${selectedTrainingActivity ? "nav-command-training-live " : ""}${view === "labs" && activeModelsSection === "runs" ? "active" : ""}`}
@@ -173,6 +252,15 @@ export function SidebarNavigation({
                     <span className="sidebar-running-dot" aria-hidden="true" />
                   </span>
                 ) : null}
+              </button>
+              <button
+                className={`nav-command ${view === "labs" && activeModelsSection === "versions" ? "active" : ""}`}
+                aria-label="Versions"
+                type="button"
+                onClick={() => selectModelsSection("versions")}
+              >
+                <GitBranch size={16} />
+                <span>Versions</span>
               </button>
               <button
                 className={`nav-command ${view === "labs" && activeModelsSection === "serving" ? "active" : ""}`}

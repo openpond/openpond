@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   desktopPath,
   desktopRouteFromLocation,
+  modelLibraryRoute,
   modelProjectRoute,
   modelsPath,
   modelsRouteFromLocation,
@@ -13,14 +14,14 @@ describe("Models path routing", () => {
   it("parses canonical project, resource, and detail-tab paths", () => {
     expect(
       modelsRouteFromLocation({
-        pathname: "/models/project_1/tasksets/taskset_1/scenarios",
+        pathname: "/models/project_1/tasksets/taskset_1/tasks",
       }),
     ).toEqual({
       kind: "project",
       projectId: "project_1",
       section: "tasksets",
       resourceId: "taskset_1",
-      detailTab: "scenarios",
+      detailTab: "tasks",
     });
     expect(
       modelsRouteFromLocation({ pathname: "/models/project_1/runs" }),
@@ -34,7 +35,7 @@ describe("Models path routing", () => {
     ).toMatchObject({
       kind: "project",
       projectId: "project_1",
-      section: "evals",
+      section: "versions",
     });
     expect(
       modelsRouteFromLocation({
@@ -57,9 +58,34 @@ describe("Models path routing", () => {
     expect(modelsRouteFromLocation({ pathname: "/models/runs" })).toBeNull();
   });
 
+  it("parses global resource libraries and their details", () => {
+    expect(modelsRouteFromLocation({ pathname: "/models/tasksets" })).toEqual({
+      kind: "library",
+      section: "tasksets",
+      resourceId: null,
+      detailTab: null,
+    });
+    expect(
+      modelsRouteFromLocation({
+        pathname: "/models/tasksets/taskset_1/scoring",
+      }),
+    ).toEqual({
+      kind: "library",
+      section: "tasksets",
+      resourceId: "taskset_1",
+      detailTab: "scoring",
+    });
+    expect(
+      modelsRouteFromLocation({ pathname: "/models/reviews/review_1/nope" }),
+    ).toBeNull();
+  });
+
   it("serializes paths without query-string navigation state", () => {
     const route = modelProjectRoute("project with spaces", "evals");
     expect(modelsPath(route)).toBe("/models/project%20with%20spaces/evals");
+    expect(modelsPath(modelLibraryRoute("scoring", "judge 1", "usage"))).toBe(
+      "/models/scoring/judge%201/usage",
+    );
     expect(modelsSectionFromRoute({ kind: "index" })).toBe("overview");
   });
 });
