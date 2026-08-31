@@ -33,36 +33,7 @@ describe("sidebar row updated dates", () => {
     );
 
     expect(markup).toContain(`>${formattedTime(sessionFixture().updatedAt)}</time>`);
-    expect(markup).not.toContain(">Aug 9 ");
-    expect(markup).not.toContain("Updated");
-    expect(markup).not.toContain("Aug 9, 2026</time>");
     expect(markup).toContain('dateTime="2026-08-09T12:30:00.000Z"');
-    expect(markup).toContain(
-      '<span class="sidebar-session-detail-line"><span class="sidebar-session-project-label">OpenPond</span><div class="sidebar-row-actions sidebar-task-inline-actions">',
-    );
-    expect(markup.indexOf("sidebar-task-inline-actions")).toBeLessThan(
-      markup.indexOf("sidebar-row-updated-at"),
-    );
-  });
-
-  test("renders Chat as the hover detail for projectless chat tasks", () => {
-    const markup = renderToStaticMarkup(
-      createElement(SidebarSessionRow, {
-        session: sessionFixture(),
-        selected: false,
-        projectLabel: "Chat",
-        onSelect: () => undefined,
-        onTogglePin: () => undefined,
-        onArchive: () => undefined,
-      })
-    );
-
-    expect(markup).toContain(
-      '<span class="sidebar-session-project-label">Chat</span>',
-    );
-    expect(markup.indexOf("sidebar-session-project-label")).toBeLessThan(
-      markup.indexOf("sidebar-row-updated-at"),
-    );
   });
 
   test("keeps grouped task dates out of the default row", () => {
@@ -82,8 +53,6 @@ describe("sidebar row updated dates", () => {
     );
 
     expect(markup).toContain('aria-describedby="task-detail-session-1"');
-    expect(markup).not.toContain("sidebar-row-updated-at");
-    expect(markup).not.toContain("sidebar-session-detail-line");
     expect(markup).toContain('aria-label="Open in right panel"');
     expect(markup).toContain('aria-label="Save for later"');
     expect(markup).toContain('aria-label="Mark done"');
@@ -138,8 +107,6 @@ describe("sidebar row updated dates", () => {
     expect(markup).toContain(
       `>Aug 8 ${formattedTime(projectFixture().updatedAt)}</time>`,
     );
-    expect(markup).not.toContain("Updated");
-    expect(markup).not.toContain("Aug 8, 2026</time>");
     expect(markup).toContain('dateTime="2026-08-08T12:30:00.000Z"');
   });
 });

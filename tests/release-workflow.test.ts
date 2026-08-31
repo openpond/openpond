@@ -46,7 +46,7 @@ describe("release workflow", () => {
   test("builds the workspace Harness dependency before checking Evals for publication", () => {
     const workflow = readFileSync(EVALS_RELEASE_WORKFLOW_PATH, "utf8");
     const harnessBuild = workflow.indexOf("pnpm --dir packages/harness run build");
-    const evalsCheck = workflow.indexOf("pnpm run evals:check");
+    const evalsCheck = workflow.indexOf("pnpm run evals:publish:check");
 
     expect(harnessBuild).toBeGreaterThan(-1);
     expect(evalsCheck).toBeGreaterThan(harnessBuild);
@@ -161,15 +161,20 @@ describe("release workflow", () => {
     expect(releaseWorkflow).toContain("cancel-in-progress: ${{ github.event_name == 'schedule' }}");
     expect(releaseWorkflow).toContain("checks: read");
     expect(ciWorkflow).toContain("name: Checks");
-    expect(ciWorkflow).toContain("needs: [scope, targeted, quality, unit, integration, contract, release_smoke]");
+    expect(ciWorkflow).toContain(
+      "needs: [scope, targeted, quality, test_build, unit, system, integration, image, python, contract, release_smoke]",
+    );
     expect(ciWorkflow).toContain("pnpm run test:unit");
+    expect(ciWorkflow).toContain("pnpm run test:system");
     expect(ciWorkflow).toContain("pnpm run test:integration");
+    expect(ciWorkflow).toContain("pnpm run test:image");
+    expect(ciWorkflow).toContain("pnpm run test:python");
     expect(ciWorkflow).toContain("pnpm run test:contract");
     expect(ciWorkflow).toContain("pnpm run test:release");
     expect(ciWorkflow).not.toContain("setup-bun");
     expect(ciWorkflow).not.toMatch(/\bbun (?:install|run|x|test)\b/);
     expect(ciWorkflow).toMatch(
-      /name: verified-build-\$\{\{ github\.sha \}\}[\s\S]*?packages\/cloud\/dist/,
+      /name: verified-build-\$\{\{ github\.sha \}\}[\s\S]*?packages\/\*\/dist/,
     );
     expect(ciWorkflow).toMatch(
       /release_smoke:[\s\S]*?actions\/download-artifact@[0-9a-f]{40} # v8[\s\S]*?path: \./,

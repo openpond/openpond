@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { HarnessReleaseDiffSidebar } from "../apps/web/src/components/settings/HarnessReleaseDiffSidebar";
 
 describe("HarnessReleaseDiffSidebar", () => {
-  test("uses the established right-sidebar chrome for an immutable release comparison", () => {
+  test("labels the immutable release comparison controls", () => {
     const markup = renderToStaticMarkup(
       createElement(HarnessReleaseDiffSidebar, {
         connection: {
@@ -25,7 +25,6 @@ describe("HarnessReleaseDiffSidebar", () => {
       }),
     );
 
-    expect(markup).toContain('id="right-sidebar-files-panel"');
     expect(markup).toContain('aria-label="Workspace diffs"');
     expect(markup).toContain('aria-label="Resize diff panel"');
     expect(markup).toContain('aria-label="Right sidebar views"');

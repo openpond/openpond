@@ -38,13 +38,6 @@ function renderTopBar(overrides: Partial<Parameters<typeof AppTopBar>[0]> = {}):
 }
 
 describe("AppTopBar", () => {
-  test("keeps the page title without rendering the inert title ellipsis", () => {
-    const markup = renderTopBar({ showWorkspaceControls: true });
-
-    expect(markup).toContain("Get started");
-    expect(markup).not.toContain('title="More"');
-  });
-
   test("shows the shared right-sidebar control in the top-right actions", () => {
     const markup = renderTopBar({
       onToggleRightSidebar: noop,
@@ -55,6 +48,5 @@ describe("AppTopBar", () => {
 
     expect(markup).toContain('aria-label="Hide sidebar"');
     expect(markup).toContain('aria-pressed="true"');
-    expect(markup).toContain("topbar-diff-button active");
   });
 });

@@ -12,9 +12,11 @@ const criticalFiles = new Set([
   "tsconfig.json",
   "vitest.config.ts",
   "scripts/ci-change-scope.mjs",
+  "scripts/check-test-tiers.ts",
   "scripts/run-affected-tests.ts",
   "scripts/run-tests.ts",
   "scripts/test-suite-config.ts",
+  "scripts/test-suite-manifest.ts",
 ]);
 
 export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedFiles = []) {
@@ -38,7 +40,9 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
   const full = reasons.length > 0;
   const workflow = files.some((file) => file.startsWith(".github/workflows/") || file === "scripts/check-workflows.ts" || file === "scripts/run-actionlint.ts");
   const release = files.some((file) => file === "apps/desktop/package.json" || file.startsWith("scripts/release-") || file.startsWith(".github/workflows/release-"));
-  const python = files.some((file) => file.startsWith("python/") && /(?:\.py|\.toml|\.lock)$/.test(file));
+  const python = files.some((file) => (
+    file.startsWith("python/") || file.startsWith("packages/evals/python/")
+  ) && /(?:\.py|\.toml|\.lock)$/.test(file));
   const affectedTests = files.some((file) => /(?:^|\/)[^/]+\.(?:[cm]?[jt]sx?)$/.test(file));
   const nodeContracts = files.some((file) => file.endsWith(".test.mjs"));
   const image = files.some((file) => file.includes("local-image-tool-registry") || file === "tests/local-image-tool-registry.test.ts");

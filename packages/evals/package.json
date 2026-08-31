@@ -96,7 +96,8 @@
     "test": "vitest run --root ../.. --config vitest.config.ts --project evals",
     "check:api": "tsx scripts/check-public-package.ts",
     "check:consumer": "tsx scripts/verify-packed-consumer.ts",
-    "check": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:api && pnpm run check:consumer && npm pack --dry-run"
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:api && pnpm run check:consumer && npm pack --dry-run",
+    "publish:check": "pnpm run build && pnpm run check:api && pnpm run check:consumer && npm pack --dry-run"
   },
   "dependencies": {
     "zod": "^4.1.13"

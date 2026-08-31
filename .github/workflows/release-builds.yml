@@ -241,7 +241,7 @@ jobs:
         run: pnpm exec tsx scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
       - run: pnpm run build:artifacts
-      - run: pnpm run cli:build
+      - run: pnpm run cli:build:from-web
 
       - name: Stage release source artifacts
         run: pnpm run release:source-artifacts:stage

@@ -46,7 +46,13 @@ describe("CI change scope", () => {
 
   test("treats test-runner and large changes as full-suite risks", () => {
     expect(classifyCiChanges(["vitest.config.ts"]).full).toBe(true);
+    expect(classifyCiChanges(["scripts/test-suite-manifest.ts"]).full).toBe(true);
     expect(classifyCiChanges(Array.from({ length: 51 }, (_, index) => `tests/fixture-${index}.test.ts`)).full).toBe(true);
+  });
+
+  test("selects both Python package roots", () => {
+    expect(classifyCiChanges(["python/openpond-datasets/tests/test_loader.py"]).python).toBe(true);
+    expect(classifyCiChanges(["packages/evals/python/tests/test_telemetry.py"]).python).toBe(true);
   });
 
   test("runs the full suite when production code is deleted, but not for a deleted test", () => {

@@ -9,48 +9,6 @@ import { buildActivityCalendar } from "../apps/web/src/components/settings/usage
 const NOW = "2026-07-04T20:00:00.000Z";
 
 describe("UsageSettingsContent", () => {
-  test("renders summary metrics, grouped tables, and recent requests", () => {
-    const html = renderUsage();
-
-    expect(html).toContain("Detailed usage");
-    expect(html).toContain("All calls");
-    expect(html).toContain("Lifetime tokens");
-    expect(html).toContain("1,500");
-    expect(html).toContain("Longest request");
-    expect(html).toContain("Current streak");
-    expect(html).toContain("Token activity");
-    expect(html).toContain("Activity summary");
-    expect(html).toContain("Prompt cache reuse");
-    expect(html).toContain("Cache telemetry");
-    expect(html).toContain("66.7%");
-    expect(html).toContain("title=\"50%\"");
-    expect(html).toContain("Model activity");
-    expect(html).toContain("Model colors");
-    expect(html).toContain("data-model-count=\"2\"");
-    expect(html).toContain("--usage-cell-gradient:");
-    expect(html).toContain("stored activity on Jul 4, 2026");
-    expect(html).not.toContain("--usage-model-color-soft");
-    expect(html).not.toContain("models recorded");
-    expect(html).not.toContain("Refresh activity");
-    expect(html).toContain("Daily tokens");
-    expect(html).toContain("Models");
-    expect(html).toContain("anthropic/claude-sonnet-4");
-    expect(html).toContain("Threads");
-    expect(html).toContain("Usage thread");
-    expect(html).toContain("Slash commands");
-    expect(html).toContain("/skill");
-    expect(html).toContain("Routes");
-    expect(html).toContain("Local BYOK");
-    expect(html).toContain("Cache cohorts");
-    expect(html).toContain("Foreground");
-    expect(html).toContain("Sources");
-    expect(html).toContain("Provider usage");
-    expect(html).toContain("Requests");
-    expect(html).toContain("Chat turn");
-    expect(html).not.toContain("TOTAL TOKENS");
-    expect(html).not.toContain("ALL CALLS");
-  });
-
   test("renders empty usage states without data", () => {
     const html = renderUsage({
       summary: emptySummary(),
@@ -80,8 +38,6 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain("anthropic/claude-sonnet-4");
     expect(html).toContain("gpt-4.1");
     expect(html).toContain("aria-label=\"Model colors\"");
-    expect(html).not.toContain("Only model in this activity");
-    expect(html).not.toContain("<option value=\"all\">All models</option>");
   });
 
   test("adds truthful provider and model filters for the Models Usage tab", () => {

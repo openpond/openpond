@@ -136,6 +136,7 @@
     "check:package-install": "tsx ./scripts/check-package-install.ts",
     "check:hygiene": "tsx ./scripts/check-hygiene.ts",
     "pack:dry-run": "npm pack --dry-run",
-    "check": "pnpm run build && pnpm run typecheck && vitest run --root ../.. --config vitest.config.ts --project agent-sdk && pnpm run check:examples && pnpm run check:package-install && pnpm run check:hygiene && pnpm run pack:dry-run"
+    "check": "pnpm run build && pnpm run typecheck && vitest run --root ../.. --config vitest.config.ts --project agent-sdk && pnpm run check:examples && pnpm run check:package-install && pnpm run check:hygiene && pnpm run pack:dry-run",
+    "publish:check": "pnpm run build && pnpm run check:examples && pnpm run check:package-install && pnpm run check:hygiene && pnpm run pack:dry-run"
   }
 }

@@ -7,10 +7,15 @@ import { fileURLToPath } from "node:url";
 
 import {
   ALL_TEST_SUITES,
+  IMAGE_TEST_PROJECTS,
+  INTEGRATION_TEST_PROJECTS,
+  SYSTEM_TEST_PROJECTS,
   type TestSuite,
+  UNIT_TEST_PROJECTS,
 } from "./test-suite-config";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+let packageRuntimeBuildReady = false;
 let serverWorkspaceBuildReady = false;
 const nodeBinary = process.env.NODE_BINARY || "node";
 const pnpmBinary = process.env.PNPM_BINARY || (process.platform === "win32" ? "pnpm.cmd" : "pnpm");
@@ -41,6 +46,7 @@ const nonDeterministicEnvKeys = [
 
 async function main(): Promise<void> {
   const suite = parseSuite(process.argv[2]);
+  const vitestArgs = process.argv.slice(3);
   const suites = suite === "all" ? ALL_TEST_SUITES : [suite];
   const isolated = suite !== "live";
   const testEnv = isolated ? await createIsolatedTestEnv() : process.env;
@@ -48,8 +54,11 @@ async function main(): Promise<void> {
 
   try {
     for (const current of suites) {
-      if (current === "unit") await runUnitTests(testEnv);
-      if (current === "integration") await runIntegrationTests(testEnv);
+      if (current === "unit") await runUnitTests(testEnv, vitestArgs);
+      if (current === "system") await runSystemTests(testEnv, vitestArgs);
+      if (current === "integration") await runIntegrationTests(testEnv, vitestArgs);
+      if (current === "image") await runImageTests(testEnv, vitestArgs);
+      if (current === "python") await runPythonTests(testEnv);
       if (current === "contract") await runContractTests(testEnv);
       if (current === "release") await runReleaseTests(testEnv);
       if (current === "cli") await runCliCompatibilitySuite(testEnv);
@@ -65,7 +74,10 @@ function parseSuite(raw: string | undefined): TestSuite {
   const suite = raw ?? "all";
   if (
     suite === "unit"
+    || suite === "system"
     || suite === "integration"
+    || suite === "image"
+    || suite === "python"
     || suite === "contract"
     || suite === "release"
     || suite === "cli"
@@ -76,7 +88,7 @@ function parseSuite(raw: string | undefined): TestSuite {
     return suite;
   }
   throw new Error(
-    `unknown test suite "${suite}". Expected unit, integration, contract, release, all, cli, agent-sdk, or live.`,
+    `unknown test suite "${suite}". Expected unit, system, integration, image, python, contract, release, all, cli, agent-sdk, or live.`,
   );
 }
 
@@ -104,23 +116,29 @@ async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
   return env;
 }
 
-async function runUnitTests(env: NodeJS.ProcessEnv): Promise<void> {
-  await ensureServerWorkspaceBuild(env);
-  await runVitestProjects([
-    "root-unit",
-    "cli-unit",
-    "agent-runtime",
-    "app-server",
-    "sdk",
-    "harness",
-    "runtime",
-    "evals",
-  ], env);
+async function runUnitTests(env: NodeJS.ProcessEnv, vitestArgs: string[] = []): Promise<void> {
+  await ensurePackageRuntimeBuild(env);
+  await runVitestProjects([...UNIT_TEST_PROJECTS], env, vitestArgs);
 }
 
-async function runIntegrationTests(env: NodeJS.ProcessEnv): Promise<void> {
-  await ensureServerWorkspaceBuild(env);
-  await runVitestProjects(["root-integration", "cli-integration"], env);
+async function runSystemTests(env: NodeJS.ProcessEnv, vitestArgs: string[] = []): Promise<void> {
+  await ensurePackageRuntimeBuild(env);
+  await runVitestProjects([...SYSTEM_TEST_PROJECTS], env, [...shardArgs(env), ...vitestArgs]);
+}
+
+async function runIntegrationTests(env: NodeJS.ProcessEnv, vitestArgs: string[] = []): Promise<void> {
+  await ensurePackageRuntimeBuild(env);
+  await runVitestProjects([...INTEGRATION_TEST_PROJECTS], env, vitestArgs);
+}
+
+async function runImageTests(env: NodeJS.ProcessEnv, vitestArgs: string[] = []): Promise<void> {
+  await ensurePackageRuntimeBuild(env);
+  await runVitestProjects([...IMAGE_TEST_PROJECTS], env, vitestArgs);
+}
+
+async function runPythonTests(env: NodeJS.ProcessEnv): Promise<void> {
+  await runCommand(pnpmBinary, ["run", "test:python:datasets"], { env });
+  await runCommand(pnpmBinary, ["run", "test:python:evals"], { env });
 }
 
 async function runContractTests(env: NodeJS.ProcessEnv): Promise<void> {
@@ -131,8 +149,7 @@ async function runContractTests(env: NodeJS.ProcessEnv): Promise<void> {
 }
 
 async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
-  if (env.OPENPOND_TEST_REUSE_BUILD !== "1") {
-    await runCommand(pnpmBinary, ["run", "build:web"], { env });
+  if (!reuseBuild(env, "OPENPOND_TEST_REUSE_CLI_BUILD")) {
     await runCommand(pnpmBinary, ["run", "cli:build"], { env });
   }
   await assertFilesExist([
@@ -144,24 +161,31 @@ async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
 }
 
 async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void> {
-  if (env.OPENPOND_TEST_REUSE_BUILD === "1" || serverWorkspaceBuildReady) return;
-  // apps/server imports the SDK package entrypoint at runtime. TypeScript project
-  // references emit its declarations, while the package build emits dist/index.js.
-  // Build both so a clean CI checkout cannot compile successfully and then fail
-  // when the node:test contract suite loads the server output.
-  await runCommand(pnpmBinary, ["run", "build:sdk"], { env });
+  await ensurePackageRuntimeBuild(env);
+  if (reuseBuild(env, "OPENPOND_TEST_REUSE_SERVER_BUILD") || serverWorkspaceBuildReady) return;
+  // Node contract tests import apps/server/dist directly. Unit and system tests
+  // only need the package runtime prepared above; complete server output belongs
+  // to this contract boundary.
   await runCommand(tscBinary, ["-b", "apps/server"], { env });
   serverWorkspaceBuildReady = true;
 }
 
+async function ensurePackageRuntimeBuild(env: NodeJS.ProcessEnv): Promise<void> {
+  if (reuseBuild(env, "OPENPOND_TEST_REUSE_PACKAGE_BUILD") || packageRuntimeBuildReady) return;
+  await runCommand(pnpmBinary, ["run", "build:sdk"], { env });
+  packageRuntimeBuildReady = true;
+}
+
 async function runCliCompatibilitySuite(env: NodeJS.ProcessEnv): Promise<void> {
-  await ensureServerWorkspaceBuild(env);
+  await ensurePackageRuntimeBuild(env);
   await runVitestProjects(["cli-unit", "cli-integration"], env);
   await runReleaseTests(env);
 }
 
 async function runAgentSdkTests(env: NodeJS.ProcessEnv): Promise<void> {
-  await runCommand(pnpmBinary, ["--dir", "packages/agent-sdk", "run", "build"], { env });
+  if (!reuseBuild(env, "OPENPOND_TEST_REUSE_AGENT_SDK_BUILD")) {
+    await runCommand(pnpmBinary, ["--dir", "packages/agent-sdk", "run", "build"], { env });
+  }
   await runCommand(vitestBinary, ["run", "--project", "agent-sdk"], { env });
 }
 
@@ -209,12 +233,25 @@ async function runCommand(
   throw new Error(`${command} ${args.join(" ")} failed with ${signal ?? `exit code ${code}`}`);
 }
 
-async function runVitestProjects(projects: string[], env: NodeJS.ProcessEnv): Promise<void> {
+async function runVitestProjects(
+  projects: string[],
+  env: NodeJS.ProcessEnv,
+  extraArgs: string[] = [],
+): Promise<void> {
   await runCommand(
     vitestBinary,
-    ["run", ...projects.flatMap((project) => ["--project", project])],
+    ["run", ...projects.flatMap((project) => ["--project", project]), ...extraArgs],
     { env },
   );
+}
+
+function shardArgs(env: NodeJS.ProcessEnv): string[] {
+  const shard = env.OPENPOND_TEST_SHARD?.trim();
+  return shard ? [`--shard=${shard}`] : [];
+}
+
+function reuseBuild(env: NodeJS.ProcessEnv, specificKey: string): boolean {
+  return env.OPENPOND_TEST_REUSE_BUILD === "1" || env[specificKey] === "1";
 }
 
 async function assertFilesExist(files: readonly string[]): Promise<void> {

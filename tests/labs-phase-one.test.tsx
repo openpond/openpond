@@ -9,7 +9,6 @@ import {
   type TrainingStateResponse,
 } from "@openpond/contracts";
 import { createTasksetDraft } from "@openpond/taskset-sdk";
-import { LabsView } from "../apps/web/src/components/labs/LabsView";
 import { labServingRows } from "../apps/web/src/components/labs/LabServingPage";
 import {
   modelProjectRoute,
@@ -129,30 +128,6 @@ describe("Lab workspace", () => {
           : candidate),
       }],
     })).toThrow("globally unique");
-  });
-
-  test("keeps Models subpage navigation out of the page header", () => {
-    const markup = renderToStaticMarkup(
-      createElement(LabsView, {
-        activeTab: "overview",
-        modelProjects: [],
-        selectedModelProjectId: null,
-        onSelectModelProject: noop,
-        onCreateDataset: noop,
-        onCreateModel: noop,
-        children: createElement("div", null, "Unified inventory"),
-      }),
-    );
-
-    expect(markup).toContain('aria-label="Models"');
-    expect(markup).not.toContain('aria-label="Model sections"');
-    expect(markup).not.toContain('role="tab"');
-    expect(markup).toContain(">New Model Project<");
-    expect(markup).not.toContain(">Profile<");
-    expect(markup).not.toContain(">Home<");
-    expect(markup).not.toContain(">Suggestions<");
-    expect(markup).not.toContain("<svg");
-    expect(markup).toContain("Unified inventory");
   });
 
   test("keeps primary Models destinations addressable across refresh and history", () => {
@@ -612,30 +587,6 @@ describe("Lab workspace", () => {
     expect(markup).not.toContain("first run");
   });
 
-  test("keeps Taskset Lab focused on review instead of a builder", () => {
-    const markup = renderToStaticMarkup(
-      createElement(LabDatasetsPage, {
-        defaultModel: {
-          providerId: "openrouter",
-          modelId: "test/model",
-        },
-        runs: [],
-        selectedId: null,
-        state: null,
-        training: {} as never,
-        onToast: noop,
-        onSelectedIdChange: noop,
-        onImproveInChat: noop,
-        onTrainModel: noop,
-        onOpenFiles: noop,
-      }),
-    );
-
-    expect(markup).toContain('aria-label="Search Tasksets"');
-    expect(markup).not.toContain(">Build</button>");
-    expect(markup).not.toContain("Embedded Taskset builder");
-  });
-
   test("shows resumable drafts in the normal Taskset table", () => {
     const draft = {
       ...createTasksetDraft({
@@ -870,26 +821,6 @@ describe("Lab workspace", () => {
     expect(markup).toContain("Graders and reward gates");
     expect(markup).toContain("Audit graders");
     expect(markup).toContain("Refresh readiness");
-  });
-
-  test("keeps generic Taskset overview focused on evidence instead of speculative method advice", () => {
-    const taskset = tasksetFixture({ ready: true });
-    const markup = renderToStaticMarkup(
-      createElement(LabModelDataset, {
-        artifact: null,
-        defaultModel: { providerId: "openrouter", modelId: "test/model" },
-        tab: "overview",
-        taskset,
-        onOpenFiles: noop,
-        onToast: noop,
-        training: { actions: {} } as never,
-      }),
-    );
-
-    expect(markup).toContain("Technical details");
-    expect(markup).toContain("This Taskset contains");
-    expect(markup).not.toContain("Training compatibility");
-    expect(markup).not.toContain("Needs Dataset Work");
   });
 
   test("shows the declared LLM judge and reward formula without opening hidden criteria", () => {

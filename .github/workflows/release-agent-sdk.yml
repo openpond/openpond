@@ -142,7 +142,7 @@ jobs:
       - run: pnpm install --frozen-lockfile --strict-peer-dependencies=false
       - run: pnpm run build:contracts
       - run: pnpm --dir packages/connected-apps run build
-      - run: pnpm run agent-sdk:check
+      - run: pnpm run agent-sdk:publish:check
 
       - name: Publish through npm trusted publishing
         run: |

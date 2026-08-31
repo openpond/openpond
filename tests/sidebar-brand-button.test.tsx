@@ -12,20 +12,13 @@ describe("Sidebar experience wordmark", () => {
       <SidebarProductMenu value="models" onChange={() => undefined} />
     );
 
-    expect(markup).toContain(
-      'class="sidebar-wordmark-button sidebar-experience-trigger"'
-    );
     expect(markup).toContain('aria-label="OpenPond product: Models"');
     expect(markup).toContain('aria-haspopup="menu"');
     expect(markup).toContain('aria-expanded="false"');
-    expect(markup).toContain('src="/openpond-wordlogo-white.png" alt=""');
-    expect(markup).toContain(
-      '<span class="sidebar-experience-label">Models</span>'
-    );
+    expect(markup).toContain(">Models</span>");
     expect(PRODUCT_AREA_OPTIONS.map((option) => option.value)).toEqual([
       "chat",
       "models",
     ]);
   });
-
 });

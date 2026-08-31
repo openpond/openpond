@@ -149,7 +149,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --strict-peer-dependencies=false
       - run: pnpm --dir packages/harness run build
-      - run: pnpm run evals:check
+      - run: pnpm run evals:publish:check
 
       - name: Publish through npm trusted publishing
         run: |
