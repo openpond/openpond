@@ -6,6 +6,11 @@ import type { PreferenceDatasetRelease } from "@openpond/evals";
 import type { TasksetRelease } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 
+import {
+  assertPolicyVisibleSupportScorerEvidence,
+  SupportVisibleTrajectorySchema,
+} from "./support-reward-trajectory.js";
+
 export type ManagedRewardModelBase = {
   source: "huggingface";
   repoId: string;
@@ -84,10 +89,10 @@ export async function buildManagedRewardModelLaunchInput(input: {
           if (!attempt || !task || !bucket) {
             throw new Error(`Preference group ${group.id} is missing an Attempt, Scenario, or label.`);
           }
-          const text = JSON.stringify({
-            schemaVersion: "openpond.structuredPreferenceCandidate.v1",
-            scenario: task.input,
-            candidate: structuredCandidateOutput(attempt),
+          const text = serializePreferenceCandidate({
+            attempt,
+            serialization: input.recipe.input.serialization,
+            task,
           });
           if (text.length > input.recipe.input.maxCharacters) {
             throw new Error(`Preference candidate ${attempt.id} exceeds the Reward Model input limit.`);
@@ -162,4 +167,33 @@ function structuredCandidateOutput(attempt: TaskAttemptResult): unknown {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Preference candidate ${attempt.id} is not valid structured JSON: ${detail}`);
   }
+}
+
+function serializePreferenceCandidate(input: {
+  attempt: TaskAttemptResult;
+  serialization: RewardModelRecipe["input"]["serialization"];
+  task: TasksetRelease["tasks"][number];
+}): string {
+  const candidate = structuredCandidateOutput(input.attempt);
+  if (input.serialization === "scenario_input_and_candidate_json_v1") {
+    return JSON.stringify({
+      schemaVersion: "openpond.structuredPreferenceCandidate.v1",
+      scenario: input.task.input,
+      candidate,
+    });
+  }
+  const trajectory = SupportVisibleTrajectorySchema.parse(candidate);
+  const scenario = {
+    input: input.task.input,
+    policyVisibleContext: input.task.policyVisibleContext,
+  };
+  assertPolicyVisibleSupportScorerEvidence(
+    scenario,
+    `Preference candidate ${input.attempt.id} scenario`,
+  );
+  return JSON.stringify({
+    schemaVersion: "openpond.supportPreferenceCandidate.v1",
+    scenario,
+    trajectory,
+  });
 }

@@ -168,7 +168,10 @@ export const RewardModelRecipeSchema = z.object({
   processorRelease: ImmutableReleaseRefSchema,
   input: z.object({
     kind: z.literal("structured_text"),
-    serialization: z.literal("scenario_input_and_candidate_json_v1"),
+    serialization: z.enum([
+      "scenario_input_and_candidate_json_v1",
+      "support_visible_trajectory_v1",
+    ]),
     maxCharacters: z.number().int().positive().max(500_000),
   }).strict().default({
     kind: "structured_text",

@@ -146,6 +146,149 @@ describe("managed Reward Model launch input", () => {
     })).rejects.toThrow("is not valid structured JSON");
   });
 
+  test("serializes only policy-visible support trajectories for support scorers", async () => {
+    const tasksetReleaseRef = { id: "support-taskset-r1", contentHash: "a".repeat(64) };
+    const datasetRef = { id: "support-preferences-d0", contentHash: "b".repeat(64) };
+    const receiptIds = ["support-love", "support-like", "support-reject"];
+    const tasksetRelease = {
+      ...tasksetReleaseRef,
+      revision: 1,
+      tasks: [{
+        id: "support-scenario-1",
+        input: { customerMessage: "My order arrived damaged." },
+        policyVisibleContext: { policyVersion: "support-policy-v1" },
+      }],
+    } as never;
+    const visibleTrajectory = {
+      schemaVersion: "openpond.supportVisibleTrajectory.v1",
+      conversation: [
+        { index: 0, role: "customer", name: null, content: "My order arrived damaged." },
+        { index: 1, role: "assistant", name: null, content: "I can replace it after confirmation." },
+      ],
+      toolEvents: [],
+      runtimeEvents: [],
+      finalVisibleState: { resolution: "replacement_offered" },
+      escalation: { requested: false, reason: null, handoff: null },
+      termination: { terminal: true, truncated: false, reason: "resolved" },
+    };
+    const launch = await buildManagedRewardModelLaunchInput({
+      idempotencyKey: "support-reward-run",
+      name: "Support communication scorer",
+      sourceRunRef: "openpond:reward-model-run:support-r0",
+      taskset: { id: "support-taskset", revision: 1, contentHash: "c".repeat(64) },
+      tasksetRelease,
+      dataset: {
+        id: datasetRef.id,
+        contentHash: datasetRef.contentHash,
+        tasksetRelease,
+        groups: ["reward_train", "reward_validation"].map((partition, index) => ({
+          id: `support-group-${index}`,
+          partition,
+          rejectAll: false,
+          attemptRefs: receiptIds.map((id) => ({ id, contentHash: "d".repeat(64) })),
+          orderedBuckets: [[receiptIds[0]], [receiptIds[1]], [receiptIds[2]]],
+        })),
+      } as never,
+      recipe: managedSyntheticRewardSmokeRecipe({
+        tasksetRelease: tasksetReleaseRef,
+        preferenceDatasetRelease: datasetRef,
+        serialization: "support_visible_trajectory_v1",
+      }),
+      managedBaseModel: {
+        source: "huggingface",
+        repoId: "Qwen/Qwen3-0.6B",
+        revision: "revision",
+        configHash: "e".repeat(64),
+        tokenizerHash: "f".repeat(64),
+        licenseId: "apache-2.0",
+        gated: false,
+      },
+      attempts: receiptIds.map((receiptId, index) => ({
+        id: `support-attempt-${index}`,
+        taskId: "support-scenario-1",
+        output: { text: JSON.stringify(visibleTrajectory) },
+        metadata: { portableAttemptReceipt: { id: receiptId } },
+      })) as never,
+    });
+    const groups = (launch.rewardModelTraining as {
+      groups: Array<{ candidates: Array<{ text: string }> }>;
+    }).groups;
+    expect(JSON.parse(groups[0]!.candidates[0]!.text)).toEqual({
+      schemaVersion: "openpond.supportPreferenceCandidate.v1",
+      scenario: {
+        input: { customerMessage: "My order arrived damaged." },
+        policyVisibleContext: { policyVersion: "support-policy-v1" },
+      },
+      trajectory: visibleTrajectory,
+    });
+    expect(groups[0]!.candidates[0]!.text).not.toMatch(/expected|privileged|reward|score/i);
+  });
+
+  test("rejects privileged fields in support scenario context", async () => {
+    const tasksetReleaseRef = { id: "support-taskset-r1", contentHash: "a".repeat(64) };
+    const datasetRef = { id: "support-preferences-d0", contentHash: "b".repeat(64) };
+    const receiptIds = ["support-love", "support-reject"];
+    const tasksetRelease = {
+      ...tasksetReleaseRef,
+      revision: 1,
+      tasks: [{
+        id: "support-scenario-1",
+        input: { customerMessage: "My order arrived damaged." },
+        policyVisibleContext: { hiddenObjective: "Issue exactly 12.34 USD." },
+      }],
+    } as never;
+    const visibleTrajectory = {
+      schemaVersion: "openpond.supportVisibleTrajectory.v1",
+      conversation: [
+        { index: 0, role: "customer", name: null, content: "My order arrived damaged." },
+      ],
+      toolEvents: [],
+      runtimeEvents: [],
+      finalVisibleState: {},
+      escalation: { requested: false, reason: null, handoff: null },
+      termination: { terminal: true, truncated: false, reason: "resolved" },
+    };
+    await expect(buildManagedRewardModelLaunchInput({
+      idempotencyKey: "support-reward-run-hidden-context",
+      name: "Support communication scorer",
+      sourceRunRef: "openpond:reward-model-run:support-r0",
+      taskset: { id: "support-taskset", revision: 1, contentHash: "c".repeat(64) },
+      tasksetRelease,
+      dataset: {
+        id: datasetRef.id,
+        contentHash: datasetRef.contentHash,
+        tasksetRelease,
+        groups: [{
+          id: "support-group-0",
+          partition: "reward_train",
+          rejectAll: false,
+          attemptRefs: receiptIds.map((id) => ({ id, contentHash: "d".repeat(64) })),
+          orderedBuckets: [[receiptIds[0]], [receiptIds[1]]],
+        }],
+      } as never,
+      recipe: managedSyntheticRewardSmokeRecipe({
+        tasksetRelease: tasksetReleaseRef,
+        preferenceDatasetRelease: datasetRef,
+        serialization: "support_visible_trajectory_v1",
+      }),
+      managedBaseModel: {
+        source: "huggingface",
+        repoId: "Qwen/Qwen3-0.6B",
+        revision: "revision",
+        configHash: "e".repeat(64),
+        tokenizerHash: "f".repeat(64),
+        licenseId: "apache-2.0",
+        gated: false,
+      },
+      attempts: receiptIds.map((receiptId, index) => ({
+        id: `support-attempt-${index}`,
+        taskId: "support-scenario-1",
+        output: { text: JSON.stringify(visibleTrajectory) },
+        metadata: { portableAttemptReceipt: { id: receiptId } },
+      })) as never,
+    })).rejects.toThrow("forbidden privileged field hiddenObjective");
+  });
+
   test("requires the recipe and preference dataset to pin the exact same Taskset release", async () => {
     const tasksetReleaseRef = {
       id: "taskset-release-t0-r1",

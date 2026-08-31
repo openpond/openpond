@@ -481,7 +481,7 @@ export function TasksetRuns({
         tasksetId: taskset.id,
         rewardModelVersionId,
       });
-      if (!binding) throw new Error("The qualified Reward Model binding could not be created.");
+      if (!binding) throw new Error("The immutable Reward Model binding could not be created.");
       onCreateRun(binding);
     } catch (error) {
       setBindingError(error instanceof Error ? error.message : String(error));
@@ -516,7 +516,8 @@ export function TasksetRuns({
         <section className="labs-dataset-run-intro">
           <h2>Learned reward policy run</h2>
           <p>
-            Start GRPO with an immutable, qualified Reward Model binding. The
+            Start GRPO with an immutable Reward Model binding. Optional
+            qualification evidence is shown separately. The
             policy updates; the Reward Model remains frozen.
           </p>
           {rewardModels.map((version) => (
