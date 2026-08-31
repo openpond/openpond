@@ -24,6 +24,7 @@ import type {
   DatasetImportMapping,
   DatasetRowPage,
   GradeResult,
+  GraderSpec,
   TaskAttemptArtifact,
   TaskAttemptResult,
   Taskset,
@@ -202,6 +203,22 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         `/models/${encodeURIComponent(modelId)}/tasksets/${encodeURIComponent(tasksetId)}/publish`,
         {},
       ),
+    createScorer: (
+      grader: GraderSpec,
+      tasksetId: string,
+      modelProjectId?: string | null,
+    ) => mutate<{
+      grader: GraderSpec;
+      taskset: Taskset;
+      hostedSync: {
+        state: "local" | "synced" | "sync_failed";
+        error: string | null;
+      };
+    }>(
+      "create-scorer",
+      "/scorers",
+      { grader, tasksetId, modelProjectId: modelProjectId ?? null },
+    ),
     createTasksetDraft: (name = "") =>
       mutate<TasksetDraft>(
         "create-taskset-draft",

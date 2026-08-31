@@ -15,7 +15,7 @@ import { contentHash } from "@openpond/harness";
 
 type InventoryFile = { path: string; sha256: string; sizeBytes: number };
 
-export function projectQualifiedRewardModel(input: {
+export function projectRewardModelRelease(input: {
   run: RewardModelRun;
   baseModel: BaseModelPreference;
   runtime: NonNullable<RewardModelVersion["runtime"]>;
@@ -35,23 +35,10 @@ export function projectQualifiedRewardModel(input: {
 }): {
   version: RewardModelVersion;
   receipt: NonNullable<RewardModelRun["receipt"]>;
-  report: RewardModelQualificationReport;
+  report: RewardModelQualificationReport | null;
 } {
   if (input.run.status !== "running" || !input.cleanup.computeReleased || !input.cleanup.providerTerminalObserved) {
-    throw new Error("Reward Model qualification requires a running Run with terminal managed cleanup.");
-  }
-  const qualification = record(input.evidence.qualification);
-  const scoreVariance = number(qualification.scoreVariance, "qualification score variance");
-  const finiteScoreRate = number(qualification.finiteScoreRate, "qualification finite score rate");
-  const sampleCount = integer(qualification.sampleCount, "qualification sample count");
-  if (
-    scoreVariance <= 0
-    || finiteScoreRate !== 1
-    || qualification.checkpointReloadPassed !== true
-    || qualification.processorCompatibilityPassed !== true
-    || qualification.invalidAttemptExclusionPassed !== true
-  ) {
-    throw new Error("Reward Model qualification evidence did not prove reload, processor, invalid-exclusion, finite, and varying-score gates.");
+    throw new Error("Reward Model release requires a running Run with terminal managed cleanup.");
   }
   const files = new Map(input.inventory.map((file) => [file.path, file]));
   const adapter = requiredFile(files, "adapter/adapter_config.json");
@@ -102,34 +89,18 @@ export function projectQualifiedRewardModel(input: {
     ...versionCore,
     contentHash: contentHash(versionCore),
   });
-  const reportCore = {
-    schemaVersion: "openpond.rewardModelQualificationReport.v1" as const,
-    id: `reward-model-qualification:${input.providerRunId}`,
-    kind: input.run.scope === "synthetic_smoke" ? "synthetic_smoke" as const : "human_heldout" as const,
-    rewardModelVersion: { id: provisional.id, contentHash: provisional.contentHash },
-    preferenceDatasetRelease: input.run.preferenceDatasetRelease,
-    tasksetRelease: input.run.tasksetRelease,
-    processorRelease: provisional.artifacts.processorRelease,
-    metrics: {
-      sampleCount,
-      finiteScoreRate,
-      scoreVariance,
-      checkpointReloadPassed: true,
-      processorCompatibilityPassed: qualification.processorCompatibilityPassed === true,
-      invalidAttemptExclusionPassed: qualification.invalidAttemptExclusionPassed === true,
-      orderedPairAccuracy: null,
-      bucketAccuracy: null,
-      tieAgreement: null,
-    },
-    passed: true,
-    productionRewardEligible: input.run.scope !== "synthetic_smoke",
-    createdAt: input.createdAt,
-    metadata: { checkpointPrefix: input.checkpointPrefix, artifactSha256: input.artifactSha256 },
-  };
-  const report = createRewardModelQualificationReport(reportCore);
   // The report pins the immutable version. Keeping the optional reverse ref
   // null avoids a self-referential content-hash cycle.
   const version = provisional;
+  const report = projectOptionalQualificationReport({
+    run: input.run,
+    version,
+    providerRunId: input.providerRunId,
+    checkpointPrefix: input.checkpointPrefix,
+    artifactSha256: input.artifactSha256,
+    evidence: input.evidence,
+    createdAt: input.createdAt,
+  });
   const receiptCore = {
     schemaVersion: "openpond.rewardModelRunReceipt.v1" as const,
     provider: "sandbox-managed-rl",
@@ -156,6 +127,60 @@ export function projectQualifiedRewardModel(input: {
   };
 }
 
+function projectOptionalQualificationReport(input: {
+  run: RewardModelRun;
+  version: RewardModelVersion;
+  providerRunId: string;
+  checkpointPrefix: string;
+  artifactSha256: string;
+  evidence: Record<string, unknown>;
+  createdAt: string;
+}): RewardModelQualificationReport | null {
+  const qualification = recordOrNull(input.evidence.qualification);
+  if (!qualification) return null;
+  const scoreVariance = finiteNumber(qualification.scoreVariance);
+  const finiteScoreRate = finiteNumber(qualification.finiteScoreRate);
+  const sampleCount = positiveInteger(qualification.sampleCount);
+  if (
+    scoreVariance === null
+    || scoreVariance <= 0
+    || finiteScoreRate !== 1
+    || sampleCount === null
+    || qualification.checkpointReloadPassed !== true
+    || qualification.processorCompatibilityPassed !== true
+    || qualification.invalidAttemptExclusionPassed !== true
+  ) {
+    return null;
+  }
+  return createRewardModelQualificationReport({
+    schemaVersion: "openpond.rewardModelQualificationReport.v1",
+    id: `reward-model-qualification:${input.providerRunId}`,
+    kind: input.run.scope === "synthetic_smoke" ? "synthetic_smoke" : "human_heldout",
+    rewardModelVersion: { id: input.version.id, contentHash: input.version.contentHash },
+    preferenceDatasetRelease: input.run.preferenceDatasetRelease,
+    tasksetRelease: input.run.tasksetRelease,
+    processorRelease: input.version.artifacts.processorRelease,
+    metrics: {
+      sampleCount,
+      finiteScoreRate,
+      scoreVariance,
+      checkpointReloadPassed: true,
+      processorCompatibilityPassed: true,
+      invalidAttemptExclusionPassed: true,
+      orderedPairAccuracy: null,
+      bucketAccuracy: null,
+      tieAgreement: null,
+    },
+    passed: true,
+    productionRewardEligible: input.run.scope !== "synthetic_smoke",
+    createdAt: input.createdAt,
+    metadata: {
+      checkpointPrefix: input.checkpointPrefix,
+      artifactSha256: input.artifactSha256,
+    },
+  });
+}
+
 function requiredFile(files: Map<string, InventoryFile>, path: string): InventoryFile {
   const file = files.get(path);
   if (!file || !/^[a-f0-9]{64}$/.test(file.sha256) || file.sizeBytes < 1) {
@@ -164,18 +189,19 @@ function requiredFile(files: Map<string, InventoryFile>, path: string): Inventor
   return file;
 }
 
-function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Reward Model qualification evidence is invalid.");
-  return value as Record<string, unknown>;
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
-function number(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} is invalid.`);
-  return value;
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function integer(value: unknown, label: string): number {
-  const parsed = number(value, label);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${label} is invalid.`);
-  return parsed;
+function positiveInteger(value: unknown): number | null {
+  const parsed = finiteNumber(value);
+  return parsed !== null && Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : null;
 }

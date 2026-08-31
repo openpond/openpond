@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-
 import {
   ModelProjectSchema,
   AdapterValidationReceiptSchema,
@@ -28,7 +27,6 @@ import {
 } from "openpond-sdk/training";
 import { createModelProjectsClient } from "openpond-sdk/model-projects";
 
-import type { SqliteStore } from "../store/store.js";
 import {
   hostedApiAuthHeaders,
   resolveManagedAdapterUserAccess,
@@ -53,21 +51,17 @@ import {
   localTrainingEventType,
   type ManagedTrainingAccess as Access,
   type ManagedTrainingJob as ManagedJob,
+  type OpenPondManagedTrainingAdapterDependencies,
 } from "./openpond-managed-training-adapter-support.js";
 import { resolveTasksetEvaluationAssetBytes } from "./taskset-work-assets.js";
+import { continuationResumeFrom } from "./openpond-managed-training-continuation.js";
+export { continuationResumeFrom };
 
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
 const ACTIVE_EVIDENCE_REFRESH_TTL_MS = 1_500;
 
-export type OpenPondManagedTrainingAdapterDependencies = {
-  store: SqliteStore;
-  storeDir: string;
-  fetchImpl?: typeof fetch;
-  resolveAccess?: (teamId?: string) => Promise<Access>;
-  readFileImpl?: typeof readFile;
-  env?: Record<string, string | undefined>;
-};
+export type { OpenPondManagedTrainingAdapterDependencies } from "./openpond-managed-training-adapter-support.js";
 
 export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   readonly id = ADAPTER_ID;
@@ -200,6 +194,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       requestedCapabilities: [
         { id: "managed_rl.reward_model", version: "1", required: true },
       ],
+      placementObjective: project.trainingSetup.managedGpuPlacementObjective,
       budget: {
         maximumSpendUsd,
         maximumWallSeconds: Math.ceil(input.recipe.resourceLimits.wallTimeMs / 1_000),
@@ -357,28 +352,34 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         });
       }
       if (taskset && trainingPlan && taskset.contentHash === trainingPlan.tasksetHash) {
-        if (taskset.metadata.harnessEvaluationReview !== undefined) {
+        if (trainingPlan.modelImprovementQualification) {
           const qualification = await managedQualification({
             store: this.dependencies.store,
             taskset,
             qualificationRef: trainingPlan.modelImprovementQualification ?? null,
           });
+          const approvalQualification =
+            approval?.modelImprovementQualification ?? null;
           if (
             !qualification ||
-            qualification.decision !== "rl" ||
-            approval?.modelImprovementQualification?.id !== qualification.id ||
-            approval.modelImprovementQualification.contentHash !== qualification.contentHash ||
-            qualification.metadata.sourceTasksetId !== taskset.id ||
-            qualification.metadata.sourceTasksetHash !== taskset.contentHash ||
-            (approval.maximumCostUsd !== null && approval.maximumCostUsd > qualification.maximumCostUsd)
+            !approvalQualification ||
+            approvalQualification.id !== qualification.id ||
+            approvalQualification.contentHash !== qualification.contentHash
           ) {
             issues.push({
-              code: "managed_qualification_invalid",
+              code: "managed_evaluation_reference_invalid",
               path: "execution",
               message:
-                "OpenPond Managed requires an exact qualified RL receipt on the immutable Taskset, plan, and approval.",
+                "The optional model-improvement evidence does not match the immutable plan and approval.",
             });
           }
+        } else if (approval?.modelImprovementQualification) {
+          issues.push({
+            code: "managed_evaluation_reference_invalid",
+            path: "execution",
+            message:
+              "The optional model-improvement evidence differs between the immutable plan and approval.",
+          });
         }
         const requiresHarness =
           taskset.capabilities.requiresState ||
@@ -600,6 +601,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           grader: { id: grader.id, contentHash: contentHash(grader) },
           composer: null,
         };
+    const resumeFrom = continuationResumeFrom(plan.recipe);
     const jobContent: Omit<TrainingJobSubmission, "contentHash"> = {
       schemaVersion: "openpond.trainingJobSubmission.v2",
       idempotencyKey: `openpond-training-v2:${plan.manifest.contentHash}`,
@@ -635,7 +637,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         baseModel,
         recipe: plan.recipe,
         rewardSource,
-        resumeFrom: null,
+        resumeFrom,
       },
       requestedCapabilities: [
         { id: "managed_rl.policy.grpo", version: "1", required: true },
@@ -645,6 +647,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           required: true,
         },
       ],
+      placementObjective: project.trainingSetup.managedGpuPlacementObjective,
       budget: {
         maximumSpendUsd: plan.maximumSpendUsd,
         maximumWallSeconds: Math.ceil(plan.recipe.resourceLimits.wallTimeMs / 1_000),

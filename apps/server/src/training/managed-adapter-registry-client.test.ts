@@ -15,7 +15,7 @@ describe("managed adapter registry client", () => {
               revision: "c1899de289a04d12100db370d81485cdf75e47ca",
               tokenizerRevision: "c1899de289a04d12100db370d81485cdf75e47ca",
               chatTemplateHash: "a".repeat(64),
-              status: "qualified",
+              status: "supported",
             },
           ],
           lifecycle: { policyOwner: "sandbox" },
@@ -30,7 +30,7 @@ describe("managed adapter registry client", () => {
 
     await expect(client.capabilities("team_qa")).resolves.toMatchObject({
       lifecyclePolicyOwner: "sandbox",
-      baseProfiles: [{ id: "qwen3-0-6b-c1899de2", status: "qualified" }],
+      baseProfiles: [{ id: "qwen3-0-6b-c1899de2", status: "supported" }],
     });
   });
 

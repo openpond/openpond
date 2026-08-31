@@ -228,10 +228,10 @@ export const RewardModelRunSchema = z.preprocess((value) => {
   completedAt: ReleaseTimestampSchema.nullable(),
   updatedAt: ReleaseTimestampSchema,
 }).strict()).superRefine((run, context) => {
-  if (run.status === "succeeded" && (!run.receipt || !run.qualificationReport)) {
+  if (run.status === "succeeded" && !run.receipt) {
     context.addIssue({
       code: "custom",
-      message: "A successful Reward Model Run requires a canonical receipt and qualification report.",
+      message: "A successful Reward Model Run requires a canonical receipt.",
     });
   }
   if (run.status !== "succeeded" && run.rewardModelVersionId !== null) {

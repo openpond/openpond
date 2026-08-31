@@ -1,4 +1,8 @@
-import type { BaseModelPreference } from "@openpond/contracts";
+import {
+  ModelProjectSchema,
+  type BaseModelPreference,
+  type ModelProject,
+} from "@openpond/contracts";
 
 export type ManagedRlBaseProfile = {
   baseProfileId: string;
@@ -31,4 +35,37 @@ export function resolveManagedRlBaseProfile(
     preference.chatTemplateHash === profile.chatTemplateHash
     ? profile
     : null;
+}
+
+export function versionModelProjectOntoManagedRlBase(
+  project: ModelProject,
+  updatedAt: string,
+): ModelProject {
+  const parsed = ModelProjectSchema.parse(project);
+  const timestamp = new Date(updatedAt);
+  if (!Number.isFinite(timestamp.getTime())) {
+    throw new Error("managed_rl_model_project_updated_at_invalid");
+  }
+  const baseModel = {
+    schemaVersion: "openpond.baseModelPreference.v1" as const,
+    modelId: MANAGED_RL_BASE_PROFILE.modelId,
+    revision: MANAGED_RL_BASE_PROFILE.revision,
+    tokenizerRevision: MANAGED_RL_BASE_PROFILE.tokenizerRevision,
+    chatTemplateHash: MANAGED_RL_BASE_PROFILE.chatTemplateHash,
+    modelAssetId: null,
+    source: "managed" as const,
+  };
+  if (
+    resolveManagedRlBaseProfile(parsed.trainingSetup.baseModel) &&
+    resolveManagedRlBaseProfile(parsed.defaultBaseModel)
+  ) {
+    return parsed;
+  }
+  return ModelProjectSchema.parse({
+    ...parsed,
+    revision: parsed.revision + 1,
+    defaultBaseModel: baseModel,
+    trainingSetup: { ...parsed.trainingSetup, baseModel },
+    updatedAt: timestamp.toISOString(),
+  });
 }

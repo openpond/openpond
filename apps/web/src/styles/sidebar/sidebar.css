@@ -221,11 +221,10 @@
 .sidebar-nav-group-label {
   padding: 12px 10px 5px;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  line-height: 1;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
 }
 
 .sidebar-utility-nav {

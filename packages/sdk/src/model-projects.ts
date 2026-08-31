@@ -78,6 +78,9 @@ export const ModelProjectTrainingSetupSchema = z
     managedRolloutPlacement: z
       .enum(["local", "remote"])
       .default("remote"),
+    managedGpuPlacementObjective: z
+      .enum(["fast", "balanced", "economical"])
+      .default("balanced"),
     runPreset: z
       .enum(["small", "standard", "custom", "small_experiment"])
       .nullable()

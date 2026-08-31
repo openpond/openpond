@@ -574,6 +574,9 @@ async function saveLifecycleJob(
         ...input.job.metadata,
         phase: input.status.phase,
         progress: input.status.progress,
+        ...(input.status.rolloutProgress
+          ? { rolloutProgress: input.status.rolloutProgress }
+          : {}),
         ...patch.metadata,
       },
     }),

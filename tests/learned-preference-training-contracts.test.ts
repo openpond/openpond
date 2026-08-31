@@ -77,7 +77,7 @@ describe("learned preference training contracts", () => {
         bucketHead: ref("bucket-head"),
         processorRelease: ref("processor"),
       },
-      qualificationReport: ref("synthetic-smoke-report"),
+      qualificationReport: null,
       createdAt: "2026-08-25T12:00:00.000Z",
       contentHash: HASH,
     });
@@ -114,7 +114,7 @@ describe("learned preference training contracts", () => {
         checkpoint: { id: "reward-checkpoint", contentHash: HASH, objectRef: "r2://bucket/tenants/team/jobs/rm0/checkpoints/r0", files: ["adapter/adapter_config.json", "adapter/adapter_model.safetensors", "scalar-head.pt", "bucket-head.pt", "processor/tokenizer_config.json"].map((path, index) => ({ path, sizeBytes: index + 1, sha256: HASH })) },
         adapter: ref("reward-adapter"), scalarHead: ref("scalar-head"), bucketHead: ref("bucket-head"), processorRelease: ref("processor"),
       },
-      qualificationReport: ref("synthetic-smoke-report"),
+      qualificationReport: null,
       createdAt: "2026-08-25T12:00:00.000Z",
       contentHash: HASH,
     });
@@ -215,7 +215,7 @@ describe("learned preference training contracts", () => {
         cleanup: { computeReleased: true, providerTerminalObserved: true },
         contentHash: HASH,
       },
-      qualificationReport: ref("synthetic-smoke-report"),
+      qualificationReport: null,
       accruedSpendUsd: 1,
       failureOwner: null,
       failure: null,
@@ -225,6 +225,7 @@ describe("learned preference training contracts", () => {
     });
     expect(run.role).toBe("reward");
     expect(run.receipt?.cleanup.providerTerminalObserved).toBe(true);
+    expect(run.qualificationReport).toBeNull();
   });
 
   it("keeps historical Reward Model Runs inspectable while new Runs pin releases", () => {

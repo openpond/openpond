@@ -50,6 +50,7 @@ export function toExecutionStatus(job: PublicTrainingJob) {
     state,
     phase: job.state,
     progress: job.progress,
+    rolloutProgress: job.rolloutProgress,
     updatedAt: dateString(job.updatedAt),
     errorCode:
       state === "failed"
@@ -96,6 +97,10 @@ export function managedJobFromPublic(job: PublicTrainingJob) {
     id: job.id,
     state,
     version: job.version,
+    completedGroups: job.rolloutProgress.groupsCompleted,
+    targetGroups: job.rolloutProgress.groupsTarget,
+    optimizerUpdatesApplied: job.rolloutProgress.optimizerUpdatesApplied,
+    optimizerUpdatesSkipped: job.rolloutProgress.optimizerUpdatesSkipped,
     terminalReason: job.terminalReason,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,

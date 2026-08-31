@@ -34,7 +34,7 @@ export function requiredRegistryCapabilities(
       typeof profile.revision !== "string" ||
       typeof profile.tokenizerRevision !== "string" ||
       typeof profile.chatTemplateHash !== "string" ||
-      !["draft", "qualified", "retired"].includes(String(profile.status))
+      !["draft", "supported", "retired"].includes(String(profile.status))
     ) {
       throw new Error(
         "Managed adapter registry returned an invalid base profile capability."

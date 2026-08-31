@@ -61,7 +61,7 @@ function capabilities() {
         revision: BASE_REVISION,
         tokenizerRevision: BASE_REVISION,
         chatTemplateHash: CHAT_TEMPLATE_HASH,
-        status: "qualified" as const,
+        status: "supported" as const,
       },
     ],
   };

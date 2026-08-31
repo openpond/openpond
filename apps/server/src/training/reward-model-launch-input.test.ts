@@ -145,4 +145,48 @@ describe("managed Reward Model launch input", () => {
       })) as never,
     })).rejects.toThrow("is not valid structured JSON");
   });
+
+  test("requires the recipe and preference dataset to pin the exact same Taskset release", async () => {
+    const tasksetReleaseRef = {
+      id: "taskset-release-t0-r1",
+      contentHash: "a".repeat(64),
+    };
+    const differentTasksetRelease = {
+      id: "taskset-release-other-r1",
+      contentHash: "f".repeat(64),
+    };
+    const datasetRef = { id: "preferences-d0", contentHash: "b".repeat(64) };
+
+    await expect(buildManagedRewardModelLaunchInput({
+      idempotencyKey: "reward-run-wrong-taskset",
+      name: "Reward wrong Taskset",
+      sourceRunRef: "openpond:reward-model-run:wrong-taskset",
+      taskset: { id: "taskset-t0", revision: 1, contentHash: "c".repeat(64) },
+      tasksetRelease: {
+        ...tasksetReleaseRef,
+        revision: 1,
+        tasks: [],
+      } as never,
+      dataset: {
+        id: datasetRef.id,
+        contentHash: datasetRef.contentHash,
+        tasksetRelease: differentTasksetRelease,
+        groups: [],
+      } as never,
+      recipe: managedSyntheticRewardSmokeRecipe({
+        tasksetRelease: tasksetReleaseRef,
+        preferenceDatasetRelease: datasetRef,
+      }),
+      managedBaseModel: {
+        source: "huggingface",
+        repoId: "model/reward",
+        revision: "revision",
+        configHash: "e".repeat(64),
+        tokenizerHash: "f".repeat(64),
+        licenseId: "apache-2.0",
+        gated: false,
+      },
+      attempts: [],
+    })).rejects.toThrow("exact Taskset release");
+  });
 });

@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import type {
+  ChatModelRef,
   GraderSpec,
+  ProviderSettings,
   Taskset,
   TrainingStateResponse,
 } from "@openpond/contracts";
@@ -8,8 +10,10 @@ import type {
 import { ArrowLeft, Search } from "../icons";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
-
-export type ScoringDetailTab = "overview" | "usage" | "evidence";
+import {
+  LabScorerCreateDialog,
+  type LabScorerCreateInput,
+} from "./LabScorerCreateDialog";
 
 type ScorerEntry = {
   key: string;
@@ -17,30 +21,29 @@ type ScorerEntry = {
   tasksets: Taskset[];
 };
 
-const SCORING_DETAIL_TABS: Array<{ id: ScoringDetailTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "usage", label: "Taskset usage" },
-  { id: "evidence", label: "Evidence" },
-];
-
 export function LabScoringPage({
-  detailTab,
+  busy,
+  defaultModel,
   modelProjectId,
-  onDetailTabChange,
+  onCreateScorer,
   onOpenTaskset,
   onSelectedScorerIdChange,
+  providerSettings,
   selectedScorerId,
   state,
 }: {
-  detailTab?: ScoringDetailTab | null;
+  busy: boolean;
+  defaultModel: ChatModelRef;
   modelProjectId?: string | null;
-  onDetailTabChange: (tab: ScoringDetailTab) => void;
+  onCreateScorer: (input: LabScorerCreateInput) => Promise<boolean>;
   onOpenTaskset: (tasksetId: string) => void;
   onSelectedScorerIdChange: (scorerId: string | null) => void;
+  providerSettings: ProviderSettings | null;
   selectedScorerId: string | null;
   state: TrainingStateResponse | null;
 }) {
   const [query, setQuery] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const entries = useMemo(
     () => scoringEntries(state, modelProjectId ?? null),
     [modelProjectId, state],
@@ -59,11 +62,9 @@ export function LabScoringPage({
   if (selected) {
     return (
       <ScorerDetail
-        detailTab={detailTab ?? "overview"}
         entry={selected}
         state={state}
         onBack={() => onSelectedScorerIdChange(null)}
-        onDetailTabChange={onDetailTabChange}
         onOpenTaskset={onOpenTaskset}
       />
     );
@@ -82,6 +83,11 @@ export function LabScoringPage({
   return (
     <div className="labs-flat-body labs-resource-page">
       <ModelProjectPageHeader
+        actions={(
+          <button className="training-button" type="button" onClick={() => setCreateOpen(true)}>
+            New scorer
+          </button>
+        )}
         title="Scoring"
         description={modelProjectId
           ? "Versioned graders and reward sources attached to this Model Project."
@@ -147,29 +153,38 @@ export function LabScoringPage({
           </tbody>
         </table>
       </div>
+      {createOpen ? (
+        <LabScorerCreateDialog
+          busy={busy}
+          defaultModel={defaultModel}
+          providerSettings={providerSettings}
+          tasksets={availableTasksets(state, modelProjectId ?? null)}
+          onClose={() => setCreateOpen(false)}
+          onCreate={async (input) => {
+            const created = await onCreateScorer(input);
+            if (!created) return false;
+            setCreateOpen(false);
+            onSelectedScorerIdChange(`${input.grader.id}@${input.grader.version}`);
+            return true;
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
 function ScorerDetail({
-  detailTab,
   entry,
   onBack,
-  onDetailTabChange,
   onOpenTaskset,
   state,
 }: {
-  detailTab: ScoringDetailTab;
   entry: ScorerEntry;
   onBack: () => void;
-  onDetailTabChange: (tab: ScoringDetailTab) => void;
   onOpenTaskset: (tasksetId: string) => void;
   state: TrainingStateResponse | null;
 }) {
   const { grader } = entry;
-  const activeTab = SCORING_DETAIL_TABS.some((tab) => tab.id === detailTab)
-    ? detailTab
-    : "overview";
   const auditReports = state?.graderAuditReports.filter((report) =>
     entry.tasksets.some((taskset) => taskset.id === report.tasksetId),
   ) ?? [];
@@ -203,22 +218,8 @@ function ScorerDetail({
           />
         </div>
       </div>
-      <div className="training-detail-tabs" role="tablist" aria-label="Scorer details">
-        {SCORING_DETAIL_TABS.map((tab) => (
-          <button
-            aria-selected={activeTab === tab.id}
-            className={activeTab === tab.id ? "active" : undefined}
-            key={tab.id}
-            role="tab"
-            type="button"
-            onClick={() => onDetailTabChange(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      {activeTab === "overview" ? (
-        <section className="training-detail-section">
+      <div className="labs-scorer-detail-grid">
+        <section className="training-detail-section training-detail-section-panel">
           <h2>Scoring contract</h2>
           <dl className="training-configuration-list">
             <Fact label="ID" value={grader.id} />
@@ -246,10 +247,8 @@ function ScorerDetail({
             <p className="labs-detail-copy"><code>{grader.module}</code> · {grader.exportName}</p>
           ) : null}
         </section>
-      ) : null}
-      {activeTab === "usage" ? (
-        <section className="training-detail-section">
-          <h2>Taskset usage</h2>
+        <section className="training-detail-section training-detail-section-panel">
+          <h2>Attached Tasksets</h2>
           <div className="training-table-wrap">
             <table className="training-data-table">
               <thead><tr><th>Taskset</th><th>Revision</th><th>Purpose</th><th>Tasks</th></tr></thead>
@@ -269,9 +268,7 @@ function ScorerDetail({
             </table>
           </div>
         </section>
-      ) : null}
-      {activeTab === "evidence" ? (
-        <section className="training-detail-section">
+        <section className="training-detail-section training-detail-section-panel labs-scorer-evidence-section">
           <h2>Validation evidence</h2>
           <dl className="labs-inline-facts">
             <Fact label="Audit reports" value={String(auditReports.length)} />
@@ -289,7 +286,7 @@ function ScorerDetail({
             </div>
           ) : <p className="labs-detail-copy">No grader audit has been saved for these Taskset releases.</p>}
         </section>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -299,16 +296,7 @@ function scoringEntries(
   modelProjectId: string | null,
 ): ScorerEntry[] {
   if (!state) return [];
-  const tasksetsByIdentity = new Map<string, Taskset>();
-  for (const taskset of [...state.tasksets, ...state.modelTasksets]) {
-    tasksetsByIdentity.set(`${taskset.id}:${taskset.revision}:${taskset.contentHash}`, taskset);
-  }
-  let tasksets = [...tasksetsByIdentity.values()];
-  if (modelProjectId) {
-    const project = state.modelProjects.find((candidate) => candidate.id === modelProjectId);
-    const attachedIds = new Set(project?.tasksetSyncs.map((sync) => sync.localTasksetId) ?? []);
-    tasksets = tasksets.filter((taskset) => attachedIds.has(taskset.id));
-  }
+  const tasksets = availableTasksets(state, modelProjectId);
   const entries = new Map<string, ScorerEntry>();
   for (const taskset of tasksets) {
     for (const grader of taskset.graders) {
@@ -324,6 +312,25 @@ function scoringEntries(
   return [...entries.values()].sort((left, right) =>
     left.grader.label.localeCompare(right.grader.label),
   );
+}
+
+function availableTasksets(
+  state: TrainingStateResponse | null,
+  modelProjectId: string | null,
+): Taskset[] {
+  if (!state) return [];
+  const latestById = new Map<string, Taskset>();
+  for (const taskset of [...state.tasksets, ...state.modelTasksets]) {
+    const current = latestById.get(taskset.id);
+    if (!current || taskset.revision > current.revision) latestById.set(taskset.id, taskset);
+  }
+  let tasksets = [...latestById.values()];
+  if (modelProjectId) {
+    const project = state.modelProjects.find((candidate) => candidate.id === modelProjectId);
+    const attachedIds = new Set(project?.tasksetSyncs.map((sync) => sync.localTasksetId) ?? []);
+    tasksets = tasksets.filter((taskset) => attachedIds.has(taskset.id));
+  }
+  return tasksets.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function scorerKey(grader: GraderSpec): string {

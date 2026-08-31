@@ -14,6 +14,7 @@ export const MODEL_SECTIONS = [
 export type ModelSection = (typeof MODEL_SECTIONS)[number];
 
 export const MODEL_LIBRARY_SECTIONS = [
+  "projects",
   "tasksets",
   "scoring",
   "evaluations",
@@ -54,7 +55,6 @@ const LIBRARY_SECTION_SET = new Set<string>(MODEL_LIBRARY_SECTIONS);
 const DETAIL_TABS_BY_SECTION: Partial<Record<ModelSection, Set<string>>> = {
   runs: new Set(["overview", "metrics", "evaluation", "rollouts", "activity", "artifacts"]),
   tasksets: new Set(["overview", "tasks", "scoring", "attempts", "releases"]),
-  scoring: new Set(["overview", "usage", "evidence"]),
   evals: new Set(["overview", "comparison", "activity"]),
   versions: new Set([
     "overview",
@@ -70,7 +70,6 @@ const DETAIL_TABS_BY_LIBRARY_SECTION: Partial<
   Record<ModelLibrarySection, Set<string>>
 > = {
   tasksets: new Set(["overview", "tasks", "scoring", "attempts", "releases"]),
-  scoring: new Set(["overview", "usage", "evidence"]),
   evaluations: new Set(["overview", "comparison", "activity"]),
 };
 const LEGACY_TAB_TO_SECTION: Record<string, ModelSection> = {

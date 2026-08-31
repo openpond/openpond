@@ -5,6 +5,7 @@ import {
   ApproveDatasetImportMappingRequestSchema,
   CreateHuggingFaceDatasetImportRequestSchema,
   DatasetCatalogResponseSchema,
+  GraderSpecSchema,
   ModelProjectSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
@@ -17,7 +18,6 @@ import {
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
   type BaseModelPreference,
-  type TaskCreationRequest,
   type TaskCreationSnapshot,
 } from "@openpond/contracts";
 import {
@@ -46,6 +46,7 @@ import {
   MANAGED_REWARD_MODEL_PROFILE,
   managedSyntheticRewardSmokeRecipe,
 } from "./managed-reward-model-recipes.js";
+import { versionModelProjectOntoManagedRlBase } from "./managed-rl-base-profile.js";
 import type { createTrainingChatSearchService } from "./training-chat-search.js";
 import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
@@ -88,13 +89,12 @@ import {
 } from "./harness-review-taskset.js";
 import {
   qualifyHarnessModelImprovement,
-  requireQualifiedModelImprovement,
+  resolveModelImprovementQualificationEvidence,
 } from "./harness-model-improvement.js";
 import {
   harnessIntegerArray,
   nonnegativeHarnessNumber,
   optionalImmutableRef,
-  recipeBaseModelId,
   requiredImmutableRef,
   sameImmutableRef,
 } from "./harness-training-api-inputs.js";
@@ -109,6 +109,15 @@ import {
   runTasksetBenchmark,
   startHarnessRefinerBenchmark,
 } from "./training-benchmark-actions.js";
+import {
+  creationSurface,
+  datasetBuildIntent,
+  managedRolloutPlacement,
+  preferenceDatasetPartition,
+  preferenceRatings,
+  tasksetTargetIntent,
+  trainingMethodHint,
+} from "./training-api-taskset-inputs.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -589,6 +598,83 @@ export function createTrainingApi(deps: {
         release,
       });
     }
+    if (action === "create_scorer") {
+      const taskset = await requireTaskset(
+        deps.store,
+        requiredString(input.tasksetId, "tasksetId"),
+      );
+      const grader = GraderSpecSchema.parse(input.grader);
+      const scorerKey = `${grader.id}@${grader.version}`;
+      if (taskset.graders.some((candidate) =>
+        `${candidate.id}@${candidate.version}` === scorerKey
+      )) {
+        throw new Error(`Scorer ${scorerKey} is already attached to ${taskset.name}.`);
+      }
+      if (
+        grader.kind === "model_judge"
+        && grader.calibrationFixtureRefs.some((fixtureId) =>
+          !taskset.graderFixtures.some((fixture) => fixture.id === fixtureId)
+        )
+      ) {
+        throw new Error("The LLM judge calibration fixtures must belong to the selected Taskset.");
+      }
+
+      const modelProjectId = string(input.modelProjectId);
+      const modelProject = modelProjectId
+        ? await deps.store.getModelProject(modelProjectId)
+        : null;
+      if (modelProjectId && !modelProject) {
+        throw new Error("Model Project was not found.");
+      }
+      if (
+        modelProject
+        && !modelProject.tasksetSyncs.some((sync) => sync.localTasksetId === taskset.id)
+      ) {
+        throw new Error("The selected Taskset is not attached to this Model Project.");
+      }
+
+      const timestamp = new Date().toISOString();
+      const unhashed = TasksetSchema.parse({
+        ...taskset,
+        revision: taskset.revision + 1,
+        graders: [...taskset.graders, grader],
+        readiness: null,
+        contentHash: "00000000",
+        updatedAt: timestamp,
+      });
+      const released = TasksetSchema.parse({
+        ...unhashed,
+        contentHash: computeTasksetHash(unhashed),
+      });
+      await deps.store.upsertTaskset(released);
+      await deps.evaluation.readiness(released.id);
+      const refreshedTaskset = await deps.store.getTaskset(released.id) ?? released;
+
+      let hostedSync: {
+        state: "local" | "synced" | "sync_failed";
+        error: string | null;
+      } = { state: "local", error: null };
+      if (modelProject?.hosted && deps.modelProjectHosting) {
+        const release = await requireReleasedTaskset(
+          deps.benchmarkTasksets,
+          refreshedTaskset,
+        );
+        try {
+          await deps.modelProjectHosting.publishTaskset({
+            projectId: modelProject.id,
+            taskset: refreshedTaskset,
+            release,
+          });
+          hostedSync = { state: "synced", error: null };
+        } catch (caught) {
+          hostedSync = {
+            state: "sync_failed",
+            error: caught instanceof Error ? caught.message : String(caught),
+          };
+        }
+      }
+      return { grader, taskset: refreshedTaskset, hostedSync };
+    }
     if (action === "save_model_project") {
       const project = ModelProjectSchema.parse(input);
       const existing = await deps.store.getModelProject(project.id);
@@ -604,6 +690,30 @@ export function createTrainingApi(deps: {
         createdAt: existing?.createdAt ?? project.createdAt,
         updatedAt: new Date().toISOString(),
       });
+    }
+    if (action === "version_model_project_onto_managed_rl_base") {
+      const modelProjectId = requiredString(
+        input.modelProjectId,
+        "modelProjectId",
+      );
+      const expectedRevision = Number(input.expectedRevision);
+      if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+        throw new Error("A valid expected Model Project revision is required.");
+      }
+      const existing = await deps.store.getModelProject(modelProjectId);
+      if (!existing) throw new Error("Model Project not found.");
+      if (existing.revision !== expectedRevision) {
+        throw new Error(
+          "Model Project changed since it was opened. Refresh and try again.",
+        );
+      }
+      const versioned = versionModelProjectOntoManagedRlBase(
+        existing,
+        new Date().toISOString(),
+      );
+      return versioned.revision === existing.revision
+        ? existing
+        : deps.store.saveModelProject(versioned);
     }
     if (action === "add_source") return deps.taskCreator.addSessionSource({ profileId: requiredString(input.profileId, "profileId"), sessionId: requiredString(input.sessionId, "sessionId"), turnIds: stringArray(input.turnIds), consentScope: input.consentScope === "selected_turns" ? "selected_turns" : "full_session" });
     if (action === "add_sources") {
@@ -1093,23 +1203,17 @@ export function createTrainingApi(deps: {
       previewHash: requiredString(input.previewHash, "previewHash"),
     });
     if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
-    if (action === "prepare_qualified_model_improvement") {
-      const qualificationRef = requiredImmutableRef(input.qualificationRef, "qualificationRef");
+    if (action === "prepare_model_improvement") {
+      const qualificationRef = optionalImmutableRef(input.qualificationRef, "qualificationRef");
       const workspaceId = requiredString(input.workspaceId, "workspaceId");
       const tasksetId = requiredString(input.tasksetId, "tasksetId");
       const recipe = record(input.recipe);
       const destinationId = TrainingDestinationIdSchema.parse(input.destinationId);
-      const qualification = await requireQualifiedModelImprovement({
+      const qualification = await resolveModelImprovementQualificationEvidence({
         store: deps.store,
         workspaceId,
         qualificationRef,
-        tasksetId,
-        recipe,
-        baseModelId: recipeBaseModelId(recipe),
       });
-      if (qualification.decision === "rl" && destinationId !== "openpond_managed") {
-        throw new Error("Qualified RL must use the OpenPond Managed boundary.");
-      }
       const prepared = await deps.training.prepareStart({
         modelId: requiredString(input.modelId, "modelId"),
         tasksetId,
@@ -1119,15 +1223,9 @@ export function createTrainingApi(deps: {
         exportApproved: input.exportApproved === true,
         retentionDays: nullableNumber(input.retentionDays),
         region: string(input.region),
-        harnessRelease: qualification.harnessRelease,
+        harnessRelease: qualification?.harnessRelease ?? null,
         modelImprovementQualification: qualificationRef,
       });
-      if (
-        prepared.plan.estimatedCostUsd !== null &&
-        prepared.plan.estimatedCostUsd > qualification.maximumCostUsd
-      ) {
-        throw new Error("Prepared Training Plan exceeds the qualified maximum cost.");
-      }
       return { qualification, prepared };
     }
     if (action === "prepare_model_run") return deps.training.prepareModelRun({
@@ -1194,23 +1292,23 @@ export function createTrainingApi(deps: {
       });
       return linkStartedTraining(result);
     }
-    if (action === "start_qualified_model_improvement") {
-      const qualificationRef = requiredImmutableRef(input.qualificationRef, "qualificationRef");
+    if (action === "start_model_improvement") {
+      const qualificationRef = optionalImmutableRef(input.qualificationRef, "qualificationRef");
       const planId = requiredString(input.planId, "planId");
       const bundleId = requiredString(input.bundleId, "bundleId");
       const plan = await deps.store.getTrainingPlan(planId);
-      if (!plan || !sameImmutableRef(plan.modelImprovementQualification, qualificationRef)) {
+      if (!plan) throw new Error("Prepared Training Plan was not found.");
+      if (
+        qualificationRef
+        && !sameImmutableRef(plan.modelImprovementQualification, qualificationRef)
+      ) {
         throw new Error("Prepared Training Plan does not match the supplied qualification.");
       }
       const maximumCostUsd = nonnegativeHarnessNumber(input.maximumCostUsd, "maximumCostUsd");
-      const qualification = await requireQualifiedModelImprovement({
+      const qualification = await resolveModelImprovementQualificationEvidence({
         store: deps.store,
         workspaceId: requiredString(input.workspaceId, "workspaceId"),
-        qualificationRef,
-        tasksetId: plan.tasksetId,
-        recipe: plan.recipe,
-        baseModelId: recipeBaseModelId(plan.recipe),
-        maximumCostUsd,
+        qualificationRef: plan.modelImprovementQualification,
       });
       const result = await deps.training.startPrepared({
         planId,
@@ -1890,44 +1988,3 @@ function boundedNumber(
   }
   return value;
 }
-function managedRolloutPlacement(value: unknown): "local" | "remote" | undefined { return value === "local" || value === "remote" ? value : undefined; }
-
-function preferenceDatasetPartition(value: unknown): "reward_train" | "reward_validation" | "reward_qualification" {
-  if (value === "reward_train" || value === "reward_validation" || value === "reward_qualification") {
-    return value;
-  }
-  throw new Error("Preference dataset partition must be reward_train, reward_validation, or reward_qualification.");
-}
-
-function preferenceRatings(value: unknown): Record<string, "love" | "like" | "reject"> {
-  const ratings = record(value);
-  return Object.fromEntries(Object.entries(ratings).map(([attemptId, rating]) => {
-    if (rating !== "love" && rating !== "like" && rating !== "reject") {
-      throw new Error(`Preference rating for ${attemptId} must be love, like, or reject.`);
-    }
-    return [attemptId, rating];
-  }));
-}
-
-function datasetBuildIntent(value: unknown): TaskCreationRequest["buildIntent"] {
-  return value === "preferences" || value === "verifiable_reward" || value === "rubric" || value === "discovery"
-    ? value
-    : "demonstrations";
-}
-
-function trainingMethodHint(value: unknown): TaskCreationRequest["methodHint"] {
-  return value === "sft" || value === "dpo" || value === "grpo" || value === "ppo"
-    ? value
-    : null;
-}
-function tasksetTargetIntent(value: unknown): TaskCreationRequest["targetIntent"] {
-  const candidate = record(value);
-  const kind = candidate.kind;
-  return {
-    kind: kind === "agent" || kind === "skill" || kind === "extension" || kind === "model" || kind === "configuration" ? kind : null,
-    id: string(candidate.id),
-    displayName: string(candidate.displayName),
-    operation: candidate.operation === "improve" ? "improve" : "create",
-  };
-}
-function creationSurface(value: unknown) { return value === "session_menu" || value === "bulk_selection" || value === "training_page" || value === "task_candidate" ? value : "slash_train"; }

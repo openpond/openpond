@@ -68,6 +68,7 @@
       "required": true
     }
   ],
+  "placementObjective": "balanced",
   "budget": {
     "maximumSpendUsd": 1,
     "maximumWallSeconds": 900
@@ -80,5 +81,5 @@
     "retentionDays": 7,
     "region": null
   },
-  "contentHash": "0d85f9767886924fae6cf16409ebee02089c0c77e6aa1e9c69bac33c9f3bd22b"
+  "contentHash": "339e6f2a48e275b0558c81c7bb71489a3e94a0a2e09de6b04e44046745cce8ee"
 }

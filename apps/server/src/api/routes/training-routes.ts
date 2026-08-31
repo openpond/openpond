@@ -89,6 +89,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/miner/run", action: "run_miner", status: 202 },
     { method: "PUT", path: "/v1/training/miner/config", action: "configure_miner" },
     { method: "POST", path: "/v1/training/grade", action: "grade" },
+    { method: "POST", path: "/v1/training/scorers", action: "create_scorer", status: 201 },
     { method: "POST", path: "/v1/training/audit-graders", action: "audit_graders" },
     { method: "POST", path: "/v1/training/calibrate-judges", action: "calibrate_judges" },
     { method: "POST", path: "/v1/training/readiness", action: "readiness" },

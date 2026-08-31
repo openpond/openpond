@@ -59,6 +59,12 @@ describe("Models path routing", () => {
   });
 
   it("parses global resource libraries and their details", () => {
+    expect(modelsRouteFromLocation({ pathname: "/models/projects" })).toEqual({
+      kind: "library",
+      section: "projects",
+      resourceId: null,
+      detailTab: null,
+    });
     expect(modelsRouteFromLocation({ pathname: "/models/tasksets" })).toEqual({
       kind: "library",
       section: "tasksets",
@@ -78,14 +84,18 @@ describe("Models path routing", () => {
     expect(
       modelsRouteFromLocation({ pathname: "/models/reviews/review_1/nope" }),
     ).toBeNull();
+    expect(
+      modelsRouteFromLocation({ pathname: "/models/scoring/judge_1/evidence" }),
+    ).toBeNull();
   });
 
   it("serializes paths without query-string navigation state", () => {
     const route = modelProjectRoute("project with spaces", "evals");
     expect(modelsPath(route)).toBe("/models/project%20with%20spaces/evals");
-    expect(modelsPath(modelLibraryRoute("scoring", "judge 1", "usage"))).toBe(
-      "/models/scoring/judge%201/usage",
+    expect(modelsPath(modelLibraryRoute("scoring", "judge 1"))).toBe(
+      "/models/scoring/judge%201",
     );
+    expect(modelsPath(modelLibraryRoute("projects"))).toBe("/models/projects");
     expect(modelsSectionFromRoute({ kind: "index" })).toBe("overview");
   });
 });

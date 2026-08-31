@@ -19,6 +19,7 @@ describe("Model Project current training setup", () => {
       method: null,
       destinationId: null,
       managedRolloutPlacement: "remote",
+      managedGpuPlacementObjective: "balanced",
       runPreset: null,
       recipe: null,
       preferredMaximumSpendUsd: null,

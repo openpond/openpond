@@ -5,6 +5,11 @@ import type {
 import { LearnedPreferenceRewardBindingSchema } from "@openpond/contracts";
 import type { RewardModelQualificationReport } from "@openpond/evals";
 
+export type LearnedScorerRelease = Pick<
+  RewardModelVersion,
+  "id" | "contentHash" | "status" | "runtime" | "artifacts"
+>;
+
 /**
  * Produces the policy-facing representation of an immutable learned scorer.
  * It deliberately derives checkpoint identity from the published Version so a
@@ -12,7 +17,7 @@ import type { RewardModelQualificationReport } from "@openpond/evals";
  * Qualification is optional Model Project evidence, never an execution gate.
  */
 export function bindLearnedPreferenceReward(input: {
-  version: RewardModelVersion;
+  version: LearnedScorerRelease;
   qualificationReport?: RewardModelQualificationReport | null;
   rewardComposerRelease: { id: string; contentHash: string };
   executionReceipt: { id: string; contentHash: string };

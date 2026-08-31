@@ -38,7 +38,7 @@ export type ManagedRegistryBaseProfile = {
   revision: string;
   tokenizerRevision: string;
   chatTemplateHash: string;
-  status: "draft" | "qualified" | "retired";
+  status: "draft" | "supported" | "retired";
 };
 
 export type ManagedRegistryCapabilities = {
