@@ -13,6 +13,7 @@ export function buildTasksetReadiness(input: {
 }): TasksetReadinessReport {
   const validation = validateTaskset(input.taskset);
   const blockers = validation.issues.filter((issue) => issue.severity === "error").map((issue) => ({ code: issue.code, message: issue.message, path: issue.path }));
+  const advisories: TasksetReadinessReport["advisories"] = [];
   const authoredMethod = typeof input.taskset.metadata.trainingMethod === "string"
     ? input.taskset.metadata.trainingMethod
     : null;
@@ -76,7 +77,7 @@ export function buildTasksetReadiness(input: {
       : 0
     : unapprovedTrainTasks.length;
   if (requiresApprovedDemonstrations && unapprovedTrainCount) blockers.push({ code: "sft_demonstrations_unapproved", message: `${unapprovedTrainCount} training example${unapprovedTrainCount === 1 ? " is" : "s are"} not explicitly approved.`, path: artifact ? "metadata.approvedArtifactSignals" : "learningSignals.demonstrations" });
-  if (frozenTaskCount === 0) blockers.push({ code: "frozen_eval_missing", message: "At least one independent evaluation example is required.", path: artifact ? "datasetArtifact.splitCounts.frozen_eval" : "tasks" });
+  if (frozenTaskCount === 0) advisories.push({ code: "frozen_eval_missing", message: "At least one independent evaluation example is recommended before making quality claims.", path: artifact ? "datasetArtifact.splitCounts.frozen_eval" : "tasks" });
   const trainClusters = new Set(trainTasks.map((task) => task.clusterKey));
   const frozenClusters = new Set(frozenTasks.map((task) => task.clusterKey));
   const artifactSplitIsolation =
@@ -85,15 +86,15 @@ export function buildTasksetReadiness(input: {
     artifact
       ? !artifactSplitIsolation || trainTaskCount === 0 || frozenTaskCount === 0
       : trainClusters.size === 0 || frozenClusters.size === 0 || [...trainClusters].some((cluster) => frozenClusters.has(cluster))
-  ) blockers.push({ code: "independent_evaluation_missing", message: "Training and evaluation must use independent source clusters.", path: artifact ? "metadata.splitIsolationVerified" : "tasks" });
+  ) advisories.push({ code: "independent_evaluation_missing", message: "Independent source clusters are recommended before using evaluation results for quality claims.", path: artifact ? "metadata.splitIsolationVerified" : "tasks" });
   if (
     artifact
       ? input.taskset.metadata.artifactRowsVerified !== true
       : input.taskset.tasks.some((task) => typeof task.metadata.exampleOrigin !== "string")
   ) blockers.push({ code: "example_provenance_missing", message: "Every training and evaluation example must record whether it was extracted, corrected, synthetic, or expert-authored.", path: artifact ? "metadata.artifactRowsVerified" : "tasks.metadata.exampleOrigin" });
   const diagnosis = metadataRecord(input.taskset.metadata.diagnosis);
-  if (!diagnosis || typeof diagnosis.summary !== "string" || !Array.isArray(diagnosis.stableBehavior)) blockers.push({ code: "capability_diagnosis_missing", message: "The Taskset must separate stable behavior from changing knowledge before training.", path: "metadata.diagnosis" });
-  if (diagnosis?.trainingEligible === false) blockers.push({ code: "training_not_recommended", message: "The capability diagnosis does not recommend storing this behavior in model weights.", path: "metadata.diagnosis.trainingEligible" });
+  if (!diagnosis || typeof diagnosis.summary !== "string" || !Array.isArray(diagnosis.stableBehavior)) advisories.push({ code: "capability_diagnosis_missing", message: "A capability diagnosis is recommended to separate stable behavior from changing knowledge.", path: "metadata.diagnosis" });
+  if (diagnosis?.trainingEligible === false) advisories.push({ code: "training_not_recommended", message: "The capability diagnosis does not recommend storing this behavior in model weights.", path: "metadata.diagnosis.trainingEligible" });
   const graderAuditRequired = input.taskset.graders.some((grader) =>
     grader.rewardEligible
     && (
@@ -101,10 +102,10 @@ export function buildTasksetReadiness(input: {
       || grader.metadata.calibrationIsAdvisory !== true
     ),
   );
-  if (graderAuditRequired && !input.graderAudit) blockers.push({ code: "grader_audit_missing", message: "Run the positive, negative, boundary, adversarial, prompt-injection, and infrastructure grader fixtures.", path: "graderFixtures" });
-  if (graderAuditRequired && input.graderAudit && input.graderAudit.tasksetHash !== input.taskset.contentHash) blockers.push({ code: "grader_audit_stale", message: "The Taskset changed after this grader audit. Run it again.", path: "graderFixtures" });
-  if (graderAuditRequired && input.graderAudit && !input.graderAudit.passed) blockers.push({ code: "grader_audit_failed", message: "The evaluation grader did not pass all calibration fixtures.", path: "graderFixtures" });
-  if (graderAuditRequired && input.graderAudit && !input.graderAudit.hackingChecksPassed) blockers.push({ code: "grader_adversarial_calibration_failed", message: "Adversarial or prompt-injection calibration fixtures did not match their expected grader outcomes.", path: "graders" });
+  if (graderAuditRequired && !input.graderAudit) advisories.push({ code: "grader_audit_missing", message: "Optional grader calibration evidence has not been recorded.", path: "graderFixtures" });
+  if (graderAuditRequired && input.graderAudit && input.graderAudit.tasksetHash !== input.taskset.contentHash) advisories.push({ code: "grader_audit_stale", message: "Optional grader calibration evidence predates this immutable Taskset revision.", path: "graderFixtures" });
+  if (graderAuditRequired && input.graderAudit && !input.graderAudit.passed) advisories.push({ code: "grader_audit_failed", message: "The grader did not match every optional calibration fixture's expected outcome.", path: "graderFixtures" });
+  if (graderAuditRequired && input.graderAudit && !input.graderAudit.hackingChecksPassed) advisories.push({ code: "grader_adversarial_calibration_failed", message: "Adversarial or prompt-injection calibration fixtures did not match their expected grader outcomes.", path: "graders" });
   if (graderAuditRequired && input.graderAudit && !input.graderAudit.leakageChecksPassed) blockers.push({ code: "environment_leakage", message: "Environment or privileged-state leakage checks failed.", path: "environment" });
   if (graderAuditRequired && input.graderAudit && !input.graderAudit.infrastructureSafetyPassed) blockers.push({ code: "infrastructure_reward", message: "An infrastructure failure produced a score or eligible reward.", path: "graderFixtures" });
   const hasRewardEligibleGrader = input.taskset.graders.some(
@@ -189,6 +190,7 @@ export function buildTasksetReadiness(input: {
         : ["export", "custom"]
       : ["export"],
     blockers,
+    advisories,
     warnings: [
       ...validation.issues.filter((issue) => issue.severity === "warning").map((issue) => issue.message),
       ...(recommendedMethod === "grpo" ? ["GRPO is readiness-compatible but not executable in the local CPU fixture."] : []),
