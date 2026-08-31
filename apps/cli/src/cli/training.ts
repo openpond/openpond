@@ -12,7 +12,7 @@ import {
 } from "./common/options";
 import { resolveApiBaseUrlOption } from "./common/urls";
 
-const DEFAULT_LOCAL_TRAINING_API_URL = "http://127.0.0.1:17874";
+export const DEFAULT_LOCAL_TRAINING_API_URL = "http://127.0.0.1:17874";
 const TERMINAL_STATUSES = new Set([
   "cancelled",
   "completed",
@@ -130,7 +130,7 @@ export async function runTrainingCommand(
   printResult(result, json);
 }
 
-async function createLocalAuthenticatedRequest(
+export async function createLocalAuthenticatedRequest(
   baseUrl: string,
 ): Promise<typeof fetch> {
   const url = new URL(baseUrl);
@@ -259,6 +259,13 @@ export class TrainingApiClient {
       "POST",
       body,
     );
+  }
+
+  importTasksetDraftPackage(body: {
+    packagePath: string;
+    profileId: string;
+  }): Promise<unknown> {
+    return this.json("/v1/training/taskset-drafts/import", "POST", body);
   }
 
   private async json(

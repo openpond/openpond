@@ -87,6 +87,8 @@ export function LabDatasetsPage({
   const project = modelProjectId
     ? state?.modelProjects.find((candidate) => candidate.id === modelProjectId)
     : null;
+  const canImportTasksetPackage = typeof window !== "undefined"
+    && Boolean(window.openpond?.selectTasksetPackage);
   const selected = tasksets.find((taskset) => taskset.id === selectedId) ?? null;
   const readOnly = Boolean(selected && selected.profileId !== state?.profileId);
   const selectedArtifact = selected?.datasetArtifact
@@ -133,6 +135,21 @@ export function LabDatasetsPage({
   useEffect(() => {
     setDetailTab("overview");
   }, [selectedId]);
+
+  async function importTasksetPackage() {
+    if (typeof window === "undefined" || !window.openpond?.selectTasksetPackage) return;
+    const selection = await window.openpond.selectTasksetPackage();
+    if (selection.canceled) return;
+    const packagePath = selection.path;
+    if (!packagePath?.trim()) return;
+    const imported = await training.actions.importTasksetDraftPackage(packagePath.trim());
+    if (!imported) {
+      onToast("Taskset package could not be imported.", "error");
+      return;
+    }
+    onToast(`${imported.name || imported.id} imported as a draft.`, "success");
+    onOpenDraft(imported.id);
+  }
 
   if (selected) {
     const sync = project?.tasksetSyncs.find(
@@ -309,6 +326,16 @@ export function LabDatasetsPage({
         >
           {training.loading ? "Refreshing…" : "Refresh"}
         </button>
+        {!modelProjectId && canImportTasksetPackage ? (
+          <button
+            className="training-button secondary labs-compact-button"
+            disabled={Boolean(training.busyAction)}
+            type="button"
+            onClick={() => void importTasksetPackage()}
+          >
+            Import package
+          </button>
+        ) : null}
       </div>
       <div className="training-table-wrap">
         <table className="training-data-table labs-datasets-table">

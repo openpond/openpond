@@ -6,7 +6,13 @@ import { contentHash } from "@openpond/taskset-sdk";
 
 type ActivityState = Pick<
   TrainingStateResponse,
-  "jobs" | "creations" | "minerRuns" | "datasetImports"
+  | "jobs"
+  | "creations"
+  | "minerRuns"
+  | "datasetImports"
+  | "tasksetDrafts"
+  | "tasksets"
+  | "modelProjects"
 >;
 
 const ACTIVE_JOB_STATUSES = new Set([
@@ -49,6 +55,22 @@ export function projectTrainingActivity(input: {
     datasetImports: revisions(input.state.datasetImports, (item) => [
       item.id,
       item.status,
+      item.updatedAt,
+    ]),
+    tasksetDrafts: revisions(input.state.tasksetDrafts, (item) => [
+      item.id,
+      String(item.revision),
+      item.updatedAt,
+    ]),
+    tasksets: revisions(input.state.tasksets, (item) => [
+      item.id,
+      String(item.revision),
+      item.contentHash,
+      item.updatedAt,
+    ]),
+    modelProjects: revisions(input.state.modelProjects, (item) => [
+      item.id,
+      String(item.revision),
       item.updatedAt,
     ]),
   });

@@ -1,16 +1,14 @@
 import path from "node:path";
 
-import { materializeHarveyLabLegalTaskset } from "../packages/taskset-sdk/src/index.js";
-import { SqliteStore } from "../apps/server/src/store/store.js";
+import { materializeHarveyLabLegalTaskset } from "./taskset.js";
 
-const storeFlag = process.argv.indexOf("--store-dir");
-const storeDir = storeFlag >= 0 ? process.argv[storeFlag + 1] : null;
+const outputFlag = process.argv.indexOf("--output-dir");
+const outputDir = outputFlag >= 0 ? process.argv[outputFlag + 1] : null;
 const releaseFlag = process.argv.indexOf("--release-stage");
-const releaseStage = releaseFlag >= 0 ? process.argv[releaseFlag + 1] : "all";
-const upsert = process.argv.includes("--upsert");
-if (!storeDir) {
+const releaseStage = releaseFlag >= 0 ? process.argv[releaseFlag + 1] : "week0";
+if (!outputDir) {
   throw new Error(
-    "Usage: pnpm tsx scripts/materialize-harvey-lab-legal-taskset.ts --store-dir <directory> [--release-stage week0|all] [--upsert]",
+    "Usage: pnpm tsx examples/training/legal-contract-review/build.ts --output-dir <directory> [--release-stage week0|all]",
   );
 }
 if (releaseStage !== "week0" && releaseStage !== "all") {
@@ -18,17 +16,9 @@ if (releaseStage !== "week0" && releaseStage !== "all") {
 }
 
 const result = await materializeHarveyLabLegalTaskset({
-  storeDir: path.resolve(storeDir),
+  outputDir: path.resolve(outputDir),
   releaseStage,
 });
-if (upsert) {
-  const store = new SqliteStore(path.resolve(storeDir));
-  try {
-    await store.upsertTaskset(result.taskset);
-  } finally {
-    await store.close();
-  }
-}
 
 console.log(JSON.stringify({
   tasksetId: result.taskset.id,
@@ -44,5 +34,4 @@ console.log(JSON.stringify({
   ),
   assetCount: result.assetCount,
   assetBytes: result.assetBytes,
-  upserted: upsert,
 }, null, 2));

@@ -522,6 +522,16 @@ function registerIpcHandlers(): void {
     if (result.canceled || !result.filePaths[0]) return { canceled: true, path: null };
     return { canceled: false, path: result.filePaths[0] };
   });
+  handleTrackedIpc("openpond:taskset-package:select", async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    const options = {
+      title: "Import Taskset package",
+      properties: ["openDirectory"],
+    } satisfies Electron.OpenDialogOptions;
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return { canceled: true, path: null };
+    return { canceled: false, path: result.filePaths[0] };
+  });
   handleTrackedIpc("openpond:file:reveal", (_event, payload) => {
     const rawPath = payload && typeof payload === "object" && !Array.isArray(payload)
       ? (payload as Record<string, unknown>).path

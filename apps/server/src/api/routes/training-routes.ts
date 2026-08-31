@@ -83,6 +83,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/harness-reviews/accept", action: "accept_harness_review", status: 201 },
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
     { method: "POST", path: "/v1/training/taskset-drafts", action: "init_taskset_draft", status: 201 },
+    { method: "POST", path: "/v1/training/taskset-drafts/import", action: "import_taskset_draft_package", status: 201 },
     { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
     { method: "PUT", path: "/v1/training/models", action: "save_model_project" },
     { method: "POST", path: "/v1/training/miner/run", action: "run_miner", status: 202 },

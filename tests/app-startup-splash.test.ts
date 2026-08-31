@@ -23,6 +23,6 @@ describe("app startup splash timing", () => {
       createElement(AppSplash, { startup: appStartupState("connecting") }),
     );
 
-    expect(markup).toContain('src="./openpond-icon.png"');
+    expect(markup).toContain('src="/openpond-icon.png"');
   });
 });

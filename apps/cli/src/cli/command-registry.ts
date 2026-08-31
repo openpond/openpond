@@ -401,6 +401,17 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       (await import("./training")).runTrainingCommand(options, rest),
   },
   {
+    name: "taskset",
+    usage: "openpond taskset import <package-directory|taskset.json> [--profile <id>] [--json]",
+    optionSchema: {
+      apiBaseUrl: "string",
+      json: "boolean",
+      profile: "string",
+    },
+    handler: async ({ options, rest }) =>
+      (await import("./taskset")).runTasksetCommand(options, rest),
+  },
+  {
     name: "opchat",
     usage: "openpond opchat <command> [args]",
     optionSchema: {

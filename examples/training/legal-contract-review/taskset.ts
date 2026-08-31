@@ -10,10 +10,17 @@ import {
   type TaskDataRecord,
   type Taskset,
 } from "@openpond/contracts";
-
-import { buildTaskset } from "./materialize.js";
-import { contentHash, sha256 } from "./hashing.js";
-import { computeTasksetHash, validateTaskset } from "./validation.js";
+import {
+  buildTaskset,
+  contentHash,
+  createPinnedGitHubRepositoryClient,
+  mediaTypeForRepositoryFile,
+  sha256,
+  computeTasksetHash,
+  validateTaskset,
+  type RepositoryFile,
+  type RepositorySourceClient,
+} from "../../../packages/taskset-sdk/src/index.js";
 
 export const HARVEY_LAB_REPOSITORY = "harveyai/harvey-labs";
 export const HARVEY_LAB_REPOSITORY_URL =
@@ -55,16 +62,8 @@ type HarveyLabTask = {
   criteria: HarveyLabCriterion[];
 };
 
-export type HarveyLabFile = {
-  path: string;
-  size: number;
-  sha?: string;
-};
-
-export type HarveyLabClient = {
-  listFiles(directory: string): Promise<HarveyLabFile[]>;
-  readBytes(filePath: string): Promise<Uint8Array>;
-};
+export type HarveyLabFile = RepositoryFile;
+export type HarveyLabClient = RepositorySourceClient;
 
 export type MaterializedHarveyLabTaskset = {
   taskset: Taskset;
@@ -75,7 +74,7 @@ export type MaterializedHarveyLabTaskset = {
 };
 
 export async function materializeHarveyLabLegalTaskset(input: {
-  storeDir: string;
+  outputDir: string;
   profileId?: string;
   client?: HarveyLabClient;
   now?: string;
@@ -91,12 +90,7 @@ export async function materializeHarveyLabLegalTaskset(input: {
   const tasksetId = releaseStage === "week0"
     ? HARVEY_LAB_LEGAL_WEEK0_TASKSET_ID
     : HARVEY_LAB_LEGAL_TASKSET_ID;
-  const tasksetRoot = path.join(
-    input.storeDir,
-    "training",
-    "tasksets",
-    tasksetId,
-  );
+  const tasksetRoot = path.resolve(input.outputDir);
   const assetRoot = path.join(tasksetRoot, "assets");
   await mkdir(assetRoot, { recursive: true });
 
@@ -453,41 +447,11 @@ export async function materializeHarveyLabLegalTaskset(input: {
 export function createGitHubHarveyLabClient(
   fetcher: typeof fetch = fetch,
 ): HarveyLabClient {
-  return {
-    async listFiles(directory) {
-      const safePath = safeRepositoryPath(directory);
-      const encodedPath = safePath.split("/").map(encodeURIComponent).join("/");
-      const entries = await fetchJson<Array<{
-        path: string;
-        type: string;
-        size: number;
-        sha: string;
-      }>>(
-        fetcher,
-        `https://api.github.com/repos/${HARVEY_LAB_REPOSITORY}/contents/${encodedPath}?ref=${HARVEY_LAB_REVISION}`,
-      );
-      return entries
-        .filter((entry) => entry.type === "file")
-        .map((entry) => ({
-          path: entry.path,
-          size: entry.size,
-          sha: entry.sha,
-        }));
-    },
-    async readBytes(filePath) {
-      const safePath = safeRepositoryPath(filePath);
-      const response = await fetcher(
-        `https://raw.githubusercontent.com/${HARVEY_LAB_REPOSITORY}/${HARVEY_LAB_REVISION}/${safePath}`,
-        { headers: { "User-Agent": "openpond-taskset-sdk" } },
-      );
-      if (!response.ok) {
-        throw new Error(
-          `Unable to fetch pinned Harvey LAB file ${safePath}: ${response.status} ${response.statusText}`,
-        );
-      }
-      return new Uint8Array(await response.arrayBuffer());
-    },
-  };
+  return createPinnedGitHubRepositoryClient({
+    repository: HARVEY_LAB_REPOSITORY,
+    revision: HARVEY_LAB_REVISION,
+    userAgent: "openpond-legal-contract-review-example",
+  }, fetcher);
 }
 
 function scenarioRange(
@@ -565,26 +529,7 @@ function scenarioName(scenarioPath: string): string {
 }
 
 function mediaTypeFor(fileName: string): string {
-  switch (path.posix.extname(fileName).toLowerCase()) {
-    case ".docx":
-      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    case ".xlsx":
-      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    case ".pdf":
-      return "application/pdf";
-    case ".eml":
-      return "message/rfc822";
-    case ".json":
-      return "application/json";
-    case ".csv":
-      return "text/csv";
-    case ".md":
-      return "text/markdown";
-    case ".txt":
-      return "text/plain";
-    default:
-      return "application/octet-stream";
-  }
+  return mediaTypeForRepositoryFile(fileName);
 }
 
 function legalCriterionJudgeRubric(): string {
@@ -609,32 +554,6 @@ function contractReviewPolicySystemPrompt(): string {
     "Self-review: verify every required filename, document validity, issue coverage, calculations, grounding, consistency between redline and memo, and absence of unsupported findings before saving outputs.",
     "Attorney handoff: clearly flag unresolved judgment calls in the work product. Do not send, negotiate, or communicate externally.",
   ].join("\n\n");
-}
-
-function safeRepositoryPath(value: string): string {
-  const normalized = value.trim().replaceAll("\\", "/");
-  if (
-    !normalized
-    || normalized.startsWith("/")
-    || normalized.split("/").some((segment) => !segment || segment === "." || segment === "..")
-  ) {
-    throw new Error(`Unsafe repository path: ${value}`);
-  }
-  return normalized;
-}
-
-async function fetchJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
-  const response = await fetcher(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "openpond-taskset-sdk",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`GitHub request failed: ${response.status} ${response.statusText}`);
-  }
-  return response.json() as Promise<T>;
 }
 
 export function harveyLabSourceReceipt(input: {

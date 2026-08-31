@@ -9,9 +9,9 @@ import {
   HARVEY_LAB_LEGAL_WEEK0_TASKSET_ID,
   HARVEY_LAB_REVISION,
   materializeHarveyLabLegalTaskset,
-  validateTaskset,
   type HarveyLabClient,
-} from "../packages/taskset-sdk/src";
+} from "../examples/training/legal-contract-review/taskset";
+import { validateTaskset } from "../packages/taskset-sdk/src";
 
 describe("Harvey LAB legal Taskset materializer", () => {
   it("pins source bytes and keeps task rubrics out of policy-visible context", async () => {
@@ -58,7 +58,7 @@ describe("Harvey LAB legal Taskset materializer", () => {
     };
 
     const result = await materializeHarveyLabLegalTaskset({
-      storeDir,
+      outputDir: path.join(storeDir, "all"),
       client,
       now: "2026-08-30T12:00:00.000Z",
     });
@@ -108,7 +108,7 @@ describe("Harvey LAB legal Taskset materializer", () => {
     });
 
     const week0 = await materializeHarveyLabLegalTaskset({
-      storeDir,
+      outputDir: path.join(storeDir, "week0"),
       client,
       releaseStage: "week0",
       now: "2026-08-30T12:00:00.000Z",

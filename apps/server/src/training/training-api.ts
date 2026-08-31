@@ -666,6 +666,12 @@ export function createTrainingApi(deps: {
       });
       return deps.store.saveTasksetDraft(draft);
     }
+    if (action === "import_taskset_draft_package") {
+      return deps.store.importTasksetDraftPackage({
+        packagePath: requiredString(input.packagePath, "packagePath"),
+        profileId: requiredString(input.profileId, "profileId"),
+      });
+    }
     if (action === "save_taskset_draft") {
       const submitted = TasksetDraftSchema.parse(input.draft);
       const current = await requireTasksetDraft(deps.store, submitted.id);
@@ -719,6 +725,10 @@ export function createTrainingApi(deps: {
       const materializedTaskset = publishTasksetDraft({
         draft,
         sourcePackageHash: workspace.packageHash,
+      });
+      await deps.store.materializePublishedTasksetPackage({
+        draftId: draft.id,
+        taskset: materializedTaskset,
       });
       await deps.store.upsertTaskset(materializedTaskset);
       await deps.evaluation.readiness(materializedTaskset.id);
@@ -1366,6 +1376,9 @@ export function createTrainingApi(deps: {
         creations,
         minerRuns,
         datasetImports,
+        tasksetDrafts,
+        tasksets,
+        modelProjects,
       },
     });
     return {
@@ -1395,10 +1408,21 @@ export function createTrainingApi(deps: {
   }
 
   async function activity(profileId: string) {
-    const [creations, datasetImports, minerRuns, execution] = await Promise.all([
+    const [
+      creations,
+      datasetImports,
+      minerRuns,
+      tasksetDrafts,
+      tasksets,
+      modelProjects,
+      execution,
+    ] = await Promise.all([
       deps.store.listTaskCreationSnapshots(profileId),
       deps.store.listDatasetImportJobs(profileId),
       deps.store.listTaskMinerRuns(profileId),
+      deps.store.listTasksetDrafts(profileId),
+      deps.store.listTasksets(),
+      deps.store.listModelProjects(profileId),
       deps.training.activity(),
     ]);
     return projectTrainingActivity({
@@ -1408,6 +1432,9 @@ export function createTrainingApi(deps: {
         creations,
         minerRuns,
         datasetImports,
+        tasksetDrafts,
+        tasksets: tasksets.filter((taskset) => taskset.profileId === profileId),
+        modelProjects,
       },
     });
   }
