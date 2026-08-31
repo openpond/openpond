@@ -152,7 +152,18 @@ export function withAuthoritativeRecipeHashes(
         method: "grpo",
         groupSize,
         normalization: "group_standardized",
+        advantageEpsilon:
+          typeof optimizer.advantageEpsilon === "number"
+            ? optimizer.advantageEpsilon
+            : 1e-8,
         loss: loss.method ?? "grpo",
+        clipRange: typeof optimizer.clipRange === "number" ? optimizer.clipRange : 0.2,
+        iterations: positiveInteger(optimizer.iterations, 2),
+        microbatchSize: positiveInteger(optimizer.microbatchSize, 1),
+        gradientAccumulationSteps: positiveInteger(
+          optimizer.gradientAccumulationSteps,
+          1,
+        ),
       },
     },
   };

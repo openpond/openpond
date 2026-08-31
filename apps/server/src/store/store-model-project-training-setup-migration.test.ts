@@ -8,6 +8,7 @@ function receiptBoundScorer() {
   return {
     rewardModelVersion: { id: "reward-model-version", contentHash: hash("a") },
     qualificationReport: { id: "qualification-report", contentHash: hash("b") },
+    evaluationReferences: [],
     checkpoint: {
       id: "checkpoint",
       contentHash: hash("c"),

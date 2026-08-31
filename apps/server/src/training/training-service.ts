@@ -338,27 +338,32 @@ export function createTrainingService(deps: {
     rewardModelVersionId: string;
   }) {
     const version = await deps.store.getRewardModelVersion(input.rewardModelVersionId);
-    if (!version || version.taskset.id !== input.tasksetId) {
-      throw new Error("Reward Model Version was not found for this Taskset.");
+    if (!version) {
+      throw new Error("Reward Model Version was not found.");
     }
-    const run = (await deps.store.listRewardModelRuns({ tasksetId: input.tasksetId }))
+    const run = (await deps.store.listRewardModelRuns())
       .find((candidate) => candidate.rewardModelVersionId === version.id && candidate.status === "succeeded");
-    if (!run?.qualificationReport || !run.receipt?.managedExecutionReceipt) {
-      throw new Error("Reward Model Version has no immutable qualification report.");
+    if (!run?.receipt?.managedExecutionReceipt) {
+      throw new Error("Reward Model Version has no immutable execution receipt.");
     }
-    const report = await loadRewardModelQualificationReport({
-      storeDir: deps.storeDir,
-      id: run.qualificationReport.id,
-      contentHash: run.qualificationReport.contentHash,
-    });
-    if (!report) {
-      throw new Error("Reward Model qualification report payload is unavailable.");
+    const report = run.qualificationReport
+      ? await loadRewardModelQualificationReport({
+          storeDir: deps.storeDir,
+          id: run.qualificationReport.id,
+          contentHash: run.qualificationReport.contentHash,
+        })
+      : null;
+    if (run.qualificationReport && !report) {
+      throw new Error("Reward Model qualification evidence is unavailable or changed.");
     }
     const rewardComposerCore = {
       schemaVersion: "openpond.rewardComposer.v1",
-      taskset: version.taskset,
       rewardModelVersion: { id: version.id, contentHash: version.contentHash },
-      qualificationReport: run.qualificationReport,
+      checkpoint: {
+        id: version.artifacts.checkpoint.id,
+        contentHash: version.artifacts.checkpoint.contentHash,
+      },
+      processorRelease: version.artifacts.processorRelease,
     };
     const rewardComposerHash = contentHash(rewardComposerCore);
     return bindLearnedPreferenceReward({

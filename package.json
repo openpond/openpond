@@ -96,7 +96,6 @@
     "test:coverage": "tsx scripts/run-tests.ts unit --coverage",
     "test:observe": "tsx scripts/run-tests.ts unit --coverage --reporter=default --reporter=json --outputFile.json=coverage/unit-results.json",
     "verify:quick": "pnpm run typecheck && pnpm run test:unit",
-    "verify:push": "tsx scripts/verify-push.ts",
     "hooks:install": "tsx scripts/install-git-hooks.ts",
     "prepare": "tsx scripts/install-git-hooks.ts",
     "test:desktop:subagents": "tsx scripts/desktop-harness.ts run tests/desktop-scenarios/subagent-suite.ts --isolated --timeout-ms 300000 --artifacts-dir tmp/desktop-harness/subagent-suite --json tmp/desktop-harness/subagent-suite/report.json",

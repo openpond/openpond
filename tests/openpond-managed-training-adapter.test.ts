@@ -630,6 +630,12 @@ function publicJob(
     phase: overrides.state ?? "queued",
     version: overrides.version ?? 1,
     progress: overrides.progress ?? 0,
+    rolloutProgress: {
+      groupsCompleted: Math.floor((overrides.progress ?? 0) * 16),
+      groupsTarget: 16,
+      optimizerUpdatesApplied: Math.floor((overrides.progress ?? 0) * 16),
+      optimizerUpdatesSkipped: 0,
+    },
     accruedSpendUsd: 0,
     terminalReason: null,
     createdAt: FIXED_TIME,

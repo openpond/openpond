@@ -65,6 +65,7 @@ export function learnedRewardSource(binding: LearnedPreferenceRewardBinding) {
     kind: "learned_reward" as const,
     rewardModelVersion: binding.rewardModelVersion,
     qualificationReport: binding.qualificationReport,
+    evaluationReferences: binding.evaluationReferences,
     scorerArtifact: {
       artifactRef: binding.checkpoint.objectRef,
       contentHash: binding.checkpoint.contentHash,
