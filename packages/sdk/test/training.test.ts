@@ -208,6 +208,36 @@ describe("Training SDK contracts", () => {
     ).toThrow("Approved spend must equal");
   });
 
+  it("accepts an immutable learned scorer without qualification evidence", () => {
+    const base = submission();
+    const learned = TrainingJobSubmissionSchema.parse({
+      ...base,
+      job: {
+        ...base.job,
+        rewardSource: {
+          kind: "learned_reward",
+          rewardModelVersion: { id: "scorer-version-1", contentHash: HASH },
+          qualificationReport: null,
+          scorerArtifact: {
+            artifactRef: "r2://team/scorers/scorer-version-1",
+            contentHash: HASH,
+            executionReceipt: { id: "receipt-1", contentHash: HASH },
+          },
+          processorRelease: { id: "processor-1", contentHash: HASH },
+          rewardComposerRelease: { id: "composer-1", contentHash: HASH },
+        },
+      },
+    });
+
+    if (
+      learned.job.kind !== "policy_optimize"
+      || learned.job.rewardSource.kind !== "learned_reward"
+    ) {
+      throw new Error("Expected policy optimization Job with learned reward");
+    }
+    expect(learned.job.rewardSource.qualificationReport).toBeNull();
+  });
+
   it("lists Jobs by Project through the public API", async () => {
     const fetch = vi.fn(async () =>
       new Response(JSON.stringify({

@@ -71,6 +71,13 @@ describe("OpenPond Managed training adapter", () => {
             clusterKey: `${trainTask.clusterKey}-second`,
           },
         ],
+        metadata: {
+          ...baseTaskset.metadata,
+          harnessEvaluationReview: {
+            id: "optional-evaluation-review",
+            contentHash: sha256("optional-evaluation-review"),
+          },
+        },
       };
       const taskset = TasksetSchema.parse({
         ...tasksetDraft,
@@ -121,6 +128,7 @@ describe("OpenPond Managed training adapter", () => {
           method: "grpo",
           destinationId: "openpond_managed",
           managedRolloutPlacement: "remote",
+          managedGpuPlacementObjective: "fast",
           runPreset: "small",
           recipe,
           preferredMaximumSpendUsd: 9,
@@ -283,6 +291,7 @@ describe("OpenPond Managed training adapter", () => {
         if (url.pathname === "/v1/training/jobs") {
           expect(body).toMatchObject({
             schemaVersion: "openpond.trainingJobSubmission.v2",
+            placementObjective: "fast",
             source: { modelProject: { id: "hosted-project-1", portableProjectId: modelProject.id } },
             job: { kind: "policy_optimize" },
           });

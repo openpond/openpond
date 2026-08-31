@@ -60,7 +60,7 @@ function availableVersion() {
 }
 
 describe("learned preference reward binding", () => {
-  test("binds an immutable scorer without making qualification an execution gate", () => {
+  test("binds an immutable scorer without qualification or a target-Taskset reuse gate", () => {
     const binding = bindLearnedPreferenceReward({
       version: availableVersion() as never,
       qualificationReport: null,
@@ -72,5 +72,30 @@ describe("learned preference reward binding", () => {
     expect(binding.evaluationReferences).toEqual([]);
     expect(binding.rewardModelVersion.id).toBe("reward-model-version-r1");
     expect(binding.checkpoint.objectRef).toBe("r2://managed/checkpoint");
+    expect("taskset" in binding).toBe(false);
+  });
+
+  test("accepts an independently published scorer release without OpenPond Run lineage", () => {
+    const source = availableVersion();
+    const externalScorer = {
+      id: "external-scorer-version-1",
+      contentHash: hash("f"),
+      status: "available" as const,
+      runtime: source.runtime,
+      artifacts: source.artifacts,
+    };
+
+    expect(bindLearnedPreferenceReward({
+      version: externalScorer,
+      qualificationReport: null,
+      rewardComposerRelease: { id: "composer", contentHash: hash("d") },
+      executionReceipt: { id: "external-receipt", contentHash: hash("e") },
+    })).toMatchObject({
+      rewardModelVersion: {
+        id: "external-scorer-version-1",
+        contentHash: hash("f"),
+      },
+      qualificationReport: null,
+    });
   });
 });
