@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld("openpond", {
   copyRecentLogs: (lineLimit?: number) => ipcRenderer.invoke("openpond:logs:copyRecent", { lineLimit }),
   exportDiagnostics: () => ipcRenderer.invoke("openpond:diagnostics:export"),
   selectFolder: () => ipcRenderer.invoke("openpond:folder:select"),
+  selectTasksetPackage: () => ipcRenderer.invoke("openpond:taskset-package:select"),
   requestMicrophoneAccess: () => ipcRenderer.invoke("openpond:microphone:request"),
   logRendererError: (payload: unknown) => ipcRenderer.invoke("openpond:renderer:error", payload),
   minimizeWindow: () => ipcRenderer.invoke("openpond:window:minimize"),

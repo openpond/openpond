@@ -116,6 +116,52 @@ export async function resolveTasksetWorkAssets(input: {
   return resolved;
 }
 
+export async function resolveTasksetTrainingAssetBytes(input: {
+  storeDir: string;
+  taskset: Taskset;
+}): Promise<ReadonlyMap<string, Uint8Array>> {
+  const result = new Map<string, Uint8Array>();
+  for (const task of input.taskset.tasks.filter((candidate) => candidate.split === "train")) {
+    for (const asset of await resolveTasksetWorkAssets({
+      storeDir: input.storeDir,
+      taskset: input.taskset,
+      task,
+    })) {
+      if (result.has(asset.artifactRef)) {
+        throw new Error(
+          `Training asset path ${asset.artifactRef} is shared by multiple tasks.`,
+        );
+      }
+      result.set(asset.artifactRef, asset.bytes);
+    }
+  }
+  return result;
+}
+
+export async function resolveTasksetEvaluationAssetBytes(input: {
+  storeDir: string;
+  taskset: Taskset;
+}): Promise<ReadonlyMap<string, Uint8Array>> {
+  const result = new Map<string, Uint8Array>();
+  for (const task of input.taskset.tasks.filter(
+    (candidate) => candidate.split === "validation" || candidate.split === "frozen_eval",
+  )) {
+    for (const asset of await resolveTasksetWorkAssets({
+      storeDir: input.storeDir,
+      taskset: input.taskset,
+      task,
+    })) {
+      if (result.has(asset.artifactRef)) {
+        throw new Error(
+          `Evaluation asset path ${asset.artifactRef} is shared by multiple tasks.`,
+        );
+      }
+      result.set(asset.artifactRef, asset.bytes);
+    }
+  }
+  return result;
+}
+
 function assertEligibleSource(
   source: Taskset["sourceRefs"][number],
   asset: NonNullable<TaskDataRecord["assets"]>[number],

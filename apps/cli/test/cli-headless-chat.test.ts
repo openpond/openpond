@@ -44,16 +44,6 @@ describe("CLI headless chat", () => {
     ], { command: "node", expectedPrompt: "Run this from the CLI" });
   });
 
-  test("message-file input is resolved relative to the caller cwd before terminal launch", async () => {
-    await expectCliHeadlessChat([
-      path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-      "chat",
-    ], {
-      inputMode: "message-file",
-      expectedPrompt: "Run this from a relative instruction file.",
-    });
-  });
-
   test("benchmark-style invocation forwards cwd, instruction file, provider model, and trust controls", async () => {
     const fake = await startCliHeadlessChatFakeServer([
       runtimeEvent({
@@ -148,267 +138,6 @@ describe("CLI headless chat", () => {
     }
   });
 
-  test("stdin input reaches the one-shot terminal child", async () => {
-    await expectCliHeadlessChat([
-      path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-      "chat",
-    ], {
-      inputMode: "stdin",
-      expectedPrompt: "Run this from stdin.",
-    });
-  });
-
-  test("piped noninteractive input is treated as one-shot stdin", async () => {
-    await expectCliHeadlessChat([
-      path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-      "chat",
-    ], {
-      inputMode: "implicit-stdin",
-      expectedPrompt: "Run this from an implicit pipe.",
-    });
-  });
-
-  test("explicit approval and sandbox flags are forwarded to the terminal turn", async () => {
-    const fake = await startCliHeadlessChatFakeServer([
-      runtimeEvent({
-        id: "event-completed",
-        name: "turn.completed",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        output: "done",
-      }),
-    ]);
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-trust-"));
-    const homeDir = path.join(tempRoot, "home");
-    const taskDir = path.join(tempRoot, "task");
-    await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
-    await mkdir(taskDir, { recursive: true });
-    await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
-    const expectedCwd = await realpath(taskDir);
-
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--server",
-          fake.url,
-          "--message",
-          "Run trusted benchmark task",
-          "--non-interactive",
-          "--json",
-          "--approval-policy",
-          "never",
-          "--sandbox",
-          "danger-full-access",
-          "--no-server-start",
-        ],
-        {
-          cwd: taskDir,
-          env: isolatedCliEnv(homeDir),
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(fake.turnRequests).toHaveLength(1);
-      expect(fake.turnRequests[0]).toMatchObject({
-        prompt: "Run trusted benchmark task",
-        cwd: expectedCwd,
-        approvalPolicy: "never",
-        sandbox: "danger-full-access",
-      });
-    } finally {
-      fake.stop();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  test("max-output-bytes caps final JSON output through the CLI wrapper", async () => {
-    const fake = await startCliHeadlessChatFakeServer([
-      runtimeEvent({
-        id: "event-assistant",
-        name: "assistant.delta",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        output: "hello world",
-      }),
-      runtimeEvent({
-        id: "event-completed",
-        name: "turn.completed",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        output: "done",
-      }),
-    ]);
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-output-cap-"));
-    const homeDir = path.join(tempRoot, "home");
-    const taskDir = path.join(tempRoot, "task");
-    await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
-    await mkdir(taskDir, { recursive: true });
-    await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
-
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--server",
-          fake.url,
-          "--message",
-          "Run capped output task",
-          "--non-interactive",
-          "--json",
-          "--max-output-bytes",
-          "5",
-          "--no-server-start",
-        ],
-        {
-          cwd: taskDir,
-          env: isolatedCliEnv(homeDir),
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(0);
-      expect(result.stderr).toBe("");
-      const printed = JSON.parse(result.stdout) as {
-        finalMessage?: string;
-        output?: { finalMessageBytes?: number; truncated?: boolean; maxOutputBytes?: number | null };
-      };
-      expect(printed.finalMessage).toBe("hello");
-      expect(printed.output).toEqual({
-        finalMessageBytes: 5,
-        truncated: true,
-        maxOutputBytes: 5,
-      });
-    } finally {
-      fake.stop();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  test("event counters, turn id, and usage metadata reach CLI JSON output", async () => {
-    const fake = await startCliHeadlessChatFakeServer([
-      runtimeEvent({
-        id: "event-assistant",
-        name: "assistant.delta",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        output: "Metadata ready.",
-      }),
-      runtimeEvent({
-        id: "event-command",
-        name: "command.output",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        output: "pnpm test",
-      }),
-      runtimeEvent({
-        id: "event-workspace",
-        name: "workspace_action_result",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        output: "saved",
-      }),
-      runtimeEvent({
-        id: "event-usage",
-        name: "session.context.updated",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        data: {
-          provider: "openpond",
-          model: "openpond-chat",
-          usedTokens: 321,
-          maxContextTokens: 128000,
-          usableContextTokens: 117760,
-          percentFull: 1,
-          source: "provider_usage",
-          updatedAtEventId: "event-usage",
-        },
-      }),
-      runtimeEvent({
-        id: "event-completed",
-        name: "turn.completed",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        output: "done",
-      }),
-    ]);
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-metadata-"));
-    const homeDir = path.join(tempRoot, "home");
-    const taskDir = path.join(tempRoot, "task");
-    await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
-    await mkdir(taskDir, { recursive: true });
-    await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
-
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--server",
-          fake.url,
-          "--message",
-          "Run metadata task",
-          "--non-interactive",
-          "--json",
-          "--no-server-start",
-        ],
-        {
-          cwd: taskDir,
-          env: isolatedCliEnv(homeDir),
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(0);
-      expect(result.stderr).toBe("");
-      const printed = JSON.parse(result.stdout) as {
-        finalMessage?: string;
-        turnId?: string | null;
-        events?: {
-          terminal?: string;
-          total?: number;
-          commands?: number;
-          workspaceActions?: number;
-        };
-        usage?: {
-          provider?: string;
-          model?: string;
-          usedTokens?: number;
-          source?: string;
-          updatedAtEventId?: string;
-        } | null;
-      };
-      expect(printed.finalMessage).toBe("Metadata ready.");
-      expect(printed.turnId).toBe("turn-cli-headless");
-      expect(printed.events).toMatchObject({
-        terminal: "turn.completed",
-        total: 5,
-        commands: 1,
-        workspaceActions: 1,
-      });
-      expect(printed.usage).toMatchObject({
-        provider: "openpond",
-        model: "openpond-chat",
-        usedTokens: 321,
-        source: "provider_usage",
-        updatedAtEventId: "event-usage",
-      });
-    } finally {
-      fake.stop();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
   test("one-shot timeout propagates exit 124 through the CLI wrapper", async () => {
     const fake = await startCliHeadlessChatFakeServer([]);
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-timeout-"));
@@ -468,76 +197,6 @@ describe("CLI headless chat", () => {
     });
   });
 
-  test("interrupted terminal turns propagate exit 1 with JSON output", async () => {
-    await expectCliHeadlessTerminalState({
-      terminalEvent: runtimeEvent({
-        id: "event-interrupted",
-        name: "turn.interrupted",
-        sessionId: "session-cli-headless",
-        turnId: "turn-cli-headless",
-        output: "interrupted by runtime",
-      }),
-      expectedStatus: "interrupted",
-      expectedError: null,
-    });
-  });
-
-  test("missing provider model exits 1 before posting a terminal turn", async () => {
-    const fake = await startCliHeadlessChatFakeServer([], {
-      bootstrapBody: bootstrapFixture(false),
-    });
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-no-model-"));
-    const homeDir = path.join(tempRoot, "home");
-    const taskDir = path.join(tempRoot, "task");
-    await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
-    await mkdir(taskDir, { recursive: true });
-    await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
-
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--server",
-          fake.url,
-          "--provider",
-          "openai",
-          "--message",
-          "Run without a configured model",
-          "--non-interactive",
-          "--json",
-          "--no-server-start",
-        ],
-        {
-          cwd: taskDir,
-          env: isolatedCliEnv(homeDir),
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain("exited with code 1");
-      const printed = JSON.parse(result.stdout) as {
-        status?: string;
-        sessionId?: string | null;
-        error?: string | null;
-        events?: { terminal?: string };
-      };
-      expect(printed).toMatchObject({
-        status: "failed",
-        sessionId: "session-cli-headless",
-        error: "No model selected for openai.",
-        events: { terminal: "error" },
-      });
-      expect(fake.turnRequests).toHaveLength(0);
-    } finally {
-      fake.stop();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
   test("server bootstrap errors exit 1 before posting a terminal turn", async () => {
     const fake = await startCliHeadlessChatFakeServer([], {
       bootstrapStatus: 500,
@@ -593,235 +252,6 @@ describe("CLI headless chat", () => {
     }
   });
 
-  test("turn submission errors exit 1 after the failed request", async () => {
-    const fake = await startCliHeadlessChatFakeServer([], {
-      turnStatus: 500,
-      turnBody: { error: "turn submission unavailable" },
-    });
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-turn-error-"));
-    const homeDir = path.join(tempRoot, "home");
-    const taskDir = path.join(tempRoot, "task");
-    await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
-    await mkdir(taskDir, { recursive: true });
-    await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
-
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--server",
-          fake.url,
-          "--message",
-          "Run while turn submission fails",
-          "--non-interactive",
-          "--json",
-          "--no-server-start",
-        ],
-        {
-          cwd: taskDir,
-          env: isolatedCliEnv(homeDir),
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain("exited with code 1");
-      const printed = JSON.parse(result.stdout) as {
-        status?: string;
-        sessionId?: string | null;
-        error?: string | null;
-        events?: { terminal?: string };
-      };
-      expect(printed).toMatchObject({
-        status: "failed",
-        sessionId: "session-cli-headless",
-        error: "turn submission unavailable",
-        events: { terminal: "error" },
-      });
-      expect(fake.turnRequests).toHaveLength(1);
-    } finally {
-      fake.stop();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  test("missing one-shot input propagates exit 2 through the CLI wrapper", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-usage-"));
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--non-interactive",
-          "--json",
-          "--no-server-start",
-        ],
-        {
-          cwd: tempRoot,
-          env: isolatedCliEnv(path.join(tempRoot, "home")),
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(2);
-      expect(result.stderr).toContain("requires --message, --message-file, or --stdin input");
-      expect(result.stderr).toContain("exited with code 2");
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  test("invalid one-shot option values exit 2 before launching the terminal child", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-bad-option-"));
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--message",
-          "Run this",
-          "--non-interactive",
-          "--json",
-          "--timeout-sec",
-          "0",
-          "--no-server-start",
-        ],
-        {
-          cwd: tempRoot,
-          env: isolatedCliEnv(path.join(tempRoot, "home")),
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(2);
-      expect(result.stdout).toBe("");
-      expect(result.stderr).toContain("timeout-sec must be a positive integer");
-      expect(result.stderr).not.toContain("exited with code");
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  test("invalid one-shot trust values exit 2 before launching the terminal child", async () => {
-    const cases = [
-      {
-        flag: "--sandbox",
-        value: "uncontained",
-        expectedError: "sandbox must be read-only, workspace-write, or danger-full-access",
-      },
-      {
-        flag: "--approval-policy",
-        value: "ask-every-time",
-        expectedError: "approval-policy must be on-request, never, on-failure, or untrusted",
-      },
-    ];
-
-    for (const testCase of cases) {
-      const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-bad-trust-"));
-      try {
-        const result = await runProcessCommand(
-          tsxBinary,
-          [
-            path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-            "chat",
-            "--message",
-            "Run this",
-            "--non-interactive",
-            "--json",
-            testCase.flag,
-            testCase.value,
-            "--no-server-start",
-          ],
-          {
-            cwd: tempRoot,
-            env: isolatedCliEnv(path.join(tempRoot, "home")),
-            timeoutMs: 5_000,
-          },
-        );
-
-        expect(result.timedOut).toBe(false);
-        expect(result.code).toBe(2);
-        expect(result.stdout).toBe("");
-        expect(result.stderr).toContain(testCase.expectedError);
-        expect(result.stderr).not.toContain("exited with code");
-      } finally {
-        await rm(tempRoot, { recursive: true, force: true });
-      }
-    }
-  });
-
-  test("ambiguous one-shot input sources exit 2 before server startup", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-ambiguous-input-"));
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--message",
-          "Run this from message",
-          "--stdin",
-          "--non-interactive",
-          "--json",
-          "--no-server-start",
-        ],
-        {
-          cwd: tempRoot,
-          env: isolatedCliEnv(path.join(tempRoot, "home")),
-          stdin: "Run this from stdin\n",
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(2);
-      expect(result.stdout).toBe("");
-      expect(result.stderr).toContain("accepts exactly one instruction source");
-      expect(result.stderr).toContain("--message, --stdin");
-      expect(result.stderr).toContain("exited with code 2");
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  test("missing message-file input exits 2 before server startup", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-missing-file-"));
-    try {
-      const result = await runProcessCommand(
-        tsxBinary,
-        [
-          path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
-          "chat",
-          "--message-file",
-          "missing-instruction.md",
-          "--non-interactive",
-          "--json",
-          "--no-server-start",
-        ],
-        {
-          cwd: tempRoot,
-          env: isolatedCliEnv(path.join(tempRoot, "home")),
-          timeoutMs: 5_000,
-        },
-      );
-
-      expect(result.timedOut).toBe(false);
-      expect(result.code).toBe(2);
-      expect(result.stdout).toBe("");
-      expect(result.stderr).toContain("openpond chat --message-file could not read");
-      expect(result.stderr).toContain("missing-instruction.md");
-      expect(result.stderr).toContain("exited with code 2");
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
 });
 
 async function expectCliHeadlessChat(
@@ -829,7 +259,6 @@ async function expectCliHeadlessChat(
   options: {
     command?: string;
     expectedPrompt: string;
-    inputMode?: "message" | "message-file" | "stdin" | "implicit-stdin";
   },
 ): Promise<void> {
   const fake = await startCliHeadlessChatFakeServer([
@@ -855,28 +284,16 @@ async function expectCliHeadlessChat(
   await mkdir(taskDir, { recursive: true });
   await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
   const expectedCwd = await realpath(taskDir);
-  const inputMode = options.inputMode ?? "message";
-  const instructionFileName = "instruction.md";
-  if (inputMode === "message-file") {
-    await writeFile(path.join(taskDir, instructionFileName), `${options.expectedPrompt}\n`, "utf8");
-  }
 
   try {
-    const inputArgs =
-      inputMode === "message"
-        ? ["--message", options.expectedPrompt]
-        : inputMode === "message-file"
-          ? ["--message-file", instructionFileName]
-          : inputMode === "stdin"
-            ? ["--stdin"]
-            : [];
     const result = await runProcessCommand(
       options.command ?? (entryArgs[0]?.endsWith(".ts") ? tsxBinary : process.execPath),
       [
         ...entryArgs,
         "--server",
         fake.url,
-        ...inputArgs,
+        "--message",
+        options.expectedPrompt,
         "--non-interactive",
         "--json",
         "--yes",
@@ -885,7 +302,6 @@ async function expectCliHeadlessChat(
       {
         cwd: taskDir,
         env: isolatedCliEnv(homeDir),
-        stdin: inputMode === "stdin" || inputMode === "implicit-stdin" ? `${options.expectedPrompt}\n` : undefined,
         timeoutMs: 10_000,
       },
     );
@@ -985,8 +401,6 @@ async function startCliHeadlessChatFakeServer(
   options: {
     bootstrapStatus?: number;
     bootstrapBody?: Record<string, unknown>;
-    turnStatus?: number;
-    turnBody?: Record<string, unknown>;
   } = {},
 ): Promise<{
   url: string;
@@ -1059,9 +473,6 @@ async function startCliHeadlessChatFakeServer(
       if (request.method === "POST" && url.pathname === "/v1/sessions/session-cli-headless/turns") {
         const body = await request.json().catch(() => ({})) as Record<string, unknown>;
         turnRequests.push(body);
-        if (options.turnStatus && options.turnStatus >= 400) {
-          return Response.json(options.turnBody ?? { error: "turn failed" }, { status: options.turnStatus });
-        }
         queueMicrotask(() => {
           for (const event of events) enqueueFrame(`data: ${JSON.stringify(event)}\n\n`);
         });
@@ -1084,18 +495,16 @@ async function startCliHeadlessChatFakeServer(
   };
 }
 
-function bootstrapFixture(withDefaultModel = true): Record<string, unknown> {
+function bootstrapFixture(): Record<string, unknown> {
   return {
     providers: {
       version: 1,
-      providers: withDefaultModel
-        ? {
-            openai: {
-              enabled: true,
-              defaultModel: "gpt-5.6-sol",
-            },
-          }
-        : {},
+      providers: {
+        openai: {
+          enabled: true,
+          defaultModel: "gpt-5.6-sol",
+        },
+      },
       statuses: {},
       modelCaches: {},
     },

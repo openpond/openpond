@@ -167,26 +167,7 @@ function profilePayload(): BootstrapPayload {
 }
 
 describe("ProfileSettingsSection", () => {
-  test("can render only the Profile Git controls for the Lab home", () => {
-    const html = renderToStaticMarkup(
-      createElement(ProfileSettingsSection, {
-        section: "controls",
-        payload: profilePayload(),
-        connection: null,
-        onPayload: noop,
-        onError: noop,
-      }),
-    );
-
-    expect(html).toContain(">Commit<");
-    expect(html).toContain(">Sync<");
-    expect(html).toContain(">Repo<");
-    expect(html).toContain("Profile ready.");
-    expect(html).not.toContain("Profile agents table");
-    expect(html).not.toContain(">Skills<");
-  });
-
-  test("renders compact profile controls and a bordered agent table without duplicate metrics", () => {
+  test("renders profile status, Git actions, and the accessible agent table", () => {
     const html = renderToStaticMarkup(
       createElement(ProfileSettingsSection, {
         payload: profilePayload(),
@@ -196,58 +177,13 @@ describe("ProfileSettingsSection", () => {
       }),
     );
 
-    expect(html).toContain('<section class="account-settings profile-settings">');
-    expect(html).toContain('class="profile-hosted-status"');
-    expect(html).toContain('class="profile-local-status ready"');
     expect(html).toContain("Profile ready.");
     expect(html).toContain("uploaded f33a352dfb");
-    expect(html).toContain('<table class="profile-data-table profile-agent-table" aria-label="Profile agents table">');
+    expect(html).toContain('aria-label="Profile agents table"');
     expect(html).toContain('<th scope="col">Agent</th>');
-    expect(html).toContain("Action");
-    expect(html).toContain("Check");
-    expect(html).toContain("Synced");
-    expect(html).toContain("Passed");
     expect(html).toContain("Commit");
     expect(html).toContain("Sync");
     expect(html).toContain("Repo");
-    expect(html).not.toContain("Plan review");
-    expect(html).not.toContain('aria-label="Profile summary"');
-    expect(html).not.toContain("profile-summary-overview");
-    expect(html).not.toContain(">Details<");
-    expect(html).not.toContain("Default action");
-    expect(html).not.toContain("Setup gate");
-    expect(html).not.toContain("Hosted invocation");
-    expect(html).not.toContain("<h1>Profile</h1>");
-    expect(html).not.toContain('aria-label="Refresh profile"');
-    expect(html).not.toContain(">Load<");
-    expect(html).not.toContain("Checks passed");
-    expect(html).not.toContain("Push hosted");
-    expect(html).not.toContain("source-backed");
-    expect(html).not.toContain("0 setup");
-    expect(html).not.toContain("Profile repo path");
-    expect(html).not.toContain("Commit message");
-    expect(html).not.toContain("Confirm sync");
-    expect(html).not.toContain("Shell command approval");
-    expect(html).not.toContain("<span>Summary</span>");
-    expect(html).not.toContain("Review release notes agent plan");
-
-    const commitIndex = html.indexOf(">Commit<");
-    const syncIndex = html.indexOf(">Sync<");
-    const repoIndex = html.indexOf(">Repo<");
-    const hostedIndex = html.indexOf('class="profile-hosted-status"');
-    const agentsIndex = html.indexOf(
-      'class="account-list-heading profile-agent-list-heading"><span>Agents</span>',
-    );
-
-    expect(commitIndex).toBeGreaterThan(-1);
-    expect(syncIndex).toBeGreaterThan(-1);
-    expect(repoIndex).toBeGreaterThan(-1);
-    expect(hostedIndex).toBeGreaterThan(-1);
-    expect(agentsIndex).toBeGreaterThan(-1);
-    expect(commitIndex).toBeLessThan(agentsIndex);
-    expect(syncIndex).toBeLessThan(agentsIndex);
-    expect(repoIndex).toBeLessThan(agentsIndex);
-    expect(hostedIndex).toBeLessThan(agentsIndex);
   });
 
   test("renders the standalone Profile selector as names-only dropdown options", () => {

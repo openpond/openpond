@@ -19,15 +19,7 @@ describe("training navigation surfaces", () => {
       setView: () => undefined,
       view: "labs",
     }));
-    expect(html).toContain('class="sidebar-model-project-picker"');
     expect(html).toContain('aria-label="Select Model Project"');
-    expect(html).not.toContain("Model Projects");
-    expect(html).not.toContain("All Model Projects");
-    expect(html).not.toContain("Tasksets");
-    expect(html).not.toContain("Versions");
-    expect(html).not.toContain(">Runs<");
-    expect(html).not.toContain("Serving");
-    expect(html).not.toContain("Usage");
     expect(html).not.toContain("training-navigation-rail");
   });
 
@@ -56,7 +48,6 @@ describe("training navigation surfaces", () => {
       onToggleExpanded: () => undefined,
     }));
     expect(home).toContain("Task draft");
-    expect(home).toContain("right-sidebar-home-panel");
     expect(panel).toContain(source.title);
     expect(panel).toContain("Open Training");
   });

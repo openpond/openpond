@@ -4,8 +4,8 @@ import type { SqliteStore } from "../store/store.js";
 import type { ManagedAdapterRegistryClient } from "./managed-adapter-registry-client.js";
 import { createManagedAdapterSyncService } from "./managed-adapter-sync-service.js";
 
-const BASE_PROFILE_ID = "qwen3-0-6b-c1899de2";
-const BASE_REVISION = "c1899de289a04d12100db370d81485cdf75e47ca";
+const BASE_PROFILE_ID = "qwen3-8b-b968826d";
+const BASE_REVISION = "b968826d9c46dd6066d109eabc6255188de91218";
 const CHAT_TEMPLATE_HASH = "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8";
 const timestamp = "2026-07-19T16:00:00.000Z";
 
@@ -57,7 +57,7 @@ function capabilities() {
     baseProfiles: [
       {
         id: BASE_PROFILE_ID,
-        repository: "Qwen/Qwen3-0.6B",
+        repository: "Qwen/Qwen3-8B",
         revision: BASE_REVISION,
         tokenizerRevision: BASE_REVISION,
         chatTemplateHash: CHAT_TEMPLATE_HASH,
@@ -123,7 +123,7 @@ function createManagedHarness(
     path: "sandbox-managed-rl://managed-job-qa/model-artifact-qa",
     sha256: "4".repeat(64),
     sizeBytes: 8_000_000,
-    baseModelId: "Qwen/Qwen3-0.6B",
+    baseModelId: "Qwen/Qwen3-8B",
     baseModelRevision: BASE_REVISION,
     tokenizerRevision: BASE_REVISION,
     chatTemplateHash: CHAT_TEMPLATE_HASH,

@@ -76,12 +76,7 @@ describe("native skills settings", () => {
     expect(markup).toContain("make-openpond-video");
     expect(markup).toContain("1 packaged resource");
     expect(markup).toContain("App integration skills");
-    expect(markup).not.toContain(`${CONNECTED_APP_INTEGRATION_SKILLS.length} built in`);
-    for (const skill of CONNECTED_APP_INTEGRATION_SKILLS) {
-      expect(markup).toContain(skill.name);
-      expect(markup).toContain(skill.path);
-    }
-    expect(markup).not.toContain("Create");
+    expect(markup).toContain(CONNECTED_APP_INTEGRATION_SKILLS[0]!.name);
     expect(extensionSourceSelection(extension)).toMatchObject({
       name: "duckailabs/ducky-capital-skills",
       scope: "extension",

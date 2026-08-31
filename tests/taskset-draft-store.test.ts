@@ -1,9 +1,14 @@
 import path from "node:path";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 
-import { createTasksetDraft } from "../packages/taskset-sdk/src/index.js";
-import { withTrainingStore } from "./helpers/training-fixtures.js";
+import {
+  createTasksetDraft,
+  publishTasksetDraft,
+  tasksetDraftFromTaskset,
+  writeTasksetDraftPackage,
+} from "../packages/taskset-sdk/src/index.js";
+import { tasksetFixture, withTrainingStore } from "./helpers/training-fixtures.js";
 import {
   closeTestDatabase,
   getTestSql,
@@ -53,5 +58,54 @@ describe("Taskset draft persistence", () => {
       expect(await store.getTasksetDraft(draft.id)).toBeNull();
       expect(await readFile(path.join(workspace!.workspacePath, "taskset.json"), "utf8"))
         .toContain("Store proof");
+    }));
+
+  test("imports portable packages with assets without bypassing the draft store", async () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const packageDirectory = path.join(directory, "portable-taskset");
+      const draft = tasksetDraftFromTaskset(
+        tasksetFixture({ profileId: "source-profile" }),
+        "2026-08-30T12:00:00.000Z",
+      );
+      await writeTasksetDraftPackage(draft, packageDirectory);
+      await mkdir(path.join(packageDirectory, "assets", "matter"), { recursive: true });
+      await writeFile(
+        path.join(packageDirectory, "assets", "matter", "input.docx"),
+        new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+      );
+
+      const imported = await store.importTasksetDraftPackage({
+        packagePath: packageDirectory,
+        profileId: "target-profile",
+      });
+      expect(imported).toMatchObject({
+        id: draft.id,
+        profileId: "target-profile",
+        status: "draft",
+        revision: 1,
+      });
+      const workspace = await store.getTasksetDraftWorkspace(imported.id);
+      expect(
+        await readFile(path.join(workspace!.workspacePath, "assets", "matter", "input.docx")),
+      ).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      const taskset = publishTasksetDraft({ draft: imported });
+      const tasksetRoot = await store.materializePublishedTasksetPackage({
+        draftId: imported.id,
+        taskset,
+      });
+      expect(
+        await readFile(path.join(tasksetRoot, "assets", "matter", "input.docx")),
+      ).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      expect(JSON.parse(await readFile(path.join(tasksetRoot, "taskset.json"), "utf8")))
+        .toMatchObject({ schemaVersion: "openpond.taskset.v1", id: taskset.id });
+
+      await expect(store.importTasksetDraftPackage({
+        packagePath: packageDirectory,
+        profileId: "target-profile",
+      })).resolves.toEqual(imported);
+      await expect(store.importTasksetDraftPackage({
+        packagePath: packageDirectory,
+        profileId: "another-profile",
+      })).rejects.toThrow("already exists");
     }));
 });

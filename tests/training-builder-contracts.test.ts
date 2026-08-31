@@ -3,6 +3,7 @@ import { test } from "vitest";
 import {
   TaskCreationRequestSchema,
   ModelProjectSchema,
+  TasksetSchema,
   TasksetReadinessReportSchema,
   TrainingMethodAvailabilitySchema,
   TrainingMethodSchema,
@@ -208,6 +209,85 @@ test("readiness gives method-specific DPO and PPO repair guidance", () => {
   assert.ok(dpo?.reasonCodes.includes("preference_pairs_missing"));
   assert.ok(ppo?.reasonCodes.includes("executable_reward_missing"));
   assert.ok(ppo?.reasonCodes.includes("value_model_required"));
+});
+
+test("a user-selected model judge with advisory calibration does not become a platform training veto", () => {
+  const base = tasksetFixture();
+  const graderId = "user_legal_judge";
+  const draft = TasksetSchema.parse({
+    ...base,
+    status: "needs_review",
+    policy: {
+      ...base.policy,
+      hiddenGraderRefs: [graderId],
+    },
+    capabilities: {
+      ...base.capabilities,
+      supportedSignals: ["reward"],
+      compatibleMethods: ["grpo"],
+      rewardKinds: ["model_judge"],
+    },
+    graders: [{
+      id: graderId,
+      version: "1",
+      label: "User legal judge",
+      kind: "model_judge",
+      weight: 1,
+      hardGate: false,
+      rewardEligible: true,
+      privileged: true,
+      rubric: "Score the hidden legal-review criteria.",
+      judge: { providerId: "openpond", modelId: "gpt-5.5" },
+      calibrationFixtureRefs: base.graderFixtures.map((fixture) => fixture.id),
+      calibrationStatus: "pending",
+      temperature: 0,
+      metadata: {
+        userSelectedReward: true,
+        calibrationIsAdvisory: true,
+      },
+    }],
+    learningSignals: {
+      demonstrations: [],
+      preferences: [],
+      corrections: [],
+      feedback: [],
+      rewards: [{
+        id: "legal_reward",
+        kind: "reward",
+        taskId: null,
+        sourceRefs: base.sourceRefs.map((source) => source.id),
+        artifactRef: graderId,
+        approved: true,
+        confidence: 1,
+        task: "Score the hidden legal-review criteria.",
+        rules: [{ id: "criterion_pass_rate", points: 1, condition: "Return the passed criterion fraction." }],
+        otherwisePoints: 0,
+        executable: true,
+        metadata: { userDefined: true },
+      }],
+      labels: [],
+    },
+    readiness: null,
+    contentHash: "00000000",
+    metadata: {
+      ...base.metadata,
+      trainingMethod: "grpo",
+    },
+  });
+  const taskset = TasksetSchema.parse({
+    ...draft,
+    contentHash: computeTasksetHash(draft),
+  });
+
+  const report = buildTasksetReadiness({
+    taskset,
+    graderAudit: null,
+    generatedAt: FIXED_TIME,
+  });
+
+  assert.equal(report.ready, true);
+  assert.equal(report.blockers.some((blocker) => blocker.code === "grader_audit_missing"), false);
+  assert.ok(report.warnings.some((warning) => warning.includes("advisory calibration")));
 });
 
 test("signal validation rejects an invalid chosen/rejected pair", () => {

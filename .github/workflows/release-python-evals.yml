@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 concurrency:
   group: release-python-evals-${{ github.ref }}
@@ -43,12 +44,34 @@ jobs:
           echo "should_publish=${should_publish}" >> "$GITHUB_OUTPUT"
 
       - name: Install build dependencies
-        run: python -m pip install --disable-pip-version-check build pydantic pytest
+        run: python -m pip install --disable-pip-version-check build pydantic
 
-      - name: Test shared conformance
+      - name: Wait for required CI
+        if: steps.package.outputs.should_publish == 'true'
         env:
-          PYTHONPATH: packages/evals/python/src
-        run: python -m pytest packages/evals/python/tests -q
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            check_run="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/check-runs" --jq '[.check_runs[] | select(.name == "Checks" and .app.slug == "github-actions")] | sort_by(.started_at) | last // {}')"
+            status="$(jq -r '.status // empty' <<<"${check_run}")"
+            conclusion="$(jq -r '.conclusion // empty' <<<"${check_run}")"
+            url="$(jq -r '.html_url // empty' <<<"${check_run}")"
+            if [[ "${status}" == "completed" && "${conclusion}" == "success" ]]; then
+              echo "Required CI check passed: ${url}"
+              exit 0
+            fi
+            if [[ "${status}" == "completed" && -n "${conclusion}" ]]; then
+              echo "Required CI check concluded ${conclusion}: ${url}" >&2
+              exit 1
+            fi
+            echo "Waiting for required CI on ${RELEASE_SHA} (attempt ${attempt}/60)..."
+            sleep 10
+          done
+          echo "Timed out waiting for required CI on ${RELEASE_SHA}." >&2
+          exit 1
 
       - name: Build distributions
         run: python -m build packages/evals/python

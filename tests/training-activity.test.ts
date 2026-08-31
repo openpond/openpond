@@ -47,11 +47,35 @@ describe("training activity projection", () => {
     expect(after.active).toBe(false);
     expect(after.revision).not.toBe(before.revision);
   });
+
+  test("changes revision when CLI-visible inventory changes", () => {
+    const state = activityState();
+    const before = projectTrainingActivity({ profileId: "default", state });
+    const after = projectTrainingActivity({
+      profileId: "default",
+      state: {
+        ...state,
+        tasksetDrafts: [{
+          id: "imported-taskset-draft",
+          revision: 1,
+          updatedAt: "2026-08-05T00:03:00.000Z",
+        }] as TrainingStateResponse["tasksetDrafts"],
+      },
+    });
+
+    expect(after.revision).not.toBe(before.revision);
+  });
 });
 
 function activityState(): Pick<
   TrainingStateResponse,
-  "jobs" | "creations" | "minerRuns" | "datasetImports"
+  | "jobs"
+  | "creations"
+  | "minerRuns"
+  | "datasetImports"
+  | "tasksetDrafts"
+  | "tasksets"
+  | "modelProjects"
 > {
   return {
     jobs: [
@@ -67,6 +91,9 @@ function activityState(): Pick<
     datasetImports: [
       lifecycleItem({ id: "import-a", status: "validating" }),
     ] as TrainingStateResponse["datasetImports"],
+    tasksetDrafts: [],
+    tasksets: [],
+    modelProjects: [],
   };
 }
 

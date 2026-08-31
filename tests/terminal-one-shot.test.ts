@@ -267,6 +267,12 @@ describe("terminal argument parser", () => {
       expect(error).toBeInstanceOf(TerminalUsageError);
       expect((error as { exitCode?: number }).exitCode).toBe(2);
     }
+    expect(() => parseTerminalArgs(["chat", "--sandbox", "uncontained"], "/repo")).toThrow(
+      /sandbox must be read-only, workspace-write, or danger-full-access/,
+    );
+    expect(() => parseTerminalArgs(["chat", "--approval-policy", "ask-every-time"], "/repo")).toThrow(
+      /approval-policy must be on-request, never, on-failure, or untrusted/,
+    );
   });
 
   test("routes chat modes without stealing existing interactive and pipe line-mode paths", () => {
@@ -465,6 +471,25 @@ describe("terminal one-shot chat result accumulator", () => {
 });
 
 describe("terminal one-shot chat runner", () => {
+  test("rejects missing and unreadable one-shot input before contacting the server", async () => {
+    const missingInput = parseTerminalArgs(["chat", "--non-interactive"], "/repo").options;
+    await expect(runOneShotChat(missingInput, { input: Readable.from([]) })).rejects.toMatchObject({
+      exitCode: 2,
+      message: "openpond chat --non-interactive requires --message, --message-file, or --stdin input.",
+    });
+
+    const missingFile = parseTerminalArgs([
+      "chat",
+      "--message-file",
+      "/missing/openpond-instruction.md",
+      "--non-interactive",
+    ], "/repo").options;
+    await expect(runOneShotChat(missingFile)).rejects.toMatchObject({
+      exitCode: 2,
+      message: expect.stringContaining("openpond chat --message-file could not read"),
+    });
+  });
+
   test("rejects ambiguous one-shot input sources before contacting the server", async () => {
     const options = parseTerminalArgs(["chat", "--message", "from message", "--stdin", "--non-interactive"], "/repo").options;
 

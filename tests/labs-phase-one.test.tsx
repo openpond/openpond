@@ -9,7 +9,6 @@ import {
   type TrainingStateResponse,
 } from "@openpond/contracts";
 import { createTasksetDraft } from "@openpond/taskset-sdk";
-import { LabsView } from "../apps/web/src/components/labs/LabsView";
 import { labServingRows } from "../apps/web/src/components/labs/LabServingPage";
 import {
   modelProjectRoute,
@@ -129,30 +128,6 @@ describe("Lab workspace", () => {
           : candidate),
       }],
     })).toThrow("globally unique");
-  });
-
-  test("keeps Models subpage navigation out of the page header", () => {
-    const markup = renderToStaticMarkup(
-      createElement(LabsView, {
-        activeTab: "overview",
-        modelProjects: [],
-        selectedModelProjectId: null,
-        onSelectModelProject: noop,
-        onCreateDataset: noop,
-        onCreateModel: noop,
-        children: createElement("div", null, "Unified inventory"),
-      }),
-    );
-
-    expect(markup).toContain('aria-label="Models"');
-    expect(markup).not.toContain('aria-label="Model sections"');
-    expect(markup).not.toContain('role="tab"');
-    expect(markup).toContain(">New Model Project<");
-    expect(markup).not.toContain(">Profile<");
-    expect(markup).not.toContain(">Home<");
-    expect(markup).not.toContain(">Suggestions<");
-    expect(markup).not.toContain("<svg");
-    expect(markup).toContain("Unified inventory");
   });
 
   test("keeps primary Models destinations addressable across refresh and history", () => {
@@ -612,30 +587,6 @@ describe("Lab workspace", () => {
     expect(markup).not.toContain("first run");
   });
 
-  test("keeps Taskset Lab focused on review instead of a builder", () => {
-    const markup = renderToStaticMarkup(
-      createElement(LabDatasetsPage, {
-        defaultModel: {
-          providerId: "openrouter",
-          modelId: "test/model",
-        },
-        runs: [],
-        selectedId: null,
-        state: null,
-        training: {} as never,
-        onToast: noop,
-        onSelectedIdChange: noop,
-        onImproveInChat: noop,
-        onTrainModel: noop,
-        onOpenFiles: noop,
-      }),
-    );
-
-    expect(markup).toContain('aria-label="Search Tasksets"');
-    expect(markup).not.toContain(">Build</button>");
-    expect(markup).not.toContain("Embedded Taskset builder");
-  });
-
   test("shows resumable drafts in the normal Taskset table", () => {
     const draft = {
       ...createTasksetDraft({
@@ -671,6 +622,88 @@ describe("Lab workspace", () => {
     expect(markup).toContain("Draft</span>");
     expect(markup).toContain("Resume draft");
     expect(markup).toContain("Choose six compatible visual traits.");
+  });
+
+  test("shows Tasksets attached through a Model Project release", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const markup = renderToStaticMarkup(
+      createElement(LabDatasetsPage, {
+        defaultModel: { providerId: "openpond", modelId: "openpond-chat" },
+        runs: [],
+        selectedId: null,
+        modelProjectId: "model_fixture",
+        state: {
+          schemaVersion: "openpond.trainingState.v1",
+          profileId: "default",
+          sources: [],
+          creations: [],
+          tasksetDrafts: [],
+          tasksets: [],
+          modelTasksets: [taskset],
+          modelProjects: [{
+            id: "model_fixture",
+            profileId: "default",
+            name: "Fixture Model",
+            objective: "Train from the attached Taskset.",
+            updatedAt: "2026-08-30T12:00:00.000Z",
+            trainingSetup: {
+              tasksetRef: null,
+              baseModel: null,
+              method: null,
+              destinationId: null,
+              recipe: null,
+            },
+            tasksetSyncs: [{
+              localTasksetId: taskset.id,
+              state: "synced",
+            }],
+          }],
+          benchmarkRuns: [],
+          benchmarkComparisons: [],
+          datasetImports: [],
+          datasetArtifacts: [],
+          graderAuditReports: [],
+          evaluationResults: [],
+          candidates: [],
+          minerConfig: {
+            schemaVersion: "openpond.taskMinerConfig.v1",
+            enabled: false,
+            source: "task_attempts",
+            lookbackDays: 7,
+            maxCandidates: 100,
+            minReward: 0,
+            maxReward: 1,
+          },
+          minerRuns: [],
+          modelVersions: [],
+          modelRuns: [],
+          rewardModelVersions: [],
+          rewardModelRuns: [],
+          plans: [],
+          bundles: [],
+          jobs: [],
+          artifacts: [],
+          models: [],
+          rolloutReceipts: [],
+          modelBindings: [],
+          destinations: [],
+          baseModelCandidates: [],
+          generatedAt: "2026-08-30T12:00:00.000Z",
+        } as unknown as TrainingStateResponse,
+        training: { loading: false, refresh: async () => null } as never,
+        onToast: noop,
+        onSelectedIdChange: noop,
+        onOpenDraft: noop,
+        onImproveInChat: noop,
+        onTrainModel: noop,
+        onOpenFiles: noop,
+      }),
+    );
+
+    expect(markup).toContain("Fixture Taskset");
+    expect(markup).toContain(">2</dd>");
+    expect(markup).toContain("Attached");
+    expect(markup).not.toContain("No Tasksets match this view.");
   });
 
   test("uses Taskset language in Lab breadcrumbs", () => {
@@ -790,12 +823,40 @@ describe("Lab workspace", () => {
     expect(markup).toContain("Refresh readiness");
   });
 
-  test("keeps generic Taskset overview focused on evidence instead of speculative method advice", () => {
-    const taskset = tasksetFixture({ ready: true });
+  test("shows the declared LLM judge and reward formula without opening hidden criteria", () => {
+    const base = tasksetFixture({
+      ready: true,
+      graders: [{
+        id: "legal_rubric_judge",
+        version: "1",
+        label: "Legal criterion judge",
+        kind: "model_judge",
+        rubric: "Apply the hidden criterion set.",
+        judge: { providerId: "openpond", modelId: "gpt-5.6-sol" },
+        calibrationFixtureRefs: ["fixture_positive"],
+        calibrationStatus: "pending",
+        temperature: 0,
+        weight: 1,
+        hardGate: false,
+        rewardEligible: true,
+        privileged: true,
+        metadata: { calibrationIsAdvisory: true },
+      }],
+    });
+    const taskset = {
+      ...base,
+      metrics: {
+        schemaVersion: "openpond.tasksetMetricPolicy.v1" as const,
+        primaryMetric: "criterion_pass_rate",
+        aggregation: "mean_score" as const,
+        missingReward: "zero" as const,
+        customAggregator: null,
+      },
+    };
     const markup = renderToStaticMarkup(
       createElement(LabModelDataset, {
         artifact: null,
-        defaultModel: { providerId: "openrouter", modelId: "test/model" },
+        defaultModel: { providerId: "openpond", modelId: "openpond-chat" },
         tab: "overview",
         taskset,
         onOpenFiles: noop,
@@ -804,10 +865,12 @@ describe("Lab workspace", () => {
       }),
     );
 
-    expect(markup).toContain("Technical details");
-    expect(markup).toContain("This Taskset contains");
-    expect(markup).not.toContain("Training compatibility");
-    expect(markup).not.toContain("Needs Dataset Work");
+    expect(markup).toContain("Reward &amp; grading");
+    expect(markup).toContain("LLM-as-judge");
+    expect(markup).toContain("gpt-5.6-sol");
+    expect(markup).toContain("Passed criteria ÷ total criteria");
+    expect(markup).toContain("Grading criteria hidden from Policy");
+    expect(markup).not.toContain("Apply the hidden criterion set.");
   });
 
   test("does not expose benchmark installation as a Tasksets UI action", () => {

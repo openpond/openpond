@@ -208,6 +208,12 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         "/taskset-drafts",
         { profileId, name },
       ),
+    importTasksetDraftPackage: (packagePath: string) =>
+      mutate<TasksetDraft>(
+        "import-taskset-draft-package",
+        "/taskset-drafts/import",
+        { packagePath, profileId },
+      ),
     saveTasksetDraft: (draft: TasksetDraft) =>
       mutate<TasksetDraft>(
         "save-taskset-draft",

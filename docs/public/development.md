@@ -16,6 +16,31 @@ pnpm dev
 
 `pnpm dev` starts the watched app server, Vite renderer, and Electron desktop app. If the app is already running, keep using the existing process instead of starting another one.
 
+## Test Commands
+
+Use the smallest confidence layer that matches the change:
+
+```bash
+pnpm test                   # pure logic, package units, and server-rendered UI
+pnpm run test:unit          # explicit alias for the fast default layer
+pnpm run test:system        # SQLite, Git, filesystem, process, and service boundaries
+pnpm run test:integration   # cross-process CLI behavior
+pnpm run test:contract      # built server and Agent SDK contracts
+pnpm run test:release       # built CLI distribution smoke
+pnpm run test:image         # ImageMagick-dependent pixel inspection
+pnpm run test:python        # both Python projects
+pnpm run test:all           # every deterministic non-live layer
+pnpm run test:live          # explicit external/live-provider checks
+```
+
+`pnpm run verify:quick` runs typechecking plus the fast unit layer. `pnpm run verify:push` is the complete local push gate. Coverage and per-file timing are collected by `pnpm run test:observe`; they run weekly in CI instead of adding instrumentation to every pull request.
+
+Pull requests use affected-test selection unless test infrastructure, shared contracts, production deletions, or broad cross-domain changes require the full matrix. Full CI runs static checks and artifact builds in parallel, shards unit and system coverage two ways, and starts integration/release consumers as soon as the verified build is available. CLI distribution installation proof runs for CLI, package, lockfile, and release changes.
+
+Every push to `master` runs the complete deterministic matrix regardless of changed-file scope, including image inspection and CLI distribution installation. Package release workflows only trigger for their version manifests, wait for the required `Checks` result, and then perform publication-specific build, clean-consumer, installation, or provenance proof without repeating source unit suites.
+
+Tests that launch a process, open SQLite, create a temporary filesystem, or listen on a network port belong in the system manifest at `scripts/test-suite-manifest.ts`. Keep UI tests for state, accessibility, navigation, persistence, errors, and user-visible results. Avoid assertions that only freeze a class name, wrapper, icon asset, or incidental copy.
+
 ## Repository Layout
 
 ```text

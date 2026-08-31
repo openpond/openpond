@@ -10,9 +10,9 @@ describe("managed base-model candidates", () => {
     const candidates = projectBaseModelCandidates({ destinations: [destination()] });
     expect(candidates.map((candidate) => candidate.preference)).toEqual([
       expect.objectContaining({
-        modelId: "Qwen/Qwen3-0.6B",
-        revision: "c1899de289a04d12100db370d81485cdf75e47ca",
-        tokenizerRevision: "c1899de289a04d12100db370d81485cdf75e47ca",
+        modelId: "Qwen/Qwen3-8B",
+        revision: "b968826d9c46dd6066d109eabc6255188de91218",
+        tokenizerRevision: "b968826d9c46dd6066d109eabc6255188de91218",
         chatTemplateHash: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
       }),
     ]);
@@ -56,7 +56,7 @@ function destination(available = true, unavailableReason: string | null = null) 
     available,
     methods: ["grpo"],
     parameterizations: ["lora"],
-    modelAllowlist: ["Qwen/Qwen3-0.6B"],
+    modelAllowlist: ["Qwen/Qwen3-8B"],
     maxDatasetBytes: 10_000_000,
     environmentPlacements: ["remote"],
     nonProduction: false,

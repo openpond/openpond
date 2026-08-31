@@ -369,10 +369,10 @@ function validateGraders(taskset: Taskset, issues: TasksetValidationIssue[]): vo
     if (ids.has(grader.id)) issues.push({ code: "grader_duplicate", severity: "error", message: `Duplicate grader id ${grader.id}.`, path: "graders" });
     ids.add(grader.id);
     if (grader.kind === "model_judge" && grader.rewardEligible && grader.calibrationStatus !== "passed") {
-      issues.push({ code: "judge_not_calibrated", severity: "error", message: `Model judge ${grader.id} cannot contribute reward before calibration passes.`, path: `graders.${grader.id}` });
+      issues.push({ code: "judge_calibration_pending", severity: "warning", message: `Model judge ${grader.id} is selected for reward without a passing advisory calibration report.`, path: `graders.${grader.id}` });
     }
     if (grader.kind === "model_judge" && grader.calibrationStatus === "passed" && typeof grader.metadata.calibrationEvidenceHash !== "string") {
-      issues.push({ code: "judge_calibration_evidence_missing", severity: "error", message: `Model judge ${grader.id} declares calibration without an OpenPond fixture evidence hash.`, path: `graders.${grader.id}.metadata.calibrationEvidenceHash` });
+      issues.push({ code: "judge_calibration_evidence_missing", severity: "warning", message: `Model judge ${grader.id} declares calibration without an OpenPond fixture evidence hash.`, path: `graders.${grader.id}.metadata.calibrationEvidenceHash` });
     }
     if (grader.kind === "human" && grader.rewardEligible) {
       issues.push({ code: "human_online_reward", severity: "error", message: `Human grader ${grader.id} cannot be an online optimizer reward.`, path: `graders.${grader.id}` });

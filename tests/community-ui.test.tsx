@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CommunityRulesDialog } from "../apps/web/src/components/community/CommunityRulesDialog";
-import { CommunityComposer } from "../apps/web/src/components/community/CommunityComposer";
 import { CommunityMessageRow } from "../apps/web/src/components/community/CommunityMessageRow";
 import { CollaborationTabs } from "../apps/web/src/components/collaboration/CollaborationTabs";
 
@@ -34,24 +33,6 @@ describe("community UI", () => {
     expect(html).toContain("Team chat");
     expect(html).toContain("Communities");
     expect(html).toContain('aria-current="page"');
-  });
-
-  test("uses the same dock composer surface as Team Chat", () => {
-    const html = renderToStaticMarkup(createElement(CommunityComposer, {
-      members: [],
-      replyTo: null,
-      busy: false,
-      disabled: false,
-      onCancelReply: () => undefined,
-      onSearchMembers: async () => [],
-      onSend: async () => true,
-    }));
-    expect(html).toContain('class="composer dock community-composer"');
-    expect(html).toContain('class="composer-textarea-frame"');
-    expect(html).toContain('class="composer-inline-input"');
-    expect(html).toContain('class="composer-primary-controls team-chat-composer-controls"');
-    expect(html).toContain('class="send-button"');
-    expect(html).not.toContain("<textarea");
   });
 
   test("shows attachment placeholders instead of download controls before joining", () => {

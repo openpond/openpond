@@ -60,8 +60,8 @@ describe("small runtime selectors", () => {
   });
 
   test("resolves only the qualified managed RL base profile", () => {
-    expect(managedRlBaseProfileForModel("Qwen/Qwen3-0.6B")).toEqual(MANAGED_RL_BASE_PROFILE);
-    expect(managedRlBaseProfileForModel("Qwen/Qwen3-8B")).toBeNull();
+    expect(managedRlBaseProfileForModel("Qwen/Qwen3-8B")).toEqual(MANAGED_RL_BASE_PROFILE);
+    expect(managedRlBaseProfileForModel("Qwen/Qwen3-0.6B")).toBeNull();
     expect(resolveManagedRlBaseProfile({
       schemaVersion: "openpond.baseModelPreference.v1",
       modelId: MANAGED_RL_BASE_PROFILE.modelId,

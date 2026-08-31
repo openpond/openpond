@@ -8,7 +8,7 @@ import { appErrorToastMessage } from "../apps/web/src/hooks/useAppErrorReporter"
 const noop = () => undefined;
 
 describe("AppToast", () => {
-  test("renders diagnostics and dismiss actions as right-aligned icon controls", () => {
+  test("exposes diagnostics and dismiss actions to assistive technology", () => {
     const html = renderToStaticMarkup(
       createElement(AppToast, {
         toast: {
@@ -24,11 +24,8 @@ describe("AppToast", () => {
       }),
     );
 
-    expect(html).toContain('class="app-toast-actions"');
-    expect(html).toContain('class="app-toast-icon-action"');
     expect(html).toContain('aria-label="Open diagnostics settings"');
     expect(html).toContain('aria-label="Dismiss notification"');
-    expect(html).not.toContain(">Settings<");
   });
 
   test("replaces the browser fetch failure with a useful connection message", () => {

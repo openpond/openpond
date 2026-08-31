@@ -345,7 +345,7 @@ describe("Training run detail UI", () => {
     expect(html).toContain("Policy loss");
     expect(html).toContain("Value loss");
     expect(html).toContain("Gradient norm");
-    expect(html).toContain("KL divergence");
+    expect(html).toContain("Policy update KL");
     expect(html).toContain('aria-label="Mean reward by optimizer step"');
   });
 

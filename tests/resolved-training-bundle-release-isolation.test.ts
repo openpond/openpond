@@ -9,7 +9,7 @@ import {
   buildTasksetTrainingBundle,
   materializeResolvedTrainingBundle,
 } from "../packages/training-sdk/src/index.js";
-import { sha256 } from "../packages/taskset-sdk/src/index.js";
+import { computeTasksetHash, sha256 } from "../packages/taskset-sdk/src/index.js";
 import {
   FIXED_TIME,
   sftRecipeFixture,
@@ -19,6 +19,19 @@ import {
 describe("resolved training bundle release isolation", () => {
   test("rejects mutable Taskset bytes that no longer match the selected authoring hash", async () => {
     const taskset = tasksetFixture({ ready: true });
+    const workAssetBytes = Buffer.from("immutable-work-asset", "utf8");
+    taskset.tasks[0]!.assets = [{
+      id: "asset_release_isolation",
+      sourceRefId: taskset.tasks[0]!.sourceRefs[0]!,
+      artifactRef: "assets/task-1/source.txt",
+      fileName: "source.txt",
+      mediaType: "text/plain",
+      sha256: sha256(workAssetBytes),
+      sizeBytes: workAssetBytes.byteLength,
+      split: "train",
+      metadata: {},
+    }];
+    taskset.contentHash = computeTasksetHash(taskset);
     const recipe = sftRecipeFixture();
     const baseModel = {
         schemaVersion: "openpond.baseModelPreference.v1",
@@ -98,6 +111,9 @@ describe("resolved training bundle release isolation", () => {
           id: "taskset-release-isolation",
           contentHash: sha256(taskset.contentHash),
         },
+        tasksetAssetBytes: new Map([
+          ["assets/task-1/source.txt", workAssetBytes],
+        ]),
       });
 
     const released = build(taskset);
@@ -124,6 +140,12 @@ describe("resolved training bundle release isolation", () => {
         ),
       ) as { tasks: Array<{ input: { prompt?: string } }> };
       expect(trainingDataset.tasks[0]?.input.prompt).toBe("Say hello");
+      expect(
+        await readFile(
+          path.join(materialized.directory, "assets", "task-1", "source.txt"),
+          "utf8",
+        ),
+      ).toBe("immutable-work-asset");
 
       const datasetPath = path.join(
         materialized.directory,
@@ -158,7 +180,7 @@ describe("resolved training bundle release isolation", () => {
 
     const mutated = tasksetFixture({ ready: true });
     mutated.tasks[0]!.input = { prompt: "This source changed after release." };
-    expect(mutated.contentHash).toBe(taskset.contentHash);
+    mutated.contentHash = taskset.contentHash;
     expect(() => build(mutated)).toThrow(
       "Taskset authoring state changed after its release was selected.",
     );

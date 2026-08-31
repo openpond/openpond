@@ -11,7 +11,11 @@ import {
   TrainingStartSummary,
 } from "./TrainingStartDetails";
 import { recommendedSequenceLength } from "./training-start-defaults";
-import { preserveBaseModelSelection, trainingRecipe } from "./training-start-recipe";
+import {
+  preserveBaseModelSelection,
+  rolloutTopologyIncompatibility,
+  trainingRecipe,
+} from "./training-start-recipe";
 import {
   defaultLearningRate,
   destinationLabel,
@@ -228,6 +232,12 @@ export function TrainingStartDialog({
   const tasksetMethodCompatible =
     taskset.capabilities.compatibleMethods.includes(method as never) ||
     bootstrap?.method === method;
+  const rolloutIncompatibility = method === "grpo"
+    ? rolloutTopologyIncompatibility({
+        groupSize: rolloutGroupSize,
+        concurrency: rolloutConcurrency,
+      })
+    : null;
   const configurationCompatible = Boolean(
     taskset.readiness?.ready &&
     executableMethod &&
@@ -237,7 +247,8 @@ export function TrainingStartDialog({
     selectedExecutionOption?.available &&
     selectedCatalogCompatibility?.state !== "unsupported" &&
     selectedCatalogCompatibility?.state !== "compute_setup_required" &&
-    selectedBaseModel?.preference.source !== "local",
+    selectedBaseModel?.preference.source !== "local" &&
+    rolloutIncompatibility === null,
   );
   const compatible = configurationCompatible && approvalReady;
   const configurationIncompatibility = !taskset.readiness?.ready
@@ -258,6 +269,7 @@ export function TrainingStartDialog({
                 : (destination?.unavailableReason ?? null);
   const launchIncompatibility =
     configurationIncompatibility ??
+    rolloutIncompatibility ??
     (approvalPolicy?.exportApprovalRequired && !exportApproved
       ? `Approve the bounded train-split export before launching ${providerLabel}.`
       : approvalPolicy &&

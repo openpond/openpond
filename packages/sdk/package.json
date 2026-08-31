@@ -78,7 +78,8 @@
     "build": "tsx scripts/build.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project sdk",
-    "check": "pnpm run typecheck && pnpm run test && tsx scripts/check-protocol-fixtures.ts && pnpm run build && tsx scripts/check-published-consumer.ts && npm pack --dry-run"
+    "check": "pnpm run typecheck && pnpm run test && tsx scripts/check-protocol-fixtures.ts && pnpm run build && tsx scripts/check-published-consumer.ts && npm pack --dry-run",
+    "publish:check": "tsx scripts/check-protocol-fixtures.ts && pnpm run build && tsx scripts/check-published-consumer.ts && npm pack --dry-run"
   },
   "devDependencies": {
     "@openpond/actions": "workspace:*",

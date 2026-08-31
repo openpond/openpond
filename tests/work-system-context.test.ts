@@ -24,6 +24,28 @@ describe("Work system context", () => {
       "Browser clicks, typing, key presses, account changes, and publication are not available"
     );
   });
+
+  test("tells managed local Work to link finished files for durable output collection", async () => {
+    const helpers = createHostedTurnHelpers({
+      appendRuntimeEvent: async () => undefined,
+    });
+    const prompt = await helpers.hostedSystemPrompt(
+      "Base",
+      "",
+      {
+        ...workSession(),
+        cwd: "/managed/work/tasks/session_work",
+        metadata: { workspaceTarget: "local" },
+      },
+      { browserControlAvailable: false },
+    );
+
+    expect(prompt).toContain("Local Work experience");
+    expect(prompt).toContain("app-managed task directory");
+    expect(prompt).toContain("link every finished file");
+    expect(prompt).toContain("durable Outputs storage");
+    expect(prompt).not.toContain("Work compute is lazy");
+  });
 });
 
 function workSession(): Session {

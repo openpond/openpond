@@ -17,6 +17,7 @@ const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const EVALS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-evals.yml";
 const HARNESS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-harness.yml";
 const AGENT_SDK_RELEASE_WORKFLOW_PATH = ".github/workflows/release-agent-sdk.yml";
+const PYTHON_EVALS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-python-evals.yml";
 const ROOT_PACKAGE_PATH = "package.json";
 const RELEASE_COMMAND_PATH = "scripts/release-stable.ts";
 const LATEST_STABLE_TAG_SCRIPT_PATH = "scripts/latest-stable-release-tag.sh";
@@ -46,10 +47,20 @@ describe("release workflow", () => {
   test("builds the workspace Harness dependency before checking Evals for publication", () => {
     const workflow = readFileSync(EVALS_RELEASE_WORKFLOW_PATH, "utf8");
     const harnessBuild = workflow.indexOf("pnpm --dir packages/harness run build");
-    const evalsCheck = workflow.indexOf("pnpm run evals:check");
+    const evalsCheck = workflow.indexOf("pnpm run evals:publish:check");
 
     expect(harnessBuild).toBeGreaterThan(-1);
     expect(evalsCheck).toBeGreaterThan(harnessBuild);
+  });
+
+  test("reuses green master CI instead of repeating Python Evals tests during publication", () => {
+    const workflow = readFileSync(PYTHON_EVALS_RELEASE_WORKFLOW_PATH, "utf8");
+
+    expect(workflow).toContain("checks: read");
+    expect(workflow).toContain("name: Wait for required CI");
+    expect(workflow).toContain('select(.name == "Checks" and .app.slug == "github-actions")');
+    expect(workflow).not.toContain("python -m pytest");
+    expect(workflow).not.toContain("build pydantic pytest");
   });
 
   test("keeps packaged desktop smoke wired for Linux and macOS release builds while Windows is disabled", () => {
@@ -161,15 +172,31 @@ describe("release workflow", () => {
     expect(releaseWorkflow).toContain("cancel-in-progress: ${{ github.event_name == 'schedule' }}");
     expect(releaseWorkflow).toContain("checks: read");
     expect(ciWorkflow).toContain("name: Checks");
-    expect(ciWorkflow).toContain("needs: [scope, targeted, quality, unit, integration, contract, release_smoke]");
+    expect(ciWorkflow).toContain(
+      "needs: [scope, targeted, quality, verified_build, distribution, test_build, unit, system, integration, image, python, contract, release_smoke]",
+    );
+    expect(ciWorkflow).toContain("name: Static quality");
+    expect(ciWorkflow).toContain("name: Verified build");
+    expect(ciWorkflow).toContain("name: CLI distribution");
+    expect(ciWorkflow).toContain("name: Unit tests (${{ matrix.shard }})");
+    expect(ciWorkflow).toContain("OPENPOND_TEST_SHARD: ${{ matrix.shard }}");
+    expect(ciWorkflow).toContain("needs: [scope, verified_build]");
+    expect(ciWorkflow).toContain("github.event_name != 'pull_request'");
+    expect(ciWorkflow).toContain("pnpm run cli:distribution:check");
+    expect(ciWorkflow).toContain("name: Check affected CLI distribution");
+    expect(ciWorkflow).toContain('if test "${DISTRIBUTION_REQUIRED}" = "true"; then');
+    expect(ciWorkflow).toContain('if test "${IMAGE_REQUIRED}" = "true"; then');
     expect(ciWorkflow).toContain("pnpm run test:unit");
+    expect(ciWorkflow).toContain("pnpm run test:system");
     expect(ciWorkflow).toContain("pnpm run test:integration");
+    expect(ciWorkflow).toContain("pnpm run test:image");
+    expect(ciWorkflow).toContain("pnpm run test:python");
     expect(ciWorkflow).toContain("pnpm run test:contract");
     expect(ciWorkflow).toContain("pnpm run test:release");
     expect(ciWorkflow).not.toContain("setup-bun");
     expect(ciWorkflow).not.toMatch(/\bbun (?:install|run|x|test)\b/);
     expect(ciWorkflow).toMatch(
-      /name: verified-build-\$\{\{ github\.sha \}\}[\s\S]*?packages\/cloud\/dist/,
+      /name: verified-build-\$\{\{ github\.sha \}\}[\s\S]*?packages\/\*\/dist/,
     );
     expect(ciWorkflow).toMatch(
       /release_smoke:[\s\S]*?actions\/download-artifact@[0-9a-f]{40} # v8[\s\S]*?path: \./,
@@ -244,6 +271,19 @@ describe("release workflow", () => {
     };
     expect(packageJson.scripts?.build).toContain("pnpm run build:artifacts");
     expect(packageJson.scripts?.["build:artifacts"]).toContain("pnpm run build:desktop");
+  });
+
+  test("keeps local tests fast by default and names full distribution proof accurately", () => {
+    const packageJson = JSON.parse(readFileSync(ROOT_PACKAGE_PATH, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.test).toBe("tsx scripts/run-tests.ts unit");
+    expect(packageJson.scripts?.["test:all"]).toBe("tsx scripts/run-tests.ts all");
+    expect(packageJson.scripts?.["cli:distribution:check"]).toBe(
+      "tsx scripts/check-cli-distribution.ts",
+    );
+    expect(packageJson.scripts?.["budgets:cli:check"]).toBeUndefined();
   });
 
   test("keeps the stable release guard available as a package script", () => {

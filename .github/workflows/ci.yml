@@ -23,6 +23,7 @@ jobs:
       agent_sdk: ${{ steps.scope.outputs.agent_sdk }}
       base: ${{ steps.scope.outputs.base }}
       cli: ${{ steps.scope.outputs.cli }}
+      distribution: ${{ steps.scope.outputs.distribution }}
       full: ${{ steps.scope.outputs.full }}
       head: ${{ steps.scope.outputs.head }}
       image: ${{ steps.scope.outputs.image }}
@@ -74,10 +75,9 @@ jobs:
       - name: Check repository invariants
         if: needs.scope.outputs.repository_checks == 'true'
         run: |
-          pnpm run structure:check
-          pnpm run reachability:check
-          pnpm run dependencies:check
+          pnpm run repository:check
           pnpm run hygiene:check
+          pnpm run test-tiers:check
 
       - name: Check workflow definitions
         if: needs.scope.outputs.workflow == 'true'
@@ -116,7 +116,15 @@ jobs:
 
       - name: Check release and workflow behavior
         if: needs.scope.outputs.release == 'true' || needs.scope.outputs.workflow == 'true'
-        run: pnpm exec vitest run --project root-unit tests/release-workflow.test.ts
+        run: pnpm exec vitest run --project root-system tests/release-workflow.test.ts
+
+      - name: Build affected CLI distribution
+        if: needs.scope.outputs.distribution == 'true'
+        run: pnpm run cli:build
+
+      - name: Check affected CLI distribution
+        if: needs.scope.outputs.distribution == 'true'
+        run: pnpm run cli:distribution:check
 
       - name: Run Python tests
         if: needs.scope.outputs.python == 'true'
@@ -130,7 +138,7 @@ jobs:
         run: echo "No executable files changed; full CI is unnecessary."
 
   quality:
-    name: Quality and build
+    name: Static quality
     needs: scope
     if: needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
@@ -153,15 +161,34 @@ jobs:
       - run: pnpm run cli:typecheck
       - run: pnpm run agent-sdk:typecheck
       - run: pnpm run sdk:typecheck
-      - run: pnpm run build:artifacts
-      - run: pnpm run cli:build
-      - run: pnpm run budgets:cli:check
-      - run: pnpm run budgets:check
-      - run: pnpm run structure:check
-      - run: pnpm run reachability:check
-      - run: pnpm run dependencies:check
+      - run: pnpm run repository:check
       - run: pnpm run hygiene:check
+      - run: pnpm run test-tiers:check
       - run: pnpm run workflows:check
+
+  verified_build:
+    name: Verified build
+    needs: scope
+    if: needs.scope.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:artifacts
+      - run: pnpm run cli:build:from-web
+      - run: pnpm run budgets:check
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -171,12 +198,34 @@ jobs:
             apps/web/dist
             apps/desktop/dist
             apps/cli/dist
-            packages/cloud/dist
-            packages/sdk/dist
+            packages/*/dist
           if-no-files-found: error
 
-  unit:
-    name: Unit tests
+  distribution:
+    name: CLI distribution
+    needs: [scope, verified_build]
+    if: needs.scope.outputs.full == 'true' && (needs.scope.outputs.distribution == 'true' || needs.scope.outputs.release == 'true' || github.event_name != 'pull_request')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: verified-build-${{ github.sha }}
+          path: .
+      - run: pnpm run cli:distribution:check
+
+  test_build:
+    name: Prepare test runtime
     needs: scope
     if: needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
@@ -192,11 +241,80 @@ jobs:
           node-version: "24.18.0"
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:sdk
+      - run: pnpm exec tsc -b apps/server
+      - run: pnpm run agent-sdk:build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-runtime-${{ github.sha }}
+          path: |
+            apps/server/dist
+            packages/*/dist
+          if-no-files-found: error
+
+  unit:
+    name: Unit tests (${{ matrix.shard }})
+    needs: [scope, test_build]
+    if: needs.scope.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: test-runtime-${{ github.sha }}
+          path: .
       - run: pnpm run test:unit
+        env:
+          OPENPOND_TEST_REUSE_PACKAGE_BUILD: "1"
+          OPENPOND_TEST_SHARD: ${{ matrix.shard }}
+
+  system:
+    name: System tests (${{ matrix.shard }})
+    needs: [scope, test_build]
+    if: needs.scope.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: test-runtime-${{ github.sha }}
+          path: .
+      - run: pnpm run test:system
+        env:
+          OPENPOND_TEST_REUSE_PACKAGE_BUILD: "1"
+          OPENPOND_TEST_SHARD: ${{ matrix.shard }}
 
   integration:
     name: Integration tests
-    needs: scope
+    needs: [scope, verified_build]
     if: needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -210,7 +328,31 @@ jobs:
         with:
           node-version: "24.18.0"
           package-manager-cache: false
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: verified-build-${{ github.sha }}
+          path: .
+      - run: pnpm run test:integration
+        env:
+          OPENPOND_TEST_REUSE_BUILD: "1"
+
+  image:
+    name: Image integration tests
+    needs: [scope, test_build]
+    if: needs.scope.outputs.full == 'true' && (needs.scope.outputs.image == 'true' || github.event_name != 'pull_request')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
       - name: Install image inspection dependency
         run: |
           sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
@@ -218,12 +360,28 @@ jobs:
           timeout 5m sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           timeout 5m sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends imagemagick
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run test:integration
-      - run: pnpm run test:python
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: test-runtime-${{ github.sha }}
+          path: .
+      - run: pnpm run test:image
+        env:
+          OPENPOND_TEST_REUSE_PACKAGE_BUILD: "1"
+
+  python:
+    name: Python tests
+    needs: scope
+    if: needs.scope.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      - run: uv run --project python/openpond-datasets --frozen pytest python/openpond-datasets/tests
+      - run: uv run --project packages/evals/python --with pytest pytest packages/evals/python/tests -q
 
   contract:
     name: Runtime contract tests
-    needs: scope
+    needs: [scope, test_build]
     if: needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -238,12 +396,20 @@ jobs:
           node-version: "24.18.0"
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: test-runtime-${{ github.sha }}
+          path: .
       - run: pnpm run test:contract
+        env:
+          OPENPOND_TEST_REUSE_PACKAGE_BUILD: "1"
+          OPENPOND_TEST_REUSE_SERVER_BUILD: "1"
+          OPENPOND_TEST_REUSE_AGENT_SDK_BUILD: "1"
 
   release_smoke:
     name: Release artifact smoke
-    needs: [scope, quality]
-    if: needs.scope.outputs.full == 'true' && needs.quality.result == 'success'
+    needs: [scope, verified_build]
+    if: needs.scope.outputs.full == 'true' && needs.verified_build.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -269,7 +435,7 @@ jobs:
   checks:
     name: Checks
     if: always()
-    needs: [scope, targeted, quality, unit, integration, contract, release_smoke]
+    needs: [scope, targeted, quality, verified_build, distribution, test_build, unit, system, integration, image, python, contract, release_smoke]
     runs-on: ubuntu-latest
     steps:
       - name: Require the selected CI lanes
@@ -278,8 +444,16 @@ jobs:
           FULL: ${{ needs.scope.outputs.full }}
           TARGETED: ${{ needs.targeted.result }}
           QUALITY: ${{ needs.quality.result }}
+          VERIFIED_BUILD: ${{ needs.verified_build.result }}
+          DISTRIBUTION: ${{ needs.distribution.result }}
+          DISTRIBUTION_REQUIRED: ${{ needs.scope.outputs.distribution == 'true' || needs.scope.outputs.release == 'true' || github.event_name != 'pull_request' }}
+          TEST_BUILD: ${{ needs.test_build.result }}
           UNIT: ${{ needs.unit.result }}
+          SYSTEM: ${{ needs.system.result }}
           INTEGRATION: ${{ needs.integration.result }}
+          IMAGE: ${{ needs.image.result }}
+          IMAGE_REQUIRED: ${{ needs.scope.outputs.image == 'true' || github.event_name != 'pull_request' }}
+          PYTHON: ${{ needs.python.result }}
           CONTRACT: ${{ needs.contract.result }}
           RELEASE_SMOKE: ${{ needs.release_smoke.result }}
         run: |
@@ -287,10 +461,20 @@ jobs:
           test "${SCOPE}" = "success"
           if test "${FULL}" = "true"; then
             test "${TARGETED}" = "skipped"
-            results=("${QUALITY}" "${UNIT}" "${INTEGRATION}" "${CONTRACT}" "${RELEASE_SMOKE}")
+            results=("${QUALITY}" "${VERIFIED_BUILD}" "${TEST_BUILD}" "${UNIT}" "${SYSTEM}" "${INTEGRATION}" "${PYTHON}" "${CONTRACT}" "${RELEASE_SMOKE}")
+            if test "${IMAGE_REQUIRED}" = "true"; then
+              test "${IMAGE}" = "success"
+            else
+              test "${IMAGE}" = "skipped"
+            fi
+            if test "${DISTRIBUTION_REQUIRED}" = "true"; then
+              test "${DISTRIBUTION}" = "success"
+            else
+              test "${DISTRIBUTION}" = "skipped"
+            fi
           else
             test "${TARGETED}" = "success"
-            results=("${QUALITY}" "${UNIT}" "${INTEGRATION}" "${CONTRACT}" "${RELEASE_SMOKE}")
+            results=("${QUALITY}" "${VERIFIED_BUILD}" "${DISTRIBUTION}" "${TEST_BUILD}" "${UNIT}" "${SYSTEM}" "${INTEGRATION}" "${IMAGE}" "${PYTHON}" "${CONTRACT}" "${RELEASE_SMOKE}")
             for result in "${results[@]}"; do test "${result}" = "skipped"; done
             exit 0
           fi

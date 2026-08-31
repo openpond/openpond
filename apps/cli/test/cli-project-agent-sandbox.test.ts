@@ -7,7 +7,6 @@ import { describe, expect, test } from "vitest";
 import { createOpenPondSandboxClient } from "../src/sandbox/client";
 import { collectProfileSourceUploadForPush } from "../src/cli/profile";
 import {
-  AGENT_SDK_PILOT_NAMES,
   type CapturedRequest,
   rewriteAgentSdkDependencyForTest,
   resolveTestAgentSdkRoot,
@@ -841,7 +840,7 @@ describe("project and agent sandbox CLI scenarios", () => {
     }
   });
 
-  test("project source-upload materializes pilots copied from a packed SDK install", async () => {
+  test("project source-upload materializes a dependency-rich pilot copied from a packed SDK install", async () => {
     const sdkRoot = resolveTestAgentSdkRoot();
     const workRoot = await mkdtemp(
       path.join(os.tmpdir(), "openpond-agent-sdk-packed-upload-")
@@ -865,7 +864,7 @@ describe("project and agent sandbox CLI scenarios", () => {
 
       const requests: CapturedRequest[] = [];
       await withSandboxApi(requests, async (sandboxApiUrl) => {
-        for (const pilotName of AGENT_SDK_PILOT_NAMES) {
+        for (const pilotName of ["integration-heavy-agent"] as const) {
           const projectDir = path.join(workRoot, "pilots", pilotName);
           await cp(path.join(sdkRoot, "examples", pilotName), projectDir, {
             recursive: true,

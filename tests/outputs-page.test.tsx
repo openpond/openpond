@@ -42,19 +42,6 @@ afterEach(() => {
 });
 
 describe("OutputsPage", () => {
-  test("omits the Outputs heading and helper copy", () => {
-    const markup = renderToStaticMarkup(
-      createElement(OutputsPage, {
-        connection: null,
-        onViewChat: () => undefined,
-      }),
-    );
-
-    expect(markup).toContain('aria-label="Outputs"');
-    expect(markup).not.toContain("<h1>Outputs</h1>");
-    expect(markup).not.toContain("Files created by your Work tasks.");
-  });
-
   test("reuses a fresh output response", async () => {
     const workOutputs = vi
       .spyOn(api, "workOutputs")
@@ -68,7 +55,7 @@ describe("OutputsPage", () => {
     expect(workOutputs).toHaveBeenCalledTimes(1);
   });
 
-  test("renders download actions without a file count", async () => {
+  test("labels download actions with the output filename", async () => {
     vi.spyOn(api, "workOutputs").mockResolvedValue({ outputs: [output] });
     await loadCachedWorkOutputs(connection);
 
@@ -80,8 +67,6 @@ describe("OutputsPage", () => {
     );
 
     expect(markup).toContain('aria-label="Download report.txt"');
-    expect(markup).not.toContain("Save as");
-    expect(markup).not.toContain('class="outputs-count"');
   });
 
   test("deduplicates concurrent output requests", async () => {

@@ -293,6 +293,7 @@ interface Window {
     copyRecentLogs?: (lineLimit?: number) => Promise<{ ok: boolean; lines?: number; error?: string }>;
     exportDiagnostics?: () => Promise<{ ok: boolean; path?: string; error?: string }>;
     selectFolder?: () => Promise<{ canceled: boolean; path: string | null }>;
+    selectTasksetPackage?: () => Promise<{ canceled: boolean; path: string | null }>;
     requestMicrophoneAccess?: () => Promise<boolean>;
     logRendererError?: (payload: unknown) => Promise<boolean>;
     minimizeWindow?: () => Promise<boolean>;

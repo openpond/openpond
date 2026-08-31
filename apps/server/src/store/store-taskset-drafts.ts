@@ -1,13 +1,17 @@
+import { cp, lstat, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import {
   TasksetDraftSchema,
+  type Taskset,
   type TasksetDraft,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import {
   hashTasksetDraftPackage,
   readTasksetDraftPackage,
+  buildTaskset,
+  sha256,
   writeTasksetDraftPackage,
 } from "@openpond/taskset-sdk";
 import { z } from "zod";
@@ -60,6 +64,107 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
     });
     await this.savePointer(pointer);
     return persistedDraft;
+  }
+
+  async importTasksetDraftPackage(input: {
+    packagePath: string;
+    profileId: string;
+  }): Promise<TasksetDraft> {
+    const sourcePath = path.resolve(input.packagePath);
+    const sourceStats = await stat(sourcePath);
+    const sourceDirectory = sourceStats.isDirectory()
+      ? sourcePath
+      : path.dirname(sourcePath);
+    await assertRegularPackageTree(sourceDirectory);
+    const sourceHash = await hashTasksetDraftPackage(sourceDirectory);
+    const sourceDraft = await readTasksetDraftPackage(sourceDirectory);
+    const existing = await this.getTasksetDraft(sourceDraft.id);
+    if (existing) {
+      const imported = existing.metadata.importedTasksetPackage;
+      if (
+        imported
+        && typeof imported === "object"
+        && !Array.isArray(imported)
+        && (imported as Record<string, unknown>).packageHash === sourceHash
+        && existing.profileId === input.profileId
+      ) {
+        return existing;
+      }
+      throw new Error(
+        `Taskset draft ${sourceDraft.id} already exists. Import a package with a distinct Taskset id.`,
+      );
+    }
+    const importedDraft = TasksetDraftSchema.parse({
+      ...sourceDraft,
+      profileId: input.profileId,
+      status: "draft",
+      revision: 1,
+      publishedTasksetRef: null,
+      metadata: {
+        ...sourceDraft.metadata,
+        importedTasksetPackage: {
+          packageHash: sourceHash,
+          importedAt: new Date().toISOString(),
+        },
+      },
+      updatedAt: new Date().toISOString(),
+    });
+    const workspacePath = this.workspacePath(importedDraft.id);
+    const temporaryPath = `${workspacePath}.import-${process.pid}-${Date.now()}`;
+    await mkdir(path.dirname(workspacePath), { recursive: true });
+    try {
+      await cp(sourceDirectory, temporaryPath, {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+        preserveTimestamps: true,
+      });
+      await writeTasksetDraftPackage(importedDraft, temporaryPath);
+      await rename(temporaryPath, workspacePath);
+    } catch (error) {
+      await rm(temporaryPath, { recursive: true, force: true });
+      throw error;
+    }
+    const pointer = TasksetDraftPointerSchema.parse({
+      schemaVersion: "openpond.tasksetDraftPointer.v1",
+      id: importedDraft.id,
+      profileId: importedDraft.profileId,
+      status: importedDraft.status,
+      revision: importedDraft.revision,
+      workspacePath,
+      packageHash: await hashTasksetDraftPackage(workspacePath),
+      publishedTasksetRef: importedDraft.publishedTasksetRef,
+      createdAt: importedDraft.createdAt,
+      updatedAt: importedDraft.updatedAt,
+    });
+    await this.savePointer(pointer);
+    return importedDraft;
+  }
+
+  async materializePublishedTasksetPackage(input: {
+    draftId: string;
+    taskset: Taskset;
+  }): Promise<string> {
+    const workspace = await this.getTasksetDraftWorkspace(input.draftId);
+    if (!workspace) {
+      throw new Error(`Taskset draft ${input.draftId} workspace was not found.`);
+    }
+    await assertRegularPackageTree(workspace.workspacePath);
+    const tasksetRoot = path.join(
+      path.dirname(this.storePath),
+      "training",
+      "tasksets",
+      input.taskset.id,
+    );
+    await mkdir(tasksetRoot, { recursive: true });
+    await cp(workspace.workspacePath, tasksetRoot, {
+      recursive: true,
+      force: true,
+      preserveTimestamps: true,
+    });
+    await buildTaskset(input.taskset, tasksetRoot);
+    await verifyPublishedTasksetAssets(tasksetRoot, input.taskset);
+    return tasksetRoot;
   }
 
   async getTasksetDraft(id: string): Promise<TasksetDraft | null> {
@@ -168,5 +273,45 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
         pointer.updatedAt,
       ],
     );
+  }
+}
+
+async function assertRegularPackageTree(directory: string): Promise<void> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      throw new Error(`Taskset packages cannot contain symbolic links: ${entryPath}`);
+    }
+    if (entry.isDirectory()) {
+      await assertRegularPackageTree(entryPath);
+      continue;
+    }
+    if (!entry.isFile()) {
+      throw new Error(`Taskset packages may contain only files and directories: ${entryPath}`);
+    }
+  }
+}
+
+async function verifyPublishedTasksetAssets(
+  tasksetRoot: string,
+  taskset: Taskset,
+): Promise<void> {
+  const assetRoot = path.resolve(tasksetRoot, "assets");
+  for (const task of taskset.tasks) {
+    for (const asset of task.assets ?? []) {
+      const assetPath = path.resolve(tasksetRoot, asset.artifactRef);
+      if (assetPath === assetRoot || !assetPath.startsWith(`${assetRoot}${path.sep}`)) {
+        throw new Error(`Taskset asset ${asset.id} escapes the package assets directory.`);
+      }
+      const status = await lstat(assetPath);
+      if (!status.isFile() || status.isSymbolicLink()) {
+        throw new Error(`Taskset asset ${asset.id} is not a regular file.`);
+      }
+      const bytes = await readFile(assetPath);
+      if (bytes.byteLength !== asset.sizeBytes || sha256(bytes) !== asset.sha256) {
+        throw new Error(`Taskset asset ${asset.id} does not match its immutable manifest.`);
+      }
+    }
   }
 }

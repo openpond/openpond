@@ -5,6 +5,7 @@ import type { AccountState, BootstrapPayload } from "@openpond/contracts";
 
 import {
   AccountEndpointDialog,
+  accountEndpointConfigForMode,
   accountEndpointSelectorForMode,
 } from "../apps/web/src/components/settings/AccountEndpointDialog";
 import {
@@ -107,6 +108,28 @@ describe("AccountSettingsSection", () => {
     expect(accountEndpointSelectorForMode("update", activeAccount)).toEqual({
       handle: "qa-user-3",
       currentBaseUrl: "https://openpond.ai",
+    });
+  });
+
+  test("preserves an existing account's endpoint configuration when updating it", () => {
+    const stagingAccount = {
+      handle: "qa-user-3",
+      baseUrl: "https://staging.openpond.ai",
+      apiBaseUrl: "https://staging-api.openpond.ai",
+      chatApiBaseUrl: "https://staging-api.openpond.ai/opchat/v1",
+      environment: "staging",
+    };
+
+    expect(accountEndpointConfigForMode("update", stagingAccount)).toEqual({
+      baseUrl: "https://staging.openpond.ai",
+      apiBaseUrl: "https://staging-api.openpond.ai",
+      chatApiBaseUrl: "https://staging-api.openpond.ai/opchat/v1",
+      environment: "staging",
+    });
+    expect(accountEndpointConfigForMode("connect", stagingAccount)).toEqual({
+      baseUrl: "https://openpond.ai",
+      apiBaseUrl: "https://api.openpond.ai",
+      environment: "production",
     });
   });
 
@@ -325,7 +348,7 @@ describe("AccountSettingsSection", () => {
     expect(html).toContain("Connect account");
   });
 
-  test("uses production endpoints when updating an account", () => {
+  test("does not expose endpoint fields when updating an account", () => {
     const html = renderToStaticMarkup(
       createElement(AccountEndpointDialog, {
         account: {

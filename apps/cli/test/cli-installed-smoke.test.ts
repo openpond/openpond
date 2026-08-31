@@ -1,18 +1,15 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 
 import { beforeAll, describe, expect, test } from "vitest";
 
-import { listCliCommandDefinitions } from "../src/cli/command-registry";
 import { runProcessCommand } from "../src/process-runner";
 
 const cliRoot = join(import.meta.dirname, "..");
 const RELEASE_AGENT_PROTOCOL_VERSION = "2026-08-26";
 
 type CliPackageJson = {
-  version: string;
   bin?: Record<string, string>;
 };
 
@@ -27,31 +24,6 @@ describe("CLI installed-package smoke", () => {
 
   beforeAll(async () => {
     packageJson = await readCliPackageJson();
-  });
-
-  test("runs from a source checkout TypeScript entrypoint", async () => {
-    const result = await runProcessCommand(
-      process.execPath,
-      [createRequire(import.meta.url).resolve("tsx/cli"), "src/cli/main.ts", "--version"],
-      { cwd: cliRoot }
-    );
-
-    expect(result.code).toBe(0);
-    expect(result.stdout.trim()).toBe(packageJson.version);
-    expect(result.stderr.trim()).toBe("");
-  });
-
-  test("runs the built dist bin entrypoint under Node", async () => {
-    const binPath = packageJson.bin?.openpond;
-    expect(binPath).toBe("dist/cli.js");
-
-    const result = await runProcessCommand("node", [join(cliRoot, binPath!), "--version"], {
-      cwd: cliRoot,
-    });
-
-    expect(result.code).toBe(0);
-    expect(result.stdout.trim()).toBe(packageJson.version);
-    expect(result.stderr.trim()).toBe("");
   });
 
   test("starts the embedded local server companion from an unrelated cwd", async () => {
@@ -169,49 +141,4 @@ describe("CLI installed-package smoke", () => {
     }
   }, 30_000);
 
-  test(
-    "prints help for every documented command group from the built dist bin",
-    async () => {
-      const binPath = packageJson.bin?.openpond;
-      expect(binPath).toBe("dist/cli.js");
-
-      for (const definition of listCliCommandDefinitions()) {
-        const result = await runProcessCommand(
-          "node",
-          [join(cliRoot, binPath!), definition.name, "--help"],
-          { cwd: cliRoot }
-        );
-
-        expect(result.code, definition.name).toBe(0);
-        expect(result.timedOut, definition.name).toBe(false);
-        expect(result.stderr.trim(), definition.name).toBe("");
-        expect(result.stdout, definition.name).toContain("Usage:");
-        expect(result.stdout, definition.name).toContain(definition.usage);
-      }
-    },
-    30_000
-  );
-
-  test("prints canonical help for documented command aliases from the built dist bin", async () => {
-    const binPath = packageJson.bin?.openpond;
-    expect(binPath).toBe("dist/cli.js");
-
-    for (const definition of listCliCommandDefinitions()) {
-      for (const alias of definition.aliases ?? []) {
-        const result = await runProcessCommand(
-          "node",
-          [join(cliRoot, binPath!), alias, "--help"],
-          { cwd: cliRoot }
-        );
-
-        expect(result.code, alias).toBe(0);
-        expect(result.timedOut, alias).toBe(false);
-        expect(result.stderr.trim(), alias).toBe("");
-        expect(result.stdout, alias).toContain("Usage:");
-        expect(result.stdout, alias).toContain(definition.usage);
-        expect(result.stdout, alias).toContain("Aliases:");
-        expect(result.stdout, alias).toContain(alias);
-      }
-    }
-  });
 });

@@ -737,6 +737,17 @@ Options:
   --retention-days <integer>
   --yes
 ```
+## taskset
+
+```text
+Usage:
+  openpond taskset import <package-directory|taskset.json> [--profile <id>] [--json]
+
+Options:
+  --api-base-url <string>
+  --json
+  --profile <string>
+```
 ## opchat
 
 ```text

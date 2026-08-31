@@ -317,7 +317,7 @@ export function AccountSettingsSection({
         currentBaseUrl: input.currentBaseUrl,
         baseUrl: input.baseUrl,
         apiBaseUrl: input.apiBaseUrl,
-        chatApiBaseUrl: null,
+        chatApiBaseUrl: input.chatApiBaseUrl,
         environment: customEnvironmentName(input.environment),
         setActive: endpointDialogAccount.isActive,
       });

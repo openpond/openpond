@@ -54,6 +54,7 @@ import {
   type ManagedTrainingAccess as Access,
   type ManagedTrainingJob as ManagedJob,
 } from "./openpond-managed-training-adapter-support.js";
+import { resolveTasksetEvaluationAssetBytes } from "./taskset-work-assets.js";
 
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
@@ -472,6 +473,21 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     if (validationTasks.length === 0) {
       throw new Error("OpenPond Managed requires at least one private validation task.");
     }
+    const validationAssetBytes = taskset.environment.kind === "work"
+      ? await resolveTasksetEvaluationAssetBytes({
+          storeDir: this.dependencies.storeDir,
+          taskset,
+        })
+      : new Map<string, Uint8Array>();
+    const validationAssets = [...validationAssetBytes.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([assetPath, value]) => ({
+        path: assetPath,
+        sha256: sha256(value),
+        sizeBytes: value.byteLength,
+        encoding: "base64" as const,
+        content: Buffer.from(value).toString("base64"),
+      }));
     const bundleDirectory = path.join(
       this.dependencies.storeDir,
       "training",
@@ -556,6 +572,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         files,
       },
       validationTasks,
+      validationAssets,
     };
     const client = this.trainingClient(access);
     const stagedContent = {
