@@ -104,7 +104,7 @@ jobs:
           timeout 5m sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends imagemagick
 
       - name: Build SDK for affected tests
-        if: needs.scope.outputs.affected_tests == 'true' || needs.scope.outputs.node_contracts == 'true'
+        if: needs.scope.outputs.affected_tests == 'true' || needs.scope.outputs.node_contracts == 'true' || needs.scope.outputs.distribution == 'true'
         run: pnpm run build:sdk
 
       - name: Run affected tests
