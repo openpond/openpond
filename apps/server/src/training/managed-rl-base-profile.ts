@@ -55,9 +55,23 @@ export function versionModelProjectOntoManagedRlBase(
     modelAssetId: null,
     source: "managed" as const,
   };
+  const recipe = parsed.trainingSetup.recipe;
+  const versionedRecipe =
+    recipe?.schemaVersion === "openpond.rftRecipe.v1"
+      ? {
+          ...recipe,
+          baseModel: {
+            id: MANAGED_RL_BASE_PROFILE.modelId,
+            revision: MANAGED_RL_BASE_PROFILE.revision,
+            tokenizerRevision: MANAGED_RL_BASE_PROFILE.tokenizerRevision,
+            chatTemplateHash: MANAGED_RL_BASE_PROFILE.chatTemplateHash,
+          },
+        }
+      : recipe;
   if (
     resolveManagedRlBaseProfile(parsed.trainingSetup.baseModel) &&
-    resolveManagedRlBaseProfile(parsed.defaultBaseModel)
+    resolveManagedRlBaseProfile(parsed.defaultBaseModel) &&
+    versionedRecipe === recipe
   ) {
     return parsed;
   }
@@ -65,7 +79,11 @@ export function versionModelProjectOntoManagedRlBase(
     ...parsed,
     revision: parsed.revision + 1,
     defaultBaseModel: baseModel,
-    trainingSetup: { ...parsed.trainingSetup, baseModel },
+    trainingSetup: {
+      ...parsed.trainingSetup,
+      baseModel,
+      recipe: versionedRecipe,
+    },
     updatedAt: timestamp.toISOString(),
   });
 }
