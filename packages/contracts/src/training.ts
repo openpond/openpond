@@ -253,6 +253,11 @@ export const RftRecipeSchema = z.object({
   optimizer: z.object({
     learningRate: z.number().positive(),
     maxSteps: z.number().int().positive().max(100_000),
+    clipRange: z.number().positive().max(1).default(0.2),
+    iterations: z.number().int().min(2).max(16).default(2),
+    microbatchSize: z.number().int().positive().max(64).default(1),
+    gradientAccumulationSteps: z.number().int().positive().max(64).default(1),
+    advantageEpsilon: z.number().positive().max(0.01).default(1e-8),
   }),
   loss: z
     .object({

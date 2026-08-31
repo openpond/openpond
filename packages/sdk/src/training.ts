@@ -162,7 +162,11 @@ const LearnedRewardSourceSchema = z
   .object({
     kind: z.literal("learned_reward"),
     rewardModelVersion: ModelProjectImmutableRefSchema,
-    qualificationReport: ModelProjectImmutableRefSchema.nullable(),
+    qualificationReport: ModelProjectImmutableRefSchema.nullable().default(null),
+    evaluationReferences: z
+      .array(ModelProjectImmutableRefSchema)
+      .max(1_000)
+      .default([]),
     scorerArtifact: z
       .object({
         artifactRef: z.string().trim().min(1).max(2_000),
@@ -274,6 +278,14 @@ export const TrainingJobSchema = z
     phase: z.string().trim().min(1).max(200),
     version: z.number().int().nonnegative(),
     progress: z.number().min(0).max(1),
+    rolloutProgress: z
+      .object({
+        groupsCompleted: z.number().int().nonnegative(),
+        groupsTarget: z.number().int().nonnegative(),
+        optimizerUpdatesApplied: z.number().int().nonnegative(),
+        optimizerUpdatesSkipped: z.number().int().nonnegative(),
+      })
+      .strict(),
     accruedSpendUsd: z.number().nonnegative(),
     terminalReason: z.string().trim().min(1).max(5_000).nullable(),
     createdAt: TimestampSchema,

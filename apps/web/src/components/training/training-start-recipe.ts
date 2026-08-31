@@ -72,7 +72,15 @@ export function trainingRecipe(input: {
       topP: 0.95,
       seed: 17,
     },
-    optimizer: { learningRate: 0.00001, maxSteps: input.maxSteps },
+    optimizer: {
+      learningRate: 0.00001,
+      maxSteps: input.maxSteps,
+      clipRange: 0.2,
+      iterations: 2,
+      microbatchSize: 1,
+      gradientAccumulationSteps: groupSize,
+      advantageEpsilon: 1e-8,
+    },
     loss: {
       method: input.rftLossMethod ?? defaultRftLossMethod(input.taskset),
       klBeta: input.klBeta,

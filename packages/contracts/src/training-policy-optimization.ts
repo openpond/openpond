@@ -27,7 +27,12 @@ export const GrpoOptimizerSchema = z.object({
   method: z.literal("grpo"),
   groupSize: z.number().int().min(2).max(128),
   normalization: z.literal("group_standardized"),
+  advantageEpsilon: z.number().positive().max(0.01).default(1e-8),
   loss: RftLossMethodSchema,
+  clipRange: z.number().positive().max(1).default(0.2),
+  iterations: z.number().int().min(2).max(16).default(2),
+  microbatchSize: z.number().int().positive().max(128).default(1),
+  gradientAccumulationSteps: z.number().int().positive().max(128).default(1),
 });
 
 export const PpoOptimizerSchema = z.object({
@@ -49,7 +54,15 @@ export const PolicyOptimizerSchema = z.discriminatedUnion("method", [
 
 export const LearnedPreferenceRewardBindingSchema = z.object({
   rewardModelVersion: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
-  qualificationReport: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
+  qualificationReport: z
+    .object({ id: IdSchema, contentHash: HashSchema })
+    .strict()
+    .nullable()
+    .default(null),
+  evaluationReferences: z
+    .array(z.object({ id: IdSchema, contentHash: HashSchema }).strict())
+    .max(1_000)
+    .default([]),
   checkpoint: z.object({
     id: IdSchema,
     contentHash: HashSchema,

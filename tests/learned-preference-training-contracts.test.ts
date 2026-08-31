@@ -298,6 +298,7 @@ describe("learned preference training contracts", () => {
     const learnedPreference = {
       rewardModelVersion: ref("reward-r0"),
       qualificationReport: ref("synthetic-smoke-report"),
+      evaluationReferences: [],
       checkpoint: {
         id: "reward-checkpoint",
         contentHash: HASH,

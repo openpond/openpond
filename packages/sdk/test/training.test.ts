@@ -88,6 +88,12 @@ function job() {
     phase: "admission",
     version: 0,
     progress: 0,
+    rolloutProgress: {
+      groupsCompleted: 0,
+      groupsTarget: 16,
+      optimizerUpdatesApplied: 0,
+      optimizerUpdatesSkipped: 0,
+    },
     accruedSpendUsd: 0,
     terminalReason: null,
     createdAt: NOW,
