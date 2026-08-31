@@ -1,6 +1,8 @@
-import { readFile, readdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import {
   ROOT_IMAGE_TESTS,
@@ -9,6 +11,7 @@ import {
 } from "./test-suite-manifest";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const execFileAsync = promisify(execFile);
 const unitRoots = ["tests", "apps/web/src", "packages/cloud/src"] as const;
 const explicitUnitMarker = "@test-tier unit";
 const boundaryPatterns = [
@@ -19,9 +22,11 @@ const boundaryPatterns = [
 ] as const;
 
 async function main(): Promise<void> {
-  const candidates = (
-    await Promise.all(unitRoots.map((directory) => walkTestFiles(directory)))
-  ).flat();
+  const trackedFiles = await listTrackedFiles();
+  const candidates = [...trackedFiles]
+    .filter((file) => file.endsWith(".test.ts"))
+    .filter((file) => unitRoots.some((directory) => file.startsWith(`${directory}/`)))
+    .sort();
   const systemTests = new Set(
     ROOT_SYSTEM_TESTS.filter((entry) => !entry.includes("*")),
   );
@@ -29,10 +34,8 @@ async function main(): Promise<void> {
   const failures: string[] = [];
 
   for (const listed of [...systemTests, ...specialTests]) {
-    try {
-      await readFile(path.join(root, listed));
-    } catch {
-      failures.push(`${listed}: listed in the test manifest but the file does not exist`);
+    if (!trackedFiles.has(listed)) {
+      failures.push(`${listed}: listed in the test manifest but is not tracked by Git`);
     }
   }
 
@@ -56,19 +59,13 @@ async function main(): Promise<void> {
   console.log(`Test tier policy passed for ${candidates.length} fast-test candidates.`);
 }
 
-async function walkTestFiles(relativeDirectory: string): Promise<string[]> {
-  const absoluteDirectory = path.join(root, relativeDirectory);
-  const entries = await readdir(absoluteDirectory, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    const relativePath = path.posix.join(relativeDirectory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...await walkTestFiles(relativePath));
-    } else if (entry.isFile() && entry.name.endsWith(".test.ts")) {
-      files.push(relativePath);
-    }
-  }
-  return files.sort();
+async function listTrackedFiles(): Promise<Set<string>> {
+  const { stdout } = await execFileAsync(
+    "git",
+    ["ls-files", "-z", "--", ...unitRoots, "apps/server/src"],
+    { cwd: root, encoding: "utf8" },
+  );
+  return new Set(stdout.split("\0").filter(Boolean));
 }
 
 void main().catch((error) => {

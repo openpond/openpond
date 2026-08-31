@@ -73,7 +73,6 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/renderer-perf-budgets.test.ts",
   "tests/resolved-training-bundle-release-isolation.test.ts",
   "tests/reward-model-qualification-store.test.ts",
-  "tests/rfp-taskset-work-proof.test.ts",
   "tests/runtime-event-bus.test.ts",
   "tests/scripted-chat-provider.test.ts",
   "tests/server-event-page.test.ts",
