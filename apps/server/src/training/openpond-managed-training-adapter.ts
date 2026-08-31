@@ -59,6 +59,47 @@ const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
 const ACTIVE_EVIDENCE_REFRESH_TTL_MS = 1_500;
 
+export function continuationResumeFrom(recipe: unknown) {
+  const recipeRecord = recordOrEmpty(recipe);
+  if (!("continuation" in recipeRecord)) return null;
+  const continuation = requiredRecord(
+    recipeRecord.continuation,
+    "Managed continuation",
+  );
+  if (
+    continuation.schemaVersion !==
+      "openpond.crossJobContinuationRequest.v1" ||
+    !["continue", "reset"].includes(String(continuation.optimizerMode))
+  ) {
+    throw new Error("Managed continuation contract is invalid.");
+  }
+  const parentArtifact = requiredRef(
+    continuation.parentArtifact,
+    "Managed continuation parent artifact",
+  );
+  const sourceArtifact = requiredRecord(
+    continuation.sourceArtifact,
+    "Managed continuation source artifact",
+  );
+  requiredStringValue(sourceArtifact.jobId, "Managed continuation source Job");
+  requiredStringValue(
+    sourceArtifact.artifactId,
+    "Managed continuation source artifact id",
+  );
+  requiredStringValue(
+    sourceArtifact.checkpointId,
+    "Managed continuation source checkpoint",
+  );
+  const sourceHash = requiredHash(
+    sourceArtifact.contentHash,
+    "Managed continuation source artifact hash",
+  );
+  if (sourceHash !== parentArtifact.contentHash) {
+    throw new Error("Managed continuation source identity is invalid.");
+  }
+  return parentArtifact;
+}
+
 export type OpenPondManagedTrainingAdapterDependencies = {
   store: SqliteStore;
   storeDir: string;
@@ -606,6 +647,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           grader: { id: grader.id, contentHash: contentHash(grader) },
           composer: null,
         };
+    const resumeFrom = continuationResumeFrom(plan.recipe);
     const jobContent: Omit<TrainingJobSubmission, "contentHash"> = {
       schemaVersion: "openpond.trainingJobSubmission.v2",
       idempotencyKey: `openpond-training-v2:${plan.manifest.contentHash}`,
@@ -641,7 +683,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         baseModel,
         recipe: plan.recipe,
         rewardSource,
-        resumeFrom: null,
+        resumeFrom,
       },
       requestedCapabilities: [
         { id: "managed_rl.policy.grpo", version: "1", required: true },

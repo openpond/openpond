@@ -1,6 +1,7 @@
 import {
   ModelProjectSchema,
   ResolvedTrainingPlanSchema,
+  RftRecipeSchema,
   TasksetSchema,
   TrainingApprovalSchema,
 } from "@openpond/contracts";
@@ -9,7 +10,10 @@ import { buildTasksetTrainingBundle, createTrainingPlan } from "@openpond/traini
 import { trainingExecutionReceiptHash } from "openpond-sdk/training";
 import { describe, expect, test, vi } from "vitest";
 
-import { OpenPondManagedTrainingAdapter } from "../apps/server/src/training/openpond-managed-training-adapter.js";
+import {
+  OpenPondManagedTrainingAdapter,
+  continuationResumeFrom,
+} from "../apps/server/src/training/openpond-managed-training-adapter.js";
 import { publishRunGraph } from "../apps/server/src/training/portable-model-run-service.js";
 import { managedRftRecipe, rftTasksetFixture } from "./helpers/managed-training-fixtures.js";
 import { FIXED_TIME, withTrainingStore } from "./helpers/training-fixtures.js";
@@ -22,6 +26,36 @@ const MANAGED_MODEL = {
 } as const;
 
 describe("OpenPond Managed training adapter", () => {
+  test("projects an explicit cross-Job continuation into resumeFrom", () => {
+    const parentArtifact = {
+      id: "managed-model-artifact-p1",
+      contentHash: "9".repeat(64),
+    };
+    const recipe = RftRecipeSchema.parse({
+      ...managedRftRecipe(),
+        continuation: {
+          schemaVersion: "openpond.crossJobContinuationRequest.v1",
+          parentArtifact,
+          sourceArtifact: {
+            jobId: "sandbox-job-week-0",
+            artifactId: "sandbox-artifact-p1",
+            checkpointId: "sandbox-checkpoint-p1",
+            contentHash: parentArtifact.contentHash,
+          },
+          optimizerMode: "continue",
+        },
+    });
+    expect(recipe.continuation).toBeDefined();
+    expect(continuationResumeFrom(recipe)).toEqual(parentArtifact);
+    expect(
+      continuationResumeFrom({
+        schemaVersion: "openpond.grpoRecipe.v1",
+        method: "grpo",
+        parameterization: "lora",
+      }),
+    ).toBeNull();
+  });
+
   test("cancels a managed Reward Model job with optimistic version protection", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (request, init) => {
       expect(String(request)).toBe("https://api.openpond.ai/v1/training/jobs/job-rm0/cancel");

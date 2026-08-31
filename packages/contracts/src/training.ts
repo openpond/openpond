@@ -287,6 +287,22 @@ export const RftRecipeSchema = z.object({
       .max(10 * 1024 * 1024),
   }),
   policyOptimization: PolicyOptimizationContractSchema.nullable().default(null),
+  continuation: z
+    .object({
+      schemaVersion: z.literal("openpond.crossJobContinuationRequest.v1"),
+      parentArtifact: ImmutableReleaseRefSchema,
+      sourceArtifact: z
+        .object({
+          jobId: IdSchema,
+          artifactId: IdSchema,
+          checkpointId: IdSchema,
+          contentHash: HashSchema,
+        })
+        .strict(),
+      optimizerMode: z.enum(["continue", "reset"]),
+    })
+    .strict()
+    .optional(),
 });
 
 export const DpoRecipeSchema = z.object({
