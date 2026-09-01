@@ -32,6 +32,8 @@ export function LabContinualLearningSeries({
 }) {
   const entries = useMemo(() => continualSeries(runs, state), [runs, state]);
   const [details, setDetails] = useState<Map<string, TrainingRunDetail>>(new Map());
+  const totalCost = entries.reduce((total, entry) =>
+    total + (entry.jobId ? details.get(entry.jobId)?.managedEvidence?.cost.totalUsd ?? 0 : 0), 0);
 
   useEffect(() => {
     let disposed = false;
@@ -60,7 +62,7 @@ export function LabContinualLearningSeries({
           <h2>Continual learning series</h2>
           <p>Each pass trains only on its disclosed cohort; evaluations retain the frozen panel.</p>
         </div>
-        <span>{entries.length} checkpoints</span>
+        <span>{entries.length} passes · {formatCost(totalCost)}</span>
       </div>
       <div className="training-table-wrap">
         <table className="training-data-table">
@@ -72,7 +74,7 @@ export function LabContinualLearningSeries({
               <th>New tasks</th>
               <th>Frozen eval</th>
               <th>Status</th>
-              <th>Updates</th>
+              <th>Applied / skipped</th>
               <th>Base</th>
               <th>Candidate</th>
               <th>Delta</th>
@@ -83,7 +85,7 @@ export function LabContinualLearningSeries({
             {entries.map((entry) => {
               const detail = entry.jobId ? details.get(entry.jobId) ?? null : null;
               const scores = evaluationScores(detail);
-              const committed = detail?.managedEvidence?.progress.committedOptimizerSteps;
+              const progress = detail?.managedEvidence?.progress;
               return (
                 <tr key={entry.run.id}>
                   <td>
@@ -101,7 +103,7 @@ export function LabContinualLearningSeries({
                   <td>{entry.trainTasks}</td>
                   <td>{entry.evaluationTasks}</td>
                   <td><LabStatusBadge label={statusLabel(entry.run.status)} value={entry.run.status} /></td>
-                  <td>{committed ?? "—"}</td>
+                  <td>{formatUpdates(progress, entry.run.status)}</td>
                   <td>{formatScore(scores.base)}</td>
                   <td>{formatScore(scores.candidate)}</td>
                   <td>{formatDelta(scores.base, scores.candidate)}</td>
@@ -217,4 +219,15 @@ function formatDelta(base: number | null, candidate: number | null): string {
 
 function formatCost(value: number | null): string {
   return value === null ? "—" : `$${value.toFixed(3)}`;
+}
+
+function formatUpdates(
+  progress: NonNullable<TrainingRunDetail["managedEvidence"]>["progress"] | undefined,
+  status: ModelRun["status"],
+): string {
+  if (!progress) return "—";
+  const skipped = status === "succeeded"
+    ? Math.max(0, progress.targetOptimizerSteps - progress.committedOptimizerSteps)
+    : null;
+  return `${progress.committedOptimizerSteps} / ${skipped ?? "—"}`;
 }
