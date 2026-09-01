@@ -843,10 +843,13 @@ function validEntryEvidenceEvolution(
   current: ModelComparisonSeriesEntry,
   next: ModelComparisonSeriesEntry,
 ): boolean {
+  if (validEntryRetryEvolution(current, next)) return true;
   const appendOnlyId = (before: string | null, after: string | null) =>
     before === null || before === after;
   if (
-    !appendOnlyId(current.trainingPlanId, next.trainingPlanId)
+    current.attemptOrdinal !== next.attemptOrdinal
+    || JSON.stringify(current.priorRunAttempts) !== JSON.stringify(next.priorRunAttempts)
+    || !appendOnlyId(current.trainingPlanId, next.trainingPlanId)
     || !appendOnlyId(current.modelRunId, next.modelRunId)
     || !appendOnlyId(current.modelVersionId, next.modelVersionId)
     || !appendOnlyId(current.promotionBindingId, next.promotionBindingId)
@@ -860,6 +863,45 @@ function validEntryEvidenceEvolution(
     if (!block.artifactLineageId) return true;
     return nextBlocks.get(block.id)?.artifactLineageId === block.artifactLineageId;
   });
+}
+
+function validEntryRetryEvolution(
+  current: ModelComparisonSeriesEntry,
+  next: ModelComparisonSeriesEntry,
+): boolean {
+  if (
+    (current.status !== "failed" && current.status !== "cancelled")
+    || next.status !== "ready"
+    || current.modelVersionId !== null
+    || current.evaluations.length !== 0
+    || current.decision !== null
+    || current.promotionBindingId !== null
+    || current.residualBlocks.some((block) => block.artifactLineageId !== null)
+    || next.trainingPlanId !== null
+    || next.modelRunId !== null
+    || next.modelVersionId !== null
+    || next.evaluations.length !== 0
+    || next.decision !== null
+    || next.promotionBindingId !== null
+    || next.queuedAt !== null
+    || next.startedAt !== null
+    || next.completedAt !== null
+    || JSON.stringify(current.residualBlocks) !== JSON.stringify(next.residualBlocks)
+  ) return false;
+  const hasAttempt = Boolean(current.trainingPlanId || current.modelRunId);
+  const expectedAttempts = hasAttempt
+    ? [...current.priorRunAttempts, {
+        attemptOrdinal: current.attemptOrdinal,
+        trainingPlanId: current.trainingPlanId,
+        modelRunId: current.modelRunId,
+        terminalStatus: current.status,
+        queuedAt: current.queuedAt,
+        startedAt: current.startedAt,
+        completedAt: current.completedAt ?? next.updatedAt,
+      }]
+    : current.priorRunAttempts;
+  return next.attemptOrdinal === current.attemptOrdinal + (hasAttempt ? 1 : 0)
+    && JSON.stringify(next.priorRunAttempts) === JSON.stringify(expectedAttempts);
 }
 
 export function isCheckpointResumeTransition(

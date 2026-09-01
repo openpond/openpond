@@ -206,6 +206,15 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
         throw new Error("The current Comparison Run must be terminal before retrying its release.");
       }
     }
+    if (
+      entry.modelVersionId
+      || entry.evaluations.length > 0
+      || entry.decision
+      || entry.promotionBindingId
+      || entry.residualBlocks.some((block) => block.artifactLineageId)
+    ) {
+      throw new Error("An evidence-bearing Comparison candidate cannot be reset as an execution retry.");
+    }
     const timestamp = new Date().toISOString();
     const hasAttempt = Boolean(entry.modelRunId || entry.trainingPlanId);
     const priorRunAttempts = hasAttempt

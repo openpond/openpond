@@ -172,4 +172,48 @@ describe("Model Comparison Series persistence", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("archives a terminal execution attempt before clearing its active linkage", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-comparison-retry-"));
+    const store = new SqliteStore(directory);
+    try {
+      const cancelled = ModelComparisonSeriesEntrySchema.parse({
+        ...entry(),
+        status: "cancelled",
+        trainingPlanId: "plan-attempt-1",
+        modelRunId: "run-attempt-1",
+        queuedAt: NOW,
+        startedAt: NOW,
+        completedAt: NOW,
+      });
+      await store.saveModelComparisonSeriesEntry(cancelled);
+      const retried = ModelComparisonSeriesEntrySchema.parse({
+        ...cancelled,
+        status: "ready",
+        attemptOrdinal: 2,
+        priorRunAttempts: [{
+          attemptOrdinal: 1,
+          trainingPlanId: cancelled.trainingPlanId,
+          modelRunId: cancelled.modelRunId,
+          terminalStatus: "cancelled",
+          queuedAt: cancelled.queuedAt,
+          startedAt: cancelled.startedAt,
+          completedAt: cancelled.completedAt,
+        }],
+        trainingPlanId: null,
+        modelRunId: null,
+        queuedAt: null,
+        startedAt: null,
+        completedAt: null,
+        updatedAt: "2026-09-01T12:03:00.000Z",
+      });
+      await expect(store.compareAndSwapModelComparisonSeriesEntry({
+        expectedStatus: "cancelled",
+        entry: retried,
+      })).resolves.toEqual(retried);
+    } finally {
+      await store.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });
