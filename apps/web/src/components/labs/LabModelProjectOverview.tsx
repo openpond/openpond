@@ -2,10 +2,13 @@ import type { ReactNode } from "react";
 import type {
   ModelProject,
   ModelRun,
+  TrainingStateResponse,
 } from "@openpond/contracts";
 
+import type { ClientConnection } from "../../api";
 import { formatDateTime, statusLabel } from "../training/training-model-data";
 import type { LabModelVersion } from "./lab-models";
+import { LabContinualLearningSeries } from "./LabContinualLearningSeries";
 import {
   isActiveRunStatus,
   LabRunStatusBadge,
@@ -15,16 +18,20 @@ import { LabProjectMetricCharts } from "./LabProjectMetricCharts";
 
 export function LabModelProjectOverview({
   actions,
+  connection,
   modelProject,
   modelRuns,
   onOpenRun,
+  state,
   status,
   versions,
 }: {
   actions?: ReactNode;
+  connection: ClientConnection | null;
   modelProject: ModelProject | null;
   modelRuns: ModelRun[];
   onOpenRun: (runId: string) => void;
+  state: TrainingStateResponse | null;
   status?: ReactNode;
   versions: LabModelVersion[];
 }) {
@@ -90,6 +97,12 @@ export function LabModelProjectOverview({
         title={modelProject?.name ?? "Model Project"}
       />
       <LabProjectMetricCharts runs={modelRuns} />
+      <LabContinualLearningSeries
+        connection={connection}
+        onOpenRun={onOpenRun}
+        runs={modelRuns}
+        state={state}
+      />
     </div>
   );
 }

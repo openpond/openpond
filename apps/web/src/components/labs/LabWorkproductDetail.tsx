@@ -682,6 +682,7 @@ export function LabWorkproductDetail({
                         : "Connect to hosted Team"}
                   </button>
                 ) : undefined}
+                connection={connection}
                 modelProject={modelProject}
                 modelRuns={modelLifecycleRuns}
                 onOpenRun={(runId) =>
@@ -693,6 +694,7 @@ export function LabWorkproductDetail({
                       value={modelProject.hosted ? "available" : "not_run"}
                     />
                 ) : undefined}
+                state={training.payload}
                 versions={modelVersions}
               />
             ) : null}

@@ -92,6 +92,21 @@
   font-weight: 640;
 }
 
+.labs-continual-series .training-table-wrap {
+  max-width: 100%;
+}
+
+.labs-continual-series .training-data-table th,
+.labs-continual-series .training-data-table td {
+  white-space: nowrap;
+}
+
+.labs-continual-series .labs-version-row-button small {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .labs-overview-decision-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
