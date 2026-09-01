@@ -872,6 +872,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           encodeURIComponent(candidate.id),
         sha256: candidate.contentHash,
         sizeBytes: candidate.sizeBytes,
+        metadata: candidate.metadata,
       }));
     const base = {
       runId: ref.runId,

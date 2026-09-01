@@ -235,6 +235,7 @@ export const TrainingArtifactsSchema = z
           objectRef: z.string().trim().min(1).max(2_000),
           sha256: ReleaseHashSchema,
           sizeBytes: z.number().int().nonnegative(),
+          metadata: z.record(z.string(), z.unknown()).optional(),
         })
         .strict(),
     ),

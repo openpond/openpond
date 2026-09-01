@@ -185,6 +185,7 @@ async function persistPortableArtifacts(input: {
             managedRlJobId: managedOutput.jobId,
             managedRlOutputId: managedOutput.outputId,
             managedRlTeamId: input.executionRef.tenantId ?? null,
+            managedRlOutputMetadata: portable.metadata ?? {},
           }
         : {}),
     };

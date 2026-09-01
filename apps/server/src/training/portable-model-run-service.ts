@@ -36,6 +36,7 @@ import {
 } from "./portable-model-run-lifecycle.js";
 import { resolvePortableBindings } from "./portable-training-catalog.js";
 import { resolveTasksetTrainingAssetBytes } from "./taskset-work-assets.js";
+import { comparisonSeriesTrainingRecipe } from "./comparison-series-training-recipe.js";
 
 export function createPortableModelRunService(deps: {
   store: SqliteStore;
@@ -135,6 +136,11 @@ export function createPortableModelRunService(deps: {
       ordinal: comparisonEntry.ordinal,
       releaseHash: comparisonEntry.releaseHash,
     } : null;
+    const recipe = await comparisonSeriesTrainingRecipe({
+      store: deps.store,
+      recipe: setup.recipe,
+      entry: comparisonEntry,
+    });
     const releasedHarness = await deps.resolveReleasedHarness({
       taskset,
       modelProject: sourceProject,
@@ -144,13 +150,13 @@ export function createPortableModelRunService(deps: {
       revision: sourceProject.revision + 1,
       trainingSetup: {
         ...setup,
+        recipe,
         harnessRelease: releasedHarness.harnessRelease,
         tasksetRelease: releasedHarness.tasksetRelease,
       },
       updatedAt: new Date().toISOString(),
     });
     setup = sourceProject.trainingSetup;
-    const recipe = TrainingRecipeSchema.parse(setup.recipe);
     const preparation = await deps.prepare({
       modelProjectId: sourceProject.id,
       maximumSpendUsd: input.maximumSpendUsd,
