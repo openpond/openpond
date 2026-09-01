@@ -34,6 +34,11 @@ import {
   RewardModelVersionSchema,
 } from "./model-lifecycle.js";
 import {
+  ModelComparisonEntryRefSchema,
+  ModelComparisonSeriesEntrySchema,
+  ModelComparisonSeriesSchema,
+} from "./model-comparisons.js";
+import {
   LearnedPreferenceRewardBindingSchema,
   PolicyOptimizationBudgetSchema,
   PolicyOptimizationContractSchema,
@@ -497,6 +502,7 @@ export const TrainingPlanSchema = z.object({
   modelId: IdSchema,
   tasksetId: IdSchema,
   tasksetHash: HashSchema,
+  comparisonSeriesEntry: ModelComparisonEntryRefSchema.nullable().optional(),
   harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
   modelImprovementQualification: ImmutableReleaseRefSchema.nullable().optional(),
   destinationId: TrainingDestinationIdSchema,
@@ -719,16 +725,22 @@ export const PolicyOptimizationMetricSchema = z.object({
 });
 
 export const ManagedTrainingRunEvidenceSchema = z.object({
-  schemaVersion: z.literal("openpond.managedTrainingRunEvidence.v1"),
+  schemaVersion: z.literal("openpond.managedTrainingRunEvidence.v2"),
   provider: IdSchema,
   providerRunId: IdSchema,
   state: IdSchema,
   progress: z.object({
     targetOptimizerSteps: z.number().int().nonnegative(),
     committedOptimizerSteps: z.number().int().nonnegative(),
+    skippedOptimizerSteps: z.number().int().nonnegative(),
   }),
   reward: z.object({
     finalMean: z.number().nullable(),
+    variance: z.number().nonnegative().nullable(),
+    minimum: z.number().nullable(),
+    maximum: z.number().nullable(),
+    distinctValueCount: z.number().int().nonnegative(),
+    noSignalGroupCount: z.number().int().nonnegative(),
     trajectoryCount: z.number().int().nonnegative(),
     eligibleTrajectoryCount: z.number().int().nonnegative(),
   }),
@@ -742,6 +754,8 @@ export const ManagedTrainingRunEvidenceSchema = z.object({
     gpuType: z.string().trim().min(1).max(300).nullable(),
     gpuCount: z.number().int().nonnegative().nullable(),
     hourlyCostUsd: z.number().nonnegative().nullable(),
+    durationSeconds: z.number().nonnegative().nullable(),
+    gpuSeconds: z.number().nonnegative().nullable(),
   }),
   cost: z.object({
     totalUsd: z.number().nonnegative().nullable(),
@@ -754,6 +768,9 @@ export const ManagedTrainingRunEvidenceSchema = z.object({
       sizeBytes: z.number().int().nonnegative().nullable(),
     })
     .nullable(),
+  movement: z.object({
+    adapterDeltaNorm: z.number().nonnegative().nullable(),
+  }),
   evaluations: z.array(
     z.object({
       kind: z.enum(["baseline", "candidate"]),
@@ -955,6 +972,8 @@ export const TrainingStateResponseSchema = z.object({
   modelProjects: z.array(ModelProjectSchema).default([]),
   modelVersions: z.array(ModelVersionSchema).default([]),
   modelRuns: z.array(ModelRunSchema).default([]),
+  comparisonSeries: z.array(ModelComparisonSeriesSchema).default([]),
+  comparisonSeriesEntries: z.array(ModelComparisonSeriesEntrySchema).default([]),
   rewardModelVersions: z.array(RewardModelVersionSchema).default([]),
   rewardModelRuns: z.array(RewardModelRunSchema).default([]),
   modelTasksets: z.array(TasksetSchema).default([]),

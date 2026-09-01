@@ -6,6 +6,10 @@ import {
   CreateHuggingFaceDatasetImportRequestSchema,
   DatasetCatalogResponseSchema,
   GraderSpecSchema,
+  ModelComparisonDecisionSchema,
+  ModelComparisonEntryStatusSchema,
+  ModelComparisonEntryRefSchema,
+  ModelComparisonEvaluationLinkSchema,
   ModelProjectSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
@@ -109,6 +113,7 @@ import {
   runTasksetBenchmark,
   startHarnessRefinerBenchmark,
 } from "./training-benchmark-actions.js";
+import { createModelComparisonSeriesService } from "./model-comparison-series-service.js";
 import {
   creationSurface,
   datasetBuildIntent,
@@ -146,6 +151,7 @@ export function createTrainingApi(deps: {
   preferenceComparisons?: PreferenceComparisons;
   modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
 }) {
+  const comparisonSeries = createModelComparisonSeriesService(deps.store);
   async function publishTasksetToHostedProject(input: {
     draft: ReturnType<typeof TasksetDraftSchema.parse>;
     taskset: ReturnType<typeof TasksetSchema.parse>;
@@ -206,6 +212,48 @@ export function createTrainingApi(deps: {
           ?? requestUrl?.searchParams.get("profileId")
           ?? "default",
       );
+    }
+    if (action === "save_model_comparison_series") {
+      return comparisonSeries.saveSeries(input.series);
+    }
+    if (action === "seal_model_comparison_series") {
+      return comparisonSeries.sealSeries({
+        seriesId: requiredString(input.seriesId, "seriesId"),
+        expectedRevision: positiveInteger(input.expectedRevision, "expectedRevision"),
+      });
+    }
+    if (action === "queue_model_comparison_release") {
+      return comparisonSeries.queueRelease({
+        ...input,
+        seriesId: requiredString(input.seriesId, "seriesId"),
+      });
+    }
+    if (action === "link_model_comparison_run") {
+      return comparisonSeries.linkRun({
+        entryId: requiredString(input.entryId, "entryId"),
+        expectedStatus: ModelComparisonEntryStatusSchema.parse(input.expectedStatus),
+        status: ModelComparisonEntryStatusSchema.parse(input.status),
+        trainingPlanId: nullableString(input.trainingPlanId),
+        modelRunId: nullableString(input.modelRunId),
+        modelVersionId: nullableString(input.modelVersionId),
+        evaluations: input.evaluations === undefined
+          ? undefined
+          : ModelComparisonEvaluationLinkSchema.array().parse(input.evaluations),
+      });
+    }
+    if (action === "decide_model_comparison_entry") {
+      return comparisonSeries.decide({
+        entryId: requiredString(input.entryId, "entryId"),
+        expectedSeriesRevision: positiveInteger(input.expectedSeriesRevision, "expectedSeriesRevision"),
+        decision: ModelComparisonDecisionSchema.parse(input.decision),
+      });
+    }
+    if (action === "record_model_comparison_promotion") {
+      return comparisonSeries.recordPromotion({
+        entryId: requiredString(input.entryId, "entryId"),
+        bindingId: requiredString(input.bindingId, "bindingId"),
+        expectedSeriesRevision: positiveInteger(input.expectedSeriesRevision, "expectedSeriesRevision"),
+      });
     }
     if (action === "preference_comparison_list") {
       return deps.store.listPreferenceComparisonAssignments({
@@ -1202,7 +1250,7 @@ export function createTrainingApi(deps: {
       tasksetId: requiredString(input.tasksetId, "tasksetId"),
       previewHash: requiredString(input.previewHash, "previewHash"),
     });
-    if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+    if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region), comparisonSeriesEntry: optionalComparisonEntryRef(input.comparisonSeriesEntry) });
     if (action === "prepare_model_improvement") {
       const qualificationRef = optionalImmutableRef(input.qualificationRef, "qualificationRef");
       const workspaceId = requiredString(input.workspaceId, "workspaceId");
@@ -1256,13 +1304,36 @@ export function createTrainingApi(deps: {
           release,
         });
       }
-      return deps.training.startModelRun({
+      const started = await deps.training.startModelRun({
         modelProjectId,
         maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
         retentionDays: nullableNumber(input.retentionDays),
         exportApproved: input.exportApproved === true,
         manifest: input.manifest,
+        comparisonSeriesEntryId: nullableString(input.comparisonSeriesEntryId),
       });
+      const comparisonEntryId = nullableString(input.comparisonSeriesEntryId);
+      if (comparisonEntryId) {
+        const modelRunId = string(started.job.metadata.modelRunId);
+        if (!modelRunId) {
+          throw new Error("The started Comparison Series Run did not publish its canonical Model Run ID.");
+        }
+        let linked = await comparisonSeries.linkRun({
+          entryId: comparisonEntryId,
+          expectedStatus: "ready",
+          status: "queued",
+          trainingPlanId: started.plan.id,
+          modelRunId,
+        });
+        if (linked.status === "queued") {
+          linked = await comparisonSeries.linkRun({
+            entryId: comparisonEntryId,
+            expectedStatus: "queued",
+            status: "running",
+          });
+        }
+      }
+      return started;
     }
     if (isModelRunControlAction(action)) return handleModelRunControl({
       action,
@@ -1283,6 +1354,7 @@ export function createTrainingApi(deps: {
       exportApproved: input.exportApproved === true,
       retentionDays: nullableNumber(input.retentionDays),
       region: string(input.region),
+      comparisonSeriesEntry: optionalComparisonEntryRef(input.comparisonSeriesEntry),
     });
     if (action === "start_prepared") {
       const result = await deps.training.startPrepared({
@@ -1438,8 +1510,7 @@ export function createTrainingApi(deps: {
       minerConfig,
       minerRuns,
       modelProjects,
-      modelVersions,
-      modelRuns,
+      comparisonSeriesRecords,
       modelTasksets,
       execution,
     ] = await Promise.all([
@@ -1453,10 +1524,15 @@ export function createTrainingApi(deps: {
       deps.taskMiner.config(profileId),
       deps.store.listTaskMinerRuns(profileId),
       deps.store.listModelProjects(),
-      deps.store.listModelVersions(),
-      deps.store.listModelRuns(),
+      deps.store.listModelComparisonSeries({ profileId }),
       deps.store.listTasksets(),
       deps.training.state(),
+    ]);
+    await comparisonSeries.reconcileEntries();
+    const [reconciledModelVersions, reconciledModelRuns, reconciledComparisonSeriesEntries] = await Promise.all([
+      deps.store.listModelVersions(),
+      deps.store.listModelRuns(),
+      deps.store.listModelComparisonSeriesEntries(),
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
@@ -1496,8 +1572,10 @@ export function createTrainingApi(deps: {
       minerConfig,
       minerRuns,
       modelProjects,
-      modelVersions,
-      modelRuns,
+      modelVersions: reconciledModelVersions,
+      modelRuns: reconciledModelRuns,
+      comparisonSeries: comparisonSeriesRecords,
+      comparisonSeriesEntries: reconciledComparisonSeriesEntries.filter((entry) => entry.profileId === profileId),
       modelTasksets,
       ...execution,
       activityRevision: activity.revision,
@@ -1766,6 +1844,12 @@ function portableMethod(
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function string(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function requiredString(value: unknown, name: string): string { const parsed = string(value); if (!parsed) throw new Error(`${name} is required.`); return parsed; }
+function positiveInteger(value: unknown, name: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
+}
 function nullableString(value: unknown): string | null { return string(value); }
 function optionalStringArray(value: unknown): string[] | undefined { return value === undefined ? undefined : requiredStringArray(value, "value"); }
 function requiredRecordArray(value: unknown, name: string): Record<string, unknown>[] {
@@ -1952,6 +2036,11 @@ function stringArray(value: unknown): string[] { return Array.isArray(value) ? v
 function requiredStringArray(value: unknown, name: string): string[] { const parsed = stringArray(value); if (!parsed.length) throw new Error(`${name} requires at least one value.`); return parsed; }
 function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }
 function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
+function optionalComparisonEntryRef(value: unknown) {
+  return value === undefined || value === null
+    ? null
+    : ModelComparisonEntryRefSchema.parse(value);
+}
 function boundedInteger(
   value: unknown,
   name: string,

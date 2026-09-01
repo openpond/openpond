@@ -90,6 +90,14 @@ describe("Models path routing", () => {
       detailTab: null,
     });
     expect(
+      modelsRouteFromLocation({ pathname: "/models/comparisons/series_1" }),
+    ).toEqual({
+      kind: "library",
+      section: "comparisons",
+      resourceId: "series_1",
+      detailTab: null,
+    });
+    expect(
       modelsRouteFromLocation({
         pathname: "/models/tasksets/taskset_1/scoring",
       }),
@@ -115,6 +123,9 @@ describe("Models path routing", () => {
       "/models/scorers/judge%201",
     );
     expect(modelsPath(modelLibraryRoute("projects"))).toBe("/models/projects");
+    expect(modelsPath(modelLibraryRoute("comparisons", "series 1"))).toBe(
+      "/models/comparisons/series%201",
+    );
     expect(modelsSectionFromRoute({ kind: "index" })).toBe("overview");
   });
 });

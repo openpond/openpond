@@ -17,13 +17,16 @@ export function modelsSectionForLabTab(tab: LabPrimaryTab): ModelSection {
 }
 
 export function libraryResourceLabel(
-  section: "projects" | "tasksets" | "scorers" | "evaluations" | "reviews",
+  section: "projects" | "comparisons" | "tasksets" | "scorers" | "evaluations" | "reviews",
   resourceId: string | null,
   state: TrainingStateResponse | null,
 ): string | null {
   if (!resourceId) return null;
   if (section === "projects") {
     return state?.modelProjects.find((project) => project.id === resourceId)?.name ?? resourceId;
+  }
+  if (section === "comparisons") {
+    return state?.comparisonSeries.find((series) => series.id === resourceId)?.name ?? resourceId;
   }
   if (section === "tasksets" || section === "reviews") {
     return [...(state?.tasksets ?? []), ...(state?.modelTasksets ?? [])].find(

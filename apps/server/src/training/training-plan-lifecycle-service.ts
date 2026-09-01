@@ -6,6 +6,7 @@ import {
   TrainingRecipeSchema,
   type TrainingDestinationId,
   type ImmutableReleaseRef,
+  type ModelComparisonEntryRef,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
@@ -34,6 +35,7 @@ export type TrainingStartInput = {
   region?: string | null;
   harnessRelease?: ImmutableReleaseRef | null;
   modelImprovementQualification?: ImmutableReleaseRef | null;
+  comparisonSeriesEntry?: ModelComparisonEntryRef | null;
 };
 
 export function createTrainingPlanLifecycleService(deps: {
@@ -80,6 +82,7 @@ export function createTrainingPlanLifecycleService(deps: {
     const draft = TrainingPlanSchema.parse({
       ...initial,
       environmentPlacement,
+      comparisonSeriesEntry: input.comparisonSeriesEntry ?? null,
     });
     const compatibility = await destination.validate(draft);
     const quote = compatibility.compatible

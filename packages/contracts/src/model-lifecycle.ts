@@ -13,6 +13,7 @@ import {
 } from "./tasksets.js";
 import { ChatModelRefSchema } from "./providers.js";
 import { CorrelatedTelemetryReceiptSchema } from "./training-benchmark.js";
+import { ModelComparisonEntryRefSchema } from "./model-comparisons.js";
 
 export const ModelVersionKindSchema = z.enum([
   "base_reference",
@@ -59,6 +60,7 @@ export const ModelVersionSchema = z
     status: z.enum(["available", "failed"]),
     baseModel: BaseModelPreferenceSchema,
     taskset: VersionedReleaseRefSchema,
+    comparisonSeriesEntry: ModelComparisonEntryRefSchema.nullable().optional(),
     releaseGraph: z
       .object({
         resolvedBundleHash: ReleaseHashSchema,
@@ -498,6 +500,7 @@ export const ModelRunSchema = z
     ]).nullable(),
     destinationId: ReleaseIdSchema.nullable(),
     taskset: VersionedReleaseRefSchema,
+    comparisonSeriesEntry: ModelComparisonEntryRefSchema.nullable().optional(),
     harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
     quote: z
       .object({

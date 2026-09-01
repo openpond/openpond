@@ -26,6 +26,9 @@ export function managedTrainingEvidenceFromPublic(input: {
     const reward = finite(event.data.reward);
     return reward === null ? [] : [reward];
   });
+  const rewardMean = rewards.length
+    ? rewards.reduce((sum, reward) => sum + reward, 0) / rewards.length
+    : null;
   const allocation = [...input.events]
     .reverse()
     .find((event) => event.type === "gpu_allocation_state");
@@ -45,19 +48,31 @@ export function managedTrainingEvidenceFromPublic(input: {
     }];
   });
   const canonicalPublication = record(checkpoint?.metadata.canonicalPublication);
+  const gpuCount = nonnegativeInteger(allocation?.data.gpuCount);
+  const durationSeconds = nonnegative(input.outputs?.receipt?.durationSeconds);
+  const adapterDeltaNorm = [...input.events].reverse().flatMap((event) => [
+    finite(event.data.adapterDeltaNorm),
+    finite(event.data.parameterDeltaNorm),
+  ]).find((value): value is number => value !== null) ?? null;
   return ManagedTrainingRunEvidenceSchema.parse({
-    schemaVersion: "openpond.managedTrainingRunEvidence.v1",
+    schemaVersion: "openpond.managedTrainingRunEvidence.v2",
     provider: "sandbox-managed-rl",
     providerRunId: input.job.id,
     state: input.job.state,
     progress: {
       targetOptimizerSteps: input.job.rolloutProgress.groupsTarget,
       committedOptimizerSteps: input.job.rolloutProgress.optimizerUpdatesApplied,
+      skippedOptimizerSteps: input.job.rolloutProgress.optimizerUpdatesSkipped,
     },
     reward: {
-      finalMean: rewards.length
-        ? rewards.reduce((sum, reward) => sum + reward, 0) / rewards.length
-        : null,
+      finalMean: rewardMean,
+      variance: rewardMean === null
+        ? null
+        : rewards.reduce((sum, reward) => sum + (reward - rewardMean) ** 2, 0) / rewards.length,
+      minimum: rewards.length ? Math.min(...rewards) : null,
+      maximum: rewards.length ? Math.max(...rewards) : null,
+      distinctValueCount: new Set(rewards).size,
+      noSignalGroupCount: input.job.rolloutProgress.optimizerUpdatesSkipped,
       trajectoryCount: trajectories.length,
       eligibleTrajectoryCount: eligible.length,
     },
@@ -69,8 +84,12 @@ export function managedTrainingEvidenceFromPublic(input: {
     resource: {
       provider: string(allocation?.data.provider) ?? "managed",
       gpuType: string(allocation?.data.gpuType),
-      gpuCount: nonnegativeInteger(allocation?.data.gpuCount),
+      gpuCount,
       hourlyCostUsd: nonnegative(allocation?.data.hourlyCostUsd),
+      durationSeconds,
+      gpuSeconds: durationSeconds !== null && gpuCount !== null
+        ? durationSeconds * gpuCount
+        : null,
     },
     cost: {
       totalUsd: input.outputs?.receipt?.spendUsd ?? input.job.accruedSpendUsd,
@@ -85,6 +104,7 @@ export function managedTrainingEvidenceFromPublic(input: {
           sizeBytes: checkpoint.sizeBytes,
         }
       : null,
+    movement: { adapterDeltaNorm },
     evaluations,
     canonicalPublication: {
       state: string(canonicalPublication.state),

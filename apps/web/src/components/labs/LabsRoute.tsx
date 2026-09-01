@@ -246,6 +246,8 @@ export function LabsRoute({
     }
     const resourceSection = closeDetailKind === "dataset"
       ? "tasksets"
+      : closeDetailKind === "comparison"
+        ? "comparisons"
       : closeDetailKind === "evaluation"
         ? "evaluations"
         : closeDetailKind === "review"
@@ -283,6 +285,7 @@ export function LabsRoute({
     if (modelsRoute?.kind === "library") {
       const definitions = {
         projects: { kind: "model" as const, label: "Model Projects" },
+        comparisons: { kind: "comparison" as const, label: "Model Comparisons" },
         tasksets: { kind: "dataset" as const, label: "Taskset Library" },
         scorers: { kind: "scoring" as const, label: "Scorers" },
         evaluations: { kind: "evaluation" as const, label: "Evaluations" },
@@ -611,12 +614,23 @@ export function LabsRoute({
             connection={profileView.connection}
             state={training.training.payload}
             training={training.training}
+            selectedSeriesId={modelsRoute.resourceId}
+            onSelectedSeriesIdChange={(seriesId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId))}
+            onOpenEvaluation={(evaluationRunId) => navigateModelsRoute(modelLibraryRoute("evaluations", evaluationRunId))}
             onOpenProject={(projectId) => navigateModelsRoute(modelProjectRoute(projectId))}
+            onOpenTaskset={(tasksetId) => navigateModelsRoute(modelLibraryRoute("tasksets", tasksetId))}
             onOpenRun={(projectId, runId) => navigateModelsRoute({
               kind: "project",
               projectId,
               section: "runs",
               resourceId: modelEntryRouteId(`model-run:${runId}`),
+              detailTab: null,
+            })}
+            onOpenVersion={(projectId, versionId) => navigateModelsRoute({
+              kind: "project",
+              projectId,
+              section: "versions",
+              resourceId: modelEntryRouteId(`version:${versionId}`),
               detailTab: null,
             })}
             onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
@@ -690,6 +704,8 @@ export function LabsRoute({
         ) : (
           <LabHumanReviewsPage
             defaultModel={training.defaultModel}
+            onOpenSeries={(seriesId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId))}
+            onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
             onSelectedTasksetIdChange={(tasksetId) => navigateModelsRoute(modelLibraryRoute("reviews", tasksetId))}
             selectedTasksetId={modelsRoute.resourceId}
             state={training.training.payload}
@@ -830,6 +846,7 @@ export function LabsRoute({
           onOpenPullRequest={onOpenPullRequest}
           onOpenCandidateFiles={onOpenCandidateFiles}
           onOpenConversation={onOpenRunConversation}
+          onOpenComparison={(seriesId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId))}
           onClose={closeSelectedWorkproduct}
           onLocationChange={onDetailOpenChange}
           onRenameAgent={() => undefined}

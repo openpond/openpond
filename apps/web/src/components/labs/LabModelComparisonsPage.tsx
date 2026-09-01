@@ -1,212 +1,189 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  resolveModelBindingPromotionGate,
-  type ModelArtifactLineage,
-  type ModelRun,
-  type TrainingRunDetail,
-  type TrainingStateResponse,
+import { useState } from "react";
+import type {
+  ModelComparisonSeries,
+  ModelRun,
+  TrainingStateResponse,
 } from "@openpond/contracts";
 
-import { api, type ClientConnection } from "../../api";
+import type { ClientConnection } from "../../api";
 import type { useTraining } from "../../hooks/useTraining";
 import { statusLabel } from "../training/training-model-data";
+import { LabComparisonSeriesCreateDialog } from "./LabComparisonSeriesCreateDialog";
+import { LabComparisonSeriesDetail } from "./LabComparisonSeriesDetail";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
-type TrainingController = ReturnType<typeof useTraining>;
-
-type ComparisonRow = {
-  run: ModelRun;
-  jobId: string | null;
-  projectName: string;
-  tasksetName: string;
-  trainTasks: number;
-  evaluationTasks: number;
-  rank: number | null;
-  parent: string;
-  lineage: ModelArtifactLineage | null;
-  main: boolean;
-};
-
 export function LabModelComparisonsPage({
   connection,
-  state,
-  training,
+  onOpenEvaluation,
   onOpenProject,
   onOpenRun,
+  onOpenTaskset,
+  onOpenVersion,
+  onSelectedSeriesIdChange,
   onToast,
+  selectedSeriesId,
+  state,
+  training,
 }: {
   connection: ClientConnection | null;
-  state: TrainingStateResponse | null;
-  training: TrainingController;
+  onOpenEvaluation: (evaluationRunId: string) => void;
   onOpenProject: (projectId: string) => void;
   onOpenRun: (projectId: string, runId: string) => void;
+  onOpenTaskset: (tasksetId: string) => void;
+  onOpenVersion: (projectId: string, versionId: string) => void;
+  onSelectedSeriesIdChange: (seriesId: string | null) => void;
   onToast: (message: string, tone: "success" | "error" | "info") => void;
+  selectedSeriesId: string | null;
+  state: TrainingStateResponse | null;
+  training: ReturnType<typeof useTraining>;
 }) {
-  const rows = useMemo(() => comparisonRows(state), [state]);
-  const [details, setDetails] = useState<Map<string, TrainingRunDetail>>(new Map());
-  const [baselineRunId, setBaselineRunId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let disposed = false;
-    const jobIds = rows.flatMap((row) => row.jobId ? [row.jobId] : []);
-    if (!connection || !jobIds.length) {
-      setDetails(new Map());
-      return () => { disposed = true; };
-    }
-    void Promise.all(jobIds.map(async (jobId) => {
-      try {
-        return [jobId, await api.trainingRunDetail(connection, jobId)] as const;
-      } catch {
-        return null;
-      }
-    })).then((results) => {
-      if (!disposed) setDetails(new Map(results.flatMap((result) => result ? [result] : [])));
-    });
-    return () => { disposed = true; };
-  }, [connection, rows]);
-
-  const totalCost = rows.reduce((sum, row) => sum + cost(details.get(row.jobId ?? "") ?? null), 0);
-  const current = rows.find((row) => row.main) ?? null;
-  const baseline = rows.find((row) => row.run.id === baselineRunId) ?? current;
-  const baselineScore = scores(baseline?.jobId ? details.get(baseline.jobId) ?? null : null).candidate;
-
-  async function promote(row: ComparisonRow) {
-    if (!row.lineage) return;
-    const result = await training.actions.bindModel(row.lineage.id, "chat_manual", row.run.modelId);
-    onToast(result ? `${row.projectName} candidate promoted to main.` : "Couldn’t promote this candidate.", result ? "success" : "error");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateWindow, setDateWindow] = useState("all");
+  const [showAllStandalone, setShowAllStandalone] = useState(false);
+  const series = state?.comparisonSeries.find((candidate) => candidate.id === selectedSeriesId) ?? null;
+  if (series && state) {
+    return <LabComparisonSeriesDetail
+      connection={connection}
+      onBack={() => onSelectedSeriesIdChange(null)}
+      onOpenEvaluation={onOpenEvaluation}
+      onOpenProject={onOpenProject}
+      onOpenRun={onOpenRun}
+      onOpenTaskset={onOpenTaskset}
+      onOpenVersion={onOpenVersion}
+      onToast={onToast}
+      series={series}
+      state={state}
+      training={training}
+    />;
   }
+  const summaries = comparisonSeriesSummaries(state);
+  const standaloneRuns = standaloneTrainingRuns(state);
+  const filteredSummaries = summaries.filter((summary) =>
+    (!query.trim() || `${summary.series.name} ${summary.projectName}`.toLowerCase().includes(query.trim().toLowerCase()))
+    && (!projectFilter || summary.series.modelProjectId === projectFilter)
+    && (!statusFilter || summary.series.status === statusFilter)
+    && withinWindow(summary.lastActivity, dateWindow));
+  const filteredStandalone = standaloneRuns.filter((run) =>
+    (!projectFilter || run.modelId === projectFilter)
+    && withinWindow(run.startedAt, dateWindow));
+  const visibleStandalone = showAllStandalone ? filteredStandalone : filteredStandalone.slice(0, 25);
+  const active = summaries.filter((summary) => summary.series.status === "active").length;
+  const attention = summaries.filter((summary) => summary.attention).length;
+  const masters = new Set(summaries.flatMap((summary) => summary.masterEntryId ? [summary.masterEntryId] : []));
 
-  async function rollback(row: ComparisonRow) {
-    const binding = state?.modelBindings.find((candidate) =>
-      candidate.status === "active"
-      && candidate.role === "chat_manual"
-      && candidate.modelArtifactLineageId === row.lineage?.id,
-    );
-    if (!binding) return;
-    const result = await training.actions.rollbackModelBinding(binding.id);
-    onToast(result ? "Main rolled back to its recorded predecessor." : "Couldn’t roll back main.", result ? "success" : "error");
+  async function createSeries(next: ModelComparisonSeries) {
+    const saved = await training.actions.saveComparisonSeries(next);
+    if (!saved) return false;
+    onToast("Comparison Series draft created. Review it before sealing.", "success");
+    onSelectedSeriesIdChange(saved.id);
+    return true;
   }
 
   return (
     <div className="labs-flat-body labs-resource-page labs-comparisons-page">
       <ModelProjectPageHeader
         title="Model Comparisons"
-        description="Compare immutable training runs chronologically, inspect their evidence, and explicitly promote an eligible Model Version to main."
+        description="Saved continual-learning series, exact branch lineage, ordinary Evaluation Runs, and explicit Master promotion."
+        actions={<button className="training-button" disabled={!state || Boolean(training.busyAction)} type="button" onClick={() => setCreateOpen(true)}>New series</button>}
         metrics={[
-          { label: "Runs", value: rows.length },
-          { label: "Current main", value: current?.projectName ?? "Not bound", hint: current?.run.id },
-          { label: "Observed spend", value: formatCost(totalCost) },
+          { label: "Series", value: summaries.length, hint: `${active} active` },
+          { label: "Needs attention", value: attention, hint: "failed, held, or candidate releases" },
+          { label: "Master releases", value: masters.size, hint: "resolved from active Model Bindings" },
+          { label: "Standalone Runs", value: standaloneRuns.length, hint: "not attached to a series" },
         ]}
       />
+      <section aria-label="Comparison filters" className="labs-comparison-filters">
+        <label><span>Search</span><input placeholder="Series or project" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+        <label><span>Project</span><select value={projectFilter} onChange={(event) => setProjectFilter(event.currentTarget.value)}><option value="">All projects</option>{state?.modelProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+        <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.currentTarget.value)}><option value="">All statuses</option><option value="draft">Draft</option><option value="active">Active</option><option value="completed">Completed</option><option value="archived">Archived</option></select></label>
+        <label><span>Date</span><select value={dateWindow} onChange={(event) => setDateWindow(event.currentTarget.value)}><option value="all">All time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select></label>
+      </section>
       <section className="training-detail-section">
-        <div className="labs-project-trends-heading">
-          <div>
-            <h2>Chronological comparison</h2>
-            <p>Select a baseline to show candidate score deltas. Date is the primary grouping.</p>
-          </div>
-          {baseline ? <span>Baseline · {shortId(baseline.run.id)}</span> : null}
-        </div>
-        <div className="training-table-wrap">
-          <table className="training-data-table labs-comparison-table">
-            <thead><tr>
-              <th>Date</th><th>Baseline</th><th>Line</th><th>Model Project</th><th>Run / Version</th>
-              <th>Parent</th><th>Dataset</th><th>Rank</th><th>Updates</th><th>Evaluation</th>
-              <th>Δ baseline</th><th>Cost</th><th>Status</th><th>Actions</th>
-            </tr></thead>
-            <tbody>
-              {rows.length ? rows.map((row) => {
-                const detail = row.jobId ? details.get(row.jobId) ?? null : null;
-                const evaluation = scores(detail);
-                const progress = detail?.managedEvidence?.progress;
-                const candidateDelta = baselineScore !== null && evaluation.candidate !== null
-                  ? evaluation.candidate - baselineScore
-                  : null;
-                const gate = row.lineage ? resolveModelBindingPromotionGate(row.lineage) : null;
-                const canPromote = Boolean(row.lineage && row.lineage.status === "imported" && gate && !row.main);
-                return (
-                  <tr key={row.run.id}>
-                    <td><strong>{formatDate(row.run.startedAt)}</strong><small>{formatTime(row.run.startedAt)}</small></td>
-                    <td><input aria-label={`Use ${row.run.id} as baseline`} checked={baseline?.run.id === row.run.id} name="comparison-baseline" type="radio" onChange={() => setBaselineRunId(row.run.id)} /></td>
-                    <td><LabStatusBadge label={row.main ? "main" : "experiment"} value={row.main ? "succeeded" : "prepared"} /></td>
-                    <td><button className="labs-version-row-button" type="button" onClick={() => onOpenProject(row.run.modelId)}>{row.projectName}</button></td>
-                    <td><button className="labs-version-row-button" type="button" onClick={() => onOpenRun(row.run.modelId, row.run.id)}>{shortId(row.run.id)}<small>{row.lineage ? shortId(row.lineage.id) : "No Model Version"}</small></button></td>
-                    <td>{row.parent}</td>
-                    <td>{row.tasksetName}<small>{row.trainTasks} train · {row.evaluationTasks} eval</small></td>
-                    <td>{row.rank ?? "—"}</td>
-                    <td>{progress ? `${progress.committedOptimizerSteps} applied / ${Math.max(0, progress.targetOptimizerSteps - progress.committedOptimizerSteps)} skipped` : "—"}</td>
-                    <td>{formatScore(evaluation.base)} → {formatScore(evaluation.candidate)}</td>
-                    <td>{formatDelta(candidateDelta)}</td>
-                    <td>{formatCost(cost(detail))}</td>
-                    <td><LabStatusBadge label={rowStatus(row)} value={rowStatus(row)} /></td>
-                    <td><div className="labs-comparison-actions">
-                      <button className="training-button secondary" type="button" onClick={() => onOpenRun(row.run.modelId, row.run.id)}>Inspect</button>
-                      {row.main ? <button className="training-button secondary" type="button" disabled={!state?.modelBindings.some((binding) => binding.status === "active" && binding.modelArtifactLineageId === row.lineage?.id && binding.rollbackTargetBindingId)} onClick={() => void rollback(row)}>Roll back</button> : <button className="training-button" type="button" disabled={!canPromote || Boolean(training.busyAction)} onClick={() => void promote(row)}>Promote</button>}
-                    </div></td>
-                  </tr>
-                );
-              }) : <tr><td colSpan={14}>No training Runs exist yet. Start a real Model Run to populate this comparison.</td></tr>}
-            </tbody>
-          </table>
+        <div className="labs-project-trends-heading"><div><h2>Comparison Series</h2><p>Persistent series are the primary comparison object. Date reflects real activity.</p></div></div>
+        <div className="labs-comparison-series-grid">
+          {filteredSummaries.map((summary) => <button className="labs-resource-card labs-comparison-series-card" key={summary.series.id} type="button" onClick={() => onSelectedSeriesIdChange(summary.series.id)}>
+            <header><div><strong>{summary.series.name}</strong><small>{summary.projectName}</small></div><LabStatusBadge label={summary.series.status} value={summary.series.status} /></header>
+            <dl>
+              <div><dt>Last activity</dt><dd>{formatDate(summary.lastActivity)}</dd></div>
+              <div><dt>Accepted head</dt><dd>{summary.acceptedHeadLabel ?? "None"}</dd></div>
+              <div><dt>Current pass</dt><dd>{summary.currentLabel ?? "Not started"}</dd></div>
+              <div><dt>Master</dt><dd>{summary.masterLabel ?? "Not set"}</dd></div>
+            </dl>
+            <footer><span>{summary.completedEntries} / {summary.series.schedule.length} releases</span><span>{summary.attention ? "Review needed" : "On track"}</span></footer>
+          </button>)}
+          {!filteredSummaries.length ? <div className="training-run-placeholder">{summaries.length ? "No Comparison Series matches these filters." : "No Comparison Series exists yet. Create a draft to define the schedule; no Run starts until a ready release is explicitly started."}</div> : null}
         </div>
       </section>
+      <section className="training-detail-section">
+        <div className="labs-project-trends-heading"><div><h2>Standalone Runs</h2><p>Training Runs outside a series remain inspectable and cannot be mistaken for series releases.</p></div></div>
+        <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Date</th><th>Project</th><th>Run</th><th>Taskset</th><th>Status</th></tr></thead><tbody>
+          {visibleStandalone.map((run) => <tr key={run.id}><td><strong>{formatDate(run.startedAt)}</strong><small>{formatTime(run.startedAt)}</small></td><td><button className="labs-version-row-button" type="button" onClick={() => onOpenProject(run.modelId)}>{projectName(state, run.modelId)}</button></td><td><button className="labs-version-row-button" type="button" onClick={() => onOpenRun(run.modelId, run.id)}>{shortId(run.id)}</button></td><td><button className="labs-version-row-button" type="button" onClick={() => onOpenTaskset(run.taskset.id)}>{tasksetName(state, run.taskset.id)}</button></td><td><LabStatusBadge label={statusLabel(run.status)} value={run.status} /></td></tr>)}
+          {!filteredStandalone.length ? <tr><td colSpan={5}>No standalone training Runs match these filters.</td></tr> : null}
+        </tbody></table></div>
+        {!showAllStandalone && filteredStandalone.length > visibleStandalone.length ? <button className="training-button secondary" type="button" onClick={() => setShowAllStandalone(true)}>Show all {filteredStandalone.length} standalone Runs</button> : null}
+      </section>
+      {createOpen && state ? <LabComparisonSeriesCreateDialog busy={Boolean(training.busyAction)} onClose={() => setCreateOpen(false)} onCreate={createSeries} profileId={state.profileId} state={state} /> : null}
     </div>
   );
 }
 
-export function comparisonRows(state: TrainingStateResponse | null): ComparisonRow[] {
+type SeriesSummary = {
+  series: ModelComparisonSeries;
+  projectName: string;
+  lastActivity: string;
+  acceptedHeadLabel: string | null;
+  currentLabel: string | null;
+  masterEntryId: string | null;
+  masterLabel: string | null;
+  completedEntries: number;
+  attention: boolean;
+};
+
+function comparisonSeriesSummaries(state: TrainingStateResponse | null): SeriesSummary[] {
   if (!state) return [];
-  const projects = new Map(state.modelProjects.map((project) => [project.id, project] as const));
-  const tasksets = new Map([...state.tasksets, ...state.modelTasksets].map((taskset) => [taskset.id, taskset] as const));
-  const jobsByRun = new Map(state.jobs.flatMap((job) => typeof job.metadata.modelRunId === "string" ? [[job.metadata.modelRunId, job] as const] : []));
-  const plans = new Map(state.plans.map((plan) => [plan.id, plan] as const));
-  const lineages = new Map(state.models.map((lineage) => [lineage.id, lineage] as const));
-  const mainLineages = new Set(state.modelBindings.filter((binding) => binding.status === "active" && binding.role === "chat_manual").map((binding) => binding.modelArtifactLineageId));
-  return state.modelRuns
-    .filter((run) => run.kind === "training")
-    .map((run) => {
-      const job = jobsByRun.get(run.id) ?? null;
-      const plan = job ? plans.get(job.planId) ?? null : null;
-      const taskset = tasksets.get(run.taskset.id);
-      const lineage = run.adapterArtifactLineageId ? lineages.get(run.adapterArtifactLineageId) ?? null : null;
-      const continuation = plan?.recipe && "continuation" in plan.recipe ? plan.recipe.continuation : null;
-      const baseModel = plan?.recipe && "baseModel" in plan.recipe ? plan.recipe.baseModel.id : "Base";
-      return {
-        run,
-        jobId: job?.id ?? null,
-        projectName: projects.get(run.modelId)?.name ?? run.modelId,
-        tasksetName: taskset?.name ?? run.taskset.id,
-        trainTasks: taskset?.tasks.filter((task) => task.split === "train").length ?? 0,
-        evaluationTasks: taskset?.tasks.filter((task) => task.split === "frozen_eval").length ?? 0,
-        rank: plan?.recipe && "lora" in plan.recipe ? plan.recipe.lora.rank : null,
-        parent: continuation ? shortId(continuation.sourceArtifact.jobId) : baseModel,
-        lineage,
-        main: Boolean(lineage && mainLineages.has(lineage.id)),
-      };
-    })
-    .sort((left, right) => right.run.startedAt.localeCompare(left.run.startedAt));
+  const projects = new Map(state.modelProjects.map((project) => [project.id, project]));
+  const entriesBySeries = new Map<string, typeof state.comparisonSeriesEntries>();
+  for (const entry of state.comparisonSeriesEntries) {
+    const current = entriesBySeries.get(entry.seriesId) ?? [];
+    current.push(entry);
+    entriesBySeries.set(entry.seriesId, current);
+  }
+  return state.comparisonSeries.map((series) => {
+    const entries = entriesBySeries.get(series.id) ?? [];
+    const acceptedHead = entries.find((entry) => entry.id === series.acceptedDailyHeadEntryId) ?? null;
+    const current = [...entries].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
+    const binding = state.modelBindings.find((candidate) => candidate.status === "active" && candidate.profileId === series.profileId && candidate.role === series.productionBinding.role && candidate.roleTargetId === series.productionBinding.roleTargetId) ?? null;
+    const master = binding ? entries.find((entry) => state.modelVersions.find((version) => version.id === entry.modelVersionId)?.artifactLineageId === binding.modelArtifactLineageId) ?? null : null;
+    return {
+      series,
+      projectName: projects.get(series.modelProjectId)?.name ?? series.modelProjectId,
+      lastActivity: current?.updatedAt ?? series.updatedAt,
+      acceptedHeadLabel: acceptedHead?.label ?? null,
+      currentLabel: current?.label ?? null,
+      masterEntryId: master?.id ?? null,
+      masterLabel: master?.label ?? null,
+      completedEntries: entries.filter((entry) => ["accepted", "rejected", "no_signal", "failed", "cancelled"].includes(entry.status)).length,
+      attention: entries.some((entry) => ["candidate", "rejected", "failed"].includes(entry.status)),
+    };
+  }).sort((left, right) => right.lastActivity.localeCompare(left.lastActivity));
 }
 
-function scores(detail: TrainingRunDetail | null): { base: number | null; candidate: number | null } {
-  if (detail?.evaluation) return { base: detail.evaluation.base.meanScore, candidate: detail.evaluation.trained.meanScore };
-  const evaluations = detail?.managedEvidence?.evaluations ?? [];
-  return {
-    base: evaluations.find((item) => item.kind === "baseline")?.score ?? null,
-    candidate: evaluations.find((item) => item.kind === "candidate")?.score ?? null,
-  };
+function standaloneTrainingRuns(state: TrainingStateResponse | null): ModelRun[] {
+  if (!state) return [];
+  const linked = new Set(state.comparisonSeriesEntries.flatMap((entry) => entry.modelRunId ? [entry.modelRunId] : []));
+  return state.modelRuns.filter((run) => run.kind === "training" && !linked.has(run.id)).sort((left, right) => right.startedAt.localeCompare(left.startedAt));
 }
 
-function rowStatus(row: ComparisonRow): string {
-  if (row.main) return "accepted";
-  if (row.lineage?.status === "rejected") return "rejected";
-  if (row.lineage?.promotable) return "candidate";
-  if (row.run.status === "succeeded" && !row.lineage) return "no signal";
-  return statusLabel(row.run.status);
+function projectName(state: TrainingStateResponse | null, id: string) { return state?.modelProjects.find((project) => project.id === id)?.name ?? id; }
+function tasksetName(state: TrainingStateResponse | null, id: string) { return [...(state?.tasksets ?? []), ...(state?.modelTasksets ?? [])].find((taskset) => taskset.id === id)?.name ?? id; }
+function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "2-digit" }).format(new Date(value)); }
+function formatTime(value: string) { return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
+function shortId(value: string) { return value.length > 24 ? `${value.slice(0, 10)}…${value.slice(-8)}` : value; }
+function withinWindow(value: string, window: string) {
+  if (window === "all") return true;
+  return Date.now() - new Date(value).getTime() <= Number(window) * 86_400_000;
 }
-function cost(detail: TrainingRunDetail | null): number { return detail?.managedEvidence?.cost.totalUsd ?? 0; }
-function formatDate(value: string): string { return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "2-digit" }).format(new Date(value)); }
-function formatTime(value: string): string { return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
-function formatScore(value: number | null): string { return value === null ? "—" : value.toFixed(3); }
-function formatDelta(value: number | null): string { return value === null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(3)}`; }
-function formatCost(value: number): string { return `$${value.toFixed(3)}`; }
-function shortId(value: string): string { return value.length > 20 ? `${value.slice(0, 9)}…${value.slice(-7)}` : value; }

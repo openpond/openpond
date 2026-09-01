@@ -11,6 +11,7 @@ import {
   type TrainingApproval,
   type TrainingCatalog,
   type TrainingJob,
+  type ModelComparisonEntryRef,
   type TrainingPreparationPlan,
   type TrainingPreparedStart,
 } from "@openpond/contracts";
@@ -57,6 +58,7 @@ export function createPortableModelRunService(deps: {
     exportApproved?: boolean;
     retentionDays?: number | null;
     harnessRelease?: { id: string; contentHash: string } | null;
+    comparisonSeriesEntry?: ModelComparisonEntryRef | null;
   }): Promise<TrainingPreparedStart>;
   approve(input: {
     planId: string;
@@ -82,6 +84,7 @@ export function createPortableModelRunService(deps: {
     exportApproved: boolean;
     retentionDays?: number | null;
     manifest?: unknown;
+    comparisonSeriesEntryId?: string | null;
   }) {
     let sourceProject = await deps.store.getModelProject(input.modelProjectId);
     if (!sourceProject) throw new Error("A saved Model Project is required.");
@@ -94,12 +97,44 @@ export function createPortableModelRunService(deps: {
     ) {
       throw new Error("The Model Project training setup is incomplete.");
     }
-    const baseModel = setup.baseModel;
-    const tasksetRef = setup.tasksetRef;
-    const taskset = await deps.store.getTaskset(setup.tasksetRef.id);
-    if (!taskset || taskset.contentHash !== setup.tasksetRef.contentHash) {
+    const comparisonEntry = input.comparisonSeriesEntryId
+      ? await deps.store.getModelComparisonSeriesEntry(input.comparisonSeriesEntryId)
+      : null;
+    if (input.comparisonSeriesEntryId && (!comparisonEntry
+      || comparisonEntry.modelProjectId !== sourceProject.id
+      || comparisonEntry.status !== "ready")) {
+      throw new Error("The requested Comparison Series entry is not a ready exact release for this Model Project.");
+    }
+    const tasksetRef = comparisonEntry?.taskset ?? setup.tasksetRef;
+    const taskset = await deps.store.getTasksetRevision(
+      tasksetRef.id,
+      tasksetRef.revision,
+      tasksetRef.contentHash,
+    );
+    if (!taskset) {
       throw new Error("The Model Project Taskset release is stale.");
     }
+    if (comparisonEntry) {
+      sourceProject = {
+        ...sourceProject,
+        trainingSetup: {
+          ...setup,
+          tasksetRef: comparisonEntry.taskset,
+        },
+      };
+      setup = sourceProject.trainingSetup;
+    }
+    const baseModel = setup.baseModel;
+    if (!baseModel) {
+      throw new Error("The Comparison Series Model Project lost its exact base Model reference.");
+    }
+    const comparisonSeriesEntry = comparisonEntry ? {
+      seriesId: comparisonEntry.seriesId,
+      entryId: comparisonEntry.id,
+      scheduleEntryId: comparisonEntry.scheduleEntryId,
+      ordinal: comparisonEntry.ordinal,
+      releaseHash: comparisonEntry.releaseHash,
+    } : null;
     const releasedHarness = await deps.resolveReleasedHarness({
       taskset,
       modelProject: sourceProject,
@@ -145,6 +180,7 @@ export function createPortableModelRunService(deps: {
       exportApproved: input.exportApproved,
       retentionDays: input.retentionDays,
       harnessRelease: releasedHarness.harnessRelease,
+      comparisonSeriesEntry,
     });
     // Preparation resolves the caller-authored Recipe into the persisted,
     // executable contract (authoritative hashes plus GRPO semantics). Export
@@ -254,6 +290,7 @@ export function createPortableModelRunService(deps: {
       releaseGraph: portableReleaseGraph,
       maximumSpendUsd: approval.maximumCostUsd,
       startedAt: approval.approvedAt,
+      comparisonSeriesEntry,
     });
     let executionRef;
     try {

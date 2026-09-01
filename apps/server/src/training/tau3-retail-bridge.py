@@ -8,6 +8,7 @@ Retail database, tools, state transitions, and deterministic end-state grade.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from typing import Any
@@ -72,9 +73,44 @@ def parse_arguments(value: Any) -> dict[str, Any]:
     return parsed
 
 
+def requests_confirmation(content: Any) -> bool:
+    if not isinstance(content, str) or not content.strip():
+        return False
+    normalized = " ".join(content.lower().split())
+    confirmation_terms = (
+        "confirm",
+        "shall i",
+        "should i",
+        "may i proceed",
+        "can i proceed",
+        "would you like me to proceed",
+        "go ahead",
+    )
+    return "?" in normalized and any(term in normalized for term in confirmation_terms)
+
+
+def confirmation_reply(task) -> tuple[str, bool]:
+    instructions = task.user_scenario.instructions
+    text = json.dumps(
+        instructions.model_dump(mode="json")
+        if hasattr(instructions, "model_dump")
+        else instructions,
+        default=str,
+    ).lower()
+    refusal_patterns = (
+        r"if (?:the )?agent asks (?:you )?to confirm[^.]*\b(?:regret|do not|don't|decline|refuse)",
+        r"when asked (?:you )?to confirm[^.]*\b(?:regret|do not|don't|decline|refuse)",
+    )
+    if any(re.search(pattern, text) for pattern in refusal_patterns):
+        return "No, do not proceed with that change.", False
+    return "Yes, I confirm. Please proceed with the changes you just summarized.", True
+
+
 def main() -> None:
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in {2, 3}:
         raise ValueError("tau3_retail_task_id_missing")
+    grader_id = sys.argv[2] if len(sys.argv) == 3 else "tau3-retail-outcome-rubric-v2"
+    v3 = grader_id == "tau3-retail-outcome-rubric-v3"
     task = task_by_id(sys.argv[1])
     environment_factory = registry.get_env_constructor("retail")
     environment = environment_factory()
@@ -108,82 +144,12 @@ def main() -> None:
     premature_mutation = False
     unexpected_mutation = False
     confirmation_turns = 0
+    confirmation_granted = False
     terminal = False
+    termination_reason: str | None = None
     resolved_communication = False
 
-    for raw_line in sys.stdin:
-        request = json.loads(raw_line)
-        operation = request.get("operation")
-        if operation == "init":
-            emit(
-                {
-                    "sourceCommit": source_commit,
-                    "policy": environment.get_policy(),
-                    "userPrompt": visible_user_prompt(task),
-                    "tools": [tool_contract(tool) for tool in environment.get_tools()],
-                }
-            )
-            continue
-        if operation != "step":
-            raise ValueError("tau3_bridge_operation_unsupported")
-
-        tool_results: list[dict[str, Any]] = []
-        successful_mutation = False
-        calls = request.get("toolCalls") or []
-        content = request.get("content")
-        resolved_communication = bool(isinstance(content, str) and content.strip())
-        for index, call in enumerate(calls):
-            attempted_call_count += 1
-            call_id = str(call.get("id") or f"tool_call_{index + 1}")
-            name = str(call.get("name") or "")
-            try:
-                arguments = parse_arguments(call.get("arguments", {}))
-                mutates = environment._is_mutating_tool(name)
-                output = environment.make_tool_call(tool_name=name, **arguments)
-                successful_mutation = successful_mutation or mutates
-                tool_call = ToolCall(
-                    id=call_id,
-                    name=name,
-                    arguments=arguments,
-                    requestor="assistant",
-                )
-                matching_actions = [
-                    action for action in expected_actions
-                    if action.requestor == "assistant" and action.compare_with_tool_call(tool_call)
-                ]
-                if mutates and not matching_actions:
-                    unexpected_mutation = True
-                tool = next((candidate for candidate in environment.get_tools() if candidate.name == name), None)
-                requires_confirmation = bool(
-                    tool is not None
-                    and "explicit user confirmation" in tool.short_desc.lower()
-                )
-                if mutates and requires_confirmation and confirmation_turns == 0:
-                    premature_mutation = True
-                successful_calls.append(
-                    {"call": tool_call, "mutates": mutates}
-                )
-                tool_results.append({"id": call_id, "name": name, "output": output})
-            except Exception as error:  # Tool errors are policy evidence, not bridge failure.
-                failed_call_count += 1
-                tool_results.append(
-                    {
-                        "id": call_id,
-                        "name": name,
-                        "output": {"error": type(error).__name__, "message": str(error)[:1000]},
-                    }
-                )
-
-        user_message = None
-        if successful_mutation:
-            terminal = True
-        elif not calls:
-            if confirmation_turns == 0:
-                confirmation_turns += 1
-                user_message = "Yes, I confirm. Please proceed with the request I described."
-            else:
-                terminal = True
-
+    def result_payload(tool_results, user_message):
         db_reward = float(
             environment.get_db_hash() == gold.get_db_hash()
             and environment.get_user_db_hash() == gold.get_user_db_hash()
@@ -216,33 +182,136 @@ def main() -> None:
             if attempted_call_count else 0.0
         )
         invalid_tool_rate = failed_call_count / attempted_call_count if attempted_call_count else 0.0
-        required_write_coverage = matched_writes / expected_writes if expected_writes else 1.0
-        required_read_coverage = matched_reads / expected_reads if expected_reads else 1.0
+        required_write_coverage = matched_writes / expected_writes if expected_writes else (0.0 if v3 else 1.0)
+        required_read_coverage = matched_reads / expected_reads if expected_reads else (0.0 if v3 else 1.0)
         action_valid = float(failed_call_count == 0)
         reward = db_reward * action_valid if terminal else 0.0
-        emit(
-            {
-                "toolResults": tool_results,
-                "userMessage": user_message,
-                "terminal": terminal,
-                "reward": reward,
-                "components": {
-                    "terminalState": db_reward,
-                    "toolExecution": action_valid,
-                    "requiredWriteCoverage": required_write_coverage,
-                    "requiredReadCoverage": required_read_coverage,
-                    "toolValidity": tool_validity,
-                    "resolvedCommunication": float(resolved_communication),
-                    "prematureMutation": float(premature_mutation),
-                    "unexpectedMutation": float(unexpected_mutation),
-                    "invalidToolRate": invalid_tool_rate,
-                },
-                "stateHashes": {
-                    "predicted": environment.get_db_hash(),
-                    "expected": gold.get_db_hash(),
-                },
-            }
-        )
+        return {
+            "toolResults": tool_results,
+            "userMessage": user_message,
+            "terminal": terminal,
+            "terminationReason": termination_reason,
+            "reward": reward,
+            "components": {
+                "terminalState": db_reward if termination_reason != "max_turns" else 0.0,
+                "toolExecution": action_valid,
+                "requiredWriteCoverage": required_write_coverage,
+                "requiredReadCoverage": required_read_coverage,
+                "toolValidity": tool_validity,
+                "resolvedCommunication": float(resolved_communication),
+                "prematureMutation": float(premature_mutation),
+                "unexpectedMutation": float(unexpected_mutation),
+                "invalidToolRate": invalid_tool_rate,
+                "requiredWritesApplicable": float(expected_writes > 0),
+                "requiredReadsApplicable": float(expected_reads > 0),
+                "toolValidityApplicable": float(attempted_call_count > 0),
+            },
+            "stateHashes": {
+                "predicted": environment.get_db_hash(),
+                "expected": gold.get_db_hash(),
+                "predictedUser": environment.get_user_db_hash(),
+                "expectedUser": gold.get_user_db_hash(),
+            },
+        }
+
+    for raw_line in sys.stdin:
+        request = json.loads(raw_line)
+        operation = request.get("operation")
+        if operation == "init":
+            emit(
+                {
+                    "sourceCommit": source_commit,
+                    "policy": environment.get_policy(),
+                    "userPrompt": visible_user_prompt(task),
+                    "tools": [tool_contract(tool) for tool in environment.get_tools()],
+                }
+            )
+            continue
+        if operation == "terminate" and v3:
+            terminal = True
+            termination_reason = str(request.get("reason") or "max_turns")
+            resolved_communication = False
+            emit(result_payload([], None))
+            continue
+        if operation != "step":
+            raise ValueError("tau3_bridge_operation_unsupported")
+
+        tool_results: list[dict[str, Any]] = []
+        successful_mutation = False
+        used_confirmation = False
+        calls = request.get("toolCalls") or []
+        content = request.get("content")
+        if not v3:
+            resolved_communication = bool(isinstance(content, str) and content.strip())
+        for index, call in enumerate(calls):
+            attempted_call_count += 1
+            call_id = str(call.get("id") or f"tool_call_{index + 1}")
+            name = str(call.get("name") or "")
+            try:
+                arguments = parse_arguments(call.get("arguments", {}))
+                mutates = environment._is_mutating_tool(name)
+                output = environment.make_tool_call(tool_name=name, **arguments)
+                successful_mutation = successful_mutation or mutates
+                tool_call = ToolCall(
+                    id=call_id,
+                    name=name,
+                    arguments=arguments,
+                    requestor="assistant",
+                )
+                matching_actions = [
+                    action for action in expected_actions
+                    if action.requestor == "assistant" and action.compare_with_tool_call(tool_call)
+                ]
+                if mutates and not matching_actions:
+                    unexpected_mutation = True
+                # The pinned Retail policy requires explicit confirmation for
+                # every database mutation. Tool short descriptions are only
+                # first-line summaries and cannot be used as the authority;
+                # several mutating tools omit the confirmation sentence there.
+                requires_confirmation = mutates
+                if mutates and requires_confirmation and not (
+                    confirmation_granted if v3 else confirmation_turns > 0
+                ):
+                    premature_mutation = True
+                if mutates and requires_confirmation:
+                    used_confirmation = True
+                successful_calls.append(
+                    {"call": tool_call, "mutates": mutates}
+                )
+                tool_results.append({"id": call_id, "name": name, "output": output})
+            except Exception as error:  # Tool errors are policy evidence, not bridge failure.
+                failed_call_count += 1
+                tool_results.append(
+                    {
+                        "id": call_id,
+                        "name": name,
+                        "output": {"error": type(error).__name__, "message": str(error)[:1000]},
+                    }
+                )
+
+        user_message = None
+        if v3:
+            if used_confirmation:
+                confirmation_granted = False
+            if not calls:
+                if requests_confirmation(content):
+                    confirmation_turns += 1
+                    user_message, confirmation_granted = confirmation_reply(task)
+                else:
+                    terminal = True
+                    termination_reason = "agent_stop" if isinstance(content, str) and content.strip() else "agent_error"
+                    resolved_communication = termination_reason == "agent_stop"
+        else:
+            if successful_mutation:
+                terminal = True
+            elif not calls:
+                if confirmation_turns == 0:
+                    confirmation_turns += 1
+                    user_message = "Yes, I confirm. Please proceed with the request I described."
+                else:
+                    terminal = True
+
+        emit(result_payload(tool_results, user_message))
 
 
 if __name__ == "__main__":

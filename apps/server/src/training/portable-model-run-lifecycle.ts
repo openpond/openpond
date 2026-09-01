@@ -7,6 +7,7 @@ import {
   TrainingJobSourceSnapshotSchema,
   TrainingJobSchema,
   type ModelRun,
+  type ModelComparisonEntryRef,
   type ModelProject,
   type Taskset,
   type TrainingArtifacts,
@@ -55,6 +56,7 @@ export async function preparePortableModelRunLifecycle(input: {
   releaseGraph: PortableReleaseGraph;
   maximumSpendUsd: number | null;
   startedAt: string;
+  comparisonSeriesEntry?: ModelComparisonEntryRef | null;
 }): Promise<{
   modelRun: ModelRun;
   targetVersion: PortableModelVersionReservation;
@@ -148,6 +150,7 @@ export async function preparePortableModelRunLifecycle(input: {
       method,
       destinationId,
       taskset: setup.tasksetRef,
+      comparisonSeriesEntry: input.comparisonSeriesEntry ?? null,
       harnessRelease: input.releaseGraph.harnessRelease,
       quote: {
         maximumSpendUsd: input.maximumSpendUsd ?? 0,
@@ -447,6 +450,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
     status: "available" as const,
     baseModel: source.baseModel,
     taskset: source.taskset,
+    comparisonSeriesEntry: current.comparisonSeriesEntry ?? null,
     releaseGraph,
     artifactLineageId: lineage.id,
     adapterStatus: "trained" as const,

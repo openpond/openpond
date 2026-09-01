@@ -16,7 +16,9 @@ import {
 } from "./managed-rl-harness-registry.js";
 import {
   composeTau3RetailOutcomeReward,
+  composeTau3RetailOutcomeRewardV3,
   TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID,
+  TAU3_RETAIL_OUTCOME_RUBRIC_V3_GRADER_ID,
   TAU3_RETAIL_TERMINAL_STATE_GRADER_ID,
 } from "./tau3-retail-reward.js";
 
@@ -36,6 +38,7 @@ type BridgeStep = {
   toolResults: Array<{ id: string; name: string; output: unknown }>;
   userMessage: string | null;
   terminal: boolean;
+  terminationReason?: string | null;
   reward: number;
   components: Record<string, number>;
   stateHashes: Record<string, string | null>;
@@ -67,6 +70,7 @@ export async function executeTau3RetailManagedRl(
   if (
     rewardGrader.id !== TAU3_RETAIL_TERMINAL_STATE_GRADER_ID
     && rewardGrader.id !== TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID
+    && rewardGrader.id !== TAU3_RETAIL_OUTCOME_RUBRIC_V3_GRADER_ID
   ) {
     throw new Error(`tau3_retail_reward_grader_unsupported:${rewardGrader.id}`);
   }
@@ -81,6 +85,7 @@ export async function executeTau3RetailManagedRl(
   const bridge = await Tau3Bridge.start({
     root: process.env.OPENPOND_TAU3_BENCH_ROOT?.trim() || DEFAULT_TAU3_ROOT,
     taskId,
+    graderId: rewardGrader.id,
     signal: input.signal,
   });
   const startedAt = (input.timestamp ?? (() => new Date().toISOString()))();
@@ -158,6 +163,20 @@ export async function executeTau3RetailManagedRl(
       });
       if (finalStep.terminal) break;
     }
+    if (finalStep && !finalStep.terminal) {
+      finalStep = await bridge.request<BridgeStep>({
+        operation: "terminate",
+        reason: "max_turns",
+      });
+      trace.push({
+        turnIndex: MAX_TURNS,
+        content: null,
+        toolCalls: [],
+        toolResults: [],
+        terminal: true,
+        terminationReason: "max_turns",
+      });
+    }
   } finally {
     await bridge.close();
   }
@@ -173,7 +192,21 @@ export async function executeTau3RetailManagedRl(
   const bridgeComponents = Object.fromEntries(
     Object.entries(finalStep.components).map(([key, value]) => [key, finite(value, key)]),
   );
-  const scored = rewardGrader.id === TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID
+  const scored = rewardGrader.id === TAU3_RETAIL_OUTCOME_RUBRIC_V3_GRADER_ID
+    ? composeTau3RetailOutcomeRewardV3({
+        terminalState: requiredComponent(bridgeComponents, "terminalState"),
+        requiredWriteCoverage: requiredComponent(bridgeComponents, "requiredWriteCoverage"),
+        requiredReadCoverage: requiredComponent(bridgeComponents, "requiredReadCoverage"),
+        toolValidity: requiredComponent(bridgeComponents, "toolValidity"),
+        resolvedCommunication: requiredComponent(bridgeComponents, "resolvedCommunication"),
+        prematureMutation: requiredComponent(bridgeComponents, "prematureMutation"),
+        unexpectedMutation: requiredComponent(bridgeComponents, "unexpectedMutation"),
+        invalidToolRate: requiredComponent(bridgeComponents, "invalidToolRate"),
+        requiredWritesApplicable: requiredComponent(bridgeComponents, "requiredWritesApplicable") === 1,
+        requiredReadsApplicable: requiredComponent(bridgeComponents, "requiredReadsApplicable") === 1,
+        toolValidityApplicable: requiredComponent(bridgeComponents, "toolValidityApplicable") === 1,
+      })
+    : rewardGrader.id === TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID
     ? composeTau3RetailOutcomeReward({
         terminalState: requiredComponent(bridgeComponents, "terminalState"),
         requiredWriteCoverage: requiredComponent(bridgeComponents, "requiredWriteCoverage"),
@@ -221,6 +254,7 @@ export async function executeTau3RetailManagedRl(
       reward: rollout.reward,
       components: rollout.components,
       terminal: rollout.terminal,
+      terminationReason: finalStep.terminationReason ?? null,
       toolSequence,
     },
     attemptReceipt: createManagedRlHarnessAttemptReceipt({
@@ -268,11 +302,16 @@ class Tau3Bridge {
     });
   }
 
-  static async start(input: { root: string; taskId: string; signal: AbortSignal }): Promise<Tau3Bridge> {
+  static async start(input: {
+    root: string;
+    taskId: string;
+    graderId: string;
+    signal: AbortSignal;
+  }): Promise<Tau3Bridge> {
     const root = path.resolve(input.root);
     const python = path.join(root, ".venv", "bin", "python");
     const script = fileURLToPath(new URL("./tau3-retail-bridge.py", import.meta.url));
-    const child = spawn(python, [script, input.taskId], {
+    const child = spawn(python, [script, input.taskId, input.graderId], {
       cwd: root,
       env: { ...process.env, PYTHONUNBUFFERED: "1" },
       stdio: ["pipe", "pipe", "pipe"],

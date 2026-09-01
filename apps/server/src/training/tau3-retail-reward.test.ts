@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { composeTau3RetailOutcomeReward } from "./tau3-retail-reward.js";
+import {
+  composeTau3RetailOutcomeReward,
+  composeTau3RetailOutcomeRewardV3,
+} from "./tau3-retail-reward.js";
 
 const evidence = (overrides: Partial<Parameters<typeof composeTau3RetailOutcomeReward>[0]> = {}) => ({
   terminalState: 0,
@@ -43,5 +46,65 @@ describe("composeTau3RetailOutcomeReward", () => {
   it("rejects non-finite and out-of-contract evidence", () => {
     expect(() => composeTau3RetailOutcomeReward(evidence({ terminalState: Number.NaN }))).toThrow();
     expect(() => composeTau3RetailOutcomeReward(evidence({ toolValidity: 1.1 }))).toThrow();
+  });
+});
+
+const evidenceV3 = (
+  overrides: Partial<Parameters<typeof composeTau3RetailOutcomeRewardV3>[0]> = {},
+) => ({
+  ...evidence(),
+  requiredWritesApplicable: true,
+  requiredReadsApplicable: true,
+  toolValidityApplicable: true,
+  ...overrides,
+});
+
+describe("composeTau3RetailOutcomeRewardV3", () => {
+  it("renormalizes absent requirements instead of awarding automatic coverage", () => {
+    const noAction = composeTau3RetailOutcomeRewardV3(evidenceV3({
+      terminalState: 1,
+      resolvedCommunication: 1,
+      requiredWritesApplicable: false,
+      requiredReadsApplicable: false,
+      toolValidityApplicable: false,
+    }));
+    expect(noAction.reward).toBe(1);
+    expect(noAction.components.requiredWritesApplicable).toBe(0);
+    expect(noAction.components.requiredReadsApplicable).toBe(0);
+    expect(noAction.components.toolValidityApplicable).toBe(0);
+  });
+
+  it("keeps read-only, write-only, and mixed partial progress distinct", () => {
+    const readOnly = composeTau3RetailOutcomeRewardV3(evidenceV3({
+      requiredWritesApplicable: false,
+      requiredReadCoverage: 1,
+    })).reward;
+    const writeOnly = composeTau3RetailOutcomeRewardV3(evidenceV3({
+      requiredReadsApplicable: false,
+      requiredWriteCoverage: 1,
+    })).reward;
+    const mixed = composeTau3RetailOutcomeRewardV3(evidenceV3({
+      requiredReadCoverage: 1,
+      requiredWriteCoverage: 1,
+    })).reward;
+    expect(new Set([readOnly, writeOnly, mixed]).size).toBe(3);
+  });
+
+  it("applies safety penalties after applicability-aware composition", () => {
+    const safe = composeTau3RetailOutcomeRewardV3(evidenceV3({
+      terminalState: 1,
+      requiredWriteCoverage: 1,
+      requiredReadCoverage: 1,
+    })).reward;
+    const unsafe = composeTau3RetailOutcomeRewardV3(evidenceV3({
+      terminalState: 1,
+      requiredWriteCoverage: 1,
+      requiredReadCoverage: 1,
+      prematureMutation: 1,
+      unexpectedMutation: 1,
+      invalidToolRate: 0.5,
+    })).reward;
+    expect(safe).toBe(1);
+    expect(unsafe).toBeCloseTo(0.1);
   });
 });

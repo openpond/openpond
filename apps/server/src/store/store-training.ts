@@ -682,6 +682,10 @@ export class SqliteTrainingStore extends SqliteTasksetDraftStore {
 
   async saveTrainingPlan(planInput: TrainingPlan): Promise<TrainingPlan> {
     const plan = TrainingPlanSchema.parse(planInput);
+    const existing = await this.getTrainingPlan(plan.id);
+    if (existing && existing.contentHash !== plan.contentHash) {
+      throw new Error(`Training Plan ${plan.id} is immutable and already has different content.`);
+    }
     await this.upsertPayload(
       `INSERT INTO training_plans (id, taskset_id, destination_id, payload, created_at) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, destination_id = excluded.destination_id, payload = excluded.payload`,
