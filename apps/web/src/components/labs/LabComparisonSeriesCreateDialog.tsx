@@ -6,6 +6,7 @@ import type {
   Taskset,
   TrainingStateResponse,
 } from "@openpond/contracts";
+import { contentHash } from "@openpond/harness";
 
 import { AppDialog } from "../dialogs/AppDialog";
 import { X } from "../icons";
@@ -96,6 +97,11 @@ export function LabComparisonSeriesCreateDialog({
     const baseModel = project.trainingSetup.baseModel;
     const reward = recipeReward(recipe);
     if (!recipe || !baseModel?.revision || !reward) return;
+    const grader = selected[0]!.graders.find((candidate) => candidate.id === reward.graderId);
+    if (!grader) {
+      setError("The seed Taskset does not contain the Model Project's configured reward grader.");
+      return;
+    }
     const seriesId = `comparison_series_${crypto.randomUUID()}`;
     const schedule = comparisonSchedule(seriesId, {
       seedRank,
@@ -122,7 +128,7 @@ export function LabComparisonSeriesCreateDialog({
         retained: exactRef(selected[3]!),
         frozenFinal: exactRef(selected[4]!),
       },
-      grader: { id: reward.graderId, contentHash: reward.graderHash },
+      grader: { id: reward.graderId, contentHash: contentHash(grader) },
       residualProfile: {
         profileId: `${project.id}-uniform-residual-v1`,
         serializedEnvelopeRank: envelopeRank,
@@ -203,14 +209,13 @@ function seriesReadyProject(project: ModelProject): boolean {
   return Boolean(project.trainingSetup.baseModel?.revision && recipeReward(project.trainingSetup.recipe));
 }
 
-function recipeReward(recipe: unknown): { graderId: string; graderHash: string } | null {
+function recipeReward(recipe: unknown): { graderId: string } | null {
   if (!recipe || typeof recipe !== "object" || Array.isArray(recipe)) return null;
   const reward = (recipe as Record<string, unknown>).reward;
   if (!reward || typeof reward !== "object" || Array.isArray(reward)) return null;
   const graderId = (reward as Record<string, unknown>).graderId;
-  const graderHash = (reward as Record<string, unknown>).graderHash;
-  return typeof graderId === "string" && typeof graderHash === "string"
-    ? { graderId, graderHash }
+  return typeof graderId === "string"
+    ? { graderId }
     : null;
 }
 
