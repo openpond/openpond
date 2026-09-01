@@ -667,6 +667,10 @@ async function startTraining(input: {
   const manifest = manifestPath
     ? await readManifest(manifestPath)
     : undefined;
+  const comparisonSeriesEntryId = optionString(
+    input.options,
+    "comparisonSeriesEntry",
+  ) || null;
   const controls = { maximumSpendUsd, retentionDays };
   const preparation = await input.client.prepareModelProject(
     input.modelRunId,
@@ -688,6 +692,7 @@ async function startTraining(input: {
       ...controls,
       exportApproved: parseBooleanOption(input.options.exportApproved),
       manifest,
+      comparisonSeriesEntryId,
     },
   );
   printResult(result, input.json);

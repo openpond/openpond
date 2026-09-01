@@ -173,6 +173,7 @@ describe("training CLI", () => {
         {
           apiBaseUrl: "http://local.test",
           detach: "true",
+          comparisonSeriesEntry: "comparison_entry_p0",
           manifest: manifestPath,
           yes: "true",
         },
@@ -185,6 +186,7 @@ describe("training CLI", () => {
         maximumSpendUsd: null,
         retentionDays: null,
         manifest: { schemaVersion: "test" },
+        comparisonSeriesEntryId: "comparison_entry_p0",
       });
     } finally {
       await rm(directory, { recursive: true });

@@ -376,7 +376,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     usage: "openpond training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>",
     usages: [
       "openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]",
-      "openpond training start <model-project-id> [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
+      "openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
       "openpond training status <run-id> [--json]",
       "openpond training watch <run-id> [--interval-ms <ms>] [--json]",
       "openpond training logs <run-id> [--json]",
@@ -387,6 +387,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     ],
     optionSchema: {
       apiBaseUrl: "string",
+      comparisonSeriesEntry: "string",
       detach: "boolean",
       destination: "string",
       exportApproved: "boolean",
