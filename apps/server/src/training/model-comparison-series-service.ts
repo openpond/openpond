@@ -126,6 +126,8 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
       enabledCumulativeRank: blocks.at(-1)!.offsetEnd,
       trainableBlockId: trainableBlock.id,
       residualBlocks: blocks,
+      attemptOrdinal: 1,
+      priorRunAttempts: [],
       trainingPlanId: null,
       modelRunId: null,
       modelVersionId: null,
@@ -191,6 +193,52 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
       updatedAt: timestamp,
     });
     return store.compareAndSwapModelComparisonSeriesEntry({ expectedStatus: input.expectedStatus, entry: next });
+  }
+
+  async function retryEntry(input: { entryId: string }): Promise<ModelComparisonSeriesEntry> {
+    const entry = await requireEntry(input.entryId);
+    if (entry.status !== "failed" && entry.status !== "cancelled") {
+      throw new Error("Only a failed or cancelled Comparison entry can be retried.");
+    }
+    if (entry.modelRunId) {
+      const run = await store.getModelRun(entry.modelRunId);
+      if (!run || (run.status !== "failed" && run.status !== "cancelled")) {
+        throw new Error("The current Comparison Run must be terminal before retrying its release.");
+      }
+    }
+    const timestamp = new Date().toISOString();
+    const hasAttempt = Boolean(entry.modelRunId || entry.trainingPlanId);
+    const priorRunAttempts = hasAttempt
+      ? [...entry.priorRunAttempts, {
+          attemptOrdinal: entry.attemptOrdinal,
+          trainingPlanId: entry.trainingPlanId,
+          modelRunId: entry.modelRunId,
+          terminalStatus: entry.status,
+          queuedAt: entry.queuedAt,
+          startedAt: entry.startedAt,
+          completedAt: entry.completedAt ?? timestamp,
+        }]
+      : entry.priorRunAttempts;
+    const next = ModelComparisonSeriesEntrySchema.parse({
+      ...entry,
+      status: "ready",
+      attemptOrdinal: hasAttempt ? entry.attemptOrdinal + 1 : entry.attemptOrdinal,
+      priorRunAttempts,
+      trainingPlanId: null,
+      modelRunId: null,
+      modelVersionId: null,
+      evaluations: [],
+      decision: null,
+      promotionBindingId: null,
+      queuedAt: null,
+      startedAt: null,
+      completedAt: null,
+      updatedAt: timestamp,
+    });
+    return store.compareAndSwapModelComparisonSeriesEntry({
+      expectedStatus: entry.status,
+      entry: next,
+    });
   }
 
   async function decide(input: {
@@ -623,7 +671,7 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     }
   }
 
-  return { decide, linkRun, queueRelease, reconcileEntries, recordPromotion, saveSeries, sealSeries };
+  return { decide, linkRun, queueRelease, reconcileEntries, recordPromotion, retryEntry, saveSeries, sealSeries };
 }
 
 function requireScheduledEntry(series: ModelComparisonSeries, id: string): ModelComparisonScheduleEntry {

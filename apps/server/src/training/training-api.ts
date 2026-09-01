@@ -241,6 +241,11 @@ export function createTrainingApi(deps: {
           : ModelComparisonEvaluationLinkSchema.array().parse(input.evaluations),
       });
     }
+    if (action === "retry_model_comparison_entry") {
+      return comparisonSeries.retryEntry({
+        entryId: requiredString(input.entryId, "entryId"),
+      });
+    }
     if (action === "decide_model_comparison_entry") {
       return comparisonSeries.decide({
         entryId: requiredString(input.entryId, "entryId"),
@@ -1283,6 +1288,13 @@ export function createTrainingApi(deps: {
     });
     if (action === "start_model_run") {
       const modelProjectId = requiredString(input.modelProjectId, "modelProjectId");
+      const comparisonEntryId = nullableString(input.comparisonSeriesEntryId);
+      if (comparisonEntryId) {
+        const comparisonEntry = await deps.store.getModelComparisonSeriesEntry(comparisonEntryId);
+        if (comparisonEntry?.status === "failed" || comparisonEntry?.status === "cancelled") {
+          await comparisonSeries.retryEntry({ entryId: comparisonEntryId });
+        }
+      }
       const modelProject = await deps.store.getModelProject(modelProjectId);
       if (!modelProject) throw new Error("A saved Model Project is required.");
       const setup = modelProject.trainingSetup;
@@ -1310,9 +1322,8 @@ export function createTrainingApi(deps: {
         retentionDays: nullableNumber(input.retentionDays),
         exportApproved: input.exportApproved === true,
         manifest: input.manifest,
-        comparisonSeriesEntryId: nullableString(input.comparisonSeriesEntryId),
+        comparisonSeriesEntryId: comparisonEntryId,
       });
-      const comparisonEntryId = nullableString(input.comparisonSeriesEntryId);
       if (comparisonEntryId) {
         const modelRunId = string(started.job.metadata.modelRunId);
         if (!modelRunId) {

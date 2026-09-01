@@ -19,6 +19,7 @@ describe("Comparison Series training routes", () => {
     ["POST", "/v1/training/comparison-series/series-a/seal", "seal_model_comparison_series", "seriesId", "series-a"],
     ["POST", "/v1/training/comparison-series/series-a/releases", "queue_model_comparison_release", "seriesId", "series-a"],
     ["PATCH", "/v1/training/comparison-series-entries/entry-a/run", "link_model_comparison_run", "entryId", "entry-a"],
+    ["POST", "/v1/training/comparison-series-entries/entry-a/retry", "retry_model_comparison_entry", "entryId", "entry-a"],
     ["POST", "/v1/training/comparison-series-entries/entry-a/decision", "decide_model_comparison_entry", "entryId", "entry-a"],
     ["POST", "/v1/training/comparison-series-entries/entry-a/promotion", "record_model_comparison_promotion", "entryId", "entry-a"],
   ])("routes %s %s through the authenticated training boundary", async (method, pathname, action, key, id) => {

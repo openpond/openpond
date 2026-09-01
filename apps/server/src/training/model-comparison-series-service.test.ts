@@ -290,7 +290,33 @@ describe("Model Comparison Series service", () => {
     store.data.entries.set(alternate.id, alternate);
     const cancelled = await service.linkRun({ entryId: alternate.id, expectedStatus: "ready", status: "cancelled" });
     expect(cancelled.status).toBe("cancelled");
-    await expect(service.linkRun({ entryId: alternate.id, expectedStatus: "cancelled", status: "ready" })).rejects.toThrow("Invalid Comparison entry transition");
+    const retried = await service.retryEntry({ entryId: alternate.id });
+    expect(retried.status).toBe("ready");
+    expect(retried.attemptOrdinal).toBe(1);
+    expect(retried.priorRunAttempts).toEqual([]);
+
+    const attempted = {
+      ...p0,
+      id: "retry-entry",
+      releaseHash: contentHash("retry-entry"),
+      status: "cancelled" as const,
+      trainingPlanId: "retry-plan",
+      modelRunId: "retry-run",
+      queuedAt: NOW,
+      startedAt: NOW,
+      completedAt: NOW,
+    };
+    store.data.entries.set(attempted.id, attempted);
+    store.data.runs.set("retry-run", { id: "retry-run", status: "cancelled" });
+    const nextAttempt = await service.retryEntry({ entryId: attempted.id });
+    expect(nextAttempt.status).toBe("ready");
+    expect(nextAttempt.attemptOrdinal).toBe(2);
+    expect(nextAttempt.modelRunId).toBeNull();
+    expect(nextAttempt.priorRunAttempts).toEqual([expect.objectContaining({
+      attemptOrdinal: 1,
+      modelRunId: "retry-run",
+      terminalStatus: "cancelled",
+    })]);
   });
 
   it("reconciles the canonical Model Run lifecycle into its Comparison entry", async () => {

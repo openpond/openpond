@@ -186,6 +186,16 @@ export const ModelComparisonEvaluationLinkSchema = z.object({
   cohortRole: z.enum(["current", "development", "retained", "prior_disclosed", "frozen_final"]),
 }).strict();
 
+export const ModelComparisonRunAttemptSchema = z.object({
+  attemptOrdinal: z.number().int().positive(),
+  trainingPlanId: ReleaseIdSchema.nullable(),
+  modelRunId: ReleaseIdSchema.nullable(),
+  terminalStatus: z.enum(["failed", "cancelled"]),
+  queuedAt: ReleaseTimestampSchema.nullable(),
+  startedAt: ReleaseTimestampSchema.nullable(),
+  completedAt: ReleaseTimestampSchema,
+}).strict();
+
 /**
  * Immutable identity for a Comparison Series release. The entry itself has a
  * mutable lifecycle, so Plans, Runs, Versions, and Evaluations carry this
@@ -221,6 +231,8 @@ export const ModelComparisonSeriesEntrySchema = z.object({
   enabledCumulativeRank: z.number().int().positive().max(1_024),
   trainableBlockId: ReleaseIdSchema,
   residualBlocks: z.array(ModelComparisonResidualBlockSchema).min(1).max(1_024),
+  attemptOrdinal: z.number().int().positive().default(1),
+  priorRunAttempts: z.array(ModelComparisonRunAttemptSchema).max(100).default([]),
   trainingPlanId: ReleaseIdSchema.nullable(),
   modelRunId: ReleaseIdSchema.nullable(),
   modelVersionId: ReleaseIdSchema.nullable(),
@@ -245,6 +257,13 @@ export const ModelComparisonSeriesEntrySchema = z.object({
   if (trainable.length !== 1 || trainable[0]?.id !== entry.trainableBlockId || trainable[0]?.rank !== entry.trainableRank) {
     context.addIssue({ code: "custom", path: ["trainableBlockId"], message: "Exactly one block must be trainable during the Run and match trainableRank." });
   }
+  const attemptOrdinals = entry.priorRunAttempts.map((attempt) => attempt.attemptOrdinal);
+  if (
+    entry.priorRunAttempts.length !== entry.attemptOrdinal - 1
+    || attemptOrdinals.some((ordinal, index) => ordinal !== index + 1)
+  ) {
+    context.addIssue({ code: "custom", path: ["priorRunAttempts"], message: "Prior Run attempts must be a contiguous history before the active attempt." });
+  }
 });
 
 export const ModelComparisonQueueReleaseRequestSchema = z.object({
@@ -266,6 +285,7 @@ export type ModelComparisonParent = z.infer<typeof ModelComparisonParentSchema>;
 export type ModelComparisonResidualBlock = z.infer<typeof ModelComparisonResidualBlockSchema>;
 export type ModelComparisonDecision = z.infer<typeof ModelComparisonDecisionSchema>;
 export type ModelComparisonEvaluationLink = z.infer<typeof ModelComparisonEvaluationLinkSchema>;
+export type ModelComparisonRunAttempt = z.infer<typeof ModelComparisonRunAttemptSchema>;
 export type ModelComparisonEntryRef = z.infer<typeof ModelComparisonEntryRefSchema>;
 export type ModelComparisonSeriesEntry = z.infer<typeof ModelComparisonSeriesEntrySchema>;
 export type ModelComparisonQueueReleaseRequest = z.infer<typeof ModelComparisonQueueReleaseRequestSchema>;

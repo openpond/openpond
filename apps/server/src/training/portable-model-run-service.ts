@@ -65,6 +65,7 @@ export function createPortableModelRunService(deps: {
     planId: string;
     bundleId: string;
     maximumCostUsd?: number | null;
+    approvedBy?: string;
   }): Promise<TrainingApproval>;
   prepareModel?: (input: { modelId: string; revision: string | null }) => Promise<unknown>;
   resolveReleasedHarness: (input: {
@@ -203,6 +204,9 @@ export function createPortableModelRunService(deps: {
       planId: prepared.plan.id,
       bundleId: prepared.bundle.id,
       maximumCostUsd: input.maximumSpendUsd,
+      approvedBy: comparisonEntry
+        ? `comparison_series:${comparisonEntry.id}:attempt:${comparisonEntry.attemptOrdinal}`
+        : undefined,
     });
     const bindings = resolvePortableBindings({
       modelProject: sourceProject,
