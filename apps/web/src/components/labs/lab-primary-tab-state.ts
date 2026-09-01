@@ -14,6 +14,7 @@ export type ModelSection = (typeof MODEL_SECTIONS)[number];
 
 export const MODEL_LIBRARY_SECTIONS = [
   "projects",
+  "comparisons",
   "tasksets",
   "scorers",
   "evaluations",

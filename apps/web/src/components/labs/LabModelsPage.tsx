@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import type {
   CreateImproveRun,
-  ProviderSettings,
   TrainingStateResponse,
 } from "@openpond/contracts";
 
@@ -9,7 +8,6 @@ import { Search } from "../icons";
 import { DropdownSelect } from "../DropdownSelect";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 import { ModelsTable, Pagination } from "./LabsRouteSections";
-import { LabModelComparisonDialog } from "./LabModelComparisonDialog";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 const PAGE_SIZE = 10;
@@ -18,25 +16,24 @@ export function LabModelsPage({
   activeProfileId,
   items,
   loading,
-  providerSettings,
   runs,
   state,
+  onCompare,
   onSelect,
   onUseModel,
 }: {
   activeProfileId: string;
   items: LabWorkproductSummary[];
   loading: boolean;
-  providerSettings: ProviderSettings | null;
   runs: CreateImproveRun[];
   state: TrainingStateResponse | null;
+  onCompare: () => void;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
 }) {
   const [profileId, setProfileId] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [comparisonOpen, setComparisonOpen] = useState(false);
   const comparableRunCount = state?.modelRuns.filter(
     (run) => run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1",
   ).length ?? 0;
@@ -121,7 +118,7 @@ export function LabModelsPage({
             className="training-button secondary"
             disabled={comparableRunCount < 1}
             type="button"
-            onClick={() => setComparisonOpen(true)}
+            onClick={onCompare}
           >
             Compare runs
           </button>
@@ -137,18 +134,6 @@ export function LabModelsPage({
         onUseModel={onUseModel}
       />
       <Pagination page={page} total={filtered.length} onChange={setPage} />
-      {comparisonOpen && state ? (
-        <LabModelComparisonDialog
-          items={items}
-          providerSettings={providerSettings}
-          state={state}
-          onClose={() => setComparisonOpen(false)}
-          onOpenModel={(key) => {
-            setComparisonOpen(false);
-            onSelect(key);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

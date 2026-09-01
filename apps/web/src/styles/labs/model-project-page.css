@@ -107,6 +107,25 @@
   text-overflow: ellipsis;
 }
 
+.labs-comparison-table th,
+.labs-comparison-table td {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.labs-comparison-table td > small,
+.labs-comparison-table .labs-version-row-button small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.labs-comparison-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .labs-overview-decision-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

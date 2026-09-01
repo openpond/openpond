@@ -19,6 +19,7 @@ import { LabScoringPage } from "./LabScoringPage";
 import type { LabScorerCreateInput } from "./LabScorerCreateDialog";
 import { LabModelCreateDialog, type LabModelCreateInput } from "./LabModelCreateDialog";
 import { LabModelsPage } from "./LabModelsPage";
+import { LabModelComparisonsPage } from "./LabModelComparisonsPage";
 import { LabModelsOverviewPage } from "./LabModelsOverviewPage";
 import { LabsRouteModelUseDialog } from "./LabsRouteModelUseDialog";
 import { LabServingPage } from "./LabServingPage";
@@ -596,14 +597,29 @@ export function LabsRoute({
             activeProfileId={profileId}
             items={models}
             loading={training.training.loading && !models.length}
-            providerSettings={training.providerSettings}
             runs={createImprove.runs}
             state={training.training.payload}
+            onCompare={() => navigateModelsRoute(modelLibraryRoute("comparisons"))}
             onSelect={(key) => {
               const project = models.find((item) => item.key === key);
               if (project) navigateModelsRoute(modelProjectRoute(project.id));
             }}
             onUseModel={useModel}
+          />
+        ) : modelsRoute.section === "comparisons" ? (
+          <LabModelComparisonsPage
+            connection={profileView.connection}
+            state={training.training.payload}
+            training={training.training}
+            onOpenProject={(projectId) => navigateModelsRoute(modelProjectRoute(projectId))}
+            onOpenRun={(projectId, runId) => navigateModelsRoute({
+              kind: "project",
+              projectId,
+              section: "runs",
+              resourceId: modelEntryRouteId(`model-run:${runId}`),
+              detailTab: null,
+            })}
+            onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
           />
         ) : modelsRoute.section === "tasksets" ? (
           datasetCreateRoute === "build" ? (
@@ -900,9 +916,9 @@ export function LabsRoute({
           activeProfileId={profileId}
           items={models}
           loading={training.training.loading && !models.length}
-          providerSettings={training.providerSettings}
           runs={createImprove.runs}
           state={training.training.payload}
+          onCompare={() => navigateModelsRoute(modelLibraryRoute("comparisons"))}
           onSelect={(key) => {
             const project = models.find((item) => item.key === key);
             if (project) navigateModelsRoute(modelProjectRoute(project.id));

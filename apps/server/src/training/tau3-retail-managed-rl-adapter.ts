@@ -14,6 +14,11 @@ import {
   registerManagedRlHarnessAdapter,
   type ManagedRlHarnessExecutionInput,
 } from "./managed-rl-harness-registry.js";
+import {
+  composeTau3RetailOutcomeReward,
+  TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID,
+  TAU3_RETAIL_TERMINAL_STATE_GRADER_ID,
+} from "./tau3-retail-reward.js";
 
 export const TAU3_RETAIL_HARNESS_ADAPTER_ID = "tau3-retail-v1";
 const DEFAULT_TAU3_ROOT = "/tmp/tau3-bench";
@@ -57,6 +62,14 @@ export async function executeTau3RetailManagedRl(
     input.taskset.environment.metadata.benchmark,
     "tau3 benchmark metadata",
   );
+  const rewardGrader = input.taskset.graders.find((grader) => grader.rewardEligible);
+  if (!rewardGrader) throw new Error("tau3_retail_reward_grader_missing");
+  if (
+    rewardGrader.id !== TAU3_RETAIL_TERMINAL_STATE_GRADER_ID
+    && rewardGrader.id !== TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID
+  ) {
+    throw new Error(`tau3_retail_reward_grader_unsupported:${rewardGrader.id}`);
+  }
   const taskId = requiredString(
     input.task.metadata.benchmarkTaskId,
     "tau3 Retail task ID",
@@ -157,12 +170,31 @@ export async function executeTau3RetailManagedRl(
   );
   const traceSha256 = sha256({ taskId, messages, trace, stateHashes: finalStep.stateHashes });
   const completedAt = (input.timestamp ?? (() => new Date().toISOString()))();
+  const bridgeComponents = Object.fromEntries(
+    Object.entries(finalStep.components).map(([key, value]) => [key, finite(value, key)]),
+  );
+  const scored = rewardGrader.id === TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID
+    ? composeTau3RetailOutcomeReward({
+        terminalState: requiredComponent(bridgeComponents, "terminalState"),
+        requiredWriteCoverage: requiredComponent(bridgeComponents, "requiredWriteCoverage"),
+        requiredReadCoverage: requiredComponent(bridgeComponents, "requiredReadCoverage"),
+        toolValidity: requiredComponent(bridgeComponents, "toolValidity"),
+        resolvedCommunication: requiredComponent(bridgeComponents, "resolvedCommunication"),
+        prematureMutation: requiredComponent(bridgeComponents, "prematureMutation"),
+        unexpectedMutation: requiredComponent(bridgeComponents, "unexpectedMutation"),
+        invalidToolRate: requiredComponent(bridgeComponents, "invalidToolRate"),
+      })
+    : {
+        reward: finite(finalStep.reward, "tau3 reward"),
+        components: {
+          terminalState: requiredComponent(bridgeComponents, "terminalState"),
+          toolExecution: requiredComponent(bridgeComponents, "toolExecution"),
+        },
+      };
   const rollout = {
     traceSha256,
-    reward: finite(finalStep.reward, "tau3 reward"),
-    components: Object.fromEntries(
-      Object.entries(finalStep.components).map(([key, value]) => [key, finite(value, key)]),
-    ),
+    reward: scored.reward,
+    components: scored.components,
     terminal: finalStep.terminal,
     toolSequence,
   };
@@ -303,6 +335,11 @@ function requiredSha(value: unknown, label: string): string {
 }
 function finite(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} must be finite.`);
+  return value;
+}
+function requiredComponent(components: Record<string, number>, key: string): number {
+  const value = components[key];
+  if (value === undefined) throw new Error(`tau3_retail_component_missing:${key}`);
   return value;
 }
 function sha256(value: unknown): string {
