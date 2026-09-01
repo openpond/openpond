@@ -319,6 +319,67 @@ describe("Model Comparison Series service", () => {
     })]);
   });
 
+  it("completes post-launch linkage after reconciliation advances the entry", async () => {
+    const seed = taskset("seed-service-test", ["seed-task"]);
+    const eligible = taskset("eligible-service-test", ["daily-one"]);
+    const development = taskset("development-service-test", ["development-task"]);
+    const retained = taskset("retained-service-test", ["retained-task"]);
+    const frozen = taskset("frozen-service-test", ["frozen-task"]);
+    const store = memoryStore([seed, eligible, development, retained, frozen]);
+    const service = createModelComparisonSeriesService(store.api as never);
+    await service.saveSeries(draftSeries(seed, eligible, development, retained, frozen));
+    const sealed = await service.sealSeries({ seriesId: "series-service-test", expectedRevision: 1 });
+    const entry = (await service.queueRelease({
+      seriesId: sealed.id,
+      scheduleEntryId: "schedule-p0",
+      taskSelection: null,
+      expectedSeriesRevision: sealed.revision,
+    })).entry;
+    const comparisonSeriesEntry = {
+      seriesId: entry.seriesId,
+      entryId: entry.id,
+      scheduleEntryId: entry.scheduleEntryId,
+      ordinal: entry.ordinal,
+      releaseHash: entry.releaseHash,
+    };
+    store.data.plans.set("plan-race", {
+      id: "plan-race",
+      modelId: entry.modelProjectId,
+      tasksetId: entry.taskset.id,
+      tasksetHash: entry.taskset.contentHash,
+      comparisonSeriesEntry,
+    });
+    store.data.runs.set("run-race", {
+      id: "run-race",
+      profileId: entry.profileId,
+      modelId: entry.modelProjectId,
+      taskset: entry.taskset,
+      comparisonSeriesEntry,
+      status: "running",
+    });
+
+    await service.linkRun({
+      entryId: entry.id,
+      expectedStatus: "ready",
+      status: "queued",
+      modelRunId: "run-race",
+    });
+    await service.linkRun({
+      entryId: entry.id,
+      expectedStatus: "queued",
+      status: "running",
+    });
+
+    const linked = await service.linkStartedRun({
+      entryId: entry.id,
+      trainingPlanId: "plan-race",
+      modelRunId: "run-race",
+    });
+    expect(linked.status).toBe("running");
+    expect(linked.trainingPlanId).toBe("plan-race");
+    expect(linked.modelRunId).toBe("run-race");
+  });
+
   it("reconciles the canonical Model Run lifecycle into its Comparison entry", async () => {
     const seed = taskset("seed-service-test", ["seed-task"]);
     const eligible = taskset("eligible-service-test", ["daily-one", "daily-two", "daily-three"]);

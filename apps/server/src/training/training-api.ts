@@ -1329,20 +1329,11 @@ export function createTrainingApi(deps: {
         if (!modelRunId) {
           throw new Error("The started Comparison Series Run did not publish its canonical Model Run ID.");
         }
-        let linked = await comparisonSeries.linkRun({
+        await comparisonSeries.linkStartedRun({
           entryId: comparisonEntryId,
-          expectedStatus: "ready",
-          status: "queued",
           trainingPlanId: started.plan.id,
           modelRunId,
         });
-        if (linked.status === "queued") {
-          linked = await comparisonSeries.linkRun({
-            entryId: comparisonEntryId,
-            expectedStatus: "queued",
-            status: "running",
-          });
-        }
       }
       return started;
     }

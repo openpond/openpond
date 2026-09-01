@@ -195,6 +195,38 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     return store.compareAndSwapModelComparisonSeriesEntry({ expectedStatus: input.expectedStatus, entry: next });
   }
 
+  async function linkStartedRun(input: {
+    entryId: string;
+    trainingPlanId: string;
+    modelRunId: string;
+  }): Promise<ModelComparisonSeriesEntry> {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const entry = await requireEntry(input.entryId);
+      if (entry.status !== "ready" && entry.status !== "queued" && entry.status !== "running") {
+        throw new Error(`A started Comparison Run cannot be linked from ${entry.status}.`);
+      }
+      try {
+        const linked = await linkRun({
+          entryId: input.entryId,
+          expectedStatus: entry.status,
+          status: entry.status === "ready" ? "queued" : entry.status,
+          trainingPlanId: input.trainingPlanId,
+          modelRunId: input.modelRunId,
+        });
+        if (linked.status !== "queued") return linked;
+        return await linkRun({
+          entryId: input.entryId,
+          expectedStatus: "queued",
+          status: "running",
+        });
+      } catch (error) {
+        const current = await requireEntry(input.entryId);
+        if (current.status === entry.status || attempt === 3) throw error;
+      }
+    }
+    throw new Error("Comparison Run linkage did not converge.");
+  }
+
   async function retryEntry(input: { entryId: string }): Promise<ModelComparisonSeriesEntry> {
     const entry = await requireEntry(input.entryId);
     if (entry.status !== "failed" && entry.status !== "cancelled") {
@@ -680,7 +712,7 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     }
   }
 
-  return { decide, linkRun, queueRelease, reconcileEntries, recordPromotion, retryEntry, saveSeries, sealSeries };
+  return { decide, linkRun, linkStartedRun, queueRelease, reconcileEntries, recordPromotion, retryEntry, saveSeries, sealSeries };
 }
 
 function requireScheduledEntry(series: ModelComparisonSeries, id: string): ModelComparisonScheduleEntry {
