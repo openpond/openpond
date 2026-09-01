@@ -76,8 +76,16 @@ export function LabComparisonSeriesCreateDialog({
       setError("Select exact seed, eligible, development, retained, and frozen Tasksets.");
       return;
     }
-    if (new Set(selected.map((taskset) => taskset!.contentHash)).size !== selected.length) {
-      setError("Each cohort role must use a distinct immutable Taskset release.");
+    if (!hasSplit(selected[0]!, "train") || !hasSplit(selected[1]!, "train")) {
+      setError("The seed and eligible-pool releases must contain training tasks.");
+      return;
+    }
+    if (!hasSplit(selected[2]!, "validation") || !hasSplit(selected[3]!, "validation")) {
+      setError("The development and retained releases must contain validation tasks.");
+      return;
+    }
+    if (!hasSplit(selected[4]!, "frozen_eval")) {
+      setError("The frozen-final release must contain frozen-evaluation tasks.");
       return;
     }
     if (maximumEnabledRank > envelopeRank) {
@@ -181,6 +189,10 @@ export function LabComparisonSeriesCreateDialog({
       </form>
     </AppDialog>
   );
+}
+
+function hasSplit(taskset: Taskset, split: Taskset["tasks"][number]["split"]): boolean {
+  return taskset.tasks.some((task) => task.split === split);
 }
 
 function TasksetField({ label, onChange, tasksets, value }: { label: string; onChange: (value: string) => void; tasksets: Taskset[]; value: string }) {
