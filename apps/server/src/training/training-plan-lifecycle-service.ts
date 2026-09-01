@@ -69,6 +69,7 @@ export function createTrainingPlanLifecycleService(deps: {
       region: input.region,
       harnessRelease: input.harnessRelease,
       modelImprovementQualification: input.modelImprovementQualification,
+      comparisonSeriesEntry: input.comparisonSeriesEntry,
     });
     const requestedPlacement =
       input.environmentPlacement ?? initial.environmentPlacement;
@@ -79,11 +80,9 @@ export function createTrainingPlanLifecycleService(deps: {
           && capabilities.environmentPlacements.includes("local")
           ? "local"
           : capabilities.environmentPlacements[0] ?? "none";
-    const draft = TrainingPlanSchema.parse({
-      ...initial,
-      environmentPlacement,
-      comparisonSeriesEntry: input.comparisonSeriesEntry ?? null,
-    });
+    const draft = TrainingPlanSchema.parse({ ...initial, environmentPlacement });
+    const existing = await deps.store.getTrainingPlan(draft.id);
+    if (existing) return existing;
     const compatibility = await destination.validate(draft);
     const quote = compatibility.compatible
       ? await destination.quote(draft)
