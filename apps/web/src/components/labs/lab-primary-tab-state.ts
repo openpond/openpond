@@ -4,7 +4,6 @@ import type { SettingsSection } from "../../lib/app-models";
 export const MODEL_SECTIONS = [
   "overview",
   "tasksets",
-  "scoring",
   "evals",
   "runs",
   "versions",
@@ -16,7 +15,7 @@ export type ModelSection = (typeof MODEL_SECTIONS)[number];
 export const MODEL_LIBRARY_SECTIONS = [
   "projects",
   "tasksets",
-  "scoring",
+  "scorers",
   "evaluations",
   "reviews",
 ] as const;
@@ -52,8 +51,9 @@ type NavigationMode = "push" | "replace";
 
 const SECTION_SET = new Set<string>(MODEL_SECTIONS);
 const LIBRARY_SECTION_SET = new Set<string>(MODEL_LIBRARY_SECTIONS);
+const RETIRED_LIBRARY_SECTION_SET = new Set(["scoring"]);
 const DETAIL_TABS_BY_SECTION: Partial<Record<ModelSection, Set<string>>> = {
-  runs: new Set(["overview", "metrics", "evaluation", "rollouts", "activity", "artifacts"]),
+  runs: new Set(["details", "metrics", "evaluation", "rollouts", "activity", "artifacts"]),
   tasksets: new Set(["overview", "tasks", "scoring", "attempts", "releases"]),
   evals: new Set(["overview", "comparison", "activity"]),
   versions: new Set([
@@ -156,7 +156,9 @@ function routeFromParts(parts: string[]): ModelsRoute | null {
       detailTab: resourceId ?? null,
     };
   }
-  if (SECTION_SET.has(projectId)) return null;
+  if (SECTION_SET.has(projectId) || RETIRED_LIBRARY_SECTION_SET.has(projectId)) {
+    return null;
+  }
   if (!section) {
     return {
       kind: "project",

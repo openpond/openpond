@@ -13,6 +13,7 @@ import type { ShowAppToast } from "../../app/app-state";
 import { DetailSection } from "../training/DetailSection";
 import type { useTraining } from "../../hooks/useTraining";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { LabModelScoring } from "./LabModelScoring";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
 type DatasetDetailTab = "overview" | "tasks" | "scoring";
@@ -64,10 +65,6 @@ export function LabModelDataset({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
-  const [checkMessage, setCheckMessage] = useState<string | null>(null);
-  const [metricOperations, setMetricOperations] = useState<Awaited<ReturnType<typeof training.actions.tasksetOperationalState>>>(null);
-  const [metricDatasets, setMetricDatasets] = useState<Awaited<ReturnType<typeof training.actions.listPreferenceDatasets>>>(null);
-  const [metricsLoading, setMetricsLoading] = useState(false);
   const sourceById = useMemo(
     () => new Map(taskset.sourceRefs.map((source) => [source.id, source])),
     [taskset.sourceRefs],
@@ -98,23 +95,6 @@ export function LabModelDataset({
       cancelled = true;
     };
   }, [artifact, cursor, split, tab, taskset.id, training.actions]);
-
-  useEffect(() => {
-    if (tab !== "scoring") return;
-    let active = true;
-    setMetricsLoading(true);
-    void Promise.all([
-      training.actions.tasksetOperationalState(taskset.id),
-      training.actions.listPreferenceDatasets(taskset.id),
-    ]).then(([operations, datasets]) => {
-      if (!active) return;
-      setMetricOperations(operations);
-      setMetricDatasets(datasets);
-    }).finally(() => {
-      if (active) setMetricsLoading(false);
-    });
-    return () => { active = false; };
-  }, [tab, taskset.id, training.actions]);
 
   const visibleTasks = artifact
     ? artifactRows
@@ -151,26 +131,7 @@ export function LabModelDataset({
   const rubricLabels = taskset.learningSignals.labels.filter(
     (signal) => signal.approved && signal.labelKind === "rubric",
   ).length;
-  const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
-  const workTask = taskset.environment.kind === "work"
-    ? taskset.tasks.find((task) => task.split !== "frozen_eval") ?? null
-    : null;
   const rewardGraders = taskset.graders.filter((grader) => grader.rewardEligible);
-  const modelJudge = rewardGraders.find((grader) => grader.kind === "model_judge");
-
-  async function runCheck(
-    label: string,
-    action: () => Promise<unknown>,
-  ): Promise<void> {
-    setCheckMessage(null);
-    const result = await action();
-    if (!result) {
-      setCheckMessage(`${label} did not complete. Check the latest error and try again.`);
-      return;
-    }
-    setCheckMessage(`${label} started or completed successfully.`);
-    onToast(`${label} started or completed successfully.`, "success");
-  }
 
   if (tab === "overview") {
     return (
@@ -257,187 +218,13 @@ export function LabModelDataset({
   }
 
   if (tab === "scoring") {
-    const metricPolicy = taskset.metrics ?? {
-      primaryMetric: "score",
-      aggregation: "mean_score" as const,
-    };
-    const grades = metricOperations?.grades ?? [];
-    const scoredGrades = grades.filter((grade) => grade.score !== null);
-    const meanScore = scoredGrades.length
-      ? scoredGrades.reduce((sum, grade) => sum + (grade.score ?? 0), 0) / scoredGrades.length
-      : null;
-    const passRate = grades.length
-      ? grades.filter((grade) => grade.passed).length / grades.length
-      : null;
-    const attempts = metricOperations?.attempts ?? [];
-    const distinctOutputs = new Set(attempts.map((attempt) => JSON.stringify(attempt.output))).size;
-    const preferenceGroups = (metricDatasets ?? []).reduce((sum, dataset) => sum + dataset.groups.length, 0);
     return (
-      <>
-        {taskset.purpose === "benchmark" ? (
-          <DetailSection title="Benchmark runs">
-            <p className="labs-detail-copy">
-              Harness Refiner runs start from a Model so the selected Model,
-              effort, full protocol, result charts, and Git-backed receipt stay
-              together in one evaluation run. Open a Model and choose
-              <strong> Run Refiner Benchmark</strong>.
-            </p>
-          </DetailSection>
-        ) : null}
-        <DetailSection title="Scoring contract">
-          {rewardGraders.length ? (
-            <dl className="training-configuration-list">
-              <Fact
-                label="Reward source"
-                value={modelJudge ? "LLM-as-judge" : titleCase(rewardGraders[0]!.kind)}
-              />
-              <Fact label="Primary grader" value={modelJudge?.label ?? rewardGraders[0]!.label} />
-              {modelJudge ? (
-                <Fact label="Judge model" value={`${titleCase(modelJudge.judge.providerId)} · ${modelJudge.judge.modelId}`} />
-              ) : null}
-              <Fact label="Reward calculation" value={rewardCalculation(taskset)} />
-              {modelJudge ? (
-                <Fact
-                  label="Calibration"
-                  value={`${titleCase(modelJudge.calibrationStatus)}${modelJudge.metadata.calibrationIsAdvisory === true ? " · advisory" : ""}`}
-                />
-              ) : null}
-              <Fact
-                label="Policy boundary"
-                value={taskset.policy.privilegedFields.length ? "Grading criteria hidden from Policy" : "No privileged grading fields"}
-              />
-            </dl>
-          ) : <p className="labs-detail-copy">No reward-eligible grader is attached to this release.</p>}
-        </DetailSection>
-        <DetailSection title="Recorded scoring evidence">
-          <p className="labs-detail-copy">
-            This view summarizes recorded Attempt, grader, artifact, and preference evidence. Configure and start runs from the project’s Runs workspace.
-          </p>
-          <dl className="labs-inline-facts">
-            <Fact label="Primary metric" value={titleCase(metricPolicy.primaryMetric)} />
-            <Fact label="Aggregation" value={titleCase(metricPolicy.aggregation)} />
-            <Fact label="Attempts" value={metricsLoading ? "Loading…" : String(attempts.length)} />
-            <Fact label="Distinct outputs" value={metricsLoading ? "Loading…" : String(distinctOutputs)} />
-            <Fact label="Mean score" value={meanScore === null ? "—" : meanScore.toFixed(3)} />
-            <Fact label="Pass rate" value={passRate === null ? "—" : `${Math.round(passRate * 100)}%`} />
-            <Fact label="Artifacts" value={String(metricOperations?.artifacts.length ?? 0)} />
-            <Fact label="Preference groups" value={String(preferenceGroups)} />
-          </dl>
-        </DetailSection>
-        <DetailSection title="Graders and reward gates">
-          {taskset.graders.length ? (
-            <div className="labs-dataset-examples">
-              {taskset.graders.map((grader) => (
-                <details className="labs-dataset-example" key={grader.id}>
-                  <summary>
-                    <span className="labs-dataset-example-title">
-                      <strong>{grader.label}</strong>
-                      <small>{titleCase(grader.kind)} · weight {grader.weight}</small>
-                    </span>
-                    <LabStatusBadge
-                      label={grader.hardGate ? "Required" : "Advisory"}
-                      value={grader.hardGate ? "ready" : "available"}
-                    />
-                  </summary>
-                  <div className="labs-dataset-example-body">
-                    <dl className="training-configuration-list">
-                      <Fact label="ID" value={grader.id} />
-                      <Fact label="Version" value={grader.version} />
-                      <Fact label="Reward eligible" value={grader.rewardEligible ? "Yes" : "No"} />
-                      <Fact label="Privileged" value={grader.privileged ? "Yes" : "No"} />
-                      {grader.kind === "model_judge" ? (
-                        <>
-                          <Fact label="Judge model" value={`${titleCase(grader.judge.providerId)} · ${grader.judge.modelId}`} />
-                          <Fact label="Calibration" value={titleCase(grader.calibrationStatus)} />
-                        </>
-                      ) : null}
-                    </dl>
-                    {!grader.privileged && "rubric" in grader ? (
-                      <pre>{grader.rubric}</pre>
-                    ) : null}
-                    {!grader.privileged && "config" in grader ? (
-                      <pre>{JSON.stringify(grader.config, null, 2)}</pre>
-                    ) : null}
-                    {!grader.privileged && "module" in grader ? (
-                      <p><code>{grader.module}</code> · {grader.exportName}</p>
-                    ) : null}
-                  </div>
-                </details>
-              ))}
-            </div>
-          ) : <p className="labs-detail-copy">No graders are attached to this Taskset revision.</p>}
-        </DetailSection>
-        <DetailSection title="Diagnostics">
-          <p className="labs-detail-copy">
-            Re-run authoring checks when grader code, fixtures, or readiness evidence changes.
-          </p>
-          <div className="labs-dataset-detail-actions">
-            {workTask ? (
-              <button
-                className="training-button secondary"
-                disabled={training.busyAction !== null}
-                type="button"
-                onClick={() => void runCheck(
-                  "Work attempt",
-                  () => training.actions.executeTasksetAttempt(
-                    taskset.id,
-                    workTask.id,
-                    defaultModel,
-                  ),
-                )}
-              >
-                Run Work attempt
-              </button>
-            ) : null}
-            <button
-              className="training-button secondary"
-              disabled={training.busyAction !== null}
-              type="button"
-              onClick={() => void runCheck(
-                "Grader audit",
-                () => training.actions.auditGraders(taskset.id),
-              )}
-            >
-              Audit graders
-            </button>
-            {hasModelJudge ? (
-              <button
-                className="training-button secondary"
-                disabled={training.busyAction !== null}
-                type="button"
-                onClick={() => void runCheck(
-                  "Judge calibration",
-                  () => training.actions.calibrateJudges(taskset.id),
-                )}
-              >
-                Calibrate judges
-              </button>
-            ) : null}
-            <button
-              className="training-button secondary"
-              disabled={training.busyAction !== null}
-              type="button"
-              onClick={() => void runCheck(
-                "Readiness check",
-                () => training.actions.readiness(taskset.id),
-              )}
-            >
-              Refresh readiness
-            </button>
-          </div>
-          {checkMessage ? <p className="labs-detail-copy" role="status">{checkMessage}</p> : null}
-          {taskset.readiness?.blockers.length ? (
-            <div className="training-banner warning">
-              <strong>Readiness blockers</strong>
-              <ul>
-                {taskset.readiness.blockers.map((blocker) => (
-                  <li key={`${blocker.code}:${blocker.path ?? ""}`}>{blocker.message}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </DetailSection>
-      </>
+      <LabModelScoring
+        defaultModel={defaultModel}
+        onToast={onToast}
+        taskset={taskset}
+        training={training}
+      />
     );
   }
 
@@ -778,16 +565,6 @@ function countBy(values: string[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
   return counts;
-}
-
-function rewardCalculation(taskset: Taskset): string {
-  if (taskset.metrics?.primaryMetric === "criterion_pass_rate") {
-    return "Passed criteria ÷ total criteria";
-  }
-  if (taskset.metrics) {
-    return `${titleCase(taskset.metrics.primaryMetric)} · ${titleCase(taskset.metrics.aggregation)}`;
-  }
-  return "Declared grader reward";
 }
 
 function formatBytes(value: number): string {

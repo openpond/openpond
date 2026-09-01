@@ -249,10 +249,10 @@ export function LabsRoute({
         ? "evaluations"
         : closeDetailKind === "review"
           ? "reviews"
-          : "scoring";
+          : "scorers";
     if (
       modelsRoute?.kind === "project" &&
-      resourceSection !== "reviews"
+      (resourceSection === "tasksets" || resourceSection === "evaluations")
     ) {
       navigateModelsRoute(modelProjectRoute(
         modelsRoute.projectId,
@@ -283,7 +283,7 @@ export function LabsRoute({
       const definitions = {
         projects: { kind: "model" as const, label: "Model Projects" },
         tasksets: { kind: "dataset" as const, label: "Taskset Library" },
-        scoring: { kind: "scoring" as const, label: "Scoring" },
+        scorers: { kind: "scoring" as const, label: "Scorers" },
         evaluations: { kind: "evaluation" as const, label: "Evaluations" },
         reviews: { kind: "review" as const, label: "Human Review" },
       };
@@ -343,25 +343,21 @@ export function LabsRoute({
       });
       return;
     }
-    if (
-      modelsRoute?.kind === "project" &&
-      (modelsRoute.section === "scoring" || modelsRoute.section === "evals")
-    ) {
-      const scoring = modelsRoute.section === "scoring";
+    if (modelsRoute?.kind === "project" && modelsRoute.section === "evals") {
       const resourceLabel = libraryResourceLabel(
-        scoring ? "scoring" : "evaluations",
+        "evaluations",
         modelsRoute.resourceId,
         training.training.payload,
       );
       onDetailOpenChange({
-        kind: scoring ? "scoring" : "evaluation",
+        kind: "evaluation",
         kindLabel: "Model Projects",
         kindOnSelect: () => navigateModelsRoute({ kind: "index" }),
         workproductLabel: selected?.name ?? modelsRoute.projectId,
         workproductOnSelect: () => navigateModelsRoute(modelProjectRoute(modelsRoute.projectId)),
         segments: [
           {
-            label: scoring ? "Scoring" : "Evaluations",
+            label: "Evaluations",
             onSelect: () => navigateModelsRoute(modelProjectRoute(
               modelsRoute.projectId,
               modelsRoute.section,
@@ -507,12 +503,11 @@ export function LabsRoute({
 
   async function createScorer(
     input: LabScorerCreateInput,
-    modelProjectId: string | null,
   ): Promise<boolean> {
     const result = await training.training.actions.createScorer(
       input.grader,
       input.tasksetId,
-      modelProjectId,
+      null,
     );
     if (!result) return false;
     if (result.hostedSync.state === "sync_failed") {
@@ -653,13 +648,13 @@ export function LabsRoute({
               onTrainModel={openModelRunEditor}
             />
           )
-        ) : modelsRoute.section === "scoring" ? (
+        ) : modelsRoute.section === "scorers" ? (
           <LabScoringPage
             busy={training.training.busyAction === "create-scorer"}
             defaultModel={training.defaultModel}
             onOpenTaskset={(tasksetId) => navigateModelsRoute(modelLibraryRoute("tasksets", tasksetId))}
-            onCreateScorer={(input) => createScorer(input, null)}
-            onSelectedScorerIdChange={(scorerId) => navigateModelsRoute(modelLibraryRoute("scoring", scorerId))}
+            onCreateScorer={createScorer}
+            onSelectedScorerIdChange={(scorerId) => navigateModelsRoute(modelLibraryRoute("scorers", scorerId))}
             selectedScorerId={modelsRoute.resourceId}
             providerSettings={training.providerSettings}
             state={training.training.payload}
@@ -749,30 +744,6 @@ export function LabsRoute({
             }}
           />
         )
-      ) : activeTab === "scoring" && modelsRoute?.kind === "project" ? (
-        <LabScoringPage
-          busy={training.training.busyAction === "create-scorer"}
-          defaultModel={training.defaultModel}
-          modelProjectId={modelsRoute.projectId}
-          onCreateScorer={(input) => createScorer(input, modelsRoute.projectId)}
-          onOpenTaskset={(tasksetId) => navigateModelsRoute({
-            kind: "project",
-            projectId: modelsRoute.projectId,
-            section: "tasksets",
-            resourceId: tasksetId,
-            detailTab: null,
-          })}
-          onSelectedScorerIdChange={(scorerId) => navigateModelsRoute({
-            kind: "project",
-            projectId: modelsRoute.projectId,
-            section: "scoring",
-            resourceId: scorerId,
-            detailTab: null,
-          })}
-          selectedScorerId={modelsRoute.resourceId}
-          providerSettings={training.providerSettings}
-          state={training.training.payload}
-        />
       ) : activeTab === "evals" && modelsRoute?.kind === "project" ? (
         <LabEvaluationsPage
           detailTab={modelsRoute.detailTab as EvaluationDetailTab | null}

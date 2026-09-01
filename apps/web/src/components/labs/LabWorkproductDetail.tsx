@@ -640,6 +640,7 @@ export function LabWorkproductDetail({
           >
             <LabModelVersionDetailPage
               connection={connection}
+              detailKind={modelSection === "versions" ? "version" : "run"}
               detailTab={modelDetailTab}
               runs={runs}
               selectedEntryKey={selectedModelEntryKey}
@@ -683,7 +684,9 @@ export function LabWorkproductDetail({
                 ) : undefined}
                 modelProject={modelProject}
                 modelRuns={modelLifecycleRuns}
-                state={training.payload}
+                onOpenRun={(runId) =>
+                  setSelectedModelEntryKey(`model-run:${runId}`)
+                }
                 status={modelProject ? (
                     <LabStatusBadge
                       label={modelProject.hosted ? "Hosted" : "Local"}

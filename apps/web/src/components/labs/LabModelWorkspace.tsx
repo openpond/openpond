@@ -15,10 +15,13 @@ import type { useTraining } from "../../hooks/useTraining";
 import { Download, Pin } from "../icons";
 import {
   formatDateTime,
-  statusLabel,
   trainingMethodLabel,
 } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
+import {
+  LabRunStatusBadge,
+  resolveRunStatus,
+} from "./LabRunStatusBadge";
 import {
   currentModelBinding,
   labLifecycleModelRuns,
@@ -198,20 +201,7 @@ export function LabModelRunsPage({
                     </button>
                   </td>
                   <td>
-                    <LabStatusBadge
-                      label={
-                        entry.job
-                          ? statusLabel(entry.job.status)
-                          : entry.lifecycleRun
-                          ? statusLabel(entry.lifecycleRun.status)
-                          : "Not started"
-                      }
-                      value={
-                        entry.job?.status ??
-                        entry.lifecycleRun?.status ??
-                        "not_run"
-                      }
-                    />
+                    <LabRunStatusBadge status={resolveRunStatus(entry)} />
                   </td>
                   <td>
                     {entry.lifecycleRun?.kind === "evaluation"

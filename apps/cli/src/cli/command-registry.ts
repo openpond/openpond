@@ -373,9 +373,10 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "training",
-    usage: "openpond training <start|status|watch|logs|cancel|resume|artifacts|benchmark> <model-run-id|run-id|model-id>",
+    usage: "openpond training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>",
     usages: [
-      "openpond training start <model-run-id> [--manifest <path>] [--yes] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
+      "openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]",
+      "openpond training start <model-project-id> [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
       "openpond training status <run-id> [--json]",
       "openpond training watch <run-id> [--interval-ms <ms>] [--json]",
       "openpond training logs <run-id> [--json]",
@@ -387,14 +388,24 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     optionSchema: {
       apiBaseUrl: "string",
       detach: "boolean",
+      destination: "string",
+      exportApproved: "boolean",
+      gpuPlacementObjective: "string",
       intervalMs: "integer",
       json: "boolean",
       manifest: "string",
       maxSpend: "number",
       model: "string",
+      name: "string",
+      objective: "string",
+      profile: "string",
+      projectId: "string",
       provider: "string",
+      recipe: "string",
       reasoningEffort: "string",
       retentionDays: "integer",
+      rolloutPlacement: "string",
+      runPreset: "string",
       yes: "boolean",
     },
     handler: async ({ options, rest }) =>
@@ -402,10 +413,17 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "taskset",
-    usage: "openpond taskset import <package-directory|taskset.json> [--profile <id>] [--json]",
+    usage: "openpond taskset <import|publish|readiness|delete-draft> <package-path|draft-id|taskset-id> [--profile <id>] [--model <id>] [--json]",
+    usages: [
+      "openpond taskset import <package-directory|taskset.json> [--profile <id>] [--json]",
+      "openpond taskset publish <draft-id> [--model <id>] [--json]",
+      "openpond taskset readiness <taskset-id> [--json]",
+      "openpond taskset delete-draft <draft-id> [--json]",
+    ],
     optionSchema: {
       apiBaseUrl: "string",
       json: "boolean",
+      model: "string",
       profile: "string",
     },
     handler: async ({ options, rest }) =>

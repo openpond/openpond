@@ -39,7 +39,6 @@ export function TrainingMetricWorkbench({
   loading?: boolean;
   live?: boolean;
 }) {
-  const [smoothed, setSmoothed] = useState(false);
   const cards = useMemo(() => {
     const available = series.filter((candidate) => candidate.points.length);
     if (!loading && !live) return available;
@@ -60,33 +59,6 @@ export function TrainingMetricWorkbench({
 
   return (
     <section className="training-metric-workbench" aria-label="Training metrics">
-      <header className="training-metric-workbench-toolbar">
-        <div>
-          <h3>Training metrics</h3>
-          <p>
-            {live
-              ? "Live metrics update as each rollout and optimizer step completes."
-              : `${cards.length} recorded metric ${cards.length === 1 ? "series" : "series"}.`}
-          </p>
-        </div>
-        <div className="training-metric-view-toggle" aria-label="Metric trend" role="group">
-          <button
-            className={!smoothed ? "active" : undefined}
-            type="button"
-            onClick={() => setSmoothed(false)}
-          >
-            Raw
-          </button>
-          <button
-            className={smoothed ? "active" : undefined}
-            type="button"
-            onClick={() => setSmoothed(true)}
-          >
-            Smoothed
-          </button>
-        </div>
-      </header>
-
       <div className="training-metric-chart-grid">
         {cards.map((metric) => (
           <TrainingMetricChartCard
@@ -94,7 +66,6 @@ export function TrainingMetricWorkbench({
             loading={loading && !metric.points.length}
             metric={metric}
             pending={live && !metric.points.length}
-            smoothed={smoothed}
           />
         ))}
       </div>
@@ -106,13 +77,12 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
   metric,
   loading,
   pending,
-  smoothed,
 }: {
   metric: TrainingMetricSeries;
   loading: boolean;
   pending: boolean;
-  smoothed: boolean;
 }) {
+  const [smoothed, setSmoothed] = useState(false);
   const points = useMemo(
     () => (smoothed ? movingAverage(metric.points, 3) : metric.points),
     [metric.points, smoothed],
@@ -126,7 +96,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
   return (
     <article className="training-metric-chart-card">
       <header>
-        <div>
+        <div className="training-metric-chart-title">
           <h4>{metric.label}</h4>
           <span>
             {metric.points.length
@@ -136,7 +106,33 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
                 : "No data"}
           </span>
         </div>
-        {stats ? <strong>{format(stats.latest)}</strong> : null}
+        <div className="training-metric-chart-header-actions">
+          {stats ? <strong>{format(stats.latest)}</strong> : null}
+          <div
+            className="training-metric-view-toggle"
+            aria-label={`${metric.label} trend`}
+            role="group"
+          >
+            <button
+              aria-pressed={!smoothed}
+              className={!smoothed ? "active" : undefined}
+              disabled={metric.points.length < 2}
+              type="button"
+              onClick={() => setSmoothed(false)}
+            >
+              Raw
+            </button>
+            <button
+              aria-pressed={smoothed}
+              className={smoothed ? "active" : undefined}
+              disabled={metric.points.length < 2}
+              type="button"
+              onClick={() => setSmoothed(true)}
+            >
+              Smoothed
+            </button>
+          </div>
+        </div>
       </header>
 
       {metric.points.length ? (

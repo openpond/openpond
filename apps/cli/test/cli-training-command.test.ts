@@ -15,7 +15,97 @@ afterEach(() => {
 });
 
 describe("training CLI", () => {
-  test("prepares, confirms, starts, and watches a saved Model Run", async () => {
+  test("creates a persisted managed Model Project from a published Taskset", async () => {
+    console.log = (message?: unknown) => logs.push(String(message ?? ""));
+    const directory = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-managed-project-cli-"),
+    );
+    const recipePath = path.join(directory, "recipe.json");
+    await writeFile(recipePath, JSON.stringify({
+      schemaVersion: "openpond.rftRecipe.v1",
+      method: "grpo",
+      parameterization: "lora",
+      baseModel: {
+        id: "Qwen/Qwen3-8B",
+        revision: "base-revision",
+        tokenizerRevision: "tokenizer-revision",
+        chatTemplateHash: "a".repeat(64),
+      },
+    }));
+    const requests: Array<{ url: string; method: string; body: unknown }> = [];
+    const request = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      requests.push({ url: String(url), method: init?.method ?? "GET", body });
+      if (String(url) === "http://local.test/v1/training") {
+        return jsonResponse({
+          tasksets: [{
+            id: "agent-trajectory",
+            profileId: "team-a",
+            revision: 2,
+            contentHash: "a".repeat(64),
+            name: "Agent trajectory",
+            objective: "Resolve agent-trajectory issues safely.",
+          }],
+          modelProjects: [],
+        });
+      }
+      if (String(url) === "http://local.test/v1/training/models") {
+        return jsonResponse({ id: "agent-trajectory-model", revision: 1 });
+      }
+      return jsonResponse({
+        id: "agent-trajectory-model",
+        revision: 2,
+        trainingSetup: { baseModel: { modelId: "Qwen/Qwen3-8B" } },
+      });
+    });
+    try {
+      await runTrainingCommand(
+        {
+          apiBaseUrl: "http://local.test",
+          json: "true",
+          projectId: "agent-trajectory-model",
+          recipe: recipePath,
+          rolloutPlacement: "local",
+          gpuPlacementObjective: "economical",
+          maxSpend: "8",
+        },
+        ["create-project", "agent-trajectory"],
+        { request: request as typeof fetch },
+      );
+    } finally {
+      await rm(directory, { recursive: true });
+    }
+    expect(requests.map((item) => `${item.method} ${item.url}`)).toEqual([
+      "GET http://local.test/v1/training",
+      "PUT http://local.test/v1/training/models",
+    ]);
+    expect(requests[1]?.body).toMatchObject({
+      id: "agent-trajectory-model",
+      profileId: "team-a",
+      defaultDestinationId: "openpond_managed",
+      trainingSetup: {
+        tasksetRef: {
+          id: "agent-trajectory",
+          revision: 2,
+          contentHash: "a".repeat(64),
+        },
+        baseModel: {
+          modelId: "Qwen/Qwen3-8B",
+          revision: "base-revision",
+          tokenizerRevision: "tokenizer-revision",
+          chatTemplateHash: "a".repeat(64),
+          source: "managed",
+        },
+        method: "grpo",
+        destinationId: "openpond_managed",
+        managedRolloutPlacement: "local",
+        managedGpuPlacementObjective: "economical",
+        preferredMaximumSpendUsd: 8,
+      },
+    });
+  });
+
+  test("prepares, confirms, starts, and watches a saved Model Project run", async () => {
     console.log = (message?: unknown) => logs.push(String(message ?? ""));
     const requests: Array<{ url: string; method: string; body: unknown }> = [];
     let statusCount = 0;
@@ -46,13 +136,13 @@ describe("training CLI", () => {
         maxSpend: "0",
         yes: "true",
       },
-      ["start", "model_run_123"],
+      ["start", "model_project_123"],
       { request: request as typeof fetch, sleep: async () => undefined },
     );
 
     expect(requests.map((item) => item.url)).toEqual([
-      "http://local.test/v1/training/model-runs/model_run_123/prepare",
-      "http://local.test/v1/training/model-runs/model_run_123/start",
+      "http://local.test/v1/training/model-projects/model_project_123/training/prepare",
+      "http://local.test/v1/training/model-projects/model_project_123/training/start",
       "http://local.test/v1/training/model-runs/run_123/status",
       "http://local.test/v1/training/model-runs/run_123/status",
     ]);
@@ -91,6 +181,7 @@ describe("training CLI", () => {
       );
 
       expect(bodies[1]).toEqual({
+        exportApproved: false,
         maximumSpendUsd: null,
         retentionDays: null,
         manifest: { schemaVersion: "test" },

@@ -35,6 +35,11 @@ import {
   StoppedEvaluationDetail,
 } from "./LabModelEvaluationBenchmarkDetails";
 import { LabStatusBadge } from "./LabStatusBadge";
+import {
+  isActiveRunStatus,
+  LabRunStatusBadge,
+  resolveRunStatus,
+} from "./LabRunStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import {
   eventSummary,
@@ -56,6 +61,7 @@ import {
 
 type RunDetailTab =
   | "overview"
+  | "details"
   | "metrics"
   | "artifacts"
   | "evaluation"
@@ -79,8 +85,10 @@ export function LabModelVersionDetailPage({
   training,
   onOpenDataset,
   onOpenConversation,
+  detailKind,
 }: ModelWorkspaceProps & {
   connection: ClientConnection | null;
+  detailKind: "run" | "version";
   detailTab: string | null;
   onDetailTabChange: (tab: string) => void;
   selectedEntryKey: string;
@@ -197,16 +205,11 @@ export function LabModelVersionDetailPage({
       event.type === "metric" &&
       event.payload.metricKind === "rollout_trajectory",
   ) ?? false;
-  const currentRunStatus =
-    detail.detail?.job.status ??
-    selectedLifecycleRun?.status ??
-    selectedJob?.status ??
-    "imported";
-  const runActive = ["queued", "starting", "running", "reconciling"].includes(
-    currentRunStatus,
-  );
-  const latestActivity = detail.detail?.events.at(-1);
-  const runStatus = statusLabel(currentRunStatus);
+  const currentRunStatus = resolveRunStatus({
+    lifecycleRun: selectedLifecycleRun,
+    job: detail.detail?.job ?? selectedJob,
+  });
+  const runActive = isActiveRunStatus(currentRunStatus);
   const isGrpo = selectedPlan?.recipe.method === "grpo";
   const rolloutProgress = managedRolloutProgress(selectedJob?.metadata);
   const optimizerStepsTarget =
@@ -248,9 +251,17 @@ export function LabModelVersionDetailPage({
       ? rolloutProgress.groupsTarget
       : optimizerStepsTarget,
   );
+  const summaryTab: { id: RunDetailTab; label: string } = detailKind === "run"
+    ? { id: "details", label: "Details" }
+    : { id: "overview", label: "Overview" };
   const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
-    { id: "overview", label: "Overview" },
-    ...(selectedJob ? [{ id: "metrics" as const, label: "Metrics" }] : []),
+    ...(detailKind === "run" && selectedJob
+      ? [{ id: "metrics" as const, label: "Metrics" }]
+      : []),
+    summaryTab,
+    ...(detailKind === "version" && selectedJob
+      ? [{ id: "metrics" as const, label: "Metrics" }]
+      : []),
     { id: "evaluation", label: "Evaluation" },
     ...(receipts.length || hasManagedAttempts
       ? [{ id: "rollouts" as const, label: "Rollouts" }]
@@ -298,38 +309,25 @@ export function LabModelVersionDetailPage({
           ? selectedRunNumber ? `Run ${selectedRunNumber}` : "Run details"
           : selectedVersion ? `Version ${selectedVersion.number}` : "Run details"}
         description={`${trainingMethodLabel(selectedLifecycleRun?.method ?? selectedPlan?.recipe.method)} on ${baseModelName(selectedPlan, selectedBaseModelId)}`}
-        status={<LabStatusBadge
-          label={runActive && latestActivity
-            ? `${runStatus} · ${eventSummary(latestActivity)}`
-            : runStatus}
-          pulse={runActive}
-          tone={runActive ? "positive" : undefined}
-          value={currentRunStatus}
-        />}
+        status={<LabRunStatusBadge status={currentRunStatus} />}
         metrics={[
           {
             label: isGrpo ? "Rollout groups" : "Training steps",
             value: progressMetric.value,
-            hint: progressMetric.hint,
           },
-          ...(isGrpo && rolloutProgress
-            ? [
-                {
-                  label: "Updates applied",
-                  value: rolloutProgress.optimizerUpdatesApplied.toLocaleString(),
-                  hint: "optimizer transitions",
-                },
-                {
-                  label: "Updates skipped",
-                  value: rolloutProgress.optimizerUpdatesSkipped.toLocaleString(),
-                  hint: "zero-signal groups",
-                },
-              ]
-            : []),
           { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
           { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
           { label: "Output", value: selectedVersion ? `Version ${selectedVersion.number}` : "No version" },
-          { label: "Taskset", value: selectedTaskset?.name ?? "Unavailable" },
+          {
+            label: "Taskset",
+            value: selectedTaskset?.name ?? "Unavailable",
+            onSelect: selectedTaskset
+              ? () => onOpenDataset(selectedTaskset.id)
+              : undefined,
+            ariaLabel: selectedTaskset
+              ? `Open Taskset ${selectedTaskset.name}`
+              : undefined,
+          },
         ]}
       />
 
@@ -360,7 +358,7 @@ export function LabModelVersionDetailPage({
           id={`run-detail-panel-${activeDetailTab}`}
           role="tabpanel"
         >
-          {activeDetailTab === "overview" ? <LabModelRunSummary
+          {activeDetailTab === summaryTab.id ? <LabModelRunSummary
         baseModel={baseModelName(selectedPlan, selectedBaseModelId)}
         compute={
           selectedLifecycleRun

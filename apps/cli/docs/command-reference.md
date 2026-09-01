@@ -714,8 +714,9 @@ Options:
 
 ```text
 Usage:
-  openpond training <start|status|watch|logs|cancel|resume|artifacts|benchmark> <model-run-id|run-id|model-id>
-  openpond training start <model-run-id> [--manifest <path>] [--yes] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
+  openpond training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>
+  openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
+  openpond training start <model-project-id> [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
   openpond training status <run-id> [--json]
   openpond training watch <run-id> [--interval-ms <ms>] [--json]
   openpond training logs <run-id> [--json]
@@ -726,26 +727,41 @@ Usage:
 
 Options:
   --api-base-url <string>
+  --destination <string>
   --detach
+  --export-approved
+  --gpu-placement-objective <string>
   --interval-ms <integer>
   --json
   --manifest <string>
   --max-spend <number>
   --model <string>
+  --name <string>
+  --objective <string>
+  --profile <string>
+  --project-id <string>
   --provider <string>
   --reasoning-effort <string>
+  --recipe <string>
   --retention-days <integer>
+  --rollout-placement <string>
+  --run-preset <string>
   --yes
 ```
 ## taskset
 
 ```text
 Usage:
+  openpond taskset <import|publish|readiness|delete-draft> <package-path|draft-id|taskset-id> [--profile <id>] [--model <id>] [--json]
   openpond taskset import <package-directory|taskset.json> [--profile <id>] [--json]
+  openpond taskset publish <draft-id> [--model <id>] [--json]
+  openpond taskset readiness <taskset-id> [--json]
+  openpond taskset delete-draft <draft-id> [--json]
 
 Options:
   --api-base-url <string>
   --json
+  --model <string>
   --profile <string>
 ```
 ## opchat

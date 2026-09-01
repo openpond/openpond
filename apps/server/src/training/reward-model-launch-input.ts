@@ -7,9 +7,9 @@ import type { TasksetRelease } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 
 import {
-  assertPolicyVisibleSupportScorerEvidence,
-  SupportVisibleTrajectorySchema,
-} from "./support-reward-trajectory.js";
+  assertPolicyVisibleAgentScorerEvidence,
+  VisibleAgentTrajectorySchema,
+} from "./visible-agent-reward-trajectory.js";
 
 export type ManagedRewardModelBase = {
   source: "huggingface";
@@ -182,17 +182,17 @@ function serializePreferenceCandidate(input: {
       candidate,
     });
   }
-  const trajectory = SupportVisibleTrajectorySchema.parse(candidate);
+  const trajectory = VisibleAgentTrajectorySchema.parse(candidate);
   const scenario = {
     input: input.task.input,
     policyVisibleContext: input.task.policyVisibleContext,
   };
-  assertPolicyVisibleSupportScorerEvidence(
+  assertPolicyVisibleAgentScorerEvidence(
     scenario,
     `Preference candidate ${input.attempt.id} scenario`,
   );
   return JSON.stringify({
-    schemaVersion: "openpond.supportPreferenceCandidate.v1",
+    schemaVersion: "openpond.visibleAgentPreferenceCandidate.v1",
     scenario,
     trajectory,
   });

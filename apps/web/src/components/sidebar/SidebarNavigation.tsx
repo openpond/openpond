@@ -167,13 +167,13 @@ export function SidebarNavigation({
             <span>Taskset Library</span>
           </button>
           <button
-            className={`nav-command ${view === "labs" && activeLibrarySection === "scoring" ? "active" : ""}`}
-            aria-label="Scoring"
+            className={`nav-command ${view === "labs" && activeLibrarySection === "scorers" ? "active" : ""}`}
+            aria-label="Scorers"
             type="button"
-            onClick={() => selectModelsLibrary("scoring")}
+            onClick={() => selectModelsLibrary("scorers")}
           >
             <Shield size={16} />
-            <span>Scoring</span>
+            <span>Scorers</span>
           </button>
           <button
             className={`nav-command ${view === "labs" && activeLibrarySection === "evaluations" ? "active" : ""}`}
@@ -224,15 +224,6 @@ export function SidebarNavigation({
               >
                 <Boxes size={16} />
                 <span>Tasksets</span>
-              </button>
-              <button
-                className={`nav-command ${view === "labs" && activeModelsSection === "scoring" ? "active" : ""}`}
-                aria-label="Project Scoring"
-                type="button"
-                onClick={() => selectModelsSection("scoring")}
-              >
-                <Shield size={16} />
-                <span>Scoring</span>
               </button>
               <button
                 className={`nav-command ${view === "labs" && activeModelsSection === "evals" ? "active" : ""}`}

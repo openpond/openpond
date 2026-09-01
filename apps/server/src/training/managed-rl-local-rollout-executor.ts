@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
 import "./marketing-portfolio-managed-rl-adapter.js";
+import "./tau3-retail-managed-rl-adapter.js";
 import {
   resolveManagedRlHarnessAdapter,
   type ManagedRlLocalRolloutClaim,
@@ -111,7 +112,7 @@ export class ManagedRlLocalRolloutExecutor {
     for (let attempt = 1; attempt <= EXECUTION_ATTEMPTS; attempt += 1) {
       try {
         const result = await this.executeOnce(claim);
-        await this.completeWithRetry(claim, result);
+        await this.completeWithRetry(claim, sandboxCompletion(result));
         return;
       } catch (error) {
         lastError = error;
@@ -261,6 +262,18 @@ export class ManagedRlLocalRolloutExecutor {
       },
     );
   }
+}
+
+function sandboxCompletion(
+  result: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    status: result.status,
+    executorId: result.executorId,
+    environmentSha256: result.environmentSha256,
+    policyResult: result.policyResult,
+    trace: result.trace,
+  };
 }
 
 export function managedRlNamedToolChoice(requiredToolName: string): {

@@ -11,6 +11,7 @@ import {
   formatTrainingProgress,
   managedRolloutProgress,
 } from "../apps/web/src/components/labs/LabModelVersionDetailPage";
+import { resolveRunStatus } from "../apps/web/src/components/labs/LabRunStatusBadge";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";
 import {
   eventSeries,
@@ -204,8 +205,10 @@ describe("Training run detail UI", () => {
     expect(html).toContain('aria-label="Loss by optimizer step"');
     expect(html).toContain("Learning rate");
     expect(html).toContain("Token accuracy");
-    expect(html).toContain("5 recorded metric series");
     expect(html).toContain("2 points");
+    expect(html).not.toContain("<h3>Training metrics</h3>");
+    expect(html.match(/>Raw<\/button>/g)).toHaveLength(5);
+    expect(html.match(/>Smoothed<\/button>/g)).toHaveLength(5);
     expect(html).not.toContain("<select");
   });
 
@@ -255,7 +258,8 @@ describe("Training run detail UI", () => {
     expect(html).toContain("Learning rate");
     expect(html).not.toContain("2 of 2");
     expect(html).toContain('aria-label="Reward by optimizer step"');
-    expect(html).toContain("Live metrics update as each rollout and optimizer step completes.");
+    expect(html).not.toContain("Live metrics update as each rollout and optimizer step completes.");
+    expect(html).toContain('aria-label="Reward trend"');
   });
 
   test("does not count a reward metric as a verified optimizer update", () => {
@@ -341,7 +345,7 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={ppoDetail} loading={false} />
     );
-    expect(html).toContain("10 recorded metric series");
+    expect(html.match(/aria-label="[^"]+ trend"/g)).toHaveLength(10);
     expect(html).toContain("1 point");
     expect(html).toContain("Policy loss");
     expect(html).toContain("Value loss");
@@ -394,6 +398,17 @@ describe("Training run detail UI", () => {
         optimizerUpdatesSkipped: -1,
       },
     })).toBeNull();
+  });
+
+  test("uses the lifecycle run as the canonical list and detail status", () => {
+    expect(resolveRunStatus({
+      lifecycleRun: { status: "running" } as never,
+      job: { status: "starting" } as never,
+    })).toBe("running");
+    expect(resolveRunStatus({
+      lifecycleRun: null,
+      job: { status: "queued" } as never,
+    })).toBe("queued");
   });
 
   test("renders managed progress as a human status without null debug fields", () => {

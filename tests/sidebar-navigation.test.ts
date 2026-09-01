@@ -161,7 +161,8 @@ describe("Sidebar navigation", () => {
     expect(models).toContain('aria-label="Select Model Project"');
     expect(models).toContain('aria-label="Model Projects"');
     expect(models).toContain('aria-label="Taskset Library"');
-    expect(models).toContain('aria-label="Scoring"');
+    expect(models).toContain('aria-label="Scorers"');
+    expect(models).not.toContain('aria-label="Project Scoring"');
     expect(models).toContain('aria-label="Evaluations"');
     expect(models).toContain('aria-label="Human Review"');
     expect(models).not.toContain("All Model Projects");

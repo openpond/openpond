@@ -45,7 +45,7 @@
   },
   "private": true,
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && node ../../scripts/stage-server-runtime-assets.mjs",
     "dev": "pnpm --dir ../.. run build:server && node dist/index.js",
     "serve": "pnpm --dir ../.. run build:server && node dist/index.js serve",
     "web": "pnpm --dir ../.. run build:web && pnpm --dir ../.. run build:server && node dist/index.js web"

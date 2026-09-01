@@ -170,7 +170,7 @@ export const RewardModelRecipeSchema = z.object({
     kind: z.literal("structured_text"),
     serialization: z.enum([
       "scenario_input_and_candidate_json_v1",
-      "support_visible_trajectory_v1",
+      "visible_agent_trajectory_v1",
     ]),
     maxCharacters: z.number().int().positive().max(500_000),
   }).strict().default({

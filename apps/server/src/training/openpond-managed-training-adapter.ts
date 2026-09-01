@@ -848,10 +848,6 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       jobId: ref.runId,
       requireCleanup: true,
     });
-    const adapterOutput = output.outputs.find((candidate) => candidate.kind === "adapter");
-    if (!adapterOutput) {
-      throw new Error("Sandbox completed managed training without an adapter artifact.");
-    }
     const artifacts = output.outputs
       .filter((candidate) => candidate.kind !== "scorer")
       .map((candidate) => ({

@@ -17,7 +17,7 @@ export function modelsSectionForLabTab(tab: LabPrimaryTab): ModelSection {
 }
 
 export function libraryResourceLabel(
-  section: "projects" | "tasksets" | "scoring" | "evaluations" | "reviews",
+  section: "projects" | "tasksets" | "scorers" | "evaluations" | "reviews",
   resourceId: string | null,
   state: TrainingStateResponse | null,
 ): string | null {

@@ -91,7 +91,8 @@
 .training-metric-chart-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .training-metric-chart-card{min-width:0;overflow:hidden;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--panel-soft) 45%,transparent)}
 .training-metric-chart-card>header{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);padding:11px 13px}
-.training-metric-chart-card>header>div{display:grid;gap:2px;min-width:0}
+.training-metric-chart-title{display:grid;gap:2px;min-width:0}
+.training-metric-chart-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-shrink:0;margin-left:auto}
 .training-metric-chart-card>header h4{margin:0;font-size:13px;font-weight:600}
 .training-metric-chart-card>header span{color:var(--muted);font-size:10px}
 .training-metric-chart-card>header strong{font-family:var(--mono);font-size:13px;font-weight:620}
@@ -106,15 +107,12 @@
 .training-metric-card-stats dd{margin:0;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono);font-size:11px;font-weight:600}
 @keyframes training-metric-skeleton{0%{background-position:100% 0}100%{background-position:-100% 0}}
 .training-metric-workbench{display:grid;gap:16px;min-width:0}
-.training-metric-workbench-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}
-.training-metric-workbench-toolbar h3,.training-metric-workbench-toolbar p{margin:0}
-.training-metric-workbench-toolbar h3{font-size:15px;font-weight:620}
-.training-metric-workbench-toolbar p{margin-top:3px;color:var(--muted);font-size:11px}
 .training-metric-workbench-controls{display:flex;align-items:center;gap:8px}
 .training-metric-workbench-controls select{min-width:180px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);padding:7px 28px 7px 9px;font:inherit;font-size:11px}
 .training-metric-view-toggle{display:flex;border:1px solid var(--border);border-radius:7px;padding:2px}
 .training-metric-view-toggle button{border:0;border-radius:5px;background:transparent;color:var(--muted);padding:5px 8px;font:inherit;font-size:10px;cursor:pointer}
 .training-metric-view-toggle button.active{background:var(--panel-soft);color:var(--text)}
+.training-metric-view-toggle button:disabled{cursor:default;opacity:.45}
 .training-metric-stat-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin:0;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
 .training-metric-stat-strip>div{display:grid;gap:5px;border-right:1px solid var(--border);padding:11px 13px}
 .training-metric-stat-strip>div:last-child{border-right:0}
@@ -122,7 +120,7 @@
 .training-metric-stat-strip dd{margin:0;font-family:var(--mono);font-size:13px;font-weight:600}
 .training-metric-primary-chart{height:360px;min-width:0;border:1px solid var(--border);border-radius:9px;background:var(--panel);padding:6px}
 .training-metric-step-table{max-height:340px;overflow:auto}
-@media (max-width:900px){.training-metric-chart-grid{grid-template-columns:1fr}.training-metric-stat-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.training-metric-stat-strip>div:nth-child(3){border-right:0}.training-metric-workbench-toolbar{align-items:flex-start;flex-direction:column}.training-metric-workbench-controls{width:100%}.training-metric-workbench-controls label,.training-metric-workbench-controls select{flex:1}}
+@media (max-width:900px){.training-metric-chart-grid{grid-template-columns:1fr}.training-metric-stat-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.training-metric-stat-strip>div:nth-child(3){border-right:0}.training-metric-workbench-controls{width:100%}.training-metric-workbench-controls label,.training-metric-workbench-controls select{flex:1}}
 .training-line-chart{width:100%;margin:0;color:var(--text)}
 .training-line-chart svg{display:block;width:100%;height:auto;min-height:210px;overflow:visible;padding:4px 5px 0}
 .training-chart-grid{stroke:var(--border);stroke-width:1}

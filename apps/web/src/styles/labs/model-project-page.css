@@ -33,6 +33,7 @@
 
 .model-project-page-metrics > div {
   display: grid;
+  min-width: 0;
   gap: 4px;
   align-content: start;
   min-height: 72px;
@@ -41,9 +42,35 @@
   background: color-mix(in srgb, var(--panel) 82%, var(--bg));
   padding: 12px 13px;
 }
+
+.model-project-page-metric-link {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-project-page-metric-link:hover,
+.model-project-page-metric-link:focus-visible,
+.model-project-page-metric-link:hover .labs-status-badge-label,
+.model-project-page-metric-link:focus-visible .labs-status-badge-label {
+  outline: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .model-project-page-metrics dt,
 .model-project-page-metrics small { color: var(--muted); font-size: 10px; line-height: 1.35; }
-.model-project-page-metrics dd { margin: 0; overflow-wrap: anywhere; font-size: 17px; font-weight: 650; line-height: 1.25; }
+.model-project-page-metrics dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 17px; font-weight: 650; line-height: 1.25; }
 
 .labs-resource-page,
 .labs-model-overview {

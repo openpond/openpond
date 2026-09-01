@@ -25,7 +25,7 @@ export function managedSyntheticRewardSmokeRecipe(input: {
   preferenceDatasetRelease: { id: string; contentHash: string };
   serialization?:
     | "scenario_input_and_candidate_json_v1"
-    | "support_visible_trajectory_v1";
+    | "visible_agent_trajectory_v1";
 }): RewardModelRecipe {
   return RewardModelRecipeSchema.parse({
     schemaVersion: "openpond.rewardModelRecipe.v1",
@@ -46,7 +46,7 @@ export function managedSyntheticRewardSmokeRecipe(input: {
       kind: "structured_text",
       serialization: input.serialization ?? "scenario_input_and_candidate_json_v1",
       maxCharacters:
-        input.serialization === "support_visible_trajectory_v1"
+        input.serialization === "visible_agent_trajectory_v1"
           ? 96_000
           : 32_000,
     },
@@ -75,7 +75,7 @@ export function managedSyntheticRewardSmokeRecipe(input: {
       wallTimeMs: 20 * 60 * 1_000,
       maxExamples: 8,
       maxInputCharacters:
-        input.serialization === "support_visible_trajectory_v1"
+        input.serialization === "visible_agent_trajectory_v1"
           ? 96_000
           : 32_000,
       maximumSpendUsd: 2,

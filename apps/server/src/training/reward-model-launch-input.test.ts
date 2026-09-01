@@ -146,43 +146,43 @@ describe("managed Reward Model launch input", () => {
     })).rejects.toThrow("is not valid structured JSON");
   });
 
-  test("serializes only policy-visible support trajectories for support scorers", async () => {
-    const tasksetReleaseRef = { id: "support-taskset-r1", contentHash: "a".repeat(64) };
-    const datasetRef = { id: "support-preferences-d0", contentHash: "b".repeat(64) };
-    const receiptIds = ["support-love", "support-like", "support-reject"];
+  test("serializes only policy-visible agent trajectories for generic scorers", async () => {
+    const tasksetReleaseRef = { id: "agent-taskset-r1", contentHash: "a".repeat(64) };
+    const datasetRef = { id: "agent-preferences-d0", contentHash: "b".repeat(64) };
+    const receiptIds = ["agent-love", "agent-like", "agent-reject"];
     const tasksetRelease = {
       ...tasksetReleaseRef,
       revision: 1,
       tasks: [{
-        id: "support-scenario-1",
-        input: { customerMessage: "My order arrived damaged." },
-        policyVisibleContext: { policyVersion: "support-policy-v1" },
+        id: "agent-scenario-1",
+        input: { request: "Please resolve the blocked work item." },
+        policyVisibleContext: { policyVersion: "agent-policy-v1" },
       }],
     } as never;
     const visibleTrajectory = {
-      schemaVersion: "openpond.supportVisibleTrajectory.v1",
+      schemaVersion: "openpond.visibleAgentTrajectory.v1",
       conversation: [
-        { index: 0, role: "customer", name: null, content: "My order arrived damaged." },
-        { index: 1, role: "assistant", name: null, content: "I can replace it after confirmation." },
+        { index: 0, role: "user", name: null, content: "Please resolve the blocked work item." },
+        { index: 1, role: "assistant", name: null, content: "I can resolve it after confirmation." },
       ],
       toolEvents: [],
       runtimeEvents: [],
-      finalVisibleState: { resolution: "replacement_offered" },
+      finalVisibleState: { resolution: "work_item_resolution_offered" },
       escalation: { requested: false, reason: null, handoff: null },
       termination: { terminal: true, truncated: false, reason: "resolved" },
     };
     const launch = await buildManagedRewardModelLaunchInput({
-      idempotencyKey: "support-reward-run",
-      name: "Support communication scorer",
-      sourceRunRef: "openpond:reward-model-run:support-r0",
-      taskset: { id: "support-taskset", revision: 1, contentHash: "c".repeat(64) },
+      idempotencyKey: "agent-reward-run",
+      name: "Visible-agent scorer",
+      sourceRunRef: "openpond:reward-model-run:agent-r0",
+      taskset: { id: "agent-taskset", revision: 1, contentHash: "c".repeat(64) },
       tasksetRelease,
       dataset: {
         id: datasetRef.id,
         contentHash: datasetRef.contentHash,
         tasksetRelease,
         groups: ["reward_train", "reward_validation"].map((partition, index) => ({
-          id: `support-group-${index}`,
+          id: `agent-group-${index}`,
           partition,
           rejectAll: false,
           attemptRefs: receiptIds.map((id) => ({ id, contentHash: "d".repeat(64) })),
@@ -192,7 +192,7 @@ describe("managed Reward Model launch input", () => {
       recipe: managedSyntheticRewardSmokeRecipe({
         tasksetRelease: tasksetReleaseRef,
         preferenceDatasetRelease: datasetRef,
-        serialization: "support_visible_trajectory_v1",
+        serialization: "visible_agent_trajectory_v1",
       }),
       managedBaseModel: {
         source: "huggingface",
@@ -204,8 +204,8 @@ describe("managed Reward Model launch input", () => {
         gated: false,
       },
       attempts: receiptIds.map((receiptId, index) => ({
-        id: `support-attempt-${index}`,
-        taskId: "support-scenario-1",
+        id: `agent-attempt-${index}`,
+        taskId: "agent-scenario-1",
         output: { text: JSON.stringify(visibleTrajectory) },
         metadata: { portableAttemptReceipt: { id: receiptId } },
       })) as never,
@@ -214,33 +214,33 @@ describe("managed Reward Model launch input", () => {
       groups: Array<{ candidates: Array<{ text: string }> }>;
     }).groups;
     expect(JSON.parse(groups[0]!.candidates[0]!.text)).toEqual({
-      schemaVersion: "openpond.supportPreferenceCandidate.v1",
+      schemaVersion: "openpond.visibleAgentPreferenceCandidate.v1",
       scenario: {
-        input: { customerMessage: "My order arrived damaged." },
-        policyVisibleContext: { policyVersion: "support-policy-v1" },
+        input: { request: "Please resolve the blocked work item." },
+        policyVisibleContext: { policyVersion: "agent-policy-v1" },
       },
       trajectory: visibleTrajectory,
     });
     expect(groups[0]!.candidates[0]!.text).not.toMatch(/expected|privileged|reward|score/i);
   });
 
-  test("rejects privileged fields in support scenario context", async () => {
-    const tasksetReleaseRef = { id: "support-taskset-r1", contentHash: "a".repeat(64) };
-    const datasetRef = { id: "support-preferences-d0", contentHash: "b".repeat(64) };
-    const receiptIds = ["support-love", "support-reject"];
+  test("rejects privileged fields in agent scenario context", async () => {
+    const tasksetReleaseRef = { id: "agent-taskset-r1", contentHash: "a".repeat(64) };
+    const datasetRef = { id: "agent-preferences-d0", contentHash: "b".repeat(64) };
+    const receiptIds = ["agent-love", "agent-reject"];
     const tasksetRelease = {
       ...tasksetReleaseRef,
       revision: 1,
       tasks: [{
-        id: "support-scenario-1",
-        input: { customerMessage: "My order arrived damaged." },
-        policyVisibleContext: { hiddenObjective: "Issue exactly 12.34 USD." },
+        id: "agent-scenario-1",
+        input: { request: "Please resolve the blocked work item." },
+        policyVisibleContext: { hiddenObjective: "Apply the hidden terminal state." },
       }],
     } as never;
     const visibleTrajectory = {
-      schemaVersion: "openpond.supportVisibleTrajectory.v1",
+      schemaVersion: "openpond.visibleAgentTrajectory.v1",
       conversation: [
-        { index: 0, role: "customer", name: null, content: "My order arrived damaged." },
+        { index: 0, role: "user", name: null, content: "Please resolve the blocked work item." },
       ],
       toolEvents: [],
       runtimeEvents: [],
@@ -249,17 +249,17 @@ describe("managed Reward Model launch input", () => {
       termination: { terminal: true, truncated: false, reason: "resolved" },
     };
     await expect(buildManagedRewardModelLaunchInput({
-      idempotencyKey: "support-reward-run-hidden-context",
-      name: "Support communication scorer",
-      sourceRunRef: "openpond:reward-model-run:support-r0",
-      taskset: { id: "support-taskset", revision: 1, contentHash: "c".repeat(64) },
+      idempotencyKey: "agent-reward-run-hidden-context",
+      name: "Visible-agent scorer",
+      sourceRunRef: "openpond:reward-model-run:agent-r0",
+      taskset: { id: "agent-taskset", revision: 1, contentHash: "c".repeat(64) },
       tasksetRelease,
       dataset: {
         id: datasetRef.id,
         contentHash: datasetRef.contentHash,
         tasksetRelease,
         groups: [{
-          id: "support-group-0",
+          id: "agent-group-0",
           partition: "reward_train",
           rejectAll: false,
           attemptRefs: receiptIds.map((id) => ({ id, contentHash: "d".repeat(64) })),
@@ -269,7 +269,7 @@ describe("managed Reward Model launch input", () => {
       recipe: managedSyntheticRewardSmokeRecipe({
         tasksetRelease: tasksetReleaseRef,
         preferenceDatasetRelease: datasetRef,
-        serialization: "support_visible_trajectory_v1",
+        serialization: "visible_agent_trajectory_v1",
       }),
       managedBaseModel: {
         source: "huggingface",
@@ -281,8 +281,8 @@ describe("managed Reward Model launch input", () => {
         gated: false,
       },
       attempts: receiptIds.map((receiptId, index) => ({
-        id: `support-attempt-${index}`,
-        taskId: "support-scenario-1",
+        id: `agent-attempt-${index}`,
+        taskId: "agent-scenario-1",
         output: { text: JSON.stringify(visibleTrajectory) },
         metadata: { portableAttemptReceipt: { id: receiptId } },
       })) as never,
