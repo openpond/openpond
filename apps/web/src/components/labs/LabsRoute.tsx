@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  type ChatModelRef,
-  type LearnedPreferenceRewardBinding,
-} from "@openpond/contracts";
+import type { ChatModelRef, LearnedPreferenceRewardBinding } from "@openpond/contracts";
 
 import { DatasetSourcePickerDialog, type DatasetCreateSource } from "../datasets/DatasetSourcePickerDialog";
 import { HuggingFaceDatasetImportDialog } from "../datasets/HuggingFaceDatasetImportDialog";
@@ -696,8 +693,7 @@ export function LabsRoute({
             onSelectedEvaluationIdChange={(evaluationId) => navigateModelsRoute(modelLibraryRoute("evaluations", evaluationId))}
             selectedEvaluationId={modelsRoute.resourceId}
             state={training.training.payload}
-            training={training.training}
-            onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
+            training={training.training} onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
           />
         ) : (
           <LabHumanReviewsPage
@@ -791,8 +787,7 @@ export function LabsRoute({
           })}
           selectedEvaluationId={modelsRoute.resourceId}
           state={training.training.payload}
-          training={training.training}
-          onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
+          training={training.training} onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
         />
       ) : activeTab === "serving" ? (
         <LabServingPage
