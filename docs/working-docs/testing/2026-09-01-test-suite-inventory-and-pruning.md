@@ -1,8 +1,8 @@
 # 2026-09-01 Test Suite Inventory And Pruning
 
-Status: rebased onto current `origin/master` with local validation complete; pull-request evidence pending.
+Status: rebased onto current `origin/master`, locally validated, and open for review in [PR #203](https://github.com/openpond/openpond/pull/203). CI is pending.
 
-Latest checkpoint: 2026-09-01. Every tracked test on the rebased `origin/master` has a disposition below. This change removes 190 of 479 files (39.7%), 861 of 2,311 test declarations (37.3%), and 34,731 of 101,520 test lines (34.2%) while retaining security, persistence, public-contract, concurrency/lifecycle, algorithmic, and representative end-to-end protection.
+Latest checkpoint: 2026-09-01. [PR #203](https://github.com/openpond/openpond/pull/203) is open from implementation commit `cbe468a1`. Every tracked test on the rebased `origin/master` has a disposition below. This change removes 190 of 479 files (39.7%), 861 of 2,311 test declarations (37.3%), and 34,731 of 101,520 test lines (34.2%) while retaining security, persistence, public-contract, concurrency/lifecycle, algorithmic, and representative end-to-end protection.
 
 ## Summary
 
@@ -70,7 +70,7 @@ Tests are not required for exact prose, CSS classes, icons, registry ordering, t
 - [x] Run repository and test-tier checks. Done: repository, hygiene, workflow, and tier checks pass.
 - [x] Re-run affected and retained unit/system suites after rebasing the merged lifecycle-fixture changes. Done: focused conflicts pass; 121 unit files / 673 tests and 141 system files / 724 tests pass.
 - [x] Run remaining integration, contract, Python, image, and release suites as their dependencies permit. Done: all retained lanes pass with exact evidence below.
-- [ ] Record the final commit and pull-request URL.
+- [x] Record the implementation commit and pull-request URL. Done: `cbe468a1`, [PR #203](https://github.com/openpond/openpond/pull/203).
 
 ## Validation
 
@@ -587,3 +587,4 @@ This is the complete set of 479 tracked `*.test.*` and Python `test_*.py` files 
 - 2026-09-01: Completed all retained test lanes, typecheck, repository policy checks, workflow validation, and release build/smoke locally before rebase.
 - 2026-09-01: Rebased onto `02cf3bb2`. Restored the merged cancellation, draft-deletion, and export-approval cases because they protect lifecycle, data, and paid-operation invariants; retained deletions of exact release-script and SSR training-detail coverage.
 - 2026-09-01: Post-rebase focused, full unit, and full system validation passed.
+- 2026-09-01: Pushed `feat/test-suite-pruning` and opened [PR #203](https://github.com/openpond/openpond/pull/203) against `master`.
