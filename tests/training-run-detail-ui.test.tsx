@@ -136,16 +136,22 @@ const detail = TrainingRunDetailSchema.parse({
 describe("Training run detail UI", () => {
   test("treats a Version as an optional run output and merges cost and resources into setup", () => {
     const evidence = ManagedTrainingRunEvidenceSchema.parse({
-      schemaVersion: "openpond.managedTrainingRunEvidence.v1",
+      schemaVersion: "openpond.managedTrainingRunEvidence.v2",
       provider: "openpond",
       providerRunId: "managed_job_fixture",
       state: "completed",
       progress: {
         targetOptimizerSteps: 1,
         committedOptimizerSteps: 1,
+        skippedOptimizerSteps: 0,
       },
       reward: {
         finalMean: 0.75,
+        variance: 0,
+        minimum: 0.75,
+        maximum: 0.75,
+        distinctValueCount: 1,
+        noSignalGroupCount: 0,
         trajectoryCount: 4,
         eligibleTrajectoryCount: 4,
       },
@@ -159,9 +165,12 @@ describe("Training run detail UI", () => {
         gpuType: "NVIDIA A40",
         gpuCount: 1,
         hourlyCostUsd: 0.44,
+        durationSeconds: 300,
+        gpuSeconds: 300,
       },
       cost: { totalUsd: 0.12 },
       checkpoint: null,
+      movement: { adapterDeltaNorm: 0.25 },
       evaluations: [],
       canonicalPublication: {
         state: null,

@@ -56,8 +56,9 @@ describe("Taskset draft persistence", () => {
 
       await store.deleteTasksetDraft(draft.id);
       expect(await store.getTasksetDraft(draft.id)).toBeNull();
-      expect(await readFile(path.join(workspace!.workspacePath, "taskset.json"), "utf8"))
-        .toContain("Store proof");
+      await expect(
+        readFile(path.join(workspace!.workspacePath, "taskset.json"), "utf8"),
+      ).rejects.toMatchObject({ code: "ENOENT" });
     }));
 
   test("imports portable packages with assets without bypassing the draft store", async () =>

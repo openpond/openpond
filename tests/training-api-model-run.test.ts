@@ -34,6 +34,7 @@ describe("training API Model Run approval forwarding", () => {
       retentionDays: 1,
       exportApproved: true,
       manifest: undefined,
+      comparisonSeriesEntryId: null,
     });
   });
 

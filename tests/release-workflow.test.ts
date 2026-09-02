@@ -329,7 +329,7 @@ describe("release workflow", () => {
     };
 
     expect(packageJson.scripts?.["bundle:server"]).toBe(
-      "pnpm run build:sdk && tsc -b apps/server && tsx scripts/build/bundle-server.ts",
+      "pnpm run build:sdk && tsc -b apps/server && tsx scripts/build/bundle-server.ts && node scripts/stage-server-runtime-assets.mjs",
     );
   });
 

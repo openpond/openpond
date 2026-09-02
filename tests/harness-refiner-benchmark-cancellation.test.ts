@@ -160,8 +160,31 @@ describe("Harness Refiner benchmark cancellation", () => {
       ...harnessRun,
       id: "model_run_other_evaluation",
       evaluation: {
-        ...harnessRun.evaluation!,
-        benchmarkId: "other-benchmark",
+        benchmarkId: "model-comparison",
+        target: {
+          kind: "external_reference",
+          label: "Reference model",
+          modelVersionId: null,
+          model: { providerId: "openpond", modelId: "openpond-chat" },
+        },
+        grader: { id: "grader_release", contentHash: HASH },
+        judge: null,
+        seeds: [17],
+        repetitions: 1,
+        maximumSpendUsd: 1,
+        attemptPlan: [{
+          stage: "comparison",
+          split: "frozen_eval",
+          taskIds: ["held-out"],
+          attemptCount: 1,
+        }],
+      },
+      evaluationProgress: {
+        stage: "comparison",
+        completedAttempts: 0,
+        totalAttempts: 1,
+        accounting: null,
+        evidenceSnapshot: null,
       },
     });
     const saveModelRun = vi.fn(async (value: typeof harnessRun) => value);
