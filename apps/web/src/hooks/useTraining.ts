@@ -100,6 +100,9 @@ export type PreferenceDatasetReleaseView = {
   createdAt: string;
 };
 
+const ACTIVE_TRAINING_POLL_INTERVAL_MS = 10_000;
+const IDLE_TRAINING_POLL_INTERVAL_MS = 30_000;
+
 export function useTraining(input: { connection: ClientConnection | null; profileId: string }) {
   const { connection, profileId } = input;
   const [payload, setPayload] = useState<TrainingStateResponse | null>(null);
@@ -174,12 +177,20 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     if (!connection) return undefined;
     let active = true;
     let timer: number | null = null;
-    const initialDelay = hasActiveWork ? 500 : 30_000;
+    // The state projection includes immutable training and evaluation history and
+    // can become large. Poll the compact activity projection frequently enough
+    // for run monitoring, but do not force the renderer to parse a full state
+    // snapshot twice per second while training is active.
+    const initialDelay = hasActiveWork
+      ? ACTIVE_TRAINING_POLL_INTERVAL_MS
+      : IDLE_TRAINING_POLL_INTERVAL_MS;
     const poll = async () => {
       let nextDelay = initialDelay;
       try {
         const activity = await api.trainingActivity(connection, profileId);
-        nextDelay = activity.active ? 500 : 30_000;
+        nextDelay = activity.active
+          ? ACTIVE_TRAINING_POLL_INTERVAL_MS
+          : IDLE_TRAINING_POLL_INTERVAL_MS;
         if (
           activityRevisionRef.current === null
           || activityRevisionRef.current !== activity.revision
