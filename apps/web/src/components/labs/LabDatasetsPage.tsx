@@ -20,6 +20,7 @@ import {
 import { LabExpertBootstrap } from "./LabExpertBootstrap";
 import { LabModelDataset } from "./LabModelDataset";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { LabTasksetGraders } from "./LabTasksetGraders";
 import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
@@ -32,12 +33,14 @@ export type TasksetDetailTab =
   | "overview"
   | "tasks"
   | "scoring"
+  | "graders"
   | "attempts"
   | "releases";
 const TASKSET_DETAIL_TABS: Array<{ id: TasksetDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "tasks", label: "Tasks" },
   { id: "scoring", label: "Scoring" },
+  { id: "graders", label: "Graders" },
   { id: "attempts", label: "Attempts" },
   { id: "releases", label: "Releases" },
 ];
@@ -253,7 +256,9 @@ export function LabDatasetsPage({
             </button>
           ))}
         </div>
-        {activeDetailTab === "attempts" ? (
+        {activeDetailTab === "graders" ? (
+          <LabTasksetGraders taskset={selected} training={training} />
+        ) : activeDetailTab === "attempts" ? (
           <TasksetAttempts taskset={selected} training={training} />
         ) : activeDetailTab === "releases" ? (
           <TasksetVersions state={state} taskset={selected} />

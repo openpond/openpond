@@ -1,26 +1,20 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import {
-  assertOptimizerIsolation,
   auditContinualBenchLeakage,
   contentHash,
   createContinualBenchReport,
   createContinualBenchSplit,
   exportContinualBenchReport,
-  optimizerTasksForPass,
   pairedBootstrapEstimate,
   sealPortableManifest,
   validateContinualBenchManifest,
-  verifyGoldenMigrationFixture,
   verifyProtocol,
-} from "@openpond/continual-bench";
+} from "@openpond/continual-support";
 import { contentHash as tasksetContentHash } from "@openpond/taskset-sdk";
 import { describe, expect, it } from "vitest";
 
 const task = (id: string, familyId: string, prompt = id) => ({ id, familyId, prompt, contentHash: contentHash({ id, familyId, prompt }) });
 
-describe("@openpond/continual-bench", () => {
+describe("@openpond/continual-support", () => {
   it("uses OpenPond canonical content hashing", () => {
     const value = { z: 1, a: [{ b: 2, a: null }] };
     expect(contentHash(value)).toBe(tasksetContentHash(value));
@@ -75,22 +69,6 @@ describe("@openpond/continual-bench", () => {
 
   it("rejects a protocol whose immutable hash was changed", () => {
     expect(() => verifyProtocol({ contentHash: "0".repeat(64) } as never)).toThrow();
-  });
-
-  it("validates the versioned public fixture without exposing holdouts to the optimizer", async () => {
-    const manifest = JSON.parse(await readFile(path.join(import.meta.dirname, "..", "examples", "tau3-retail-continual-v1", "continual-bench.json"), "utf8"));
-    const validation = validateContinualBenchManifest(manifest);
-    expect(validation.issues).toEqual([]);
-    expect(validation.valid).toBe(true);
-    expect(() => assertOptimizerIsolation(manifest)).not.toThrow();
-    const optimizerIds = optimizerTasksForPass(manifest, "P0").map((item) => item.id);
-    expect(optimizerIds).toHaveLength(1);
-    expect(optimizerIds).not.toContain("fixture-return-2");
-  });
-
-  it("reproduces the production v3 split as a golden migration fixture", async () => {
-    const fixture = JSON.parse(await readFile(path.join(import.meta.dirname, "..", "examples", "tau3-retail-continual-v1", "golden-migration.json"), "utf8"));
-    expect(verifyGoldenMigrationFixture(fixture)).toBe(true);
   });
 
   it("computes deterministic paired confidence intervals and an exact sign test", () => {

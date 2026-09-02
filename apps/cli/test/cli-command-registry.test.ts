@@ -59,14 +59,14 @@ describe("CLI command registry", () => {
     });
   });
 
-  test("registers the four-command Continual Bench workflow", () => {
-    const definition = getCliCommandDefinition("bench");
+  test("registers the four-command Continual Support workflow", () => {
+    const definition = getCliCommandDefinition("continual");
     expect(definition?.usage).toContain("init|validate|run|report");
     expect(definition?.usages).toEqual(expect.arrayContaining([
-      expect.stringContaining("bench init"),
-      expect.stringContaining("bench validate"),
-      expect.stringContaining("bench run"),
-      expect.stringContaining("bench report"),
+      expect.stringContaining("continual init"),
+      expect.stringContaining("continual validate"),
+      expect.stringContaining("continual run"),
+      expect.stringContaining("continual report"),
     ]));
   });
 

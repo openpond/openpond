@@ -710,15 +710,15 @@ Options:
   --volume-storage-gb <number>
   --workflow-mode <string>
 ```
-## bench
+## continual
 
 ```text
 Usage:
-  openpond bench <init|validate|run|report> [manifest-or-series-id]
-  openpond bench init --from <tasks.jsonl> [--output <continual-bench.yaml>] [--non-interactive]
-  openpond bench validate <continual-bench.yaml> [--json]
-  openpond bench run <continual-bench.yaml> [--api-base-url <url>] [--json]
-  openpond bench report <comparison-series-id> [--output <report.json>] [--json]
+  openpond continual <init|validate|run|report> [manifest-or-series-id]
+  openpond continual init --from <tasks.jsonl> [--output <continual-support.yaml>] [--non-interactive]
+  openpond continual validate <continual-support.yaml> [--json]
+  openpond continual run <continual-support.yaml> [--api-base-url <url>] [--json]
+  openpond continual report <comparison-series-id> [--output <report.json>] [--json]
 
 Options:
   --api-base-url <string>

@@ -24,6 +24,15 @@ describe("Models path routing", () => {
       detailTab: "tasks",
     });
     expect(
+      modelsRouteFromLocation({
+        pathname: "/models/project_1/tasksets/taskset_1/graders",
+      }),
+    ).toMatchObject({
+      section: "tasksets",
+      resourceId: "taskset_1",
+      detailTab: "graders",
+    });
+    expect(
       modelsRouteFromLocation({ pathname: "/models/project_1/runs" }),
     ).toMatchObject({
       kind: "project",
@@ -106,6 +115,16 @@ describe("Models path routing", () => {
       section: "tasksets",
       resourceId: "taskset_1",
       detailTab: "scoring",
+    });
+    expect(
+      modelsRouteFromLocation({
+        pathname: "/models/tasksets/taskset_1/graders",
+      }),
+    ).toEqual({
+      kind: "library",
+      section: "tasksets",
+      resourceId: "taskset_1",
+      detailTab: "graders",
     });
     expect(
       modelsRouteFromLocation({ pathname: "/models/reviews/review_1/nope" }),

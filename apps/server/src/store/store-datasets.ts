@@ -9,7 +9,7 @@ import {
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
-import { SqliteContinualBenchReviewStore } from "./store-continual-bench-reviews.js";
+import { SqliteContinualBenchReviewStore } from "./store-continual-support-reviews.js";
 
 export type DatasetCatalogTasksetProjection = {
   tasksetId: string;

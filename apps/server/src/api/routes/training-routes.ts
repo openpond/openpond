@@ -87,7 +87,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
     { method: "PUT", path: "/v1/training/models", action: "save_model_project" },
     { method: "POST", path: "/v1/training/comparison-series", action: "save_model_comparison_series", status: 201 },
-    { method: "PUT", path: "/v1/training/continual-bench/issue-reviews", action: "save_continual_bench_issue_review" },
+    { method: "PUT", path: "/v1/training/continual-support/issue-reviews", action: "save_continual_support_issue_review" },
     { method: "POST", path: "/v1/training/continual-learning/daily-batches/import", action: "import_continual_learning_daily_batch", status: 201 },
     { method: "POST", path: "/v1/training/continual-learning/responses", action: "generate_continual_learning_responses", status: 202 },
     { method: "PUT", path: "/v1/training/continual-learning/daily-batches", action: "save_continual_learning_daily_batch" },
@@ -113,6 +113,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const dynamic = [
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/graders$/, method: "GET", action: "taskset_grader_details", key: "tasksetId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/attempts\/([^/]+)\/evidence$/, method: "GET", action: "model_comparison_attempt_evidence", key: "runId", assignmentKey: "attemptId" },
     { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/seal$/, method: "POST", action: "seal_model_comparison_series", key: "seriesId" },
     { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/releases$/, method: "POST", action: "queue_model_comparison_release", key: "seriesId" },

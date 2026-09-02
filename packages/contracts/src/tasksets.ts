@@ -482,6 +482,35 @@ export const GraderSpecSchema = z.union([
   CustomVerifierGraderSpecSchema,
 ]);
 
+export const TasksetGraderSourceSchema = z.object({
+  graderId: IdSchema.nullable(),
+  path: z.string().trim().min(1).max(1_000),
+  language: z.enum(["javascript", "typescript", "python", "json", "text"]),
+  content: z.string().max(2_000_000),
+  sha256: HashSchema,
+  declaredSha256: HashSchema.nullable(),
+  integrity: z.enum(["verified", "unverified", "mismatch"]),
+});
+
+export const TasksetGraderRuntimeSchema = z.object({
+  protocolVersion: z.string().trim().min(1).max(200),
+  module: z.string().trim().min(1).max(1_000),
+  moduleSha256: HashSchema,
+  command: z.array(z.string().max(2_000)).max(100),
+  cwd: z.string().trim().min(1).max(4_000),
+  maxTurns: z.number().int().positive().max(100),
+});
+
+export const TasksetGraderDetailsResponseSchema = z.object({
+  schemaVersion: z.literal("openpond.tasksetGraderDetails.v1"),
+  taskset: VersionedReleaseRefSchema,
+  sourceTasksetId: IdSchema,
+  graders: z.array(GraderSpecSchema).max(1_000),
+  runtime: TasksetGraderRuntimeSchema.nullable(),
+  sources: z.array(TasksetGraderSourceSchema).max(1_000),
+  unavailableReason: z.string().max(2_000).nullable(),
+});
+
 export const GraderFixtureLabelSchema = z.enum([
   "positive",
   "negative",
@@ -909,6 +938,7 @@ export type TasksetCapabilityManifest = z.infer<typeof TasksetCapabilityManifest
 export type TasksetMetricPolicy = z.infer<typeof TasksetMetricPolicySchema>;
 export type TaskFailureClass = z.infer<typeof TaskFailureClassSchema>;
 export type GraderSpec = z.infer<typeof GraderSpecSchema>;
+export type TasksetGraderDetailsResponse = z.infer<typeof TasksetGraderDetailsResponseSchema>;
 export type GraderFixture = z.infer<typeof GraderFixtureSchema>;
 export type TaskDesignFixtureTemplate = z.infer<typeof TaskDesignFixtureTemplateSchema>;
 export type GeneratedTaskFile = z.infer<typeof GeneratedTaskFileSchema>;

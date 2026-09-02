@@ -59,6 +59,6 @@ export function createContinualBenchReport(input: Omit<ContinualBenchPortableRep
 export function exportContinualBenchReport(report: ContinualBenchPortableReport): string {
   const parsed = ContinualBenchPortableReportSchema.parse(report);
   const { contentHash: declared, ...unsealed } = parsed;
-  if (declared !== contentHash(unsealed)) throw new Error("Continual Bench report content hash does not match its payload.");
+  if (declared !== contentHash(unsealed)) throw new Error("Continual Support report content hash does not match its payload.");
   return canonicalJson(parsed);
 }

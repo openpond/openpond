@@ -17,7 +17,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@openpond/continual-bench": "workspace:*",
+    "@openpond/continual-support": "workspace:*",
     "@openpond/evals": "workspace:*",
     "@openpond/harness": "workspace:*",
     "@openpond/cloud": "workspace:*",

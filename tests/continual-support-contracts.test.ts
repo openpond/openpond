@@ -23,7 +23,7 @@ function protocolInput() {
   ] as const;
   const release = {
     schemaVersion: "openpond.continualBenchmarkProtocol.v1",
-    id: "continual-bench-protocol-test",
+    id: "continual-support-protocol-test",
     revision: 1,
     ownerId: "owner-test",
     createdAt: NOW,
@@ -58,7 +58,7 @@ function protocolInput() {
   return { ...release, contentHash: hash(release) };
 }
 
-describe("Continual Bench contracts", () => {
+describe("Continual Support contracts", () => {
   it("accepts a sealed portable benchmark protocol and issue packet", () => {
     expect(ContinualBenchmarkProtocolReleaseSchema.parse(protocolInput()).evaluation.seeds).toHaveLength(3);
     const packetInput = {

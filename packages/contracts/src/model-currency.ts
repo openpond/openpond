@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ContinualBenchPanelRoleSchema } from "./continual-bench.js";
+import { ContinualBenchPanelRoleSchema } from "./continual-support.js";
 import { ImmutableReleaseRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, VersionedReleaseRefSchema } from "./release-core.js";
 
 export const ModelCurrencyEvidenceStateSchema = z.enum(["measuring", "up_to_date", "needs_attention"]);

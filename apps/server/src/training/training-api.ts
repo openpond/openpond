@@ -42,10 +42,7 @@ import type { createTaskCreatorService } from "./task-creator.js";
 import type { createTaskEvaluationService } from "./evaluation-service.js";
 import type { createTaskMinerService } from "./task-miner.js";
 import type { createTrainingService } from "./training-service.js";
-import {
-  MANAGED_REWARD_MODEL_PROFILE,
-  managedSyntheticRewardSmokeRecipe,
-} from "./managed-reward-model-recipes.js";
+import { MANAGED_REWARD_MODEL_PROFILE, managedSyntheticRewardSmokeRecipe } from "./managed-reward-model-recipes.js";
 import { versionModelProjectOntoManagedRlBase } from "./managed-rl-base-profile.js";
 import type { createTrainingChatSearchService } from "./training-chat-search.js";
 import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
@@ -55,10 +52,7 @@ import type { createHarnessRefinerBenchmarkService } from "./harness-refiner-ben
 import type { createPreferenceComparisonService } from "./preference-comparison-service.js";
 import type { createModelProjectHostingService } from "./model-project-hosting.js";
 import { trainingRunDetail } from "./run-detail.js";
-import {
-  managedStructuredOutputContract,
-  preferenceCalibrationSourceHash,
-} from "./managed-rl-calibration.js";
+import { managedStructuredOutputContract, preferenceCalibrationSourceHash } from "./managed-rl-calibration.js";
 import {
   materializeSyntheticCollectionRun,
   SyntheticCollectionRunRequestSchema,
@@ -107,6 +101,7 @@ import {
 import { createModelComparisonRuntime } from "./model-comparison-runtime.js";
 import { handleModelComparisonAction } from "./training-api-model-comparison-actions.js";
 import { handleContinualLearningAction } from "./training-api-continual-learning-actions.js";
+import { readTasksetGraderDetails } from "./taskset-grader-details.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
 import {
   boundedInteger,
@@ -183,6 +178,9 @@ export function createTrainingApi(deps: {
           ?? "default",
       );
     }
+    if (action === "taskset_grader_details") return readTasksetGraderDetails({
+      store: deps.store, storeDir: deps.storeDir, tasksetId: requiredString(input.tasksetId, "tasksetId"),
+    });
     const continualLearningAction = await handleContinualLearningAction({
       action, payload: input, store: deps.store, storeDir: deps.storeDir, evaluations: comparisonEvaluations,
     });

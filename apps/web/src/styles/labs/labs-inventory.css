@@ -83,6 +83,85 @@
   white-space: nowrap;
 }
 
+.labs-taskset-grader-runtime,
+.labs-taskset-grader-source {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  padding: 13px;
+}
+
+.labs-taskset-grader-table strong,
+.labs-taskset-grader-table small {
+  display: block;
+}
+
+.labs-taskset-grader-table small {
+  margin-top: 3px;
+  color: var(--muted);
+  font: 10px/1.35 var(--mono);
+}
+
+.labs-taskset-grader-runtime h3,
+.labs-taskset-grader-source h3 {
+  margin: 0;
+  font-size: 12px;
+}
+
+.labs-taskset-grader-source > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.labs-taskset-grader-source > header p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.labs-taskset-grader-source pre {
+  overflow: auto;
+  max-height: 560px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  padding: 12px;
+  color: var(--muted-strong);
+  font: 11px/1.55 var(--mono);
+  tab-size: 2;
+  white-space: pre;
+}
+
+.labs-taskset-grader-source > small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font: 9px/1.4 var(--mono);
+}
+
+.labs-taskset-grader-integrity {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  padding: 3px 7px;
+  font-size: 9px;
+  text-transform: capitalize;
+}
+
+.labs-taskset-grader-integrity.verified {
+  color: var(--success);
+}
+
+.labs-taskset-grader-integrity.mismatch {
+  color: var(--danger);
+}
+
 .labs-dataset-advanced-action .training-button {
   flex: 0 0 auto;
   margin-top: 0;

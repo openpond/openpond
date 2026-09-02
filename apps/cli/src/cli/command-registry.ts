@@ -372,13 +372,13 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({ options, rest }) => (await import("./sandbox-command")).runSandboxCommand(options, rest),
   },
   {
-    name: "bench",
-    usage: "openpond bench <init|validate|run|report> [manifest-or-series-id]",
+    name: "continual",
+    usage: "openpond continual <init|validate|run|report> [manifest-or-series-id]",
     usages: [
-      "openpond bench init --from <tasks.jsonl> [--output <continual-bench.yaml>] [--non-interactive]",
-      "openpond bench validate <continual-bench.yaml> [--json]",
-      "openpond bench run <continual-bench.yaml> [--api-base-url <url>] [--json]",
-      "openpond bench report <comparison-series-id> [--output <report.json>] [--json]",
+      "openpond continual init --from <tasks.jsonl> [--output <continual-support.yaml>] [--non-interactive]",
+      "openpond continual validate <continual-support.yaml> [--json]",
+      "openpond continual run <continual-support.yaml> [--api-base-url <url>] [--json]",
+      "openpond continual report <comparison-series-id> [--output <report.json>] [--json]",
     ],
     optionSchema: {
       apiBaseUrl: "string",
@@ -398,7 +398,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       seed: "string",
       semanticSimilarityThreshold: "number",
     },
-    handler: async ({ options, rest }) => (await import("./bench")).runBenchCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./continual")).runContinualCommand(options, rest),
   },
   {
     name: "training",

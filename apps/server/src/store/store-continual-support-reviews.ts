@@ -48,7 +48,7 @@ export class SqliteContinualBenchReviewStore extends SqliteTrainingModelStore {
     const existing = await this.getContinualBenchIssueReview(review.id);
     if (existing && (existing.seriesId !== review.seriesId || existing.passLabel !== review.passLabel || existing.packet.contentHash !== review.packet.contentHash || review.revision !== existing.revision + 1)) {
       if (JSON.stringify(existing) === JSON.stringify(review)) return existing;
-      throw new Error("A Continual Bench review update must preserve its sealed packet and use the next revision.");
+      throw new Error("A Continual Support review update must preserve its sealed packet and use the next revision.");
     }
     await this.upsertPayload(
       `INSERT INTO continual_bench_issue_reviews (id, series_id, pass_label, status, revision, payload, created_at, updated_at)

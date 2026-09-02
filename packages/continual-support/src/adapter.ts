@@ -44,9 +44,9 @@ export function optimizerTasksForPass(
   });
 }
 
-export const CONTINUAL_BENCH_COMMANDS = Object.freeze({
-  init: "openpond bench init --from ./tasks.jsonl",
-  validate: "openpond bench validate ./continual-bench.yaml",
-  run: "openpond bench run ./continual-bench.yaml",
-  report: "openpond bench report <comparison-series-id>",
+export const CONTINUAL_SUPPORT_COMMANDS = Object.freeze({
+  init: "openpond continual init --from ./tasks.jsonl",
+  validate: "openpond continual validate ./continual-support.yaml",
+  run: "openpond continual run ./continual-support.yaml",
+  report: "openpond continual report <comparison-series-id>",
 });

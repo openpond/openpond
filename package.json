@@ -41,7 +41,6 @@
     "bundle:server": "pnpm run build:sdk && tsc -b apps/server && tsx scripts/build/bundle-server.ts",
     "build:terminal": "tsc -b apps/terminal",
     "build:web": "pnpm --dir apps/web run build",
-    "build:continual-bench-site": "pnpm --dir apps/continual-bench-site run build",
     "build:desktop": "tsc -b apps/desktop && tsx scripts/build/bundle-desktop.ts",
     "electron:runtime:check": "tsx scripts/check-electron-runtime.ts",
     "stage:desktop": "pnpm run agent-sdk:build && tsx scripts/stage-desktop-runtime.ts",
@@ -167,7 +166,7 @@
   },
   "devDependencies": {
     "@electron/asar": "^3.4.1",
-    "@openpond/continual-bench": "workspace:*",
+    "@openpond/continual-support": "workspace:*",
     "@openpond/agent-runtime": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@openpond/codex-provider": "workspace:*",

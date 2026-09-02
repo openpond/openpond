@@ -42,7 +42,7 @@ export function LabComparisonSeriesCreateDialog({
   const tasksets = useMemo(() => uniqueTasksets(state), [state]);
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const project = projects.find((candidate) => candidate.id === projectId) ?? null;
-  const [name, setName] = useState("Production continual learning");
+  const [name, setName] = useState("Continual Support");
   const [objective, setObjective] = useState("Improve the selected Model through bounded, inspectable continual-learning releases.");
   const [seedId, setSeedId] = useState("");
   const [eligibleId, setEligibleId] = useState("");

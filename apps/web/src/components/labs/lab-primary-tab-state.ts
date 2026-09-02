@@ -55,7 +55,7 @@ const LIBRARY_SECTION_SET = new Set<string>(MODEL_LIBRARY_SECTIONS);
 const RETIRED_LIBRARY_SECTION_SET = new Set(["scoring"]);
 const DETAIL_TABS_BY_SECTION: Partial<Record<ModelSection, Set<string>>> = {
   runs: new Set(["details", "metrics", "evaluation", "rollouts", "activity", "artifacts"]),
-  tasksets: new Set(["overview", "tasks", "scoring", "attempts", "releases"]),
+  tasksets: new Set(["overview", "tasks", "scoring", "graders", "attempts", "releases"]),
   evals: new Set(["overview", "comparison", "activity"]),
   versions: new Set([
     "overview",
@@ -70,7 +70,7 @@ const DETAIL_TABS_BY_SECTION: Partial<Record<ModelSection, Set<string>>> = {
 const DETAIL_TABS_BY_LIBRARY_SECTION: Partial<
   Record<ModelLibrarySection, Set<string>>
 > = {
-  tasksets: new Set(["overview", "tasks", "scoring", "attempts", "releases"]),
+  tasksets: new Set(["overview", "tasks", "scoring", "graders", "attempts", "releases"]),
   evaluations: new Set(["overview", "comparison", "activity"]),
 };
 const LEGACY_TAB_TO_SECTION: Record<string, ModelSection> = {

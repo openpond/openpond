@@ -69,7 +69,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@openpond/continual-bench": "workspace:*",
+    "@openpond/continual-support": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@openpond/contracts": "workspace:*",
     "@openpond/local-server": "workspace:*",
@@ -80,7 +80,7 @@
     "@types/node": "24.13.3"
   },
   "openpondBundledSourceDependencies": [
-    "@openpond/continual-bench",
+    "@openpond/continual-support",
     "@openpond/cloud",
     "@openpond/contracts",
     "@openpond/local-server",

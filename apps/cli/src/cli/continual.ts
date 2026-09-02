@@ -14,14 +14,14 @@ import {
   validateContinualBenchManifest,
   type ContinualBenchPortableManifest,
   type ContinualBenchPortablePanel,
-} from "@openpond/continual-bench";
+} from "@openpond/continual-support";
 import yaml from "js-yaml";
 
 import { optionString, parseBooleanOption, parseIntegerOption, parseNumberOption } from "./common/options";
 import { resolveApiBaseUrlOption } from "./common/urls";
 import { createLocalAuthenticatedRequest, DEFAULT_LOCAL_TRAINING_API_URL } from "./training";
 
-type BenchDependencies = {
+type ContinualDependencies = {
   request?: typeof fetch;
   readFile?: typeof readFile;
   writeFile?: typeof writeFile;
@@ -38,14 +38,14 @@ type SourceRow = {
   payload: Record<string, unknown>;
 };
 
-export async function runBenchCommand(
+export async function runContinualCommand(
   options: Record<string, string | boolean>,
   rest: string[],
-  dependencies: BenchDependencies = {},
+  dependencies: ContinualDependencies = {},
 ): Promise<void> {
   const subcommand = rest[0];
   if (!subcommand || !["init", "validate", "run", "report"].includes(subcommand)) {
-    throw new Error("usage: openpond bench <init|validate|run|report> [manifest-or-series-id]");
+    throw new Error("usage: openpond continual <init|validate|run|report> [manifest-or-series-id]");
   }
   const log = dependencies.log ?? console.log;
   if (subcommand === "init") {
@@ -57,17 +57,17 @@ export async function runBenchCommand(
     return;
   }
   const manifestPath = rest[1];
-  if (!manifestPath || rest.length !== 2) throw new Error(`usage: openpond bench ${subcommand} <manifest-path>`);
+  if (!manifestPath || rest.length !== 2) throw new Error(`usage: openpond continual ${subcommand} <manifest-path>`);
   const manifestValue = await loadStructuredFile(path.resolve(manifestPath), dependencies.readFile ?? readFile);
   const validation = validateContinualBenchManifest(manifestValue);
   if (subcommand === "validate") {
     if (parseBooleanOption(options.json)) log(JSON.stringify(validation, null, 2));
     else {
-      log(validation.valid ? `Valid Continual Bench manifest ${validation.manifestHash}.` : "Continual Bench manifest is invalid.");
+      log(validation.valid ? `Valid Continual Support manifest ${validation.manifestHash}.` : "Continual Support manifest is invalid.");
       log(`Leakage audit ${validation.leakageHash ?? "unavailable"}; ${validation.issues.length} finding(s).`);
       for (const issue of validation.issues) log(`${issue.severity}: ${issue.code} at ${issue.path}: ${issue.message}`);
     }
-    if (!validation.valid) throw withExitCode("Continual Bench validation failed.", 2);
+    if (!validation.valid) throw withExitCode("Continual Support validation failed.", 2);
     return;
   }
   const manifest = requireValidContinualBenchManifest(manifestValue);
@@ -78,13 +78,13 @@ export async function runBenchCommand(
 async function initializeManifest(
   options: Record<string, string | boolean>,
   rest: string[],
-  dependencies: BenchDependencies,
+  dependencies: ContinualDependencies,
   log: (message: string) => void,
 ): Promise<void> {
-  if (rest.length) throw new Error("bench init accepts --from and --output options, not positional arguments.");
+  if (rest.length) throw new Error("continual init accepts --from and --output options, not positional arguments.");
   const sourcePath = optionString(options, "from");
-  if (!sourcePath) throw new Error("bench init requires --from <tasks.json|tasks.jsonl>.");
-  const outputPath = path.resolve(optionString(options, "output") || "continual-bench.yaml");
+  if (!sourcePath) throw new Error("continual init requires --from <tasks.json|tasks.jsonl>.");
+  const outputPath = path.resolve(optionString(options, "output") || "continual-support.yaml");
   const rows = await readSourceRows(path.resolve(sourcePath), dependencies.readFile ?? readFile);
   const nonInteractive = parseBooleanOption(options.nonInteractive) || !process.stdin.isTTY;
   const prompt = dependencies.prompt ?? defaultPrompt;
@@ -104,7 +104,7 @@ async function initializeManifest(
   const split = createContinualBenchSplit({
     tasks: splitRows.map((row) => ({ id: row.id, familyId: row.familyId!, contentHash: contentHash(row.payload), prompt: row.prompt })),
     passes,
-    seed: optionString(options, "seed") || "continual-bench-v1",
+    seed: optionString(options, "seed") || "continual-support-v1",
     correctionCasesPerFamily: parseIntegerOption(options.correctionCasesPerFamily, "correction-cases-per-family") ?? 1,
     correctionSelection: optionString(options, "correctionSelection") === "stable_hash" ? "stable_hash" : "minimize_prompt_similarity",
   });
@@ -138,9 +138,9 @@ async function initializeManifest(
     id,
     revision: 1,
     name: optionString(options, "name") || id,
-    description: optionString(options, "description") || "A sealed continual-learning benchmark converted from an ordinary test set.",
+    description: optionString(options, "description") || "A sealed continual-support workflow converted from an ordinary task set.",
     license: optionString(options, "license") || "UNSPECIFIED",
-    source: { repository: optionString(options, "repository") || null, commit: optionString(options, "commit") || null, generatedBy: `openpond bench init --from ${sourcePath}` },
+    source: { repository: optionString(options, "repository") || null, commit: optionString(options, "commit") || null, generatedBy: `openpond continual init --from ${sourcePath}` },
     split: {
       seed: split.seed,
       correctionCasesPerFamily: parseIntegerOption(options.correctionCasesPerFamily, "correction-cases-per-family") ?? 1,
@@ -165,10 +165,10 @@ async function initializeManifest(
 async function submitManifest(
   manifest: ContinualBenchPortableManifest,
   options: Record<string, string | boolean>,
-  dependencies: BenchDependencies,
+  dependencies: ContinualDependencies,
   log: (message: string) => void,
 ): Promise<void> {
-  if (!manifest.execution) throw new Error("This manifest validates locally but needs an execution.openpond series binding before `bench run`.");
+  if (!manifest.execution) throw new Error("This manifest validates locally but needs an execution.openpond series binding before `continual run`.");
   const series = { ...manifest.execution.series } as Record<string, unknown>;
   const benchmarkProtocol = series.benchmarkProtocol as Record<string, unknown> | undefined;
   const issueFamilyLedger = object(benchmarkProtocol?.issueFamilyLedger);
@@ -190,11 +190,11 @@ async function submitManifest(
 async function exportReport(
   options: Record<string, string | boolean>,
   rest: string[],
-  dependencies: BenchDependencies,
+  dependencies: ContinualDependencies,
   log: (message: string) => void,
 ): Promise<void> {
   const seriesId = rest[0];
-  if (!seriesId || rest.length !== 1) throw new Error("usage: openpond bench report <comparison-series-id> [--output <path>]");
+  if (!seriesId || rest.length !== 1) throw new Error("usage: openpond continual report <comparison-series-id> [--output <path>]");
   const baseUrl = resolveApiBaseUrlOption(options) ?? process.env.OPENPOND_LOCAL_API_URL?.replace(/\/$/, "") ?? DEFAULT_LOCAL_TRAINING_API_URL;
   const request = dependencies.request ?? await createLocalAuthenticatedRequest(baseUrl);
   const state = object(await requestJson(request, `${baseUrl}/v1/training`, "GET"));
@@ -312,5 +312,5 @@ function array(value: unknown): unknown[] { return Array.isArray(value) ? value 
 function string(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function number(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 function numberOrNull(value: unknown): number | null { return number(value); }
-function slug(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "continual-bench"; }
+function slug(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "continual-support"; }
 function withExitCode(message: string, exitCode: number): Error { return Object.assign(new Error(message), { exitCode }); }

@@ -40,6 +40,7 @@ import type {
   TaskAttemptArtifact,
   TaskAttemptResult,
   Taskset,
+  TasksetGraderDetailsResponse,
   TasksetDraft,
   TasksetOperationalState,
   LearnedPreferenceRewardBinding,
@@ -206,8 +207,8 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       ),
     saveContinualBenchIssueReview: (review: ContinualBenchIssueReview) =>
       mutate<ContinualBenchIssueReview>(
-        "save-continual-bench-issue-review",
-        "/continual-bench/issue-reviews",
+        "save-continual-support-issue-review",
+        "/continual-support/issue-reviews",
         { review },
         "PUT",
       ),
@@ -363,6 +364,20 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         "/taskset-drafts/import",
         { packagePath, profileId },
       ),
+    tasksetGraderDetails: async (tasksetId: string) => {
+      if (!connection) return null;
+      try {
+        return await api.trainingRequest<TasksetGraderDetailsResponse>(
+          connection,
+          `/tasksets/${encodeURIComponent(tasksetId)}/graders`,
+          {},
+          "GET",
+        );
+      } catch (caught) {
+        setError(message(caught));
+        return null;
+      }
+    },
     saveTasksetDraft: (draft: TasksetDraft) =>
       mutate<TasksetDraft>(
         "save-taskset-draft",

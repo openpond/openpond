@@ -42,7 +42,7 @@ import { ModelCurrencySnapshotSchema } from "./model-currency.js";
 import {
   ContinualBenchIssueReviewSchema,
   ContinualLearningDailyBatchSchema,
-} from "./continual-bench-review.js";
+} from "./continual-support-review.js";
 import {
   LearnedPreferenceRewardBindingSchema,
   PolicyOptimizationBudgetSchema,

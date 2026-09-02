@@ -1,7 +1,7 @@
 {
-  "name": "@openpond/continual-bench",
+  "name": "@openpond/continual-support",
   "version": "0.2.0",
-  "description": "Portable continual-learning benchmark manifests, splitting, validation, statistics, and reports",
+  "description": "Portable continual-support manifests, splitting, validation, statistics, and reports",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,10 +24,6 @@
       "types": "./dist/report.d.ts",
       "import": "./dist/report.js"
     },
-    "./adapters/tau3-retail": {
-      "types": "./dist/adapters/tau3-retail.d.ts",
-      "import": "./dist/adapters/tau3-retail.js"
-    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -37,15 +33,16 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/openpond/openpond.git",
-    "directory": "packages/continual-bench"
+    "directory": "packages/continual-support"
   },
   "engines": {
     "node": ">=22.14.0 <25"
   },
   "scripts": {
-    "build": "tsc -b",
+    "clean": "node -e \"const fs=require('node:fs'); for (const target of ['dist','tsconfig.tsbuildinfo']) fs.rmSync(target,{ recursive: true, force: true })\"",
+    "build": "pnpm run clean && tsc -b",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root ../.. tests/continual-bench-package.test.ts",
+    "test": "vitest run --root ../.. tests/continual-support-package.test.ts",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build && npm pack --dry-run"
   },
   "dependencies": {

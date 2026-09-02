@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ContinualBenchIssuePacketSchema } from "./continual-bench.js";
+import { ContinualBenchIssuePacketSchema } from "./continual-support.js";
 import { ModelComparisonEntryRefSchema } from "./model-comparisons.js";
 import { ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, VersionedReleaseRefSchema } from "./release-core.js";
 

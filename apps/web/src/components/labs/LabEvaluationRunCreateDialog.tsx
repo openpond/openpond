@@ -93,7 +93,7 @@ export function LabEvaluationRunCreateDialog({
           <Fact label="Taskset hash" value={panel.taskset.contentHash} mono />
           <Fact label="Sampling" value={`${selected.series.benchmarkProtocol.evaluation.seeds.length} seeds × ${selected.series.benchmarkProtocol.evaluation.repetitions} repetitions`} />
           <Fact label="Target" value={`${selected.entry.label} · ${selected.entry.modelVersionId}`} mono />
-        </dl> : <p className="labs-detail-copy">Only trained releases in a sealed continual-benchmark protocol can be evaluated here.</p>}
+        </dl> : <p className="labs-detail-copy">Only trained releases in a sealed Continual Support protocol can be evaluated here.</p>}
         <div className="labs-comparison-create-grid">
           <label><span>Maximum provider spend (USD)</span><input min="0.01" required step="0.01" type="number" value={maximumSpendUsd} onChange={(event) => setMaximumSpendUsd(Number(event.currentTarget.value))} /></label>
           <label><span>Maximum evaluation GPU seconds</span><input min="1" required step="1" type="number" value={maxGpuSeconds} onChange={(event) => setMaxGpuSeconds(Number(event.currentTarget.value))} /></label>

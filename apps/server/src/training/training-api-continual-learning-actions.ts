@@ -32,7 +32,7 @@ export async function handleContinualLearningAction(input: {
       kind,
     }));
   }
-  if (action === "save_continual_bench_issue_review") {
+  if (action === "save_continual_support_issue_review") {
     return handled(await store.saveContinualBenchIssueReview(ContinualBenchIssueReviewSchema.parse(payload.review)));
   }
   if (action === "import_continual_learning_daily_batch") {

@@ -14,7 +14,7 @@ class ResponseRecorder extends EventEmitter {
   end(value?: string) { this.payload = value ?? ""; this.writableEnded = true; return this; }
 }
 
-describe("Comparison Series training routes", () => {
+describe("Authenticated training routes", () => {
   it.each([
     ["POST", "/v1/training/comparison-series/series-a/seal", "seal_model_comparison_series", "seriesId", "series-a"],
     ["POST", "/v1/training/comparison-series/series-a/releases", "queue_model_comparison_release", "seriesId", "series-a"],
@@ -38,6 +38,30 @@ describe("Comparison Series training routes", () => {
       action,
       expect.objectContaining({ [key]: id }),
       expect.any(URL),
+      expect.any(AbortSignal),
+    );
+    expect(response.statusCode).toBe(200);
+  });
+
+  it("routes Taskset grader source reads through the authenticated training boundary", async () => {
+    const request = Readable.from([]);
+    Object.assign(request, { method: "GET", headers: {} });
+    const response = new ResponseRecorder();
+    const trainingPayload = vi.fn(async () => ({ ok: true }));
+    const requestUrl = new URL("http://localhost/v1/training/tasksets/tau3-retail-outcomes-v3/graders");
+
+    const handled = await handleTrainingRoutes({
+      deps: { trainingPayload } as never,
+      request: request as never,
+      requestUrl,
+      response: response as never,
+    });
+
+    expect(handled).toBe(true);
+    expect(trainingPayload).toHaveBeenCalledWith(
+      "taskset_grader_details",
+      { tasksetId: "tau3-retail-outcomes-v3" },
+      requestUrl,
       expect.any(AbortSignal),
     );
     expect(response.statusCode).toBe(200);

@@ -7,7 +7,7 @@ import {
   ReleaseTimestampSchema,
   VersionedReleaseRefSchema,
 } from "./release-core.js";
-import { ContinualBenchmarkProtocolReleaseSchema } from "./continual-bench.js";
+import { ContinualBenchmarkProtocolReleaseSchema } from "./continual-support.js";
 
 export const ModelComparisonSeriesStatusSchema = z.enum(["draft", "active", "completed", "archived"]);
 export const ModelComparisonEntryStatusSchema = z.enum([
