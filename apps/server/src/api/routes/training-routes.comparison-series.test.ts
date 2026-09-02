@@ -48,7 +48,7 @@ describe("Authenticated training routes", () => {
     Object.assign(request, { method: "GET", headers: {} });
     const response = new ResponseRecorder();
     const trainingPayload = vi.fn(async () => ({ ok: true }));
-    const requestUrl = new URL("http://localhost/v1/training/tasksets/tau3-retail-outcomes-v3/graders");
+    const requestUrl = new URL("http://localhost/v1/training/tasksets/taskset-a/graders");
 
     const handled = await handleTrainingRoutes({
       deps: { trainingPayload } as never,
@@ -60,7 +60,7 @@ describe("Authenticated training routes", () => {
     expect(handled).toBe(true);
     expect(trainingPayload).toHaveBeenCalledWith(
       "taskset_grader_details",
-      { tasksetId: "tau3-retail-outcomes-v3" },
+      { tasksetId: "taskset-a" },
       requestUrl,
       expect.any(AbortSignal),
     );
