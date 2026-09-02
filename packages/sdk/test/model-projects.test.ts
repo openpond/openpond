@@ -19,6 +19,7 @@ function setup() {
     destinationId: "openpond_managed",
     managedRolloutPlacement: "remote" as const,
     managedGpuPlacementObjective: "balanced" as const,
+    managedGpuRequirement: "any" as const,
     runPreset: "standard" as const,
     recipe: {
       schemaVersion: "openpond.rftRecipe.v1",
@@ -32,6 +33,7 @@ function setup() {
 }
 
 function hostedProject() {
+  const { managedGpuRequirement: _managedGpuRequirement, ...trainingSetup } = setup();
   return {
     id: "hosted-project-1",
     teamId: "team-1",
@@ -40,7 +42,7 @@ function hostedProject() {
     objective: "Improve support resolution quality.",
     defaultBaseModel: null,
     defaultDestinationId: "openpond_managed",
-    trainingSetup: setup(),
+    trainingSetup,
     sourceRevision: 3,
     sourceUpdatedAt: NOW,
     revision: 4,
@@ -106,6 +108,7 @@ describe("Model Project SDK contracts", () => {
       fetch,
       headers: { authorization: "Bearer test" },
     });
+    const { managedGpuRequirement: _managedGpuRequirement, ...trainingSetup } = setup();
     const project = await client.upsert({
       schemaVersion: "openpond.hostedModelProjectSync.v2",
       portableProjectId: "project-1",
@@ -113,7 +116,7 @@ describe("Model Project SDK contracts", () => {
       objective: "Improve support resolution quality.",
       defaultBaseModel: null,
       defaultDestinationId: "openpond_managed",
-      trainingSetup: setup(),
+      trainingSetup,
       sourceRevision: 3,
       sourceUpdatedAt: NOW,
       expectedEtag: null,

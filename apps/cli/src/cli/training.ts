@@ -535,6 +535,7 @@ async function createManagedModelProject(input: {
         || "openpond_managed",
       managedRolloutPlacement: rolloutPlacement,
       managedGpuPlacementObjective: gpuPlacementObjective,
+      managedGpuRequirement: "any",
       runPreset,
       recipe,
       preferredMaximumSpendUsd: maximumSpendUsd,

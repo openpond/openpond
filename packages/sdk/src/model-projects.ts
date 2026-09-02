@@ -81,6 +81,9 @@ export const ModelProjectTrainingSetupSchema = z
     managedGpuPlacementObjective: z
       .enum(["fast", "balanced", "economical"])
       .default("balanced"),
+    managedGpuRequirement: z
+      .enum(["any", "h100_hbm3"])
+      .default("any"),
     runPreset: z
       .enum(["small", "standard", "custom", "small_experiment"])
       .nullable()
@@ -95,6 +98,9 @@ export const ModelProjectTrainingSetupSchema = z
       .default(null),
   })
   .strict();
+
+export const HostedModelProjectTrainingSetupSchema =
+  ModelProjectTrainingSetupSchema.omit({ managedGpuRequirement: true });
 
 export const HostedModelProjectLinkSchema = z
   .object({
@@ -167,7 +173,7 @@ export const HostedModelProjectSyncSchema = z
     objective: z.string().trim().max(5_000).nullable(),
     defaultBaseModel: ModelProjectBaseModelSchema.nullable(),
     defaultDestinationId: IdSchema.nullable(),
-    trainingSetup: ModelProjectTrainingSetupSchema,
+    trainingSetup: HostedModelProjectTrainingSetupSchema,
     sourceRevision: z.number().int().positive(),
     sourceUpdatedAt: TimestampSchema,
     expectedEtag: HashSchema.nullable().default(null),
@@ -183,7 +189,7 @@ export const HostedModelProjectSummarySchema = z
     objective: z.string().trim().max(5_000).nullable(),
     defaultBaseModel: ModelProjectBaseModelSchema.nullable(),
     defaultDestinationId: IdSchema.nullable(),
-    trainingSetup: ModelProjectTrainingSetupSchema,
+    trainingSetup: HostedModelProjectTrainingSetupSchema,
     sourceRevision: z.number().int().positive(),
     sourceUpdatedAt: TimestampSchema,
     revision: z.number().int().positive(),

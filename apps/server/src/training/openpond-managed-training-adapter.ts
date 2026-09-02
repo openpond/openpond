@@ -645,6 +645,9 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           version: "1",
           required: true,
         },
+        ...(project.trainingSetup.managedGpuRequirement === "h100_hbm3"
+          ? [{ id: "managed_rl.gpu.h100_hbm3", version: "1", required: true }]
+          : []),
       ],
       placementObjective: project.trainingSetup.managedGpuPlacementObjective,
       budget: {
@@ -949,6 +952,10 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       fetch: this.fetchImpl,
       headers,
     });
+    const {
+      managedGpuRequirement: _managedGpuRequirement,
+      ...hostedTrainingSetup
+    } = project.trainingSetup;
     const hosted = await client.upsert({
       schemaVersion: "openpond.hostedModelProjectSync.v2",
       portableProjectId: project.id,
@@ -956,7 +963,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       objective: project.objective,
       defaultBaseModel: project.defaultBaseModel,
       defaultDestinationId: project.defaultDestinationId,
-      trainingSetup: project.trainingSetup,
+      trainingSetup: hostedTrainingSetup,
       sourceRevision: project.revision,
       sourceUpdatedAt: project.updatedAt,
       expectedEtag: project.hosted?.teamId === access.teamId ? project.hosted.etag : null,

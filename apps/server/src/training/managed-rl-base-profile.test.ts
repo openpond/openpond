@@ -37,6 +37,7 @@ describe("versionModelProjectOntoManagedRlBase", () => {
         destinationId: "sandbox-managed-rl",
         managedRolloutPlacement: "remote",
         managedGpuPlacementObjective: "balanced",
+        managedGpuRequirement: "any",
         runPreset: "custom",
         recipe: {
           schemaVersion: "openpond.grpoRecipe.v3",
@@ -142,6 +143,7 @@ describe("versionModelProjectOntoManagedRlBase", () => {
         destinationId: "openpond_managed",
         managedRolloutPlacement: "remote",
         managedGpuPlacementObjective: "balanced",
+        managedGpuRequirement: "any",
         runPreset: "custom",
         recipe,
         preferredMaximumSpendUsd: 9.99,
