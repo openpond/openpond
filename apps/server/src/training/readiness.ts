@@ -13,7 +13,9 @@ export function buildTasksetReadiness(input: {
 }): TasksetReadinessReport {
   const validation = validateTaskset(input.taskset);
   const blockers = validation.issues.filter((issue) => issue.severity === "error").map((issue) => ({ code: issue.code, message: issue.message, path: issue.path }));
-  const advisories: TasksetReadinessReport["advisories"] = [];
+  const advisories: TasksetReadinessReport["advisories"] = validation.issues
+    .filter((issue) => issue.severity === "warning")
+    .map((issue) => ({ code: issue.code, message: issue.message, path: issue.path }));
   const authoredMethod = typeof input.taskset.metadata.trainingMethod === "string"
     ? input.taskset.metadata.trainingMethod
     : null;

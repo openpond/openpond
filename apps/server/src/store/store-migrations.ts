@@ -116,4 +116,8 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     version: 51,
     run: (store) => store.createTrainingTables(),
   },
+  {
+    version: 52,
+    run: (store) => store.allowModelRunsWithoutVersion(),
+  },
 ];

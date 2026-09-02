@@ -26,12 +26,12 @@ import {
   type TrainingJobSubmission,
 } from "openpond-sdk/training";
 import { createModelProjectsClient } from "openpond-sdk/model-projects";
-
 import {
   hostedApiAuthHeaders,
   resolveManagedAdapterUserAccess,
 } from "../openpond/hosted-api-access.js";
 import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
+import { ensureManagedRlLocalExecutor } from "./managed-rl-local-executor-manager.js";
 import { supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
 import {
   dateString,
@@ -56,14 +56,12 @@ import {
 import { resolveTasksetEvaluationAssetBytes } from "./taskset-work-assets.js";
 import { continuationResumeFrom } from "./openpond-managed-training-continuation.js";
 import { managedTrainingEvidenceFromPublic } from "./openpond-managed-training-evidence.js";
+import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
 export { continuationResumeFrom };
-
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
 const ACTIVE_EVIDENCE_REFRESH_TTL_MS = 1_500;
-
 export type { OpenPondManagedTrainingAdapterDependencies } from "./openpond-managed-training-adapter-support.js";
-
 export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   readonly id = ADAPTER_ID;
   private readonly fetchImpl: typeof fetch;
@@ -469,16 +467,16 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     if (taskset.contentHash !== trainingPlan.tasksetHash) {
       throw new Error("The managed training Taskset changed before launch.");
     }
-    const validationTasks = taskset.tasks.filter(
-      (task) => task.split === "frozen_eval" || task.split === "validation",
-    );
-    if (validationTasks.length === 0) {
-      throw new Error("OpenPond Managed requires at least one private validation task.");
-    }
-    const validationAssetBytes = taskset.environment.kind === "work"
+    const validationSource = await resolveManagedValidationTaskSource({
+      store: this.dependencies.store,
+      trainingPlan,
+      trainingTaskset: taskset,
+    });
+    const validationTasks = validationSource.tasks;
+    const validationAssetBytes = validationSource.taskset.environment.kind === "work"
       ? await resolveTasksetEvaluationAssetBytes({
           storeDir: this.dependencies.storeDir,
-          taskset,
+          taskset: validationSource.taskset,
         })
       : new Map<string, Uint8Array>();
     const validationAssets = [...validationAssetBytes.entries()]
@@ -680,7 +678,12 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       createdAt: dateString(job.createdAt),
     };
     if (plan.runtime.placement === "local") {
-      this.ensureLocalExecutor(ref, access, plan.manifest.harnessRelease.contentHash);
+      await this.ensureLocalExecutor(
+        ref,
+        access,
+        plan.manifest.harnessRelease.contentHash,
+        validationSource.taskset,
+      );
     }
     return ref;
   }
@@ -698,7 +701,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     const placement = runtime.placement;
     if (placement === "local") {
       const storedHarnessHash = localJob?.metadata.harnessReleaseHash;
-      this.ensureLocalExecutor(
+      await this.ensureLocalExecutor(
         ref,
         access,
         typeof storedHarnessHash === "string" ? storedHarnessHash : undefined,
@@ -977,31 +980,20 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     return saved;
   }
 
-  private ensureLocalExecutor(
+  private async ensureLocalExecutor(
     ref: TrainingExecutionRef,
     access: Access,
     harnessReleaseHash?: string,
-  ): void {
-    if (this.localExecutors.has(ref.runId)) return;
-    if (!harnessReleaseHash) {
-      throw new Error("Managed local rollout is missing its Harness release hash.");
-    }
-    const executor = new ManagedRlLocalRolloutExecutor({
-      runId: ref.runId,
+    validationTaskset?: import("@openpond/contracts").Taskset,
+  ): Promise<void> {
+    await ensureManagedRlLocalExecutor({
       access,
+      dependencies: this.dependencies,
+      executors: this.localExecutors,
       fetchImpl: this.fetchImpl,
-      env: this.dependencies.env,
-      store: this.dependencies.store,
-      storeDir: this.dependencies.storeDir,
-      harnessRoot: path.join(
-        this.dependencies.storeDir,
-        "training",
-        "harnesses",
-        harnessReleaseHash,
-        "source",
-      ),
+      harnessReleaseHash,
+      ref,
+      validationTaskset,
     });
-    this.localExecutors.set(ref.runId, executor);
-    executor.start();
   }
 }

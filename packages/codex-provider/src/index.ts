@@ -1,5 +1,6 @@
 export type {
   CodexClientOptions,
+  CodexDynamicToolSpec,
   CodexNotification,
   CodexProbeStatus,
   CodexServerRequest,

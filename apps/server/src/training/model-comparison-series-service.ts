@@ -19,6 +19,7 @@ import {
 import { contentHash, computeTasksetHash } from "@openpond/taskset-sdk";
 
 import type { SqliteStore } from "../store/store.js";
+import { buildTasksetReadiness } from "./readiness.js";
 
 const TRANSITIONS: Record<ModelComparisonEntryStatus, ReadonlySet<ModelComparisonEntryStatus>> = {
   draft: new Set(["ready", "cancelled"]),
@@ -75,7 +76,10 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     const scheduled = requireScheduledEntry(series, input.scheduleEntryId);
     const existing = (await store.listModelComparisonSeriesEntries({ seriesId: series.id }))
       .find((entry) => entry.scheduleEntryId === scheduled.id);
-    if (existing) return { series, entry: existing };
+    if (existing) {
+      await ensureCurrentTasksetReadiness(existing.taskset, series.profileId);
+      return { series, entry: existing };
+    }
     requireRevision(series, input.expectedSeriesRevision);
     if (!series.scheduleSealedAt || series.status !== "active") {
       throw new Error("Seal the Comparison Series before queueing a release.");
@@ -243,7 +247,9 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
       || entry.evaluations.length > 0
       || entry.decision
       || entry.promotionBindingId
-      || entry.residualBlocks.some((block) => block.artifactLineageId)
+      || entry.residualBlocks.some(
+        (block) => block.id === entry.trainableBlockId && block.artifactLineageId,
+      )
     ) {
       throw new Error("An evidence-bearing Comparison candidate cannot be reset as an execution retry.");
     }
@@ -420,6 +426,9 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
         entry = await linkRun({ entryId: entry.id, expectedStatus: "queued", status: "running" });
       }
       if (entry.status !== "running") continue;
+      if (!linkedRun.modelVersionId) {
+        throw new Error("A succeeded Comparison training Run is missing its Model Version identity.");
+      }
       const version = await store.getModelVersion(linkedRun.modelVersionId);
       await linkRun({
         entryId: entry.id,
@@ -647,7 +656,10 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
       objective: `${input.series.objective}\n\nImmutable ${input.scheduled.role} release ${input.scheduled.label}.`,
       status: "ready" as const,
       tasks: input.tasks.map((task) => ({ ...task, split: "train" as const })),
-      graderFixtures: input.template.graderFixtures.filter((fixture) => taskIds.has(fixture.taskId)),
+      // Grader fixtures calibrate the immutable grader release; they are not
+      // training examples and must survive a cohort selection even when their
+      // representative task is outside that cohort.
+      graderFixtures: input.template.graderFixtures,
       learningSignals: Object.fromEntries(Object.entries(input.template.learningSignals).map(([kind, signals]) => [
         kind,
         (signals as Array<{ taskId?: string | null }>).filter((signal) => !signal.taskId || taskIds.has(signal.taskId)),
@@ -673,9 +685,29 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
       if (existing.contentHash !== candidate.contentHash || existing.profileId !== input.series.profileId) {
         throw new Error(`Immutable Comparison release ${id} already exists with different content.`);
       }
-      return existing;
+      return ensureCurrentTasksetReadiness(existing, input.series.profileId);
     }
-    return store.upsertTaskset(candidate);
+    const persisted = await store.upsertTaskset(candidate);
+    return ensureCurrentTasksetReadiness(persisted, input.series.profileId);
+  }
+
+  async function ensureCurrentTasksetReadiness(
+    reference: { id: string; revision: number; contentHash: string } | Taskset,
+    profileId: string,
+  ): Promise<Taskset> {
+    const taskset = "tasks" in reference
+      ? reference
+      : await requireExactTaskset(reference, profileId);
+    if (taskset.readiness?.tasksetHash === taskset.contentHash) return taskset;
+    const timestamp = new Date().toISOString();
+    const readiness = buildTasksetReadiness({ taskset, generatedAt: timestamp });
+    await store.saveReadinessReport(readiness);
+    return store.upsertTaskset({
+      ...taskset,
+      status: readiness.ready ? "ready" : "needs_review",
+      readiness,
+      updatedAt: timestamp,
+    });
   }
 
   async function requireSeries(id: string): Promise<ModelComparisonSeries> {

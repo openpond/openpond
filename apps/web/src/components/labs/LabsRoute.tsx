@@ -28,7 +28,10 @@ import { labModelVersions } from "./lab-models";
 import { newProject, nextModelName } from "./model-run-editor-helpers";
 import { buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { useErrorToast } from "../../app/AppToastContext";
-import { trainingModelRunSyncKey } from "./LabsRouteSections";
+import {
+  computeProfileAgentRunSyncKey,
+  trainingModelRunSyncKey,
+} from "./LabsRouteSections";
 import {
   modelProjectRoute,
   modelLibraryRoute,
@@ -46,9 +49,7 @@ import {
   modelsSectionForLabTab,
   titleCaseLabel,
 } from "./labs-route-models";
-
 export type { LabsRouteProps } from "./labs-route-types";
-
 export function LabsRoute({
   closeDetailKind,
   closeDetailRequestId,
@@ -85,14 +86,7 @@ export function LabsRoute({
     [training.training.payload]
   );
   const profileAgentRunSyncKey = useMemo(
-    () => createImprove.runs
-      .filter((run) =>
-        run.target.kind === "agent"
-        && ["ready_local", "released", "published_hosted"].includes(run.state)
-      )
-      .map((run) => `${run.id}:${run.revision}:${run.state}`)
-      .sort()
-      .join("|"),
+    () => computeProfileAgentRunSyncKey(createImprove.runs),
     [createImprove.runs]
   );
   const modelsRoute = useModelsRoute();
@@ -615,7 +609,9 @@ export function LabsRoute({
             state={training.training.payload}
             training={training.training}
             selectedSeriesId={modelsRoute.resourceId}
+            selectedEntryId={modelsRoute.detailTab}
             onSelectedSeriesIdChange={(seriesId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId))}
+            onSelectedEntryIdChange={(seriesId, entryId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId, entryId))}
             onOpenEvaluation={(evaluationRunId) => navigateModelsRoute(modelLibraryRoute("evaluations", evaluationRunId))}
             onOpenProject={(projectId) => navigateModelsRoute(modelProjectRoute(projectId))}
             onOpenTaskset={(tasksetId) => navigateModelsRoute(modelLibraryRoute("tasksets", tasksetId))}

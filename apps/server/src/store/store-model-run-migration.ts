@@ -69,3 +69,33 @@ export async function createModelProjectTables(
     DROP TABLE IF EXISTS model_build_drafts;
   `);
 }
+
+export async function allowModelRunsWithoutVersion(
+  database: ModelRunMigrationDatabase,
+): Promise<void> {
+  await database.exec(`
+    ALTER TABLE model_runs RENAME TO model_runs_before_nullable_version;
+    CREATE TABLE model_runs (
+      id TEXT PRIMARY KEY,
+      model_id TEXT NOT NULL,
+      model_version_id TEXT,
+      profile_id TEXT NOT NULL,
+      taskset_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    INSERT INTO model_runs (
+      id, model_id, model_version_id, profile_id, taskset_id, status, payload,
+      created_at, updated_at
+    )
+    SELECT id, model_id, model_version_id, profile_id, taskset_id, status,
+      payload, created_at, updated_at
+    FROM model_runs_before_nullable_version;
+    DROP TABLE model_runs_before_nullable_version;
+    CREATE INDEX model_runs_profile_updated_idx ON model_runs(profile_id, updated_at DESC);
+    CREATE INDEX model_runs_model_updated_idx ON model_runs(model_id, updated_at DESC);
+    CREATE INDEX model_runs_taskset_updated_idx ON model_runs(taskset_id, updated_at DESC);
+  `);
+}

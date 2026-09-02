@@ -445,8 +445,100 @@ export const ModelEvaluationStopReceiptSchema = z.object({
   contentHash: ReleaseHashSchema,
 }).strict();
 
-export const ModelEvaluationConfigurationSchema = z.object({
-  benchmarkId: ReleaseIdSchema,
+const ConfidenceIntervalSchema = z.object({
+  level: z.literal(0.95),
+  lower: z.number().finite(),
+  upper: z.number().finite(),
+}).strict().superRefine((interval, context) => {
+  if (interval.lower > interval.upper) {
+    context.addIssue({ code: "custom", message: "A confidence interval's lower bound cannot exceed its upper bound." });
+  }
+});
+
+export const ModelComparisonBenchmarkReceiptSchema = z.object({
+  schemaVersion: z.literal("openpond.modelComparisonBenchmarkReceipt.v1"),
+  benchmarkId: z.literal("model-comparison"),
+  target: z.object({
+    kind: z.enum(["base_model", "model_version", "external_reference"]),
+    label: z.string().trim().min(1).max(300),
+    modelVersionId: ReleaseIdSchema.nullable(),
+    model: ChatModelRefSchema.nullable(),
+  }).strict(),
+  taskset: VersionedReleaseRefSchema,
+  grader: ImmutableReleaseRefSchema,
+  sampling: z.object({
+    seeds: z.array(z.number().int()).min(1).max(100),
+    repetitions: z.number().int().positive().max(20),
+  }).strict(),
+  deterministic: z.object({
+    attemptedTaskCount: z.number().int().nonnegative(),
+    completedTaskCount: z.number().int().nonnegative(),
+    passedTaskCount: z.number().int().nonnegative(),
+    failedTaskCount: z.number().int().nonnegative(),
+    meanScore: z.number().finite().nullable(),
+    passRate: z.number().min(0).max(1).nullable(),
+    passRateCi95: ConfidenceIntervalSchema.nullable(),
+  }).strict(),
+  judge: z.object({
+    judgeModel: ChatModelRefSchema,
+    judgeRelease: ImmutableReleaseRefSchema,
+    rubricRelease: ImmutableReleaseRefSchema,
+    calibrationRelease: ImmutableReleaseRefSchema,
+    score: z.number().min(0).max(100),
+    scoreCi95: ConfidenceIntervalSchema,
+    comparisonCount: z.number().int().positive(),
+    wins: z.number().int().nonnegative(),
+    ties: z.number().int().nonnegative(),
+    losses: z.number().int().nonnegative(),
+    referenceLabel: z.string().trim().min(1).max(300),
+  }).strict().superRefine((judge, context) => {
+    if (judge.wins + judge.ties + judge.losses !== judge.comparisonCount) {
+      context.addIssue({ code: "custom", message: "Judge win, tie, and loss counts must equal comparisonCount." });
+    }
+  }).nullable(),
+  attempts: z.array(z.object({
+    taskId: ReleaseIdSchema,
+    seed: z.number().int(),
+    repetition: z.number().int().nonnegative(),
+    status: z.enum(["succeeded", "failed"]),
+    deterministicScore: z.number().finite().nullable(),
+    passed: z.boolean().nullable(),
+    judgeScore: z.number().min(0).max(100).nullable(),
+    judgePreference: z.enum(["win", "tie", "loss"]).nullable(),
+    transcriptHash: ReleaseHashSchema.nullable(),
+    traceHash: ReleaseHashSchema.nullable(),
+    failureClass: TaskFailureClassSchema.nullable(),
+  }).strict()).max(100_000),
+  usage: z.object({
+    policy: EvaluationUsageCategorySchema.nullable(),
+    judge: EvaluationUsageCategorySchema.nullable(),
+    observedSpendUsd: z.number().nonnegative().nullable(),
+  }).strict(),
+  evidenceSnapshot: z.object({
+    id: ReleaseIdSchema,
+    contentHash: ReleaseHashSchema,
+    artifactPath: z.string().trim().min(1).max(2_000),
+  }).strict(),
+  completedAt: ReleaseTimestampSchema,
+  contentHash: ReleaseHashSchema,
+}).strict().superRefine((receipt, context) => {
+  const deterministic = receipt.deterministic;
+  if (deterministic.completedTaskCount > deterministic.attemptedTaskCount) {
+    context.addIssue({ code: "custom", message: "Completed task count cannot exceed attempted task count." });
+  }
+  if (deterministic.passedTaskCount + deterministic.failedTaskCount !== deterministic.completedTaskCount) {
+    context.addIssue({ code: "custom", message: "Passed and failed task counts must equal completed task count." });
+  }
+  if ((deterministic.completedTaskCount === 0) !== (deterministic.meanScore === null)) {
+    context.addIssue({ code: "custom", message: "Deterministic mean score is available exactly when tasks completed." });
+  }
+  if ((deterministic.completedTaskCount === 0) !== (deterministic.passRate === null)) {
+    context.addIssue({ code: "custom", message: "Deterministic pass rate is available exactly when tasks completed." });
+  }
+});
+
+const HarnessRefinerEvaluationConfigurationSchema = z.object({
+  benchmarkId: z.literal("harness-refiner"),
   model: ChatModelRefSchema,
   upstreamModel: z.object({
     providerId: ReleaseIdSchema,
@@ -473,12 +565,44 @@ export const ModelEvaluationConfigurationSchema = z.object({
   }).strict()).length(4),
 }).strict();
 
+const ModelComparisonEvaluationConfigurationSchema = z.object({
+  benchmarkId: z.literal("model-comparison"),
+  target: z.object({
+    kind: z.enum(["base_model", "model_version", "external_reference"]),
+    label: z.string().trim().min(1).max(300),
+    modelVersionId: ReleaseIdSchema.nullable(),
+    model: ChatModelRefSchema.nullable(),
+  }).strict(),
+  grader: ImmutableReleaseRefSchema,
+  judge: z.object({
+    model: ChatModelRefSchema,
+    release: ImmutableReleaseRefSchema,
+    rubricRelease: ImmutableReleaseRefSchema,
+    calibrationRelease: ImmutableReleaseRefSchema,
+    referenceLabel: z.string().trim().min(1).max(300),
+  }).strict().nullable(),
+  seeds: z.array(z.number().int()).min(1).max(100),
+  repetitions: z.number().int().positive().max(20),
+  maximumSpendUsd: z.number().nonnegative(),
+  attemptPlan: z.array(z.object({
+    stage: z.literal("comparison"),
+    split: z.string().trim().min(1).max(100),
+    taskIds: z.array(ReleaseIdSchema).min(1).max(100_000),
+    attemptCount: z.number().int().positive(),
+  }).strict()).length(1),
+}).strict();
+
+export const ModelEvaluationConfigurationSchema = z.union([
+  HarnessRefinerEvaluationConfigurationSchema,
+  ModelComparisonEvaluationConfigurationSchema,
+]);
+
 export const ModelRunSchema = z
   .object({
     schemaVersion: z.literal("openpond.modelRun.v1"),
     id: ReleaseIdSchema,
     modelId: ReleaseIdSchema,
-    modelVersionId: ReleaseIdSchema,
+    modelVersionId: ReleaseIdSchema.nullable(),
     profileId: ReleaseIdSchema,
     kind: z.enum(["rollout_smoke", "training", "evaluation"]),
     status: z.enum([
@@ -535,6 +659,7 @@ export const ModelRunSchema = z
       ModelRunReceiptSchema,
       ModelEvaluationReceiptSchema,
       ModelEvaluationStopReceiptSchema,
+      ModelComparisonBenchmarkReceiptSchema,
     ]).nullable(),
     adapterArtifactLineageId: ReleaseIdSchema.nullable(),
     failure: z.string().trim().min(1).max(5_000).nullable(),
@@ -570,6 +695,7 @@ export const ModelRunSchema = z
       && run.receipt
       && run.receipt.schemaVersion !== "openpond.modelEvaluationReceipt.v1"
       && run.receipt.schemaVersion !== "openpond.modelEvaluationStopReceipt.v1"
+      && run.receipt.schemaVersion !== "openpond.modelComparisonBenchmarkReceipt.v1"
     ) {
       context.addIssue({
         code: "custom",
@@ -604,6 +730,7 @@ export type RewardModelRun = z.infer<typeof RewardModelRunSchema>;
 export type ModelRunReceipt = z.infer<typeof ModelRunReceiptSchema>;
 export type ModelEvaluationReceipt = z.infer<typeof ModelEvaluationReceiptSchema>;
 export type ModelEvaluationStopReceipt = z.infer<typeof ModelEvaluationStopReceiptSchema>;
+export type ModelComparisonBenchmarkReceipt = z.infer<typeof ModelComparisonBenchmarkReceiptSchema>;
 export type ModelEvaluationConfiguration = z.infer<typeof ModelEvaluationConfigurationSchema>;
 export type ModelRun = z.infer<typeof ModelRunSchema>;
 export type ModelEvaluationAttempt = z.infer<typeof ModelEvaluationAttemptSchema>;

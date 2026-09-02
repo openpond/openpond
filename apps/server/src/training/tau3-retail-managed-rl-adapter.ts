@@ -21,6 +21,7 @@ import {
   TAU3_RETAIL_OUTCOME_RUBRIC_V3_GRADER_ID,
   TAU3_RETAIL_TERMINAL_STATE_GRADER_ID,
 } from "./tau3-retail-reward.js";
+import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 
 export const TAU3_RETAIL_HARNESS_ADAPTER_ID = "tau3-retail-v1";
 const DEFAULT_TAU3_ROOT = "/tmp/tau3-bench";
@@ -96,6 +97,10 @@ export async function executeTau3RetailManagedRl(
   const toolSequence: string[] = [];
   const trace: Array<Record<string, unknown>> = [];
   let lastPolicyResult: Record<string, unknown> | null = null;
+  const policyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  let policyUsageObserved = false;
+  let policyCostUsd = 0;
+  let policyCostObserved = false;
   let finalStep: BridgeStep | null = null;
   try {
     const initialized = await bridge.request<BridgeInit>({ operation: "init" });
@@ -128,6 +133,22 @@ export async function executeTau3RetailManagedRl(
         returnTokenIds: true,
       }, input.signal);
       lastPolicyResult = policyResult;
+      const normalizedUsage = normalizeModelUsageTokens(policyResult.usage);
+      if (
+        normalizedUsage.promptTokens !== null
+        || normalizedUsage.completionTokens !== null
+        || normalizedUsage.totalTokens !== null
+      ) {
+        policyUsageObserved = true;
+        policyUsage.inputTokens += normalizedUsage.promptTokens ?? 0;
+        policyUsage.outputTokens += normalizedUsage.completionTokens ?? 0;
+        policyUsage.totalTokens += normalizedUsage.totalTokens
+          ?? (normalizedUsage.promptTokens ?? 0) + (normalizedUsage.completionTokens ?? 0);
+      }
+      if (typeof policyResult.costUsd === "number" && Number.isFinite(policyResult.costUsd) && policyResult.costUsd >= 0) {
+        policyCostObserved = true;
+        policyCostUsd += policyResult.costUsd;
+      }
       const completion = parseManagedRlPolicyCompletion(policyResult);
       messages.push({
         role: "assistant",
@@ -265,6 +286,23 @@ export async function executeTau3RetailManagedRl(
       startedAt,
       completedAt,
     }),
+    ...(input.claim.executionKind === "evaluation"
+      ? {
+          evaluationEvidence: {
+            schemaVersion: "openpond.tau3RetailEvaluationEvidence.v1",
+            taskId,
+            messages,
+            trace,
+            components: rollout.components,
+            reward: rollout.reward,
+            terminal: rollout.terminal,
+            terminationReason: finalStep.terminationReason ?? null,
+            stateHashes: finalStep.stateHashes,
+            policyUsage: policyUsageObserved ? policyUsage : null,
+            policyCostUsd: policyCostObserved ? policyCostUsd : null,
+          },
+        }
+      : {}),
   };
 }
 

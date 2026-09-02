@@ -112,6 +112,8 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/seal$/, method: "POST", action: "seal_model_comparison_series", key: "seriesId" },
     { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/releases$/, method: "POST", action: "queue_model_comparison_release", key: "seriesId" },
     { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/run$/, method: "PATCH", action: "link_model_comparison_run", key: "entryId" },
+    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/evaluations$/, method: "POST", action: "start_model_comparison_evaluation", key: "entryId" },
+    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/reference-evaluations$/, method: "POST", action: "start_model_comparison_reference_evaluation", key: "seriesId" },
     { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/retry$/, method: "POST", action: "retry_model_comparison_entry", key: "entryId" },
     { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/decision$/, method: "POST", action: "decide_model_comparison_entry", key: "entryId" },
     { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/promotion$/, method: "POST", action: "record_model_comparison_promotion", key: "entryId" },

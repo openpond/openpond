@@ -876,7 +876,9 @@ function validEntryRetryEvolution(
     || current.evaluations.length !== 0
     || current.decision !== null
     || current.promotionBindingId !== null
-    || current.residualBlocks.some((block) => block.artifactLineageId !== null)
+    || current.residualBlocks.some(
+      (block) => block.id === current.trainableBlockId && block.artifactLineageId !== null,
+    )
     || next.trainingPlanId !== null
     || next.modelRunId !== null
     || next.modelVersionId !== null

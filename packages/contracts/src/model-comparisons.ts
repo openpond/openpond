@@ -116,6 +116,10 @@ export const ModelComparisonSeriesSchema = z.object({
   if (series.residualProfile.maximumEnabledRank > series.residualProfile.serializedEnvelopeRank) {
     context.addIssue({ code: "custom", path: ["residualProfile"], message: "Maximum enabled rank cannot exceed the serialized envelope." });
   }
+  const evaluationCohorts = Object.values(series.evaluationTasksets);
+  if (new Set(evaluationCohorts.map((reference) => `${reference.id}:${reference.revision}:${reference.contentHash}`)).size !== evaluationCohorts.length) {
+    context.addIssue({ code: "custom", path: ["evaluationTasksets"], message: "Development, retained, and frozen-final cohorts require distinct immutable Taskset releases." });
+  }
   const seed = series.schedule.find((entry) => entry.role === "seed");
   if (!seed || series.schedule.filter((entry) => entry.role === "seed").length !== 1) {
     context.addIssue({ code: "custom", path: ["schedule"], message: "A series requires exactly one seed entry." });

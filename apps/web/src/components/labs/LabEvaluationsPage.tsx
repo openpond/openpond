@@ -11,6 +11,11 @@ import {
   statusLabel,
 } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
+import {
+  comparisonReceipt,
+  comparisonRunScore,
+  LabModelComparisonEvaluationDetails,
+} from "./LabModelComparisonEvaluationDetails";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 export type EvaluationDetailTab = "overview" | "comparison" | "activity";
@@ -100,6 +105,7 @@ export function LabEvaluationsPage({
             <tbody>
               {runs.map((run) => {
                 const receipt = evaluationReceipt(run);
+                const comparisonScore = comparisonRunScore(run);
                 const version = state?.modelVersions.find(
                   (candidate) => candidate.id === run.modelVersionId,
                 );
@@ -116,10 +122,10 @@ export function LabEvaluationsPage({
                       </button>
                     </td>
                     {!modelProjectId ? <td>{projects.get(run.modelId)?.name ?? run.modelId}</td> : null}
-                    <td>{version ? `Version ${version.version}` : run.modelVersionId}</td>
+                    <td>{version ? `Version ${version.version}` : evaluationTargetLabel(run)}</td>
                     <td>{tasksets.get(run.taskset.id) ?? run.taskset.id}</td>
                     <td><LabStatusBadge label={statusLabel(run.status)} value={run.status} /></td>
-                    <td>{receipt ? percent(receipt.quality.candidatePassRate) : "—"}</td>
+                    <td>{receipt ? percent(receipt.quality.candidatePassRate) : comparisonScore === null ? runningProgress(run) : percent(comparisonScore)}</td>
                     <td>{receipt ? signedPercent(receipt.quality.candidatePassRate - receipt.quality.baselinePassRate) : "—"}</td>
                     <td>{formatDateTime(run.updatedAt)}</td>
                   </tr>
@@ -184,11 +190,12 @@ function EvaluationComparisonSummary({
               <div className="labs-evaluation-score-row">
                 {latest.slice(0, 4).map((run) => {
                   const receipt = evaluationReceipt(run);
+                  const comparisonScore = comparisonRunScore(run);
                   const version = state?.modelVersions.find((candidate) => candidate.id === run.modelVersionId);
                   return (
                     <div key={run.id}>
-                      <span>{version ? `Version ${version.version}` : "Base"}</span>
-                      <strong>{receipt ? percent(receipt.quality.candidatePassRate) : "—"}</strong>
+                      <span>{version ? `Version ${version.version}` : evaluationTargetLabel(run)}</span>
+                      <strong>{receipt ? percent(receipt.quality.candidatePassRate) : comparisonScore === null ? "—" : percent(comparisonScore)}</strong>
                     </div>
                   );
                 })}
@@ -217,6 +224,8 @@ function EvaluationDetail({
   tasksetName: string;
 }) {
   const receipt = evaluationReceipt(run);
+  const modelComparisonReceipt = comparisonReceipt(run);
+  const isModelComparison = run.evaluation?.benchmarkId === "model-comparison";
   const activeTab = EVALUATION_DETAIL_TABS.some((tab) => tab.id === detailTab)
     ? detailTab
     : "overview";
@@ -228,8 +237,8 @@ function EvaluationDetail({
           <ArrowLeft size={15} />
         </button>
         <div>
-          <h1>{run.evaluation?.benchmarkId ?? "Evaluation"}</h1>
-          <p>{tasksetName} · {version ? `Version ${version.version}` : run.modelVersionId}</p>
+          <h1>{isModelComparison ? `Model comparison · ${evaluationTargetLabel(run)}` : run.evaluation?.benchmarkId ?? "Evaluation"}</h1>
+          <p>{tasksetName} · {version ? `Version ${version.version}` : evaluationTargetLabel(run)}</p>
         </div>
         <LabStatusBadge label={statusLabel(run.status)} value={run.status} />
       </div>
@@ -247,7 +256,7 @@ function EvaluationDetail({
           </button>
         ))}
       </div>
-      {activeTab === "overview" ? (
+      {isModelComparison ? <LabModelComparisonEvaluationDetails activeTab={activeTab} receipt={modelComparisonReceipt} run={run} /> : activeTab === "overview" ? (
         <section className="training-detail-section">
           <h2>Evaluation result</h2>
           <dl className="labs-inline-facts">
@@ -317,6 +326,17 @@ function evaluationReceipt(run: ModelRun): ModelEvaluationReceipt | null {
   return run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
     ? run.receipt
     : null;
+}
+
+function evaluationTargetLabel(run: ModelRun): string {
+  return run.evaluation?.benchmarkId === "model-comparison"
+    ? run.evaluation.target.label
+    : run.modelVersionId ?? "Unversioned target";
+}
+
+function runningProgress(run: ModelRun): string {
+  if (!run.evaluationProgress || run.status !== "running") return "—";
+  return `${run.evaluationProgress.completedAttempts}/${run.evaluationProgress.totalAttempts}`;
 }
 
 function percent(value: number): string {

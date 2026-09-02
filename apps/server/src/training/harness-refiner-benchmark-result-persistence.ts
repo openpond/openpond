@@ -209,6 +209,9 @@ export async function ensureBaseVersion(input: {
   model: ChatModelRef;
   baseline: EvaluationAttempt | BenchmarkAttemptEvidence;
 }) {
+  if (!input.modelRun.modelVersionId) {
+    throw new Error("A base-Version materialization Run requires a Model Version identity.");
+  }
   const existing = await input.store.getModelVersion(input.modelRun.modelVersionId);
   if (existing) return existing;
   if (!("portable" in input.baseline)) {

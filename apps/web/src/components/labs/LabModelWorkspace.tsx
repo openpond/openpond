@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type {
   CreateImproveRun,
+  ModelComparisonSeriesEntry,
   ModelRun,
   TrainingJob,
 } from "@openpond/contracts";
@@ -88,6 +89,7 @@ export function LabModelRunsPage({
   );
   const lifecycleRuns = labLifecycleModelRuns(workproduct, state);
   const tasksets = labModelTasksets(state);
+  const comparisonEntries = state?.comparisonSeriesEntries ?? [];
   const runEntries = useMemo(() => {
     const entries = modelRunEntries(jobs, versions, lifecycleRuns);
     return entries.filter((entry) =>
@@ -143,6 +145,7 @@ export function LabModelRunsPage({
               <th>Run</th>
               <th>Status</th>
               <th>Method</th>
+              <th>Based on</th>
               <th>Taskset</th>
               <th>Result</th>
               <th>Updated</th>
@@ -151,7 +154,7 @@ export function LabModelRunsPage({
           <tbody>
             {!runEntries.length ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <div className="training-run-placeholder">
                     No runs yet.
                   </div>
@@ -211,6 +214,7 @@ export function LabModelRunsPage({
                             plan?.recipe.method
                         )}
                   </td>
+                  <td>{runBasedOn(entry.lifecycleRun, comparisonEntries)}</td>
                   <td>
                     {dataset ? (
                       <button
@@ -474,6 +478,24 @@ export function LabModelVersionsPage({
       </div>
     </section>
   );
+}
+
+function runBasedOn(
+  run: ModelRun | null,
+  entries: ModelComparisonSeriesEntry[],
+): string {
+  const reference = run?.comparisonSeriesEntry ?? null;
+  const entry = reference
+    ? entries.find((candidate) => candidate.id === reference.entryId) ?? null
+    : null;
+  if (!entry) return run?.kind === "evaluation" ? "Evaluated Model Version" : "Frozen base";
+  if (entry.parent.kind === "base_model") return "Frozen base";
+  const parent = entries.find(
+    (candidate) =>
+      candidate.seriesId === entry.seriesId
+      && candidate.modelVersionId === entry.parent.id,
+  ) ?? null;
+  return parent ? `${parent.label} · Model Version` : "Prior Model Version";
 }
 
 export function modelVersionEntries(

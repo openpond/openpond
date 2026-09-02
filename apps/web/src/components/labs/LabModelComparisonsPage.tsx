@@ -20,9 +20,11 @@ export function LabModelComparisonsPage({
   onOpenRun,
   onOpenTaskset,
   onOpenVersion,
+  onSelectedEntryIdChange,
   onSelectedSeriesIdChange,
   onToast,
   selectedSeriesId,
+  selectedEntryId,
   state,
   training,
 }: {
@@ -32,9 +34,11 @@ export function LabModelComparisonsPage({
   onOpenRun: (projectId: string, runId: string) => void;
   onOpenTaskset: (tasksetId: string) => void;
   onOpenVersion: (projectId: string, versionId: string) => void;
+  onSelectedEntryIdChange: (seriesId: string, entryId: string | null) => void;
   onSelectedSeriesIdChange: (seriesId: string | null) => void;
   onToast: (message: string, tone: "success" | "error" | "info") => void;
   selectedSeriesId: string | null;
+  selectedEntryId: string | null;
   state: TrainingStateResponse | null;
   training: ReturnType<typeof useTraining>;
 }) {
@@ -54,8 +58,10 @@ export function LabModelComparisonsPage({
       onOpenRun={onOpenRun}
       onOpenTaskset={onOpenTaskset}
       onOpenVersion={onOpenVersion}
+      onSelectedEntryIdChange={(entryId) => onSelectedEntryIdChange(series.id, entryId)}
       onToast={onToast}
       series={series}
+      selectedEntryId={selectedEntryId}
       state={state}
       training={training}
     />;
@@ -84,7 +90,7 @@ export function LabModelComparisonsPage({
   }
 
   return (
-    <div className="labs-flat-body labs-resource-page labs-comparisons-page">
+    <div className="labs-flat-body labs-resource-page labs-comparisons-page" data-profile-id={state?.profileId}>
       <ModelProjectPageHeader
         title="Model Comparisons"
         description="Saved continual-learning series, exact branch lineage, ordinary Evaluation Runs, and explicit Master promotion."
@@ -109,7 +115,7 @@ export function LabModelComparisonsPage({
             <header><div><strong>{summary.series.name}</strong><small>{summary.projectName}</small></div><LabStatusBadge label={summary.series.status} value={summary.series.status} /></header>
             <dl>
               <div><dt>Last activity</dt><dd>{formatDate(summary.lastActivity)}</dd></div>
-              <div><dt>Accepted head</dt><dd>{summary.acceptedHeadLabel ?? "None"}</dd></div>
+              <div><dt>Experimental head</dt><dd>{summary.acceptedHeadLabel ?? "None"}</dd></div>
               <div><dt>Current pass</dt><dd>{summary.currentLabel ?? "Not started"}</dd></div>
               <div><dt>Master</dt><dd>{summary.masterLabel ?? "Not set"}</dd></div>
             </dl>

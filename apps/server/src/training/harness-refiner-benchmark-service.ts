@@ -360,6 +360,10 @@ export function createHarnessRefinerBenchmarkService(deps: {
     const { input, modelRun } = context;
     try {
       context.signal.throwIfAborted();
+      const evaluation = modelRun.evaluation;
+      if (evaluation?.benchmarkId !== "harness-refiner") {
+        throw new Error("Harness Refiner Model Run has the wrong evaluation configuration.");
+      }
       if (!modelRun.harnessRelease) {
         throw new Error("Harness Refiner Model Run has no admitted Harness release.");
       }
@@ -385,10 +389,10 @@ export function createHarnessRefinerBenchmarkService(deps: {
         seeds: input.seeds,
         repetitions: input.repetitions,
       });
-      if (contentHash(executionPlan) !== contentHash(modelRun.evaluation?.attemptPlan)) {
+      if (contentHash(executionPlan) !== contentHash(evaluation.attemptPlan)) {
         throw new Error("Harness Refiner execution plan changed after admission.");
       }
-      const upstreamModel = modelRun.evaluation?.upstreamModel;
+      const upstreamModel = evaluation.upstreamModel;
       if (!upstreamModel?.pricing) {
         throw new Error("Harness Refiner run has no admitted upstream pricing.");
       }
@@ -674,7 +678,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
       const manifest = createResultManifest({
         modelRunId: modelRun.id,
         model: input.model,
-        upstreamModel: modelRun.evaluation!.upstreamModel,
+        upstreamModel: evaluation.upstreamModel,
         reasoningEffort: input.reasoningEffort,
         baseline: baseline.run,
         adaptation: adaptation.run,

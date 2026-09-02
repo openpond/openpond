@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 51;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 52;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -526,7 +526,7 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS model_runs (
     id TEXT PRIMARY KEY,
     model_id TEXT NOT NULL,
-    model_version_id TEXT NOT NULL,
+    model_version_id TEXT,
     profile_id TEXT NOT NULL,
     taskset_id TEXT NOT NULL,
     status TEXT NOT NULL,

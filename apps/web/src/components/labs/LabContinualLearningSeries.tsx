@@ -19,7 +19,7 @@ export function LabContinualLearningSeries({
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)) ?? [], [modelProjectId, state]);
   if (!series.length || !state) return null;
   return <section className="training-detail-section labs-continual-series">
-    <div className="labs-project-trends-heading"><div><h2>Continual Series</h2><p>Saved schedules, accepted experimental heads, Master bindings, and exact release lineage.</p></div><span>{series.length} series</span></div>
+    <div className="labs-project-trends-heading"><div><h2>Continual Series</h2><p>Saved schedules, advanced experimental heads, Master bindings, and exact release lineage.</p></div><span>{series.length} series</span></div>
     {series.map((item) => {
       const entries = state.comparisonSeriesEntries.filter((entry) => entry.seriesId === item.id).sort((left, right) => left.ordinal - right.ordinal);
       const accepted = entries.find((entry) => entry.id === item.acceptedDailyHeadEntryId) ?? null;
@@ -29,11 +29,11 @@ export function LabContinualLearningSeries({
         <header><div><strong>{item.name}</strong><small>{item.schedule.length} planned releases · updated {formatDate(item.updatedAt)}</small></div><div className="labs-comparison-actions"><LabStatusBadge label={item.status} value={item.status} /><button className="training-button secondary" type="button" onClick={() => onOpenSeries(item.id)}>Open series</button></div></header>
         <div className="labs-overview-decision-grid">
           <CompactFact label="Master" value={master?.label ?? "Not set"} />
-          <CompactFact label="Accepted head" value={accepted?.label ?? "None"} />
+          <CompactFact label="Experimental head" value={accepted?.label ?? "None"} />
           <CompactFact label="Current release" value={entries.at(-1)?.label ?? "Not started"} />
           <CompactFact label="Capacity" value={`${item.residualProfile.maximumEnabledRank} / ${item.residualProfile.serializedEnvelopeRank}`} />
         </div>
-        <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Date</th><th>Release</th><th>Role</th><th>Rank</th><th>Status</th><th>Run</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.id}><td>{formatDate(entry.createdAt)}</td><td><strong>{entry.label}</strong></td><td>{entry.role.replaceAll("_", " ")}</td><td>{entry.trainableRank}<small>{entry.enabledCumulativeRank} enabled</small></td><td><LabStatusBadge label={entry.status} value={entry.status} /></td><td>{entry.modelRunId ? <button className="labs-version-row-button" type="button" onClick={() => onOpenRun(entry.modelRunId!)}>{shortId(entry.modelRunId)}</button> : "—"}</td></tr>)}</tbody></table></div>
+        <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Date</th><th>Release</th><th>Role</th><th>New rank</th><th>Candidate stack</th><th>Status</th><th>Run</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.id}><td>{formatDate(entry.createdAt)}</td><td><button className="labs-version-row-button" type="button" onClick={() => onOpenSeries(item.id)}><strong>{entry.label}</strong></button></td><td>{entry.role.replaceAll("_", " ")}</td><td>{entry.trainableRank}</td><td>{entry.enabledCumulativeRank}<small>{entry.residualBlocks.map((block) => `${block.optimizationRole === "trainable" ? "new" : "frozen"} r${block.rank}`).join(" + ")}{entry.status === "rejected" || entry.status === "no_signal" ? " · inactive" : ""}</small></td><td><LabStatusBadge label={comparisonStatusLabel(entry.status)} value={entry.status} /></td><td>{entry.modelRunId ? <button className="labs-version-row-button" type="button" onClick={() => onOpenRun(entry.modelRunId!)}>{shortId(entry.modelRunId)}</button> : "—"}</td></tr>)}</tbody></table></div>
       </article>;
     })}
   </section>;
@@ -42,3 +42,10 @@ export function LabContinualLearningSeries({
 function CompactFact({ label, value }: { label: string; value: string }) { return <div className="labs-overview-decision-card"><small>{label}</small><strong>{value}</strong></div>; }
 function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "2-digit" }).format(new Date(value)); }
 function shortId(value: string) { return value.length > 24 ? `${value.slice(0, 10)}…${value.slice(-8)}` : value; }
+function comparisonStatusLabel(status: string) {
+  if (status === "accepted") return "Advanced";
+  if (status === "rejected") return "Held";
+  if (status === "candidate") return "Awaiting decision";
+  if (status === "no_signal") return "No signal";
+  return status.replaceAll("_", " ");
+}

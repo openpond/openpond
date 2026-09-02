@@ -52,6 +52,17 @@ export function SuggestionsTab({
   );
 }
 
+export function computeProfileAgentRunSyncKey(runs: CreateImproveRun[]): string {
+  return runs
+    .filter((run) =>
+      run.target.kind === "agent"
+      && ["ready_local", "released", "published_hosted"].includes(run.state)
+    )
+    .map((run) => `${run.id}:${run.revision}:${run.state}`)
+    .sort()
+    .join("|");
+}
+
 export function WorkproductsTable({
   items,
   loading,

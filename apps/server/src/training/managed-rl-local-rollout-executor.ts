@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
+import type { TaskDataRecord, Taskset } from "@openpond/contracts";
 import "./marketing-portfolio-managed-rl-adapter.js";
 import "./tau3-retail-managed-rl-adapter.js";
 import {
@@ -46,6 +46,7 @@ export class ManagedRlLocalRolloutExecutor {
       store: SqliteStore;
       storeDir: string;
       harnessRoot: string;
+      validationTaskset?: Taskset;
     },
   ) {
     this.executorId = input.executorId ?? `openpond-desktop:${randomUUID()}`;
@@ -176,13 +177,19 @@ export class ManagedRlLocalRolloutExecutor {
       claim.taskset.contentHash,
     );
     if (!taskset) throw new Error("managed_rl_local_taskset_missing");
-    const task = taskset.tasks.find((candidate) => candidate.id === claim.task.id);
-    if (!task) throw new Error("managed_rl_local_task_missing");
-    const adapter = resolveManagedRlHarnessAdapter({ taskset, environmentId });
+    const execution = resolveManagedRlExecutionTask({
+      claimTaskId: claim.task.id,
+      trainingTaskset: taskset,
+      validationTaskset: this.input.validationTaskset,
+    });
+    const adapter = resolveManagedRlHarnessAdapter({
+      taskset: execution.taskset,
+      environmentId,
+    });
     return adapter.execute({
       claim,
-      taskset,
-      task,
+      taskset: execution.taskset,
+      task: execution.task,
       harnessRoot: this.input.harnessRoot,
       storeDir: this.input.storeDir,
       executorId: this.executorId,
@@ -262,6 +269,29 @@ export class ManagedRlLocalRolloutExecutor {
       },
     );
   }
+}
+
+export function resolveManagedRlExecutionTask(input: {
+  claimTaskId: string;
+  trainingTaskset: Taskset;
+  validationTaskset?: Taskset;
+}): { taskset: Taskset; task: TaskDataRecord } {
+  const sources = [input.trainingTaskset, input.validationTaskset].filter(
+    (taskset): taskset is Taskset => Boolean(taskset),
+  );
+  const matches = sources.flatMap((taskset) =>
+    taskset.tasks
+      .filter((task) => task.id === input.claimTaskId)
+      .map((task) => ({ taskset, task })),
+  );
+  if (matches.length === 0) throw new Error("managed_rl_local_task_missing");
+  if (matches.length > 1) {
+    const [first, ...rest] = matches;
+    if (rest.some((match) => JSON.stringify(match.task) !== JSON.stringify(first!.task))) {
+      throw new Error("managed_rl_local_task_ambiguous");
+    }
+  }
+  return matches[0]!;
 }
 
 function sandboxCompletion(

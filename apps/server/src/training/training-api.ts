@@ -6,10 +6,6 @@ import {
   CreateHuggingFaceDatasetImportRequestSchema,
   DatasetCatalogResponseSchema,
   GraderSpecSchema,
-  ModelComparisonDecisionSchema,
-  ModelComparisonEntryStatusSchema,
-  ModelComparisonEntryRefSchema,
-  ModelComparisonEvaluationLinkSchema,
   ModelProjectSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
@@ -114,6 +110,14 @@ import {
   startHarnessRefinerBenchmark,
 } from "./training-benchmark-actions.js";
 import { createModelComparisonSeriesService } from "./model-comparison-series-service.js";
+import { createModelComparisonEvaluationService } from "./model-comparison-evaluation-service.js";
+import { handleModelComparisonAction } from "./training-api-model-comparison-actions.js";
+import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
+import {
+  boundedInteger,
+  optionalComparisonEntryRef,
+  portableMethod,
+} from "./training-api-common-inputs.js";
 import {
   creationSurface,
   datasetBuildIntent,
@@ -150,47 +154,16 @@ export function createTrainingApi(deps: {
   harnessRefinerBenchmarks?: HarnessRefinerBenchmarks;
   preferenceComparisons?: PreferenceComparisons;
   modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
+  modelStream?: import("./taskset-work-attempt-runner.js").TasksetWorkModelStream;
 }) {
   const comparisonSeries = createModelComparisonSeriesService(deps.store);
-  async function publishTasksetToHostedProject(input: {
-    draft: ReturnType<typeof TasksetDraftSchema.parse>;
-    taskset: ReturnType<typeof TasksetSchema.parse>;
-    modelId: string | null;
-  }) {
-    if (!input.modelId || !deps.modelProjectHosting) {
-      return {
-        draft: input.draft,
-        taskset: input.taskset,
-        hostedSync: { state: "local" as const, error: null },
-      };
-    }
-    const release = await requireReleasedTaskset(
-      deps.benchmarkTasksets,
-      input.taskset,
-    );
-    try {
-      await deps.modelProjectHosting.publishTaskset({
-        projectId: input.modelId,
-        taskset: input.taskset,
-        release,
-      });
-      return {
-        draft: input.draft,
-        taskset: input.taskset,
-        hostedSync: { state: "synced" as const, error: null },
-      };
-    } catch (caught) {
-      return {
-        draft: input.draft,
-        taskset: input.taskset,
-        hostedSync: {
-          state: "sync_failed" as const,
-          error: caught instanceof Error ? caught.message : String(caught),
-        },
-      };
-    }
-  }
-
+  const comparisonEvaluations = createModelComparisonEvaluationService({
+    store: deps.store,
+    storeDir: deps.storeDir,
+    comparisonSeries,
+    modelStream: deps.modelStream,
+  });
+  void comparisonEvaluations.reconcileInterrupted().catch(() => undefined);
   async function request(
     action: string,
     payload: unknown,
@@ -213,53 +186,13 @@ export function createTrainingApi(deps: {
           ?? "default",
       );
     }
-    if (action === "save_model_comparison_series") {
-      return comparisonSeries.saveSeries(input.series);
-    }
-    if (action === "seal_model_comparison_series") {
-      return comparisonSeries.sealSeries({
-        seriesId: requiredString(input.seriesId, "seriesId"),
-        expectedRevision: positiveInteger(input.expectedRevision, "expectedRevision"),
-      });
-    }
-    if (action === "queue_model_comparison_release") {
-      return comparisonSeries.queueRelease({
-        ...input,
-        seriesId: requiredString(input.seriesId, "seriesId"),
-      });
-    }
-    if (action === "link_model_comparison_run") {
-      return comparisonSeries.linkRun({
-        entryId: requiredString(input.entryId, "entryId"),
-        expectedStatus: ModelComparisonEntryStatusSchema.parse(input.expectedStatus),
-        status: ModelComparisonEntryStatusSchema.parse(input.status),
-        trainingPlanId: nullableString(input.trainingPlanId),
-        modelRunId: nullableString(input.modelRunId),
-        modelVersionId: nullableString(input.modelVersionId),
-        evaluations: input.evaluations === undefined
-          ? undefined
-          : ModelComparisonEvaluationLinkSchema.array().parse(input.evaluations),
-      });
-    }
-    if (action === "retry_model_comparison_entry") {
-      return comparisonSeries.retryEntry({
-        entryId: requiredString(input.entryId, "entryId"),
-      });
-    }
-    if (action === "decide_model_comparison_entry") {
-      return comparisonSeries.decide({
-        entryId: requiredString(input.entryId, "entryId"),
-        expectedSeriesRevision: positiveInteger(input.expectedSeriesRevision, "expectedSeriesRevision"),
-        decision: ModelComparisonDecisionSchema.parse(input.decision),
-      });
-    }
-    if (action === "record_model_comparison_promotion") {
-      return comparisonSeries.recordPromotion({
-        entryId: requiredString(input.entryId, "entryId"),
-        bindingId: requiredString(input.bindingId, "bindingId"),
-        expectedSeriesRevision: positiveInteger(input.expectedSeriesRevision, "expectedSeriesRevision"),
-      });
-    }
+    const comparisonAction = await handleModelComparisonAction({
+      action,
+      payload: input,
+      evaluations: comparisonEvaluations,
+      series: comparisonSeries,
+    });
+    if (comparisonAction.handled) return comparisonAction.value;
     if (action === "preference_comparison_list") {
       return deps.store.listPreferenceComparisonAssignments({
         tasksetId: requiredString(input.tasksetId, "tasksetId"),
@@ -878,7 +811,9 @@ export function createTrainingApi(deps: {
           : null;
         if (!taskset) throw new Error("Published Taskset draft lost its immutable Taskset revision.");
         return publishTasksetToHostedProject({
+          benchmarkTasksets: deps.benchmarkTasksets,
           draft,
+          modelProjectHosting: deps.modelProjectHosting,
           taskset,
           modelId: string(input.modelId),
         });
@@ -910,7 +845,9 @@ export function createTrainingApi(deps: {
       });
       await deps.store.saveTasksetDraft(published);
       return publishTasksetToHostedProject({
+        benchmarkTasksets: deps.benchmarkTasksets,
         draft: published,
+        modelProjectHosting: deps.modelProjectHosting,
         taskset,
         modelId: string(input.modelId),
       });
@@ -1526,7 +1463,11 @@ export function createTrainingApi(deps: {
       deps.taskMiner.config(profileId),
       deps.store.listTaskMinerRuns(profileId),
       deps.store.listModelProjects(),
-      deps.store.listModelComparisonSeries({ profileId }),
+      // Model Projects are an account-wide library. Comparison Series must use
+      // the same scope or a series disappears whenever the active assistant
+      // profile changes even though its Project, Runs, and Versions remain
+      // visible on the Models dashboard.
+      deps.store.listModelComparisonSeries(),
       deps.store.listTasksets(),
       deps.training.state(),
     ]);
@@ -1577,7 +1518,7 @@ export function createTrainingApi(deps: {
       modelVersions: reconciledModelVersions,
       modelRuns: reconciledModelRuns,
       comparisonSeries: comparisonSeriesRecords,
-      comparisonSeriesEntries: reconciledComparisonSeriesEntries.filter((entry) => entry.profileId === profileId),
+      comparisonSeriesEntries: reconciledComparisonSeriesEntries,
       modelTasksets,
       ...execution,
       activityRevision: activity.revision,
@@ -1835,23 +1776,9 @@ export function createTrainingApi(deps: {
   return { request, state };
 }
 
-function portableMethod(
-  value: string | null | undefined,
-): "sft" | "dpo" | "grpo" | "ppo" | undefined {
-  return value === "sft" || value === "dpo" || value === "grpo" || value === "ppo"
-    ? value
-    : undefined;
-}
-
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function string(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function requiredString(value: unknown, name: string): string { const parsed = string(value); if (!parsed) throw new Error(`${name} is required.`); return parsed; }
-function positiveInteger(value: unknown, name: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    throw new Error(`${name} must be a positive integer.`);
-  }
-  return value;
-}
 function nullableString(value: unknown): string | null { return string(value); }
 function optionalStringArray(value: unknown): string[] | undefined { return value === undefined ? undefined : requiredStringArray(value, "value"); }
 function requiredRecordArray(value: unknown, name: string): Record<string, unknown>[] {
@@ -2038,29 +1965,6 @@ function stringArray(value: unknown): string[] { return Array.isArray(value) ? v
 function requiredStringArray(value: unknown, name: string): string[] { const parsed = stringArray(value); if (!parsed.length) throw new Error(`${name} requires at least one value.`); return parsed; }
 function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }
 function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
-function optionalComparisonEntryRef(value: unknown) {
-  return value === undefined || value === null
-    ? null
-    : ModelComparisonEntryRefSchema.parse(value);
-}
-function boundedInteger(
-  value: unknown,
-  name: string,
-  minimum: number,
-  maximum: number,
-  fallback: number,
-): number {
-  if (value === undefined || value === null) return fallback;
-  if (
-    typeof value !== "number"
-    || !Number.isInteger(value)
-    || value < minimum
-    || value > maximum
-  ) {
-    throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
-  }
-  return value;
-}
 function boundedNumber(
   value: unknown,
   name: string,

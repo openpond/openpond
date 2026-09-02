@@ -12,6 +12,7 @@ import { api, type ClientConnection } from "../../api";
 import type { useTraining } from "../../hooks/useTraining";
 import { ArrowLeft } from "../icons";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { LabComparisonQualityTrend } from "./LabComparisonQualityTrend";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 export function LabComparisonSeriesDetail({
@@ -22,7 +23,9 @@ export function LabComparisonSeriesDetail({
   onOpenRun,
   onOpenTaskset,
   onOpenVersion,
+  onSelectedEntryIdChange,
   onToast,
+  selectedEntryId,
   series,
   state,
   training,
@@ -34,8 +37,10 @@ export function LabComparisonSeriesDetail({
   onOpenRun: (projectId: string, runId: string) => void;
   onOpenTaskset: (tasksetId: string) => void;
   onOpenVersion: (projectId: string, versionId: string) => void;
+  onSelectedEntryIdChange: (entryId: string | null) => void;
   onToast: (message: string, tone: "success" | "error" | "info") => void;
   series: ModelComparisonSeries;
+  selectedEntryId: string | null;
   state: TrainingStateResponse;
   training: ReturnType<typeof useTraining>;
 }) {
@@ -43,8 +48,7 @@ export function LabComparisonSeriesDetail({
     .filter((entry) => entry.seriesId === series.id)
     .sort((left, right) => left.ordinal - right.ordinal), [series.id, state.comparisonSeriesEntries]);
   const entryBySchedule = useMemo(() => new Map(entries.map((entry) => [entry.scheduleEntryId, entry])), [entries]);
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(entries.at(-1)?.id ?? null);
-  const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? entries.at(-1) ?? null;
+  const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? null;
   const selectedRun = selectedEntry?.modelRunId
     ? state.modelRuns.find((run) => run.id === selectedEntry.modelRunId) ?? null
     : null;
@@ -159,8 +163,24 @@ export function LabComparisonSeriesDetail({
     onToast(result ? "Master rolled back to its recorded predecessor." : "Couldn’t roll back Master.", result ? "success" : "error");
   }
 
+  if (selectedEntry) {
+    return <ComparisonReleaseDetail
+      detail={detail}
+      entry={selectedEntry}
+      entries={entries}
+      masterEntry={masterEntry}
+      onBack={() => onSelectedEntryIdChange(null)}
+      onOpenEvaluation={onOpenEvaluation}
+      onOpenRun={onOpenRun}
+      onOpenTaskset={onOpenTaskset}
+      onOpenVersion={onOpenVersion}
+      series={series}
+      state={state}
+    />;
+  }
+
   return (
-    <div className="labs-flat-body labs-resource-page labs-comparison-series-detail">
+    <div className="labs-flat-body labs-resource-page labs-comparison-series-detail" data-profile-id={state.profileId}>
       <div className="labs-dataset-detail-heading">
         <button aria-label="Back to Comparison Series" className="labs-back-button" type="button" onClick={onBack}><ArrowLeft size={15} /></button>
         <div><h1>{series.name}</h1><p>{project?.name ?? series.modelProjectId} · revision {series.revision}</p></div>
@@ -176,36 +196,37 @@ export function LabComparisonSeriesDetail({
         </div>}
         metrics={[
           { label: "Master", value: masterEntry?.label ?? "Not set", hint: masterBinding?.id ?? "Production binding is separate" },
-          { label: "Accepted head", value: acceptedHead?.label ?? "None", hint: acceptedHead?.modelVersionId ?? "Experimental branch" },
+          { label: "Experimental head", value: acceptedHead?.label ?? "None", hint: acceptedHead?.modelVersionId ?? "No branch advanced" },
           { label: "Seed", value: acceptedSeed?.label ?? "Pending", hint: `rank ${series.schedule[0]?.trainableRank ?? "—"}` },
           { label: "Capacity", value: `${series.residualProfile.maximumEnabledRank} / ${series.residualProfile.serializedEnvelopeRank}`, hint: "maximum enabled / serialized envelope" },
           { label: "Observed cost", value: `$${seriesCost.toFixed(3)}`, hint: "receipt-backed across materialized releases" },
         ]}
       />
       <section className="training-detail-section">
-        <div className="labs-project-trends-heading"><div><h2>Release history</h2><p>Date is first. Ready releases never start implicitly.</p></div><span>{entries.length} of {series.schedule.length} materialized</span></div>
+        <div className="labs-project-trends-heading"><div><h2>Release history</h2><p>Each release opens to its own evidence and lineage page. Only an operator decision can advance a candidate.</p></div><span>{entries.length} of {series.schedule.length} materialized</span></div>
         <div className="training-table-wrap">
           <table className="training-data-table labs-comparison-table">
-            <thead><tr><th>Date</th><th>Release</th><th>Branch</th><th>Parent</th><th>Taskset</th><th>Rank</th><th>Updates</th><th>Tokens</th><th>GPU time</th><th>Cost</th><th>Status</th><th>Run / Version</th><th>Evaluations</th><th>Decision</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Date</th><th>Release</th><th>Branch</th><th>Based on</th><th>Taskset</th><th>New rank</th><th>Candidate stack</th><th>Updates</th><th>Tokens</th><th>GPU time</th><th>Cost</th><th>Status</th><th>Run / Version</th><th>Evaluations</th><th>Operator decision</th><th>Actions</th></tr></thead>
             <tbody>{series.schedule.map((scheduled) => {
               const entry = entryBySchedule.get(scheduled.id) ?? null;
               const evidence = entry ? entryEvidence(state, entry) : null;
               const canPrepare = Boolean(series.scheduleSealedAt && !entry && scheduled.role !== "daily_residual");
-              return <tr className={selectedEntry?.id === entry?.id ? "selected" : undefined} key={scheduled.id}>
+              return <tr key={scheduled.id}>
                 <td>{entry ? <><strong>{formatDate(entry.createdAt)}</strong><small>{formatTime(entry.createdAt)}</small></> : "—"}</td>
-                <td>{entry ? <button className="labs-version-row-button" type="button" onClick={() => setSelectedEntryId(entry.id)}><strong>{entry.label}</strong><small>{roleLabel(entry.role)}</small></button> : <><strong>{scheduled.label}</strong><small>Not materialized</small></>}</td>
+                <td>{entry ? <button className="labs-version-row-button" type="button" onClick={() => onSelectedEntryIdChange(entry.id)}><strong>{entry.label}</strong><small>{roleLabel(entry.role)}</small></button> : <><strong>{scheduled.label}</strong><small>Not materialized</small></>}</td>
                 <td>{branchLabel(entry?.role ?? scheduled.role)}</td>
                 <td>{entry ? parentLabel(entry, entries) : parentRuleLabel(scheduled.parentRule)}</td>
                 <td>{entry ? <button className="labs-version-row-button" type="button" onClick={() => onOpenTaskset(entry.taskset.id)}>{tasksetName(state, entry.taskset.id)}<small>{shortId(entry.taskset.contentHash)}</small></button> : scheduled.taskSource === "nightly_selection" ? "Learning queue" : "Derived on prepare"}</td>
-                <td>{entry ? <>{entry.trainableRank}<small>{entry.enabledCumulativeRank} enabled · {entry.serializedEnvelopeRank} envelope</small></> : scheduled.trainableRank}</td>
+                <td>{entry?.trainableRank ?? scheduled.trainableRank}</td>
+                <td>{entry ? <><strong>{entry.enabledCumulativeRank}</strong><small>{candidateStackLabel(entry)}{entry.status === "rejected" || entry.status === "no_signal" ? " · inactive" : ""}</small></> : "—"}</td>
                 <td>{evidence ? <>{evidence.progress.committedOptimizerSteps} / {evidence.progress.targetOptimizerSteps}<small>{evidence.progress.skippedOptimizerSteps} skipped</small></> : "Unavailable"}</td>
                 <td>{evidence ? formatInteger(evidence.usage.inputTokens + evidence.usage.outputTokens) : "Unavailable"}</td>
                 <td>{evidence?.resource.gpuSeconds == null ? "Unavailable" : formatDuration(evidence.resource.gpuSeconds)}</td>
                 <td>{evidence?.cost.totalUsd == null ? "Unavailable" : `$${evidence.cost.totalUsd.toFixed(3)}`}</td>
-                <td><LabStatusBadge label={entry?.status ?? "planned"} value={entry?.status ?? "prepared"} /></td>
+                <td><LabStatusBadge label={comparisonStatusLabel(entry?.status ?? "planned")} value={entry?.status ?? "prepared"} /></td>
                 <td>{entry ? <>{entry.modelRunId ? <button className="labs-version-row-button" type="button" onClick={() => onOpenRun(entry.modelProjectId, entry.modelRunId!)}>{shortId(entry.modelRunId)}</button> : "No Run"}{entry.modelVersionId ? <button className="labs-version-row-button" type="button" onClick={() => onOpenVersion(entry.modelProjectId, entry.modelVersionId!)}><small>{shortId(entry.modelVersionId)}</small></button> : <small>No Version</small>}</> : "—"}</td>
                 <td>{entry?.evaluations.length ? <button className="labs-version-row-button" type="button" onClick={() => onOpenEvaluation(entry.evaluations[0]!.evaluationRunId)}>{entry.evaluations.length} linked<small>{entry.evaluations.map((evaluation) => evaluation.cohortRole).join(", ")}</small></button> : entry ? "0 linked" : "—"}</td>
-                <td>{entry?.decision ? <>{entry.decision.disposition}<small>{entry.decision.reasonCodes.join(", ")}</small></> : "—"}</td>
+                <td>{entry?.decision ? <>{comparisonDecisionLabel(entry.decision.disposition)}<small>{decisionActor(entry.decision.decidedBy)} · {formatDateTime(entry.decision.decidedAt)}</small></> : entry?.status === "no_signal" ? <>No signal<small>No operator decision recorded</small></> : "Awaiting review"}</td>
                 <td><div className="labs-comparison-actions">
                   {canPrepare ? <button className="training-button secondary" disabled={Boolean(training.busyAction)} type="button" onClick={() => void queueDerived(scheduled.id)}>Prepare</button> : null}
                   {entry?.status === "ready" ? <button className="training-button" disabled={Boolean(training.busyAction)} type="button" onClick={() => void start(entry)}>Start</button> : null}
@@ -218,10 +239,64 @@ export function LabComparisonSeriesDetail({
           </table>
         </div>
       </section>
+      <LabComparisonQualityTrend entries={entries} onOpenEvaluation={onOpenEvaluation} series={series} state={state} />
       <CohortMatrix entries={entries} onOpenEvaluation={onOpenEvaluation} state={state} />
-      <ComparisonEvidence entry={selectedEntry} detail={detail} state={state} onOpenEvaluation={onOpenEvaluation} onOpenTaskset={onOpenTaskset} onOpenVersion={onOpenVersion} />
     </div>
   );
+}
+
+function ComparisonReleaseDetail({ detail, entry, entries, masterEntry, onBack, onOpenEvaluation, onOpenRun, onOpenTaskset, onOpenVersion, series, state }: {
+  detail: TrainingRunDetail | null;
+  entry: ModelComparisonSeriesEntry;
+  entries: ModelComparisonSeriesEntry[];
+  masterEntry: ModelComparisonSeriesEntry | null;
+  onBack: () => void;
+  onOpenEvaluation: (id: string) => void;
+  onOpenRun: (projectId: string, runId: string) => void;
+  onOpenTaskset: (id: string) => void;
+  onOpenVersion: (projectId: string, versionId: string) => void;
+  series: ModelComparisonSeries;
+  state: TrainingStateResponse;
+}) {
+  const decision = entry.decision;
+  return <div className="labs-flat-body labs-resource-page labs-comparison-series-detail" data-profile-id={state.profileId}>
+    <div className="labs-dataset-detail-heading">
+      <button aria-label={`Back to ${series.name}`} className="labs-back-button" type="button" onClick={onBack}><ArrowLeft size={15} /></button>
+      <div><h1>{entry.label}</h1><p>{series.name} · {roleLabel(entry.role)}</p></div>
+      <LabStatusBadge label={comparisonStatusLabel(entry.status)} value={entry.status} />
+    </div>
+    <ModelProjectPageHeader
+      title="Release evidence"
+      description="A release is a candidate with immutable training lineage. Advancing it and promoting it to Master are separate operator actions."
+      actions={<div className="labs-comparison-actions">
+        {entry.modelRunId ? <button className="training-button secondary" type="button" onClick={() => onOpenRun(entry.modelProjectId, entry.modelRunId!)}>Open Run</button> : null}
+        {entry.modelVersionId ? <button className="training-button secondary" type="button" onClick={() => onOpenVersion(entry.modelProjectId, entry.modelVersionId!)}>Open Version</button> : null}
+        <button className="training-button secondary" type="button" onClick={() => onOpenTaskset(entry.taskset.id)}>Open Taskset</button>
+      </div>}
+      metrics={[
+        { label: "Based on", value: parentLabel(entry, entries), hint: entry.parent.kind === "base_model" ? entry.parent.id : shortId(entry.parent.id) },
+        { label: "New rank", value: entry.trainableRank, hint: `block ${shortId(entry.trainableBlockId)}` },
+        { label: "Candidate stack", value: entry.enabledCumulativeRank, hint: `${candidateStackLabel(entry)}${entry.status === "rejected" || entry.status === "no_signal" ? " · inactive" : ""}` },
+        { label: "Operator decision", value: decision ? comparisonDecisionLabel(decision.disposition) : entry.status === "no_signal" ? "No signal" : "Awaiting review", hint: decision ? `${decisionActor(decision.decidedBy)} · ${formatDateTime(decision.decidedAt)}` : "No operator decision recorded" },
+        { label: "Master", value: masterEntry?.id === entry.id ? "Yes" : "No", hint: masterEntry?.id === entry.id ? "Active production binding" : "Promotion is separate from branch advancement" },
+      ]}
+    />
+    {decision ? <section className="training-detail-section">
+      <div className="labs-project-trends-heading"><div><h2>Decision record</h2><p>{decision.summary}</p></div><span>{decisionActor(decision.decidedBy)}</span></div>
+      <div className="labs-overview-decision-grid">
+        <CompactDecisionFact label="Disposition" value={comparisonDecisionLabel(decision.disposition)} />
+        <CompactDecisionFact label="Decided by" value={decisionActor(decision.decidedBy)} />
+        <CompactDecisionFact label="Decided at" value={formatDateTime(decision.decidedAt)} />
+        <CompactDecisionFact label="Policy" value={`${decision.policy.id} v${decision.policy.version}`} />
+      </div>
+      <div className="labs-comparison-lineage"><strong>Recorded reasons</strong><span>{decision.reasonCodes.join(" · ")}</span></div>
+    </section> : null}
+    <ComparisonEvidence entry={entry} detail={detail} state={state} onOpenEvaluation={onOpenEvaluation} onOpenTaskset={onOpenTaskset} onOpenVersion={onOpenVersion} />
+  </div>;
+}
+
+function CompactDecisionFact({ label, value }: { label: string; value: string }) {
+  return <div className="labs-overview-decision-card"><small>{label}</small><strong>{value}</strong></div>;
 }
 
 const COHORTS = ["current", "development", "retained", "prior_disclosed", "frozen_final"] as const;
@@ -235,8 +310,8 @@ function CohortMatrix({ entries, onOpenEvaluation, state }: { entries: ModelComp
         if (!links.length) return <td key={cohort}>Unavailable</td>;
         const latest = links.at(-1)!;
         const run = state.modelRuns.find((candidate) => candidate.id === latest.evaluationRunId) ?? null;
-        const receipt = run?.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1" ? run.receipt : null;
-        return <td key={cohort}><button className="labs-version-row-button" type="button" onClick={() => onOpenEvaluation(latest.evaluationRunId)}><strong>{receipt ? `${Math.round(receipt.quality.candidatePassRate * 100)}%` : run?.status ?? "Linked"}</strong><small>{receipt ? signedPercent(receipt.quality.candidatePassRate - receipt.quality.baselinePassRate) : shortId(latest.taskset.contentHash)}</small></button></td>;
+        const score = evaluationPassRate(run);
+        return <td key={cohort}><button className="labs-version-row-button" type="button" onClick={() => onOpenEvaluation(latest.evaluationRunId)}><strong>{score ? `${Math.round(score.candidate * 100)}%` : run?.status ?? "Linked"}</strong><small>{score?.baseline == null ? shortId(latest.taskset.contentHash) : signedPercent(score.candidate - score.baseline)}</small></button></td>;
       })}</tr>)}
       {!entries.length ? <tr><td colSpan={COHORTS.length + 1}>No materialized releases are available yet.</td></tr> : null}
     </tbody></table></div>
@@ -304,17 +379,39 @@ function EvidenceCard({ rows, title }: { rows: Array<[string, string]>; title: s
 
 function tasksetName(state: TrainingStateResponse, id: string) { return [...state.tasksets, ...state.modelTasksets].find((taskset) => taskset.id === id)?.name ?? id; }
 function parentLabel(entry: ModelComparisonSeriesEntry, entries: ModelComparisonSeriesEntry[]) { return entry.parent.kind === "base_model" ? "Frozen base" : entries.find((candidate) => candidate.modelVersionId === entry.parent.id)?.label ?? shortId(entry.parent.id); }
+function candidateStackLabel(entry: ModelComparisonSeriesEntry) { return entry.residualBlocks.map((block) => `${block.optimizationRole === "trainable" ? "new" : "frozen"} r${block.rank}`).join(" + "); }
+function decisionActor(value: string) { return value === "default" ? "Default operator profile" : value; }
+function comparisonStatusLabel(status: string) {
+  if (status === "accepted") return "Advanced";
+  if (status === "rejected") return "Held";
+  if (status === "candidate") return "Awaiting decision";
+  if (status === "no_signal") return "No signal";
+  return status.replaceAll("_", " ");
+}
+function comparisonDecisionLabel(disposition: "advance" | "hold" | "no_signal") {
+  return disposition === "advance" ? "Advanced" : disposition === "hold" ? "Held" : "No signal";
+}
 function parentRuleLabel(rule: string) { return rule === "base_model" ? "Frozen base" : rule === "accepted_seed" ? "Accepted seed" : "Accepted daily head"; }
 function branchLabel(role: string) { return role === "weekly_rollup" ? "Weekly roll-up" : role === "full_refresh" ? "Full-task refresh" : "Daily"; }
 function roleLabel(role: string) { return role === "full_refresh" ? "full-task refresh" : role.replaceAll("_", " "); }
 function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "2-digit" }).format(new Date(value)); }
 function formatTime(value: string) { return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
+function formatDateTime(value: string) { return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "2-digit", hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
 function formatMetric(value: number | null, digits = 3) { return value === null ? "Unavailable" : value.toFixed(digits); }
 function formatSigned(value: number | null) { return value === null ? "Unavailable" : `${value > 0 ? "+" : ""}${value.toFixed(3)}`; }
 function formatInteger(value: number) { return new Intl.NumberFormat().format(value); }
 function formatDuration(seconds: number) { return seconds < 60 ? `${seconds.toFixed(1)}s` : `${(seconds / 60).toFixed(1)}m`; }
 function signedPercent(value: number) { const rounded = Math.round(value * 100); return `${rounded > 0 ? "+" : ""}${rounded}%`; }
 function shortId(value: string) { return value.length > 24 ? `${value.slice(0, 10)}…${value.slice(-8)}` : value; }
+function evaluationPassRate(run: TrainingStateResponse["modelRuns"][number] | null) {
+  if (run?.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1") {
+    return { candidate: run.receipt.quality.candidatePassRate, baseline: run.receipt.quality.baselinePassRate };
+  }
+  if (run?.receipt?.schemaVersion === "openpond.modelComparisonBenchmarkReceipt.v1" && run.receipt.deterministic.passRate !== null) {
+    return { candidate: run.receipt.deterministic.passRate, baseline: null };
+  }
+  return null;
+}
 function entryEvidence(state: TrainingStateResponse, entry: ModelComparisonSeriesEntry): ManagedTrainingRunEvidence | null {
   const job = state.jobs.find((candidate) => candidate.metadata.modelRunId === entry.modelRunId);
   return ManagedTrainingRunEvidenceSchema.safeParse(job?.metadata.managedTrainingEvidence).data ?? null;

@@ -144,6 +144,7 @@ function routeFromParts(parts: string[]): ModelsRoute | null {
     if (detailTab || rest.length) return null;
     if (
       resourceId &&
+      projectId !== "comparisons" &&
       !DETAIL_TABS_BY_LIBRARY_SECTION[
         projectId as ModelLibrarySection
       ]?.has(resourceId)

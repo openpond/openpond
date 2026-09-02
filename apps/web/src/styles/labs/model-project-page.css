@@ -737,12 +737,133 @@
   margin-top: 18px;
 }
 
+.labs-quality-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.labs-quality-chart-card {
+  min-width: 0;
+  padding: 14px;
+}
+
+.labs-quality-chart-card > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.labs-quality-chart-card > header small,
+.labs-quality-date-label {
+  fill: var(--muted);
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.labs-quality-chart-card svg {
+  display: block;
+  overflow: visible;
+  width: 100%;
+  min-height: 230px;
+}
+
+.labs-quality-grid-line {
+  stroke: color-mix(in srgb, var(--border) 72%, transparent);
+  stroke-width: 1;
+}
+
+.labs-quality-axis-label {
+  fill: var(--muted);
+  font-size: 9px;
+}
+
+.labs-quality-series-line {
+  stroke: var(--cyan);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.labs-quality-point {
+  cursor: pointer;
+}
+
+.labs-quality-point circle {
+  fill: var(--cyan);
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.labs-quality-point:hover circle,
+.labs-quality-point:focus circle {
+  filter: brightness(1.25);
+  r: 6px;
+}
+
+.labs-quality-point-value {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.labs-quality-error-bar {
+  stroke: color-mix(in srgb, var(--cyan) 74%, var(--muted));
+  stroke-width: 1;
+}
+
+.labs-quality-reference {
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.labs-quality-reference.base { stroke: var(--muted); }
+.labs-quality-reference.master { stroke: var(--warning); }
+.labs-quality-reference.external { stroke: var(--danger); }
+
+.labs-quality-reference-label {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.labs-quality-reference-label.base { fill: var(--muted); }
+.labs-quality-reference-label.master { fill: var(--warning); }
+.labs-quality-reference-label.external { fill: var(--danger); }
+
+.labs-quality-judge-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.labs-quality-judge-evidence button {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.labs-quality-judge-evidence span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
 @media (max-width: 700px) {
   .model-project-page-heading { align-items: flex-start; flex-direction: column; }
   .model-project-page-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .labs-overview-decision-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .labs-models-operational-grid { grid-template-columns: 1fr; }
   .labs-project-chart-grid { grid-template-columns: 1fr; }
+  .labs-quality-trend-grid { grid-template-columns: 1fr; }
   .labs-evaluation-score-row-large { grid-template-columns: 1fr; }
   .labs-human-review-detail .labs-dataset-detail-heading {
     grid-template-columns: auto minmax(0, 1fr);

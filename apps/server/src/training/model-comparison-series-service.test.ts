@@ -28,8 +28,24 @@ function taskset(id: string, taskIds: string[]): Taskset {
       metadata: {},
     })),
     graders: [GRADER],
-    graderFixtures: [],
-    learningSignals: {},
+    graderFixtures: [{
+      id: `${id}-grader-fixture`,
+      taskId: taskIds[0],
+      label: "positive",
+      output: { passed: true },
+      infrastructureError: null,
+      expectedPassed: true,
+      expectedRewardEligible: true,
+      metadata: {},
+    }],
+    learningSignals: {
+      demonstrations: [],
+      preferences: [],
+      corrections: [],
+      feedback: [],
+      rewards: [],
+      labels: [],
+    },
     metadata: {},
     contentHash: contentHash(id),
     createdAt: NOW,
@@ -115,6 +131,7 @@ function memoryStore(tasksets: Taskset[]) {
       },
       getTaskset: async (id: string) => tasksetMap.get(id) ?? null,
       upsertTaskset: async (value: Taskset) => { tasksetMap.set(value.id, value); return value; },
+      saveReadinessReport: async () => undefined,
       commitModelComparisonSeriesMutation: async (input: { expectedSeriesRevision: number; series: ModelComparisonSeries; entry: ModelComparisonSeriesEntry; expectedEntryStatus: ModelComparisonSeriesEntry["status"] | null }) => {
         const currentSeries = series.get(input.series.id);
         const currentEntry = entries.get(input.entry.id);
@@ -188,6 +205,36 @@ describe("Model Comparison Series service", () => {
     });
     const p1Result = await service.queueRelease({ seriesId: sealed.id, scheduleEntryId: "schedule-p1", taskSelection: selection("daily-one", "2026-09-01T12:20:00.000Z"), expectedSeriesRevision: 4 });
     expect(p1Result.entry.parent).toMatchObject({ kind: "model_version", id: "version-p0" });
+    expect(store.data.tasksets.get(p1Result.entry.taskset.id)?.readiness?.tasksetHash).toBe(p1Result.entry.taskset.contentHash);
+    const p1Ref = { seriesId: sealed.id, entryId: p1Result.entry.id, scheduleEntryId: p1Result.entry.scheduleEntryId, ordinal: 1, releaseHash: p1Result.entry.releaseHash };
+    store.data.plans.set("plan-p1-failed", {
+      id: "plan-p1-failed",
+      modelId: sealed.modelProjectId,
+      tasksetId: p1Result.entry.taskset.id,
+      tasksetHash: p1Result.entry.taskset.contentHash,
+      comparisonSeriesEntry: p1Ref,
+    });
+    store.data.runs.set("run-p1-failed", {
+      id: "run-p1-failed",
+      status: "failed",
+      profileId: sealed.profileId,
+      modelId: sealed.modelProjectId,
+      taskset: p1Result.entry.taskset,
+      comparisonSeriesEntry: p1Ref,
+    });
+    await service.linkRun({
+      entryId: p1Result.entry.id,
+      expectedStatus: "ready",
+      status: "queued",
+      trainingPlanId: "plan-p1-failed",
+      modelRunId: "run-p1-failed",
+    });
+    await service.linkRun({ entryId: p1Result.entry.id, expectedStatus: "queued", status: "failed" });
+    const p1Retry = await service.retryEntry({ entryId: p1Result.entry.id });
+    expect(p1Retry.attemptOrdinal).toBe(2);
+    expect(p1Retry.priorRunAttempts).toHaveLength(1);
+    expect(p1Retry.residualBlocks.find((block) => block.optimizationRole === "frozen")?.artifactLineageId).toBe("lineage-p0");
+    expect(p1Retry.residualBlocks.find((block) => block.optimizationRole === "trainable")?.artifactLineageId).toBeNull();
     await expect(service.queueRelease({ seriesId: sealed.id, scheduleEntryId: "schedule-p2", taskSelection: selection("daily-one", "2026-09-01T12:21:00.000Z"), expectedSeriesRevision: 5 })).rejects.toThrow("already used");
 
     store.data.versions.set("version-p1", {
@@ -195,7 +242,7 @@ describe("Model Comparison Series service", () => {
       taskset: p1Result.entry.taskset, contentHash: contentHash("version-p1"), artifactLineageId: "lineage-p1",
       comparisonSeriesEntry: { seriesId: sealed.id, entryId: p1Result.entry.id, scheduleEntryId: p1Result.entry.scheduleEntryId, ordinal: 1, releaseHash: p1Result.entry.releaseHash },
     });
-    await candidate(service, p1Result.entry, "version-p1");
+    await candidate(service, p1Retry, "version-p1");
     const p1Decision = await service.decide({
       entryId: p1Result.entry.id, expectedSeriesRevision: 5,
       decision: { disposition: "advance", policy: { id: "advancement-service-test", version: 1 }, reasonCodes: ["acquisition_passed"], summary: "Daily acquisition passed retention limits.", decidedBy: "actor-service-test", decidedAt: "2026-09-01T12:30:00.000Z" },
@@ -203,6 +250,9 @@ describe("Model Comparison Series service", () => {
 
     const p2Result = await service.queueRelease({ seriesId: sealed.id, scheduleEntryId: "schedule-p2", taskSelection: selection("daily-two", "2026-09-01T12:40:00.000Z"), expectedSeriesRevision: 6 });
     expect(p2Result.entry.parent).toMatchObject({ kind: "model_version", id: "version-p1" });
+    expect(store.data.tasksets.get(p2Result.entry.taskset.id)?.graderFixtures).toEqual(
+      eligible.graderFixtures,
+    );
     store.data.versions.set("version-p2", {
       id: "version-p2", profileId: sealed.profileId, modelId: sealed.modelProjectId,
       taskset: p2Result.entry.taskset, contentHash: contentHash("version-p2"), artifactLineageId: "lineage-p2",

@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import {
   type ModelEvaluationReceipt,
   type ModelEvaluationStopReceipt,
+  type ModelComparisonSeriesEntry,
   type ModelRun,
+  type TrainingStateResponse,
 } from "@openpond/contracts";
 
 import type { ClientConnection } from "../../api";
@@ -140,6 +142,12 @@ export function LabModelVersionDetailPage({
             job.metadata.modelRunId === selectedLifecycleRun.id
         ) ?? null
       : null);
+  const selectedComparisonEntry = state?.comparisonSeriesEntries.find(
+    (entry) =>
+      entry.modelRunId === selectedLifecycleRun?.id ||
+      entry.modelRunId === selectedJob?.metadata.modelRunId,
+  ) ?? null;
+  const selectedBasedOn = comparisonParentLabel(state, selectedComparisonEntry);
   const runEntries = useMemo(
     () => modelRunEntries(jobs, versions, lifecycleRuns),
     [jobs, lifecycleRuns, versions]
@@ -318,6 +326,7 @@ export function LabModelVersionDetailPage({
           { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
           { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
           { label: "Output", value: selectedVersion ? `Version ${selectedVersion.number}` : "No version" },
+          { label: "Based on", value: selectedBasedOn },
           {
             label: "Taskset",
             value: selectedTaskset?.name ?? "Unavailable",
@@ -391,7 +400,10 @@ export function LabModelVersionDetailPage({
             : "Not recorded"
         }
         failure={selectedJob?.error ?? selectedLifecycleRun?.failure ?? null}
-        configuration={runConfiguration(selectedPlan)}
+        configuration={[
+          ...continuationConfiguration(state, selectedComparisonEntry),
+          ...runConfiguration(selectedPlan),
+        ]}
         evidence={managedEvidence}
         method={trainingMethodLabel(
           selectedLifecycleRun?.method ?? selectedPlan?.recipe.method
@@ -815,6 +827,57 @@ function runConfiguration(
     ];
   }
   return [];
+}
+
+function continuationConfiguration(
+  state: TrainingStateResponse | null,
+  entry: ModelComparisonSeriesEntry | null,
+): Array<{ label: string; value: string }> {
+  if (!state || !entry) return [];
+  if (entry.parent.kind === "base_model") {
+    return [
+      {
+        label: "Starting checkpoint",
+        value: `Frozen base · ${entry.parent.revision}`,
+      },
+      { label: "Optimizer", value: "Fresh" },
+    ];
+  }
+  const parentVersion = state.modelVersions.find(
+    (version) => version.id === entry.parent.id,
+  );
+  const parentEntry = state.comparisonSeriesEntries.find(
+    (candidate) =>
+      candidate.seriesId === entry.seriesId &&
+      candidate.modelVersionId === entry.parent.id,
+  );
+  const checkpoint = [
+    parentEntry?.label ?? null,
+    parentVersion ? `Version ${parentVersion.version}` : entry.parent.id,
+  ].filter((value): value is string => Boolean(value)).join(" · ");
+  return [
+    { label: "Starting checkpoint", value: checkpoint },
+    { label: "Optimizer", value: "Fresh" },
+  ];
+}
+
+function comparisonParentLabel(
+  state: TrainingStateResponse | null,
+  entry: ModelComparisonSeriesEntry | null,
+): string {
+  if (!state || !entry || entry.parent.kind === "base_model") return "Frozen base";
+  const parentEntry = state.comparisonSeriesEntries.find(
+    (candidate) =>
+      candidate.seriesId === entry.seriesId
+      && candidate.modelVersionId === entry.parent.id,
+  );
+  const parentVersion = state.modelVersions.find(
+    (version) => version.id === entry.parent.id,
+  );
+  return [
+    parentEntry?.label ?? "Prior checkpoint",
+    parentVersion ? `Version ${parentVersion.version}` : null,
+  ].filter((value): value is string => Boolean(value)).join(" · ");
 }
 
 function scientificNumber(value: number): string {
