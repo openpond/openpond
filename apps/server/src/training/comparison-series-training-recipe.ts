@@ -17,9 +17,41 @@ export async function comparisonSeriesTrainingRecipe(input: {
     throw new Error("Comparison Series execution requires a GRPO residual-LoRA recipe.");
   }
 
+  const series = await input.store.getModelComparisonSeries(input.entry.seriesId);
+  const protocolEntry = series?.benchmarkProtocol?.schedule.find(
+    (scheduled) => scheduled.scheduleEntryId === input.entry!.scheduleEntryId,
+  );
+  const taskset = await input.store.getTasksetRevision(
+    input.entry.taskset.id,
+    input.entry.taskset.revision,
+    input.entry.taskset.contentHash,
+  );
+  if (!series?.scheduleSealedAt || !protocolEntry || !taskset) {
+    throw new Error("Comparison Series execution requires an exact sealed protocol and Taskset release.");
+  }
+  const optimizerSteps = taskset.tasks.length * protocolEntry.optimizerGroupsPerTask;
+  const trajectoriesPerGroup = protocolEntry.trajectoriesPerGroup;
+
   const ranked = {
     ...recipe,
     lora: { ...recipe.lora, rank: input.entry.trainableRank },
+    rollout: {
+      ...recipe.rollout,
+      groupSize: trajectoriesPerGroup,
+    },
+    optimizer: {
+      ...recipe.optimizer,
+      maxSteps: optimizerSteps,
+    },
+    resourceLimits: {
+      ...recipe.resourceLimits,
+      maxGpuSeconds: Math.min(
+        7_200,
+        series.benchmarkProtocol!.resources.maximumTrainingGpuSeconds,
+        1_200 + optimizerSteps * 600,
+      ),
+      maxRollouts: optimizerSteps * trajectoriesPerGroup,
+    },
   };
   if (input.entry.parent.kind === "base_model") {
     const { continuation: _continuation, ...fresh } = ranked;

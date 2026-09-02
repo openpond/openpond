@@ -1,0 +1,59 @@
+{
+  "name": "@openpond/continual-bench",
+  "version": "0.2.0",
+  "description": "Portable continual-learning benchmark manifests, splitting, validation, statistics, and reports",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
+    },
+    "./manifest": {
+      "types": "./dist/manifest.d.ts",
+      "import": "./dist/manifest.js"
+    },
+    "./report": {
+      "types": "./dist/report.d.ts",
+      "import": "./dist/report.js"
+    },
+    "./adapters/tau3-retail": {
+      "types": "./dist/adapters/tau3-retail.d.ts",
+      "import": "./dist/adapters/tau3-retail.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpond/openpond.git",
+    "directory": "packages/continual-bench"
+  },
+  "engines": {
+    "node": ">=22.14.0 <25"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. tests/continual-bench-package.test.ts",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build && npm pack --dry-run"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.10"
+  }
+}

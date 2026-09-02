@@ -13,16 +13,18 @@ export function ModelProjectPageHeader({
   description,
   status,
   actions,
+  layout = "default",
   metrics = [],
 }: {
   title: string;
   description: string;
   status?: ReactNode;
   actions?: ReactNode;
+  layout?: "default" | "toolbar";
   metrics?: ModelProjectPageMetric[];
 }) {
   return (
-    <header className="model-project-page-header">
+    <header className={`model-project-page-header model-project-page-header-${layout}`}>
       <div className="model-project-page-heading">
         <div>
           <div className="model-project-page-title-row">

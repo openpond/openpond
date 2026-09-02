@@ -1,6 +1,7 @@
 import type {
   ModelComparisonSeries,
   ModelComparisonSeriesEntry,
+  ModelCurrencySnapshot,
   ModelBinding,
   ModelRun,
   ModelVersion,
@@ -11,6 +12,7 @@ import type {
 import {
   ModelComparisonSeriesEntrySchema,
   ModelComparisonSeriesSchema,
+  ModelCurrencySnapshotSchema,
   ModelBindingSchema,
   ModelRunSchema,
   ModelVersionSchema,
@@ -22,6 +24,32 @@ import type { PayloadRow } from "../types.js";
 import { SqliteStoreCore } from "./store-core.js";
 
 export class SqliteTrainingModelStore extends SqliteStoreCore {
+  async saveModelCurrencySnapshot(snapshotInput: ModelCurrencySnapshot): Promise<ModelCurrencySnapshot> {
+    const snapshot = ModelCurrencySnapshotSchema.parse(snapshotInput);
+    const existing = await this.getModelCurrencySnapshot(snapshot.id);
+    if (existing) {
+      if (existing.contentHash === snapshot.contentHash && JSON.stringify(existing) === JSON.stringify(snapshot)) return existing;
+      throw new Error("An immutable Model Currency Snapshot cannot be replaced.");
+    }
+    await this.upsertPayload(
+      `INSERT INTO model_currency_snapshots
+        (id, series_id, entry_id, evidence_state, content_hash, payload, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [snapshot.id, snapshot.seriesId, snapshot.entryId, snapshot.evidenceState, snapshot.contentHash, JSON.stringify(snapshot), snapshot.projectedAt],
+    );
+    return snapshot;
+  }
+
+  async getModelCurrencySnapshot(id: string): Promise<ModelCurrencySnapshot | null> {
+    return this.getParsedPayload("SELECT payload FROM model_currency_snapshots WHERE id = ?", [id], ModelCurrencySnapshotSchema.parse);
+  }
+
+  async listModelCurrencySnapshots(input: { seriesId?: string; entryId?: string } = {}): Promise<ModelCurrencySnapshot[]> {
+    if (input.entryId) return this.listParsedPayloads("SELECT payload FROM model_currency_snapshots WHERE entry_id = ? ORDER BY created_at DESC", [input.entryId], ModelCurrencySnapshotSchema.parse);
+    if (input.seriesId) return this.listParsedPayloads("SELECT payload FROM model_currency_snapshots WHERE series_id = ? ORDER BY created_at DESC", [input.seriesId], ModelCurrencySnapshotSchema.parse);
+    return this.listParsedPayloads("SELECT payload FROM model_currency_snapshots ORDER BY created_at DESC", [], ModelCurrencySnapshotSchema.parse);
+  }
+
   async saveModelComparisonSeries(
     seriesInput: ModelComparisonSeries,
   ): Promise<ModelComparisonSeries> {
@@ -800,6 +828,8 @@ function sameSealedSeriesDefinition(
     eligibleTaskPool: series.eligibleTaskPool,
     evaluationTasksets: series.evaluationTasksets,
     grader: series.grader,
+    benchmarkProtocol: series.benchmarkProtocol,
+    automaticEvaluation: series.automaticEvaluation,
     residualProfile: series.residualProfile,
     schedule: series.schedule,
     scheduleSealedAt: series.scheduleSealedAt,

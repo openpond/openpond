@@ -13,6 +13,7 @@ import type { useTraining } from "../../hooks/useTraining";
 import { ArrowLeft } from "../icons";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { LabComparisonQualityTrend } from "./LabComparisonQualityTrend";
+import { LabComparisonCurrencyWorkspace } from "./LabComparisonCurrencyWorkspace";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 export function LabComparisonSeriesDetail({
@@ -240,7 +241,7 @@ export function LabComparisonSeriesDetail({
         </div>
       </section>
       <LabComparisonQualityTrend entries={entries} onOpenEvaluation={onOpenEvaluation} series={series} state={state} />
-      <CohortMatrix entries={entries} onOpenEvaluation={onOpenEvaluation} state={state} />
+      <LabComparisonCurrencyWorkspace entries={entries} onOpenEvaluation={onOpenEvaluation} series={series} state={state} />
     </div>
   );
 }
@@ -297,25 +298,6 @@ function ComparisonReleaseDetail({ detail, entry, entries, masterEntry, onBack, 
 
 function CompactDecisionFact({ label, value }: { label: string; value: string }) {
   return <div className="labs-overview-decision-card"><small>{label}</small><strong>{value}</strong></div>;
-}
-
-const COHORTS = ["current", "development", "retained", "prior_disclosed", "frozen_final"] as const;
-
-function CohortMatrix({ entries, onOpenEvaluation, state }: { entries: ModelComparisonSeriesEntry[]; onOpenEvaluation: (id: string) => void; state: TrainingStateResponse }) {
-  return <section className="training-detail-section">
-    <div className="labs-project-trends-heading"><div><h2>Evaluation cohorts</h2><p>Every cell resolves to an ordinary Evaluation Run on an exact Taskset and grader release.</p></div></div>
-    <div className="training-table-wrap"><table className="training-data-table labs-comparison-table"><thead><tr><th>Release</th>{COHORTS.map((cohort) => <th key={cohort}>{cohort.replaceAll("_", " ")}</th>)}</tr></thead><tbody>
-      {entries.map((entry) => <tr key={entry.id}><td><strong>{entry.label}</strong><small>{roleLabel(entry.role)}</small></td>{COHORTS.map((cohort) => {
-        const links = entry.evaluations.filter((evaluation) => evaluation.cohortRole === cohort);
-        if (!links.length) return <td key={cohort}>Unavailable</td>;
-        const latest = links.at(-1)!;
-        const run = state.modelRuns.find((candidate) => candidate.id === latest.evaluationRunId) ?? null;
-        const score = evaluationPassRate(run);
-        return <td key={cohort}><button className="labs-version-row-button" type="button" onClick={() => onOpenEvaluation(latest.evaluationRunId)}><strong>{score ? `${Math.round(score.candidate * 100)}%` : run?.status ?? "Linked"}</strong><small>{score?.baseline == null ? shortId(latest.taskset.contentHash) : signedPercent(score.candidate - score.baseline)}</small></button></td>;
-      })}</tr>)}
-      {!entries.length ? <tr><td colSpan={COHORTS.length + 1}>No materialized releases are available yet.</td></tr> : null}
-    </tbody></table></div>
-  </section>;
 }
 
 function ComparisonEvidence({ entry, detail, onOpenEvaluation, onOpenTaskset, onOpenVersion, state }: { entry: ModelComparisonSeriesEntry | null; detail: TrainingRunDetail | null; onOpenEvaluation: (id: string) => void; onOpenTaskset: (id: string) => void; onOpenVersion: (projectId: string, versionId: string) => void; state: TrainingStateResponse }) {
@@ -401,17 +383,7 @@ function formatMetric(value: number | null, digits = 3) { return value === null 
 function formatSigned(value: number | null) { return value === null ? "Unavailable" : `${value > 0 ? "+" : ""}${value.toFixed(3)}`; }
 function formatInteger(value: number) { return new Intl.NumberFormat().format(value); }
 function formatDuration(seconds: number) { return seconds < 60 ? `${seconds.toFixed(1)}s` : `${(seconds / 60).toFixed(1)}m`; }
-function signedPercent(value: number) { const rounded = Math.round(value * 100); return `${rounded > 0 ? "+" : ""}${rounded}%`; }
 function shortId(value: string) { return value.length > 24 ? `${value.slice(0, 10)}…${value.slice(-8)}` : value; }
-function evaluationPassRate(run: TrainingStateResponse["modelRuns"][number] | null) {
-  if (run?.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1") {
-    return { candidate: run.receipt.quality.candidatePassRate, baseline: run.receipt.quality.baselinePassRate };
-  }
-  if (run?.receipt?.schemaVersion === "openpond.modelComparisonBenchmarkReceipt.v1" && run.receipt.deterministic.passRate !== null) {
-    return { candidate: run.receipt.deterministic.passRate, baseline: null };
-  }
-  return null;
-}
 function entryEvidence(state: TrainingStateResponse, entry: ModelComparisonSeriesEntry): ManagedTrainingRunEvidence | null {
   const job = state.jobs.find((candidate) => candidate.metadata.modelRunId === entry.modelRunId);
   return ManagedTrainingRunEvidenceSchema.safeParse(job?.metadata.managedTrainingEvidence).data ?? null;

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type {
   ModelEvaluationReceipt,
   ModelRun,
@@ -6,17 +6,19 @@ import type {
 } from "@openpond/contracts";
 
 import { ArrowLeft } from "../icons";
+import type { useTraining } from "../../hooks/useTraining";
 import {
   formatDateTime,
   statusLabel,
 } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { LabModelComparisonEvaluationDetails } from "./LabModelComparisonEvaluationDetails";
 import {
   comparisonReceipt,
   comparisonRunScore,
-  LabModelComparisonEvaluationDetails,
-} from "./LabModelComparisonEvaluationDetails";
+} from "./model-comparison-evaluation";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { LabEvaluationRunCreateDialog } from "./LabEvaluationRunCreateDialog";
 
 export type EvaluationDetailTab = "overview" | "comparison" | "activity";
 
@@ -36,6 +38,8 @@ export function LabEvaluationsPage({
   onSelectedEvaluationIdChange,
   selectedEvaluationId,
   state,
+  training,
+  onToast,
 }: {
   detailTab?: EvaluationDetailTab | null;
   modelProjectId?: string | null;
@@ -43,7 +47,10 @@ export function LabEvaluationsPage({
   onSelectedEvaluationIdChange: (evaluationId: string | null) => void;
   selectedEvaluationId: string | null;
   state: TrainingStateResponse | null;
+  training: ReturnType<typeof useTraining>;
+  onToast: (message: string, tone: "success" | "error" | "info") => void;
 }) {
+  const [createOpen, setCreateOpen] = useState(false);
   const runs = useMemo(
     () => evaluationRuns(state, modelProjectId ?? null),
     [modelProjectId, state],
@@ -63,6 +70,7 @@ export function LabEvaluationsPage({
         tasksetName={tasksets.get(selected.taskset.id) ?? selected.taskset.id}
         onBack={() => onSelectedEvaluationIdChange(null)}
         onDetailTabChange={onDetailTabChange}
+        training={training}
       />
     );
   }
@@ -84,6 +92,7 @@ export function LabEvaluationsPage({
           { label: "Completed", value: completed.length },
           { label: "Comparable suites", value: comparableSuites },
         ]}
+        actions={<button className="training-button" disabled={!state || Boolean(training.busyAction)} type="button" onClick={() => setCreateOpen(true)}>New evaluation run</button>}
       />
       <EvaluationComparisonSummary runs={completed} state={state} />
       <section className="training-detail-section">
@@ -142,6 +151,18 @@ export function LabEvaluationsPage({
           </table>
         </div>
       </section>
+      {createOpen && state ? <LabEvaluationRunCreateDialog
+        busy={training.busyAction === "start-comparison-evaluation"}
+        modelProjectId={modelProjectId}
+        onClose={() => setCreateOpen(false)}
+        onStart={async (input) => {
+          const run = await training.actions.startComparisonEvaluation(input);
+          onToast(run ? "Evaluation Run started. Evidence will update without changing the operator decision." : "The Evaluation Run did not start.", run ? "success" : "error");
+          if (run) onSelectedEvaluationIdChange(run.id);
+          return run;
+        }}
+        state={state}
+      /> : null}
     </div>
   );
 }
@@ -215,6 +236,7 @@ function EvaluationDetail({
   run,
   state,
   tasksetName,
+  training,
 }: {
   detailTab: EvaluationDetailTab;
   onBack: () => void;
@@ -222,6 +244,7 @@ function EvaluationDetail({
   run: ModelRun;
   state: TrainingStateResponse | null;
   tasksetName: string;
+  training: ReturnType<typeof useTraining>;
 }) {
   const receipt = evaluationReceipt(run);
   const modelComparisonReceipt = comparisonReceipt(run);
@@ -256,7 +279,7 @@ function EvaluationDetail({
           </button>
         ))}
       </div>
-      {isModelComparison ? <LabModelComparisonEvaluationDetails activeTab={activeTab} receipt={modelComparisonReceipt} run={run} /> : activeTab === "overview" ? (
+      {isModelComparison ? <LabModelComparisonEvaluationDetails activeTab={activeTab} receipt={modelComparisonReceipt} run={run} onLoadEvidence={training.actions.loadComparisonAttemptEvidence} /> : activeTab === "overview" ? (
         <section className="training-detail-section">
           <h2>Evaluation result</h2>
           <dl className="labs-inline-facts">
@@ -270,7 +293,7 @@ function EvaluationDetail({
           {run.failure ? <p className="training-banner error">{run.failure}</p> : null}
         </section>
       ) : null}
-      {activeTab === "comparison" ? (
+      {!isModelComparison && activeTab === "comparison" ? (
         <section className="training-detail-section">
           <h2>Baseline versus candidate</h2>
           {receipt ? (
@@ -282,7 +305,7 @@ function EvaluationDetail({
           ) : <p className="labs-detail-copy">A canonical comparison receipt has not been recorded.</p>}
         </section>
       ) : null}
-      {activeTab === "activity" ? (
+      {!isModelComparison && activeTab === "activity" ? (
         <section className="training-detail-section">
           <h2>Attempt evidence</h2>
           <div className="training-table-wrap">

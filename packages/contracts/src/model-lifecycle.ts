@@ -13,7 +13,7 @@ import {
 } from "./tasksets.js";
 import { ChatModelRefSchema } from "./providers.js";
 import { CorrelatedTelemetryReceiptSchema } from "./training-benchmark.js";
-import { ModelComparisonEntryRefSchema } from "./model-comparisons.js";
+import { ModelComparisonEntryRefSchema, ModelComparisonParentSchema } from "./model-comparisons.js";
 
 export const ModelVersionKindSchema = z.enum([
   "base_reference",
@@ -497,6 +497,7 @@ export const ModelComparisonBenchmarkReceiptSchema = z.object({
     }
   }).nullable(),
   attempts: z.array(z.object({
+    attemptId: ReleaseIdSchema.nullable().default(null),
     taskId: ReleaseIdSchema,
     seed: z.number().int(),
     repetition: z.number().int().nonnegative(),
@@ -507,13 +508,35 @@ export const ModelComparisonBenchmarkReceiptSchema = z.object({
     judgePreference: z.enum(["win", "tie", "loss"]).nullable(),
     transcriptHash: ReleaseHashSchema.nullable(),
     traceHash: ReleaseHashSchema.nullable(),
+    transcriptArtifact: z.object({
+      artifactPath: z.string().trim().min(1).max(2_000),
+      jsonPointer: z.string().trim().min(1).max(1_000),
+    }).strict().nullable().default(null),
+    traceArtifact: z.object({
+      artifactPath: z.string().trim().min(1).max(2_000),
+      jsonPointer: z.string().trim().min(1).max(1_000),
+    }).strict().nullable().default(null),
+    latencyMs: z.number().int().nonnegative().nullable().default(null),
     failureClass: TaskFailureClassSchema.nullable(),
   }).strict()).max(100_000),
   usage: z.object({
     policy: EvaluationUsageCategorySchema.nullable(),
     judge: EvaluationUsageCategorySchema.nullable(),
     observedSpendUsd: z.number().nonnegative().nullable(),
+    evaluationGpuSeconds: z.number().nonnegative().nullable().default(null),
   }).strict(),
+  managedServing: z.object({
+    jobId: ReleaseIdSchema,
+    terminalState: z.enum(["completed", "cancelled", "failed", "budget_exhausted"]),
+    sourcePolicyVersion: z.number().int().nonnegative(),
+    sourceAdapterSha256: ReleaseHashSchema.nullable(),
+    servedPolicyVersion: z.number().int().nonnegative().nullable(),
+    servedAdapterSha256: ReleaseHashSchema.nullable(),
+    accruedSpendUsd: z.number().nonnegative(),
+    cleanupAttestationHash: ReleaseHashSchema,
+    resourceCount: z.number().int().nonnegative(),
+    activeResourceCount: z.literal(0),
+  }).strict().nullable().default(null),
   evidenceSnapshot: z.object({
     id: ReleaseIdSchema,
     contentHash: ReleaseHashSchema,
@@ -584,6 +607,20 @@ const ModelComparisonEvaluationConfigurationSchema = z.object({
   seeds: z.array(z.number().int()).min(1).max(100),
   repetitions: z.number().int().positive().max(20),
   maximumSpendUsd: z.number().nonnegative(),
+  series: z.object({
+    id: ReleaseIdSchema,
+    protocol: z.object({ id: ReleaseIdSchema, revision: z.number().int().positive(), contentHash: ReleaseHashSchema }).strict(),
+  }).strict().nullable().default(null),
+  panel: z.object({
+    id: ReleaseIdSchema,
+    role: z.enum(["correction", "sibling_verification", "cumulative_known", "development", "retained", "frozen_final"]),
+    passLabel: ReleaseIdSchema.nullable(),
+  }).strict().nullable().default(null),
+  comparisonPair: z.object({
+    entryId: ReleaseIdSchema,
+    parent: ModelComparisonParentSchema,
+    candidateModelVersionId: ReleaseIdSchema,
+  }).strict().nullable().default(null),
   attemptPlan: z.array(z.object({
     stage: z.literal("comparison"),
     split: z.string().trim().min(1).max(100),

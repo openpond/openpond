@@ -1,0 +1,255 @@
+schemaVersion: openpond.continualBenchManifest.v1
+id: tau3-retail-continual-v1
+revision: 1
+name: Tau3 Retail Continual Bench v1
+description: A sealed continual-learning benchmark converted from an ordinary test set.
+license: MIT
+source:
+  repository: https://github.com/sierra-research/tau3
+  commit: a2c024725189473d2d7cea3a5cfdbcc67478e41f
+  generatedBy: openpond bench init --from examples/tau3-retail-continual-v1/source/tasks.jsonl
+split:
+  seed: tau3-retail-continual-v1-public-fixture
+  correctionCasesPerFamily: 1
+  correctionSelection: minimize_prompt_similarity
+  semanticSimilarityThreshold: 0.8
+passes:
+  - label: P0
+    familyIds:
+      - fixture-family-return
+  - label: P1
+    familyIds:
+      - fixture-family-address
+  - label: P2
+    familyIds:
+      - fixture-family-exchange
+tasks:
+  - id: fixture-return-1
+    familyId: fixture-family-return
+    contentHash: 01247f2f0313d2baca49facec4be5db9360b21101acd6a5cc8d8dae07553fec9
+    prompt: Return a damaged chair and request an exchange only after the return policy is confirmed.
+    payload:
+      id: fixture-return-1
+      familyId: fixture-family-return
+      passLabel: P0
+      prompt: Return a damaged chair and request an exchange only after the return policy is confirmed.
+  - id: fixture-return-2
+    familyId: fixture-family-return
+    contentHash: 59a8fdba257511ccfaba4306c32c460c3b98ccfb633ff0d2b77ba652974d65a0
+    prompt: Return a bottle while leaving the other delivered items unchanged.
+    payload:
+      id: fixture-return-2
+      familyId: fixture-family-return
+      passLabel: P0
+      prompt: Return a bottle while leaving the other delivered items unchanged.
+  - id: fixture-address-1
+    familyId: fixture-family-address
+    contentHash: ddf83c2db5cec7637a9157bca88b07a2b58db790a2bd4255be449164271de27c
+    prompt: Update the shipping address on one pending order after confirming the destination.
+    payload:
+      id: fixture-address-1
+      familyId: fixture-family-address
+      passLabel: P1
+      prompt: Update the shipping address on one pending order after confirming the destination.
+  - id: fixture-address-2
+    familyId: fixture-family-address
+    contentHash: 0d6f0cab6b06309296e6e3db7ac3a150627410625e1660508eda364dac8dfc62
+    prompt: Change the account default address without changing completed orders.
+    payload:
+      id: fixture-address-2
+      familyId: fixture-family-address
+      passLabel: P1
+      prompt: Change the account default address without changing completed orders.
+  - id: fixture-exchange-1
+    familyId: fixture-family-exchange
+    contentHash: d142d9943add9a4aa8076f3d4cd4accfd10bc1815637db74e0444eccf940323f
+    prompt: Exchange a jacket for the same size in red and preserve the payment method.
+    payload:
+      id: fixture-exchange-1
+      familyId: fixture-family-exchange
+      passLabel: P2
+      prompt: Exchange a jacket for the same size in red and preserve the payment method.
+  - id: fixture-exchange-2
+    familyId: fixture-family-exchange
+    contentHash: ebeee721165ef30dbc615a75a87fdddbdc41f4d605ae1e8faa01e00d0e7d2bb4
+    prompt: Exchange a laptop configuration and state the price difference before confirmation.
+    payload:
+      id: fixture-exchange-2
+      familyId: fixture-family-exchange
+      passLabel: P2
+      prompt: Exchange a laptop configuration and state the price difference before confirmation.
+  - id: fixture-development-1
+    familyId: fixture-family-development-a
+    contentHash: df99eb3c3db3f85e40d925a6abac4aa409a66666e03f3c1cad7368b58e2fce15
+    prompt: Find the delivery status of a shipped package without modifying the order.
+    payload:
+      id: fixture-development-1
+      familyId: fixture-family-development-a
+      panelRole: development
+      prompt: Find the delivery status of a shipped package without modifying the order.
+  - id: fixture-development-2
+    familyId: fixture-family-development-b
+    contentHash: fecaf5b02e4598a2e6acbd5c7f14eb01b2c9cf5740a587bf12ceeec552a50c6d
+    prompt: Explain the refund timing for a previously completed return.
+    payload:
+      id: fixture-development-2
+      familyId: fixture-family-development-b
+      panelRole: development
+      prompt: Explain the refund timing for a previously completed return.
+  - id: fixture-retained-1
+    familyId: fixture-family-retained-a
+    contentHash: 71de5623528657c134faef9ffc6d5dccac2d7bb8421acf171ab6bbbd0ca6ac23
+    prompt: Cancel one cancellable item while retaining every other pending item.
+    payload:
+      id: fixture-retained-1
+      familyId: fixture-family-retained-a
+      panelRole: retained
+      prompt: Cancel one cancellable item while retaining every other pending item.
+  - id: fixture-retained-2
+    familyId: fixture-family-retained-b
+    contentHash: 6be55294fb7ad752c7206a0b232b275abf212ebb21c38939aa48622a981a82b0
+    prompt: Report a gift card balance without exposing unrelated payment details.
+    payload:
+      id: fixture-retained-2
+      familyId: fixture-family-retained-b
+      panelRole: retained
+      prompt: Report a gift card balance without exposing unrelated payment details.
+  - id: fixture-frozen-1
+    familyId: fixture-family-frozen-a
+    contentHash: 8d7ff8a144fb8b0936e0ac3a826a432184998652db3791161ac76645f220f558
+    prompt: Resolve a multi-order request while preserving every confirmation boundary.
+    payload:
+      id: fixture-frozen-1
+      familyId: fixture-family-frozen-a
+      panelRole: frozen_final
+      prompt: Resolve a multi-order request while preserving every confirmation boundary.
+  - id: fixture-frozen-2
+    familyId: fixture-family-frozen-b
+    contentHash: da4e660559af3227d6b45266859eb406eeee0227d8c4c3125211362b8c374bd1
+    prompt: Handle a policy exception by transferring to a human without mutating state.
+    payload:
+      id: fixture-frozen-2
+      familyId: fixture-family-frozen-b
+      panelRole: frozen_final
+      prompt: Handle a policy exception by transferring to a human without mutating state.
+panels:
+  - id: p0-correction
+    role: correction
+    passLabel: P0
+    taskIds:
+      - fixture-return-1
+    disclosurePhase: review
+    optimizerEligible: true
+  - id: p0-siblings
+    role: sibling_verification
+    passLabel: P0
+    taskIds:
+      - fixture-return-2
+    disclosurePhase: evaluation
+    optimizerEligible: false
+  - id: p1-correction
+    role: correction
+    passLabel: P1
+    taskIds:
+      - fixture-address-1
+    disclosurePhase: review
+    optimizerEligible: true
+  - id: p1-siblings
+    role: sibling_verification
+    passLabel: P1
+    taskIds:
+      - fixture-address-2
+    disclosurePhase: evaluation
+    optimizerEligible: false
+  - id: p2-correction
+    role: correction
+    passLabel: P2
+    taskIds:
+      - fixture-exchange-1
+    disclosurePhase: review
+    optimizerEligible: true
+  - id: p2-siblings
+    role: sibling_verification
+    passLabel: P2
+    taskIds:
+      - fixture-exchange-2
+    disclosurePhase: evaluation
+    optimizerEligible: false
+  - id: known-p0
+    role: cumulative_known
+    passLabel: P0
+    taskIds:
+      - fixture-return-1
+      - fixture-return-2
+    disclosurePhase: review
+    optimizerEligible: false
+  - id: known-p1
+    role: cumulative_known
+    passLabel: P1
+    taskIds:
+      - fixture-address-1
+      - fixture-address-2
+      - fixture-return-1
+      - fixture-return-2
+    disclosurePhase: review
+    optimizerEligible: false
+  - id: known-p2
+    role: cumulative_known
+    passLabel: P2
+    taskIds:
+      - fixture-address-1
+      - fixture-address-2
+      - fixture-exchange-1
+      - fixture-exchange-2
+      - fixture-return-1
+      - fixture-return-2
+    disclosurePhase: review
+    optimizerEligible: false
+  - id: training-eligible
+    role: training_eligible
+    passLabel: null
+    taskIds:
+      - fixture-address-1
+      - fixture-exchange-1
+      - fixture-return-1
+    disclosurePhase: review
+    optimizerEligible: true
+  - id: development
+    role: development
+    passLabel: null
+    taskIds:
+      - fixture-development-1
+      - fixture-development-2
+    disclosurePhase: evaluation
+    optimizerEligible: false
+  - id: retained
+    role: retained
+    passLabel: null
+    taskIds:
+      - fixture-retained-1
+      - fixture-retained-2
+    disclosurePhase: evaluation
+    optimizerEligible: false
+  - id: frozen-final
+    role: frozen_final
+    passLabel: null
+    taskIds:
+      - fixture-frozen-1
+      - fixture-frozen-2
+    disclosurePhase: final
+    optimizerEligible: false
+grader:
+  id: user-supplied-grader-v1
+  contentHash: ef7b016fbdc0fd0c34940620b1b28e6f5361aa224c6cafb878dfe044ba066c92
+  outcomeScale:
+    minimum: 0
+    maximum: 1
+evaluation:
+  seeds:
+    - 1701
+    - 1709
+    - 1721
+  repetitions: 3
+  confidenceLevel: 0.95
+  pairedBootstrapSamples: 10000
+contentHash: 2818238c43e2c088bce0026aa6604c923050dc94a57cfbabde03d3d4d6506b7a

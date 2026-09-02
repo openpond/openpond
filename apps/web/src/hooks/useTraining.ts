@@ -18,11 +18,16 @@ import type {
   TrainingStateResponse,
   LocalModelChatConfiguration,
   ModelComparisonDecision,
+  ContinualBenchIssueReview,
+  ContinualLearningDailyBatch,
+  ContinualLearningDailyBatchManifest,
+  ContinualLearningResponseTarget,
   ModelComparisonEntryStatus,
   ModelComparisonEvaluationLink,
   ModelComparisonQueueReleaseRequest,
   ModelComparisonSeries,
   ModelComparisonSeriesEntry,
+  ModelRun,
   ModelBinding,
   ModelProject,
   CrossSystemExpertBootstrapPreview,
@@ -199,6 +204,37 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         "/comparison-series",
         { series },
       ),
+    saveContinualBenchIssueReview: (review: ContinualBenchIssueReview) =>
+      mutate<ContinualBenchIssueReview>(
+        "save-continual-bench-issue-review",
+        "/continual-bench/issue-reviews",
+        { review },
+        "PUT",
+      ),
+    importContinualLearningDailyBatch: (
+      manifest: ContinualLearningDailyBatchManifest,
+      source: "json_upload" | "sealed_fixture" = "json_upload",
+    ) => mutate<ContinualLearningDailyBatch>(
+      "import-continual-learning-daily-batch",
+      "/continual-learning/daily-batches/import",
+      { manifest, source },
+    ),
+    saveContinualLearningDailyBatch: (batch: ContinualLearningDailyBatch) =>
+      mutate<ContinualLearningDailyBatch>(
+        "save-continual-learning-daily-batch",
+        "/continual-learning/daily-batches",
+        { batch },
+        "PUT",
+      ),
+    generateContinualLearningResponses: (input: {
+      seriesId: string;
+      batchIds?: string[];
+      targets?: ContinualLearningResponseTarget[];
+    }) => mutate<ContinualLearningDailyBatch[]>(
+      "generate-continual-learning-responses",
+      "/continual-learning/responses",
+      input,
+    ),
     sealComparisonSeries: (seriesId: string, expectedRevision: number) =>
       mutate<ModelComparisonSeries>(
         "seal-comparison-series",
@@ -211,6 +247,43 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         `/comparison-series/${encodeURIComponent(input.seriesId)}/releases`,
         input,
       ),
+    startComparisonEvaluation: (input: {
+      entryId: string;
+      cohortRole: ModelComparisonEvaluationLink["cohortRole"];
+      panelId?: string;
+      taskset?: { id: string; revision: number; contentHash: string };
+      targetModelVersionId?: string;
+      targetBaseCheckpointId?: string;
+      idempotencyKey?: string;
+      seeds?: number[];
+      repetitions?: number;
+      maximumSpendUsd?: number;
+      maxGpuSeconds?: number;
+    }) => mutate<ModelRun>(
+      "start-comparison-evaluation",
+      `/comparison-series-entries/${encodeURIComponent(input.entryId)}/evaluations`,
+      input,
+    ),
+    loadComparisonAttemptEvidence: (input: {
+      runId: string;
+      attemptId: string;
+      kind: "transcript" | "trace";
+    }) => connection
+      ? api.trainingRequest<{
+          runId: string;
+          attemptId: string;
+          kind: "transcript" | "trace";
+          artifactPath: string;
+          jsonPointer: string;
+          contentHash: string | null;
+          value: unknown;
+        }>(
+          connection,
+          `/model-runs/${encodeURIComponent(input.runId)}/attempts/${encodeURIComponent(input.attemptId)}/evidence?kind=${input.kind}`,
+          {},
+          "GET",
+        )
+      : Promise.resolve(null),
     linkComparisonRun: (input: {
       entryId: string;
       expectedStatus: ModelComparisonEntryStatus;

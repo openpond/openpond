@@ -1,9 +1,11 @@
+import { useState } from "react";
 import type {
   ModelComparisonBenchmarkReceipt,
   ModelRun,
 } from "@openpond/contracts";
 
 import { formatDateTime } from "../training/training-model-data";
+import { LabAttemptEvidenceDialog, type AttemptEvidencePayload } from "./LabAttemptEvidenceDialog";
 
 type DetailTab = "overview" | "comparison" | "activity";
 
@@ -11,11 +13,14 @@ export function LabModelComparisonEvaluationDetails({
   activeTab,
   receipt,
   run,
+  onLoadEvidence,
 }: {
   activeTab: DetailTab;
   receipt: ModelComparisonBenchmarkReceipt | null;
   run: ModelRun;
+  onLoadEvidence: (input: { runId: string; attemptId: string; kind: "transcript" | "trace" }) => Promise<AttemptEvidencePayload | null>;
 }) {
+  const [evidence, setEvidence] = useState<{ attemptId: string; kind: "transcript" | "trace" } | null>(null);
   const evaluation = run.evaluation?.benchmarkId === "model-comparison"
     ? run.evaluation
     : null;
@@ -25,7 +30,6 @@ export function LabModelComparisonEvaluationDetails({
   const completed = progress?.completedAttempts ?? receipt?.deterministic.completedTaskCount ?? 0;
   const total = progress?.totalAttempts ?? receipt?.deterministic.attemptedTaskCount ?? evaluation.attemptPlan[0].attemptCount;
   const percentComplete = total > 0 ? Math.min(100, (completed / total) * 100) : 0;
-  const model = evaluation.target.model;
 
   if (activeTab === "overview") {
     return (
@@ -50,8 +54,15 @@ export function LabModelComparisonEvaluationDetails({
           <dl className="labs-inline-facts">
             <Fact label="Target" value={evaluation.target.label} />
             <Fact label="Target type" value={titleCase(evaluation.target.kind)} />
-            <Fact label="Model" value={model ? `${model.providerId} / ${model.modelId}` : "Managed Model Version"} />
+            <Fact label="Model" value={evaluationTargetLabel(evaluation)} />
             <Fact label="Cohort" value={titleCase(evaluation.attemptPlan[0].split)} />
+            <Fact label="Panel" value={evaluation.panel ? `${evaluation.panel.id}${evaluation.panel.passLabel ? ` · ${evaluation.panel.passLabel}` : ""}` : "Legacy cohort"} />
+            <Fact label="Taskset release" value={`${run.taskset.id} · r${run.taskset.revision}`} />
+            <Fact label="Taskset hash" value={run.taskset.contentHash} />
+            <Fact label="Grader" value={`${evaluation.grader.id} · ${evaluation.grader.contentHash}`} />
+            <Fact label="Harness" value={run.harnessRelease ? `${run.harnessRelease.id} · ${run.harnessRelease.contentHash}` : "Unavailable"} />
+            <Fact label="Protocol" value={evaluation.series ? `${evaluation.series.protocol.id} · r${evaluation.series.protocol.revision}` : "Legacy comparison"} />
+            <Fact label="Protocol hash" value={evaluation.series?.protocol.contentHash ?? "Unavailable"} />
             <Fact label="Sampling" value={`${evaluation.seeds.length} seed${evaluation.seeds.length === 1 ? "" : "s"} × ${evaluation.repetitions} repetition${evaluation.repetitions === 1 ? "" : "s"}`} />
             <Fact label="Maximum spend" value={`$${evaluation.maximumSpendUsd.toFixed(2)}`} />
             <Fact label="Started" value={formatDateTime(run.startedAt)} />
@@ -64,6 +75,9 @@ export function LabModelComparisonEvaluationDetails({
             <Fact label="Judge score" value={receipt.judge ? `${receipt.judge.score.toFixed(1)} / 100` : "Not run"} />
             <Fact label="Observed spend" value={receipt.usage.observedSpendUsd === null ? "Unavailable" : `$${receipt.usage.observedSpendUsd.toFixed(3)}`} />
             <Fact label="Receipt sealed" value={formatDateTime(receipt.completedAt)} />
+            <Fact label="Receipt hash" value={receipt.contentHash} />
+            <Fact label="Evidence snapshot" value={`${receipt.evidenceSnapshot.id} · ${receipt.evidenceSnapshot.contentHash}`} />
+            <Fact label="Evaluation GPU" value={receipt.usage.evaluationGpuSeconds === null ? "Unavailable" : `${receipt.usage.evaluationGpuSeconds.toFixed(1)}s`} />
           </dl> : null}
           {!receipt && run.status === "running" ? <p className="labs-detail-copy">Aggregate scores and immutable attempt evidence appear as soon as the terminal receipt seals. Progress above is live.</p> : null}
           {run.failure ? <p className="training-banner error">{run.failure}</p> : null}
@@ -96,32 +110,45 @@ export function LabModelComparisonEvaluationDetails({
         <div><h2>Attempt evidence</h2><p>Each task retains its seed, deterministic outcome, hashes, and failure classification.</p></div>
         <span>{receipt?.attempts.length ?? completed} of {total}</span>
       </div>
-      {receipt ? <div className="training-table-wrap">
+      {receipt ? <><div className="training-table-wrap">
         <table className="training-data-table">
-          <thead><tr><th>Task</th><th>Seed</th><th>Status</th><th>Passed</th><th>Score</th><th>Judge</th><th>Failure</th></tr></thead>
+          <thead><tr><th>Task / attempt</th><th>Seed</th><th>Status</th><th>Passed</th><th>Score</th><th>Judge</th><th>Latency</th><th>Failure</th><th>Evidence</th></tr></thead>
           <tbody>{receipt.attempts.map((attempt) => <tr key={`${attempt.taskId}:${attempt.seed}:${attempt.repetition}`}>
-            <td>{attempt.taskId}</td>
-            <td>{attempt.seed}</td>
+            <td><strong>{attempt.taskId}</strong><small className="labs-mono-value">{attempt.attemptId ?? "No attempt id"}</small></td>
+            <td>{attempt.seed}<small>rep {attempt.repetition + 1}</small></td>
             <td>{titleCase(attempt.status)}</td>
             <td>{attempt.passed === null ? "—" : attempt.passed ? "Yes" : "No"}</td>
             <td>{attempt.deterministicScore?.toFixed(3) ?? "—"}</td>
-            <td>{attempt.judgeScore === null ? "—" : attempt.judgeScore.toFixed(1)}</td>
+            <td>{attempt.judgeScore === null ? "—" : <>{attempt.judgeScore.toFixed(1)}<small>{attempt.judgePreference ? titleCase(attempt.judgePreference) : null}</small></>}</td>
+            <td>{attempt.latencyMs === null ? "—" : `${(attempt.latencyMs / 1_000).toFixed(1)}s`}</td>
             <td>{attempt.failureClass ? titleCase(attempt.failureClass) : "—"}</td>
+            <td><div className="labs-attempt-evidence-actions">
+              <button disabled={!attempt.attemptId || !attempt.transcriptArtifact} type="button" onClick={() => attempt.attemptId && setEvidence({ attemptId: attempt.attemptId, kind: "transcript" })}>Transcript</button>
+              <button disabled={!attempt.attemptId || !attempt.traceArtifact} type="button" onClick={() => attempt.attemptId && setEvidence({ attemptId: attempt.attemptId, kind: "trace" })}>Trace</button>
+            </div></td>
           </tr>)}</tbody>
         </table>
-      </div> : <p className="labs-detail-copy">{completed} tasks have completed. Per-task evidence is published atomically with the terminal receipt so a partial run cannot be mistaken for a final result.</p>}
+      </div>{evidence ? <LabAttemptEvidenceDialog attemptId={evidence.attemptId} kind={evidence.kind} onClose={() => setEvidence(null)} onLoad={onLoadEvidence} runId={run.id} /> : null}</> : <p className="labs-detail-copy">{completed} tasks have completed. Per-task evidence is published atomically with the terminal receipt so a partial run cannot be mistaken for a final result.</p>}
     </section>
   );
 }
 
-export function comparisonReceipt(run: ModelRun): ModelComparisonBenchmarkReceipt | null {
-  return run.receipt?.schemaVersion === "openpond.modelComparisonBenchmarkReceipt.v1"
-    ? run.receipt
-    : null;
-}
+type ModelComparisonEvaluation = Extract<
+  NonNullable<ModelRun["evaluation"]>,
+  { benchmarkId: "model-comparison" }
+>;
 
-export function comparisonRunScore(run: ModelRun): number | null {
-  return comparisonReceipt(run)?.deterministic.passRate ?? null;
+function evaluationTargetLabel(evaluation: ModelComparisonEvaluation): string {
+  if (evaluation.target.model) {
+    return `${evaluation.target.model.providerId} / ${evaluation.target.model.modelId}`;
+  }
+  if (evaluation.target.kind === "base_model") {
+    const parent = evaluation.comparisonPair?.parent;
+    return parent?.kind === "base_model"
+      ? `${parent.id} @ ${parent.revision}`
+      : evaluation.target.label;
+  }
+  return evaluation.target.modelVersionId ?? evaluation.target.label;
 }
 
 function formatPassRate(receipt: ModelComparisonBenchmarkReceipt): string {

@@ -17,6 +17,7 @@ export const MARKETING_PORTFOLIO_HARNESS_ADAPTER_ID = "marketing-portfolio-v1";
 
 export const marketingPortfolioManagedRlAdapter = {
   id: MARKETING_PORTFOLIO_HARNESS_ADAPTER_ID,
+  priority: 100,
   supports(input: { taskset: Taskset; environmentId: string }): boolean {
     const benchmark = input.taskset.environment.metadata.benchmark;
     const benchmarkId = benchmark && typeof benchmark === "object" && !Array.isArray(benchmark)

@@ -24,6 +24,7 @@ export type Command =
   | "apps"
   | "repo"
   | "sandbox"
+  | "bench"
   | "training"
   | "taskset"
   | "desktop-test"

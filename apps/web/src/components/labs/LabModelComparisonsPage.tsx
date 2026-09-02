@@ -94,7 +94,7 @@ export function LabModelComparisonsPage({
       <ModelProjectPageHeader
         title="Model Comparisons"
         description="Saved continual-learning series, exact branch lineage, ordinary Evaluation Runs, and explicit Master promotion."
-        actions={<button className="training-button" disabled={!state || Boolean(training.busyAction)} type="button" onClick={() => setCreateOpen(true)}>New series</button>}
+        actions={<button className="training-button" disabled={!state || Boolean(training.busyAction)} type="button" onClick={() => setCreateOpen(true)}>New comparison</button>}
         metrics={[
           { label: "Series", value: summaries.length, hint: `${active} active` },
           { label: "Needs attention", value: attention, hint: "failed, held, or candidate releases" },

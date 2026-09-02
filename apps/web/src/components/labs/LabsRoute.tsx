@@ -283,7 +283,7 @@ export function LabsRoute({
         tasksets: { kind: "dataset" as const, label: "Taskset Library" },
         scorers: { kind: "scoring" as const, label: "Scorers" },
         evaluations: { kind: "evaluation" as const, label: "Evaluations" },
-        reviews: { kind: "review" as const, label: "Human Review" },
+        reviews: { kind: "review" as const, label: "Evals" },
       };
       const definition = definitions[modelsRoute.section];
       const resourceLabel = libraryResourceLabel(
@@ -696,6 +696,8 @@ export function LabsRoute({
             onSelectedEvaluationIdChange={(evaluationId) => navigateModelsRoute(modelLibraryRoute("evaluations", evaluationId))}
             selectedEvaluationId={modelsRoute.resourceId}
             state={training.training.payload}
+            training={training.training}
+            onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
           />
         ) : (
           <LabHumanReviewsPage
@@ -789,6 +791,8 @@ export function LabsRoute({
           })}
           selectedEvaluationId={modelsRoute.resourceId}
           state={training.training.payload}
+          training={training.training}
+          onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
         />
       ) : activeTab === "serving" ? (
         <LabServingPage

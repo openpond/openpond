@@ -3,6 +3,7 @@ import {
   ModelComparisonDecisionSchema,
   ModelComparisonEntryStatusSchema,
   ModelComparisonEvaluationLinkSchema,
+  VersionedReleaseRefSchema,
 } from "@openpond/contracts";
 
 import type { createModelComparisonEvaluationService } from "./model-comparison-evaluation-service.js";
@@ -47,6 +48,11 @@ export async function handleModelComparisonAction(input: {
       return handled(await input.evaluations.start({
         entryId: requiredString(payload.entryId, "entryId"),
         cohortRole: cohortRole(payload.cohortRole),
+        panelId: string(payload.panelId) ?? undefined,
+        taskset: payload.taskset === undefined ? undefined : VersionedReleaseRefSchema.parse(payload.taskset),
+        targetModelVersionId: string(payload.targetModelVersionId) ?? undefined,
+        targetBaseCheckpointId: string(payload.targetBaseCheckpointId) ?? undefined,
+        idempotencyKey: string(payload.idempotencyKey) ?? undefined,
         seeds: payload.seeds === undefined ? undefined : integerArray(payload.seeds, "seeds"),
         repetitions: payload.repetitions === undefined ? undefined : positiveInteger(payload.repetitions, "repetitions"),
         maximumSpendUsd: payload.maximumSpendUsd === undefined ? undefined : positiveNumber(payload.maximumSpendUsd, "maximumSpendUsd"),
@@ -55,13 +61,17 @@ export async function handleModelComparisonAction(input: {
     case "start_model_comparison_reference_evaluation":
       return handled(await input.evaluations.startReference({
         seriesId: requiredString(payload.seriesId, "seriesId"),
+        entryId: string(payload.entryId) ?? undefined,
         cohortRole: cohortRole(payload.cohortRole),
+        panelId: string(payload.panelId) ?? undefined,
+        taskset: payload.taskset === undefined ? undefined : VersionedReleaseRefSchema.parse(payload.taskset),
         targetKind: payload.targetKind === "base_model" ? "base_model" : "external_reference",
         label: requiredString(payload.label, "label"),
         model: ChatModelRefSchema.parse(payload.model),
         seeds: payload.seeds === undefined ? undefined : integerArray(payload.seeds, "seeds"),
         repetitions: payload.repetitions === undefined ? undefined : positiveInteger(payload.repetitions, "repetitions"),
         maximumSpendUsd: payload.maximumSpendUsd === undefined ? undefined : positiveNumber(payload.maximumSpendUsd, "maximumSpendUsd"),
+        idempotencyKey: string(payload.idempotencyKey) ?? undefined,
       }));
     case "retry_model_comparison_entry":
       return handled(await input.series.retryEntry({ entryId: requiredString(payload.entryId, "entryId") }));
@@ -112,7 +122,7 @@ function integerArray(value: unknown, name: string): number[] {
   }
   return value as number[];
 }
-function cohortRole(value: unknown): "current" | "development" | "retained" | "prior_disclosed" | "frozen_final" {
-  if (value === "current" || value === "development" || value === "retained" || value === "prior_disclosed" || value === "frozen_final") return value;
+function cohortRole(value: unknown): "current" | "correction" | "sibling_verification" | "cumulative_known" | "development" | "retained" | "prior_disclosed" | "frozen_final" {
+  if (value === "current" || value === "correction" || value === "sibling_verification" || value === "cumulative_known" || value === "development" || value === "retained" || value === "prior_disclosed" || value === "frozen_final") return value;
   throw new Error("cohortRole is invalid.");
 }

@@ -68,6 +68,35 @@ describe("SqliteStore hardening", () => {
     });
   });
 
+  test("migrates version 52 stores to immutable Model Currency snapshot storage", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const initialStore = new SqliteStore(storeDir);
+      await initialStore.snapshot();
+      await initialStore.close();
+
+      const oldDb = openTestDatabase(storePath);
+      await run(oldDb, "DROP TABLE model_currency_snapshots");
+      await run(oldDb, "PRAGMA user_version = 52");
+      await close(oldDb);
+
+      const migratedStore = new SqliteStore(storeDir);
+      await migratedStore.snapshot();
+      await migratedStore.close();
+
+      const migratedDb = openTestDatabase(storePath);
+      try {
+        const columns = await all<{ name: string }>(migratedDb, "PRAGMA table_info(model_currency_snapshots)");
+        expect(columns.map((column) => column.name)).toEqual([
+          "id", "series_id", "entry_id", "evidence_state", "content_hash", "payload", "created_at",
+        ]);
+        expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      } finally {
+        await close(migratedDb);
+      }
+    });
+  });
+
   test("migrates version 43 usage storage to cache telemetry columns", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");

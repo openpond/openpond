@@ -4,7 +4,7 @@ import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
 import type { TaskDataRecord, Taskset } from "@openpond/contracts";
 import "./marketing-portfolio-managed-rl-adapter.js";
-import "./tau3-retail-managed-rl-adapter.js";
+import "./portable-jsonl-managed-rl-adapter.js";
 import {
   resolveManagedRlHarnessAdapter,
   type ManagedRlLocalRolloutClaim,

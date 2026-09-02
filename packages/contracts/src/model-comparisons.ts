@@ -7,6 +7,7 @@ import {
   ReleaseTimestampSchema,
   VersionedReleaseRefSchema,
 } from "./release-core.js";
+import { ContinualBenchmarkProtocolReleaseSchema } from "./continual-bench.js";
 
 export const ModelComparisonSeriesStatusSchema = z.enum(["draft", "active", "completed", "archived"]);
 export const ModelComparisonEntryStatusSchema = z.enum([
@@ -88,6 +89,8 @@ export const ModelComparisonSeriesSchema = z.object({
     frozenFinal: VersionedReleaseRefSchema,
   }).strict(),
   grader: ImmutableReleaseRefSchema,
+  benchmarkProtocol: ContinualBenchmarkProtocolReleaseSchema.nullable().default(null),
+  automaticEvaluation: z.object({ enabled: z.boolean() }).strict().default({ enabled: false }),
   residualProfile: z.object({
     profileId: ReleaseIdSchema,
     serializedEnvelopeRank: z.number().int().positive().max(1_024),
@@ -187,7 +190,9 @@ export const ModelComparisonEvaluationLinkSchema = z.object({
   modelVersionId: ReleaseIdSchema,
   taskset: VersionedReleaseRefSchema,
   grader: ImmutableReleaseRefSchema,
-  cohortRole: z.enum(["current", "development", "retained", "prior_disclosed", "frozen_final"]),
+  cohortRole: z.enum(["current", "correction", "sibling_verification", "cumulative_known", "development", "retained", "prior_disclosed", "frozen_final"]),
+  panelId: ReleaseIdSchema.nullable().default(null),
+  protocol: z.object({ id: ReleaseIdSchema, revision: z.number().int().positive(), contentHash: ReleaseHashSchema }).strict().nullable().default(null),
 }).strict();
 
 export const ModelComparisonRunAttemptSchema = z.object({

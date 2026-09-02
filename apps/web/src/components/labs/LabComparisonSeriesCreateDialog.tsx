@@ -129,6 +129,8 @@ export function LabComparisonSeriesCreateDialog({
         frozenFinal: exactRef(selected[4]!),
       },
       grader: { id: reward.graderId, contentHash: contentHash(grader) },
+      benchmarkProtocol: null,
+      automaticEvaluation: { enabled: false },
       residualProfile: {
         profileId: `${project.id}-uniform-residual-v1`,
         serializedEnvelopeRank: envelopeRank,

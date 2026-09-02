@@ -66,15 +66,36 @@ function recipe(): TrainingRecipe {
 
 function entry(parent: ModelComparisonSeriesEntry["parent"]): ModelComparisonSeriesEntry {
   return {
+    seriesId: "series-1",
+    scheduleEntryId: "schedule-p0",
+    taskset: { id: "taskset-p0", revision: 1, contentHash: HASH },
     trainableRank: 3,
     parent,
   } as ModelComparisonSeriesEntry;
 }
 
+function executionStore(overrides: Record<string, unknown> = {}): SqliteStore {
+  return {
+    getModelComparisonSeries: vi.fn(async () => ({
+      scheduleSealedAt: "2026-09-02T12:00:00.000Z",
+      benchmarkProtocol: {
+        resources: { maximumTrainingGpuSeconds: 180_000 },
+        schedule: [{
+          scheduleEntryId: "schedule-p0",
+          optimizerGroupsPerTask: 1,
+          trajectoriesPerGroup: 4,
+        }],
+      },
+    })),
+    getTasksetRevision: vi.fn(async () => ({ tasks: [{ id: "task-1" }, { id: "task-2" }] })),
+    ...overrides,
+  } as unknown as SqliteStore;
+}
+
 describe("Comparison Series executable recipe", () => {
   it("starts base-parent arms fresh at the sealed trainable rank", async () => {
     const resolved = await comparisonSeriesTrainingRecipe({
-      store: {} as SqliteStore,
+      store: executionStore(),
       recipe: { ...recipe(), continuation: {
         schemaVersion: "openpond.crossJobContinuationRequest.v1",
         parentArtifact: { id: "stale", contentHash: HASH },
@@ -86,7 +107,40 @@ describe("Comparison Series executable recipe", () => {
 
     if (resolved.schemaVersion !== "openpond.rftRecipe.v1") throw new Error("Expected RFT recipe.");
     expect(resolved.lora.rank).toBe(3);
+    expect(resolved.rollout.groupSize).toBe(4);
+    expect(resolved.optimizer.maxSteps).toBe(2);
+    expect(resolved.resourceLimits.maxGpuSeconds).toBe(2_400);
+    expect(resolved.resourceLimits.maxRollouts).toBe(8);
     expect("continuation" in resolved).toBe(false);
+  });
+
+  it("honors repeated sealed optimizer groups instead of collapsing a pass to one group per task", async () => {
+    const store = executionStore({
+      getModelComparisonSeries: vi.fn(async () => ({
+        scheduleSealedAt: "2026-09-02T12:00:00.000Z",
+        benchmarkProtocol: {
+          resources: { maximumTrainingGpuSeconds: 180_000 },
+          schedule: [{
+            scheduleEntryId: "schedule-p0",
+            optimizerGroupsPerTask: 16,
+            trajectoriesPerGroup: 4,
+          }],
+        },
+      })),
+      getTasksetRevision: vi.fn(async () => ({ tasks: [{ id: "task-1" }] })),
+    });
+
+    const resolved = await comparisonSeriesTrainingRecipe({
+      store,
+      recipe: recipe(),
+      entry: entry({ kind: "base_model", id: "base-model", revision: "revision-1" }),
+    });
+
+    if (resolved.schemaVersion !== "openpond.rftRecipe.v1") throw new Error("Expected RFT recipe.");
+    expect(resolved.optimizer.maxSteps).toBe(16);
+    expect(resolved.rollout.groupSize).toBe(4);
+    expect(resolved.resourceLimits.maxRollouts).toBe(64);
+    expect(resolved.resourceLimits.maxGpuSeconds).toBe(7_200);
   });
 
   it("binds a child arm to the exact Sandbox adapter and resets its optimizer", async () => {
@@ -100,11 +154,11 @@ describe("Comparison Series executable recipe", () => {
         managedRlOutputMetadata: { checkpointId: "sandbox-checkpoint-1" },
       },
     } as unknown as TrainingArtifact;
-    const store = {
+    const store = executionStore({
       getModelVersion: vi.fn(async () => ({ contentHash: HASH, artifactLineageId: "lineage-1" })),
       getModelArtifactLineage: vi.fn(async () => ({ artifactId: "training-artifact-1" })),
       getTrainingArtifact: vi.fn(async () => artifact),
-    } as unknown as SqliteStore;
+    });
 
     const resolved = await comparisonSeriesTrainingRecipe({
       store,

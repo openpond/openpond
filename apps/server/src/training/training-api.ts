@@ -1,6 +1,10 @@
 import {
   BaseModelPreferenceSchema,
   ChatModelRefSchema,
+  ContinualBenchIssueReviewSchema,
+  ContinualLearningDailyBatchManifestSchema,
+  ContinualLearningDailyBatchSchema,
+  ContinualLearningResponseTargetSchema,
   CodexReasoningEffortSchema,
   ApproveDatasetImportMappingRequestSchema,
   CreateHuggingFaceDatasetImportRequestSchema,
@@ -111,7 +115,10 @@ import {
 } from "./training-benchmark-actions.js";
 import { createModelComparisonSeriesService } from "./model-comparison-series-service.js";
 import { createModelComparisonEvaluationService } from "./model-comparison-evaluation-service.js";
+import { createModelComparisonEvaluationScheduler } from "./model-comparison-evaluation-scheduler.js";
+import { createModelCurrencyProjectionService } from "./model-currency-projection-service.js";
 import { handleModelComparisonAction } from "./training-api-model-comparison-actions.js";
+import { readModelComparisonAttemptEvidence } from "./model-comparison-evidence-reader.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
 import {
   boundedInteger,
@@ -157,13 +164,24 @@ export function createTrainingApi(deps: {
   modelStream?: import("./taskset-work-attempt-runner.js").TasksetWorkModelStream;
 }) {
   const comparisonSeries = createModelComparisonSeriesService(deps.store);
+  const modelCurrency = createModelCurrencyProjectionService(deps.store);
+  let reconcileAutomaticEvaluations: () => Promise<unknown> = async () => null;
   const comparisonEvaluations = createModelComparisonEvaluationService({
     store: deps.store,
     storeDir: deps.storeDir,
     comparisonSeries,
     modelStream: deps.modelStream,
+    projectCurrency: modelCurrency.reconcileEntry,
+    reconcileAutomatic: () => reconcileAutomaticEvaluations(),
   });
-  void comparisonEvaluations.reconcileInterrupted().catch(() => undefined);
+  const comparisonEvaluationScheduler = createModelComparisonEvaluationScheduler({ store: deps.store, evaluations: comparisonEvaluations });
+  reconcileAutomaticEvaluations = comparisonEvaluationScheduler.reconcileAutomatic;
+  void (async () => {
+    await comparisonEvaluations.reconcileInterrupted();
+    await comparisonSeries.reconcileEntries();
+    await modelCurrency.reconcileAll();
+    await comparisonEvaluationScheduler.reconcileAutomatic();
+  })().catch(() => undefined);
   async function request(
     action: string,
     payload: unknown,
@@ -185,6 +203,134 @@ export function createTrainingApi(deps: {
           ?? requestUrl?.searchParams.get("profileId")
           ?? "default",
       );
+    }
+    if (action === "model_comparison_attempt_evidence") {
+      const kind = input.kind === "trace" ? "trace" : input.kind === "transcript" ? "transcript" : null;
+      if (!kind) throw new Error("kind must be transcript or trace.");
+      return readModelComparisonAttemptEvidence({
+        store: deps.store,
+        storeDir: deps.storeDir,
+        runId: requiredString(input.runId, "runId"),
+        attemptId: requiredString(input.attemptId, "attemptId"),
+        kind,
+      });
+    }
+    if (action === "save_continual_bench_issue_review") {
+      return deps.store.saveContinualBenchIssueReview(ContinualBenchIssueReviewSchema.parse(input.review));
+    }
+    if (action === "import_continual_learning_daily_batch") {
+      const manifest = ContinualLearningDailyBatchManifestSchema.parse(input.manifest);
+      const series = await deps.store.getModelComparisonSeries(manifest.seriesId);
+      if (!series || series.status !== "active" || !series.scheduleSealedAt) {
+        throw new Error("Daily task intake requires an active series with a sealed schedule.");
+      }
+      const scheduleEntry = series.schedule.find((entry) => entry.id === manifest.scheduleEntryId);
+      if (!scheduleEntry || scheduleEntry.role !== "daily_residual") {
+        throw new Error("A daily task batch must target a daily-residual schedule entry.");
+      }
+      if (scheduleEntry.ordinal !== manifest.dayOrdinal) {
+        throw new Error("The daily batch ordinal must match its sealed schedule entry.");
+      }
+      if (JSON.stringify(manifest.sourceTaskset) !== JSON.stringify(series.eligibleTaskPool)) {
+        throw new Error("The daily batch must reference the series' exact eligible task-pool release.");
+      }
+      const sourceTaskset = await deps.store.getTasksetRevision(
+        manifest.sourceTaskset.id,
+        manifest.sourceTaskset.revision,
+        manifest.sourceTaskset.contentHash,
+      );
+      if (!sourceTaskset) throw new Error("The daily batch source Taskset release was not found.");
+      const tasksById = new Map(sourceTaskset.tasks.map((task) => [task.id, task]));
+      const selectedTasks = manifest.taskIds.map((taskId) => {
+        const task = tasksById.get(taskId);
+        if (!task) throw new Error(`Daily task ${taskId} is not in the referenced eligible task pool.`);
+        if (task.split !== "train") throw new Error(`Daily task ${taskId} is not in the train split.`);
+        return task;
+      });
+      const existingBatches = await deps.store.listContinualLearningDailyBatches({ seriesId: series.id });
+      const existingIdentity = existingBatches.find((batch) => (
+        batch.id === manifest.id
+        || batch.dayOrdinal === manifest.dayOrdinal
+        || batch.scheduleEntryId === manifest.scheduleEntryId
+      ));
+      if (existingIdentity) {
+        if (existingIdentity.id === manifest.id) return existingIdentity;
+        throw new Error("That series day or schedule entry already has a task batch.");
+      }
+      const previouslyImported = new Set(existingBatches.flatMap((batch) => batch.tasks.map((task) => task.taskId)));
+      const repeated = manifest.taskIds.find((taskId) => previouslyImported.has(taskId));
+      if (repeated) throw new Error(`Daily task ${repeated} was already imported for this series.`);
+      const now = new Date().toISOString();
+      const observedAttempts = new Map(manifest.observedAttempts.map((attempt) => [`${attempt.taskId}:${intakeTargetKey(attempt.target)}`, attempt]));
+      const requestedPolicies = manifest.observedAttempts.flatMap((attempt) => typeof attempt.target === "string" ? [] : [attempt.target]);
+      return deps.store.saveContinualLearningDailyBatch(ContinualLearningDailyBatchSchema.parse({
+        schemaVersion: "openpond.continualLearningDailyBatch.v1",
+        id: manifest.id,
+        seriesId: manifest.seriesId,
+        scheduleEntryId: manifest.scheduleEntryId,
+        dayOrdinal: manifest.dayOrdinal,
+        label: manifest.availableAt.slice(0, 10),
+        source: input.source === "sealed_fixture" ? "sealed_fixture" : "json_upload",
+        sourceFileName: manifest.sourceFileName,
+        sourceTaskset: manifest.sourceTaskset,
+        tasks: selectedTasks.map((task) => ({
+          taskId: task.id,
+          taskContentHash: contentHash(task),
+          familyKey: task.clusterKey || task.id,
+          disposition: null,
+          oracleReview: "pending",
+          note: "",
+          observedAttempt: observedAttempts.get(`${task.id}:current`)?.attempt ?? null,
+          baselineAttempt: observedAttempts.get(`${task.id}:base`)?.attempt ?? null,
+          responses: manifest.observedAttempts.flatMap((attempt) => attempt.taskId === task.id && typeof attempt.target !== "string"
+            ? [{ target: attempt.target, attempt: attempt.attempt }]
+            : []),
+          stagedAt: null,
+          queuedEntry: null,
+        })),
+        intakeEvaluation: {
+          status: manifest.observedAttempts.length ? "ready" : "awaiting",
+          requestedTargets: [...new Set(manifest.observedAttempts.flatMap((attempt) => typeof attempt.target === "string" ? [attempt.target] : []))],
+          requestedPolicies,
+          runs: manifest.observedAttempts.flatMap((attempt) => {
+            if (typeof attempt.target === "string" || attempt.attempt.source !== "evaluation_run") return [];
+            return [{ target: attempt.target, runId: attempt.attempt.evaluationRunId }];
+          }),
+          baselineRunId: evaluationRunId(manifest.observedAttempts.find((attempt) => attempt.target === "base")?.attempt),
+          currentRunId: evaluationRunId(manifest.observedAttempts.find((attempt) => attempt.target === "current")?.attempt),
+          currentPolicy: null,
+          failure: null,
+        },
+        status: "pending",
+        queuedEntry: null,
+        reviewedBy: null,
+        reviewedAt: null,
+        availableAt: manifest.availableAt,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      }));
+    }
+    if (action === "save_continual_learning_daily_batch") {
+      return deps.store.saveContinualLearningDailyBatch(ContinualLearningDailyBatchSchema.parse(input.batch));
+    }
+    if (action === "generate_continual_learning_responses") {
+      const seriesId = requiredString(input.seriesId, "seriesId");
+      const requestedIds = Array.isArray(input.batchIds)
+        ? new Set(input.batchIds.map((value) => requiredString(value, "batchId")))
+        : null;
+      const targets = Array.isArray(input.targets)
+        ? [...new Map(input.targets.map((value) => {
+            const target = ContinualLearningResponseTargetSchema.parse(value);
+            return [intakeTargetKey(target), target] as const;
+          })).values()]
+        : undefined;
+      if (targets && !targets.length) throw new Error("Select at least one model for response generation.");
+      const batches = (await deps.store.listContinualLearningDailyBatches({ seriesId }))
+        .filter((batch) => (!requestedIds || requestedIds.has(batch.id)) && (batch.intakeEvaluation.status === "awaiting" || batch.intakeEvaluation.status === "failed"));
+      const started = [];
+      for (const batch of batches) started.push(await comparisonEvaluations.startIntake({ batchId: batch.id, targets }));
+      return started;
     }
     const comparisonAction = await handleModelComparisonAction({
       action,
@@ -1280,6 +1426,7 @@ export function createTrainingApi(deps: {
       loadRun: (id) => deps.store.getModelRun(id),
       training: deps.training,
       harnessRefinerBenchmarks: deps.harnessRefinerBenchmarks,
+      comparisonEvaluations,
     });
     if (action === "build_bundle") return deps.training.buildBundle(requiredString(input.planId, "planId"));
     if (action === "approve_training") return deps.training.approve({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), approvedBy: string(input.approvedBy) ?? undefined, maximumCostUsd: nullableNumber(input.maximumCostUsd) });
@@ -1438,6 +1585,10 @@ export function createTrainingApi(deps: {
 
   async function state(profileId: string) {
     await deps.benchmarkTasksets.ensureHarnessRefiner({ profileId });
+    await comparisonSeries.reconcileEntries();
+    await comparisonEvaluations.reconcileIntakeBatches();
+    await modelCurrency.reconcileAll();
+    await comparisonEvaluationScheduler.reconcileAutomatic();
     const [
       sources,
       creations,
@@ -1450,6 +1601,9 @@ export function createTrainingApi(deps: {
       minerRuns,
       modelProjects,
       comparisonSeriesRecords,
+      modelCurrencySnapshots,
+      continualBenchIssueReviews,
+      continualLearningDailyBatches,
       modelTasksets,
       execution,
     ] = await Promise.all([
@@ -1468,10 +1622,12 @@ export function createTrainingApi(deps: {
       // profile changes even though its Project, Runs, and Versions remain
       // visible on the Models dashboard.
       deps.store.listModelComparisonSeries(),
+      deps.store.listModelCurrencySnapshots(),
+      deps.store.listContinualBenchIssueReviews(),
+      deps.store.listContinualLearningDailyBatches(),
       deps.store.listTasksets(),
       deps.training.state(),
     ]);
-    await comparisonSeries.reconcileEntries();
     const [reconciledModelVersions, reconciledModelRuns, reconciledComparisonSeriesEntries] = await Promise.all([
       deps.store.listModelVersions(),
       deps.store.listModelRuns(),
@@ -1519,6 +1675,9 @@ export function createTrainingApi(deps: {
       modelRuns: reconciledModelRuns,
       comparisonSeries: comparisonSeriesRecords,
       comparisonSeriesEntries: reconciledComparisonSeriesEntries,
+      modelCurrencySnapshots,
+      continualBenchIssueReviews,
+      continualLearningDailyBatches,
       modelTasksets,
       ...execution,
       activityRevision: activity.revision,
@@ -1780,6 +1939,10 @@ function record(value: unknown): Record<string, unknown> { return value && typeo
 function string(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function requiredString(value: unknown, name: string): string { const parsed = string(value); if (!parsed) throw new Error(`${name} is required.`); return parsed; }
 function nullableString(value: unknown): string | null { return string(value); }
+function evaluationRunId(value: unknown): string | null { return string(record(value).evaluationRunId); }
+function intakeTargetKey(value: "base" | "current" | { kind: string; id: string }): string {
+  return typeof value === "string" ? value : `${value.kind}:${value.id}`;
+}
 function optionalStringArray(value: unknown): string[] | undefined { return value === undefined ? undefined : requiredStringArray(value, "value"); }
 function requiredRecordArray(value: unknown, name: string): Record<string, unknown>[] {
   if (!Array.isArray(value) || !value.length || value.some((item) => !item || typeof item !== "object" || Array.isArray(item))) {

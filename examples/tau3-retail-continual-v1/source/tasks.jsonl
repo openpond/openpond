@@ -1,0 +1,12 @@
+{"id":"fixture-return-1","familyId":"fixture-family-return","passLabel":"P0","prompt":"Return a damaged chair and request an exchange only after the return policy is confirmed."}
+{"id":"fixture-return-2","familyId":"fixture-family-return","passLabel":"P0","prompt":"Return a bottle while leaving the other delivered items unchanged."}
+{"id":"fixture-address-1","familyId":"fixture-family-address","passLabel":"P1","prompt":"Update the shipping address on one pending order after confirming the destination."}
+{"id":"fixture-address-2","familyId":"fixture-family-address","passLabel":"P1","prompt":"Change the account default address without changing completed orders."}
+{"id":"fixture-exchange-1","familyId":"fixture-family-exchange","passLabel":"P2","prompt":"Exchange a jacket for the same size in red and preserve the payment method."}
+{"id":"fixture-exchange-2","familyId":"fixture-family-exchange","passLabel":"P2","prompt":"Exchange a laptop configuration and state the price difference before confirmation."}
+{"id":"fixture-development-1","familyId":"fixture-family-development-a","panelRole":"development","prompt":"Find the delivery status of a shipped package without modifying the order."}
+{"id":"fixture-development-2","familyId":"fixture-family-development-b","panelRole":"development","prompt":"Explain the refund timing for a previously completed return."}
+{"id":"fixture-retained-1","familyId":"fixture-family-retained-a","panelRole":"retained","prompt":"Cancel one cancellable item while retaining every other pending item."}
+{"id":"fixture-retained-2","familyId":"fixture-family-retained-b","panelRole":"retained","prompt":"Report a gift card balance without exposing unrelated payment details."}
+{"id":"fixture-frozen-1","familyId":"fixture-family-frozen-a","panelRole":"frozen_final","prompt":"Resolve a multi-order request while preserving every confirmation boundary."}
+{"id":"fixture-frozen-2","familyId":"fixture-family-frozen-b","panelRole":"frozen_final","prompt":"Handle a policy exception by transferring to a human without mutating state."}

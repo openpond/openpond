@@ -37,6 +37,7 @@ const TRANSITIONS: Record<ModelComparisonEntryStatus, ReadonlySet<ModelCompariso
 export function createModelComparisonSeriesService(store: SqliteStore) {
   async function saveSeries(input: unknown): Promise<ModelComparisonSeries> {
     const series = ModelComparisonSeriesSchema.parse(input);
+    verifyBenchmarkProtocol(series);
     const project = await store.getModelProject(series.modelProjectId);
     if (!project || project.profileId !== series.profileId) {
       throw new Error("The Model Project does not belong to the Comparison Series Profile.");
@@ -56,6 +57,12 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     const series = await requireSeries(input.seriesId);
     if (series.scheduleSealedAt) return series;
     requireRevision(series, input.expectedRevision);
+    const competingSeries = (await store.listModelComparisonSeries({ modelProjectId: series.modelProjectId }))
+      .find((candidate) => candidate.id !== series.id && candidate.status === "active" && candidate.scheduleSealedAt);
+    if (competingSeries) {
+      throw new Error(`Model Project ${series.modelProjectId} already has active continual series ${competingSeries.id}. Complete or archive it before sealing another.`);
+    }
+    verifyBenchmarkProtocol(series);
     await requireSeriesTasksets(series);
     const timestamp = new Date().toISOString();
     return store.saveModelComparisonSeries({
@@ -621,6 +628,20 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     entry: ModelComparisonSeriesEntry,
     evaluation: ModelComparisonEvaluationLink,
   ): Promise<boolean> {
+    if (series.benchmarkProtocol && evaluation.panelId && evaluation.protocol) {
+      if (
+        evaluation.protocol.id !== series.benchmarkProtocol.id
+        || evaluation.protocol.revision !== series.benchmarkProtocol.revision
+        || evaluation.protocol.contentHash !== series.benchmarkProtocol.contentHash
+      ) return false;
+      const panel = series.benchmarkProtocol.panels.find((candidate) => candidate.id === evaluation.panelId);
+      if (!panel || panel.role === "training_eligible" || !sameRef(panel.taskset, evaluation.taskset)) return false;
+      if (evaluation.cohortRole !== "current" && evaluation.cohortRole !== "prior_disclosed" && evaluation.cohortRole !== panel.role) return false;
+      if (panel.role === "frozen_final") return entry.ordinal === series.schedule.length - 1;
+      if (!panel.passLabel) return panel.role === "development" || panel.role === "retained";
+      const panelOrdinal = series.schedule.find((scheduled) => scheduled.label === panel.passLabel)?.ordinal;
+      return panelOrdinal !== undefined && panelOrdinal <= entry.ordinal;
+    }
     if (evaluation.cohortRole === "current") return sameRef(evaluation.taskset, entry.taskset);
     if (evaluation.cohortRole === "development") return sameRef(evaluation.taskset, series.evaluationTasksets.development);
     if (evaluation.cohortRole === "retained") return sameRef(evaluation.taskset, series.evaluationTasksets.retained);
@@ -745,6 +766,47 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
   }
 
   return { decide, linkRun, linkStartedRun, queueRelease, reconcileEntries, recordPromotion, retryEntry, saveSeries, sealSeries };
+}
+
+function verifyBenchmarkProtocol(series: ModelComparisonSeries): void {
+  const protocol = series.benchmarkProtocol;
+  if (!protocol) {
+    if (series.automaticEvaluation.enabled) {
+      throw new Error("Automatic evaluation requires a sealed benchmark protocol release.");
+    }
+    return;
+  }
+  const { contentHash: declaredHash, ...release } = protocol;
+  const actualHash = contentHash(release);
+  if (actualHash !== declaredHash) {
+    throw new Error("The benchmark protocol content hash does not match its immutable release.");
+  }
+  const schedule = [...series.schedule].sort((left, right) => left.ordinal - right.ordinal);
+  const protocolSchedule = [...protocol.schedule].sort((left, right) => left.ordinal - right.ordinal);
+  if (
+    schedule.length !== protocolSchedule.length
+    || schedule.some((entry, index) => {
+      const pinned = protocolSchedule[index];
+      return !pinned
+        || entry.id !== pinned.scheduleEntryId
+        || entry.ordinal !== pinned.ordinal
+        || entry.label !== pinned.label
+        || entry.role !== pinned.role
+        || entry.parentRule !== pinned.parentRule
+        || entry.trainableRank !== pinned.trainableRank;
+    })
+  ) {
+    throw new Error("The Comparison Series schedule does not match its benchmark protocol release.");
+  }
+  if (series.grader.id !== protocol.grader.id || series.grader.contentHash !== protocol.grader.contentHash) {
+    throw new Error("The Comparison Series grader does not match its benchmark protocol release.");
+  }
+  if (
+    series.baseModel.id !== protocol.policies.base.id
+    || series.baseModel.revision !== (protocol.policies.base.kind === "base_model" ? protocol.policies.base.revision : "")
+  ) {
+    throw new Error("The Comparison Series base Model does not match its benchmark protocol release.");
+  }
 }
 
 function requireScheduledEntry(series: ModelComparisonSeries, id: string): ModelComparisonScheduleEntry {

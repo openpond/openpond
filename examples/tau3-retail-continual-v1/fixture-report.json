@@ -1,0 +1,179 @@
+{
+  "audit": [
+    {
+      "evidenceRefs": [
+        "30fe6d8c463ad4d363e0341539ff447c7949e77ac4623743a066114e8f542a8a"
+      ],
+      "requirement": "family-level-split",
+      "status": "passed"
+    },
+    {
+      "evidenceRefs": [
+        "ad92e889f8866003ac1fbe81c3a94875cbb086e18d1a90dd7726fee0e73815d4"
+      ],
+      "requirement": "leakage-audit",
+      "status": "passed"
+    },
+    {
+      "evidenceRefs": [
+        "fixture-base",
+        "fixture-p0",
+        "fixture-p1",
+        "fixture-p2"
+      ],
+      "requirement": "receipt-derived-scorecard",
+      "status": "passed"
+    }
+  ],
+  "chart": {
+    "series": [
+      {
+        "kind": "base",
+        "label": "Original base",
+        "lower": 0.38,
+        "ordinal": null,
+        "pointId": "fixture-base",
+        "upper": 0.62,
+        "value": 0.5
+      },
+      {
+        "kind": "candidate",
+        "label": "P0",
+        "lower": 0.54,
+        "ordinal": 0,
+        "pointId": "fixture-p0",
+        "upper": 0.78,
+        "value": 0.67
+      },
+      {
+        "kind": "candidate",
+        "label": "P1",
+        "lower": 0.63,
+        "ordinal": 1,
+        "pointId": "fixture-p1",
+        "upper": 0.84,
+        "value": 0.75
+      },
+      {
+        "kind": "candidate",
+        "label": "P2",
+        "lower": 0.72,
+        "ordinal": 2,
+        "pointId": "fixture-p2",
+        "upper": 0.91,
+        "value": 0.83
+      }
+    ],
+    "x": "ordinal",
+    "y": "meanScore"
+  },
+  "contentHash": "78ecf5825a5139eec6cd3480dc7e5f9f516e4fb232497e0b3f47f49512aa0b9d",
+  "generatedAt": "2026-09-01T00:00:00.000Z",
+  "outcomes": [
+    "systems_complete",
+    "correction_absorbed",
+    "issue_generalized"
+  ],
+  "points": [
+    {
+      "confidenceInterval": [
+        0.38,
+        0.62
+      ],
+      "efficiency": {
+        "durationSeconds": 480,
+        "evaluationGpuSeconds": 480,
+        "optimizerGroups": 0,
+        "providerSpendUsd": 0,
+        "targetId": "fixture-base",
+        "totalSpendUsd": 0,
+        "trainingGpuSeconds": 0,
+        "trajectories": 0
+      },
+      "evidenceUrl": "https://openpond.ai/models/comparisons/tau3-retail-continual-v1-fixture?point=fixture-base",
+      "id": "fixture-base",
+      "kind": "base",
+      "label": "Original base",
+      "meanScore": 0.5,
+      "ordinal": null,
+      "taskMetrics": []
+    },
+    {
+      "confidenceInterval": [
+        0.54,
+        0.78
+      ],
+      "efficiency": {
+        "durationSeconds": 1720,
+        "evaluationGpuSeconds": 480,
+        "optimizerGroups": 1,
+        "providerSpendUsd": 0,
+        "targetId": "fixture-p0",
+        "totalSpendUsd": 3.8,
+        "trainingGpuSeconds": 1240,
+        "trajectories": 4
+      },
+      "evidenceUrl": "https://openpond.ai/models/comparisons/tau3-retail-continual-v1-fixture?point=fixture-p0",
+      "id": "fixture-p0",
+      "kind": "candidate",
+      "label": "P0",
+      "meanScore": 0.67,
+      "ordinal": 0,
+      "taskMetrics": []
+    },
+    {
+      "confidenceInterval": [
+        0.63,
+        0.84
+      ],
+      "efficiency": {
+        "durationSeconds": 2340,
+        "evaluationGpuSeconds": 480,
+        "optimizerGroups": 2,
+        "providerSpendUsd": 0,
+        "targetId": "fixture-p1",
+        "totalSpendUsd": 5.5,
+        "trainingGpuSeconds": 1860,
+        "trajectories": 8
+      },
+      "evidenceUrl": "https://openpond.ai/models/comparisons/tau3-retail-continual-v1-fixture?point=fixture-p1",
+      "id": "fixture-p1",
+      "kind": "candidate",
+      "label": "P1",
+      "meanScore": 0.75,
+      "ordinal": 1,
+      "taskMetrics": []
+    },
+    {
+      "confidenceInterval": [
+        0.72,
+        0.91
+      ],
+      "efficiency": {
+        "durationSeconds": 2890,
+        "evaluationGpuSeconds": 480,
+        "optimizerGroups": 3,
+        "providerSpendUsd": 0,
+        "targetId": "fixture-p2",
+        "totalSpendUsd": 7.2,
+        "trainingGpuSeconds": 2410,
+        "trajectories": 12
+      },
+      "evidenceUrl": "https://openpond.ai/models/comparisons/tau3-retail-continual-v1-fixture?point=fixture-p2",
+      "id": "fixture-p2",
+      "kind": "candidate",
+      "label": "P2",
+      "meanScore": 0.83,
+      "ordinal": 2,
+      "taskMetrics": []
+    }
+  ],
+  "protocol": {
+    "contentHash": "2818238c43e2c088bce0026aa6604c923050dc94a57cfbabde03d3d4d6506b7a",
+    "id": "tau3-retail-continual-v1-fixture-protocol",
+    "revision": 1
+  },
+  "schemaVersion": "openpond.continualBenchReport.v1",
+  "seriesId": "tau3-retail-continual-v1-fixture",
+  "status": "terminal"
+}

@@ -38,6 +38,11 @@ import {
   ModelComparisonSeriesEntrySchema,
   ModelComparisonSeriesSchema,
 } from "./model-comparisons.js";
+import { ModelCurrencySnapshotSchema } from "./model-currency.js";
+import {
+  ContinualBenchIssueReviewSchema,
+  ContinualLearningDailyBatchSchema,
+} from "./continual-bench-review.js";
 import {
   LearnedPreferenceRewardBindingSchema,
   PolicyOptimizationBudgetSchema,
@@ -287,6 +292,7 @@ export const RftRecipeSchema = z.object({
       .int()
       .positive()
       .max(24 * 60 * 60 * 1_000),
+    maxGpuSeconds: z.number().int().positive().max(7_200).optional(),
     maxRollouts: z.number().int().positive().max(100_000),
     maxPayloadBytes: z
       .number()
@@ -974,6 +980,9 @@ export const TrainingStateResponseSchema = z.object({
   modelRuns: z.array(ModelRunSchema).default([]),
   comparisonSeries: z.array(ModelComparisonSeriesSchema).default([]),
   comparisonSeriesEntries: z.array(ModelComparisonSeriesEntrySchema).default([]),
+  modelCurrencySnapshots: z.array(ModelCurrencySnapshotSchema).default([]),
+  continualBenchIssueReviews: z.array(ContinualBenchIssueReviewSchema).default([]),
+  continualLearningDailyBatches: z.array(ContinualLearningDailyBatchSchema).default([]),
   rewardModelVersions: z.array(RewardModelVersionSchema).default([]),
   rewardModelRuns: z.array(RewardModelRunSchema).default([]),
   modelTasksets: z.array(TasksetSchema).default([]),

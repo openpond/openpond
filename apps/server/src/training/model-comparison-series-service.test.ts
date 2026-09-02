@@ -120,6 +120,8 @@ function memoryStore(tasksets: Taskset[]) {
     api: {
       getModelProject: async (id: string) => id === "project-service-test" ? { id, profileId: "profile-service-test" } : null,
       getModelComparisonSeries: async (id: string) => series.get(id) ?? null,
+      listModelComparisonSeries: async (filter?: { modelProjectId?: string }) => [...series.values()]
+        .filter((candidate) => !filter?.modelProjectId || candidate.modelProjectId === filter.modelProjectId),
       saveModelComparisonSeries: async (value: ModelComparisonSeries) => { series.set(value.id, value); return value; },
       listModelComparisonSeriesEntries: async (filter?: { seriesId?: string }) => [...entries.values()]
         .filter((entry) => !filter?.seriesId || entry.seriesId === filter.seriesId)

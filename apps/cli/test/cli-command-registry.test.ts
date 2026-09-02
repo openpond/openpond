@@ -59,6 +59,17 @@ describe("CLI command registry", () => {
     });
   });
 
+  test("registers the four-command Continual Bench workflow", () => {
+    const definition = getCliCommandDefinition("bench");
+    expect(definition?.usage).toContain("init|validate|run|report");
+    expect(definition?.usages).toEqual(expect.arrayContaining([
+      expect.stringContaining("bench init"),
+      expect.stringContaining("bench validate"),
+      expect.stringContaining("bench run"),
+      expect.stringContaining("bench report"),
+    ]));
+  });
+
   test("documents the headless chat contract in registry and top-level help", () => {
     const definition = getCliCommandDefinition("chat");
     expect(definition?.usage).toContain("--message-file <path>|--message <text>|--stdin");

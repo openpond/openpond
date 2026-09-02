@@ -9,7 +9,7 @@ import {
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
-import { SqliteTrainingModelStore } from "./store-training-models.js";
+import { SqliteContinualBenchReviewStore } from "./store-continual-bench-reviews.js";
 
 export type DatasetCatalogTasksetProjection = {
   tasksetId: string;
@@ -45,7 +45,7 @@ type DatasetCatalogTasksetRow = {
   updated_at: string;
 };
 
-export class SqliteDatasetStore extends SqliteTrainingModelStore {
+export class SqliteDatasetStore extends SqliteContinualBenchReviewStore {
   async listDatasetCatalogTasksets(
     profileId: string,
   ): Promise<DatasetCatalogTasksetProjection[]> {

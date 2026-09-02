@@ -38,6 +38,9 @@ export async function handleModelRunControl(input: {
     cancel(id: string): Promise<unknown> | unknown;
     resume(id: string): Promise<unknown> | unknown;
   };
+  comparisonEvaluations?: {
+    cancel(id: string): Promise<unknown> | unknown;
+  };
 }) {
   const modelRunId = requiredString(input.modelRunId, "modelRunId");
   if (input.action === "model_run_events") return input.training.modelRunEvents(modelRunId);
@@ -51,6 +54,12 @@ export async function handleModelRunControl(input: {
   }
   if (input.action === "cancel_model_run") {
     if (run?.kind !== "evaluation") return input.training.cancelModelRun(modelRunId);
+    if (run.evaluation?.benchmarkId === "model-comparison") {
+      if (!input.comparisonEvaluations) {
+        throw new Error("Model Comparison evaluations are unavailable.");
+      }
+      return input.comparisonEvaluations.cancel(modelRunId);
+    }
     if (!input.harnessRefinerBenchmarks) {
       throw new Error("Harness Refiner benchmarks are unavailable.");
     }

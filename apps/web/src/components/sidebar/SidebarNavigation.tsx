@@ -186,12 +186,12 @@ export function SidebarNavigation({
           </button>
           <button
             className={`nav-command ${view === "labs" && activeLibrarySection === "reviews" ? "active" : ""}`}
-            aria-label="Human Review"
+            aria-label="Evals"
             type="button"
             onClick={() => selectModelsLibrary("reviews")}
           >
             <UserRound size={16} />
-            <span>Human Review</span>
+            <span>Evals</span>
           </button>
           <span className="sidebar-nav-group-label">Current project</span>
           <div className="sidebar-model-project-picker">

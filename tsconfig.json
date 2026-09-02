@@ -8,6 +8,7 @@
     { "path": "packages/evals/tsconfig.build.json" },
     { "path": "packages/cloud" },
     { "path": "packages/connected-apps" },
+    { "path": "packages/continual-bench" },
     { "path": "packages/contracts" },
     { "path": "packages/codex-provider" },
     { "path": "packages/logging" },

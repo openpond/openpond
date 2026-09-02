@@ -32,6 +32,7 @@ export type ManagedRlHarnessExecutionInput = {
 
 export type ManagedRlHarnessAdapterDescriptor = {
   id: string;
+  priority?: number;
   supports(input: { taskset: Taskset; environmentId: string }): boolean;
   execute(input: ManagedRlHarnessExecutionInput): Promise<Record<string, unknown>>;
 };
@@ -48,12 +49,13 @@ export function resolveManagedRlHarnessAdapter(input: {
   environmentId: string;
 }): ManagedRlHarnessAdapterDescriptor {
   const matches = adapters.filter((adapter) => adapter.supports(input));
-  if (matches.length !== 1) {
-    throw new Error(matches.length
-      ? `managed_rl_harness_adapter_ambiguous:${matches.map((item) => item.id).join(",")}`
-      : `managed_rl_local_harness_unsupported:${input.environmentId}`);
+  if (!matches.length) throw new Error(`managed_rl_local_harness_unsupported:${input.environmentId}`);
+  const highestPriority = Math.max(...matches.map((adapter) => adapter.priority ?? 0));
+  const selected = matches.filter((adapter) => (adapter.priority ?? 0) === highestPriority);
+  if (selected.length !== 1) {
+    throw new Error(`managed_rl_harness_adapter_ambiguous:${selected.map((item) => item.id).join(",")}`);
   }
-  return matches[0]!;
+  return selected[0]!;
 }
 
 export function supportsManagedRlHarness(taskset: Taskset, placement: string): boolean {
@@ -66,7 +68,12 @@ export function supportsManagedRlHarness(taskset: Taskset, placement: string): b
   }
   if (placement !== "local") return false;
   const environmentId = declaredEnvironmentId(taskset);
-  return adapters.filter((adapter) => adapter.supports({ taskset, environmentId })).length === 1;
+  try {
+    resolveManagedRlHarnessAdapter({ taskset, environmentId });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function declaredEnvironmentId(taskset: Taskset): string {

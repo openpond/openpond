@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
 
@@ -14,22 +14,13 @@ import {
   registerManagedRlHarnessAdapter,
   type ManagedRlHarnessExecutionInput,
 } from "./managed-rl-harness-registry.js";
-import {
-  composeTau3RetailOutcomeReward,
-  composeTau3RetailOutcomeRewardV3,
-  TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID,
-  TAU3_RETAIL_OUTCOME_RUBRIC_V3_GRADER_ID,
-  TAU3_RETAIL_TERMINAL_STATE_GRADER_ID,
-} from "./tau3-retail-reward.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 
-export const TAU3_RETAIL_HARNESS_ADAPTER_ID = "tau3-retail-v1";
-const DEFAULT_TAU3_ROOT = "/tmp/tau3-bench";
-const MAX_TURNS = 12;
+export const PORTABLE_JSONL_HARNESS_ADAPTER_ID = "portable-jsonl-stateful-v1";
 const MAX_STDERR_BYTES = 64 * 1024;
 
 type BridgeInit = {
-  sourceCommit: string;
+  environmentVersion?: string;
   policy: string;
   userPrompt: string;
   tools: Array<Record<string, unknown>>;
@@ -45,46 +36,30 @@ type BridgeStep = {
   stateHashes: Record<string, string | null>;
 };
 
-export const tau3RetailManagedRlAdapter = {
-  id: TAU3_RETAIL_HARNESS_ADAPTER_ID,
+export const portableJsonlManagedRlAdapter = {
+  id: PORTABLE_JSONL_HARNESS_ADAPTER_ID,
+  priority: -100,
   supports(input: { taskset: Taskset; environmentId: string }): boolean {
-    const benchmark = record(input.taskset.environment.metadata.benchmark);
-    return input.environmentId === TAU3_RETAIL_HARNESS_ADAPTER_ID
-      && benchmark?.id === TAU3_RETAIL_HARNESS_ADAPTER_ID
+    return input.taskset.environment.kind === "stateful_harness"
       && input.taskset.capabilities.requiresState
       && input.taskset.capabilities.requiresTools;
   },
-  execute: executeTau3RetailManagedRl,
+  execute: executePortableJsonlManagedRl,
 };
 
-registerManagedRlHarnessAdapter(tau3RetailManagedRlAdapter);
+registerManagedRlHarnessAdapter(portableJsonlManagedRlAdapter);
 
-export async function executeTau3RetailManagedRl(
+export async function executePortableJsonlManagedRl(
   input: ManagedRlHarnessExecutionInput,
 ): Promise<Record<string, unknown>> {
-  const benchmark = requiredRecord(
-    input.taskset.environment.metadata.benchmark,
-    "tau3 benchmark metadata",
-  );
   const rewardGrader = input.taskset.graders.find((grader) => grader.rewardEligible);
-  if (!rewardGrader) throw new Error("tau3_retail_reward_grader_missing");
-  if (
-    rewardGrader.id !== TAU3_RETAIL_TERMINAL_STATE_GRADER_ID
-    && rewardGrader.id !== TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID
-    && rewardGrader.id !== TAU3_RETAIL_OUTCOME_RUBRIC_V3_GRADER_ID
-  ) {
-    throw new Error(`tau3_retail_reward_grader_unsupported:${rewardGrader.id}`);
-  }
-  const taskId = requiredString(
-    input.task.metadata.benchmarkTaskId,
-    "tau3 Retail task ID",
-  );
-  const expectedCommit = requiredSha(
-    benchmark.sourceCommit,
-    "tau3 source commit",
-  );
-  const bridge = await Tau3Bridge.start({
-    root: process.env.OPENPOND_TAU3_BENCH_ROOT?.trim() || DEFAULT_TAU3_ROOT,
+  if (!rewardGrader) throw new Error("portable_jsonl_reward_grader_missing");
+  const taskId = typeof input.task.metadata.benchmarkTaskId === "string"
+    ? input.task.metadata.benchmarkTaskId
+    : input.task.id;
+  const runtime = await loadPortableJsonlRuntime(input.taskset, input.storeDir);
+  const bridge = await PortableJsonlBridge.start({
+    runtime,
     taskId,
     graderId: rewardGrader.id,
     signal: input.signal,
@@ -96,6 +71,7 @@ export async function executeTau3RetailManagedRl(
   const messages: ManagedRlPolicyMessage[] = [];
   const toolSequence: string[] = [];
   const trace: Array<Record<string, unknown>> = [];
+  const policyResults: Array<Record<string, unknown>> = [];
   let lastPolicyResult: Record<string, unknown> | null = null;
   const policyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   let policyUsageObserved = false;
@@ -104,20 +80,17 @@ export async function executeTau3RetailManagedRl(
   let finalStep: BridgeStep | null = null;
   try {
     const initialized = await bridge.request<BridgeInit>({ operation: "init" });
-    if (initialized.sourceCommit !== expectedCommit) {
-      throw new Error("tau3_retail_source_commit_mismatch");
-    }
     const toolNames = initialized.tools.map((tool) =>
-      requiredString(requiredRecord(tool.function, "tau3 tool function").name, "tau3 tool name")
+      requiredString(requiredRecord(tool.function, "tool function").name, "tool name")
     );
     if (toolNames.join(",") !== input.taskset.environment.toolNames.join(",")) {
-      throw new Error("tau3_retail_tool_contract_mismatch");
+      throw new Error("portable_jsonl_tool_contract_mismatch");
     }
     messages.push(
       { role: "system", content: initialized.policy },
       { role: "user", content: initialized.userPrompt },
     );
-    for (let turnIndex = 0; turnIndex < MAX_TURNS; turnIndex += 1) {
+    for (let turnIndex = 0; turnIndex < runtime.maxTurns; turnIndex += 1) {
       const policyResult = await input.policyRequest({
         deliveryId: input.claim.deliveryId,
         policyVersion: input.claim.policyVersion,
@@ -133,6 +106,7 @@ export async function executeTau3RetailManagedRl(
         returnTokenIds: true,
       }, input.signal);
       lastPolicyResult = policyResult;
+      policyResults.push(policyResult);
       const normalizedUsage = normalizeModelUsageTokens(policyResult.usage);
       if (
         normalizedUsage.promptTokens !== null
@@ -190,7 +164,7 @@ export async function executeTau3RetailManagedRl(
         reason: "max_turns",
       });
       trace.push({
-        turnIndex: MAX_TURNS,
+        turnIndex: runtime.maxTurns,
         content: null,
         toolCalls: [],
         toolResults: [],
@@ -202,53 +176,21 @@ export async function executeTau3RetailManagedRl(
     await bridge.close();
   }
   if (!lastPolicyResult || !finalStep) {
-    throw new Error("tau3_retail_policy_result_missing");
+    throw new Error("portable_jsonl_policy_result_missing");
   }
-  const trainingSample = requiredRecord(
-    lastPolicyResult.trainingSample,
-    "tau3 Managed RL training sample",
-  );
+  const trainingSamples = policyResults.map((policyResult, index) => requiredRecord(
+    policyResult.trainingSample,
+    `Managed RL training sample turn ${index + 1}`,
+  ));
   const traceSha256 = sha256({ taskId, messages, trace, stateHashes: finalStep.stateHashes });
   const completedAt = (input.timestamp ?? (() => new Date().toISOString()))();
   const bridgeComponents = Object.fromEntries(
     Object.entries(finalStep.components).map(([key, value]) => [key, finite(value, key)]),
   );
-  const scored = rewardGrader.id === TAU3_RETAIL_OUTCOME_RUBRIC_V3_GRADER_ID
-    ? composeTau3RetailOutcomeRewardV3({
-        terminalState: requiredComponent(bridgeComponents, "terminalState"),
-        requiredWriteCoverage: requiredComponent(bridgeComponents, "requiredWriteCoverage"),
-        requiredReadCoverage: requiredComponent(bridgeComponents, "requiredReadCoverage"),
-        toolValidity: requiredComponent(bridgeComponents, "toolValidity"),
-        resolvedCommunication: requiredComponent(bridgeComponents, "resolvedCommunication"),
-        prematureMutation: requiredComponent(bridgeComponents, "prematureMutation"),
-        unexpectedMutation: requiredComponent(bridgeComponents, "unexpectedMutation"),
-        invalidToolRate: requiredComponent(bridgeComponents, "invalidToolRate"),
-        requiredWritesApplicable: requiredComponent(bridgeComponents, "requiredWritesApplicable") === 1,
-        requiredReadsApplicable: requiredComponent(bridgeComponents, "requiredReadsApplicable") === 1,
-        toolValidityApplicable: requiredComponent(bridgeComponents, "toolValidityApplicable") === 1,
-      })
-    : rewardGrader.id === TAU3_RETAIL_OUTCOME_RUBRIC_GRADER_ID
-    ? composeTau3RetailOutcomeReward({
-        terminalState: requiredComponent(bridgeComponents, "terminalState"),
-        requiredWriteCoverage: requiredComponent(bridgeComponents, "requiredWriteCoverage"),
-        requiredReadCoverage: requiredComponent(bridgeComponents, "requiredReadCoverage"),
-        toolValidity: requiredComponent(bridgeComponents, "toolValidity"),
-        resolvedCommunication: requiredComponent(bridgeComponents, "resolvedCommunication"),
-        prematureMutation: requiredComponent(bridgeComponents, "prematureMutation"),
-        unexpectedMutation: requiredComponent(bridgeComponents, "unexpectedMutation"),
-        invalidToolRate: requiredComponent(bridgeComponents, "invalidToolRate"),
-      })
-    : {
-        reward: finite(finalStep.reward, "tau3 reward"),
-        components: {
-          terminalState: requiredComponent(bridgeComponents, "terminalState"),
-          toolExecution: requiredComponent(bridgeComponents, "toolExecution"),
-        },
-      };
   const rollout = {
     traceSha256,
-    reward: scored.reward,
-    components: scored.components,
+    reward: finite(finalStep.reward, "reward"),
+    components: bridgeComponents,
     terminal: finalStep.terminal,
     toolSequence,
   };
@@ -257,8 +199,9 @@ export async function executeTau3RetailManagedRl(
     executorId: input.executorId,
     environmentSha256: input.claim.environmentSha256,
     policyResult: lastPolicyResult,
+    policyResults,
     trace: {
-      schemaVersion: "openpond.managedRlLocalHarnessReceipt.v1",
+      schemaVersion: "openpond.managedRlLocalHarnessReceipt.v2",
       jobId: input.claim.jobId,
       executionKind: input.claim.executionKind,
       executionId: input.claim.executionId,
@@ -270,8 +213,8 @@ export async function executeTau3RetailManagedRl(
       harnessReleaseSha256: input.claim.harnessRelease.contentHash,
       tasksetSha256: input.claim.taskset.contentHash,
       traceSha256,
-      trainingSampleSha256: sha256(trainingSample),
-      modelRequestId: requiredString(trainingSample.modelRequestId, "tau3 model request ID"),
+      trainingSampleSha256s: trainingSamples.map((sample) => sha256(sample)),
+      modelRequestIds: trainingSamples.map((sample) => requiredString(sample.modelRequestId, "model request ID")),
       reward: rollout.reward,
       components: rollout.components,
       terminal: rollout.terminal,
@@ -289,7 +232,7 @@ export async function executeTau3RetailManagedRl(
     ...(input.claim.executionKind === "evaluation"
       ? {
           evaluationEvidence: {
-            schemaVersion: "openpond.tau3RetailEvaluationEvidence.v1",
+            schemaVersion: "openpond.portableJsonlEvaluationEvidence.v1",
             taskId,
             messages,
             trace,
@@ -306,7 +249,14 @@ export async function executeTau3RetailManagedRl(
   };
 }
 
-class Tau3Bridge {
+type PortableJsonlRuntime = {
+  command: string[];
+  cwd: string;
+  maxTurns: number;
+  modulePath: string;
+};
+
+class PortableJsonlBridge {
   private readonly reader: readline.Interface;
   private readonly pending: Array<{ resolve(value: unknown): void; reject(error: Error): void }> = [];
   private stderr = "";
@@ -320,7 +270,7 @@ class Tau3Bridge {
       try {
         const parsed = JSON.parse(line) as Record<string, unknown>;
         if (typeof parsed.fatal === "string") {
-          waiter.reject(new Error(`tau3_bridge_failed:${String(parsed.message ?? parsed.fatal)}`));
+          waiter.reject(new Error(`portable_jsonl_bridge_failed:${String(parsed.message ?? parsed.fatal)}`));
         } else {
           waiter.resolve(parsed);
         }
@@ -334,27 +284,30 @@ class Tau3Bridge {
     child.on("exit", (code, signal) => {
       this.closed = true;
       const error = new Error(
-        `tau3_bridge_exited:${signal ?? code ?? "unknown"}:${this.stderr.slice(-2_000)}`,
+        `portable_jsonl_bridge_exited:${signal ?? code ?? "unknown"}:${this.stderr.slice(-2_000)}`,
       );
       for (const waiter of this.pending.splice(0)) waiter.reject(error);
     });
   }
 
   static async start(input: {
-    root: string;
+    runtime: PortableJsonlRuntime;
     taskId: string;
     graderId: string;
     signal: AbortSignal;
-  }): Promise<Tau3Bridge> {
-    const root = path.resolve(input.root);
-    const python = path.join(root, ".venv", "bin", "python");
-    const script = fileURLToPath(new URL("./tau3-retail-bridge.py", import.meta.url));
-    const child = spawn(python, [script, input.taskId, input.graderId], {
-      cwd: root,
+  }): Promise<PortableJsonlBridge> {
+    const [executable, ...configuredArguments] = input.runtime.command;
+    if (!executable) throw new Error("portable_jsonl_command_missing");
+    const argumentsWithModule = configuredArguments.map((argument) => (
+      argument === "{module}" ? input.runtime.modulePath : argument
+    ));
+    if (!configuredArguments.includes("{module}")) argumentsWithModule.push(input.runtime.modulePath);
+    const child = spawn(executable, [...argumentsWithModule, input.taskId, input.graderId], {
+      cwd: input.runtime.cwd,
       env: { ...process.env, PYTHONUNBUFFERED: "1" },
       stdio: ["pipe", "pipe", "pipe"],
     });
-    const bridge = new Tau3Bridge(child);
+    const bridge = new PortableJsonlBridge(child);
     const abort = () => child.kill("SIGTERM");
     if (input.signal.aborted) abort();
     else input.signal.addEventListener("abort", abort, { once: true });
@@ -363,7 +316,7 @@ class Tau3Bridge {
   }
 
   request<T>(value: Record<string, unknown>): Promise<T> {
-    if (this.closed) return Promise.reject(new Error("tau3_bridge_closed"));
+    if (this.closed) return Promise.reject(new Error("portable_jsonl_bridge_closed"));
     return new Promise<T>((resolve, reject) => {
       this.pending.push({ resolve: (response) => resolve(response as T), reject });
       this.child.stdin.write(`${JSON.stringify(value)}\n`, (error) => {
@@ -391,6 +344,55 @@ class Tau3Bridge {
   }
 }
 
+async function loadPortableJsonlRuntime(taskset: Taskset, storeDir: string): Promise<PortableJsonlRuntime> {
+  const imported = record(taskset.metadata.importedFromTaskset);
+  const declaredSource = typeof taskset.environment.metadata.runtimeSourceTasksetId === "string"
+    ? taskset.environment.metadata.runtimeSourceTasksetId.trim()
+    : null;
+  const importedSource = typeof imported?.id === "string" ? imported.id.trim() : null;
+  const sourceTasksetId = declaredSource || importedSource || taskset.id;
+  const root = path.resolve(storeDir, "training", "tasksets", sourceTasksetId);
+  const runtimeFile = path.join(root, "graders", "managed-rl-runtime.json");
+  const raw = JSON.parse(await readFile(runtimeFile, "utf8")) as unknown;
+  const config = requiredRecord(raw, "Portable JSONL runtime config");
+  if (config.protocolVersion !== "openpond.managedRlJsonlRuntime.v1") {
+    throw new Error("portable_jsonl_protocol_unsupported");
+  }
+  const moduleName = requiredString(config.module, "Portable JSONL runtime module");
+  const resolvedRoot = await realpath(root);
+  const modulePath = await realpath(path.resolve(resolvedRoot, moduleName));
+  if (modulePath !== resolvedRoot && !modulePath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    throw new Error("portable_jsonl_module_outside_taskset");
+  }
+  const expectedModuleSha256 = requiredString(
+    config.moduleSha256,
+    "Portable JSONL runtime module SHA-256",
+  );
+  const actualModuleSha256 = createHash("sha256")
+    .update(await readFile(modulePath))
+    .digest("hex");
+  if (actualModuleSha256 !== expectedModuleSha256) {
+    throw new Error("portable_jsonl_module_hash_mismatch");
+  }
+  const command = Array.isArray(config.command)
+    ? config.command.map((value, index) => requiredString(value, `Portable JSONL command ${index + 1}`))
+    : [];
+  if (!command.length) throw new Error("portable_jsonl_command_missing");
+  const configuredCwd = typeof config.cwd === "string" && config.cwd.trim()
+    ? config.cwd.trim()
+    : resolvedRoot;
+  const maxTurns = typeof config.maxTurns === "number" && Number.isInteger(config.maxTurns)
+    ? config.maxTurns
+    : 12;
+  if (maxTurns < 1 || maxTurns > 100) throw new Error("portable_jsonl_max_turns_invalid");
+  return {
+    command,
+    cwd: path.isAbsolute(configuredCwd) ? configuredCwd : path.resolve(resolvedRoot, configuredCwd),
+    maxTurns,
+    modulePath,
+  };
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -405,18 +407,8 @@ function requiredString(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim()) throw new Error(`${label} must be a non-empty string.`);
   return value.trim();
 }
-function requiredSha(value: unknown, label: string): string {
-  const parsed = requiredString(value, label);
-  if (!/^[a-f0-9]{40}$/.test(parsed)) throw new Error(`${label} must be a git commit SHA.`);
-  return parsed;
-}
 function finite(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} must be finite.`);
-  return value;
-}
-function requiredComponent(components: Record<string, number>, key: string): number {
-  const value = components[key];
-  if (value === undefined) throw new Error(`tau3_retail_component_missing:${key}`);
   return value;
 }
 function sha256(value: unknown): string {

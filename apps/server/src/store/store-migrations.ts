@@ -120,4 +120,17 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     version: 52,
     run: (store) => store.allowModelRunsWithoutVersion(),
   },
+  {
+    version: 53,
+    run: (store) => store.createTrainingTables(),
+  },
+  {
+    version: 54,
+    run: (store) => store.createTrainingTables(),
+  },
+  {
+    // Add persisted daily Evals intake/review batches to existing stores.
+    version: 55,
+    run: (store) => store.createTrainingTables(),
+  },
 ];
