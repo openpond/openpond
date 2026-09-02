@@ -113,7 +113,7 @@ export class ManagedRlLocalRolloutExecutor {
     for (let attempt = 1; attempt <= EXECUTION_ATTEMPTS; attempt += 1) {
       try {
         const result = await this.executeOnce(claim);
-        await this.completeWithRetry(claim, sandboxCompletion(result));
+        await this.completeWithRetry(claim, managedRlSandboxCompletion(result));
         return;
       } catch (error) {
         lastError = error;
@@ -294,7 +294,7 @@ export function resolveManagedRlExecutionTask(input: {
   return matches[0]!;
 }
 
-function sandboxCompletion(
+export function managedRlSandboxCompletion(
   result: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
@@ -302,6 +302,9 @@ function sandboxCompletion(
     executorId: result.executorId,
     environmentSha256: result.environmentSha256,
     policyResult: result.policyResult,
+    ...(Array.isArray(result.policyResults)
+      ? { policyResults: result.policyResults }
+      : {}),
     trace: result.trace,
   };
 }

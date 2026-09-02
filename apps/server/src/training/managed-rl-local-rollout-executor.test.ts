@@ -1,7 +1,10 @@
 import type { Taskset } from "@openpond/contracts";
 import { describe, expect, it } from "vitest";
 
-import { resolveManagedRlExecutionTask } from "./managed-rl-local-rollout-executor.js";
+import {
+  managedRlSandboxCompletion,
+  resolveManagedRlExecutionTask,
+} from "./managed-rl-local-rollout-executor.js";
 
 function taskset(
   id: string,
@@ -32,5 +35,35 @@ describe("Managed RL local execution task resolution", () => {
 
     expect(result.taskset.id).toBe("development");
     expect(result.task.id).toBe("validation-1");
+  });
+
+  it("preserves every policy result required by a multi-turn Harness receipt", () => {
+    const policyResults = [
+      { servedPolicyVersion: 0, trainingSample: { modelRequestId: "turn-1" } },
+      { servedPolicyVersion: 0, trainingSample: { modelRequestId: "turn-2" } },
+    ];
+
+    expect(managedRlSandboxCompletion({
+      status: "succeeded",
+      executorId: "desktop-executor",
+      environmentSha256: "a".repeat(64),
+      policyResult: policyResults[1],
+      policyResults,
+      trace: {
+        schemaVersion: "openpond.managedRlLocalHarnessReceipt.v2",
+        trainingSampleSha256s: ["sample-1", "sample-2"],
+      },
+      evaluationEvidence: { private: "not part of the completion contract" },
+    })).toEqual({
+      status: "succeeded",
+      executorId: "desktop-executor",
+      environmentSha256: "a".repeat(64),
+      policyResult: policyResults[1],
+      policyResults,
+      trace: {
+        schemaVersion: "openpond.managedRlLocalHarnessReceipt.v2",
+        trainingSampleSha256s: ["sample-1", "sample-2"],
+      },
+    });
   });
 });
