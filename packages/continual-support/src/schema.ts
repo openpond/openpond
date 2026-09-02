@@ -39,7 +39,7 @@ export const ContinualBenchPolicyIdentitySchema = z.discriminatedUnion("kind", [
 ]);
 export const ContinualBenchScheduleEntrySchema = z.object({
   scheduleEntryId: Id, ordinal: z.number().int().nonnegative(), label: Id,
-  role: z.enum(["seed", "daily_residual", "weekly_rollup", "full_refresh"]), parentRule: z.enum(["base_model", "accepted_daily_head", "accepted_seed"]),
+  role: z.enum(["seed", "daily_residual", "weekly_rollup", "full_refresh"]), parentRule: z.enum(["base_model", "previous_release", "seed_release", "accepted_daily_head", "accepted_seed"]),
   trainableRank: z.number().int().positive().max(1_024), correctionPanelIds: z.array(Id).min(1).max(1_000),
   optimizerGroupsPerTask: z.number().int().positive().max(1_000), trajectoriesPerGroup: z.number().int().min(4).max(1_000),
 }).strict();

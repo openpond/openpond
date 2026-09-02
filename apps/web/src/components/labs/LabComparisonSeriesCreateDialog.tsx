@@ -242,7 +242,7 @@ function comparisonSchedule(seriesId: string, template: SeriesTemplate): ModelCo
     ordinal: index + 1,
     label: `P${index + 1}`,
     role: "daily_residual",
-    parentRule: "accepted_daily_head",
+    parentRule: "previous_release",
     taskSource: "nightly_selection",
     trainableRank: rank,
     minimumTasks: 1,
@@ -252,7 +252,7 @@ function comparisonSchedule(seriesId: string, template: SeriesTemplate): ModelCo
   return [{
     id: `${seriesId}-p0`, ordinal: 0, label: "P0", role: "seed", parentRule: "base_model", taskSource: "seed_taskset", trainableRank: template.seedRank, minimumTasks: 1, maximumTasks: 100_000,
   }, ...daily, {
-    id: `${seriesId}-p${weeklyOrdinal}`, ordinal: weeklyOrdinal, label: `P${weeklyOrdinal}`, role: "weekly_rollup", parentRule: "accepted_seed", taskSource: "daily_cohort_union", trainableRank: template.weeklyRank, minimumTasks: daily.length, maximumTasks: 100_000,
+    id: `${seriesId}-p${weeklyOrdinal}`, ordinal: weeklyOrdinal, label: `P${weeklyOrdinal}`, role: "weekly_rollup", parentRule: "seed_release", taskSource: "daily_cohort_union", trainableRank: template.weeklyRank, minimumTasks: daily.length, maximumTasks: 100_000,
   }, {
     id: `${seriesId}-p${weeklyOrdinal + 1}`, ordinal: weeklyOrdinal + 1, label: `P${weeklyOrdinal + 1}`, role: "full_refresh", parentRule: "base_model", taskSource: "eligible_task_pool", trainableRank: template.fullRefreshRank, minimumTasks: 1, maximumTasks: 100_000,
   }];

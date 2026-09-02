@@ -67,7 +67,7 @@ describe("Model Currency projection", () => {
         invariants: { systemPromptHash: hash("prompt"), toolSchema: immutable("tools"), application: immutable("application"), harness: immutable("harness"), runtime: immutable("runtime"), workerImage: immutable("worker"), autoRefiner: { enabled: false, release: null } },
         schedule: [
           { scheduleEntryId: "schedule-p0", ordinal: 0, label: "P0", role: "seed" as const, parentRule: "base_model" as const, trainableRank: 16, correctionPanelIds: ["p0-correction"], optimizerGroupsPerTask: 1, trajectoriesPerGroup: 4 },
-          { scheduleEntryId: "schedule-p1", ordinal: 1, label: "P1", role: "daily_residual" as const, parentRule: "accepted_daily_head" as const, trainableRank: 1, correctionPanelIds: ["p1-correction"], optimizerGroupsPerTask: 1, trajectoriesPerGroup: 4 },
+          { scheduleEntryId: "schedule-p1", ordinal: 1, label: "P1", role: "daily_residual" as const, parentRule: "previous_release" as const, trainableRank: 1, correctionPanelIds: ["p1-correction"], optimizerGroupsPerTask: 1, trajectoriesPerGroup: 4 },
         ],
         evaluation: { seeds: [1, 2, 3], repetitions: 3, powerRule: immutable("power"), pairedBootstrapSamples: 1_000, confidenceLevel: 0.95 as const },
         resources: { maximumTrainingGpuSeconds: 100, maximumEvaluationGpuSeconds: 100, maximumProviderSpendUsd: 10, maximumTotalSpendUsd: 20, maximumConcurrentGroups: 1 },
@@ -81,7 +81,7 @@ describe("Model Currency projection", () => {
         residualProfile: { profileId: "currency-residual", serializedEnvelopeRank: 32, maximumEnabledRank: 17, topology: "uniform_block_masked" },
         schedule: [
           { id: "schedule-p0", ordinal: 0, label: "P0", role: "seed", parentRule: "base_model", taskSource: "seed_taskset", trainableRank: 16, minimumTasks: 1, maximumTasks: 10 },
-          { id: "schedule-p1", ordinal: 1, label: "P1", role: "daily_residual", parentRule: "accepted_daily_head", taskSource: "nightly_selection", trainableRank: 1, minimumTasks: 1, maximumTasks: 10 },
+          { id: "schedule-p1", ordinal: 1, label: "P1", role: "daily_residual", parentRule: "previous_release", taskSource: "nightly_selection", trainableRank: 1, minimumTasks: 1, maximumTasks: 10 },
         ],
         scheduleSealedAt: NOW, advancementPolicy: { id: "currency-policy", version: 1, requireCheckpoint: true, requireAppliedOptimizerUpdate: true, minimumCurrentCohortMeanImprovement: 0, maximumRetainedMeanRegression: 0.05, blockCriticalInvariantRegression: true, automaticDailyAdvancement: false }, executionPolicy: { startWhenReady: false },
         acceptedSeedEntryId: null, acceptedDailyHeadEntryId: null, promotedBindingId: null, createdBy: "currency-owner", createdAt: NOW, updatedAt: NOW,
@@ -97,14 +97,14 @@ describe("Model Currency projection", () => {
       expect(measuring).toMatchObject({ evidenceState: "measuring", criteria: { allRequiredAttemptsTerminal: false } });
       expect((await projection.reconcileEntry(entry.id))?.id).toBe(measuring?.id);
 
-      for (const panel of panels.filter((value) => ["p0-correction", "p0-sibling", "p0-known", "development", "retained"].includes(value.id))) {
+      for (const panel of panels.filter((value) => ["p0-correction", "p0-sibling", "p0-known", "development", "retained", "frozen"].includes(value.id))) {
         if (panel.role === "training_eligible") throw new Error("The test evaluation inventory cannot include the optimizer panel.");
         await store.saveModelRun(evaluationRun(series, entry, panel.id, panel.role, panel.passLabel, panel.taskset, "base_model", null, panel.role === "correction" || panel.role === "sibling_verification" ? false : true));
         await store.saveModelRun(evaluationRun(series, entry, panel.id, panel.role, panel.passLabel, panel.taskset, "model_version", candidate.id, true));
       }
       const terminal = await projection.reconcileEntry(entry.id);
       expect(terminal).toMatchObject({ evidenceState: "up_to_date", taskIds: { fixed: expect.arrayContaining(["task-correction", "task-sibling"]), regressed: [] }, criteria: { allRequiredAttemptsTerminal: true, criticalCorrectionPassRate: 1, siblingPassRate: 1, criticalPriorRegressionCount: 0 }, metrics: { behavioralRetention: 1 } });
-      expect(terminal?.matches).toHaveLength(45);
+      expect(terminal?.matches).toHaveLength(54);
       expect((await projection.reconcileEntry(entry.id))?.id).toBe(terminal?.id);
       expect(await store.listModelCurrencySnapshots({ entryId: entry.id })).toHaveLength(2);
       await expect(store.saveModelCurrencySnapshot({ ...terminal!, contentHash: hash("replacement") })).rejects.toThrow("cannot be replaced");
@@ -125,4 +125,4 @@ function evaluationRun(series: ReturnType<typeof ModelComparisonSeriesSchema.par
   return ModelRunSchema.parse({ schemaVersion: "openpond.modelRun.v1", id: runId, modelId: series.modelProjectId, modelVersionId, profileId: series.profileId, kind: "evaluation", status: "succeeded", method: null, destinationId: null, taskset: tasksetRef, comparisonSeriesEntry: { seriesId: series.id, entryId: entry.id, scheduleEntryId: entry.scheduleEntryId, releaseHash: entry.releaseHash, ordinal: entry.ordinal }, harnessRelease: series.benchmarkProtocol!.invariants.harness, quote: { maximumSpendUsd: 1, hourlyCostUsd: 1 }, evaluation: { benchmarkId: "model-comparison", target: receipt.target, grader: series.grader, judge: null, seeds: [1, 2, 3], repetitions: 3, maximumSpendUsd: 1, series: { id: series.id, protocol: { id: series.benchmarkProtocol!.id, revision: series.benchmarkProtocol!.revision, contentHash: series.benchmarkProtocol!.contentHash } }, panel: { id: panelId, role: panelRole, passLabel }, comparisonPair: { entryId: entry.id, parent: entry.parent, candidateModelVersionId: entry.modelVersionId! }, attemptPlan: [{ stage: "comparison", split: panelRole, taskIds: [taskIdForPanel(panelId)], attemptCount: 9 }] }, evaluationProgress: { stage: "comparison", completedAttempts: 9, totalAttempts: 9, accounting: null, evidenceSnapshot: null }, reward: null, receipt, adapterArtifactLineageId: null, failure: null, startedAt: NOW, completedAt: NOW, updatedAt: NOW });
 }
 
-function taskIdForPanel(panelId: string) { return panelId === "p0-correction" ? "task-correction" : panelId === "p0-sibling" ? "task-sibling" : panelId === "p0-known" ? "task-known" : panelId === "development" ? "task-development" : "task-retained"; }
+function taskIdForPanel(panelId: string) { return panelId === "p0-correction" ? "task-correction" : panelId === "p0-sibling" ? "task-sibling" : panelId === "p0-known" ? "task-known" : panelId === "development" ? "task-development" : panelId === "frozen" ? "task-frozen" : "task-retained"; }

@@ -373,7 +373,13 @@ function comparisonStatusLabel(status: string) {
 function comparisonDecisionLabel(disposition: "advance" | "hold" | "no_signal") {
   return disposition === "advance" ? "Advanced" : disposition === "hold" ? "Held" : "No signal";
 }
-function parentRuleLabel(rule: string) { return rule === "base_model" ? "Frozen base" : rule === "accepted_seed" ? "Accepted seed" : "Accepted daily head"; }
+function parentRuleLabel(rule: string) {
+  if (rule === "base_model") return "Frozen base";
+  if (rule === "previous_release") return "Previous release";
+  if (rule === "seed_release") return "Seed release";
+  if (rule === "accepted_seed") return "Accepted seed";
+  return "Accepted daily head";
+}
 function branchLabel(role: string) { return role === "weekly_rollup" ? "Weekly roll-up" : role === "full_refresh" ? "Full-task refresh" : "Daily"; }
 function roleLabel(role: string) { return role === "full_refresh" ? "full-task refresh" : role.replaceAll("_", " "); }
 function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "2-digit" }).format(new Date(value)); }

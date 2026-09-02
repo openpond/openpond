@@ -81,9 +81,9 @@ function draftSeries(seed: Taskset, eligible: Taskset, development: Taskset, ret
     },
     schedule: [
       { id: "schedule-p0", ordinal: 0, label: "P0", role: "seed", parentRule: "base_model", taskSource: "seed_taskset", trainableRank: 16, minimumTasks: 1, maximumTasks: 10 },
-      { id: "schedule-p1", ordinal: 1, label: "P1", role: "daily_residual", parentRule: "accepted_daily_head", taskSource: "nightly_selection", trainableRank: 1, minimumTasks: 1, maximumTasks: 2 },
-      { id: "schedule-p2", ordinal: 2, label: "P2", role: "daily_residual", parentRule: "accepted_daily_head", taskSource: "nightly_selection", trainableRank: 2, minimumTasks: 1, maximumTasks: 2 },
-      { id: "schedule-p7", ordinal: 3, label: "P7", role: "weekly_rollup", parentRule: "accepted_seed", taskSource: "daily_cohort_union", trainableRank: 3, minimumTasks: 2, maximumTasks: 4 },
+      { id: "schedule-p1", ordinal: 1, label: "P1", role: "daily_residual", parentRule: "previous_release", taskSource: "nightly_selection", trainableRank: 1, minimumTasks: 1, maximumTasks: 2 },
+      { id: "schedule-p2", ordinal: 2, label: "P2", role: "daily_residual", parentRule: "previous_release", taskSource: "nightly_selection", trainableRank: 2, minimumTasks: 1, maximumTasks: 2 },
+      { id: "schedule-p7", ordinal: 3, label: "P7", role: "weekly_rollup", parentRule: "seed_release", taskSource: "daily_cohort_union", trainableRank: 3, minimumTasks: 2, maximumTasks: 4 },
       { id: "schedule-p8", ordinal: 4, label: "P8", role: "full_refresh", parentRule: "base_model", taskSource: "eligible_task_pool", trainableRank: 19, minimumTasks: 3, maximumTasks: 10 },
     ],
     scheduleSealedAt: null,
@@ -297,6 +297,62 @@ describe("Model Comparison Series service", () => {
     expect(p7Decision.series.acceptedDailyHeadEntryId).toBe(p1Decision.entry.id);
   });
 
+  it("chains daily releases through every prior residual without an intermediate quality decision", async () => {
+    const seed = taskset("seed-cumulative-test", ["seed-task"]);
+    const eligible = taskset("eligible-cumulative-test", ["daily-one", "daily-two"]);
+    const development = taskset("development-cumulative-test", ["development-task"]);
+    const retained = taskset("retained-cumulative-test", ["retained-task"]);
+    const frozen = taskset("frozen-cumulative-test", ["frozen-task"]);
+    const store = memoryStore([seed, eligible, development, retained, frozen]);
+    const service = createModelComparisonSeriesService(store.api as never);
+    const saved = await service.saveSeries(draftSeries(seed, eligible, development, retained, frozen));
+    const sealed = await service.sealSeries({ seriesId: saved.id, expectedRevision: 1 });
+    const selection = (taskId: string) => ({
+      source: "replay_evidence" as const,
+      taskIds: [taskId], observedFrom: NOW, observedTo: NOW, reviewedAt: NOW,
+      reviewedBy: "reviewer-cumulative-test", sourceTaskset: taskRef(eligible),
+    });
+
+    const p0 = (await service.queueRelease({
+      seriesId: sealed.id, scheduleEntryId: "schedule-p0", taskSelection: null, expectedSeriesRevision: 2,
+    })).entry;
+    store.data.versions.set("version-cumulative-p0", {
+      id: "version-cumulative-p0", profileId: sealed.profileId, modelId: sealed.modelProjectId,
+      taskset: p0.taskset, contentHash: contentHash("version-cumulative-p0"), artifactLineageId: "lineage-cumulative-p0",
+      comparisonSeriesEntry: { seriesId: sealed.id, entryId: p0.id, scheduleEntryId: p0.scheduleEntryId, ordinal: p0.ordinal, releaseHash: p0.releaseHash },
+    });
+    await candidate(service, p0, "version-cumulative-p0");
+
+    const p1 = (await service.queueRelease({
+      seriesId: sealed.id, scheduleEntryId: "schedule-p1", taskSelection: selection("daily-one"), expectedSeriesRevision: 3,
+    })).entry;
+    expect(p1.parent).toMatchObject({ kind: "model_version", id: "version-cumulative-p0" });
+    store.data.versions.set("version-cumulative-p1", {
+      id: "version-cumulative-p1", profileId: sealed.profileId, modelId: sealed.modelProjectId,
+      taskset: p1.taskset, contentHash: contentHash("version-cumulative-p1"), artifactLineageId: "lineage-cumulative-p1",
+      comparisonSeriesEntry: { seriesId: sealed.id, entryId: p1.id, scheduleEntryId: p1.scheduleEntryId, ordinal: p1.ordinal, releaseHash: p1.releaseHash },
+    });
+    await candidate(service, p1, "version-cumulative-p1");
+
+    const p2 = (await service.queueRelease({
+      seriesId: sealed.id, scheduleEntryId: "schedule-p2", taskSelection: selection("daily-two"), expectedSeriesRevision: 4,
+    })).entry;
+    expect(p2.parent).toMatchObject({ kind: "model_version", id: "version-cumulative-p1" });
+    expect(p2.residualBlocks.map((block) => ({ rank: block.rank, role: block.optimizationRole }))).toEqual([
+      { rank: 16, role: "frozen" },
+      { rank: 1, role: "frozen" },
+      { rank: 2, role: "trainable" },
+    ]);
+    expect(p2.enabledCumulativeRank).toBe(19);
+    expect(p2.decision).toBeNull();
+
+    const p7 = (await service.queueRelease({
+      seriesId: sealed.id, scheduleEntryId: "schedule-p7", taskSelection: null, expectedSeriesRevision: 5,
+    })).entry;
+    expect(p7.parent).toMatchObject({ kind: "model_version", id: "version-cumulative-p0" });
+    expect(p0.decision).toBeNull();
+  });
+
   it("rejects invalid parents and version references while preserving cancellation and no-signal outcomes", async () => {
     const seed = taskset("seed-service-test", ["seed-task"]);
     const eligible = taskset("eligible-service-test", ["daily-one", "daily-two"]);
@@ -314,7 +370,7 @@ describe("Model Comparison Series service", () => {
     };
     await expect(service.queueRelease({
       seriesId: sealed.id, scheduleEntryId: "schedule-p1", taskSelection: selection, expectedSeriesRevision: 2,
-    })).rejects.toThrow("accepted parent");
+    })).rejects.toThrow("previous release's trained Model Version");
 
     const p0 = (await service.queueRelease({
       seriesId: sealed.id, scheduleEntryId: "schedule-p0", taskSelection: null, expectedSeriesRevision: 2,

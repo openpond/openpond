@@ -1,4 +1,11 @@
-import type { ModelComparisonParent, ModelComparisonSeries, ModelComparisonSeriesEntry, ModelRun } from "@openpond/contracts";
+import {
+  ChatModelRefSchema,
+  type ContinualBenchPanelRelease,
+  type ModelComparisonParent,
+  type ModelComparisonSeries,
+  type ModelComparisonSeriesEntry,
+  type ModelRun,
+} from "@openpond/contracts";
 
 import type { SqliteStore } from "../store/store.js";
 import type { createModelComparisonEvaluationService } from "./model-comparison-evaluation-service.js";
@@ -86,10 +93,60 @@ export function createModelComparisonEvaluationScheduler(deps: { store: SqliteSt
         }
       }
     }
+    for (const [seriesId, series] of enabled) {
+      const finalEntry = publishable
+        .filter((entry) => entry.seriesId === seriesId)
+        .sort((left, right) => right.ordinal - left.ordinal)[0];
+      if (!finalEntry) continue;
+      const panels = series.benchmarkProtocol!.panels
+        .filter((panel): panel is ContinualBenchPanelRelease & { role: Exclude<ContinualBenchPanelRelease["role"], "training_eligible"> } => panel.role !== "training_eligible")
+        .sort((left, right) => left.id.localeCompare(right.id));
+      const references = series.benchmarkProtocol!.policies.externalReferences
+        .filter((reference) => reference.kind === "external_reference");
+      for (const reference of references) {
+        for (const panel of panels) {
+          const priorAttempts = matchingReferenceEvaluations(runs, series, panel.id, reference.id);
+          if (priorAttempts.some((run) => run.status === "succeeded")) continue;
+          if (priorAttempts.length >= AUTOMATIC_EVALUATION_MAX_ATTEMPTS) return null;
+          const attempt = priorAttempts.length + 1;
+          return deps.evaluations.startReference({
+            seriesId,
+            entryId: finalEntry.id,
+            cohortRole: panel.role,
+            panelId: panel.id,
+            targetKind: "external_reference",
+            label: reference.id,
+            model: ChatModelRefSchema.parse(reference.model),
+            seeds: series.benchmarkProtocol!.evaluation.seeds,
+            repetitions: series.benchmarkProtocol!.evaluation.repetitions,
+            maximumSpendUsd: Math.min(
+              AUTOMATIC_EVALUATION_MAX_SPEND_USD,
+              series.benchmarkProtocol!.resources.maximumProviderSpendUsd,
+              series.benchmarkProtocol!.resources.maximumTotalSpendUsd,
+            ),
+            idempotencyKey: `automatic-reference:${series.benchmarkProtocol!.contentHash}:${reference.id}:${panel.id}:attempt:${attempt}`,
+          });
+        }
+      }
+    }
     return null;
   }
 
   return { reconcileAutomatic };
+}
+
+function matchingReferenceEvaluations(
+  runs: ModelRun[],
+  series: ModelComparisonSeries,
+  panelId: string,
+  label: string,
+): ModelRun[] {
+  return runs.filter((run) => run.evaluation?.benchmarkId === "model-comparison"
+    && run.evaluation.series?.id === series.id
+    && run.evaluation.series.protocol.contentHash === series.benchmarkProtocol?.contentHash
+    && run.evaluation.panel?.id === panelId
+    && run.evaluation.target.kind === "external_reference"
+    && run.evaluation.target.label === label);
 }
 
 function matchingEvaluations(runs: ModelRun[], series: ModelComparisonSeries, entry: ModelComparisonSeriesEntry, panelId: string, target: ModelComparisonParent | { kind: "model_version"; id: string; contentHash: string }): ModelRun[] {

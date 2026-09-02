@@ -3,6 +3,7 @@ import { contentHash } from "@openpond/taskset-sdk";
 import { describe, expect, it, vi } from "vitest";
 
 import { createModelComparisonEvaluationScheduler } from "./model-comparison-evaluation-scheduler.js";
+import { currencyPanelsForEntry } from "./model-currency-projection-service.js";
 
 const hash = (value: unknown) => contentHash(value);
 
@@ -56,6 +57,33 @@ describe("automatic Model Comparison evaluation scheduling", () => {
     }).reconcileAutomatic();
 
     expect(start).not.toHaveBeenCalled();
+  });
+
+  it("starts sealed frontier references only after the complete candidate matrix", async () => {
+    const series = fixtureSeries(true);
+    const seedEntry = fixtureEntry();
+    const entries = fixtureEntries(series, seedEntry);
+    const runs = entries.flatMap((entry) => currencyPanelsForEntry(series, entry).flatMap((panel) => [
+      existingRun(series, entry, panel.id, "base_model", null),
+      existingRun(series, entry, panel.id, "model_version", entry.modelVersionId),
+    ]));
+    const start = vi.fn(async (input: Record<string, unknown>) => preparedRun(input));
+    const startReference = vi.fn(async (input: Record<string, unknown>) => preparedRun(input));
+
+    await createModelComparisonEvaluationScheduler({
+      store: fixtureStore(series, seedEntry, runs) as never,
+      evaluations: { start, startReference } as never,
+    }).reconcileAutomatic();
+
+    expect(start).not.toHaveBeenCalled();
+    expect(startReference).toHaveBeenCalledWith(expect.objectContaining({
+      seriesId: series.id,
+      entryId: "scheduler-entry-schedule-p1",
+      targetKind: "external_reference",
+      label: "frontier-reference",
+      model: { providerId: "codex", modelId: "frontier-model" },
+      idempotencyKey: expect.stringContaining("automatic-reference:"),
+    }));
   });
 
   it("retries terminal failures with distinct identities and stops after the bounded attempt count", async () => {
@@ -112,6 +140,15 @@ function fixtureSeries(enabled: boolean): ModelComparisonSeries {
         { scheduleEntryId: "schedule-p1", ordinal: 1, label: "P1", correctionPanelIds: ["p0-correction"] },
       ],
       evaluation: { seeds: [1, 2, 3], repetitions: 3 },
+      policies: {
+        externalReferences: [{
+          kind: "external_reference",
+          id: "frontier-reference",
+          model: { providerId: "codex", modelId: "frontier-model" },
+          providerRevision: "frontier-revision",
+          contentHash: hash("frontier-reference"),
+        }],
+      },
       resources: { maximumProviderSpendUsd: 1_000, maximumTotalSpendUsd: 5_000, maximumEvaluationGpuSeconds: 500_000 },
     },
     baseModel: { id: "scheduler-base", revision: "base-revision" },
@@ -126,7 +163,17 @@ function fixtureEntry(): ModelComparisonSeriesEntry {
 }
 
 function fixtureStore(series: ModelComparisonSeries, entry: ModelComparisonSeriesEntry, runs: ModelRun[]) {
-  const entries = series.schedule.map((scheduled) => scheduled.id === entry.scheduleEntryId
+  const entries = fixtureEntries(series, entry);
+  return {
+    listModelComparisonSeries: async () => [series],
+    listModelComparisonSeriesEntries: async () => entries,
+    listModelRuns: async () => runs,
+    listTrainingArtifacts: async () => [{ kind: "checkpoint", baseModelId: series.baseModel.id, baseModelRevision: series.baseModel.revision, metadata: { policyVersion: 3, managedRlOutputId: "base-checkpoint-output" } }],
+  };
+}
+
+function fixtureEntries(series: ModelComparisonSeries, entry: ModelComparisonSeriesEntry): ModelComparisonSeriesEntry[] {
+  return series.schedule.map((scheduled) => scheduled.id === entry.scheduleEntryId
     ? entry
     : ({
         ...entry,
@@ -136,12 +183,6 @@ function fixtureStore(series: ModelComparisonSeries, entry: ModelComparisonSerie
         label: scheduled.label,
         modelVersionId: `scheduler-candidate-${scheduled.id}`,
       }) as ModelComparisonSeriesEntry);
-  return {
-    listModelComparisonSeries: async () => [series],
-    listModelComparisonSeriesEntries: async () => entries,
-    listModelRuns: async () => runs,
-    listTrainingArtifacts: async () => [{ kind: "checkpoint", baseModelId: series.baseModel.id, baseModelRevision: series.baseModel.revision, metadata: { policyVersion: 3, managedRlOutputId: "base-checkpoint-output" } }],
-  };
 }
 
 function preparedRun(input: Record<string, unknown>): ModelRun {

@@ -18,7 +18,7 @@ export const ModelComparisonEntryRoleSchema = z.enum([
   "seed", "daily_residual", "weekly_rollup", "full_refresh",
 ]);
 export const ModelComparisonParentRuleSchema = z.enum([
-  "base_model", "accepted_daily_head", "accepted_seed",
+  "base_model", "previous_release", "seed_release", "accepted_daily_head", "accepted_seed",
 ]);
 export const ModelComparisonTaskSourceSchema = z.enum([
   "seed_taskset", "nightly_selection", "daily_cohort_union", "eligible_task_pool",
@@ -42,14 +42,14 @@ export const ModelComparisonScheduleEntrySchema = z.object({
     context.addIssue({ code: "custom", path: ["minimumTasks"], message: "The minimum task count cannot exceed the maximum task count." });
   }
   const expected = {
-    seed: ["base_model", "seed_taskset"],
-    daily_residual: ["accepted_daily_head", "nightly_selection"],
-    weekly_rollup: ["accepted_seed", "daily_cohort_union"],
-    full_refresh: ["base_model", "eligible_task_pool"],
+    seed: { parentRules: ["base_model"], taskSource: "seed_taskset" },
+    daily_residual: { parentRules: ["previous_release", "accepted_daily_head"], taskSource: "nightly_selection" },
+    weekly_rollup: { parentRules: ["seed_release", "accepted_seed"], taskSource: "daily_cohort_union" },
+    full_refresh: { parentRules: ["base_model"], taskSource: "eligible_task_pool" },
   } as const;
-  const [parentRule, taskSource] = expected[entry.role];
-  if (entry.parentRule !== parentRule) {
-    context.addIssue({ code: "custom", path: ["parentRule"], message: `${entry.role} requires parent rule ${parentRule}.` });
+  const { parentRules, taskSource } = expected[entry.role];
+  if (!(parentRules as readonly string[]).includes(entry.parentRule)) {
+    context.addIssue({ code: "custom", path: ["parentRule"], message: `${entry.role} requires parent rule ${parentRules.join(" or ")}.` });
   }
   if (entry.taskSource !== taskSource) {
     context.addIssue({ code: "custom", path: ["taskSource"], message: `${entry.role} requires task source ${taskSource}.` });

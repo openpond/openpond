@@ -233,13 +233,12 @@ export function currencyPanelsForEntry(series: ModelComparisonSeries, entry: Mod
   const correctionIds = new Set(scheduled.correctionPanelIds);
   const correctionLabels = new Set(protocol.panels.filter((panel) => correctionIds.has(panel.id)).map((panel) => panel.passLabel));
   const ordinalByLabel = new Map(protocol.schedule.map((candidate) => [candidate.label, candidate.ordinal]));
-  const includeFrozen = entry.ordinal === protocol.schedule.length - 1;
   return protocol.panels.filter((panel): panel is RequiredPanel => {
     if (panel.role === "training_eligible") return false;
     if (panel.role === "correction") return correctionIds.has(panel.id);
     if (panel.role === "sibling_verification") return correctionLabels.has(panel.passLabel);
     if (panel.role === "cumulative_known") return (ordinalByLabel.get(panel.passLabel ?? "") ?? Number.POSITIVE_INFINITY) <= entry.ordinal;
-    if (panel.role === "frozen_final") return includeFrozen;
+    if (panel.role === "frozen_final") return true;
     return panel.role === "development" || panel.role === "retained";
   }).sort((left, right) => left.id.localeCompare(right.id));
 }

@@ -525,6 +525,27 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     series: ModelComparisonSeries,
     scheduled: ModelComparisonScheduleEntry,
   ): Promise<ModelComparisonSeriesEntry | null> {
+    if (scheduled.parentRule === "previous_release") {
+      const previousSchedule = series.schedule.find((entry) => entry.ordinal === scheduled.ordinal - 1);
+      if (!previousSchedule) throw new Error(`Release ${scheduled.label} has no previous scheduled release.`);
+      const entry = (await store.listModelComparisonSeriesEntries({ seriesId: series.id }))
+        .find((candidate) => candidate.scheduleEntryId === previousSchedule.id);
+      if (!entry || !["candidate", "accepted"].includes(entry.status) || !entry.modelVersionId) {
+        throw new Error(`Release ${scheduled.label} requires the previous release's trained Model Version.`);
+      }
+      return entry;
+    }
+    if (scheduled.parentRule === "seed_release") {
+      const seedSchedule = series.schedule.find((entry) => entry.role === "seed");
+      const entry = seedSchedule
+        ? (await store.listModelComparisonSeriesEntries({ seriesId: series.id }))
+          .find((candidate) => candidate.scheduleEntryId === seedSchedule.id)
+        : null;
+      if (!entry || !["candidate", "accepted"].includes(entry.status) || !entry.modelVersionId) {
+        throw new Error(`Release ${scheduled.label} requires the trained seed Model Version.`);
+      }
+      return entry;
+    }
     const id = scheduled.parentRule === "accepted_daily_head"
       ? series.acceptedDailyHeadEntryId
       : scheduled.parentRule === "accepted_seed" ? series.acceptedSeedEntryId : null;
@@ -544,13 +565,13 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     if (scheduled.parentRule === "base_model") {
       return { kind: "base_model", id: series.baseModel.id, revision: series.baseModel.revision };
     }
-    if (!parentEntry?.modelVersionId) throw new Error(`Release ${scheduled.label} requires its accepted parent.`);
+    if (!parentEntry?.modelVersionId) throw new Error(`Release ${scheduled.label} requires its declared parent.`);
     const version = await store.getModelVersion(parentEntry.modelVersionId);
     if (!version || version.profileId !== series.profileId || version.modelId !== series.modelProjectId) {
-      throw new Error("The accepted parent Model Version is unavailable or belongs to another project.");
+      throw new Error("The parent Model Version is unavailable or belongs to another project.");
     }
     if (!sameEntryRef(version.comparisonSeriesEntry, entryRef(parentEntry))) {
-      throw new Error("The accepted parent Model Version does not reference the immutable parent release.");
+      throw new Error("The parent Model Version does not reference the immutable parent release.");
     }
     return { kind: "model_version", id: version.id, contentHash: version.contentHash };
   }
@@ -637,7 +658,7 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
       const panel = series.benchmarkProtocol.panels.find((candidate) => candidate.id === evaluation.panelId);
       if (!panel || panel.role === "training_eligible" || !sameRef(panel.taskset, evaluation.taskset)) return false;
       if (evaluation.cohortRole !== "current" && evaluation.cohortRole !== "prior_disclosed" && evaluation.cohortRole !== panel.role) return false;
-      if (panel.role === "frozen_final") return entry.ordinal === series.schedule.length - 1;
+      if (panel.role === "frozen_final") return true;
       if (!panel.passLabel) return panel.role === "development" || panel.role === "retained";
       const panelOrdinal = series.schedule.find((scheduled) => scheduled.label === panel.passLabel)?.ordinal;
       return panelOrdinal !== undefined && panelOrdinal <= entry.ordinal;
