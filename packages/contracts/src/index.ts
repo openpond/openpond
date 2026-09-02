@@ -43,6 +43,7 @@ export * from "./dataset-imports.js";
 export * from "./task-mining.js";
 export * from "./training.js";
 export * from "./model-lifecycle.js";
+export * from "./model-comparisons.js";
 export * from "./training-benchmark.js";
 export * from "./training-sizing.js";
 export * from "./cross-system-operations.js";

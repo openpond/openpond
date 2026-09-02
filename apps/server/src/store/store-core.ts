@@ -38,6 +38,7 @@ import {
   resetLegacySubagentTransportState as resetLegacySubagentTransportStateMigration,
 } from "./store-subagent-migrations.js";
 import {
+  allowModelRunsWithoutVersion as allowModelRunsWithoutVersionMigration,
   createModelProjectTables as migrateModelProjectTables,
 } from "./store-model-run-migration.js";
 import {
@@ -594,19 +595,23 @@ export class SqliteStoreCore {
   }
 
   async createModelProjectTables(): Promise<void> {
-    await migrateModelProjectTables({
-      all: <T>(sql: string, params: unknown[] = []) => this.all<T>(sql, params),
-      exec: (sql) => this.exec(sql),
-      run: (sql, params = []) => this.run(sql, params),
-    });
+    await migrateModelProjectTables(this.modelProjectMigrationStore());
+  }
+
+  async allowModelRunsWithoutVersion(): Promise<void> {
+    await allowModelRunsWithoutVersionMigration(this.modelProjectMigrationStore());
   }
 
   async consolidateModelProjectTrainingSetup(): Promise<void> {
-    await consolidateModelProjectTrainingSetupMigration({
+    await consolidateModelProjectTrainingSetupMigration(this.modelProjectMigrationStore());
+  }
+
+  private modelProjectMigrationStore() {
+    return {
       all: <T>(sql: string, params: unknown[] = []) => this.all<T>(sql, params),
-      exec: (sql) => this.exec(sql),
-      run: (sql, params = []) => this.run(sql, params),
-    });
+      exec: (sql: string) => this.exec(sql),
+      run: (sql: string, params: unknown[] = []) => this.run(sql, params),
+    };
   }
 
   async repairUnverifiableLearnedPreferenceBindings(): Promise<void> {

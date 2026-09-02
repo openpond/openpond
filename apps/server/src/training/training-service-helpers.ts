@@ -145,7 +145,7 @@ export function withAuthoritativeRecipeHashes(
         wallTimeMs: positiveInteger(resourceLimits.wallTimeMs, 180_000),
         maximumCostUsd: null,
       },
-      checkpointEverySteps: Math.max(1, Math.min(10, maxSteps)),
+      checkpointEverySteps: 1,
       seed: rollout.seed,
       evaluationSplit: "frozen_eval",
       optimizer: {

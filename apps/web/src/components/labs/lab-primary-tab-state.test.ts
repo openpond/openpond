@@ -31,6 +31,24 @@ describe("Models path routing", () => {
       section: "runs",
     });
     expect(
+      modelsRouteFromLocation({
+        pathname: "/models/project_1/runs/run_1/details",
+      }),
+    ).toMatchObject({
+      section: "runs",
+      resourceId: "run_1",
+      detailTab: "details",
+    });
+    expect(
+      modelsRouteFromLocation({
+        pathname: "/models/project_1/runs/run_1/metrics",
+      }),
+    ).toMatchObject({
+      section: "runs",
+      resourceId: "run_1",
+      detailTab: "metrics",
+    });
+    expect(
       modelsRouteFromLocation({ pathname: "/models/project_1/versions" }),
     ).toMatchObject({
       kind: "project",
@@ -72,6 +90,14 @@ describe("Models path routing", () => {
       detailTab: null,
     });
     expect(
+      modelsRouteFromLocation({ pathname: "/models/comparisons/series_1" }),
+    ).toEqual({
+      kind: "library",
+      section: "comparisons",
+      resourceId: "series_1",
+      detailTab: null,
+    });
+    expect(
       modelsRouteFromLocation({
         pathname: "/models/tasksets/taskset_1/scoring",
       }),
@@ -85,17 +111,21 @@ describe("Models path routing", () => {
       modelsRouteFromLocation({ pathname: "/models/reviews/review_1/nope" }),
     ).toBeNull();
     expect(
-      modelsRouteFromLocation({ pathname: "/models/scoring/judge_1/evidence" }),
+      modelsRouteFromLocation({ pathname: "/models/scorers/judge_1/evidence" }),
     ).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models/scoring" })).toBeNull();
   });
 
   it("serializes paths without query-string navigation state", () => {
     const route = modelProjectRoute("project with spaces", "evals");
     expect(modelsPath(route)).toBe("/models/project%20with%20spaces/evals");
-    expect(modelsPath(modelLibraryRoute("scoring", "judge 1"))).toBe(
-      "/models/scoring/judge%201",
+    expect(modelsPath(modelLibraryRoute("scorers", "judge 1"))).toBe(
+      "/models/scorers/judge%201",
     );
     expect(modelsPath(modelLibraryRoute("projects"))).toBe("/models/projects");
+    expect(modelsPath(modelLibraryRoute("comparisons", "series 1"))).toBe(
+      "/models/comparisons/series%201",
+    );
     expect(modelsSectionFromRoute({ kind: "index" })).toBe("overview");
   });
 });

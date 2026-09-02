@@ -24,7 +24,7 @@ export async function createModelLifecycleTables(
     CREATE TABLE IF NOT EXISTS model_runs (
       id TEXT PRIMARY KEY,
       model_id TEXT NOT NULL,
-      model_version_id TEXT NOT NULL,
+      model_version_id TEXT,
       profile_id TEXT NOT NULL,
       taskset_id TEXT NOT NULL,
       status TEXT NOT NULL,

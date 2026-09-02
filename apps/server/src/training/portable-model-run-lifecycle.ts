@@ -7,6 +7,7 @@ import {
   TrainingJobSourceSnapshotSchema,
   TrainingJobSchema,
   type ModelRun,
+  type ModelComparisonEntryRef,
   type ModelProject,
   type Taskset,
   type TrainingArtifacts,
@@ -55,6 +56,7 @@ export async function preparePortableModelRunLifecycle(input: {
   releaseGraph: PortableReleaseGraph;
   maximumSpendUsd: number | null;
   startedAt: string;
+  comparisonSeriesEntry?: ModelComparisonEntryRef | null;
 }): Promise<{
   modelRun: ModelRun;
   targetVersion: PortableModelVersionReservation;
@@ -148,6 +150,7 @@ export async function preparePortableModelRunLifecycle(input: {
       method,
       destinationId,
       taskset: setup.tasksetRef,
+      comparisonSeriesEntry: input.comparisonSeriesEntry ?? null,
       harnessRelease: input.releaseGraph.harnessRelease,
       quote: {
         maximumSpendUsd: input.maximumSpendUsd ?? 0,
@@ -307,6 +310,90 @@ export async function reconcilePortableModelRunLifecycle(input: {
     weights,
     provider,
   } = imported;
+  const releaseGraph = portableReleaseGraph(input.job);
+  if (!weights) {
+    if (provider !== "sandbox") {
+      throw new Error("Portable training completed without adapter weights.");
+    }
+    const evidence = input.artifacts.artifacts.filter((artifact) =>
+      ["metrics", "trace", "receipt"].includes(artifact.kind),
+    );
+    const receiptArtifact = persistedArtifacts.find(
+      (artifact) => artifact.metadata.portableKind === "receipt",
+    );
+    if (!receiptArtifact) {
+      throw new Error(
+        "Sandbox managed training completed without a persisted execution receipt.",
+      );
+    }
+    const traceHash = input.artifacts.artifacts.find(
+      (artifact) => artifact.kind === "trace",
+    )?.sha256 ?? null;
+    const versions = await input.store.listModelVersions({
+      modelId: source.modelProjectId,
+    });
+    const baseVersion = versions.find((version) =>
+      version.version === 0
+      && version.kind === "base_reference"
+      && version.baseModel.modelId === source.baseModel.modelId
+      && version.baseModel.revision === source.baseModel.revision
+    );
+    if (!baseVersion) {
+      throw new Error(
+        "Sandbox no-signal completion lost its exact base Model Version.",
+      );
+    }
+    const receiptCore = {
+      schemaVersion: "openpond.modelRunReceipt.v1" as const,
+      provider,
+      providerRunId:
+        input.executionRef.providerJobId ?? input.executionRef.runId,
+      assignmentHash: input.artifacts.manifestHash,
+      resultHash: input.artifacts.contentHash,
+      transcriptHash: contentHash(evidence),
+      traceHash,
+      resolvedBundleHash: releaseGraph.resolvedBundleHash,
+      artifactPath: artifactReceiptPath(
+        input.storeDir,
+        receiptArtifact.path,
+      ),
+      cleanup: {
+        computeReleased: true,
+        tunnelClosed: true,
+      },
+      telemetry: null,
+    };
+    const terminal = await input.store.saveModelRun(
+      ModelRunSchema.parse({
+        ...current,
+        status: "succeeded",
+        receipt: {
+          ...receiptCore,
+          contentHash: contentHash(receiptCore),
+        },
+        adapterArtifactLineageId: null,
+        failure: null,
+        completedAt,
+        updatedAt: completedAt,
+      }),
+    );
+    await saveLifecycleJob(input, {
+      status: "succeeded",
+      completedAt,
+      error: null,
+      metadata: {
+        provider,
+        providerJobId:
+          input.executionRef.providerJobId ?? input.executionRef.runId,
+        phase: "complete_no_learning_signal",
+        portableArtifactCount: persistedArtifacts.length,
+        noLearningSignal: true,
+        modelVersionId: current.modelVersionId,
+        unchangedBaseModelVersionId: baseVersion.id,
+      },
+    });
+    return terminal;
+  }
   const existingLineages = (
     await input.store.listModelArtifactLineage(taskset.id)
   ).filter((lineage) => lineage.jobId === input.job.id);
@@ -353,7 +440,6 @@ export async function reconcilePortableModelRunLifecycle(input: {
       }),
     );
   const reservation = modelVersionReservation(input.job, current);
-  const releaseGraph = portableReleaseGraph(input.job);
   const versionCore = {
     schemaVersion: "openpond.modelVersion.v1" as const,
     id: reservation.id,
@@ -364,6 +450,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
     status: "available" as const,
     baseModel: source.baseModel,
     taskset: source.taskset,
+    comparisonSeriesEntry: current.comparisonSeriesEntry ?? null,
     releaseGraph,
     artifactLineageId: lineage.id,
     adapterStatus: "trained" as const,

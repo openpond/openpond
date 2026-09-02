@@ -201,7 +201,6 @@ import {
 } from "./training/managed-adapter-models.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
-
 const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
 
 export async function createOpenPondServer(
@@ -748,6 +747,7 @@ export async function createOpenPondServer(
     harnessRefinerBenchmarks,
     preferenceComparisons: preferenceComparisonService,
     modelProjectHosting,
+    modelStream: trainingModelStream,
   });
   const trainingPayload = trainingApi.request;
   const teamChatAiExecutions = createTeamChatAiExecutionService({

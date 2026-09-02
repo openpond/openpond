@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -207,8 +208,24 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
 
   async deleteTasksetDraft(id: string): Promise<void> {
     await this.ready;
-    const write = this.writeQueue.then(() =>
-      this.run("DELETE FROM taskset_drafts WHERE id = ?", [id]));
+    const workspacePath = this.workspacePath(id);
+    const recoverablePath = `${workspacePath}.delete-${randomUUID()}`;
+    let movedWorkspace = false;
+    try {
+      await rename(workspacePath, recoverablePath);
+      movedWorkspace = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const write = this.writeQueue.then(async () => {
+      try {
+        await this.run("DELETE FROM taskset_drafts WHERE id = ?", [id]);
+      } catch (error) {
+        if (movedWorkspace) await rename(recoverablePath, workspacePath).catch(() => undefined);
+        throw error;
+      }
+      if (movedWorkspace) await rm(recoverablePath, { recursive: true, force: true });
+    });
     this.writeQueue = write.catch(() => undefined);
     await write;
   }

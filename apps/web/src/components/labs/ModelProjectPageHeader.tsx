@@ -4,6 +4,8 @@ export type ModelProjectPageMetric = {
   label: string;
   value: ReactNode;
   hint?: string;
+  ariaLabel?: string;
+  onSelect?: () => void;
 };
 
 export function ModelProjectPageHeader({
@@ -34,9 +36,22 @@ export function ModelProjectPageHeader({
       {metrics.length ? (
         <dl className="model-project-page-metrics">
           {metrics.map((metric) => (
-            <div key={metric.label}>
+            <div
+              key={metric.label}
+            >
               <dt>{metric.label}</dt>
-              <dd>{metric.value}</dd>
+              <dd>
+                {metric.onSelect ? (
+                  <button
+                    aria-label={metric.ariaLabel}
+                    className="model-project-page-metric-link"
+                    type="button"
+                    onClick={metric.onSelect}
+                  >
+                    {metric.value}
+                  </button>
+                ) : metric.value}
+              </dd>
               {metric.hint ? <small>{metric.hint}</small> : null}
             </div>
           ))}

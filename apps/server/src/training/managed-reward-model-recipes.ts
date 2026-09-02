@@ -23,6 +23,9 @@ const MANAGED_REWARD_PROCESSOR = {
 export function managedSyntheticRewardSmokeRecipe(input: {
   tasksetRelease: { id: string; contentHash: string };
   preferenceDatasetRelease: { id: string; contentHash: string };
+  serialization?:
+    | "scenario_input_and_candidate_json_v1"
+    | "visible_agent_trajectory_v1";
 }): RewardModelRecipe {
   return RewardModelRecipeSchema.parse({
     schemaVersion: "openpond.rewardModelRecipe.v1",
@@ -41,8 +44,11 @@ export function managedSyntheticRewardSmokeRecipe(input: {
     processorRelease: MANAGED_REWARD_PROCESSOR,
     input: {
       kind: "structured_text",
-      serialization: "scenario_input_and_candidate_json_v1",
-      maxCharacters: 32_000,
+      serialization: input.serialization ?? "scenario_input_and_candidate_json_v1",
+      maxCharacters:
+        input.serialization === "visible_agent_trajectory_v1"
+          ? 96_000
+          : 32_000,
     },
     lora: {
       rank: 4,
@@ -68,7 +74,10 @@ export function managedSyntheticRewardSmokeRecipe(input: {
     resourceLimits: {
       wallTimeMs: 20 * 60 * 1_000,
       maxExamples: 8,
-      maxInputCharacters: 32_000,
+      maxInputCharacters:
+        input.serialization === "visible_agent_trajectory_v1"
+          ? 96_000
+          : 32_000,
       maximumSpendUsd: 2,
     },
   });

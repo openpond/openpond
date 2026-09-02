@@ -14,6 +14,7 @@ import {
   OpenPondManagedTrainingAdapter,
   continuationResumeFrom,
 } from "../apps/server/src/training/openpond-managed-training-adapter.js";
+import { managedTrainingEvidenceFromPublic } from "../apps/server/src/training/openpond-managed-training-evidence.js";
 import { publishRunGraph } from "../apps/server/src/training/portable-model-run-service.js";
 import { managedRftRecipe, rftTasksetFixture } from "./helpers/managed-training-fixtures.js";
 import { FIXED_TIME, withTrainingStore } from "./helpers/training-fixtures.js";
@@ -26,6 +27,81 @@ const MANAGED_MODEL = {
 } as const;
 
 describe("OpenPond Managed training adapter", () => {
+  test("projects portable run evidence from public jobs, events, outputs, and receipts", () => {
+    const job = publicJob("managed-job-evidence", {
+      state: "succeeded",
+      progress: 1,
+    });
+    job.rolloutProgress = {
+      groupsCompleted: 1,
+      groupsTarget: 1,
+      optimizerUpdatesApplied: 0,
+      optimizerUpdatesSkipped: 1,
+    };
+    const evidence = managedTrainingEvidenceFromPublic({
+      job,
+      events: [
+        {
+          schemaVersion: "openpond.trainingJobEvent.v2",
+          id: "trajectory-evidence-1",
+          jobId: job.id,
+          sequence: 0,
+          type: "rollout_metric",
+          phase: "eligible",
+          message: null,
+          data: {
+            metricKind: "rollout_trajectory",
+            reward: 0.25,
+            rewardEligible: true,
+            inputTokens: 10,
+            outputTokens: 2,
+          },
+          createdAt: FIXED_TIME,
+        },
+      ],
+      outputs: {
+        schemaVersion: "openpond.trainingJobOutputs.v2",
+        outputs: [
+          {
+            schemaVersion: "openpond.trainingJobOutput.v2",
+            id: "baseline-evaluation",
+            jobId: job.id,
+            kind: "evaluation",
+            artifactRef: `managed-rl://jobs/${job.id}/evaluations/baseline-evaluation`,
+            contentHash: "e".repeat(64),
+            sizeBytes: 0,
+            metadata: {
+              kind: "baseline",
+              policyVersion: 0,
+              score: 0,
+              threshold: 0.5,
+              passed: true,
+            },
+            createdAt: FIXED_TIME,
+          },
+        ],
+        receipt: {
+          ...trainingReceipt(),
+          jobId: job.id,
+          spendUsd: 0.125,
+        },
+      },
+      syncedAt: FIXED_TIME,
+    });
+    expect(evidence).toMatchObject({
+      providerRunId: job.id,
+      progress: { targetOptimizerSteps: 1, committedOptimizerSteps: 0 },
+      reward: {
+        finalMean: 0.25,
+        trajectoryCount: 1,
+        eligibleTrajectoryCount: 1,
+      },
+      usage: { inputTokens: 10, outputTokens: 2, environmentExecutions: 1 },
+      cost: { totalUsd: 0.125 },
+      evaluations: [{ kind: "baseline", policyVersion: 0, score: 0 }],
+    });
+  });
+
   test("projects an explicit cross-Job continuation into resumeFrom", () => {
     const parentArtifact = {
       id: "managed-model-artifact-p1",

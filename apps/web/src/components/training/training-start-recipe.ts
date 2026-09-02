@@ -62,18 +62,18 @@ export function trainingRecipe(input: {
         ? "rft_easy_curriculum_v1"
         : "stable_hash_top_n",
     },
-    lora: { rank: 16 },
+    lora: { rank: input.rank },
     rollout: {
       groupSize,
       concurrency: rolloutConcurrency,
       maxTurns: crossSystem ? 15 : 1,
-      maxOutputTokens: 512,
+      maxOutputTokens: input.rolloutMaxOutputTokens,
       temperature: 0.8,
       topP: 0.95,
       seed: 17,
     },
     optimizer: {
-      learningRate: 0.00001,
+      learningRate: input.learningRate,
       maxSteps: input.maxSteps,
       clipRange: 0.2,
       iterations: 2,

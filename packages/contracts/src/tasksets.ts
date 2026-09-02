@@ -637,6 +637,12 @@ export const TrainingMethodReadinessSchema = z.object({
   reasons: z.array(z.string().trim().min(1).max(5_000)).default([]),
 });
 
+export const TasksetReadinessFindingSchema = z.object({
+  code: IdSchema,
+  message: z.string().trim().min(1).max(5_000),
+  path: z.string().trim().max(2_000).nullable(),
+});
+
 export const TasksetReadinessReportSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetReadiness.v1"),
   tasksetId: IdSchema,
@@ -648,7 +654,8 @@ export const TasksetReadinessReportSchema = z.object({
   compatibleDestinationClasses: z.array(
     z.enum(["export", "custom", "hosted_managed"]),
   ),
-  blockers: z.array(z.object({ code: IdSchema, message: z.string().trim().min(1).max(5_000), path: z.string().trim().max(2_000).nullable() })).default([]),
+  blockers: z.array(TasksetReadinessFindingSchema).default([]),
+  advisories: z.array(TasksetReadinessFindingSchema).default([]),
   warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),
   generatedAt: TimestampSchema,
 });

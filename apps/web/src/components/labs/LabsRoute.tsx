@@ -19,6 +19,7 @@ import { LabScoringPage } from "./LabScoringPage";
 import type { LabScorerCreateInput } from "./LabScorerCreateDialog";
 import { LabModelCreateDialog, type LabModelCreateInput } from "./LabModelCreateDialog";
 import { LabModelsPage } from "./LabModelsPage";
+import { LabModelComparisonsPage } from "./LabModelComparisonsPage";
 import { LabModelsOverviewPage } from "./LabModelsOverviewPage";
 import { LabsRouteModelUseDialog } from "./LabsRouteModelUseDialog";
 import { LabServingPage } from "./LabServingPage";
@@ -27,7 +28,10 @@ import { labModelVersions } from "./lab-models";
 import { newProject, nextModelName } from "./model-run-editor-helpers";
 import { buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { useErrorToast } from "../../app/AppToastContext";
-import { trainingModelRunSyncKey } from "./LabsRouteSections";
+import {
+  computeProfileAgentRunSyncKey,
+  trainingModelRunSyncKey,
+} from "./LabsRouteSections";
 import {
   modelProjectRoute,
   modelLibraryRoute,
@@ -45,9 +49,7 @@ import {
   modelsSectionForLabTab,
   titleCaseLabel,
 } from "./labs-route-models";
-
 export type { LabsRouteProps } from "./labs-route-types";
-
 export function LabsRoute({
   closeDetailKind,
   closeDetailRequestId,
@@ -84,14 +86,7 @@ export function LabsRoute({
     [training.training.payload]
   );
   const profileAgentRunSyncKey = useMemo(
-    () => createImprove.runs
-      .filter((run) =>
-        run.target.kind === "agent"
-        && ["ready_local", "released", "published_hosted"].includes(run.state)
-      )
-      .map((run) => `${run.id}:${run.revision}:${run.state}`)
-      .sort()
-      .join("|"),
+    () => computeProfileAgentRunSyncKey(createImprove.runs),
     [createImprove.runs]
   );
   const modelsRoute = useModelsRoute();
@@ -245,14 +240,16 @@ export function LabsRoute({
     }
     const resourceSection = closeDetailKind === "dataset"
       ? "tasksets"
+      : closeDetailKind === "comparison"
+        ? "comparisons"
       : closeDetailKind === "evaluation"
         ? "evaluations"
         : closeDetailKind === "review"
           ? "reviews"
-          : "scoring";
+          : "scorers";
     if (
       modelsRoute?.kind === "project" &&
-      resourceSection !== "reviews"
+      (resourceSection === "tasksets" || resourceSection === "evaluations")
     ) {
       navigateModelsRoute(modelProjectRoute(
         modelsRoute.projectId,
@@ -282,8 +279,9 @@ export function LabsRoute({
     if (modelsRoute?.kind === "library") {
       const definitions = {
         projects: { kind: "model" as const, label: "Model Projects" },
+        comparisons: { kind: "comparison" as const, label: "Model Comparisons" },
         tasksets: { kind: "dataset" as const, label: "Taskset Library" },
-        scoring: { kind: "scoring" as const, label: "Scoring" },
+        scorers: { kind: "scoring" as const, label: "Scorers" },
         evaluations: { kind: "evaluation" as const, label: "Evaluations" },
         reviews: { kind: "review" as const, label: "Human Review" },
       };
@@ -343,25 +341,21 @@ export function LabsRoute({
       });
       return;
     }
-    if (
-      modelsRoute?.kind === "project" &&
-      (modelsRoute.section === "scoring" || modelsRoute.section === "evals")
-    ) {
-      const scoring = modelsRoute.section === "scoring";
+    if (modelsRoute?.kind === "project" && modelsRoute.section === "evals") {
       const resourceLabel = libraryResourceLabel(
-        scoring ? "scoring" : "evaluations",
+        "evaluations",
         modelsRoute.resourceId,
         training.training.payload,
       );
       onDetailOpenChange({
-        kind: scoring ? "scoring" : "evaluation",
+        kind: "evaluation",
         kindLabel: "Model Projects",
         kindOnSelect: () => navigateModelsRoute({ kind: "index" }),
         workproductLabel: selected?.name ?? modelsRoute.projectId,
         workproductOnSelect: () => navigateModelsRoute(modelProjectRoute(modelsRoute.projectId)),
         segments: [
           {
-            label: scoring ? "Scoring" : "Evaluations",
+            label: "Evaluations",
             onSelect: () => navigateModelsRoute(modelProjectRoute(
               modelsRoute.projectId,
               modelsRoute.section,
@@ -507,12 +501,11 @@ export function LabsRoute({
 
   async function createScorer(
     input: LabScorerCreateInput,
-    modelProjectId: string | null,
   ): Promise<boolean> {
     const result = await training.training.actions.createScorer(
       input.grader,
       input.tasksetId,
-      modelProjectId,
+      null,
     );
     if (!result) return false;
     if (result.hostedSync.state === "sync_failed") {
@@ -601,14 +594,42 @@ export function LabsRoute({
             activeProfileId={profileId}
             items={models}
             loading={training.training.loading && !models.length}
-            providerSettings={training.providerSettings}
             runs={createImprove.runs}
             state={training.training.payload}
+            onCompare={() => navigateModelsRoute(modelLibraryRoute("comparisons"))}
             onSelect={(key) => {
               const project = models.find((item) => item.key === key);
               if (project) navigateModelsRoute(modelProjectRoute(project.id));
             }}
             onUseModel={useModel}
+          />
+        ) : modelsRoute.section === "comparisons" ? (
+          <LabModelComparisonsPage
+            connection={profileView.connection}
+            state={training.training.payload}
+            training={training.training}
+            selectedSeriesId={modelsRoute.resourceId}
+            selectedEntryId={modelsRoute.detailTab}
+            onSelectedSeriesIdChange={(seriesId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId))}
+            onSelectedEntryIdChange={(seriesId, entryId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId, entryId))}
+            onOpenEvaluation={(evaluationRunId) => navigateModelsRoute(modelLibraryRoute("evaluations", evaluationRunId))}
+            onOpenProject={(projectId) => navigateModelsRoute(modelProjectRoute(projectId))}
+            onOpenTaskset={(tasksetId) => navigateModelsRoute(modelLibraryRoute("tasksets", tasksetId))}
+            onOpenRun={(projectId, runId) => navigateModelsRoute({
+              kind: "project",
+              projectId,
+              section: "runs",
+              resourceId: modelEntryRouteId(`model-run:${runId}`),
+              detailTab: null,
+            })}
+            onOpenVersion={(projectId, versionId) => navigateModelsRoute({
+              kind: "project",
+              projectId,
+              section: "versions",
+              resourceId: modelEntryRouteId(`version:${versionId}`),
+              detailTab: null,
+            })}
+            onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
           />
         ) : modelsRoute.section === "tasksets" ? (
           datasetCreateRoute === "build" ? (
@@ -653,13 +674,13 @@ export function LabsRoute({
               onTrainModel={openModelRunEditor}
             />
           )
-        ) : modelsRoute.section === "scoring" ? (
+        ) : modelsRoute.section === "scorers" ? (
           <LabScoringPage
             busy={training.training.busyAction === "create-scorer"}
             defaultModel={training.defaultModel}
             onOpenTaskset={(tasksetId) => navigateModelsRoute(modelLibraryRoute("tasksets", tasksetId))}
-            onCreateScorer={(input) => createScorer(input, null)}
-            onSelectedScorerIdChange={(scorerId) => navigateModelsRoute(modelLibraryRoute("scoring", scorerId))}
+            onCreateScorer={createScorer}
+            onSelectedScorerIdChange={(scorerId) => navigateModelsRoute(modelLibraryRoute("scorers", scorerId))}
             selectedScorerId={modelsRoute.resourceId}
             providerSettings={training.providerSettings}
             state={training.training.payload}
@@ -679,6 +700,8 @@ export function LabsRoute({
         ) : (
           <LabHumanReviewsPage
             defaultModel={training.defaultModel}
+            onOpenSeries={(seriesId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId))}
+            onToast={(message, tone) => profileView.onToast?.(message, tone) ?? 0}
             onSelectedTasksetIdChange={(tasksetId) => navigateModelsRoute(modelLibraryRoute("reviews", tasksetId))}
             selectedTasksetId={modelsRoute.resourceId}
             state={training.training.payload}
@@ -749,30 +772,6 @@ export function LabsRoute({
             }}
           />
         )
-      ) : activeTab === "scoring" && modelsRoute?.kind === "project" ? (
-        <LabScoringPage
-          busy={training.training.busyAction === "create-scorer"}
-          defaultModel={training.defaultModel}
-          modelProjectId={modelsRoute.projectId}
-          onCreateScorer={(input) => createScorer(input, modelsRoute.projectId)}
-          onOpenTaskset={(tasksetId) => navigateModelsRoute({
-            kind: "project",
-            projectId: modelsRoute.projectId,
-            section: "tasksets",
-            resourceId: tasksetId,
-            detailTab: null,
-          })}
-          onSelectedScorerIdChange={(scorerId) => navigateModelsRoute({
-            kind: "project",
-            projectId: modelsRoute.projectId,
-            section: "scoring",
-            resourceId: scorerId,
-            detailTab: null,
-          })}
-          selectedScorerId={modelsRoute.resourceId}
-          providerSettings={training.providerSettings}
-          state={training.training.payload}
-        />
       ) : activeTab === "evals" && modelsRoute?.kind === "project" ? (
         <LabEvaluationsPage
           detailTab={modelsRoute.detailTab as EvaluationDetailTab | null}
@@ -843,6 +842,7 @@ export function LabsRoute({
           onOpenPullRequest={onOpenPullRequest}
           onOpenCandidateFiles={onOpenCandidateFiles}
           onOpenConversation={onOpenRunConversation}
+          onOpenComparison={(seriesId) => navigateModelsRoute(modelLibraryRoute("comparisons", seriesId))}
           onClose={closeSelectedWorkproduct}
           onLocationChange={onDetailOpenChange}
           onRenameAgent={() => undefined}
@@ -929,9 +929,9 @@ export function LabsRoute({
           activeProfileId={profileId}
           items={models}
           loading={training.training.loading && !models.length}
-          providerSettings={training.providerSettings}
           runs={createImprove.runs}
           state={training.training.payload}
+          onCompare={() => navigateModelsRoute(modelLibraryRoute("comparisons"))}
           onSelect={(key) => {
             const project = models.find((item) => item.key === key);
             if (project) navigateModelsRoute(modelProjectRoute(project.id));

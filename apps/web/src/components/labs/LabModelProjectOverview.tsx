@@ -7,6 +7,11 @@ import type {
 
 import { formatDateTime, statusLabel } from "../training/training-model-data";
 import type { LabModelVersion } from "./lab-models";
+import { LabContinualLearningSeries } from "./LabContinualLearningSeries";
+import {
+  isActiveRunStatus,
+  LabRunStatusBadge,
+} from "./LabRunStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { LabProjectMetricCharts } from "./LabProjectMetricCharts";
 
@@ -14,13 +19,17 @@ export function LabModelProjectOverview({
   actions,
   modelProject,
   modelRuns,
-  state: _state,
+  onOpenRun,
+  onOpenSeries,
+  state,
   status,
   versions,
 }: {
   actions?: ReactNode;
   modelProject: ModelProject | null;
   modelRuns: ModelRun[];
+  onOpenRun: (runId: string) => void;
+  onOpenSeries: (seriesId: string) => void;
   state: TrainingStateResponse | null;
   status?: ReactNode;
   versions: LabModelVersion[];
@@ -28,7 +37,10 @@ export function LabModelProjectOverview({
   const orderedRuns = [...modelRuns].sort((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt),
   );
-  const latestRun = orderedRuns[0] ?? null;
+  const currentRun =
+    orderedRuns.find((run) => isActiveRunStatus(run.status)) ??
+    orderedRuns[0] ??
+    null;
   const latestEvaluation = orderedRuns.find((run) => run.kind === "evaluation") ?? null;
   const evaluationReceipt = latestEvaluation?.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
     ? latestEvaluation.receipt
@@ -58,11 +70,17 @@ export function LabModelProjectOverview({
               : `${versions.length} trained version${versions.length === 1 ? "" : "s"}`,
           },
           {
-            label: "Last run",
-            value: latestRun ? statusLabel(latestRun.status) : "Not started",
-            hint: latestRun
-              ? `${runKindLabel(latestRun)} · ${formatDateTime(latestRun.updatedAt)}`
+            label: "Current run",
+            value: currentRun
+              ? <LabRunStatusBadge status={currentRun.status} />
+              : "Not started",
+            hint: currentRun
+              ? `${runKindLabel(currentRun)} · ${formatDateTime(currentRun.updatedAt)}`
               : `${modelProject?.tasksetSyncs.length ?? 0} attached Taskset release${modelProject?.tasksetSyncs.length === 1 ? "" : "s"}`,
+            onSelect: currentRun ? () => onOpenRun(currentRun.id) : undefined,
+            ariaLabel: currentRun
+              ? `Open ${runKindLabel(currentRun)} run with status ${statusLabel(currentRun.status)}`
+              : undefined,
           },
           {
             label: "Latest evaluation",
@@ -78,6 +96,12 @@ export function LabModelProjectOverview({
         title={modelProject?.name ?? "Model Project"}
       />
       <LabProjectMetricCharts runs={modelRuns} />
+      <LabContinualLearningSeries
+        modelProjectId={modelProject?.id ?? null}
+        onOpenRun={onOpenRun}
+        onOpenSeries={onOpenSeries}
+        state={state}
+      />
     </div>
   );
 }

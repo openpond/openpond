@@ -86,6 +86,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/taskset-drafts/import", action: "import_taskset_draft_package", status: 201 },
     { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
     { method: "PUT", path: "/v1/training/models", action: "save_model_project" },
+    { method: "POST", path: "/v1/training/comparison-series", action: "save_model_comparison_series", status: 201 },
     { method: "POST", path: "/v1/training/miner/run", action: "run_miner", status: 202 },
     { method: "PUT", path: "/v1/training/miner/config", action: "configure_miner" },
     { method: "POST", path: "/v1/training/grade", action: "grade" },
@@ -108,6 +109,14 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const dynamic = [
+    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/seal$/, method: "POST", action: "seal_model_comparison_series", key: "seriesId" },
+    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/releases$/, method: "POST", action: "queue_model_comparison_release", key: "seriesId" },
+    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/run$/, method: "PATCH", action: "link_model_comparison_run", key: "entryId" },
+    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/evaluations$/, method: "POST", action: "start_model_comparison_evaluation", key: "entryId" },
+    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/reference-evaluations$/, method: "POST", action: "start_model_comparison_reference_evaluation", key: "seriesId" },
+    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/retry$/, method: "POST", action: "retry_model_comparison_entry", key: "entryId" },
+    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/decision$/, method: "POST", action: "decide_model_comparison_entry", key: "entryId" },
+    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/promotion$/, method: "POST", action: "record_model_comparison_promotion", key: "entryId" },
     { pattern: /^\/v1\/training\/model-projects\/([^/]+)\/training\/prepare$/, method: "POST", action: "prepare_model_run", key: "modelProjectId" },
     { pattern: /^\/v1\/training\/model-projects\/([^/]+)\/training\/start$/, method: "POST", action: "start_model_run", key: "modelProjectId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/status$/, method: "GET", action: "model_run_status", key: "modelRunId" },

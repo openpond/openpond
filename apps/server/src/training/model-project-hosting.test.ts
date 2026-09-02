@@ -128,6 +128,48 @@ describe("Model Project hosting", () => {
     expect(synced.hosted?.etag).toBe("b".repeat(64));
   });
 
+  test("preserves hosted validation codes in sync errors", async () => {
+    const project = {
+      schemaVersion: "openpond.modelProject.v2" as const,
+      id: "model_project_invalid",
+      profileId: "default",
+      revision: 1,
+      name: "Invalid project",
+      objective: "Expose hosted validation evidence",
+      defaultBaseModel: null,
+      defaultDestinationId: "openpond_managed" as const,
+      trainingSetup: emptyTrainingSetup(),
+      hosted: null,
+      tasksetSyncs: [],
+      createdAt: "2026-08-25T12:00:00.000Z",
+      updatedAt: "2026-08-25T12:00:00.000Z",
+    };
+    const service = createModelProjectHostingService({
+      store: {
+        getModelProject: vi.fn(async () => project),
+        saveModelProject: vi.fn(async (value: unknown) => value),
+      } as never,
+      resolveAccess: async () => ({
+        apiBaseUrl: "https://hosted.example.test",
+        teamId: "team_1",
+        token: "test-token",
+      }),
+      env: {},
+      fetch: vi.fn(async () => Response.json({
+        schemaVersion: "openpond.modelProjectApiError.v2",
+        code: "managed_gpu_placement_objective_invalid",
+        message: "Model Project sync failed.",
+        retryable: false,
+        requestId: null,
+        details: {},
+      }, { status: 400 })) as typeof fetch,
+    });
+
+    await expect(service.syncProject(project.id)).rejects.toThrow(
+      "Model Project sync failed. (managed_gpu_placement_objective_invalid)",
+    );
+  });
+
   test("publishes immutable Taskset releases with compressed transport", async () => {
     const project = {
       schemaVersion: "openpond.modelProject.v2" as const,

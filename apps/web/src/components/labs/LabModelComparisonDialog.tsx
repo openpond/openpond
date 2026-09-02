@@ -212,15 +212,20 @@ function comparisonLabel(
   entry: ComparableRun,
   settings: ProviderSettings | null,
 ): string {
+  const model = entry.run.evaluation?.benchmarkId === "harness-refiner"
+    ? entry.run.evaluation.model
+    : null;
   return `${chatModelLabel(
-    entry.run.evaluation?.model.modelId ?? "Unknown model",
+    model?.modelId ?? "Unknown model",
     settings,
-    entry.run.evaluation?.model.providerId,
+    model?.providerId,
   )} · ${compactTime(entry.run.updatedAt)}`;
 }
 
 function runModelLabel(run: ModelRun, settings: ProviderSettings | null): string {
-  const model = run.evaluation?.model;
+  const model = run.evaluation?.benchmarkId === "harness-refiner"
+    ? run.evaluation.model
+    : run.evaluation?.target.model ?? null;
   if (!model) return "Unknown model";
   return `${chatProviderLabel(model.providerId, settings)} / ${chatModelLabel(
     model.modelId,

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { request as requestHttp } from "node:http";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -44,13 +45,14 @@ export async function runTrainingCommand(
       "resume",
       "artifacts",
       "benchmark",
+      "create-project",
     ].includes(
       subcommand,
     ) ||
     !id
   ) {
     throw new Error(
-      "usage: training <start|status|watch|logs|cancel|resume|artifacts|benchmark> <model-run-id|run-id|model-id>",
+      "usage: training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>",
     );
   }
   if (rest.length > 2) {
@@ -68,6 +70,16 @@ export async function runTrainingCommand(
       await createLocalAuthenticatedRequest(baseUrl),
   });
   const json = parseBooleanOption(options.json);
+
+  if (subcommand === "create-project") {
+    const project = await createManagedModelProject({
+      client,
+      options,
+      tasksetId: id,
+    });
+    printResult(project, json);
+    return;
+  }
 
   if (subcommand === "benchmark") {
     await startHarnessRefinerBenchmark({
@@ -238,13 +250,29 @@ export class TrainingApiClient {
 
   modelRun(
     id: string,
-    action: "prepare" | "start" | "status" | "logs" | "artifacts" | "cancel" | "resume",
+    action: "status" | "logs" | "artifacts" | "cancel" | "resume",
     method: "GET" | "POST",
     body?: unknown,
   ): Promise<unknown> {
     return this.json(
       `/v1/training/model-runs/${encodeURIComponent(id)}/${action}`,
       method,
+      body,
+    );
+  }
+
+  prepareModelProject(id: string, body: unknown): Promise<unknown> {
+    return this.json(
+      `/v1/training/model-projects/${encodeURIComponent(id)}/training/prepare`,
+      "POST",
+      body,
+    );
+  }
+
+  startModelProject(id: string, body: unknown): Promise<unknown> {
+    return this.json(
+      `/v1/training/model-projects/${encodeURIComponent(id)}/training/start`,
+      "POST",
       body,
     );
   }
@@ -268,9 +296,32 @@ export class TrainingApiClient {
     return this.json("/v1/training/taskset-drafts/import", "POST", body);
   }
 
+  publishTasksetDraft(draftId: string, modelId: string | null): Promise<unknown> {
+    return this.json(
+      `/v1/training/taskset-drafts/${encodeURIComponent(draftId)}/publish`,
+      "POST",
+      modelId ? { modelId } : {},
+    );
+  }
+
+  tasksetReadiness(tasksetId: string): Promise<unknown> {
+    return this.json("/v1/training/readiness", "POST", { tasksetId });
+  }
+
+  deleteTasksetDraft(draftId: string): Promise<unknown> {
+    return this.json(
+      `/v1/training/taskset-drafts/${encodeURIComponent(draftId)}`,
+      "DELETE",
+    );
+  }
+
+  saveModelProject(project: unknown): Promise<unknown> {
+    return this.json("/v1/training/models", "PUT", project);
+  }
+
   private async json(
     pathname: string,
-    method: "GET" | "POST",
+    method: "DELETE" | "GET" | "POST" | "PUT",
     body?: unknown,
   ): Promise<unknown> {
     const response = await this.request(`${this.baseUrl}${pathname}`, {
@@ -315,9 +366,9 @@ async function startHarnessRefinerBenchmark(input: {
 }) {
   const state = await input.client.trainingState();
   const project = modelProject(state, input.modelId);
-  const providerId = optionString(input.options, "provider") ?? "openpond";
-  const modelId = optionString(input.options, "model") ?? "openpond-chat";
-  const effort = optionString(input.options, "reasoningEffort") ?? "high";
+  const providerId = optionString(input.options, "provider") || "openpond";
+  const modelId = optionString(input.options, "model") || "openpond-chat";
+  const effort = optionString(input.options, "reasoningEffort") || "high";
   const maximumSpendUsd = parseNumberOption(input.options.maxSpend, "max-spend") ?? 10;
   if (maximumSpendUsd <= 0) throw new Error("max-spend must be greater than zero");
   if (parseBooleanOption(input.options.detach)) {
@@ -366,6 +417,233 @@ function objectString(value: unknown, key: string): string | null {
   return typeof candidate === "string" && candidate ? candidate : null;
 }
 
+async function createManagedModelProject(input: {
+  client: TrainingApiClient;
+  options: Record<string, string | boolean>;
+  tasksetId: string;
+}): Promise<unknown> {
+  const recipePath = optionString(input.options, "recipe");
+  if (!recipePath) {
+    throw new Error("training create-project requires --recipe <versioned-recipe.json>");
+  }
+  const recipe = await readJsonObject(recipePath, "Training recipe");
+  const state = await input.client.trainingState();
+  const taskset = trainingStateRecord(state, "tasksets", input.tasksetId, "Taskset");
+  const profileId = optionString(input.options, "profile")
+    || objectString(taskset, "profileId");
+  if (!profileId) {
+    throw new Error(
+      `The Taskset has no Profile id (received ${typeof taskset.profileId}: ${String(taskset.profileId)}).`,
+    );
+  }
+  const tasksetProfileId = objectString(taskset, "profileId");
+  if (tasksetProfileId !== profileId) {
+    throw new Error(
+      `Taskset ${input.tasksetId} belongs to Profile ${tasksetProfileId ?? "unknown"}, not ${profileId}.`,
+    );
+  }
+  const projectId = optionString(input.options, "projectId")
+    || `model_${randomUUID()}`;
+  const projects = trainingStateRecords(state, "modelProjects");
+  const existingProject = projects.find(
+    (project) => objectString(project, "id") === projectId,
+  );
+  const rolloutPlacement = enumOption(
+    input.options,
+    "rolloutPlacement",
+    ["local", "remote"] as const,
+    "local",
+  );
+  const gpuPlacementObjective = enumOption(
+    input.options,
+    "gpuPlacementObjective",
+    ["fast", "balanced", "economical"] as const,
+    "balanced",
+  );
+  const runPreset = enumOption(
+    input.options,
+    "runPreset",
+    ["small", "standard", "custom", "small_experiment"] as const,
+    "custom",
+  );
+  const maximumSpendUsd = parseNumberOption(input.options.maxSpend, "max-spend") ?? null;
+  if (maximumSpendUsd !== null && maximumSpendUsd < 0) {
+    throw new Error("max-spend must be non-negative");
+  }
+  const retentionDays = parseIntegerOption(
+    input.options.retentionDays,
+    "retention-days",
+  ) ?? null;
+  if (retentionDays !== null && retentionDays < 0) {
+    throw new Error("retention-days must be non-negative");
+  }
+  const timestamp = new Date().toISOString();
+  const contentHash = objectString(taskset, "contentHash");
+  const revision = objectNumber(taskset, "revision");
+  if (!contentHash || !revision || revision < 1) {
+    throw new Error("The Taskset does not have an immutable published revision.");
+  }
+  const method = objectString(recipe, "method");
+  if (!method) throw new Error("Training recipe must declare its method.");
+  const baseModel = managedBasePreferenceFromRecipe(recipe);
+  if (existingProject) {
+    const existingSetup = objectRecord(existingProject, "trainingSetup");
+    const existingTasksetRef = objectRecord(existingSetup, "tasksetRef");
+    if (
+      objectString(existingTasksetRef, "id") !== input.tasksetId
+      || objectString(existingProject, "profileId") !== profileId
+    ) {
+      throw new Error(
+        `Model Project ${projectId} already exists for a different Profile or Taskset.`,
+      );
+    }
+    if (objectRecord(existingSetup, "baseModel")) {
+      throw new Error(`Model Project ${projectId} already exists.`);
+    }
+    return input.client.saveModelProject({
+      ...existingProject,
+      revision: objectNumber(existingProject, "revision") ?? 1,
+      defaultBaseModel: baseModel,
+      trainingSetup: {
+        ...existingSetup,
+        baseModel,
+        recipe,
+      },
+      updatedAt: timestamp,
+    });
+  }
+  return input.client.saveModelProject({
+    schemaVersion: "openpond.modelProject.v2",
+    id: projectId,
+    profileId,
+    revision: 1,
+    name: optionString(input.options, "name")
+      || objectString(taskset, "name")
+      || "Managed Model",
+    objective: optionString(input.options, "objective")
+      || objectString(taskset, "objective"),
+    defaultBaseModel: baseModel,
+    defaultDestinationId: optionString(input.options, "destination")
+      || "openpond_managed",
+    trainingSetup: {
+      tasksetRef: { id: input.tasksetId, revision, contentHash },
+      tasksetRelease: null,
+      harnessRelease: null,
+      baseModel,
+      method,
+      destinationId: optionString(input.options, "destination")
+        || "openpond_managed",
+      managedRolloutPlacement: rolloutPlacement,
+      managedGpuPlacementObjective: gpuPlacementObjective,
+      runPreset,
+      recipe,
+      preferredMaximumSpendUsd: maximumSpendUsd,
+      preferredRetentionDays: retentionDays,
+    },
+    hosted: null,
+    tasksetSyncs: [],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
+function managedBasePreferenceFromRecipe(
+  recipe: Record<string, unknown>,
+): Record<string, unknown> {
+  const recipeBase = objectRecord(recipe, "baseModel");
+  const modelId = objectString(recipeBase, "id");
+  const revision = objectString(recipeBase, "revision");
+  const tokenizerRevision = objectString(recipeBase, "tokenizerRevision");
+  const chatTemplateHash = objectString(recipeBase, "chatTemplateHash");
+  if (!modelId || !revision || !tokenizerRevision || !chatTemplateHash) {
+    throw new Error(
+      "Managed GRPO recipe must pin baseModel id, revision, tokenizerRevision, and chatTemplateHash.",
+    );
+  }
+  return {
+    schemaVersion: "openpond.baseModelPreference.v1",
+    modelId,
+    revision,
+    tokenizerRevision,
+    chatTemplateHash,
+    modelAssetId: null,
+    source: "managed",
+  };
+}
+
+function trainingStateRecord(
+  state: unknown,
+  key: string,
+  id: string,
+  label: string,
+): Record<string, unknown> {
+  const match = trainingStateRecords(state, key).find(
+    (candidate) => objectString(candidate, "id") === id,
+  );
+  if (!match) throw new Error(`${label} ${id} was not found.`);
+  return match;
+}
+
+function trainingStateRecords(state: unknown, key: string): Record<string, unknown>[] {
+  if (!state || typeof state !== "object" || !(key in state)) return [];
+  const value = (state as Record<string, unknown>)[key];
+  return Array.isArray(value)
+    ? value.filter(
+        (candidate): candidate is Record<string, unknown> =>
+          Boolean(candidate) && typeof candidate === "object" && !Array.isArray(candidate),
+      )
+    : [];
+}
+
+function objectNumber(value: unknown, key: string): number | null {
+  if (!value || typeof value !== "object" || !(key in value)) return null;
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "number" && Number.isFinite(candidate)
+    ? candidate
+    : null;
+}
+
+function objectRecord(
+  value: unknown,
+  key: string,
+): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || !(key in value)) return null;
+  const candidate = (value as Record<string, unknown>)[key];
+  return candidate && typeof candidate === "object" && !Array.isArray(candidate)
+    ? candidate as Record<string, unknown>
+    : null;
+}
+
+function enumOption<const Values extends readonly string[]>(
+  options: Record<string, string | boolean>,
+  key: string,
+  values: Values,
+  fallback: Values[number],
+): Values[number] {
+  const value = optionString(options, key) || fallback;
+  if (!values.includes(value)) {
+    throw new Error(`${key} must be one of ${values.join(", ")}`);
+  }
+  return value as Values[number];
+}
+
+async function readJsonObject(file: string, label: string): Promise<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Could not read ${label} ${file}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object.`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
 async function startTraining(input: {
   client: TrainingApiClient;
   dependencies: TrainingCommandDependencies;
@@ -389,11 +667,13 @@ async function startTraining(input: {
   const manifest = manifestPath
     ? await readManifest(manifestPath)
     : undefined;
+  const comparisonSeriesEntryId = optionString(
+    input.options,
+    "comparisonSeriesEntry",
+  ) || null;
   const controls = { maximumSpendUsd, retentionDays };
-  const preparation = await input.client.modelRun(
+  const preparation = await input.client.prepareModelProject(
     input.modelRunId,
-    "prepare",
-    "POST",
     controls,
   );
   if (!input.json) {
@@ -406,11 +686,14 @@ async function startTraining(input: {
   if (!confirmed) {
     throw new Error("Training start cancelled.");
   }
-  const result = await input.client.modelRun(
+  const result = await input.client.startModelProject(
     input.modelRunId,
-    "start",
-    "POST",
-    { ...controls, manifest },
+    {
+      ...controls,
+      exportApproved: parseBooleanOption(input.options.exportApproved),
+      manifest,
+      comparisonSeriesEntryId,
+    },
   );
   printResult(result, input.json);
   if (parseBooleanOption(input.options.detach)) return;

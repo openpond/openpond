@@ -7,7 +7,7 @@ import {
 import { rftTasksetFixture } from "./helpers/managed-training-fixtures";
 
 describe("training start recipe", () => {
-  test("projects the selected admitted rollout topology onto the qualified 0.6B recipe", () => {
+  test("projects the selected admitted recipe controls onto managed GRPO", () => {
     const recipe = trainingRecipe({
       method: "grpo",
       taskset: rftTasksetFixture(),
@@ -51,14 +51,14 @@ describe("training start recipe", () => {
         maxPromptTokens: 4_096,
         maxExamples: 1,
       },
-      lora: { rank: 16 },
+      lora: { rank: 2 },
       rollout: {
         groupSize: 8,
         concurrency: 8,
-        maxOutputTokens: 512,
+        maxOutputTokens: 64,
       },
       optimizer: {
-        learningRate: 0.00001,
+        learningRate: 0.0002,
         maxSteps: 1,
       },
       resourceLimits: {

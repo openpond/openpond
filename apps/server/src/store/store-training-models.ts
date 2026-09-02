@@ -1,4 +1,6 @@
 import type {
+  ModelComparisonSeries,
+  ModelComparisonSeriesEntry,
   ModelBinding,
   ModelRun,
   ModelVersion,
@@ -7,6 +9,8 @@ import type {
   RolloutTrajectoryReceipt,
 } from "@openpond/contracts";
 import {
+  ModelComparisonSeriesEntrySchema,
+  ModelComparisonSeriesSchema,
   ModelBindingSchema,
   ModelRunSchema,
   ModelVersionSchema,
@@ -18,6 +22,256 @@ import type { PayloadRow } from "../types.js";
 import { SqliteStoreCore } from "./store-core.js";
 
 export class SqliteTrainingModelStore extends SqliteStoreCore {
+  async saveModelComparisonSeries(
+    seriesInput: ModelComparisonSeries,
+  ): Promise<ModelComparisonSeries> {
+    const series = ModelComparisonSeriesSchema.parse(seriesInput);
+    const existing = await this.getModelComparisonSeries(series.id);
+    if (
+      existing
+      && (
+        existing.profileId !== series.profileId
+        || existing.modelProjectId !== series.modelProjectId
+        || existing.createdAt !== series.createdAt
+      )
+    ) {
+      throw new Error("A Model Comparison Series cannot change its immutable ownership.");
+    }
+    if (existing && series.revision !== existing.revision + 1) {
+      if (JSON.stringify(existing) === JSON.stringify(series)) return existing;
+      throw new Error("A Model Comparison Series update requires the next revision.");
+    }
+    if (existing?.scheduleSealedAt && !sameSealedSeriesDefinition(existing, series)) {
+      throw new Error("A sealed Model Comparison Series definition is immutable.");
+    }
+    await this.upsertPayload(
+      `INSERT INTO model_comparison_series
+        (id, profile_id, model_project_id, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         status = excluded.status,
+         payload = excluded.payload,
+         updated_at = excluded.updated_at`,
+      [
+        series.id,
+        series.profileId,
+        series.modelProjectId,
+        series.status,
+        JSON.stringify(series),
+        series.createdAt,
+        series.updatedAt,
+      ],
+    );
+    return series;
+  }
+
+  async getModelComparisonSeries(id: string): Promise<ModelComparisonSeries | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_comparison_series WHERE id = ?",
+      [id],
+      ModelComparisonSeriesSchema.parse,
+    );
+  }
+
+  async listModelComparisonSeries(input: {
+    profileId?: string;
+    modelProjectId?: string;
+  } = {}): Promise<ModelComparisonSeries[]> {
+    if (input.modelProjectId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_comparison_series WHERE model_project_id = ? ORDER BY updated_at DESC",
+        [input.modelProjectId],
+        ModelComparisonSeriesSchema.parse,
+      );
+    }
+    if (input.profileId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_comparison_series WHERE profile_id = ? ORDER BY updated_at DESC",
+        [input.profileId],
+        ModelComparisonSeriesSchema.parse,
+      );
+    }
+    return this.listParsedPayloads(
+      "SELECT payload FROM model_comparison_series ORDER BY updated_at DESC",
+      [],
+      ModelComparisonSeriesSchema.parse,
+    );
+  }
+
+  async saveModelComparisonSeriesEntry(
+    entryInput: ModelComparisonSeriesEntry,
+  ): Promise<ModelComparisonSeriesEntry> {
+    const entry = ModelComparisonSeriesEntrySchema.parse(entryInput);
+    const existing = await this.getModelComparisonSeriesEntry(entry.id);
+    if (existing && !sameEntryLineage(existing, entry)) {
+      throw new Error("A Model Comparison Series Entry cannot change its immutable release lineage.");
+    }
+    if (existing && !validEntryEvidenceEvolution(existing, entry)) {
+      throw new Error("A Model Comparison Series Entry cannot replace linked evidence or artifact lineage.");
+    }
+    await this.upsertPayload(
+      `INSERT INTO model_comparison_series_entries
+        (id, series_id, profile_id, model_project_id, ordinal, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         status = excluded.status,
+         payload = excluded.payload,
+         updated_at = excluded.updated_at`,
+      [
+        entry.id,
+        entry.seriesId,
+        entry.profileId,
+        entry.modelProjectId,
+        entry.ordinal,
+        entry.status,
+        JSON.stringify(entry),
+        entry.createdAt,
+        entry.updatedAt,
+      ],
+    );
+    return entry;
+  }
+
+  async getModelComparisonSeriesEntry(id: string): Promise<ModelComparisonSeriesEntry | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_comparison_series_entries WHERE id = ?",
+      [id],
+      ModelComparisonSeriesEntrySchema.parse,
+    );
+  }
+
+  async listModelComparisonSeriesEntries(input: {
+    seriesId?: string;
+    modelProjectId?: string;
+  } = {}): Promise<ModelComparisonSeriesEntry[]> {
+    if (input.seriesId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_comparison_series_entries WHERE series_id = ? ORDER BY ordinal ASC",
+        [input.seriesId],
+        ModelComparisonSeriesEntrySchema.parse,
+      );
+    }
+    if (input.modelProjectId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_comparison_series_entries WHERE model_project_id = ? ORDER BY updated_at DESC",
+        [input.modelProjectId],
+        ModelComparisonSeriesEntrySchema.parse,
+      );
+    }
+    return this.listParsedPayloads(
+      "SELECT payload FROM model_comparison_series_entries ORDER BY updated_at DESC",
+      [],
+      ModelComparisonSeriesEntrySchema.parse,
+    );
+  }
+
+  async commitModelComparisonSeriesMutation(input: {
+    expectedSeriesRevision: number;
+    series: ModelComparisonSeries;
+    entry: ModelComparisonSeriesEntry;
+    expectedEntryStatus: ModelComparisonSeriesEntry["status"] | null;
+  }): Promise<{ series: ModelComparisonSeries; entry: ModelComparisonSeriesEntry }> {
+    const nextSeries = ModelComparisonSeriesSchema.parse(input.series);
+    const nextEntry = ModelComparisonSeriesEntrySchema.parse(input.entry);
+    await this.ready;
+    let result = { series: nextSeries, entry: nextEntry };
+    const write = this.writeQueue.then(async () => {
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        const seriesRow = await this.get<PayloadRow>(
+          "SELECT payload FROM model_comparison_series WHERE id = ?",
+          [nextSeries.id],
+        );
+        if (!seriesRow) throw new Error("Model Comparison Series not found.");
+        const currentSeries = ModelComparisonSeriesSchema.parse(JSON.parse(seriesRow.payload));
+        if (currentSeries.revision !== input.expectedSeriesRevision) {
+          throw new Error(`Comparison Series revision changed; expected ${input.expectedSeriesRevision} and found ${currentSeries.revision}.`);
+        }
+        if (nextSeries.revision !== currentSeries.revision + 1) {
+          throw new Error("A Comparison Series mutation must advance exactly one revision.");
+        }
+        if (currentSeries.scheduleSealedAt && !sameSealedSeriesDefinition(currentSeries, nextSeries)) {
+          throw new Error("A sealed Model Comparison Series definition is immutable.");
+        }
+        const entryRow = await this.get<PayloadRow>(
+          "SELECT payload FROM model_comparison_series_entries WHERE id = ?",
+          [nextEntry.id],
+        );
+        const currentEntry = entryRow
+          ? ModelComparisonSeriesEntrySchema.parse(JSON.parse(entryRow.payload))
+          : null;
+        if ((currentEntry?.status ?? null) !== input.expectedEntryStatus) {
+          throw new Error("The Comparison Series Entry changed before the mutation could be applied.");
+        }
+        if (currentEntry && !sameEntryLineage(currentEntry, nextEntry)) {
+          throw new Error("A Model Comparison Series Entry cannot change its immutable release lineage.");
+        }
+        if (currentEntry && !validEntryEvidenceEvolution(currentEntry, nextEntry)) {
+          throw new Error("A Model Comparison Series Entry cannot replace linked evidence or artifact lineage.");
+        }
+        await this.run(
+          `INSERT INTO model_comparison_series_entries
+            (id, series_id, profile_id, model_project_id, ordinal, status, payload, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+          [nextEntry.id, nextEntry.seriesId, nextEntry.profileId, nextEntry.modelProjectId, nextEntry.ordinal,
+            nextEntry.status, JSON.stringify(nextEntry), nextEntry.createdAt, nextEntry.updatedAt],
+        );
+        await this.run(
+          `UPDATE model_comparison_series SET status = ?, payload = ?, updated_at = ? WHERE id = ?`,
+          [nextSeries.status, JSON.stringify(nextSeries), nextSeries.updatedAt, nextSeries.id],
+        );
+        await this.exec("COMMIT");
+        result = { series: nextSeries, entry: nextEntry };
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return result;
+  }
+
+  async compareAndSwapModelComparisonSeriesEntry(input: {
+    expectedStatus: ModelComparisonSeriesEntry["status"];
+    entry: ModelComparisonSeriesEntry;
+  }): Promise<ModelComparisonSeriesEntry> {
+    const next = ModelComparisonSeriesEntrySchema.parse(input.entry);
+    await this.ready;
+    const write = this.writeQueue.then(async () => {
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        const row = await this.get<PayloadRow>(
+          "SELECT payload FROM model_comparison_series_entries WHERE id = ?",
+          [next.id],
+        );
+        if (!row) throw new Error("Model Comparison Series Entry not found.");
+        const current = ModelComparisonSeriesEntrySchema.parse(JSON.parse(row.payload));
+        if (current.status !== input.expectedStatus) {
+          throw new Error(`Comparison entry state changed; expected ${input.expectedStatus} and found ${current.status}.`);
+        }
+        if (!sameEntryLineage(current, next)) {
+          throw new Error("A Model Comparison Series Entry cannot change its immutable release lineage.");
+        }
+        if (!validEntryEvidenceEvolution(current, next)) {
+          throw new Error("A Model Comparison Series Entry cannot replace linked evidence or artifact lineage.");
+        }
+        await this.run(
+          "UPDATE model_comparison_series_entries SET status = ?, payload = ?, updated_at = ? WHERE id = ?",
+          [next.status, JSON.stringify(next), next.updatedAt, next.id],
+        );
+        await this.exec("COMMIT");
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return next;
+  }
+
   async saveRewardModelVersion(
     versionInput: RewardModelVersion,
   ): Promise<RewardModelVersion> {
@@ -231,6 +485,8 @@ export class SqliteTrainingModelStore extends SqliteStoreCore {
         || existing.modelVersionId !== modelRun.modelVersionId
         || existing.profileId !== modelRun.profileId
         || existing.taskset.id !== modelRun.taskset.id
+        || JSON.stringify(existing.comparisonSeriesEntry ?? null)
+          !== JSON.stringify(modelRun.comparisonSeriesEntry ?? null)
       )
     ) {
       throw new Error("A Model Run cannot change its immutable lineage.");
@@ -526,6 +782,128 @@ export class SqliteTrainingModelStore extends SqliteStoreCore {
     const row = await this.get<PayloadRow>(sql, params);
     return row ? parse(JSON.parse(row.payload)) : null;
   }
+}
+
+function sameSealedSeriesDefinition(
+  left: ModelComparisonSeries,
+  right: ModelComparisonSeries,
+): boolean {
+  const definition = (series: ModelComparisonSeries) => ({
+    id: series.id,
+    profileId: series.profileId,
+    modelProjectId: series.modelProjectId,
+    name: series.name,
+    objective: series.objective,
+    productionBinding: series.productionBinding,
+    baseModel: series.baseModel,
+    seedTaskset: series.seedTaskset,
+    eligibleTaskPool: series.eligibleTaskPool,
+    evaluationTasksets: series.evaluationTasksets,
+    grader: series.grader,
+    residualProfile: series.residualProfile,
+    schedule: series.schedule,
+    scheduleSealedAt: series.scheduleSealedAt,
+    advancementPolicy: series.advancementPolicy,
+    executionPolicy: series.executionPolicy,
+    createdBy: series.createdBy,
+    createdAt: series.createdAt,
+  });
+  return JSON.stringify(definition(left)) === JSON.stringify(definition(right));
+}
+
+function sameEntryLineage(
+  left: ModelComparisonSeriesEntry,
+  right: ModelComparisonSeriesEntry,
+): boolean {
+  const lineage = (entry: ModelComparisonSeriesEntry) => ({
+    seriesId: entry.seriesId,
+    profileId: entry.profileId,
+    modelProjectId: entry.modelProjectId,
+    scheduleEntryId: entry.scheduleEntryId,
+    releaseHash: entry.releaseHash,
+    ordinal: entry.ordinal,
+    label: entry.label,
+    role: entry.role,
+    branch: entry.branch,
+    parent: entry.parent,
+    taskset: entry.taskset,
+    sourceTasksets: entry.sourceTasksets,
+    taskSelection: entry.taskSelection,
+    trainableRank: entry.trainableRank,
+    serializedEnvelopeRank: entry.serializedEnvelopeRank,
+    enabledCumulativeRank: entry.enabledCumulativeRank,
+    trainableBlockId: entry.trainableBlockId,
+    residualBlocks: entry.residualBlocks.map(({ artifactLineageId: _artifactLineageId, ...block }) => block),
+    createdAt: entry.createdAt,
+  });
+  return JSON.stringify(lineage(left)) === JSON.stringify(lineage(right));
+}
+
+function validEntryEvidenceEvolution(
+  current: ModelComparisonSeriesEntry,
+  next: ModelComparisonSeriesEntry,
+): boolean {
+  if (validEntryRetryEvolution(current, next)) return true;
+  const appendOnlyId = (before: string | null, after: string | null) =>
+    before === null || before === after;
+  if (
+    current.attemptOrdinal !== next.attemptOrdinal
+    || JSON.stringify(current.priorRunAttempts) !== JSON.stringify(next.priorRunAttempts)
+    || !appendOnlyId(current.trainingPlanId, next.trainingPlanId)
+    || !appendOnlyId(current.modelRunId, next.modelRunId)
+    || !appendOnlyId(current.modelVersionId, next.modelVersionId)
+    || !appendOnlyId(current.promotionBindingId, next.promotionBindingId)
+    || (current.decision !== null && JSON.stringify(current.decision) !== JSON.stringify(next.decision))
+  ) return false;
+  const nextEvaluations = new Map(next.evaluations.map((evaluation) => [evaluation.evaluationRunId, evaluation]));
+  if (current.evaluations.some((evaluation) =>
+    JSON.stringify(nextEvaluations.get(evaluation.evaluationRunId)) !== JSON.stringify(evaluation))) return false;
+  const nextBlocks = new Map(next.residualBlocks.map((block) => [block.id, block]));
+  return current.residualBlocks.every((block) => {
+    if (!block.artifactLineageId) return true;
+    return nextBlocks.get(block.id)?.artifactLineageId === block.artifactLineageId;
+  });
+}
+
+function validEntryRetryEvolution(
+  current: ModelComparisonSeriesEntry,
+  next: ModelComparisonSeriesEntry,
+): boolean {
+  if (
+    (current.status !== "failed" && current.status !== "cancelled")
+    || next.status !== "ready"
+    || current.modelVersionId !== null
+    || current.evaluations.length !== 0
+    || current.decision !== null
+    || current.promotionBindingId !== null
+    || current.residualBlocks.some(
+      (block) => block.id === current.trainableBlockId && block.artifactLineageId !== null,
+    )
+    || next.trainingPlanId !== null
+    || next.modelRunId !== null
+    || next.modelVersionId !== null
+    || next.evaluations.length !== 0
+    || next.decision !== null
+    || next.promotionBindingId !== null
+    || next.queuedAt !== null
+    || next.startedAt !== null
+    || next.completedAt !== null
+    || JSON.stringify(current.residualBlocks) !== JSON.stringify(next.residualBlocks)
+  ) return false;
+  const hasAttempt = Boolean(current.trainingPlanId || current.modelRunId);
+  const expectedAttempts = hasAttempt
+    ? [...current.priorRunAttempts, {
+        attemptOrdinal: current.attemptOrdinal,
+        trainingPlanId: current.trainingPlanId,
+        modelRunId: current.modelRunId,
+        terminalStatus: current.status,
+        queuedAt: current.queuedAt,
+        startedAt: current.startedAt,
+        completedAt: current.completedAt ?? next.updatedAt,
+      }]
+    : current.priorRunAttempts;
+  return next.attemptOrdinal === current.attemptOrdinal + (hasAttempt ? 1 : 0)
+    && JSON.stringify(next.priorRunAttempts) === JSON.stringify(expectedAttempts);
 }
 
 export function isCheckpointResumeTransition(

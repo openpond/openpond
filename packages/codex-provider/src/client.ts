@@ -4,6 +4,7 @@ import { resolveCodexBinary } from "./binary.js";
 import { defaultServerRequestResult } from "./default-result.js";
 import type {
   CodexClientOptions,
+  CodexDynamicToolSpec,
   CodexNotification,
   CodexServerRequest,
   CodexServerRequestResult,
@@ -23,6 +24,7 @@ export class CodexAppServerClient {
   private readonly clientName: string;
   private readonly clientTitle: string;
   private readonly clientVersion: string;
+  private readonly experimentalApi: boolean;
   private readonly onNotification?: (notification: CodexNotification) => void;
   private readonly onServerRequest?: (request: CodexServerRequest) => Promise<CodexServerRequestResult>;
   private readonly stderr?: (chunk: string) => void;
@@ -38,6 +40,7 @@ export class CodexAppServerClient {
     this.clientName = options.clientName ?? "openpond-app";
     this.clientTitle = options.clientTitle ?? "OpenPond App";
     this.clientVersion = options.clientVersion ?? "0.1.0";
+    this.experimentalApi = options.experimentalApi ?? false;
     this.onNotification = options.onNotification;
     this.onServerRequest = options.onServerRequest;
     this.stderr = options.stderr;
@@ -79,7 +82,7 @@ export class CodexAppServerClient {
         title: this.clientTitle,
         version: this.clientVersion,
       },
-      capabilities: null,
+      capabilities: this.experimentalApi ? { experimentalApi: true } : null,
     });
     this.notify("initialized");
     this.initialized = true;
@@ -98,6 +101,9 @@ export class CodexAppServerClient {
     sandbox?: "read-only" | "workspace-write" | "danger-full-access";
     config?: Record<string, unknown> | null;
     developerInstructions?: string | null;
+    baseInstructions?: string | null;
+    dynamicTools?: CodexDynamicToolSpec[] | null;
+    ephemeral?: boolean | null;
   }): Promise<{ threadId: string; response: unknown }> {
     await this.initialize();
     const response = (await this.request("thread/start", {
@@ -107,6 +113,9 @@ export class CodexAppServerClient {
       sandbox: params.sandbox ?? "workspace-write",
       config: params.config ?? null,
       developerInstructions: params.developerInstructions ?? null,
+      baseInstructions: params.baseInstructions ?? null,
+      dynamicTools: params.dynamicTools ?? null,
+      ephemeral: params.ephemeral ?? null,
       threadSource: "user",
     })) as { thread?: { id?: string } };
     const threadId = response.thread?.id;

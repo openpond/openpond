@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   ChatModelRef,
   Taskset,
@@ -10,6 +11,7 @@ import { LabStatusBadge } from "./LabStatusBadge";
 import { PreferenceDatasetSummary } from "./LabModelDataset";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { PreferenceComparisonReview } from "./PreferenceComparisonReview";
+import { LabLearningQueue, LabLearningReviewHistory } from "./LabLearningQueue";
 
 export function LabHumanReviewsPage({
   defaultModel,
@@ -17,13 +19,18 @@ export function LabHumanReviewsPage({
   selectedTasksetId,
   state,
   training,
+  onOpenSeries,
+  onToast,
 }: {
   defaultModel: ChatModelRef;
   onSelectedTasksetIdChange: (tasksetId: string | null) => void;
   selectedTasksetId: string | null;
   state: TrainingStateResponse | null;
   training: ReturnType<typeof useTraining>;
+  onOpenSeries: (seriesId: string) => void;
+  onToast: (message: string, tone: "success" | "error" | "info") => void;
 }) {
+  const [mode, setMode] = useState<"learning" | "preference" | "history">("learning");
   const tasksets = reviewTasksets(state);
   const selected = tasksets.find((taskset) => taskset.id === selectedTasksetId) ?? null;
 
@@ -67,14 +74,22 @@ export function LabHumanReviewsPage({
     <div className="labs-flat-body labs-resource-page labs-human-review-page">
       <ModelProjectPageHeader
         title="Human Review"
-        description="Blinded assignments, preference evidence, and judge-calibration queues across Tasksets."
+        description="Learning-release intake, blinded preference evidence, and immutable review history."
         metrics={[
+          { label: "Active learning series", value: state?.comparisonSeries.filter((series) => series.status === "active").length ?? 0 },
           { label: "Reviewable Tasksets", value: tasksets.length },
           { label: "Human graders", value: tasksets.reduce((count, taskset) => count + taskset.graders.filter((grader) => grader.kind === "human").length, 0) },
           { label: "Judge calibrations", value: tasksets.reduce((count, taskset) => count + taskset.graders.filter((grader) => grader.kind === "model_judge").length, 0) },
         ]}
       />
-      <section className="training-detail-section labs-human-review-queues">
+      <nav aria-label="Human Review workspace" className="labs-review-mode-tabs">
+        <button className={mode === "learning" ? "selected" : undefined} type="button" onClick={() => setMode("learning")}>Learning queue</button>
+        <button className={mode === "preference" ? "selected" : undefined} type="button" onClick={() => setMode("preference")}>Preference review</button>
+        <button className={mode === "history" ? "selected" : undefined} type="button" onClick={() => setMode("history")}>Review history</button>
+      </nav>
+      {mode === "learning" && state ? <LabLearningQueue onOpenSeries={onOpenSeries} onToast={onToast} state={state} training={training} /> : null}
+      {mode === "history" && state ? <LabLearningReviewHistory onOpenSeries={onOpenSeries} state={state} /> : null}
+      {mode === "preference" ? <section className="training-detail-section labs-human-review-queues">
         <h2>Review queues</h2>
         <p className="labs-detail-copy">
           Open a Taskset queue to rank blinded candidates, materialize preference evidence, and compare an LLM judge with human decisions.
@@ -110,7 +125,7 @@ export function LabHumanReviewsPage({
             </tbody>
           </table>
         </div>
-      </section>
+      </section> : null}
     </div>
   );
 }

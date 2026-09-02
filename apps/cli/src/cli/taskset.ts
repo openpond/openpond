@@ -13,9 +13,16 @@ export async function runTasksetCommand(
   rest: string[],
   dependencies: { request?: typeof fetch } = {},
 ): Promise<void> {
-  const [subcommand, packagePath] = rest;
-  if (subcommand !== "import" || !packagePath || rest.length !== 2) {
-    throw new Error("usage: taskset import <package-directory|taskset.json> [--profile <id>] [--json]");
+  const [subcommand, identifier] = rest;
+  if (
+    !subcommand
+    || !identifier
+    || rest.length !== 2
+    || !["import", "publish", "readiness", "delete-draft"].includes(subcommand)
+  ) {
+    throw new Error(
+      "usage: taskset <import|publish|readiness|delete-draft> <package-path|draft-id|taskset-id> [--profile <id>] [--model <id>] [--json]",
+    );
   }
   const baseUrl = resolveApiBaseUrlOption(options)
     ?? process.env.OPENPOND_LOCAL_API_URL?.replace(/\/$/, "")
@@ -31,17 +38,42 @@ export async function runTasksetCommand(
     baseUrl,
     request: dependencies.request ?? await createLocalAuthenticatedRequest(baseUrl),
   });
-  const imported = await client.importTasksetDraftPackage({
-    packagePath: path.resolve(packagePath),
-    profileId: optionString(options, "profile") ?? "default",
-  });
+  const result = subcommand === "import"
+    ? await client.importTasksetDraftPackage({
+        packagePath: path.resolve(identifier),
+        profileId: optionString(options, "profile") || "default",
+      })
+    : subcommand === "publish"
+      ? await client.publishTasksetDraft(
+          identifier,
+          optionString(options, "model") || null,
+        )
+      : subcommand === "readiness"
+        ? await client.tasksetReadiness(identifier)
+        : await client.deleteTasksetDraft(identifier);
   if (parseBooleanOption(options.json)) {
-    console.log(JSON.stringify(imported, null, 2));
+    console.log(JSON.stringify(result, null, 2));
     return;
   }
-  const record = imported && typeof imported === "object"
-    ? imported as Record<string, unknown>
+  const record = result && typeof result === "object"
+    ? result as Record<string, unknown>
     : {};
-  console.log(`Imported Taskset draft ${String(record.name ?? record.id ?? packagePath)}.`);
-  console.log("Open it in Models → Tasksets to review and publish it.");
+  if (subcommand === "import") {
+    console.log(`Imported Taskset draft ${String(record.name ?? record.id ?? identifier)}.`);
+    console.log("Open it in Models → Tasksets to review it, or publish it with the OpenPond CLI.");
+    return;
+  }
+  if (subcommand === "publish") {
+    const taskset = record.taskset && typeof record.taskset === "object"
+      ? record.taskset as Record<string, unknown>
+      : {};
+    console.log(`Published Taskset ${String(taskset.name ?? taskset.id ?? identifier)}.`);
+    return;
+  }
+  if (subcommand === "readiness") {
+    console.log(`Checked Taskset ${identifier} readiness.`);
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  console.log(`Deleted unpublished Taskset draft ${identifier}.`);
 }

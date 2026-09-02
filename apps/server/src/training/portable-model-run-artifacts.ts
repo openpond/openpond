@@ -24,7 +24,7 @@ export async function importPortableModelRunArtifacts(input: {
   portable: TrainingArtifacts;
 }): Promise<{
   artifacts: TrainingArtifact[];
-  weights: TrainingArtifact;
+  weights: TrainingArtifact | null;
   configuration: TrainingArtifact | null;
   provider: string;
 }> {
@@ -35,15 +35,17 @@ export async function importPortableModelRunArtifacts(input: {
     provider,
   });
   if (provider === "sandbox") {
-    const weights = artifacts.find((artifact) => artifact.metadata.managedRlCandidate === true);
-    if (!weights || artifacts.filter((artifact) => artifact.metadata.managedRlCandidate === true).length !== 1) {
+    const candidates = artifacts.filter(
+      (artifact) => artifact.metadata.managedRlCandidate === true,
+    );
+    if (candidates.length > 1) {
       throw new Error(
-        "Sandbox managed training completed without one canonical candidate receipt.",
+        "Sandbox managed training completed with multiple canonical candidate receipts.",
       );
     }
     return {
       artifacts,
-      weights,
+      weights: candidates[0] ?? null,
       configuration: null,
       provider,
     };
@@ -183,6 +185,7 @@ async function persistPortableArtifacts(input: {
             managedRlJobId: managedOutput.jobId,
             managedRlOutputId: managedOutput.outputId,
             managedRlTeamId: input.executionRef.tenantId ?? null,
+            managedRlOutputMetadata: portable.metadata ?? {},
           }
         : {}),
     };

@@ -17,6 +17,13 @@ import type {
   TrainingChatSearchResult,
   TrainingStateResponse,
   LocalModelChatConfiguration,
+  ModelComparisonDecision,
+  ModelComparisonEntryStatus,
+  ModelComparisonEvaluationLink,
+  ModelComparisonQueueReleaseRequest,
+  ModelComparisonSeries,
+  ModelComparisonSeriesEntry,
+  ModelBinding,
   ModelProject,
   CrossSystemExpertBootstrapPreview,
   CrossSystemExpertBootstrapApproval,
@@ -33,6 +40,7 @@ import type {
   LearnedPreferenceRewardBinding,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
+import { TrainingStateResponseSchema } from "@openpond/contracts";
 
 export type PreferenceComparisonReview = {
   assignment: {
@@ -101,10 +109,11 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     setLoading(true);
     const request = api.trainingState(connection, profileId)
       .then((next) => {
-        activityRevisionRef.current = next.activityRevision ?? null;
-        setPayload(next);
+        const normalized = TrainingStateResponseSchema.parse(next);
+        activityRevisionRef.current = normalized.activityRevision ?? null;
+        setPayload(normalized);
         setError(null);
-        return next;
+        return normalized;
       })
       .catch((caught) => {
         setError(message(caught));
@@ -184,6 +193,56 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   }, [connection, hasActiveWork, profileId, refresh]);
 
   const actions = useMemo(() => ({
+    saveComparisonSeries: (series: ModelComparisonSeries) =>
+      mutate<ModelComparisonSeries>(
+        "save-comparison-series",
+        "/comparison-series",
+        { series },
+      ),
+    sealComparisonSeries: (seriesId: string, expectedRevision: number) =>
+      mutate<ModelComparisonSeries>(
+        "seal-comparison-series",
+        `/comparison-series/${encodeURIComponent(seriesId)}/seal`,
+        { expectedRevision },
+      ),
+    queueComparisonRelease: (input: ModelComparisonQueueReleaseRequest) =>
+      mutate<{ series: ModelComparisonSeries; entry: ModelComparisonSeriesEntry }>(
+        "queue-comparison-release",
+        `/comparison-series/${encodeURIComponent(input.seriesId)}/releases`,
+        input,
+      ),
+    linkComparisonRun: (input: {
+      entryId: string;
+      expectedStatus: ModelComparisonEntryStatus;
+      status: ModelComparisonEntryStatus;
+      trainingPlanId?: string | null;
+      modelRunId?: string | null;
+      modelVersionId?: string | null;
+      evaluations?: ModelComparisonEvaluationLink[];
+    }) => mutate<ModelComparisonSeriesEntry>(
+      "link-comparison-run",
+      `/comparison-series-entries/${encodeURIComponent(input.entryId)}/run`,
+      input,
+      "PATCH",
+    ),
+    decideComparisonEntry: (input: {
+      entryId: string;
+      expectedSeriesRevision: number;
+      decision: ModelComparisonDecision;
+    }) => mutate<{ series: ModelComparisonSeries; entry: ModelComparisonSeriesEntry }>(
+      "decide-comparison-entry",
+      `/comparison-series-entries/${encodeURIComponent(input.entryId)}/decision`,
+      input,
+    ),
+    recordComparisonPromotion: (input: {
+      entryId: string;
+      bindingId: string;
+      expectedSeriesRevision: number;
+    }) => mutate<{ series: ModelComparisonSeries; entry: ModelComparisonSeriesEntry }>(
+      "record-comparison-promotion",
+      `/comparison-series-entries/${encodeURIComponent(input.entryId)}/promotion`,
+      input,
+    ),
     saveModelProject: (project: ModelProject) =>
       mutate<ModelProject>(
         "save-model-project",
@@ -687,6 +746,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         retentionDays: number | null;
         exportApproved: boolean;
         manifest?: unknown;
+        comparisonSeriesEntryId?: string | null;
       },
     ) => mutate<{
       manifest: { id: string; contentHash: string };
@@ -709,12 +769,17 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     }>("start-prepared-training", "/start/prepared", body),
     startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; environmentPlacement?: "local" | "remote"; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
     cancelJob: (jobId: string) => mutate("cancel-job", `/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
+    cancelModelRun: (modelRunId: string) => mutate(
+      "cancel-model-run",
+      `/model-runs/${encodeURIComponent(modelRunId)}/cancel`,
+      {},
+    ),
     rejectModel: (modelId: string, reason: string) => mutate("reject-model", `/models/${encodeURIComponent(modelId)}/reject`, { reason }),
     bindModel: (
       modelId: string,
       role: "chat_manual" | "agent" | "extension" | "authoring_optimizer",
       roleTargetId: string,
-    ) => mutate("bind-model", `/models/${encodeURIComponent(modelId)}/bind`, {
+    ) => mutate<ModelBinding>("bind-model", `/models/${encodeURIComponent(modelId)}/bind`, {
       profileId,
       role,
       roleTargetId,

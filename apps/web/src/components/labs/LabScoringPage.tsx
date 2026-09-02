@@ -24,7 +24,6 @@ type ScorerEntry = {
 export function LabScoringPage({
   busy,
   defaultModel,
-  modelProjectId,
   onCreateScorer,
   onOpenTaskset,
   onSelectedScorerIdChange,
@@ -34,7 +33,6 @@ export function LabScoringPage({
 }: {
   busy: boolean;
   defaultModel: ChatModelRef;
-  modelProjectId?: string | null;
   onCreateScorer: (input: LabScorerCreateInput) => Promise<boolean>;
   onOpenTaskset: (tasksetId: string) => void;
   onSelectedScorerIdChange: (scorerId: string | null) => void;
@@ -45,8 +43,8 @@ export function LabScoringPage({
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const entries = useMemo(
-    () => scoringEntries(state, modelProjectId ?? null),
-    [modelProjectId, state],
+    () => scoringEntries(state),
+    [state],
   );
   const selected = entries.find((entry) => entry.key === selectedScorerId) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
@@ -77,7 +75,7 @@ export function LabScoringPage({
     entries.flatMap((entry) => entry.tasksets.map((taskset) => taskset.id)),
   );
   const learnedRewardCount = state?.rewardModelVersions.filter((version) =>
-    !modelProjectId || visibleTasksetIds.has(version.taskset.id),
+    visibleTasksetIds.has(version.taskset.id),
   ).length ?? 0;
 
   return (
@@ -88,10 +86,8 @@ export function LabScoringPage({
             New scorer
           </button>
         )}
-        title="Scoring"
-        description={modelProjectId
-          ? "Versioned graders and reward sources attached to this Model Project."
-          : "Reusable deterministic graders, LLM judges, human rubrics, and learned reward models."}
+        title="Scorers"
+        description="Reusable deterministic graders, LLM judges, human rubrics, and learned reward models."
         metrics={[
           { label: "Scorer releases", value: entries.length },
           { label: "LLM judges", value: modelJudgeCount },
@@ -102,7 +98,7 @@ export function LabScoringPage({
         <label className="labs-search">
           <Search size={14} />
           <input
-            aria-label="Search scoring"
+            aria-label="Search scorers"
             placeholder="Search scorers"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -158,7 +154,7 @@ export function LabScoringPage({
           busy={busy}
           defaultModel={defaultModel}
           providerSettings={providerSettings}
-          tasksets={availableTasksets(state, modelProjectId ?? null)}
+          tasksets={availableTasksets(state)}
           onClose={() => setCreateOpen(false)}
           onCreate={async (input) => {
             const created = await onCreateScorer(input);
@@ -196,7 +192,7 @@ function ScorerDetail({
     <div className="labs-flat-body labs-resource-page">
       <div className="labs-dataset-detail-heading">
         <button
-          aria-label="Back to Scoring"
+          aria-label="Back to Scorers"
           className="labs-back-button"
           type="button"
           onClick={onBack}
@@ -293,10 +289,9 @@ function ScorerDetail({
 
 function scoringEntries(
   state: TrainingStateResponse | null,
-  modelProjectId: string | null,
 ): ScorerEntry[] {
   if (!state) return [];
-  const tasksets = availableTasksets(state, modelProjectId);
+  const tasksets = availableTasksets(state);
   const entries = new Map<string, ScorerEntry>();
   for (const taskset of tasksets) {
     for (const grader of taskset.graders) {
@@ -316,7 +311,6 @@ function scoringEntries(
 
 function availableTasksets(
   state: TrainingStateResponse | null,
-  modelProjectId: string | null,
 ): Taskset[] {
   if (!state) return [];
   const latestById = new Map<string, Taskset>();
@@ -324,13 +318,7 @@ function availableTasksets(
     const current = latestById.get(taskset.id);
     if (!current || taskset.revision > current.revision) latestById.set(taskset.id, taskset);
   }
-  let tasksets = [...latestById.values()];
-  if (modelProjectId) {
-    const project = state.modelProjects.find((candidate) => candidate.id === modelProjectId);
-    const attachedIds = new Set(project?.tasksetSyncs.map((sync) => sync.localTasksetId) ?? []);
-    tasksets = tasksets.filter((taskset) => attachedIds.has(taskset.id));
-  }
-  return tasksets.sort((left, right) => left.name.localeCompare(right.name));
+  return [...latestById.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function scorerKey(grader: GraderSpec): string {

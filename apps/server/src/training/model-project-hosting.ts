@@ -257,9 +257,13 @@ export function createModelProjectHostingService(input: {
       throw new Error(
         `${
           typeof payload.message === "string"
-            ? payload.message
+            ? typeof payload.code === "string"
+              ? `${payload.message} (${payload.code})`
+              : payload.message
             : typeof payload.error === "string"
               ? payload.error
+              : typeof payload.code === "string"
+                ? payload.code
             : "Hosted Model Project request failed"
         } (${response.status} ${endpoint.origin}${endpoint.pathname}).`,
       );

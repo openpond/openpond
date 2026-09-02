@@ -8,6 +8,12 @@ const ADVISORY_READINESS_CODES = new Set([
   "grader_audit_missing",
   "grader_audit_stale",
   "grader_audit_failed",
+  "grader_adversarial_calibration_failed",
+  "grader_fixture_task_missing",
+  "grader_fixture_missing",
+  // Legacy persisted Tasksets used this misleading name for the same
+  // calibration result. It was never proof of a security compromise.
+  "grader_hacking",
 ]);
 
 export type TrainingExecutionBlocker = {

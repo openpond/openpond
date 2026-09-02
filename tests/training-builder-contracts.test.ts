@@ -194,6 +194,32 @@ test("one Model can bind distinct immutable Dataset revisions across plans", () 
   assert.notEqual(first.id, second.id);
 });
 
+test("comparison releases and data policy are part of immutable plan identity", () => {
+  const taskset = tasksetFixture({ ready: true });
+  const common = {
+    modelId: "model_continual",
+    taskset,
+    destinationId: "openpond_managed" as const,
+    recipe: sftRecipeFixture(),
+  };
+  const standalone = createTrainingPlan(common);
+  const series = createTrainingPlan({
+    ...common,
+    comparisonSeriesEntry: {
+      seriesId: "series-a",
+      entryId: "entry-p0",
+      scheduleEntryId: "schedule-p0",
+      ordinal: 0,
+      releaseHash: "a".repeat(64),
+    },
+  });
+  const retained = createTrainingPlan({ ...common, retentionDays: 30 });
+
+  assert.notEqual(standalone.id, series.id);
+  assert.notEqual(standalone.id, retained.id);
+  assert.equal(series.comparisonSeriesEntry?.entryId, "entry-p0");
+});
+
 test("readiness gives method-specific DPO and PPO repair guidance", () => {
   const taskset = tasksetFixture();
   const report = buildTasksetReadiness({

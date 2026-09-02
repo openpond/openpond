@@ -15,11 +15,20 @@ export type CodexServerRequestResult =
   | { result: unknown }
   | { error: { code: number; message: string; data?: unknown } };
 
+export type CodexDynamicToolSpec = {
+  type: "function";
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  deferLoading?: boolean;
+};
+
 export type CodexClientOptions = {
   binaryPath?: string;
   clientName?: string;
   clientTitle?: string;
   clientVersion?: string;
+  experimentalApi?: boolean;
   onNotification?: (notification: CodexNotification) => void;
   onServerRequest?: (request: CodexServerRequest) => Promise<CodexServerRequestResult>;
   stderr?: (chunk: string) => void;

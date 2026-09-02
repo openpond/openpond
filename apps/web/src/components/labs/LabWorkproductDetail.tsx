@@ -86,6 +86,7 @@ export function LabWorkproductDetail({
   training,
   connection,
   onOpenConversation,
+  onOpenComparison,
   onClose,
   onLocationChange,
   onRenameAgent,
@@ -128,6 +129,7 @@ export function LabWorkproductDetail({
   training: TrainingController;
   connection: ClientConnection | null;
   onOpenConversation: (conversationId: string) => void;
+  onOpenComparison: (seriesId: string) => void;
   onClose: () => void;
   onLocationChange: (location: LabDetailLocation | null) => void;
   onRenameAgent: () => void;
@@ -640,6 +642,7 @@ export function LabWorkproductDetail({
           >
             <LabModelVersionDetailPage
               connection={connection}
+              detailKind={modelSection === "versions" ? "version" : "run"}
               detailTab={modelDetailTab}
               runs={runs}
               selectedEntryKey={selectedModelEntryKey}
@@ -683,13 +686,17 @@ export function LabWorkproductDetail({
                 ) : undefined}
                 modelProject={modelProject}
                 modelRuns={modelLifecycleRuns}
-                state={training.payload}
+                onOpenRun={(runId) =>
+                  setSelectedModelEntryKey(`model-run:${runId}`)
+                }
+                onOpenSeries={onOpenComparison}
                 status={modelProject ? (
                     <LabStatusBadge
                       label={modelProject.hosted ? "Hosted" : "Local"}
                       value={modelProject.hosted ? "available" : "not_run"}
                     />
                 ) : undefined}
+                state={training.payload}
                 versions={modelVersions}
               />
             ) : null}

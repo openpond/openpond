@@ -11,6 +11,7 @@ import {
   type TrainingApproval,
   type TrainingCatalog,
   type TrainingJob,
+  type ModelComparisonEntryRef,
   type TrainingPreparationPlan,
   type TrainingPreparedStart,
 } from "@openpond/contracts";
@@ -35,6 +36,7 @@ import {
 } from "./portable-model-run-lifecycle.js";
 import { resolvePortableBindings } from "./portable-training-catalog.js";
 import { resolveTasksetTrainingAssetBytes } from "./taskset-work-assets.js";
+import { comparisonSeriesTrainingRecipe } from "./comparison-series-training-recipe.js";
 
 export function createPortableModelRunService(deps: {
   store: SqliteStore;
@@ -57,11 +59,13 @@ export function createPortableModelRunService(deps: {
     exportApproved?: boolean;
     retentionDays?: number | null;
     harnessRelease?: { id: string; contentHash: string } | null;
+    comparisonSeriesEntry?: ModelComparisonEntryRef | null;
   }): Promise<TrainingPreparedStart>;
   approve(input: {
     planId: string;
     bundleId: string;
     maximumCostUsd?: number | null;
+    approvedBy?: string;
   }): Promise<TrainingApproval>;
   prepareModel?: (input: { modelId: string; revision: string | null }) => Promise<unknown>;
   resolveReleasedHarness: (input: {
@@ -82,6 +86,7 @@ export function createPortableModelRunService(deps: {
     exportApproved: boolean;
     retentionDays?: number | null;
     manifest?: unknown;
+    comparisonSeriesEntryId?: string | null;
   }) {
     let sourceProject = await deps.store.getModelProject(input.modelProjectId);
     if (!sourceProject) throw new Error("A saved Model Project is required.");
@@ -94,12 +99,49 @@ export function createPortableModelRunService(deps: {
     ) {
       throw new Error("The Model Project training setup is incomplete.");
     }
-    const baseModel = setup.baseModel;
-    const tasksetRef = setup.tasksetRef;
-    const taskset = await deps.store.getTaskset(setup.tasksetRef.id);
-    if (!taskset || taskset.contentHash !== setup.tasksetRef.contentHash) {
+    const comparisonEntry = input.comparisonSeriesEntryId
+      ? await deps.store.getModelComparisonSeriesEntry(input.comparisonSeriesEntryId)
+      : null;
+    if (input.comparisonSeriesEntryId && (!comparisonEntry
+      || comparisonEntry.modelProjectId !== sourceProject.id
+      || comparisonEntry.status !== "ready")) {
+      throw new Error("The requested Comparison Series entry is not a ready exact release for this Model Project.");
+    }
+    const tasksetRef = comparisonEntry?.taskset ?? setup.tasksetRef;
+    const taskset = await deps.store.getTasksetRevision(
+      tasksetRef.id,
+      tasksetRef.revision,
+      tasksetRef.contentHash,
+    );
+    if (!taskset) {
       throw new Error("The Model Project Taskset release is stale.");
     }
+    if (comparisonEntry) {
+      sourceProject = {
+        ...sourceProject,
+        trainingSetup: {
+          ...setup,
+          tasksetRef: comparisonEntry.taskset,
+        },
+      };
+      setup = sourceProject.trainingSetup;
+    }
+    const baseModel = setup.baseModel;
+    if (!baseModel) {
+      throw new Error("The Comparison Series Model Project lost its exact base Model reference.");
+    }
+    const comparisonSeriesEntry = comparisonEntry ? {
+      seriesId: comparisonEntry.seriesId,
+      entryId: comparisonEntry.id,
+      scheduleEntryId: comparisonEntry.scheduleEntryId,
+      ordinal: comparisonEntry.ordinal,
+      releaseHash: comparisonEntry.releaseHash,
+    } : null;
+    const recipe = await comparisonSeriesTrainingRecipe({
+      store: deps.store,
+      recipe: setup.recipe,
+      entry: comparisonEntry,
+    });
     const releasedHarness = await deps.resolveReleasedHarness({
       taskset,
       modelProject: sourceProject,
@@ -109,13 +151,13 @@ export function createPortableModelRunService(deps: {
       revision: sourceProject.revision + 1,
       trainingSetup: {
         ...setup,
+        recipe,
         harnessRelease: releasedHarness.harnessRelease,
         tasksetRelease: releasedHarness.tasksetRelease,
       },
       updatedAt: new Date().toISOString(),
     });
     setup = sourceProject.trainingSetup;
-    const recipe = TrainingRecipeSchema.parse(setup.recipe);
     const preparation = await deps.prepare({
       modelProjectId: sourceProject.id,
       maximumSpendUsd: input.maximumSpendUsd,
@@ -145,11 +187,26 @@ export function createPortableModelRunService(deps: {
       exportApproved: input.exportApproved,
       retentionDays: input.retentionDays,
       harnessRelease: releasedHarness.harnessRelease,
+      comparisonSeriesEntry,
     });
+    // Preparation resolves the caller-authored Recipe into the persisted,
+    // executable contract (authoritative hashes plus GRPO semantics). Export
+    // that exact projection instead of reverting to the mutable Project input.
+    const preparedRecipe = TrainingRecipeSchema.parse(prepared.plan.recipe);
+    const preparedProject = {
+      ...sourceProject,
+      trainingSetup: {
+        ...sourceProject.trainingSetup,
+        recipe: preparedRecipe,
+      },
+    };
     const approval = await deps.approve({
       planId: prepared.plan.id,
       bundleId: prepared.bundle.id,
       maximumCostUsd: input.maximumSpendUsd,
+      approvedBy: comparisonEntry
+        ? `comparison_series:${comparisonEntry.id}:attempt:${comparisonEntry.attemptOrdinal}`
+        : undefined,
     });
     const bindings = resolvePortableBindings({
       modelProject: sourceProject,
@@ -168,7 +225,7 @@ export function createPortableModelRunService(deps: {
       : new Map<string, Uint8Array>();
     const graph = buildTasksetTrainingBundle({
       taskset,
-      modelProject: sourceProject,
+      modelProject: preparedProject,
       modelRunId,
       runtime: bindings.runtime,
       compute: bindings.compute,
@@ -190,7 +247,7 @@ export function createPortableModelRunService(deps: {
     const resolvedPlanBase = {
       schemaVersion: "openpond.resolvedTrainingPlan.v1" as const,
       manifest: graph.manifest,
-      recipe,
+      recipe: preparedRecipe,
       runtime: bindings.runtime,
       compute: bindings.compute,
       engine: bindings.engine,
@@ -243,6 +300,7 @@ export function createPortableModelRunService(deps: {
       releaseGraph: portableReleaseGraph,
       maximumSpendUsd: approval.maximumCostUsd,
       startedAt: approval.approvedAt,
+      comparisonSeriesEntry,
     });
     let executionRef;
     try {

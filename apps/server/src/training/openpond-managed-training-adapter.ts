@@ -26,12 +26,12 @@ import {
   type TrainingJobSubmission,
 } from "openpond-sdk/training";
 import { createModelProjectsClient } from "openpond-sdk/model-projects";
-
 import {
   hostedApiAuthHeaders,
   resolveManagedAdapterUserAccess,
 } from "../openpond/hosted-api-access.js";
 import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
+import { ensureManagedRlLocalExecutor } from "./managed-rl-local-executor-manager.js";
 import { supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
 import {
   dateString,
@@ -55,14 +55,13 @@ import {
 } from "./openpond-managed-training-adapter-support.js";
 import { resolveTasksetEvaluationAssetBytes } from "./taskset-work-assets.js";
 import { continuationResumeFrom } from "./openpond-managed-training-continuation.js";
+import { managedTrainingEvidenceFromPublic } from "./openpond-managed-training-evidence.js";
+import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
 export { continuationResumeFrom };
-
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
 const ACTIVE_EVIDENCE_REFRESH_TTL_MS = 1_500;
-
 export type { OpenPondManagedTrainingAdapterDependencies } from "./openpond-managed-training-adapter-support.js";
-
 export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   readonly id = ADAPTER_ID;
   private readonly fetchImpl: typeof fetch;
@@ -468,16 +467,16 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     if (taskset.contentHash !== trainingPlan.tasksetHash) {
       throw new Error("The managed training Taskset changed before launch.");
     }
-    const validationTasks = taskset.tasks.filter(
-      (task) => task.split === "frozen_eval" || task.split === "validation",
-    );
-    if (validationTasks.length === 0) {
-      throw new Error("OpenPond Managed requires at least one private validation task.");
-    }
-    const validationAssetBytes = taskset.environment.kind === "work"
+    const validationSource = await resolveManagedValidationTaskSource({
+      store: this.dependencies.store,
+      trainingPlan,
+      trainingTaskset: taskset,
+    });
+    const validationTasks = validationSource.tasks;
+    const validationAssetBytes = validationSource.taskset.environment.kind === "work"
       ? await resolveTasksetEvaluationAssetBytes({
           storeDir: this.dependencies.storeDir,
-          taskset,
+          taskset: validationSource.taskset,
         })
       : new Map<string, Uint8Array>();
     const validationAssets = [...validationAssetBytes.entries()]
@@ -679,7 +678,12 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       createdAt: dateString(job.createdAt),
     };
     if (plan.runtime.placement === "local") {
-      this.ensureLocalExecutor(ref, access, plan.manifest.harnessRelease.contentHash);
+      await this.ensureLocalExecutor(
+        ref,
+        access,
+        plan.manifest.harnessRelease.contentHash,
+        validationSource.taskset,
+      );
     }
     return ref;
   }
@@ -697,7 +701,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     const placement = runtime.placement;
     if (placement === "local") {
       const storedHarnessHash = localJob?.metadata.harnessReleaseHash;
-      this.ensureLocalExecutor(
+      await this.ensureLocalExecutor(
         ref,
         access,
         typeof storedHarnessHash === "string" ? storedHarnessHash : undefined,
@@ -723,6 +727,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     );
     if (
       terminal
+      && snapshot.schemaVersion === "openpond.managedEvidenceSnapshot.v2"
       && snapshot.syncedJobUpdatedAt === localJob?.updatedAt
     ) {
       return;
@@ -745,9 +750,13 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   }
 
   private async refreshEvidenceOnce(ref: TrainingExecutionRef): Promise<void> {
-    const storedEvents = await this.dependencies.store.listTrainingJobEvents(ref.runId);
     const client = this.trainingClient(await this.resolveBoundAccess(ref.tenantId));
-    const events = await client.events(ref.runId);
+    const [storedEvents, job, events] = await Promise.all([
+      this.dependencies.store.listTrainingJobEvents(ref.runId),
+      client.getJob(ref.runId),
+      client.events(ref.runId),
+    ]);
+    const outputs = job.state === "succeeded" ? await client.outputs(ref.runId) : null;
     const storedById = new Map(storedEvents.map((event) => [event.id, event]));
     const occupiedSequences = new Set(storedEvents.map((event) => event.sequence));
     let nextSequence = Math.max(
@@ -780,20 +789,29 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       }));
     }
     const refreshedJob = await this.dependencies.store.getTrainingJob(ref.runId);
-    if (
-      refreshedJob
-      && ["succeeded", "failed", "cancelled"].includes(refreshedJob.status)
-    ) {
+    if (refreshedJob) {
+      const terminal = ["succeeded", "failed", "cancelled"].includes(refreshedJob.status);
+      const syncedAt = new Date().toISOString();
       await this.dependencies.store.saveTrainingJob({
         ...refreshedJob,
         metadata: {
           ...refreshedJob.metadata,
-          managedEvidenceSnapshot: {
-            schemaVersion: "openpond.managedEvidenceSnapshot.v1",
-            syncedJobUpdatedAt: refreshedJob.updatedAt,
-            eventCount: events.length,
-            syncedAt: new Date().toISOString(),
-          },
+          managedTrainingEvidence: managedTrainingEvidenceFromPublic({
+            job,
+            events,
+            outputs,
+            syncedAt,
+          }),
+          ...(terminal
+            ? {
+                managedEvidenceSnapshot: {
+                  schemaVersion: "openpond.managedEvidenceSnapshot.v2",
+                  syncedJobUpdatedAt: refreshedJob.updatedAt,
+                  eventCount: events.length,
+                  syncedAt,
+                },
+              }
+            : {}),
         },
       });
     }
@@ -848,10 +866,6 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       jobId: ref.runId,
       requireCleanup: true,
     });
-    const adapterOutput = output.outputs.find((candidate) => candidate.kind === "adapter");
-    if (!adapterOutput) {
-      throw new Error("Sandbox completed managed training without an adapter artifact.");
-    }
     const artifacts = output.outputs
       .filter((candidate) => candidate.kind !== "scorer")
       .map((candidate) => ({
@@ -861,6 +875,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           encodeURIComponent(candidate.id),
         sha256: candidate.contentHash,
         sizeBytes: candidate.sizeBytes,
+        metadata: candidate.metadata,
       }));
     const base = {
       runId: ref.runId,
@@ -965,31 +980,20 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     return saved;
   }
 
-  private ensureLocalExecutor(
+  private async ensureLocalExecutor(
     ref: TrainingExecutionRef,
     access: Access,
     harnessReleaseHash?: string,
-  ): void {
-    if (this.localExecutors.has(ref.runId)) return;
-    if (!harnessReleaseHash) {
-      throw new Error("Managed local rollout is missing its Harness release hash.");
-    }
-    const executor = new ManagedRlLocalRolloutExecutor({
-      runId: ref.runId,
+    validationTaskset?: import("@openpond/contracts").Taskset,
+  ): Promise<void> {
+    await ensureManagedRlLocalExecutor({
       access,
+      dependencies: this.dependencies,
+      executors: this.localExecutors,
       fetchImpl: this.fetchImpl,
-      env: this.dependencies.env,
-      store: this.dependencies.store,
-      storeDir: this.dependencies.storeDir,
-      harnessRoot: path.join(
-        this.dependencies.storeDir,
-        "training",
-        "harnesses",
-        harnessReleaseHash,
-        "source",
-      ),
+      harnessReleaseHash,
+      ref,
+      validationTaskset,
     });
-    this.localExecutors.set(ref.runId, executor);
-    executor.start();
   }
 }

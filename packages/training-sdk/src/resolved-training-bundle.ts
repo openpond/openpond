@@ -115,7 +115,11 @@ export function buildTasksetTrainingBundle(input: {
     environment: taskset.environment,
     capabilities: taskset.capabilities,
     policy: taskset.policy,
-    outputContract: taskset.metadata.tasksetOutputContract ?? null,
+    outputContract:
+      (taskset.metadata.tasksetOutputContract as { mode?: unknown } | undefined)
+        ?.mode === "text"
+        ? null
+        : taskset.metadata.tasksetOutputContract ?? null,
   });
   addJsonAsset(assets, "graders.json", {
     schemaVersion: "openpond.harnessGraders.v1",

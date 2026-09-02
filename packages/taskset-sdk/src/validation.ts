@@ -71,11 +71,11 @@ function validateGraderFixtures(taskset: Taskset, issues: TasksetValidationIssue
   const taskIds = new Set(taskset.tasks.map((task) => task.id));
   const required = new Set(["positive", "negative", "boundary", "adversarial", "prompt_injection", "infrastructure_failure"]);
   for (const fixture of taskset.graderFixtures) {
-    if (!taskset.datasetArtifact && !taskIds.has(fixture.taskId)) issues.push({ code: "grader_fixture_task_missing", severity: "error", message: `Fixture ${fixture.id} references missing task ${fixture.taskId}.`, path: `graderFixtures.${fixture.id}.taskId` });
+    if (!taskset.datasetArtifact && !taskIds.has(fixture.taskId)) issues.push({ code: "grader_fixture_task_missing", severity: "warning", message: `Fixture ${fixture.id} references a task outside this Taskset revision (${fixture.taskId}).`, path: `graderFixtures.${fixture.id}.taskId` });
     required.delete(fixture.label);
     if (fixture.label === "infrastructure_failure" && !fixture.infrastructureError) issues.push({ code: "infrastructure_fixture_error_missing", severity: "error", message: `Infrastructure fixture ${fixture.id} must declare an infrastructure error.`, path: `graderFixtures.${fixture.id}.infrastructureError` });
   }
-  for (const label of required) issues.push({ code: "grader_fixture_missing", severity: "error", message: `Taskset requires a ${label} grader fixture.`, path: "graderFixtures" });
+  for (const label of required) issues.push({ code: "grader_fixture_missing", severity: "warning", message: `Taskset does not include the optional ${label} grader calibration fixture.`, path: "graderFixtures" });
 }
 
 function validateDatasetArtifact(

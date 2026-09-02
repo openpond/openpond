@@ -5,7 +5,8 @@ export type LabDetailKind =
   | "dataset"
   | "scoring"
   | "evaluation"
-  | "review";
+  | "review"
+  | "comparison";
 
 export type LabDetailLocation = {
   kind: LabDetailKind;
