@@ -42,7 +42,10 @@ export function startVoiceTranscription(
     promise: Promise.resolve(),
   };
   job.promise = Promise.resolve()
-    .then(() => transcribe(controller.signal))
+    .then(() => {
+      if (controller.signal.aborted) return;
+      return transcribe(controller.signal);
+    })
     .catch((error) => {
       if (controller.signal.aborted) return;
       throw error;

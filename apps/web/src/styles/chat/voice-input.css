@@ -73,6 +73,13 @@
   color: #a4a4a4;
 }
 
+.composer-primary-controls.has-running-turn
+  .composer-voice-input.voice-input-control.recording,
+.composer-primary-controls.has-running-turn
+  .composer-voice-input.voice-input-control.transcribing {
+  right: 74px;
+}
+
 .voice-transcribing-label {
   display: flex;
   align-items: baseline;

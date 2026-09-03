@@ -167,7 +167,11 @@ export function ComposerPrimaryControls({
   };
   if (surface === "team") {
     return (
-      <div className="composer-primary-controls team-chat-composer-controls">
+      <div
+        className={`composer-primary-controls team-chat-composer-controls ${
+          running ? "has-running-turn" : ""
+        }`.trim()}
+      >
         <button
           type="button"
           className="composer-icon"
@@ -224,31 +228,23 @@ export function ComposerPrimaryControls({
           onTranscript={onTranscript}
           transcriptionChannelKey={voiceInputChannelKey}
         />
-        {running ? (
-          <button
-            type="button"
-            className="send-button stop-button"
-            data-tooltip={stopLabel}
-            aria-label={stopLabel}
-            onClick={onStop}
-          >
-            <Square size={13} fill="currentColor" />
-          </button>
-        ) : (
-          <button
-            className="send-button"
-            disabled={sendDisabled}
-            data-tooltip={sendTooltip}
-            aria-label={sendTooltip}
-          >
-            <ArrowUp size={18} />
-          </button>
-        )}
+        <ComposerSubmissionControls
+          running={running}
+          sendDisabled={sendDisabled}
+          sendTooltip={sendTooltip}
+          stopIcon={stopIcon}
+          stopLabel={stopLabel}
+          onStop={onStop}
+        />
       </div>
     );
   }
   return (
-    <div className="composer-primary-controls">
+    <div
+      className={`composer-primary-controls ${
+        running ? "has-running-turn" : ""
+      }`.trim()}
+    >
       <div className="composer-add-control open-up" ref={addMenuRef}>
         <button
           type="button"
@@ -395,6 +391,35 @@ export function ComposerPrimaryControls({
         onTranscript={onTranscript}
         transcriptionChannelKey={voiceInputChannelKey}
       />
+      <ComposerSubmissionControls
+        running={running}
+        sendDisabled={sendDisabled}
+        sendTooltip={sendTooltip}
+        stopIcon={stopIcon}
+        stopLabel={stopLabel}
+        onStop={onStop}
+      />
+    </div>
+  );
+}
+
+function ComposerSubmissionControls({
+  running,
+  sendDisabled,
+  sendTooltip,
+  stopIcon,
+  stopLabel,
+  onStop,
+}: {
+  running: boolean;
+  sendDisabled: boolean;
+  sendTooltip: string;
+  stopIcon: "pause" | "stop";
+  stopLabel: string;
+  onStop: () => Promise<boolean | void> | boolean | void;
+}) {
+  return (
+    <>
       {running ? (
         <button
           type="button"
@@ -409,17 +434,16 @@ export function ComposerPrimaryControls({
             <Square size={13} fill="currentColor" />
           )}
         </button>
-      ) : (
-        <button
-          className="send-button"
-          disabled={sendDisabled}
-          data-tooltip={sendTooltip}
-          aria-label={sendTooltip}
-        >
-          <ArrowUp size={18} />
-        </button>
-      )}
-    </div>
+      ) : null}
+      <button
+        className="send-button"
+        disabled={sendDisabled}
+        data-tooltip={sendTooltip}
+        aria-label={sendTooltip}
+      >
+        <ArrowUp size={18} />
+      </button>
+    </>
   );
 }
 

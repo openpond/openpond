@@ -1888,7 +1888,7 @@ export function Composer({
           provider={provider}
           providerSettings={providerSettings}
           providerOptions={providerOptions}
-          running={running && !hasComposerInput}
+          running={running}
           sendDisabled={sendDisabled}
           sendTooltip={sendTooltip}
           showToast={showToast}
