@@ -201,8 +201,6 @@ import {
 } from "./training/managed-adapter-models.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
-const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
-
 export async function createOpenPondServer(
   options: OpenPondServerOptions = {}
 ): Promise<OpenPondServerInstance> {
@@ -1084,7 +1082,7 @@ export async function createOpenPondServer(
     subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
     maxHostedWorkspaceToolRounds,
-    maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
+    maxRepeatedInvalidToolRequests: 3,
   });
   const {
     sendTurn,
