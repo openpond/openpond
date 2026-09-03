@@ -253,6 +253,12 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         `/comparison-series/${encodeURIComponent(seriesId)}/seal`,
         { expectedRevision },
       ),
+    archiveComparisonSeries: (seriesId: string, expectedRevision: number) =>
+      mutate<ModelComparisonSeries>(
+        "archive-comparison-series",
+        `/comparison-series/${encodeURIComponent(seriesId)}/archive`,
+        { expectedRevision },
+      ),
     queueComparisonRelease: (input: ModelComparisonQueueReleaseRequest) =>
       mutate<{ series: ModelComparisonSeries; entry: ModelComparisonSeriesEntry }>(
         "queue-comparison-release",

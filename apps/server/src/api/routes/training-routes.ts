@@ -116,6 +116,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/graders$/, method: "GET", action: "taskset_grader_details", key: "tasksetId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/attempts\/([^/]+)\/evidence$/, method: "GET", action: "model_comparison_attempt_evidence", key: "runId", assignmentKey: "attemptId" },
     { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/seal$/, method: "POST", action: "seal_model_comparison_series", key: "seriesId" },
+    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/archive$/, method: "POST", action: "archive_model_comparison_series", key: "seriesId" },
     { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/releases$/, method: "POST", action: "queue_model_comparison_release", key: "seriesId" },
     { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/run$/, method: "PATCH", action: "link_model_comparison_run", key: "entryId" },
     { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/evaluations$/, method: "POST", action: "start_model_comparison_evaluation", key: "entryId" },

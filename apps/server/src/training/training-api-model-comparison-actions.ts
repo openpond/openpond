@@ -27,6 +27,11 @@ export async function handleModelComparisonAction(input: {
         seriesId: requiredString(payload.seriesId, "seriesId"),
         expectedRevision: positiveInteger(payload.expectedRevision, "expectedRevision"),
       }));
+    case "archive_model_comparison_series":
+      return handled(await input.series.archiveSeries({
+        seriesId: requiredString(payload.seriesId, "seriesId"),
+        expectedRevision: positiveInteger(payload.expectedRevision, "expectedRevision"),
+      }));
     case "queue_model_comparison_release":
       return handled(await input.series.queueRelease({
         ...payload,

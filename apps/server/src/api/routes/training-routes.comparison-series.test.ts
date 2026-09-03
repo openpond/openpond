@@ -17,6 +17,7 @@ class ResponseRecorder extends EventEmitter {
 describe("Authenticated training routes", () => {
   it.each([
     ["POST", "/v1/training/comparison-series/series-a/seal", "seal_model_comparison_series", "seriesId", "series-a"],
+    ["POST", "/v1/training/comparison-series/series-a/archive", "archive_model_comparison_series", "seriesId", "series-a"],
     ["POST", "/v1/training/comparison-series/series-a/releases", "queue_model_comparison_release", "seriesId", "series-a"],
     ["PATCH", "/v1/training/comparison-series-entries/entry-a/run", "link_model_comparison_run", "entryId", "entry-a"],
     ["POST", "/v1/training/comparison-series-entries/entry-a/retry", "retry_model_comparison_entry", "entryId", "entry-a"],

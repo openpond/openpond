@@ -488,6 +488,52 @@ describe("Model Comparison Series service", () => {
     expect(linked.modelRunId).toBe("run-race");
   });
 
+  it("archives terminal series history but refuses to orphan active work", async () => {
+    const seed = taskset("seed-service-test", ["seed-task"]);
+    const eligible = taskset("eligible-service-test", ["daily-one"]);
+    const development = taskset("development-service-test", ["development-task"]);
+    const retained = taskset("retained-service-test", ["retained-task"]);
+    const frozen = taskset("frozen-service-test", ["frozen-task"]);
+    const store = memoryStore([seed, eligible, development, retained, frozen]);
+    const service = createModelComparisonSeriesService(store.api as never);
+    await service.saveSeries(draftSeries(seed, eligible, development, retained, frozen));
+    const sealed = await service.sealSeries({
+      seriesId: "series-service-test",
+      expectedRevision: 1,
+    });
+    const queued = await service.queueRelease({
+      seriesId: sealed.id,
+      scheduleEntryId: "schedule-p0",
+      taskSelection: null,
+      expectedSeriesRevision: sealed.revision,
+    });
+    await service.linkRun({
+      entryId: queued.entry.id,
+      expectedStatus: "ready",
+      status: "queued",
+    });
+
+    await expect(service.archiveSeries({
+      seriesId: sealed.id,
+      expectedRevision: queued.series.revision,
+    })).rejects.toThrow("cannot be archived");
+
+    await service.linkRun({
+      entryId: queued.entry.id,
+      expectedStatus: "queued",
+      status: "cancelled",
+    });
+    const archived = await service.archiveSeries({
+      seriesId: sealed.id,
+      expectedRevision: queued.series.revision,
+    });
+    expect(archived).toMatchObject({
+      id: sealed.id,
+      status: "archived",
+      revision: queued.series.revision + 1,
+    });
+  });
+
   it("reconciles the canonical Model Run lifecycle into its Comparison entry", async () => {
     const seed = taskset("seed-service-test", ["seed-task"]);
     const eligible = taskset("eligible-service-test", ["daily-one", "daily-two", "daily-three"]);

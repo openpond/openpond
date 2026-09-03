@@ -74,6 +74,33 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     });
   }
 
+  async function archiveSeries(input: {
+    seriesId: string;
+    expectedRevision: number;
+  }): Promise<ModelComparisonSeries> {
+    const series = await requireSeries(input.seriesId);
+    if (series.status === "archived") return series;
+    requireRevision(series, input.expectedRevision);
+    const entries = await store.listModelComparisonSeriesEntries({
+      seriesId: series.id,
+    });
+    const activeEntry = entries.find(
+      (entry) => entry.status === "queued" || entry.status === "running",
+    );
+    if (activeEntry) {
+      throw new Error(
+        `Comparison Series ${series.id} cannot be archived while ${activeEntry.label} is ${activeEntry.status}.`,
+      );
+    }
+    const timestamp = new Date().toISOString();
+    return store.saveModelComparisonSeries({
+      ...series,
+      status: "archived",
+      revision: series.revision + 1,
+      updatedAt: timestamp,
+    });
+  }
+
   async function queueRelease(inputValue: unknown): Promise<{
     series: ModelComparisonSeries;
     entry: ModelComparisonSeriesEntry;
@@ -786,7 +813,7 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
     }
   }
 
-  return { decide, linkRun, linkStartedRun, queueRelease, reconcileEntries, recordPromotion, retryEntry, saveSeries, sealSeries };
+  return { archiveSeries, decide, linkRun, linkStartedRun, queueRelease, reconcileEntries, recordPromotion, retryEntry, saveSeries, sealSeries };
 }
 
 function verifyBenchmarkProtocol(series: ModelComparisonSeries): void {
