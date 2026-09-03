@@ -1,20 +1,19 @@
 # 2026-09-01 Continual Support Causal Rank Sweep
 
-Status: Correctness repairs are deployed and the replacement causal P0–P8
-protocol is sealed. No result from Retail Support Version 2 is valid evidence
-for this study. Fresh P0 is active on staging; P1–P8 remain queued behind its
-published seed artifact.
+Status: Active worker-performance remediation. The replacement causal P0–P8
+protocol remains sealed, but no Version 3 result is yet valid evidence. P0 was
+cancelled at the one-hour paid-runtime cap; P1–P8 remain queued behind a valid
+published P0 seed artifact.
 
-Latest checkpoint: 2026-09-03 04:24 UTC. Sandbox commits `73c0ddabc` and
-`2bc992881`, plus deployment pin `72cffde84`, passed the complete CI-shaped
-source suite and Source Validation. Staging pins corrected worker image
-`sha256:c9e7a12d5958bcb744e460c054b9fdb129a38954eec2dff58c959876822d8abc`.
-Retail Support Version 3 project `retail-support-version-3` and sealed series
-`retail-support-version-3-causal-rank` use protocol hash
-`29d02a95c20fb298b1173824dab663ed9714ba85bfe807b27b809f77ba15a3ca`.
-Fresh P0 Model Run `model_run_2ca6809b-d6a3-43e3-9343-077e19e17a06` is
-admitted on one H100. The exact immutable image has downloaded and container
-startup is in progress; optimization has not begun, so no result is claimed.
+Latest checkpoint: 2026-09-03 09:46 UTC. The latest P0 retry
+`model_run_f824a2a2-3e34-43fe-b931-87bf1b3f2829` committed two updates, then
+was cancelled at the one-hour cap and its exact H100 provider worker was
+terminated and reconciled. The blocker was checkpoint diagnostics, not GRPO:
+each update formed dense Qwen LoRA deltas and ran full CPU SVDs. Sandbox commit
+`5c42303e0` replaces that with mathematically equivalent rank-sized QR/SVD
+cores; its immutable worker image build is in progress. The rerun must prove a
+material checkpoint-time reduction before P0 can advance; no P1–P8 arm may
+start first.
 
 Product name: **Continual Support**. Create the corrected execution as a new
 Model Project, **Retail Support Version 3**, with one sealed Comparison Series.
@@ -188,6 +187,9 @@ successful infrastructure status.
 - [x] Record block norms, singular values, and activation ratios.
 - [x] Replace the factor-only reload assertion with a behavior-equivalence probe
   and preserve nonconforming artifacts with explicit evidence.
+- [x] Keep residual diagnostics low-rank rather than materializing dense Qwen
+  projection updates. Done: Sandbox commit `5c42303e0` derives the exact
+  Frobenius norm and non-zero singular values from rank-sized QR cores.
 - [x] Pass the complete Sandbox worker suite in the packaged worker image. Done:
   91 worker tests pass without skips in the packaged environment.
 - [x] Pass broader Sandbox and OpenPond CI from the exact commits to deploy.
@@ -213,6 +215,14 @@ successful infrastructure status.
   Done: rank 16, 16 optimizer groups, two optimizer iterations, at most 32
   actual Adam steps, and an external one-hour paid-runtime cutoff are active.
 - [x] Start P0 through the canonical Model Run path.
+- [x] Cancel the nonviable P0 retry at the external one-hour paid-runtime cap
+  and verify its provider worker is terminated. Done: Model Run
+  `model_run_f824a2a2-3e34-43fe-b931-87bf1b3f2829` was cancelled after two
+  applied updates; provider worker `oe0lcjbbzujdu8u4pyj6ecy1` was reconciled
+  absent.
+- [ ] Deploy the low-rank diagnostic worker image and rerun P0 from the sealed
+  base and seed Taskset. Require the same protocol hash and no reuse of partial
+  P0 output.
 - [ ] Require live evidence for deterministic initialization, trajectory-level
   optimizer accounting, active checkpointing, real serialization equivalence,
   and a continuous applied-update parameter-hash chain.
