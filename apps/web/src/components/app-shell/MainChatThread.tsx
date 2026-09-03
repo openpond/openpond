@@ -40,7 +40,6 @@ export function MainChatThread({
   onResolveUserQuestion,
   onOpenSession,
   onScroll,
-  preparingInitialScroll,
   rows,
   sessionId,
   turnRunning,
@@ -62,7 +61,6 @@ export function MainChatThread({
   onResolveUserQuestion: MessageRowProps["onResolveUserQuestion"];
   onOpenSession: MessageRowProps["onOpenSession"];
   onScroll: (event: UIEvent<HTMLElement>) => void;
-  preparingInitialScroll: boolean;
   rows: ReturnType<typeof buildChatTimelineRows>;
   sessionId: string | null;
   turnRunning: boolean;
@@ -92,7 +90,7 @@ export function MainChatThread({
 
   return (
     <section
-      className={`chat-thread${preparingInitialScroll ? " initial-scroll-pending" : ""}`}
+      className="chat-thread"
       aria-label="Conversation"
       ref={threadRef}
       onScroll={onScroll}

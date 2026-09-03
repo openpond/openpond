@@ -1714,7 +1714,6 @@ export function MainPane({
                 }}
                 onOpenSession={onOpenSession}
                 onScroll={(event) => handleChatScroll(event.currentTarget)}
-                preparingInitialScroll={chatThreadPreparingInitialScroll}
                 rows={chatTimelineRows}
                 sessionId={browserConversationId}
                 turnRunning={turnRunning}

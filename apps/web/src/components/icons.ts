@@ -112,5 +112,6 @@ export { default as UserCircle } from "lucide-react/dist/esm/icons/circle-user.j
 export { default as UserRound } from "lucide-react/dist/esm/icons/user-round.js";
 export { default as WifiOff } from "lucide-react/dist/esm/icons/wifi-off.js";
 export { default as Workflow } from "lucide-react/dist/esm/icons/workflow.js";
+export { default as WrapText } from "lucide-react/dist/esm/icons/wrap-text.js";
 export { default as X } from "lucide-react/dist/esm/icons/x.js";
 export { default as XCircle } from "lucide-react/dist/esm/icons/circle-x.js";

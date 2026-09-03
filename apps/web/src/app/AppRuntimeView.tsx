@@ -1237,7 +1237,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           workspaceDiff: visibleWorkspaceDiff,
           workspaceBusy,
           diffBusy,
-          forceChatThread: isCodexHistorySessionId(selectedSessionId),
+          forceChatThread: Boolean(selectedSessionId),
           diffPanelOpen,
           diffPanelExpanded,
           rightPanelMode,

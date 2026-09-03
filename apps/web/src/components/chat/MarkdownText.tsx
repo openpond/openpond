@@ -24,6 +24,7 @@ import {
 } from "./MarkdownInline";
 import { revealLocalFile } from "../../lib/desktop-files";
 import { MarkdownMath } from "./MarkdownMath";
+import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 
 export function MarkdownText({
   activeWorkspaceAppId = null,
@@ -206,9 +207,11 @@ function renderMarkdownBlocks(
         );
       }
       return (
-        <pre className="markdown-code-block" key={key}>
-          <code>{block.content}</code>
-        </pre>
+        <MarkdownCodeBlock
+          content={block.content}
+          key={key}
+          language={block.language}
+        />
       );
     }
     if (block.type === "math") {

@@ -197,6 +197,9 @@ describe("markdown checkbox rendering", () => {
     });
 
     expect(markup).toContain('class="markdown-code-block"');
+    expect(markup).toContain('aria-label="TypeScript code block"');
+    expect(markup).toContain('aria-label="Wrap code"');
+    expect(markup).toContain('aria-label="Copy code"');
     expect(markup).not.toContain('markdown-file-reference-block');
   });
 
@@ -222,9 +225,10 @@ describe("markdown checkbox rendering", () => {
       '```tsx{message.content ? <div className="user-message-content">{message.content}</div> : null}\n```\n\nAfter the code block.',
     );
 
-    expect(markup).toContain('<pre class="markdown-code-block"><code>{message.content ? &lt;div');
+    expect(markup).toContain('aria-label="TSX code block"');
+    expect(markup).toContain('<pre class="markdown-code-content"><code>{message.content ? &lt;div');
     expect(markup).toContain("user-message-content");
-    expect(markup).toContain('</code></pre><p class="markdown-paragraph">After the code block.</p>');
+    expect(markup).toContain('</code></pre></section><p class="markdown-paragraph">After the code block.</p>');
     expect(markup).not.toContain("```tsx");
   });
 
@@ -233,9 +237,10 @@ describe("markdown checkbox rendering", () => {
       '``ts if (action.key === "prompt") {\nconst prompt = String(nextValue);\n}\n``\n\nAfter the code block.',
     );
 
-    expect(markup).toContain('<pre class="markdown-code-block"><code>if (action.key === &quot;prompt&quot;) {');
+    expect(markup).toContain('aria-label="TypeScript code block"');
+    expect(markup).toContain('<pre class="markdown-code-content"><code>if (action.key === &quot;prompt&quot;) {');
     expect(markup).toContain("const prompt = String(nextValue);");
-    expect(markup).toContain('</code></pre><p class="markdown-paragraph">After the code block.</p>');
+    expect(markup).toContain('</code></pre></section><p class="markdown-paragraph">After the code block.</p>');
     expect(markup).not.toContain("``ts");
   });
 

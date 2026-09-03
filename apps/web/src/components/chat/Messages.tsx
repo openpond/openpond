@@ -2,10 +2,12 @@ import { memo, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
   Copy,
   CreditCard,
   ExternalLink,
   Globe2,
+  HelpCircle,
   ImageIcon,
   Lightbulb,
 } from "../icons";
@@ -479,13 +481,23 @@ function UserQuestionCard({
       className={`user-question-card ${question.status}`}
       aria-label="Question from OpenPond"
     >
-      <strong>{question.question}</strong>
-      {question.reason ? <p>{question.reason}</p> : null}
+      <header className="user-question-header">
+        <span className="user-question-icon" aria-hidden>
+          <HelpCircle size={17} />
+        </span>
+        <span className="user-question-heading">
+          <span className="user-question-eyebrow">Question</span>
+          <strong>{question.question}</strong>
+        </span>
+      </header>
+      {question.reason ? (
+        <p className="user-question-reason">{question.reason}</p>
+      ) : null}
       {question.status === "pending" ? (
         <>
           {question.options.length > 0 ? (
             <div className="user-question-options">
-              {question.options.map((option) => (
+              {question.options.map((option, index) => (
                 <button
                   disabled={submitting || !onResolve}
                   key={option.id}
@@ -499,10 +511,15 @@ function UserQuestionCard({
                     })
                   }
                 >
-                  <span>{option.label}</span>
-                  {option.description ? (
-                    <small>{option.description}</small>
-                  ) : null}
+                  <span className="user-question-option-index" aria-hidden>
+                    {index + 1}
+                  </span>
+                  <span className="user-question-option-copy">
+                    <span>{option.label}</span>
+                    {option.description ? (
+                      <small>{option.description}</small>
+                    ) : null}
+                  </span>
                 </button>
               ))}
             </div>
@@ -522,19 +539,25 @@ function UserQuestionCard({
                   });
               }}
             >
-              <input
-                aria-label="Answer"
-                disabled={submitting || !onResolve}
-                onChange={(event) => setFreeform(event.target.value)}
-                placeholder="Type an answer"
-                value={freeform}
-              />
-              <button
-                disabled={submitting || !onResolve || !freeform.trim()}
-                type="submit"
-              >
-                Answer
-              </button>
+              <label htmlFor={`question-answer-${question.id}`}>
+                Or write your own answer
+              </label>
+              <span className="user-question-freeform-controls">
+                <input
+                  aria-label="Answer"
+                  disabled={submitting || !onResolve}
+                  id={`question-answer-${question.id}`}
+                  onChange={(event) => setFreeform(event.target.value)}
+                  placeholder="Type an answer"
+                  value={freeform}
+                />
+                <button
+                  disabled={submitting || !onResolve || !freeform.trim()}
+                  type="submit"
+                >
+                  {submitting ? "Sending…" : "Answer"}
+                </button>
+              </span>
             </form>
           ) : null}
           <button
@@ -550,17 +573,20 @@ function UserQuestionCard({
               })
             }
           >
-            Dismiss question
+            Skip for now
           </button>
         </>
       ) : (
-        <small>
-          {question.status === "answered"
-            ? `Answered${
-                question.answer?.text ? `: ${question.answer.text}` : ""
-              }`
-            : "Dismissed"}
-        </small>
+        <span className="user-question-resolution">
+          <CheckCircle2 aria-hidden size={15} />
+          <small>
+            {question.status === "answered"
+              ? `Answered${
+                  question.answer?.text ? `: ${question.answer.text}` : ""
+                }`
+              : "Skipped"}
+          </small>
+        </span>
       )}
     </section>
   );
