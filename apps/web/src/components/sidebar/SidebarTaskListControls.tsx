@@ -1,5 +1,7 @@
 import {
   Fragment,
+  useEffect,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -55,6 +57,7 @@ export function SidebarTaskListControls({
   selectedTasksetId: string | null;
   tasksets: readonly SidebarTasksetFilterOption[];
 }) {
+  const controlsRef = useRef<HTMLDivElement | null>(null);
   const [tasksetsExpanded, setTasksetsExpanded] = useState(false);
   const selectedTaskset = tasksets.find(
     (taskset) => taskset.id === selectedTasksetId
@@ -67,14 +70,21 @@ export function SidebarTaskListControls({
   const filterMenuOpen = openMenu === "tasks-filter";
   const sortMenuOpen = openMenu === "chats";
 
+  useEffect(() => {
+    if (!filterMenuOpen && !sortMenuOpen) return;
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!controlsRef.current?.contains(event.target as Node)) setOpenMenu(null);
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [filterMenuOpen, setOpenMenu, sortMenuOpen]);
+
   return (
-    <>
+    <div className="sidebar-task-list-controls" ref={controlsRef}>
       <div className="section-menu">
         <button
           type="button"
-          className={`section-icon ${
-            sortMenuOpen || !showCodexChats || onlyRunningTasks ? "active" : ""
-          }`}
+          className={`section-icon ${sortMenuOpen ? "active" : ""}`}
           aria-label={`${noun === "tasks" ? "Task" : "Chat"} list options`}
           aria-haspopup="menu"
           aria-expanded={sortMenuOpen}
@@ -149,9 +159,7 @@ export function SidebarTaskListControls({
       <div className="section-menu">
         <button
           type="button"
-          className={`section-icon ${
-            filterMenuOpen || filter !== "active" ? "active" : ""
-          }`}
+          className={`section-icon ${filterMenuOpen ? "active" : ""}`}
           aria-label={`Filter ${noun}: ${filterLabel}`}
           aria-haspopup="menu"
           aria-expanded={filterMenuOpen}
@@ -259,6 +267,6 @@ export function SidebarTaskListControls({
           </div>
         ) : null}
       </div>
-    </>
+    </div>
   );
 }

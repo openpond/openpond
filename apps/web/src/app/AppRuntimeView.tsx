@@ -186,6 +186,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     activeProvider,
     appDefaults,
     startMessage,
+    organizations,
     teamChatOrganization,
     teamChatTeamId,
     teamChat,
@@ -338,6 +339,46 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     expandProject(projectId);
     requestMainComposerFocus();
   }, [expandProject, requestMainComposerFocus, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView]);
+  const selectSidebarTeam = useCallback(
+    async (teamId: string) => {
+      if (!connection || !bootstrap) return;
+      try {
+        const preferencesPayload = await api.savePreferences(connection, {
+          defaultTeamId: teamId,
+        });
+        applyBootstrapPayload({
+          ...bootstrap,
+          preferences: preferencesPayload.preferences,
+        });
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : String(caught);
+        setError(message);
+        showToast("Could not switch teams", "error");
+        throw caught;
+      }
+    },
+    [applyBootstrapPayload, bootstrap, connection, setError, showToast],
+  );
+  const logOutOpenPondAccount = useCallback(async () => {
+    if (!connection) return;
+    try {
+      const signedOutPayload = await api.signOutOpenPondAccount(connection);
+      applyBootstrapPayload(signedOutPayload);
+      const preferencesPayload = await api.savePreferences(connection, {
+        defaultTeamId: null,
+      });
+      applyBootstrapPayload({
+        ...signedOutPayload,
+        preferences: preferencesPayload.preferences,
+      });
+      showToast("Logged out", "success");
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setError(message);
+      showToast("Could not log out", "error");
+      throw caught;
+    }
+  }, [applyBootstrapPayload, connection, setError, showToast]);
   const projectsTeamId = teamChatTeamId ?? appDefaults.defaultTeamId ?? null;
   const projectsForActiveTeam = useMemo(
     () =>
@@ -918,6 +959,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           selectedSessionId,
           selectedTeamThreadId: teamChat.selectedThreadId,
           teamChatEnabled: teamChatTeamId !== null,
+          organizations,
           teamChatOrganization,
           teamChatLoading: teamChat.loading,
           currentUserId: teamChat.currentUserId,
@@ -969,6 +1011,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setSearchOpen,
           setSectionMenuOpen,
           setSettingsSection,
+          onSelectTeam: selectSidebarTeam,
+          onLogOut: logOutOpenPondAccount,
           onTogglePinnedCollapsed: togglePinnedCollapsed,
           onToggleCloudProjectsCollapsed: toggleCloudProjectsCollapsed,
           onToggleChatsCollapsed: toggleChatsCollapsed,

@@ -1194,6 +1194,7 @@ export function useAppPrimaryRuntime() {
     startMessage,
     workspaceName,
     accountScopeKey,
+    organizations,
     teamChatOrganization,
     teamChatTeamId,
     teamChat,

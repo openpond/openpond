@@ -14,6 +14,7 @@ export async function handleSettingsRoutes({
     switchOpenPondPayload,
     saveOpenPondAccountPayload,
     removeOpenPondAccountPayload,
+    signOutOpenPondAccountPayload,
     updateOpenPondAccountConfigPayload,
     voiceTranscriptionStatusPayload,
     transcribeVoicePayload,
@@ -77,6 +78,13 @@ export async function handleSettingsRoutes({
       200,
       await saveOpenPondAccountPayload(await readJson(request))
     );
+    return true;
+  }
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === "/v1/openpond/accounts/logout"
+  ) {
+    sendJson(response, 200, await signOutOpenPondAccountPayload());
     return true;
   }
   if (

@@ -856,6 +856,11 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify(input),
     }),
+  signOutOpenPondAccount: (connection: ClientConnection) =>
+    apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/logout", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
   saveOpenPondAccount: (
     connection: ClientConnection,
     input: SaveOpenPondAccountRequest

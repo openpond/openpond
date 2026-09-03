@@ -21,6 +21,10 @@ import {
   type SidebarTasksetFilterOption,
 } from "../../lib/sidebar-task-list";
 import {
+  readSidebarTaskVisibilityPreferences,
+  writeSidebarTaskVisibilityPreferences,
+} from "../../lib/sidebar-task-visibility-preferences";
+import {
   sidebarTerminalIndicator,
   terminalScopeKey,
   type TerminalScopeSummary,
@@ -161,8 +165,10 @@ export function SidebarSectionList({
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
   const [groupByProject, setGroupByProject] = useState(experience !== "chat");
-  const [showCodexChats, setShowCodexChats] = useState(true);
-  const [onlyRunningTasks, setOnlyRunningTasks] = useState(false);
+  const [taskVisibility, setTaskVisibility] = useState(
+    readSidebarTaskVisibilityPreferences,
+  );
+  const { onlyRunningTasks, showCodexChats } = taskVisibility;
   const [selectedTasksetId, setSelectedTasksetId] = useState<string | null>(
     null
   );
@@ -801,11 +807,19 @@ export function SidebarSectionList({
             onFilterChange={changeTaskFilter}
             onGroupByProjectChange={setGroupByProject}
             onOnlyRunningTasksChange={(nextValue) => {
-              setOnlyRunningTasks(nextValue);
+              setTaskVisibility((current) => {
+                const next = { ...current, onlyRunningTasks: nextValue };
+                writeSidebarTaskVisibilityPreferences(next);
+                return next;
+              });
               setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
             }}
             onShowCodexChatsChange={(nextValue) => {
-              setShowCodexChats(nextValue);
+              setTaskVisibility((current) => {
+                const next = { ...current, showCodexChats: nextValue };
+                writeSidebarTaskVisibilityPreferences(next);
+                return next;
+              });
               setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
             }}
             onTasksetChange={changeTasksetFilter}

@@ -1,3 +1,4 @@
+import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import { Download, PanelLeft } from "../icons";
 import { isDesktopShell } from "../app-shell/WindowControls";
 import {
@@ -11,8 +12,10 @@ import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
 import { HarnessLearningSidebarCard } from "./HarnessLearningSidebarCard";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
+import type { SidebarSectionMenuId } from "../../app/app-state";
 
 export function Sidebar(props: SidebarProps) {
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const {
     beginNewChat,
     arch,
@@ -33,6 +36,22 @@ export function Sidebar(props: SidebarProps) {
     modelProjects,
     modelTrainingActivityByProjectId,
   } = props;
+  const setSidebarSectionMenuOpen = useCallback<
+    Dispatch<SetStateAction<SidebarSectionMenuId | null>>
+  >(
+    (value) => {
+      setAccountMenuOpen(false);
+      setSectionMenuOpen(value);
+    },
+    [setSectionMenuOpen],
+  );
+  const setAccountMenu = useCallback(
+    (nextOpen: boolean) => {
+      setAccountMenuOpen(nextOpen);
+      if (nextOpen) setSectionMenuOpen(null);
+    },
+    [setSectionMenuOpen],
+  );
   const updateCheck = useReleaseUpdateCheck({
     currentVersion,
     platform,
@@ -74,7 +93,7 @@ export function Sidebar(props: SidebarProps) {
         productArea={productArea}
         experience={experience}
         beginNewChat={beginNewChat}
-        setSectionMenuOpen={setSectionMenuOpen}
+        setSectionMenuOpen={setSidebarSectionMenuOpen}
         setSelectedAppId={setSelectedAppId}
         setSelectedProjectId={setSelectedProjectId}
         setSelectedSessionId={setSelectedSessionId}
@@ -84,7 +103,12 @@ export function Sidebar(props: SidebarProps) {
         modelTrainingActivityByProjectId={modelTrainingActivityByProjectId}
       />
 
-      {productArea === "models" ? null : <SidebarSectionList {...props} />}
+      {productArea === "models" ? null : (
+        <SidebarSectionList
+          {...props}
+          setSectionMenuOpen={setSidebarSectionMenuOpen}
+        />
+      )}
 
       <div className="sidebar-bottom-stack">
         {productArea === "models" ? null : (
@@ -101,6 +125,10 @@ export function Sidebar(props: SidebarProps) {
         <div className="sidebar-footer-row">
           <UserAuthFooter
             account={props.account}
+            open={accountMenuOpen}
+            organizations={props.organizations}
+            selectedTeamId={props.teamChatOrganization?.teamId ?? null}
+            onOpenChange={setAccountMenu}
             onOpenActivity={() => {
               setSectionMenuOpen(null);
               setSettingsSection("usage");
@@ -113,9 +141,11 @@ export function Sidebar(props: SidebarProps) {
               setView("settings");
               navigateDesktopRoute({ kind: "settings", section: "account" });
             }}
+            onSelectTeam={props.onSelectTeam}
+            onLogOut={props.onLogOut}
           />
           <SidebarUtilityNavigation
-            setSectionMenuOpen={setSectionMenuOpen}
+            setSectionMenuOpen={setSidebarSectionMenuOpen}
             setSelectedAppId={setSelectedAppId}
             setSelectedProjectId={setSelectedProjectId}
             setSelectedSessionId={setSelectedSessionId}

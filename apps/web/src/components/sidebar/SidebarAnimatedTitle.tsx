@@ -32,10 +32,10 @@ export function SidebarAnimatedTitle({ title }: { title: string }) {
 
   return (
     <span
-      className={`sidebar-task-title-text${title ? "" : " pending"}`}
-      aria-label={title || "Creating title"}
+      className="sidebar-task-title-text"
+      aria-label={title || "New task"}
     >
-      {visibleTitle || "\u00a0"}
+      {visibleTitle || "New task"}
     </span>
   );
 }

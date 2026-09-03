@@ -137,6 +137,7 @@ export type HttpRouteDeps = {
   switchOpenPondPayload: (payload: unknown) => Promise<unknown>;
   saveOpenPondAccountPayload: (payload: unknown) => Promise<unknown>;
   removeOpenPondAccountPayload: (payload: unknown) => Promise<unknown>;
+  signOutOpenPondAccountPayload: () => Promise<unknown>;
   updateOpenPondAccountConfigPayload: (payload: unknown) => Promise<unknown>;
   profileCurrentPayload: () => Promise<unknown>;
   profileCatalogPayload: () => Promise<unknown>;

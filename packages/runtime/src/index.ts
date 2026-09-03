@@ -34,6 +34,7 @@ export {
 } from "./chat.js";
 export { saveOpenPondAccount } from "./save-account.js";
 export { removeOpenPondAccount } from "./remove-account.js";
+export { signOutOpenPondAccount } from "./sign-out-account.js";
 export { updateOpenPondAccountConfig } from "./update-account-config.js";
 export {
   deleteOpenPondSchedule,

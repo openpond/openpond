@@ -46,6 +46,7 @@ import {
   loadOpenPondAccountContext,
   loadOpenPondApps,
   removeOpenPondAccount,
+  signOutOpenPondAccount,
   saveOpenPondAccount,
   switchOpenPondAccount,
   updateOpenPondAccountConfig,
@@ -1719,6 +1720,23 @@ export function createServerPayloads(deps: {
     });
   }
 
+  async function signOutOpenPondAccountPayload(): Promise<BootstrapPayload> {
+    await signOutOpenPondAccount();
+    await appendRuntimeEvent(
+      event({
+        name: "diagnostic",
+        source: "server",
+        action: "openpond.account.logout",
+        status: "completed",
+        output: "Logged out of the active OpenPond account.",
+      }),
+    );
+    return bootstrapPayload({
+      forceOpenPond: true,
+      refreshCloudProjects: false,
+    });
+  }
+
   async function updateOpenPondAccountConfigPayload(
     payload: unknown
   ): Promise<BootstrapPayload> {
@@ -1796,6 +1814,7 @@ export function createServerPayloads(deps: {
     switchOpenPondPayload,
     saveOpenPondAccountPayload,
     removeOpenPondAccountPayload,
+    signOutOpenPondAccountPayload,
     updateOpenPondAccountConfigPayload,
     ...profilePayloads,
     waitForOpenPondRefresh,
