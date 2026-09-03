@@ -1789,7 +1789,7 @@ export function MainPane({
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey
                 }
-                voiceInputChannelKey="main-composer"
+                voiceInputChannelKey={`main-composer:${composerSubmissionScopeKey}`}
                 showProjectFooter={false}
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
@@ -1882,7 +1882,7 @@ export function MainPane({
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey
                 }
-                voiceInputChannelKey="main-composer"
+                voiceInputChannelKey={`main-composer:${composerSubmissionScopeKey}`}
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}

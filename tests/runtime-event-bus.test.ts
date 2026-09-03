@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import type { ServerResponse } from "node:http";
 import { describe, expect, test } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
@@ -134,13 +135,18 @@ describe("runtime event bus assistant delta coalescing", () => {
     expect(writes[0]?.startsWith("id: 4\n")).toBe(true);
   });
 
-  test("disconnects subscribers that apply stream backpressure", async () => {
+  test("queues subscriber events during stream backpressure and flushes them on drain", async () => {
     const events: RuntimeEvent[] = [];
     let destroyed = false;
+    let backpressured = true;
+    const writes: string[] = [];
     const bus = createRuntimeEventBus({ logger: testLogger(), store: fakeStore(events) });
-    bus.addLiveSubscriber({
+    const response = Object.assign(new EventEmitter(), {
       destroyed: false,
-      write() {
+      write(chunk: string) {
+        writes.push(chunk);
+        if (!backpressured) return true;
+        backpressured = false;
         return false;
       },
       destroy() {
@@ -148,12 +154,25 @@ describe("runtime event bus assistant delta coalescing", () => {
         this.destroyed = true;
         return this;
       },
-    } as unknown as ServerResponse);
+    }) as unknown as ServerResponse;
+    bus.addLiveSubscriber(response);
 
-    await bus.appendRuntimeEvent(runtimeEvent("slow-client", { name: "turn.started" }));
+    await bus.appendRuntimeEvent(runtimeEvent("slow-client-1", { name: "turn.started" }));
+    await bus.appendRuntimeEvent(runtimeEvent("slow-client-2", { name: "turn.completed" }));
 
-    expect(destroyed).toBe(true);
-    expect(bus.subscribers.size).toBe(0);
+    expect(destroyed).toBe(false);
+    expect(bus.subscribers.size).toBe(1);
+    expect(writes.map(runtimeEventFromSseWrite).map((event) => event.id)).toEqual([
+      "slow-client-1",
+    ]);
+
+    response.emit("drain");
+
+    expect(writes.map(runtimeEventFromSseWrite).map((event) => event.id)).toEqual([
+      "slow-client-1",
+      "slow-client-2",
+    ]);
+    expect(destroyed).toBe(false);
   });
 });
 

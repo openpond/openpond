@@ -334,8 +334,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           selectedProjectId: null,
           error: null,
           view: "chat",
-        },
-        { clearSelectedDraft: true }
+        }
       );
     case "openCommitDialog":
       return {

@@ -14,6 +14,8 @@ type PendingAssistantDelta = {
 };
 
 type RuntimeEventSubscriber = {
+  backpressured: boolean;
+  drainListener: (() => void) | null;
   response: ServerResponse;
   sessionId: string | null;
   ready: boolean;
@@ -116,6 +118,8 @@ export function createRuntimeEventBus({
     sessionId: string | null;
   }): Promise<() => void> {
     const subscriber: RuntimeEventSubscriber = {
+      backpressured: false,
+      drainListener: null,
       response: input.response,
       sessionId: input.sessionId,
       ready: false,
@@ -153,7 +157,14 @@ export function createRuntimeEventBus({
   }
 
   function addLiveSubscriber(response: ServerResponse, sessionId: string | null = null): () => void {
-    const subscriber: RuntimeEventSubscriber = { response, sessionId, ready: true, pending: [] };
+    const subscriber: RuntimeEventSubscriber = {
+      backpressured: false,
+      drainListener: null,
+      response,
+      sessionId,
+      ready: true,
+      pending: [],
+    };
     subscribers.add(subscriber);
     return () => disconnectSubscriber(subscriber, false);
   }
@@ -247,11 +258,20 @@ export function createRuntimeEventBus({
       subscribers.delete(subscriber);
       return false;
     }
+    if (subscriber.backpressured) {
+      return queueSubscriberEvent(subscriber, event);
+    }
     const encoded = `id: ${event.sequence ?? ""}\nevent: runtime\ndata: ${JSON.stringify(event)}\n\n`;
     try {
       if (!subscriber.response.write(encoded)) {
-        disconnectSubscriber(subscriber);
-        return false;
+        subscriber.backpressured = true;
+        const onDrain = () => {
+          subscriber.drainListener = null;
+          subscriber.backpressured = false;
+          flushSubscriberQueue(subscriber);
+        };
+        subscriber.drainListener = onDrain;
+        subscriber.response.once("drain", onDrain);
       }
       return true;
     } catch {
@@ -262,8 +282,34 @@ export function createRuntimeEventBus({
 
   function disconnectSubscriber(subscriber: RuntimeEventSubscriber, destroy = true): void {
     subscribers.delete(subscriber);
+    if (subscriber.drainListener) {
+      subscriber.response.off("drain", subscriber.drainListener);
+      subscriber.drainListener = null;
+    }
+    subscriber.backpressured = false;
     subscriber.pending = [];
     if (destroy && !subscriber.response.destroyed) subscriber.response.destroy();
+  }
+
+  function queueSubscriberEvent(
+    subscriber: RuntimeEventSubscriber,
+    runtimeEvent: RuntimeEvent,
+  ): boolean {
+    subscriber.pending.push(runtimeEvent);
+    if (subscriber.pending.length <= MAX_PENDING_SUBSCRIBER_EVENTS) return true;
+    disconnectSubscriber(subscriber);
+    return false;
+  }
+
+  function flushSubscriberQueue(subscriber: RuntimeEventSubscriber): void {
+    while (
+      subscribers.has(subscriber) &&
+      !subscriber.backpressured &&
+      subscriber.pending.length > 0
+    ) {
+      const runtimeEvent = subscriber.pending.shift();
+      if (!runtimeEvent || !writeSubscriberEvent(subscriber, runtimeEvent)) return;
+    }
   }
 }
 

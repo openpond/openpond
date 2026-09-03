@@ -10,6 +10,21 @@ import {
 } from "../apps/web/src/lib/voice-transcription-job";
 
 describe("voice transcription lifecycle", () => {
+  test("restores an unsent new-task draft after visiting another chat", () => {
+    const draftStore = createComposerDraftStore();
+    draftStore.set("A task I still need to finish");
+    draftStore.applyAppAction({
+      type: "selectSession",
+      sessionId: "another-chat",
+    });
+
+    expect(draftStore.getSnapshot()).toBe("");
+
+    draftStore.applyAppAction({ type: "beginNewChat", appId: null });
+
+    expect(draftStore.getSnapshot()).toBe("A task I still need to finish");
+  });
+
   test("keeps an in-flight job visible across composer remounts and lets the new composer cancel it", async () => {
     const channelKey = "main-composer-test";
     const firstSubscriber = vi.fn();

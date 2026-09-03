@@ -369,7 +369,7 @@ function areReasoningSectionPropsEqual(
   );
 }
 
-const USER_MESSAGE_COLLAPSE_LINE_LIMIT = 10;
+const USER_MESSAGE_COLLAPSE_LINE_LIMIT = 5;
 
 function UserMessageContent({ content }: { content: string }) {
   const lines = useMemo(() => content.split(/\r?\n/), [content]);
@@ -582,13 +582,15 @@ function MessageSources({
         <Globe2 size={13} />
         <span>Sources</span>
       </span>
-      {sources.map((source) => (
-        <SourcePill
-          key={`${source.id}:${source.url}`}
-          source={source}
-          onOpenBrowserLink={onOpenBrowserLink}
-        />
-      ))}
+      <div className="assistant-source-stack">
+        {sources.map((source) => (
+          <SourcePill
+            key={`${source.id}:${source.url}`}
+            source={source}
+            onOpenBrowserLink={onOpenBrowserLink}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -911,10 +913,7 @@ function MessageImageAttachment({
 export const ThinkingIndicator = memo(function ThinkingIndicator() {
   return (
     <article className="activity-group thinking-row" aria-live="polite">
-      <ChatActivitySummary
-        icon={<Lightbulb aria-hidden className="activity-summary-kind-icon" size={13} />}
-        running
-      >
+      <ChatActivitySummary running>
         Thinking…
       </ChatActivitySummary>
     </article>

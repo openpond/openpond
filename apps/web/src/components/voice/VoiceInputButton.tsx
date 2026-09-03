@@ -132,9 +132,13 @@ export function VoiceInputButton({
         signal,
       });
       if (signal.aborted) return;
-      await onTranscript(response.text, { submit: submitRequested() });
+      void Promise.resolve(
+        onTranscript(response.text, { submit: submitRequested() }),
+      ).catch((error) => {
+        showToast(voiceErrorMessage(error), "error");
+      });
     },
-    [language, onTranscript],
+    [language, onTranscript, showToast],
   );
 
   const cancelTranscription = useCallback(() => {

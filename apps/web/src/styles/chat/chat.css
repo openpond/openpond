@@ -310,7 +310,6 @@ button.user-message-attachment {
 
 .assistant-sources {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   max-width: min(760px, 100%);
@@ -340,9 +339,42 @@ button.user-message-attachment {
 }
 
 .assistant-source-pill {
-  max-width: min(220px, 100%);
+  width: 30px;
+  max-width: 30px;
+  padding: 0 7px;
+  overflow: hidden;
   cursor: pointer;
   text-decoration: none;
+  transition:
+    max-width 180ms ease,
+    margin-left 180ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.assistant-source-stack {
+  display: inline-flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 4px;
+  min-width: 0;
+}
+
+.assistant-source-stack .assistant-source-pill + .assistant-source-pill {
+  margin-left: -9px;
+}
+
+.assistant-source-stack:hover .assistant-source-pill,
+.assistant-source-stack:focus-within .assistant-source-pill {
+  width: auto;
+  max-width: min(220px, 32vw);
+}
+
+.assistant-source-stack:hover .assistant-source-pill + .assistant-source-pill,
+.assistant-source-stack:focus-within .assistant-source-pill + .assistant-source-pill {
+  margin-left: 4px;
 }
 
 .assistant-source-pill:hover,
@@ -371,10 +403,26 @@ button.user-message-attachment {
 }
 
 .assistant-source-pill span {
+  max-width: 0;
   min-width: 0;
   overflow: hidden;
+  opacity: 0;
   text-overflow: ellipsis;
+  transition: max-width 180ms ease, opacity 120ms ease;
   white-space: nowrap;
+}
+
+.assistant-source-stack:hover .assistant-source-pill span,
+.assistant-source-stack:focus-within .assistant-source-pill span {
+  max-width: 180px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-source-pill,
+  .assistant-source-pill span {
+    transition: none;
+  }
 }
 
 .chat-create-receipt {

@@ -128,7 +128,6 @@ export function createComposerDraftStore(
       if (action.type === "beginNewChat") {
         select(
           { selectedSessionId: null, selectedAppId: action.appId, selectedProjectId: null },
-          { clear: true },
         );
       }
     },

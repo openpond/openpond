@@ -43,6 +43,24 @@ function commandStarted(
 }
 
 describe("chat message projection", () => {
+  test("collapses pasted user messages after five lines", () => {
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: {
+          id: "long_user_message",
+          role: "user" as const,
+          content: "one\ntwo\nthree\nfour\nfive\nsix",
+          timestamp: "2026-07-04T10:00:00.000Z",
+          turnId: "turn_long_user_message",
+        },
+      }),
+    );
+
+    expect(html).toContain("one\ntwo\nthree\nfour\nfive");
+    expect(html).not.toContain("six");
+    expect(html).toContain('aria-expanded="false"');
+  });
+
   test("renders per-turn KV cache reuse as plain assistant footer metadata", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
@@ -1060,6 +1078,7 @@ describe("chat message projection", () => {
       })
     );
     expect(html).toContain("assistant-sources");
+    expect(html).toContain("assistant-source-stack");
     expect(html).toContain("assistant-source-pill");
     expect(html).toContain("Open source U.S. Soccer");
     expect(html).toContain("Open source ESPN");
