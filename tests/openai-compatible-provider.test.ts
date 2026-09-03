@@ -554,7 +554,6 @@ describe("OpenAI-compatible provider adapter", () => {
           store: false,
           instructions: "Be concise.",
           prompt_cache_key: "conversation_123",
-          prompt_cache_options: { mode: "implicit", ttl: "30m" },
           reasoning: { summary: "auto" },
           tools: [
             {

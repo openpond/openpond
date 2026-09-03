@@ -540,9 +540,6 @@ export function buildResponsesBody(input: {
   };
   if (projected.instructions) body.instructions = projected.instructions;
   if (input.promptCacheKey) body.prompt_cache_key = input.promptCacheKey;
-  if (isGpt56Model(input.model)) {
-    body.prompt_cache_options = { mode: "implicit", ttl: "30m" };
-  }
   body.reasoning = {
     ...(input.reasoningEffort ? { effort: input.reasoningEffort } : {}),
     summary: "auto",
@@ -563,10 +560,6 @@ function normalizedPromptCacheKey(value: string | undefined): string | undefined
   return trimmed.length <= 64
     ? trimmed
     : createHash("sha256").update(trimmed).digest("hex");
-}
-
-function isGpt56Model(model: string): boolean {
-  return /^gpt-5\.6(?:-|$)/i.test(model.trim());
 }
 
 function responsesInputFromMessages(messages: HostedChatMessage[]): {
