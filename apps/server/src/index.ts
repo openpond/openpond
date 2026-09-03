@@ -31,7 +31,7 @@ import {
   DEFAULT_PORT,
   VERSION,
 } from "./constants.js";
-import { runOpenPondServerCli } from "./cli.js";
+import { runOpenPondServerCliEntrypoint } from "./server-cli-entrypoint.js";
 import { createOpenPondAppServer } from "./app-server-runtime.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { runHostedContextCompaction } from "./openpond/context-compaction/index.js";
@@ -1994,15 +1994,6 @@ export async function createOpenPondServer(
     },
   };
 }
-
 if (isCliEntrypoint(import.meta.url)) {
-  void runOpenPondServerCli({
-    createOpenPondServer,
-    createOpenPondAppServer,
-  }).catch((error) => {
-    console.error(
-      error instanceof Error ? error.stack ?? error.message : String(error)
-    );
-    process.exit(1);
-  });
+  runOpenPondServerCliEntrypoint({ createOpenPondServer, createOpenPondAppServer });
 }

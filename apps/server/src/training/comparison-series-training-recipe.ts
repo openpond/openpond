@@ -29,11 +29,21 @@ export async function comparisonSeriesTrainingRecipe(input: {
   if (!series?.scheduleSealedAt || !protocolEntry || !taskset) {
     throw new Error("Comparison Series execution requires an exact sealed protocol and Taskset release.");
   }
-  const optimizerSteps = taskset.tasks.length * protocolEntry.optimizerGroupsPerTask;
+  const trainingTaskCount = taskset.tasks.filter(
+    (task) => task.split === recipe.dataset.trainSplit,
+  ).length;
+  if (trainingTaskCount < 1) {
+    throw new Error("Comparison Series execution requires at least one task in the sealed training split.");
+  }
+  const optimizerSteps = trainingTaskCount * protocolEntry.optimizerGroupsPerTask;
   const trajectoriesPerGroup = protocolEntry.trajectoriesPerGroup;
 
   const ranked = {
     ...recipe,
+    dataset: {
+      ...recipe.dataset,
+      maxExamples: trainingTaskCount,
+    },
     lora: { ...recipe.lora, rank: input.entry.trainableRank },
     rollout: {
       ...recipe.rollout,

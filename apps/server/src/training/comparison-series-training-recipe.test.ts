@@ -88,7 +88,11 @@ function executionStore(overrides: Record<string, unknown> = {}): SqliteStore {
         }],
       },
     })),
-    getTasksetRevision: vi.fn(async () => ({ tasks: [{ id: "task-1" }, { id: "task-2" }] })),
+    getTasksetRevision: vi.fn(async () => ({ tasks: [
+      { id: "task-1", split: "train" },
+      { id: "task-2", split: "train" },
+      { id: "held-out", split: "frozen_eval" },
+    ] })),
     ...overrides,
   } as unknown as SqliteStore;
 }
@@ -108,6 +112,7 @@ describe("Comparison Series executable recipe", () => {
 
     if (resolved.schemaVersion !== "openpond.rftRecipe.v1") throw new Error("Expected RFT recipe.");
     expect(resolved.lora.rank).toBe(3);
+    expect(resolved.dataset.maxExamples).toBe(2);
     expect(resolved.rollout.groupSize).toBe(4);
     expect(resolved.optimizer.maxSteps).toBe(2);
     expect(resolved.resourceLimits.maxGpuSeconds).toBe(2_400);
@@ -128,7 +133,7 @@ describe("Comparison Series executable recipe", () => {
           }],
         },
       })),
-      getTasksetRevision: vi.fn(async () => ({ tasks: [{ id: "task-1" }] })),
+      getTasksetRevision: vi.fn(async () => ({ tasks: [{ id: "task-1", split: "train" }] })),
     });
 
     const resolved = await comparisonSeriesTrainingRecipe({
@@ -138,6 +143,7 @@ describe("Comparison Series executable recipe", () => {
     });
 
     if (resolved.schemaVersion !== "openpond.rftRecipe.v1") throw new Error("Expected RFT recipe.");
+    expect(resolved.dataset.maxExamples).toBe(1);
     expect(resolved.optimizer.maxSteps).toBe(16);
     expect(resolved.rollout.groupSize).toBe(4);
     expect(resolved.resourceLimits.maxRollouts).toBe(64);
