@@ -1166,14 +1166,19 @@ export const api = {
         method: "POST",
       }
     ),
-  voiceTranscriptionStatus: (connection: ClientConnection) =>
+  voiceTranscriptionStatus: (
+    connection: ClientConnection,
+    options: { signal?: AbortSignal } = {}
+  ) =>
     apiFetch<VoiceTranscriptionStatus>(
       connection,
-      "/v1/audio/transcriptions/status"
+      "/v1/audio/transcriptions/status",
+      { signal: options.signal }
     ),
   transcribeVoice: (
     connection: ClientConnection,
-    input: VoiceTranscriptionRequest
+    input: VoiceTranscriptionRequest,
+    options: { signal?: AbortSignal } = {}
   ) =>
     apiFetch<VoiceTranscriptionResponse>(
       connection,
@@ -1181,6 +1186,7 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
+        signal: options.signal,
       }
     ),
   createSession: (connection: ClientConnection, input: CreateSessionRequest) =>

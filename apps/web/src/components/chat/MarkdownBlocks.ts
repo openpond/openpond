@@ -8,6 +8,7 @@ type MarkdownBlock =
   | { type: "paragraph"; content: string }
   | { type: "blockquote"; content: string }
   | { type: "code"; content: string; language?: string }
+  | { type: "math"; content: string }
   | { type: "heading"; level: 1 | 2 | 3 | 4; content: string }
   | {
       type: "list";
@@ -28,6 +29,7 @@ export function parseBlocks(content: string): MarkdownBlock[] {
   let codeLines: string[] | null = null;
   let codeLanguage: string | undefined;
   let codeFenceTicks = 0;
+  let mathBlock: MathBlockState | null = null;
 
   function flushParagraph() {
     if (paragraph.length === 0) return;
@@ -68,6 +70,18 @@ export function parseBlocks(content: string): MarkdownBlock[] {
       continue;
     }
 
+    if (mathBlock) {
+      const closing = closeMathBlock(line, mathBlock.delimiter);
+      if (closing) {
+        if (closing.content) mathBlock.lines.push(closing.content);
+        blocks.push({ type: "math", content: mathBlock.lines.join("\n").trim() });
+        mathBlock = null;
+        continue;
+      }
+      mathBlock.lines.push(line);
+      continue;
+    }
+
     const blockquoteMatch = line.match(/^\s*>\s?(.*)$/);
     if (blockquoteMatch) {
       flushParagraph();
@@ -84,6 +98,22 @@ export function parseBlocks(content: string): MarkdownBlock[] {
       codeLines = fence.firstLine === undefined ? [] : [fence.firstLine];
       codeLanguage = fence.language;
       codeFenceTicks = fence.ticks;
+      continue;
+    }
+
+    const mathOpening = openMathBlock(line);
+    if (mathOpening) {
+      flushParagraph();
+      flushList();
+      if (mathOpening.closed) {
+        blocks.push({ type: "math", content: mathOpening.content.trim() });
+      } else {
+        mathBlock = {
+          delimiter: mathOpening.delimiter,
+          lines: mathOpening.content ? [mathOpening.content] : [],
+          openingLine: line,
+        };
+      }
       continue;
     }
 
@@ -134,6 +164,12 @@ export function parseBlocks(content: string): MarkdownBlock[] {
   }
 
   if (codeLines) blocks.push({ type: "code", content: codeLines.join("\n"), language: codeLanguage });
+  if (mathBlock) {
+    blocks.push({
+      type: "paragraph",
+      content: [mathBlock.openingLine, ...mathBlock.lines].join("\n"),
+    });
+  }
   flushBlockquote();
   flushParagraph();
   flushList();
@@ -149,10 +185,89 @@ export function renderableStreamingMarkdown(
   complete: boolean
 ): string {
   if (complete) return content;
+  const mathBlockStart = unclosedDisplayMathStart(content);
+  if (mathBlockStart !== null) return content.slice(0, mathBlockStart);
   const lineStart = content.lastIndexOf("\n") + 1;
   return INCOMPLETE_BLOCK_MARKER_PATTERN.test(content.slice(lineStart))
     ? content.slice(0, lineStart)
     : content;
+}
+
+type MathDelimiter = "bracket" | "dollar";
+
+type MathBlockState = {
+  delimiter: MathDelimiter;
+  lines: string[];
+  openingLine: string;
+};
+
+function openMathBlock(line: string): {
+  delimiter: MathDelimiter;
+  content: string;
+  closed: boolean;
+} | null {
+  const trimmed = line.trim();
+  const delimiter: MathDelimiter | null = trimmed.startsWith("\\[")
+    ? "bracket"
+    : trimmed.startsWith("$$")
+      ? "dollar"
+      : null;
+  if (!delimiter) return null;
+  const openingLength = 2;
+  const closingToken = delimiter === "bracket" ? "\\]" : "$$";
+  const remainder = trimmed.slice(openingLength);
+  const closingIndex = remainder.indexOf(closingToken);
+  if (closingIndex < 0) {
+    return { delimiter, content: remainder.trim(), closed: false };
+  }
+  if (remainder.slice(closingIndex + closingToken.length).trim()) return null;
+  return {
+    delimiter,
+    content: remainder.slice(0, closingIndex).trim(),
+    closed: true,
+  };
+}
+
+function closeMathBlock(
+  line: string,
+  delimiter: MathDelimiter,
+): { content: string } | null {
+  const closingToken = delimiter === "bracket" ? "\\]" : "$$";
+  const closingIndex = line.indexOf(closingToken);
+  if (closingIndex < 0) return null;
+  if (line.slice(closingIndex + closingToken.length).trim()) return null;
+  return { content: line.slice(0, closingIndex).trimEnd() };
+}
+
+function unclosedDisplayMathStart(content: string): number | null {
+  const lines = content.split("\n");
+  let codeFenceTicks = 0;
+  let math: { delimiter: MathDelimiter; offset: number } | null = null;
+  let offset = 0;
+  for (const line of lines) {
+    if (codeFenceTicks > 0) {
+      if (isClosingFenceLine(line, codeFenceTicks)) codeFenceTicks = 0;
+      offset += line.length + 1;
+      continue;
+    }
+    if (math) {
+      if (closeMathBlock(line, math.delimiter)) math = null;
+      offset += line.length + 1;
+      continue;
+    }
+    const fence = parseOpeningFenceLine(line);
+    if (fence) {
+      codeFenceTicks = fence.ticks;
+      offset += line.length + 1;
+      continue;
+    }
+    const opening = openMathBlock(line);
+    if (opening && !opening.closed) {
+      math = { delimiter: opening.delimiter, offset };
+    }
+    offset += line.length + 1;
+  }
+  return math?.offset ?? null;
 }
 
 function isClosingFenceLine(line: string, minTicks: number): boolean {

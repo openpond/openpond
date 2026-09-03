@@ -42,13 +42,24 @@ export function streamingMarkdownSegments(
   if (complete || !content) return { finalized: content, mutable: "" };
   const lines = content.split("\n");
   let fenced = false;
+  let mathDelimiter: "\\]" | "$$" | null = null;
   let offset = 0;
   let finalizedEnd = 0;
   for (let index = 0; index < lines.length - 1; index += 1) {
     const line = lines[index] ?? "";
-    if (/^\s*```/.test(line)) fenced = !fenced;
+    const trimmed = line.trim();
+    if (!mathDelimiter && /^\s*```/.test(line)) fenced = !fenced;
+    if (!fenced) {
+      if (mathDelimiter && trimmed.endsWith(mathDelimiter)) {
+        mathDelimiter = null;
+      } else if (!mathDelimiter && trimmed.startsWith("\\[") && !trimmed.endsWith("\\]")) {
+        mathDelimiter = "\\]";
+      } else if (!mathDelimiter && trimmed.startsWith("$$") && trimmed.indexOf("$$", 2) < 0) {
+        mathDelimiter = "$$";
+      }
+    }
     offset += line.length + 1;
-    if (!fenced && line.trim() === "") finalizedEnd = offset;
+    if (!fenced && !mathDelimiter && trimmed === "") finalizedEnd = offset;
   }
   return {
     finalized: content.slice(0, finalizedEnd),

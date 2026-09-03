@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, Square } from "../icons";
+import { Mic, Square, X } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { canRecordVoice, startVoiceRecorder, type RecordedVoiceAudio, type VoiceRecorder } from "../../lib/voice-recorder";
+import {
+  appendVoiceWaveformLevel,
+  emptyVoiceWaveformLevels,
+  VoiceRecordingWaveform,
+} from "./VoiceRecordingWaveform";
 
 type VoiceInputPhase = "idle" | "starting" | "recording" | "transcribing";
 
@@ -33,6 +38,7 @@ export function VoiceInputButton({
   onTranscript,
 }: VoiceInputButtonProps) {
   const recorderRef = useRef<VoiceRecorder | null>(null);
+  const transcriptionControllerRef = useRef<AbortController | null>(null);
   const stopTimerRef = useRef<number | null>(null);
   const connectionRef = useRef(connection);
   const disabledRef = useRef(disabled);
@@ -41,9 +47,14 @@ export function VoiceInputButton({
   disabledRef.current = disabled;
   const [phase, setPhase] = useState<VoiceInputPhase>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [waveformLevels, setWaveformLevels] = useState<number[]>(
+    emptyVoiceWaveformLevels,
+  );
   const busy = phase === "transcribing";
   const starting = phase === "starting";
   const recording = phase === "recording";
+  const transcribing = phase === "transcribing";
+  const active = recording || transcribing;
 
   const clearStopTimer = useCallback(() => {
     if (stopTimerRef.current !== null) {
@@ -57,48 +68,64 @@ export function VoiceInputButton({
     const recorder = recorderRef.current;
     recorderRef.current = null;
     setPhase("idle");
+    setWaveformLevels(emptyVoiceWaveformLevels());
     if (recorder) await recorder.cancel().catch(() => undefined);
   }, [clearStopTimer]);
 
   const transcribe = useCallback(
-    async (audio: RecordedVoiceAudio) => {
+    async (audio: RecordedVoiceAudio, signal: AbortSignal) => {
       const currentConnection = connectionRef.current;
       if (!currentConnection) throw new Error("Voice input is still connecting.");
-      const status = await api.voiceTranscriptionStatus(currentConnection);
+      const status = await api.voiceTranscriptionStatus(currentConnection, {
+        signal,
+      });
       if (!status.binaryPath) {
         throw new Error(status.installHint ?? "Install whisper.cpp to use dictation.");
-      }
-      if (!status.modelReady && status.canDownloadModel) {
-        setMessage(`Downloading ${status.modelName} voice model...`);
-      } else {
-        setMessage("Transcribing voice...");
       }
       const response = await api.transcribeVoice(currentConnection, {
         audioBase64: await blobToBase64(audio.blob),
         durationMs: Math.round(audio.durationMs),
         language,
         mimeType: "audio/wav",
+      }, {
+        signal,
       });
+      if (signal.aborted) return;
       onTranscript(response.text);
-      setMessage(null);
     },
     [language, onTranscript],
   );
+
+  const cancelTranscription = useCallback(() => {
+    transcriptionControllerRef.current?.abort();
+    transcriptionControllerRef.current = null;
+    setMessage(null);
+    setPhase("idle");
+    setWaveformLevels(emptyVoiceWaveformLevels());
+  }, []);
 
   const stopAndTranscribe = useCallback(async () => {
     clearStopTimer();
     const recorder = recorderRef.current;
     recorderRef.current = null;
     if (!recorder) return;
+    const controller = new AbortController();
+    transcriptionControllerRef.current?.abort();
+    transcriptionControllerRef.current = controller;
     setPhase("transcribing");
-    setMessage("Transcribing voice...");
+    setMessage(null);
     try {
       const audio = await recorder.stop();
-      await transcribe(audio);
+      if (controller.signal.aborted) return;
+      await transcribe(audio, controller.signal);
     } catch (error) {
-      setMessage(voiceErrorMessage(error));
+      if (!controller.signal.aborted) setMessage(voiceErrorMessage(error));
     } finally {
-      setPhase("idle");
+      if (transcriptionControllerRef.current === controller) {
+        transcriptionControllerRef.current = null;
+        setPhase("idle");
+        setWaveformLevels(emptyVoiceWaveformLevels());
+      }
     }
   }, [clearStopTimer, transcribe]);
 
@@ -118,10 +145,16 @@ export function VoiceInputButton({
     try {
       const desktopPermission = await window.openpond?.requestMicrophoneAccess?.();
       if (desktopPermission === false) throw new Error("Microphone access is denied.");
-      const recorder = await startVoiceRecorder();
+      const recorder = await startVoiceRecorder({
+        onAudioLevel: (level) => {
+          setWaveformLevels((current) =>
+            appendVoiceWaveformLevel(current, level),
+          );
+        },
+      });
       recorderRef.current = recorder;
+      setWaveformLevels(emptyVoiceWaveformLevels());
       setPhase("recording");
-      setMessage("Recording...");
       stopTimerRef.current = window.setTimeout(() => {
         void stopAndTranscribe();
       }, MAX_RECORDING_MS);
@@ -156,26 +189,67 @@ export function VoiceInputButton({
 
   useEffect(() => {
     return () => {
+      transcriptionControllerRef.current?.abort();
       void cancelRecording();
     };
   }, [cancelRecording]);
 
   return (
-    <span className={`voice-input-control ${wrapperClassName} ${starting ? "starting" : ""} ${recording ? "recording" : ""}`.trim()}>
-      <button
-        type="button"
-        className={`${buttonClassName} ${starting ? "starting" : ""} ${recording ? "recording active" : ""}`.trim()}
-        aria-label={recording ? "Stop dictation" : starting ? "Starting dictation" : "Dictate"}
-        aria-pressed={recording}
-        disabled={disabled || busy || starting}
-        onClick={() => {
-          if (recording) void stopAndTranscribe();
-          else startRecording();
-        }}
-      >
-        {recording ? <Square size={Math.max(12, iconSize - 3)} fill="currentColor" /> : <Mic size={iconSize} />}
-      </button>
-      {message ? (
+    <span className={`voice-input-control ${wrapperClassName} ${starting ? "starting" : ""} ${recording ? "recording" : ""} ${transcribing ? "transcribing" : ""}`.trim()}>
+      {active ? (
+        <span className="voice-recording-strip">
+          <span className="sr-only" role="status">
+            {transcribing ? "Transcribing audio" : "Recording voice"}
+          </span>
+          <button
+            type="button"
+            className="voice-recording-action cancel"
+            aria-label={transcribing ? "Cancel transcription" : "Cancel dictation"}
+            onClick={() => {
+              if (transcribing) cancelTranscription();
+              else void cancelRecording();
+            }}
+          >
+            <X size={15} />
+          </button>
+          {transcribing ? (
+            <>
+              <span className="voice-transcribing-label" aria-hidden="true">
+                Transcribing
+                <span className="voice-transcribing-dots">
+                  <span>.</span>
+                  <span>.</span>
+                  <span>.</span>
+                </span>
+              </span>
+              <span className="voice-recording-action-spacer" aria-hidden="true" />
+            </>
+          ) : (
+            <>
+              <VoiceRecordingWaveform levels={waveformLevels} />
+              <button
+                type="button"
+                className="voice-recording-action stop"
+                aria-label="Stop and transcribe"
+                onClick={() => void stopAndTranscribe()}
+              >
+                <Square size={10} fill="currentColor" />
+              </button>
+            </>
+          )}
+        </span>
+      ) : (
+        <button
+          type="button"
+          className={`voice-input-trigger ${buttonClassName} ${starting ? "starting" : ""}`.trim()}
+          aria-label={starting ? "Starting dictation" : "Dictate"}
+          disabled={disabled || busy || starting}
+          onClick={startRecording}
+        >
+          <Mic size={iconSize} />
+        </button>
+      )}
+      {message && !active ? (
         <span className="voice-input-status" role="status">
           {message}
         </span>

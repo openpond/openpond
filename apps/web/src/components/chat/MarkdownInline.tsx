@@ -7,6 +7,7 @@ import type { WorkspaceImageUrlResolver } from "../../hooks/useWorkspaceImageUrl
 import { matchChatFilePathAt, normalizeChatFilePath } from "../../lib/chat-file-links";
 import { publicAssetUrl } from "../../lib/public-assets";
 import { isWorkspaceImagePath, workspaceFileName } from "../../lib/workspace-images";
+import { MarkdownMath } from "./MarkdownMath";
 
 export type ImageLinkPreview = {
   src: string;
@@ -88,6 +89,17 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
         textStart = index;
         continue;
       }
+    }
+
+    const inlineMath = parseInlineMath(content, index);
+    if (inlineMath) {
+      flushText(index);
+      nodes.push(
+        <MarkdownMath key={nodes.length} source={inlineMath.content} />,
+      );
+      index = inlineMath.end;
+      textStart = index;
+      continue;
     }
 
     const htmlImage = char === "<" || content.startsWith("!<img", index)
@@ -199,6 +211,33 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
 
   flushText(content.length);
   return nodes;
+}
+
+function parseInlineMath(
+  content: string,
+  start: number,
+): { content: string; end: number } | null {
+  if (content.startsWith("\\(", start)) {
+    const closing = content.indexOf("\\)", start + 2);
+    if (closing <= start + 2) return null;
+    return {
+      content: content.slice(start + 2, closing),
+      end: closing + 2,
+    };
+  }
+  if (content[start] !== "$" || content[start + 1] === "$" || /\s/.test(content[start + 1] ?? "")) {
+    return null;
+  }
+  let closing = start + 1;
+  while ((closing = content.indexOf("$", closing + 1)) >= 0) {
+    if (content[closing - 1] === "\\") continue;
+    if (content[closing + 1] === "$" || /\s/.test(content[closing - 1] ?? "")) continue;
+    return {
+      content: content.slice(start + 1, closing),
+      end: closing + 1,
+    };
+  }
+  return null;
 }
 
 function matchBareLinkAt(content: string, start: number): { href: string; end: number } | null {

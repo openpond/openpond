@@ -451,6 +451,25 @@ button.user-message-attachment {
   white-space: pre-wrap;
 }
 
+.markdown-math-block {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px 0;
+  color: inherit;
+  text-align: center;
+}
+
+.markdown-math-block .katex-display {
+  margin: 0.35em 0;
+}
+
+.markdown-math-inline {
+  color: inherit;
+  white-space: nowrap;
+}
+
 .markdown-blockquote {
   display: grid;
   gap: 8px;

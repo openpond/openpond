@@ -23,6 +23,7 @@ import {
   type OpenFileLink,
 } from "./MarkdownInline";
 import { revealLocalFile } from "../../lib/desktop-files";
+import { MarkdownMath } from "./MarkdownMath";
 
 export function MarkdownText({
   activeWorkspaceAppId = null,
@@ -209,6 +210,9 @@ function renderMarkdownBlocks(
           <code>{block.content}</code>
         </pre>
       );
+    }
+    if (block.type === "math") {
+      return <MarkdownMath display key={key} source={block.content} />;
     }
     if (block.type === "list") {
       const items = block.items.map((item, itemIndex) => (

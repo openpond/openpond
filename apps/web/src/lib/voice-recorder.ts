@@ -9,6 +9,10 @@ export type VoiceRecorder = {
   cancel: () => Promise<void>;
 };
 
+export type VoiceRecorderOptions = {
+  onAudioLevel?: (level: number) => void;
+};
+
 type RecorderState = {
   audioContext: AudioContext;
   chunks: Float32Array[];
@@ -18,13 +22,16 @@ type RecorderState = {
   stream: MediaStream;
   startedAt: number;
   stopped: boolean;
+  onAudioLevel?: (level: number) => void;
 };
 
 export function canRecordVoice(): boolean {
   return Boolean(navigator.mediaDevices && typeof AudioContext !== "undefined");
 }
 
-export async function startVoiceRecorder(): Promise<VoiceRecorder> {
+export async function startVoiceRecorder(
+  options: VoiceRecorderOptions = {},
+): Promise<VoiceRecorder> {
   if (!canRecordVoice()) {
     throw new Error("Voice recording is not available in this browser.");
   }
@@ -52,12 +59,14 @@ export async function startVoiceRecorder(): Promise<VoiceRecorder> {
     stream,
     startedAt: performance.now(),
     stopped: false,
+    onAudioLevel: options.onAudioLevel,
   };
 
   processor.onaudioprocess = (event) => {
     if (state.stopped) return;
     const input = event.inputBuffer.getChannelData(0);
     state.chunks.push(new Float32Array(input));
+    state.onAudioLevel?.(normalizedAudioLevel(input));
   };
 
   source.connect(processor);
@@ -68,6 +77,14 @@ export async function startVoiceRecorder(): Promise<VoiceRecorder> {
     stop: () => stopRecorder(state, true),
     cancel: () => stopRecorder(state, false).then(() => undefined),
   };
+}
+
+function normalizedAudioLevel(samples: Float32Array): number {
+  if (samples.length === 0) return 0;
+  let sumOfSquares = 0;
+  for (const sample of samples) sumOfSquares += sample * sample;
+  const rootMeanSquare = Math.sqrt(sumOfSquares / samples.length);
+  return Math.min(1, Math.pow(rootMeanSquare * 5, 0.6));
 }
 
 async function stopRecorder(state: RecorderState, encode: boolean): Promise<RecordedVoiceAudio> {
