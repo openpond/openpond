@@ -466,7 +466,7 @@ describe("OpenAI-compatible provider adapter", () => {
     ).toThrow(/The raw OpenAI provider uses Platform API credentials/);
   });
 
-  test("streams OpenAI ChatGPT subscription requests with reasoning summaries and without unsupported sampling fields", async () => {
+  test("streams OpenAI ChatGPT subscription requests with a stable cache identity and without unsupported sampling fields", async () => {
     const requests: Array<{
       url: string;
       authorization: string | null;
@@ -511,7 +511,7 @@ describe("OpenAI-compatible provider adapter", () => {
     for await (const delta of streamOpenAiCompatibleChatCompletion({
       ...subscriptionProviderState(),
       providerId: "openai",
-      modelId: "gpt-5.5",
+      modelId: "gpt-5.6-sol",
       messages: [
         { role: "system", content: "Be concise." },
         { role: "user", content: "read README" },
@@ -527,6 +527,7 @@ describe("OpenAI-compatible provider adapter", () => {
       ],
       toolChoice: "auto",
       requestId,
+      promptCacheKey: "conversation_123",
       maxOutputTokens: 512,
       temperature: 0.4,
       topP: 0.8,
@@ -539,9 +540,9 @@ describe("OpenAI-compatible provider adapter", () => {
         url: "https://chatgpt.com/backend-api/codex/responses",
         authorization: "Bearer access-token",
         accountId: "acct_123456",
-        sessionId: createHash("sha256").update(requestId).digest("hex"),
+        sessionId: "conversation_123",
         body: {
-          model: "gpt-5.5",
+          model: "gpt-5.6-sol",
           input: [
             {
               type: "message",
@@ -552,6 +553,8 @@ describe("OpenAI-compatible provider adapter", () => {
           stream: true,
           store: false,
           instructions: "Be concise.",
+          prompt_cache_key: "conversation_123",
+          prompt_cache_options: { mode: "implicit", ttl: "30m" },
           reasoning: { summary: "auto" },
           tools: [
             {
@@ -579,6 +582,38 @@ describe("OpenAI-compatible provider adapter", () => {
       { type: "tool_call_delta", toolCalls: [{ function: { arguments: '"README.md"}' } }] },
     ]);
     expect(deltas[4]).toMatchObject({ type: "usage", usage: { total_tokens: 12 } });
+  });
+
+  test("bounds OpenAI subscription cache identities to the provider limit", async () => {
+    let request: { sessionId: string | null; body: Record<string, unknown> } | null = null;
+    globalThis.fetch = async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      request = {
+        sessionId: headers.get("session-id"),
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      };
+      return streamResponse([
+        sse({ type: "response.completed", response: { output: [] } }),
+      ]);
+    };
+
+    const overlongCacheKey = `conversation:${"x".repeat(80)}`;
+    const boundedCacheKey = createHash("sha256").update(overlongCacheKey).digest("hex");
+    for await (const _delta of streamOpenAiCompatibleChatCompletion({
+      ...subscriptionProviderState(),
+      providerId: "openai",
+      modelId: "gpt-5.6-sol",
+      messages: [{ role: "user", content: "hello" }],
+      requestId: "turn_123",
+      promptCacheKey: overlongCacheKey,
+    })) {
+      // Drain the stream.
+    }
+
+    expect(request).toMatchObject({
+      sessionId: boundedCacheKey,
+      body: { prompt_cache_key: boundedCacheKey },
+    });
   });
 
   test("omits unsupported deterministic seeds for ChatGPT subscriptions", async () => {

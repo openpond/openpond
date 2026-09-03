@@ -176,6 +176,7 @@ async function runByokTurn(input: {
     modelId: input.modelId,
     messages: hostedMessages(input.thread.messages),
     requestId: input.thread.activeTurn?.id,
+    promptCacheKey: input.thread.conversationId,
     signal: input.execution.controller.signal,
   })) {
     if (delta.type !== "text_delta" || !delta.text) continue;

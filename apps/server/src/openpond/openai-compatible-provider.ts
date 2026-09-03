@@ -243,6 +243,7 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
+  promptCacheKey?: string;
   reasoningEffort?: OpenAiCompatibleReasoningEffort | null;
   maxOutputTokens?: number;
   temperature?: number;
@@ -344,6 +345,7 @@ async function* streamOpenAiSubscriptionResponses(input: {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
+  promptCacheKey?: string;
   reasoningEffort?: OpenAiCompatibleReasoningEffort | null;
   maxOutputTokens?: number;
   temperature?: number;
@@ -363,17 +365,19 @@ async function* streamOpenAiSubscriptionResponses(input: {
     saveChatGptSubscriptionCredential: input.saveChatGptSubscriptionCredential,
   });
   if (!credential.accessToken) throw new Error("OpenAI ChatGPT subscription credential has no access token.");
+  const promptCacheKey = normalizedPromptCacheKey(input.promptCacheKey);
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
   try {
     const response = await fetch(OPENAI_CODEX_RESPONSES_ENDPOINT, {
       method: "POST",
-      headers: subscriptionHeaders(credential, input.requestId),
+      headers: subscriptionHeaders(credential, promptCacheKey ?? input.requestId),
       body: JSON.stringify(buildResponsesBody({
         model: input.provider.model,
         messages: input.messages,
         tools: input.tools,
         toolChoice: input.toolChoice,
         reasoningEffort: input.reasoningEffort,
+        promptCacheKey,
       })),
       signal: requestSignal.signal,
     });
@@ -525,6 +529,7 @@ export function buildResponsesBody(input: {
   maxOutputTokens?: number;
   temperature?: number;
   topP?: number;
+  promptCacheKey?: string;
 }): Record<string, unknown> {
   const projected = responsesInputFromMessages(input.messages);
   const body: Record<string, unknown> = {
@@ -534,6 +539,10 @@ export function buildResponsesBody(input: {
     store: false,
   };
   if (projected.instructions) body.instructions = projected.instructions;
+  if (input.promptCacheKey) body.prompt_cache_key = input.promptCacheKey;
+  if (isGpt56Model(input.model)) {
+    body.prompt_cache_options = { mode: "implicit", ttl: "30m" };
+  }
   body.reasoning = {
     ...(input.reasoningEffort ? { effort: input.reasoningEffort } : {}),
     summary: "auto",
@@ -546,6 +555,18 @@ export function buildResponsesBody(input: {
   const toolChoice = responsesToolChoice(input.toolChoice);
   if (toolChoice !== undefined) body.tool_choice = toolChoice;
   return body;
+}
+
+function normalizedPromptCacheKey(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length <= 64
+    ? trimmed
+    : createHash("sha256").update(trimmed).digest("hex");
+}
+
+function isGpt56Model(model: string): boolean {
+  return /^gpt-5\.6(?:-|$)/i.test(model.trim());
 }
 
 function responsesInputFromMessages(messages: HostedChatMessage[]): {

@@ -1052,6 +1052,7 @@ export async function createOpenPondServer(
         toolChoice: input.toolChoice,
         maxOutputTokens: input.maxOutputTokens,
         requestId: input.requestId,
+        promptCacheKey: input.promptCacheKey,
         signal: input.signal,
         saveChatGptSubscriptionCredential: async (providerId, credential) => {
           await writeProviderChatGptSubscriptionCredential({
@@ -1303,6 +1304,7 @@ export async function createOpenPondServer(
               modelId: streamInput.model,
               messages: streamInput.messages,
               requestId: streamInput.requestId,
+              promptCacheKey: input.session.id,
               signal: streamInput.signal,
               saveChatGptSubscriptionCredential: async (
                 providerId,

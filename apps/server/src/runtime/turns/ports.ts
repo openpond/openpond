@@ -254,6 +254,7 @@ export type ProviderRuntime = {
     toolChoice?: HostedChatToolChoice;
     maxOutputTokens?: number;
     requestId: string;
+    promptCacheKey?: string;
     reasoningEffort?: CodexReasoningEffort;
     signal: AbortSignal;
   }) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;

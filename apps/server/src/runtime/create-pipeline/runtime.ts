@@ -105,6 +105,7 @@ export function createCreateImproveRuntime(deps: {
       ? M
       : never;
     requestId: string;
+    promptCacheKey?: string;
     signal: AbortSignal;
   }) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
@@ -479,6 +480,7 @@ export function createCreateImproveRuntime(deps: {
             modelId,
             messages,
             requestId: `${input.turn.id}:create-improve-planner`,
+            promptCacheKey: input.session.id,
             signal: input.signal,
           }),
       });

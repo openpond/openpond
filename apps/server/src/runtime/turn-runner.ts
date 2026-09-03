@@ -1403,6 +1403,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             modelId: runtimeModel,
             messages: streamInput.messages,
             requestId: streamInput.requestId,
+            promptCacheKey: session.id,
             reasoningEffort: turnPermissions.codexReasoningEffort,
             signal: streamInput.signal ?? controller.signal,
           })) {
@@ -1457,6 +1458,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               toolChoice: options?.toolChoice,
               maxOutputTokens: options?.maxOutputTokens,
               requestId: options?.requestId ?? turn.id,
+              promptCacheKey: session.id,
               signal: controller.signal,
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };
