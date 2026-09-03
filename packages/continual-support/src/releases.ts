@@ -62,10 +62,11 @@ export function issuePacketCasesForFamily(
 export function correctionPanelIdsForSchedule(input: {
   split: ContinualBenchSplit;
   label: string;
-  role: "seed" | "daily_residual" | "weekly_rollup" | "full_refresh";
+  role: "seed" | "daily_residual" | "rank_candidate" | "weekly_rollup" | "full_refresh";
   weeklyExcludeLabels?: string[];
 }): string[] {
   const labels = input.split.families.map((family) => family.passLabel);
+  if (input.role === "rank_candidate") return labels.map((label) => `${label.toLowerCase()}-correction`);
   if (input.role === "full_refresh") return labels.map((label) => `${label.toLowerCase()}-correction`);
   if (input.role === "weekly_rollup") {
     const excluded = new Set(input.weeklyExcludeLabels ?? []);

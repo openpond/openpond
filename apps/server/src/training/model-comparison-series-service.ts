@@ -153,7 +153,7 @@ export function createModelComparisonSeriesService(store: SqliteStore) {
       ordinal: scheduled.ordinal,
       label: scheduled.label,
       role: scheduled.role,
-      branch: scheduled.role === "weekly_rollup" ? "weekly_rollup" : scheduled.role === "full_refresh" ? "full_refresh" : "daily",
+      branch: scheduled.role === "rank_candidate" ? "rank_candidate" : scheduled.role === "weekly_rollup" ? "weekly_rollup" : scheduled.role === "full_refresh" ? "full_refresh" : "daily",
       status: "ready",
       parent,
       taskset: exactRef(release.taskset),

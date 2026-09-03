@@ -80,6 +80,13 @@ export function trainingRecipe(input: {
       microbatchSize: 1,
       gradientAccumulationSteps: groupSize,
       advantageEpsilon: 1e-8,
+      adamw: {
+        name: "adamw",
+        weightDecay: 0,
+        beta1: 0.9,
+        beta2: 0.999,
+        epsilon: 1e-8,
+      },
     },
     loss: {
       method: input.rftLossMethod ?? defaultRftLossMethod(input.taskset),

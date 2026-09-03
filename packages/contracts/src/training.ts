@@ -44,6 +44,7 @@ import {
   ContinualLearningDailyBatchSchema,
 } from "./continual-support-review.js";
 import {
+  AdamwOptimizerConfigSchema,
   LearnedPreferenceRewardBindingSchema,
   PolicyOptimizationBudgetSchema,
   PolicyOptimizationContractSchema,
@@ -68,6 +69,7 @@ import { ImmutableReleaseRefSchema } from "./release-core.js";
 export * from "./training-managed-adapter.js";
 export * from "./training-trajectories.js";
 export {
+  AdamwOptimizerConfigSchema,
   GrpoOptimizerSchema,
   LearnedPreferenceRewardBindingSchema,
   PolicyOptimizationBudgetSchema,
@@ -271,6 +273,7 @@ export const RftRecipeSchema = z.object({
     microbatchSize: z.number().int().positive().max(64).default(1),
     gradientAccumulationSteps: z.number().int().positive().max(64).default(1),
     advantageEpsilon: z.number().positive().max(0.01).default(1e-8),
+    adamw: AdamwOptimizerConfigSchema,
   }),
   loss: z
     .object({

@@ -6,6 +6,20 @@ const HashSchema = z.string().trim().min(8).max(256);
 
 export const RftLossMethodSchema = z.enum(["grpo", "dapo", "gspo-token"]);
 
+export const AdamwOptimizerConfigSchema = z.object({
+  name: z.literal("adamw").default("adamw"),
+  weightDecay: z.number().nonnegative().max(1).default(0),
+  beta1: z.number().positive().lt(1).default(0.9),
+  beta2: z.number().positive().lt(1).default(0.999),
+  epsilon: z.number().positive().max(0.01).default(1e-8),
+}).strict().default({
+  name: "adamw",
+  weightDecay: 0,
+  beta1: 0.9,
+  beta2: 0.999,
+  epsilon: 1e-8,
+});
+
 export const TrainingModelRefSchema = z.object({
   id: IdSchema,
   revision: z.string().trim().min(1).max(256),
@@ -33,6 +47,7 @@ export const GrpoOptimizerSchema = z.object({
   iterations: z.number().int().min(2).max(16).default(2),
   microbatchSize: z.number().int().positive().max(128).default(1),
   gradientAccumulationSteps: z.number().int().positive().max(128).default(1),
+  adamw: AdamwOptimizerConfigSchema,
 });
 
 export const PpoOptimizerSchema = z.object({

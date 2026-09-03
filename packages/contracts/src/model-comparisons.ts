@@ -15,7 +15,7 @@ export const ModelComparisonEntryStatusSchema = z.enum([
   "rejected", "no_signal", "failed", "cancelled",
 ]);
 export const ModelComparisonEntryRoleSchema = z.enum([
-  "seed", "daily_residual", "weekly_rollup", "full_refresh",
+  "seed", "daily_residual", "rank_candidate", "weekly_rollup", "full_refresh",
 ]);
 export const ModelComparisonParentRuleSchema = z.enum([
   "base_model", "previous_release", "seed_release", "accepted_daily_head", "accepted_seed",
@@ -44,6 +44,7 @@ export const ModelComparisonScheduleEntrySchema = z.object({
   const expected = {
     seed: { parentRules: ["base_model"], taskSource: "seed_taskset" },
     daily_residual: { parentRules: ["previous_release", "accepted_daily_head"], taskSource: "nightly_selection" },
+    rank_candidate: { parentRules: ["seed_release"], taskSource: "eligible_task_pool" },
     weekly_rollup: { parentRules: ["seed_release", "accepted_seed"], taskSource: "daily_cohort_union" },
     full_refresh: { parentRules: ["base_model"], taskSource: "eligible_task_pool" },
   } as const;
@@ -128,12 +129,20 @@ export const ModelComparisonSeriesSchema = z.object({
     context.addIssue({ code: "custom", path: ["schedule"], message: "A series requires exactly one seed entry." });
     return;
   }
+  const rankCandidates = series.schedule.filter((entry) => entry.role === "rank_candidate");
+  if (rankCandidates.length === 1) {
+    context.addIssue({ code: "custom", path: ["schedule"], message: "A causal rank comparison requires at least two rank candidates." });
+  }
+  if (new Set(rankCandidates.map((entry) => entry.trainableRank)).size !== rankCandidates.length) {
+    context.addIssue({ code: "custom", path: ["schedule"], message: "Causal rank candidates must use distinct trainable ranks." });
+  }
   const dailyRank = seed.trainableRank + series.schedule
     .filter((entry) => entry.role === "daily_residual")
     .reduce((sum, entry) => sum + entry.trainableRank, 0);
   const branchRanks = [
     dailyRank,
     ...series.schedule.filter((entry) => entry.role === "weekly_rollup").map((entry) => seed.trainableRank + entry.trainableRank),
+    ...series.schedule.filter((entry) => entry.role === "rank_candidate").map((entry) => seed.trainableRank + entry.trainableRank),
     ...series.schedule.filter((entry) => entry.role === "full_refresh").map((entry) => entry.trainableRank),
   ];
   if (branchRanks.some((rank) => rank > series.residualProfile.maximumEnabledRank)) {
@@ -229,7 +238,7 @@ export const ModelComparisonSeriesEntrySchema = z.object({
   ordinal: z.number().int().nonnegative(),
   label: z.string().trim().min(1).max(100),
   role: ModelComparisonEntryRoleSchema,
-  branch: z.enum(["daily", "weekly_rollup", "full_refresh"]),
+  branch: z.enum(["daily", "rank_candidate", "weekly_rollup", "full_refresh"]),
   status: ModelComparisonEntryStatusSchema,
   parent: ModelComparisonParentSchema,
   taskset: VersionedReleaseRefSchema,

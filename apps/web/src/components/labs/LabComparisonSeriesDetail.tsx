@@ -380,8 +380,8 @@ function parentRuleLabel(rule: string) {
   if (rule === "accepted_seed") return "Accepted seed";
   return "Accepted daily head";
 }
-function branchLabel(role: string) { return role === "weekly_rollup" ? "Weekly roll-up" : role === "full_refresh" ? "Full-task refresh" : "Daily"; }
-function roleLabel(role: string) { return role === "full_refresh" ? "full-task refresh" : role.replaceAll("_", " "); }
+function branchLabel(role: string) { return role === "rank_candidate" ? "Rank candidate" : role === "weekly_rollup" ? "Weekly roll-up" : role === "full_refresh" ? "Full-task refresh" : "Daily"; }
+function roleLabel(role: string) { return role === "rank_candidate" ? "controlled rank candidate" : role === "full_refresh" ? "full-task refresh" : role.replaceAll("_", " "); }
 function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "2-digit" }).format(new Date(value)); }
 function formatTime(value: string) { return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "2-digit", hour: "numeric", minute: "2-digit" }).format(new Date(value)); }

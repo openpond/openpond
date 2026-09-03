@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { type Taskset } from "@openpond/contracts";
+import { AdamwOptimizerConfigSchema, type Taskset } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 
 export function withAuthoritativeRecipeHashes(
@@ -96,6 +96,7 @@ export function withAuthoritativeRecipeHashes(
   const maxOutputTokens = positiveInteger(rollout.maxOutputTokens, 1);
   const maxPromptTokens = positiveInteger(dataset.maxPromptTokens, 1);
   const maxSteps = positiveInteger(optimizer.maxSteps, 1);
+  const optimizerIterations = positiveInteger(optimizer.iterations, 2);
   return {
     ...candidate,
     reward: {
@@ -141,7 +142,7 @@ export function withAuthoritativeRecipeHashes(
         maxEnvironmentExecutions: positiveInteger(resourceLimits.maxRollouts, maxExamples * groupSize),
         maxInputTokens: maxExamples * groupSize * maxPromptTokens,
         maxOutputTokens: maxExamples * groupSize * maxOutputTokens,
-        maxOptimizerSteps: maxSteps,
+        maxOptimizerSteps: maxSteps * optimizerIterations,
         wallTimeMs: positiveInteger(resourceLimits.wallTimeMs, 180_000),
         maximumCostUsd: null,
       },
@@ -158,12 +159,13 @@ export function withAuthoritativeRecipeHashes(
             : 1e-8,
         loss: loss.method ?? "grpo",
         clipRange: typeof optimizer.clipRange === "number" ? optimizer.clipRange : 0.2,
-        iterations: positiveInteger(optimizer.iterations, 2),
+        iterations: optimizerIterations,
         microbatchSize: positiveInteger(optimizer.microbatchSize, 1),
         gradientAccumulationSteps: positiveInteger(
           optimizer.gradientAccumulationSteps,
           1,
         ),
+        adamw: AdamwOptimizerConfigSchema.parse(optimizer.adamw),
       },
     },
   };

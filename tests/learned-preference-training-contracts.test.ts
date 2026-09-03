@@ -324,5 +324,12 @@ describe("learned preference training contracts", () => {
     );
 
     expect(authoritative.policyOptimization?.reward.learnedPreference).toEqual(learnedPreference);
+    expect(authoritative.policyOptimization?.budgets.maxOptimizerSteps).toBe(
+      recipe.optimizer.maxSteps * recipe.optimizer.iterations,
+    );
+    expect(authoritative.policyOptimization?.optimizer).toMatchObject({
+      method: "grpo",
+      adamw: recipe.optimizer.adamw,
+    });
   });
 });

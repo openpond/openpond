@@ -46,6 +46,7 @@ function recipe(): TrainingRecipe {
       microbatchSize: 1,
       gradientAccumulationSteps: 1,
       advantageEpsilon: 1e-8,
+      adamw: { name: "adamw", weightDecay: 0, beta1: 0.9, beta2: 0.999, epsilon: 1e-8 },
     },
     loss: { method: "grpo", klBeta: null },
     reward: {

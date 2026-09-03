@@ -107,6 +107,51 @@ function draftSeries(seed: Taskset, eligible: Taskset, development: Taskset, ret
   });
 }
 
+function causalRankSeries(
+  seed: Taskset,
+  eligible: Taskset,
+  development: Taskset,
+  retained: Taskset,
+  frozen: Taskset,
+): ModelComparisonSeries {
+  const draft = draftSeries(seed, eligible, development, retained, frozen);
+  const childRanks = [1, 2, 3, 4, 6, 8, 11, 16];
+  return ModelComparisonSeriesSchema.parse({
+    ...draft,
+    id: "series-causal-rank-test",
+    name: "Causal rank test",
+    objective: "Compare child rank while holding the seed parent, task release, and training contract fixed.",
+    residualProfile: {
+      ...draft.residualProfile,
+      maximumEnabledRank: 32,
+    },
+    schedule: [
+      {
+        id: "causal-p0",
+        ordinal: 0,
+        label: "P0",
+        role: "seed",
+        parentRule: "base_model",
+        taskSource: "seed_taskset",
+        trainableRank: 16,
+        minimumTasks: 1,
+        maximumTasks: 10,
+      },
+      ...childRanks.map((rank, index) => ({
+        id: `causal-p${index + 1}`,
+        ordinal: index + 1,
+        label: `P${index + 1}`,
+        role: "rank_candidate" as const,
+        parentRule: "seed_release" as const,
+        taskSource: "eligible_task_pool" as const,
+        trainableRank: rank,
+        minimumTasks: 1,
+        maximumTasks: 10,
+      })),
+    ],
+  });
+}
+
 function memoryStore(tasksets: Taskset[]) {
   const series = new Map<string, ModelComparisonSeries>();
   const entries = new Map<string, ModelComparisonSeriesEntry>();
@@ -165,6 +210,80 @@ async function candidate(service: ReturnType<typeof createModelComparisonSeriesS
 }
 
 describe("Model Comparison Series service", () => {
+  it("creates causal rank siblings from one exact seed and one exact task release", async () => {
+    const seed = taskset("seed-causal-rank-test", ["seed-task"]);
+    const eligible = taskset("eligible-causal-rank-test", ["rank-one", "rank-two"]);
+    const development = taskset("development-causal-rank-test", ["development-task"]);
+    const retained = taskset("retained-causal-rank-test", ["retained-task"]);
+    const frozen = taskset("frozen-causal-rank-test", ["frozen-task"]);
+    const store = memoryStore([seed, eligible, development, retained, frozen]);
+    const service = createModelComparisonSeriesService(store.api as never);
+    const saved = await service.saveSeries(causalRankSeries(seed, eligible, development, retained, frozen));
+    const sealed = await service.sealSeries({ seriesId: saved.id, expectedRevision: 1 });
+
+    await expect(service.queueRelease({
+      seriesId: sealed.id,
+      scheduleEntryId: "causal-p1",
+      taskSelection: null,
+      expectedSeriesRevision: sealed.revision,
+    })).rejects.toThrow("trained seed Model Version");
+
+    const p0 = (await service.queueRelease({
+      seriesId: sealed.id,
+      scheduleEntryId: "causal-p0",
+      taskSelection: null,
+      expectedSeriesRevision: sealed.revision,
+    })).entry;
+    store.data.versions.set("version-causal-p0", {
+      id: "version-causal-p0",
+      profileId: sealed.profileId,
+      modelId: sealed.modelProjectId,
+      taskset: p0.taskset,
+      contentHash: contentHash("version-causal-p0"),
+      artifactLineageId: "lineage-causal-p0",
+      comparisonSeriesEntry: {
+        seriesId: sealed.id,
+        entryId: p0.id,
+        scheduleEntryId: p0.scheduleEntryId,
+        ordinal: p0.ordinal,
+        releaseHash: p0.releaseHash,
+      },
+    });
+    await candidate(service, p0, "version-causal-p0");
+
+    const siblings: ModelComparisonSeriesEntry[] = [];
+    let expectedRevision = sealed.revision + 1;
+    for (let ordinal = 1; ordinal <= 8; ordinal += 1) {
+      const result = await service.queueRelease({
+        seriesId: sealed.id,
+        scheduleEntryId: `causal-p${ordinal}`,
+        taskSelection: null,
+        expectedSeriesRevision: expectedRevision,
+      });
+      siblings.push(result.entry);
+      expectedRevision = result.series.revision;
+    }
+
+    expect(new Set(siblings.map((entry) => JSON.stringify(entry.parent)))).toEqual(
+      new Set([JSON.stringify({
+        kind: "model_version",
+        id: "version-causal-p0",
+        contentHash: contentHash("version-causal-p0"),
+      })]),
+    );
+    expect(new Set(siblings.map((entry) => `${entry.taskset.id}:${entry.taskset.revision}:${entry.taskset.contentHash}`))).toEqual(
+      new Set([`${eligible.id}:${eligible.revision}:${eligible.contentHash}`]),
+    );
+    expect(siblings.map((entry) => entry.trainableRank)).toEqual([1, 2, 3, 4, 6, 8, 11, 16]);
+    expect(siblings.map((entry) => entry.enabledCumulativeRank)).toEqual([17, 18, 19, 20, 22, 24, 27, 32]);
+    for (const sibling of siblings) {
+      expect(sibling.residualBlocks).toEqual([
+        expect.objectContaining({ rank: 16, optimizationRole: "frozen", artifactLineageId: "lineage-causal-p0" }),
+        expect.objectContaining({ rank: sibling.trainableRank, optimizationRole: "trainable", artifactLineageId: null }),
+      ]);
+    }
+  });
+
   it("enforces sealed lineage, family quarantine, decisions, and independent P7/P8 parents", async () => {
     const seed = taskset("seed-service-test", ["seed-task"]);
     const eligible = taskset("eligible-service-test", ["daily-one", "daily-two", "daily-three"]);
