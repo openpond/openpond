@@ -1,15 +1,20 @@
 # 2026-09-01 Continual Support Causal Rank Sweep
 
-Status: Correctness repairs and a replacement causal P0–P8 protocol are in
-progress on develop. No result from Retail Support Version 2 is valid evidence
-for this study, and no paid training run is currently active.
+Status: Correctness repairs are deployed and the replacement causal P0–P8
+protocol is sealed. No result from Retail Support Version 2 is valid evidence
+for this study. Fresh P0 is active on staging; P1–P8 remain queued behind its
+published seed artifact.
 
-Latest checkpoint: 2026-09-03 02:55 UTC. The invalid Version 2 P0 Model Run
-`model_run_dff258b4-d2dc-47b0-86f4-c3e6203b7cd6` was cancelled and its provider
-allocation was released. The physical H100 worker is healthy and idle, but it
-contains the old immutable image and must be recycled after the corrected worker
-image is published. Focused trainer, Sandbox, Continual Support, and causal
-lineage tests pass; broader CI and the live worker proof remain.
+Latest checkpoint: 2026-09-03 04:24 UTC. Sandbox commits `73c0ddabc` and
+`2bc992881`, plus deployment pin `72cffde84`, passed the complete CI-shaped
+source suite and Source Validation. Staging pins corrected worker image
+`sha256:c9e7a12d5958bcb744e460c054b9fdb129a38954eec2dff58c959876822d8abc`.
+Retail Support Version 3 project `retail-support-version-3` and sealed series
+`retail-support-version-3-causal-rank` use protocol hash
+`29d02a95c20fb298b1173824dab663ed9714ba85bfe807b27b809f77ba15a3ca`.
+Fresh P0 Model Run `model_run_2ca6809b-d6a3-43e3-9343-077e19e17a06` is
+admitted on one H100. The exact immutable image has downloaded and container
+startup is in progress; optimization has not begun, so no result is claimed.
 
 Product name: **Continual Support**. Create the corrected execution as a new
 Model Project, **Retail Support Version 3**, with one sealed Comparison Series.
@@ -183,26 +188,31 @@ successful infrastructure status.
 - [x] Record block norms, singular values, and activation ratios.
 - [x] Replace the factor-only reload assertion with a behavior-equivalence probe
   and preserve nonconforming artifacts with explicit evidence.
-- [ ] Pass the complete Sandbox worker suite in the packaged worker image.
-- [ ] Pass broader Sandbox and OpenPond CI from the exact commits to deploy.
+- [x] Pass the complete Sandbox worker suite in the packaged worker image. Done:
+  91 worker tests pass without skips in the packaged environment.
+- [x] Pass broader Sandbox and OpenPond CI from the exact commits to deploy.
+  Done: 62 source shards, three isolated runtime suites, and the focused
+  OpenPond continual-support suite pass; Source Validation is green.
 
 ### Phase 1 — Seal Retail Support Version 3
 
-- [ ] Publish the corrected immutable worker image and recycle the old idle H100.
-- [ ] Create one new Retail Support Version 3 Model Project and one Comparison
+- [x] Publish the corrected immutable worker image and recycle the old idle H100.
+- [x] Create one new Retail Support Version 3 Model Project and one Comparison
   Series; do not mutate or reuse sealed Version 2 evidence.
-- [ ] Seal P0 plus eight `rank_candidate` siblings using the graph above.
-- [ ] Verify every P1–P8 protocol entry uses `seed_release`,
+- [x] Seal P0 plus eight `rank_candidate` siblings using the graph above.
+- [x] Verify every P1–P8 protocol entry uses `seed_release`,
   `eligible_task_pool`, a distinct child rank, and the exact same non-rank
   training settings.
-- [ ] Verify Tau artifacts resolve only from user-owned data and R2 objects.
-- [ ] Verify no automatic evaluation starts before all nine Model Versions exist.
+- [x] Verify Tau artifacts resolve only from user-owned data and R2 objects.
+- [x] Verify no automatic evaluation starts before all nine Model Versions exist.
 
 ### Phase 2 — Train and prove P0
 
-- [ ] Queue P0 from the frozen base and sealed seed Taskset.
-- [ ] Verify the admitted recipe, actual Adam-step budget, and one-hour cap.
-- [ ] Start P0 through the canonical Model Run path.
+- [x] Queue P0 from the frozen base and sealed seed Taskset.
+- [x] Verify the admitted recipe, actual Adam-step budget, and one-hour cap.
+  Done: rank 16, 16 optimizer groups, two optimizer iterations, at most 32
+  actual Adam steps, and an external one-hour paid-runtime cutoff are active.
+- [x] Start P0 through the canonical Model Run path.
 - [ ] Require live evidence for deterministic initialization, trajectory-level
   optimizer accounting, active checkpointing, real serialization equivalence,
   and a continuous applied-update parameter-hash chain.
