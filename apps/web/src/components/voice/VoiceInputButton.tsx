@@ -1,15 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Mic, Square, X } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { canRecordVoice, startVoiceRecorder, type RecordedVoiceAudio, type VoiceRecorder } from "../../lib/voice-recorder";
+import {
+  cancelVoiceTranscription,
+  startVoiceTranscription,
+  subscribeVoiceTranscription,
+  voiceTranscriptionActive,
+} from "../../lib/voice-transcription-job";
 import {
   appendVoiceWaveformLevel,
   emptyVoiceWaveformLevels,
   VoiceRecordingWaveform,
 } from "./VoiceRecordingWaveform";
 
-type VoiceInputPhase = "idle" | "starting" | "recording" | "transcribing";
+type VoiceInputPhase = "idle" | "starting" | "recording";
 
 type VoiceInputButtonProps = {
   connection: ClientConnection | null;
@@ -19,7 +31,8 @@ type VoiceInputButtonProps = {
   iconSize?: number;
   language?: string;
   showToast: ShowAppToast;
-  onTranscript: (text: string) => void;
+  onTranscript: (text: string) => Promise<void> | void;
+  transcriptionChannelKey: string;
 };
 
 const MAX_RECORDING_MS = 120_000;
@@ -36,9 +49,9 @@ export function VoiceInputButton({
   language = "en",
   showToast,
   onTranscript,
+  transcriptionChannelKey,
 }: VoiceInputButtonProps) {
   const recorderRef = useRef<VoiceRecorder | null>(null);
-  const transcriptionControllerRef = useRef<AbortController | null>(null);
   const stopTimerRef = useRef<number | null>(null);
   const connectionRef = useRef(connection);
   const disabledRef = useRef(disabled);
@@ -50,10 +63,23 @@ export function VoiceInputButton({
   const [waveformLevels, setWaveformLevels] = useState<number[]>(
     emptyVoiceWaveformLevels,
   );
-  const busy = phase === "transcribing";
+  const subscribeToTranscription = useCallback(
+    (listener: () => void) =>
+      subscribeVoiceTranscription(transcriptionChannelKey, listener),
+    [transcriptionChannelKey],
+  );
+  const getTranscriptionSnapshot = useCallback(
+    () => voiceTranscriptionActive(transcriptionChannelKey),
+    [transcriptionChannelKey],
+  );
+  const transcribing = useSyncExternalStore(
+    subscribeToTranscription,
+    getTranscriptionSnapshot,
+    getTranscriptionSnapshot,
+  );
+  const busy = transcribing;
   const starting = phase === "starting";
   const recording = phase === "recording";
-  const transcribing = phase === "transcribing";
   const active = recording || transcribing;
 
   const clearStopTimer = useCallback(() => {
@@ -91,43 +117,37 @@ export function VoiceInputButton({
         signal,
       });
       if (signal.aborted) return;
-      onTranscript(response.text);
+      await onTranscript(response.text);
     },
     [language, onTranscript],
   );
 
   const cancelTranscription = useCallback(() => {
-    transcriptionControllerRef.current?.abort();
-    transcriptionControllerRef.current = null;
+    cancelVoiceTranscription(transcriptionChannelKey);
     setMessage(null);
-    setPhase("idle");
     setWaveformLevels(emptyVoiceWaveformLevels());
-  }, []);
+  }, [transcriptionChannelKey]);
 
   const stopAndTranscribe = useCallback(async () => {
     clearStopTimer();
     const recorder = recorderRef.current;
     recorderRef.current = null;
     if (!recorder) return;
-    const controller = new AbortController();
-    transcriptionControllerRef.current?.abort();
-    transcriptionControllerRef.current = controller;
-    setPhase("transcribing");
+    setPhase("idle");
     setMessage(null);
-    try {
-      const audio = await recorder.stop();
-      if (controller.signal.aborted) return;
-      await transcribe(audio, controller.signal);
-    } catch (error) {
-      if (!controller.signal.aborted) setMessage(voiceErrorMessage(error));
-    } finally {
-      if (transcriptionControllerRef.current === controller) {
-        transcriptionControllerRef.current = null;
-        setPhase("idle");
-        setWaveformLevels(emptyVoiceWaveformLevels());
-      }
-    }
-  }, [clearStopTimer, transcribe]);
+    setWaveformLevels(emptyVoiceWaveformLevels());
+    void startVoiceTranscription(
+      transcriptionChannelKey,
+      async (signal) => {
+        const audio = await recorder.stop();
+        if (signal.aborted) return;
+        await transcribe(audio, signal);
+      },
+    ).catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      showToast(voiceErrorMessage(error), "error");
+    });
+  }, [clearStopTimer, showToast, transcribe, transcriptionChannelKey]);
 
   const beginRecording = useCallback(async () => {
     if (disabledRef.current) return;
@@ -189,7 +209,6 @@ export function VoiceInputButton({
 
   useEffect(() => {
     return () => {
-      transcriptionControllerRef.current?.abort();
       void cancelRecording();
     };
   }, [cancelRecording]);

@@ -5,8 +5,10 @@ type PromptSelection = Pick<AppState, "selectedAppId" | "selectedProjectId" | "s
 
 export type ComposerDraftStore = {
   applyAppAction: (action: AppAction) => void;
+  getScopeKey: () => string;
   getSnapshot: () => string;
   set: (value: SetStateAction<string>) => void;
+  setForScope: (scopeKey: string, value: SetStateAction<string>) => void;
   subscribe: (listener: () => void) => () => void;
 };
 
@@ -58,18 +60,22 @@ export function createComposerDraftStore(
   };
 
   const store: ComposerDraftStore = {
+    getScopeKey: () => draftKey(selection),
     getSnapshot: () => value,
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    set(next) {
-      const resolved = typeof next === "function" ? next(value) : next;
-      if (Object.is(value, resolved)) return;
-      const key = draftKey(selection);
-      if (resolved) drafts.set(key, resolved);
-      else drafts.delete(key);
-      publish(resolved);
+    set: (next) => store.setForScope(draftKey(selection), next),
+    setForScope(scopeKey, next) {
+      const activeScopeKey = draftKey(selection);
+      const current =
+        scopeKey === activeScopeKey ? value : (drafts.get(scopeKey) ?? "");
+      const resolved = typeof next === "function" ? next(current) : next;
+      if (Object.is(current, resolved)) return;
+      if (resolved) drafts.set(scopeKey, resolved);
+      else drafts.delete(scopeKey);
+      if (scopeKey === activeScopeKey) publish(resolved);
     },
     applyAppAction(action) {
       if (action.type === "field") {

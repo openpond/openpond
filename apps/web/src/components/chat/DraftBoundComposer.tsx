@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import { useComposerDraft } from "../../lib/composer-draft-store";
 import { RenderCommitBoundary } from "../../lib/render-commit-metrics";
@@ -13,9 +13,16 @@ export const DraftBoundComposer = memo(function DraftBoundComposer({
   ...props
 }: DraftBoundComposerProps) {
   const prompt = useComposerDraft(draftStore);
+  const draftScopeKey = draftStore.getScopeKey();
+  const setScopedPrompt = useCallback(
+    (value: Parameters<ComposerDraftStore["set"]>[0]) => {
+      draftStore.setForScope(draftScopeKey, value);
+    },
+    [draftScopeKey, draftStore],
+  );
   return (
     <RenderCommitBoundary id="composer">
-      <Composer {...props} prompt={prompt} onPromptChange={draftStore.set} />
+      <Composer {...props} prompt={prompt} onPromptChange={setScopedPrompt} />
     </RenderCommitBoundary>
   );
 });

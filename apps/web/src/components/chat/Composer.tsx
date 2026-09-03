@@ -52,6 +52,7 @@ import {
   replaceActiveProfileSkillInvocation,
 } from "../../lib/profile-skill-invocations";
 import { insertVoiceTranscript } from "../../lib/voice-text";
+import { deliverVoiceTranscript } from "../../lib/voice-transcript-delivery";
 import {
   ComposerPinnedWorkspaceContext,
   ComposerProjectTargetControl,
@@ -165,6 +166,8 @@ export function Composer({
   running = busy,
   interruptRunningTurnBeforeSteer = true,
   submissionScopeKey = "default",
+  getCurrentSubmissionScopeKey,
+  voiceInputChannelKey = submissionScopeKey,
   initialSteerDrafts = EMPTY_STEER_DRAFTS,
   showProjectFooter = true,
   autoFocus = false,
@@ -1418,10 +1421,36 @@ export function Composer({
     }
   }
 
-  function insertDictationTranscript(text: string) {
+  async function insertDictationTranscript(text: string) {
     const cursor = cursorIndex;
+    const delivery = await deliverVoiceTranscript({
+      currentScopeKey: getCurrentSubmissionScopeKey?.() ?? submissionScopeKey,
+      cursorIndex: cursor,
+      originScopeKey: submissionScopeKey,
+      prompt,
+      setOriginDraft: (value) => onPromptChange(value),
+      submitFromOrigin: (promptOverride) =>
+        onSubmit([], null, null, {
+          preservePrompt: true,
+          promptOverride,
+        }),
+      transcript: text,
+    });
+    if (delivery === "retained") {
+      showToast(
+        "The voice message couldn't be sent. It is saved in the original chat draft.",
+        "error",
+      );
+      return;
+    }
+    if (delivery === "submitted") {
+      showToast(
+        "Voice message sent to the chat where recording started.",
+        "success",
+      );
+      return;
+    }
     const next = insertVoiceTranscript(prompt, text, cursor);
-    onPromptChange(next.value);
     setCursorIndex(next.cursorIndex);
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(next.cursorIndex);
@@ -1855,6 +1884,7 @@ export function Composer({
             });
           }}
           onTranscript={insertDictationTranscript}
+          voiceInputChannelKey={voiceInputChannelKey}
           provider={provider}
           providerSettings={providerSettings}
           providerOptions={providerOptions}

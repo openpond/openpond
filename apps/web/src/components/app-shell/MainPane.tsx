@@ -4,6 +4,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type {
@@ -300,6 +301,11 @@ export function MainPane({
   const [composerAttachmentRequest, setComposerAttachmentRequest] =
     useState<ComposerAttachmentRequest | null>(null);
   const [chatSubmissionVersion, setChatSubmissionVersion] = useState(0);
+  const currentComposerSubmissionScopeKeyRef = useRef("");
+  const getCurrentComposerSubmissionScopeKey = useCallback(
+    () => currentComposerSubmissionScopeKeyRef.current,
+    [],
+  );
   const [openDiffFileRequest, setOpenDiffFileRequest] =
     useState<WorkspaceDiffOpenFileRequest | null>(null);
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] =
@@ -808,6 +814,7 @@ export function MainPane({
     `draft:${view}:${activeWorkspaceKind ?? "none"}:${
       activeWorkspaceId ?? activeWorkspaceAppId ?? "none"
     }`;
+  currentComposerSubmissionScopeKeyRef.current = composerSubmissionScopeKey;
   const trainingChatHandoffBar = (
     <ActiveTrainingChatHandoffBar
       activeModel={activeModel}
@@ -1766,6 +1773,10 @@ export function MainPane({
                 busy={turnRunning}
                 running={turnRunning}
                 submissionScopeKey={composerSubmissionScopeKey}
+                getCurrentSubmissionScopeKey={
+                  getCurrentComposerSubmissionScopeKey
+                }
+                voiceInputChannelKey="main-composer"
                 showProjectFooter={false}
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
@@ -1855,6 +1866,10 @@ export function MainPane({
                 busy={turnRunning}
                 running={turnRunning}
                 submissionScopeKey={composerSubmissionScopeKey}
+                getCurrentSubmissionScopeKey={
+                  getCurrentComposerSubmissionScopeKey
+                }
+                voiceInputChannelKey="main-composer"
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}

@@ -82,6 +82,7 @@ export function ComposerPrimaryControls({
   onStop,
   onToggleAddMenu,
   onTranscript,
+  voiceInputChannelKey,
   provider,
   providerSettings,
   providerOptions,
@@ -125,7 +126,8 @@ export function ComposerPrimaryControls({
   onProviderSetupOpen?: () => void;
   onStop: () => Promise<boolean | void> | boolean | void;
   onToggleAddMenu: () => void;
-  onTranscript: (text: string) => void;
+  onTranscript: (text: string) => Promise<void> | void;
+  voiceInputChannelKey: string;
   provider: ChatProvider;
   providerSettings?: ProviderSettings | null;
   providerOptions: DropdownOption[];
@@ -220,6 +222,7 @@ export function ComposerPrimaryControls({
           wrapperClassName="composer-voice-input"
           showToast={showToast}
           onTranscript={onTranscript}
+          transcriptionChannelKey={voiceInputChannelKey}
         />
         {running ? (
           <button
@@ -390,6 +393,7 @@ export function ComposerPrimaryControls({
         wrapperClassName="composer-voice-input"
         showToast={showToast}
         onTranscript={onTranscript}
+        transcriptionChannelKey={voiceInputChannelKey}
       />
       {running ? (
         <button

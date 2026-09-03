@@ -51,6 +51,8 @@ export type ComposerProps = {
   running?: boolean;
   interruptRunningTurnBeforeSteer?: boolean;
   submissionScopeKey?: string;
+  getCurrentSubmissionScopeKey?: () => string;
+  voiceInputChannelKey?: string;
   initialSteerDrafts?: ComposerSteerDraft[];
   showProjectFooter?: boolean;
   autoFocus?: boolean;
