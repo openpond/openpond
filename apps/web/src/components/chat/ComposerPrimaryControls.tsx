@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties, type RefObject } from "react";
+import { useMemo, useState, type CSSProperties, type RefObject } from "react";
 import {
   ArrowUp,
   Pause,
@@ -79,6 +79,7 @@ export function ComposerPrimaryControls({
   onOpenFilePicker,
   onProviderChange,
   onProviderSetupOpen,
+  onSend,
   onStop,
   onToggleAddMenu,
   onTranscript,
@@ -124,9 +125,13 @@ export function ComposerPrimaryControls({
   onOpenFilePicker: () => void;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
-  onStop: () => Promise<boolean | void> | boolean | void;
+  onSend: () => void;
+  onStop: (reason?: string) => Promise<boolean | void> | boolean | void;
   onToggleAddMenu: () => void;
-  onTranscript: (text: string) => Promise<void> | void;
+  onTranscript: (
+    text: string,
+    options: { submit: boolean },
+  ) => Promise<void> | void;
   voiceInputChannelKey: string;
   provider: ChatProvider;
   providerSettings?: ProviderSettings | null;
@@ -138,6 +143,7 @@ export function ComposerPrimaryControls({
   stopIcon?: "pause" | "stop";
   stopLabel?: string;
 }) {
+  const [voiceInputActive, setVoiceInputActive] = useState(false);
   const showModelReasoningMenu = providerModelSupportsReasoning(
     provider,
     modelValue,
@@ -224,6 +230,7 @@ export function ComposerPrimaryControls({
           disabled={disabled}
           iconSize={16}
           wrapperClassName="composer-voice-input"
+          onActiveChange={setVoiceInputActive}
           showToast={showToast}
           onTranscript={onTranscript}
           transcriptionChannelKey={voiceInputChannelKey}
@@ -234,6 +241,8 @@ export function ComposerPrimaryControls({
           sendTooltip={sendTooltip}
           stopIcon={stopIcon}
           stopLabel={stopLabel}
+          voiceInputActive={voiceInputActive}
+          onSend={onSend}
           onStop={onStop}
         />
       </div>
@@ -387,6 +396,7 @@ export function ComposerPrimaryControls({
         disabled={disabled}
         iconSize={16}
         wrapperClassName="composer-voice-input"
+        onActiveChange={setVoiceInputActive}
         showToast={showToast}
         onTranscript={onTranscript}
         transcriptionChannelKey={voiceInputChannelKey}
@@ -397,6 +407,8 @@ export function ComposerPrimaryControls({
         sendTooltip={sendTooltip}
         stopIcon={stopIcon}
         stopLabel={stopLabel}
+        voiceInputActive={voiceInputActive}
+        onSend={onSend}
         onStop={onStop}
       />
     </div>
@@ -409,6 +421,8 @@ function ComposerSubmissionControls({
   sendTooltip,
   stopIcon,
   stopLabel,
+  voiceInputActive,
+  onSend,
   onStop,
 }: {
   running: boolean;
@@ -416,7 +430,9 @@ function ComposerSubmissionControls({
   sendTooltip: string;
   stopIcon: "pause" | "stop";
   stopLabel: string;
-  onStop: () => Promise<boolean | void> | boolean | void;
+  voiceInputActive: boolean;
+  onSend: () => void;
+  onStop: (reason?: string) => Promise<boolean | void> | boolean | void;
 }) {
   return (
     <>
@@ -426,7 +442,7 @@ function ComposerSubmissionControls({
           className="send-button stop-button"
           data-tooltip={stopLabel}
           aria-label={stopLabel}
-          onClick={onStop}
+          onClick={() => void onStop()}
         >
           {stopIcon === "pause" ? (
             <Pause size={15} />
@@ -436,10 +452,12 @@ function ComposerSubmissionControls({
         </button>
       ) : null}
       <button
+        type="button"
         className="send-button"
-        disabled={sendDisabled}
+        disabled={sendDisabled && !running && !voiceInputActive}
         data-tooltip={sendTooltip}
         aria-label={sendTooltip}
+        onClick={onSend}
       >
         <ArrowUp size={18} />
       </button>

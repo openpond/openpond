@@ -14,6 +14,7 @@ import {
   codexControlMessage,
   isCodexGoalContextEvent,
 } from "./codex-control-messages";
+import { isSteerInterruptionReason } from "./steer-interruption";
 
 export const MAX_PROJECTED_COMMAND_OUTPUT_CHARS = 64 * 1024;
 const PROJECTED_COMMAND_OUTPUT_HEAD_CHARS = 8 * 1024;
@@ -121,6 +122,7 @@ export function appendInterruptionStatus(messages: ChatMessage[], item: RuntimeE
     else candidate.activities = activities;
   }
   completeActivityGroup(messages, item, "interrupted");
+  if (isSteerInterruptionReason(item.output)) return;
   messages.push({
     id: item.id,
     role: "status_divider",

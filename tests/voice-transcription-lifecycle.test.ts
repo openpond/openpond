@@ -3,6 +3,7 @@ import { createComposerDraftStore } from "../apps/web/src/lib/composer-draft-sto
 import { deliverVoiceTranscript } from "../apps/web/src/lib/voice-transcript-delivery";
 import {
   cancelVoiceTranscription,
+  requestVoiceInputSubmit,
   startVoiceTranscription,
   subscribeVoiceTranscription,
   voiceTranscriptionActive,
@@ -37,6 +38,28 @@ describe("voice transcription lifecycle", () => {
     expect(voiceTranscriptionActive(channelKey)).toBe(false);
     expect(remountedSubscriber).toHaveBeenCalledTimes(1);
     unsubscribeRemounted();
+  });
+
+  test("lets Send mark an in-flight transcription for submission", async () => {
+    const channelKey = "voice-submit-test";
+    let releaseTranscription!: () => void;
+    const transcriptionBarrier = new Promise<void>((resolve) => {
+      releaseTranscription = resolve;
+    });
+    let submitted = false;
+    const job = startVoiceTranscription(
+      channelKey,
+      async (_signal, submitRequested) => {
+        await transcriptionBarrier;
+        submitted = submitRequested();
+      },
+    );
+
+    expect(requestVoiceInputSubmit(channelKey)).toBe(true);
+    releaseTranscription();
+    await job;
+
+    expect(submitted).toBe(true);
   });
 
   test("submits from the originating chat after navigation and clears its draft", async () => {

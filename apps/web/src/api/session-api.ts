@@ -81,8 +81,15 @@ export const sessionApi = {
       `/v1/create-improve-runs/${encodeURIComponent(runId)}/actions`,
       { method: "POST", body: JSON.stringify(input) },
     ),
-  interruptTurn: (connection: ClientConnection, sessionId: string) =>
-    apiFetch<Turn>(connection, `/v1/sessions/${sessionId}/turns/interrupt`, { method: "POST" }),
+  interruptTurn: (
+    connection: ClientConnection,
+    sessionId: string,
+    reason?: string,
+  ) =>
+    apiFetch<Turn>(connection, `/v1/sessions/${sessionId}/turns/interrupt`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
   compactSession: (
     connection: ClientConnection,
     sessionId: string,

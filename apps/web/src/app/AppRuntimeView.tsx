@@ -1299,7 +1299,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           showToast,
           onSaveTaskDraft: saveTaskDraft,
           sendPrompt: sendPromptFromMainComposer,
-          stopTurn,
+          stopTurn: (reason) => stopTurn(undefined, reason),
           syncWorkspaceLocally,
           refreshWorkspaceDiff: refreshVisibleWorkspaceDiff,
         }}

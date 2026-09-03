@@ -12,6 +12,7 @@ import { canRecordVoice, startVoiceRecorder, type RecordedVoiceAudio, type Voice
 import {
   cancelVoiceTranscription,
   startVoiceTranscription,
+  subscribeVoiceSubmitRequest,
   subscribeVoiceTranscription,
   voiceTranscriptionActive,
 } from "../../lib/voice-transcription-job";
@@ -30,8 +31,12 @@ type VoiceInputButtonProps = {
   disabled?: boolean;
   iconSize?: number;
   language?: string;
+  onActiveChange?: (active: boolean) => void;
   showToast: ShowAppToast;
-  onTranscript: (text: string) => Promise<void> | void;
+  onTranscript: (
+    text: string,
+    options: { submit: boolean },
+  ) => Promise<void> | void;
   transcriptionChannelKey: string;
 };
 
@@ -47,6 +52,7 @@ export function VoiceInputButton({
   disabled = false,
   iconSize = 16,
   language = "en",
+  onActiveChange,
   showToast,
   onTranscript,
   transcriptionChannelKey,
@@ -55,6 +61,8 @@ export function VoiceInputButton({
   const stopTimerRef = useRef<number | null>(null);
   const connectionRef = useRef(connection);
   const disabledRef = useRef(disabled);
+  const phaseRef = useRef<VoiceInputPhase>("idle");
+  const submitAfterStartRef = useRef(false);
   const setupNoticeAcknowledgedRef = useRef(readVoiceSetupNoticeAcknowledged());
   connectionRef.current = connection;
   disabledRef.current = disabled;
@@ -81,6 +89,8 @@ export function VoiceInputButton({
   const starting = phase === "starting";
   const recording = phase === "recording";
   const active = recording || transcribing;
+  const acceptsSubmitRequest = starting || active;
+  phaseRef.current = phase;
 
   const clearStopTimer = useCallback(() => {
     if (stopTimerRef.current !== null) {
@@ -93,13 +103,18 @@ export function VoiceInputButton({
     clearStopTimer();
     const recorder = recorderRef.current;
     recorderRef.current = null;
+    submitAfterStartRef.current = false;
     setPhase("idle");
     setWaveformLevels(emptyVoiceWaveformLevels());
     if (recorder) await recorder.cancel().catch(() => undefined);
   }, [clearStopTimer]);
 
   const transcribe = useCallback(
-    async (audio: RecordedVoiceAudio, signal: AbortSignal) => {
+    async (
+      audio: RecordedVoiceAudio,
+      signal: AbortSignal,
+      submitRequested: () => boolean,
+    ) => {
       const currentConnection = connectionRef.current;
       if (!currentConnection) throw new Error("Voice input is still connecting.");
       const status = await api.voiceTranscriptionStatus(currentConnection, {
@@ -117,7 +132,7 @@ export function VoiceInputButton({
         signal,
       });
       if (signal.aborted) return;
-      await onTranscript(response.text);
+      await onTranscript(response.text, { submit: submitRequested() });
     },
     [language, onTranscript],
   );
@@ -128,7 +143,7 @@ export function VoiceInputButton({
     setWaveformLevels(emptyVoiceWaveformLevels());
   }, [transcriptionChannelKey]);
 
-  const stopAndTranscribe = useCallback(async () => {
+  const stopAndTranscribe = useCallback(async (submit = false) => {
     clearStopTimer();
     const recorder = recorderRef.current;
     recorderRef.current = null;
@@ -138,11 +153,12 @@ export function VoiceInputButton({
     setWaveformLevels(emptyVoiceWaveformLevels());
     void startVoiceTranscription(
       transcriptionChannelKey,
-      async (signal) => {
+      async (signal, submitRequested) => {
         const audio = await recorder.stop();
         if (signal.aborted) return;
-        await transcribe(audio, signal);
+        await transcribe(audio, signal, submitRequested);
       },
+      { submit },
     ).catch((error) => {
       if (error instanceof DOMException && error.name === "AbortError") return;
       showToast(voiceErrorMessage(error), "error");
@@ -175,8 +191,13 @@ export function VoiceInputButton({
       recorderRef.current = recorder;
       setWaveformLevels(emptyVoiceWaveformLevels());
       setPhase("recording");
+      if (submitAfterStartRef.current) {
+        submitAfterStartRef.current = false;
+        void stopAndTranscribe(true);
+        return;
+      }
       stopTimerRef.current = window.setTimeout(() => {
-        void stopAndTranscribe();
+        void stopAndTranscribe(false);
       }, MAX_RECORDING_MS);
     } catch (error) {
       setMessage(voiceErrorMessage(error));
@@ -200,6 +221,31 @@ export function VoiceInputButton({
       },
     });
   }, [beginRecording, showToast]);
+
+  useEffect(
+    () =>
+      subscribeVoiceSubmitRequest(transcriptionChannelKey, () => {
+        if (recorderRef.current) {
+          void stopAndTranscribe(true);
+          return true;
+        }
+        if (phaseRef.current === "starting") {
+          submitAfterStartRef.current = true;
+          return true;
+        }
+        return false;
+      }),
+    [stopAndTranscribe, transcriptionChannelKey],
+  );
+
+  useEffect(() => {
+    onActiveChange?.(acceptsSubmitRequest);
+  }, [acceptsSubmitRequest, onActiveChange]);
+
+  useEffect(
+    () => () => onActiveChange?.(false),
+    [onActiveChange],
+  );
 
   useEffect(() => {
     if (!message || recording || busy) return;
@@ -250,7 +296,7 @@ export function VoiceInputButton({
                 type="button"
                 className="voice-recording-action stop"
                 aria-label="Stop and transcribe"
-                onClick={() => void stopAndTranscribe()}
+                onClick={() => void stopAndTranscribe(false)}
               >
                 <Square size={10} fill="currentColor" />
               </button>

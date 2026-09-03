@@ -1291,7 +1291,10 @@ export function useChatActions({
     }
   }
 
-  async function stopTurn(sessionId?: string | null): Promise<boolean> {
+  async function stopTurn(
+    sessionId?: string | null,
+    reason?: string,
+  ): Promise<boolean> {
     const fallbackActiveSessionId =
       activeTurnSessionIdsRef.current.values().next().value ?? null;
     const activeSessionId =
@@ -1350,7 +1353,7 @@ export function useChatActions({
       }
     }
     try {
-      await api.interruptTurn(connection, activeSessionId);
+      await api.interruptTurn(connection, activeSessionId, reason);
       const payload = await api.bootstrap(connection);
       applyBootstrapPayload(payload);
       return true;

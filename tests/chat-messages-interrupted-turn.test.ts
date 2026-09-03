@@ -31,6 +31,57 @@ function commandStarted(
 }
 
 describe("chat message interrupted turn projection", () => {
+  test("does not render a stop divider for a steer handoff", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Draft the implementation" },
+      }),
+      runtimeEvent({
+        id: "turn_steered",
+        name: "turn.interrupted",
+        turnId: "turn_1",
+        output: "Steered by user",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual(["user"]);
+  });
+
+  test("hides the stop divider when an interrupted response is immediately steered", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1_started",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Draft the implementation" },
+      }),
+      runtimeEvent({
+        id: "turn_1_interrupted",
+        name: "turn.interrupted",
+        turnId: "turn_1",
+        output: "Stopped by user",
+      }),
+      runtimeEvent({
+        id: "turn_2_started",
+        name: "turn.started",
+        turnId: "turn_2",
+        args: {
+          prompt: "Focus on the migration path",
+          interactionKind: "steer",
+        },
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "user"]);
+    expect(messages.map((message) => message.content)).toEqual([
+      "Draft the implementation",
+      "Focus on the migration path",
+    ]);
+  });
+
   test("settles orphaned work when a newer turn starts", () => {
     const messages = buildChatMessages([
       runtimeEvent({

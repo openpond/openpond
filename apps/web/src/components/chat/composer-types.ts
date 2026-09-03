@@ -89,7 +89,7 @@ export type ComposerProps = {
     command?: ComposerSlashCommand | null,
     options?: ComposerSubmitOptions
   ) => Promise<boolean>;
-  onStop: () => Promise<boolean | void> | boolean | void;
+  onStop: (reason?: string) => Promise<boolean | void> | boolean | void;
   onPauseGoal?: () => Promise<boolean | void> | boolean | void;
 };
 

@@ -45,6 +45,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   for (const item of items) {
     if (item.name === "turn.started") {
       settleRunningActivityGroups(messages, item);
+      removeSupersededSteerInterruption(messages, item);
       const prompt = extractPrompt(item.args);
       if (prompt) {
         const marker = codexControlMessage(prompt);
@@ -278,6 +279,21 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
   attachTurnDeliverables(messages);
   return messages;
+}
+
+function removeSupersededSteerInterruption(
+  messages: ChatMessage[],
+  item: RuntimeEvent,
+) {
+  if (asRecord(item.args)?.interactionKind !== "steer") return;
+  const lastMessage = messages.at(-1);
+  if (
+    lastMessage?.role === "status_divider" &&
+    lastMessage.statusKind === "interruption" &&
+    lastMessage.content === "Stopped by user"
+  ) {
+    messages.pop();
+  }
 }
 
 function appendSourcesToTurn(

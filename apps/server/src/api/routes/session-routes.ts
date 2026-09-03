@@ -73,7 +73,14 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   );
   if (request.method === "POST" && turnInterruptMatch) {
     markTransitionalAgentAdapter();
-    const result = await agentRuntime.turnInterrupt({ threadId: turnInterruptMatch[1]! }) as { turn: unknown };
+    const input = await readJson(request) as { reason?: unknown };
+    const reason = typeof input.reason === "string" && input.reason.trim()
+      ? input.reason.trim()
+      : undefined;
+    const result = await agentRuntime.turnInterrupt({
+      threadId: turnInterruptMatch[1]!,
+      ...(reason ? { reason } : {}),
+    }) as { turn: unknown };
     sendJson(response, 202, result.turn);
     return true;
   }

@@ -240,7 +240,7 @@ export type MainPaneProps = {
       turnMetadata?: Record<string, unknown>;
     }
   ) => Promise<boolean>;
-  stopTurn: () => Promise<boolean>;
+  stopTurn: (reason?: string) => Promise<boolean>;
   syncWorkspaceLocally: () => Promise<void>;
   refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;
   onToggleDiffPanelExpanded: () => void;

@@ -53,6 +53,8 @@ import {
 } from "../../lib/profile-skill-invocations";
 import { insertVoiceTranscript } from "../../lib/voice-text";
 import { deliverVoiceTranscript } from "../../lib/voice-transcript-delivery";
+import { requestVoiceInputSubmit } from "../../lib/voice-transcription-job";
+import { STEER_INTERRUPTION_REASON } from "../../lib/steer-interruption";
 import {
   ComposerPinnedWorkspaceContext,
   ComposerProjectTargetControl,
@@ -1221,8 +1223,10 @@ export function Composer({
     resetAddMenuQuery(insertSelectedAction(item.item.action, range));
   }
 
-  function stageCurrentSteerDraft(): boolean {
-    const value = (inputRef.current?.getPrompt() ?? prompt).trim();
+  function stageCurrentSteerDraft(promptOverride?: string): boolean {
+    const value = (
+      promptOverride ?? inputRef.current?.getPrompt() ?? prompt
+    ).trim();
     if (!running || !value) return false;
     if (attachments.length > 0 || selectedAction || selectedCommand) {
       showToast(
@@ -1256,7 +1260,7 @@ export function Composer({
     try {
       const steeringActiveTurn = running;
       if (steeringActiveTurn && interruptRunningTurnBeforeSteer) {
-        const stopped = await onStop();
+        const stopped = await onStop(STEER_INTERRUPTION_REASON);
         if (stopped === false) return false;
       }
       const sent = await onSubmit([], null, null, {
@@ -1391,6 +1395,11 @@ export function Composer({
     }
   }
 
+  function submitComposerOrVoice() {
+    if (requestVoiceInputSubmit(voiceInputChannelKey)) return;
+    void submitComposer();
+  }
+
   async function submitIssueForm(
     input: SubmitIssueFormInput
   ): Promise<boolean> {
@@ -1421,8 +1430,12 @@ export function Composer({
     }
   }
 
-  async function insertDictationTranscript(text: string) {
+  async function insertDictationTranscript(
+    text: string,
+    options: { submit: boolean },
+  ) {
     const cursor = cursorIndex;
+    const next = insertVoiceTranscript(prompt, text, cursor);
     const delivery = await deliverVoiceTranscript({
       currentScopeKey: getCurrentSubmissionScopeKey?.() ?? submissionScopeKey,
       cursorIndex: cursor,
@@ -1450,7 +1463,24 @@ export function Composer({
       );
       return;
     }
-    const next = insertVoiceTranscript(prompt, text, cursor);
+    if (options.submit) {
+      if (running) {
+        stageCurrentSteerDraft(next.value);
+        return;
+      }
+      const submissionScope = submissionScopeKey;
+      if (!beginSubmissionForScope(submissionScope)) return;
+      try {
+        await onSubmit([], null, null, { promptOverride: next.value });
+      } catch (error) {
+        setAttachmentError(
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        finishSubmissionForScope(submissionScope);
+      }
+      return;
+    }
     setCursorIndex(next.cursorIndex);
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(next.cursorIndex);
@@ -1867,6 +1897,7 @@ export function Composer({
           onOpenFilePicker={openFilePicker}
           onProviderChange={onProviderChange}
           onProviderSetupOpen={onProviderSetupOpen}
+          onSend={submitComposerOrVoice}
           onStop={stopCurrentTurn}
           onToggleAddMenu={() => {
             const nextCursor = Math.max(
