@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  ModelProjectSchema,
   AdapterValidationReceiptSchema,
   TrainingArtifactsSchema,
   TrainingEngineCapabilitiesSchema,
@@ -25,7 +24,6 @@ import {
   trainingJobSubmissionHash,
   type TrainingJobSubmission,
 } from "openpond-sdk/training";
-import { createModelProjectsClient } from "openpond-sdk/model-projects";
 import {
   hostedApiAuthHeaders,
   resolveManagedAdapterUserAccess,
@@ -33,6 +31,7 @@ import {
 import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
 import { ensureManagedRlLocalExecutor } from "./managed-rl-local-executor-manager.js";
 import { supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
+import { syncHostedModelProjectForSubmission } from "./model-project-hosted-projection.js";
 import {
   dateString,
   learnedRewardSource,
@@ -945,46 +944,13 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     project: import("@openpond/contracts").ModelProject,
     access: Access,
   ) {
-    const headers = hostedApiAuthHeaders(access.token);
-    headers.set("x-openpond-team-id", access.teamId);
-    const client = createModelProjectsClient({
-      baseUrl: access.apiBaseUrl,
-      fetch: this.fetchImpl,
-      headers,
+    return syncHostedModelProjectForSubmission({
+      project,
+      access,
+      fetchImpl: this.fetchImpl,
+      saveModelProject: (saved) =>
+        this.dependencies.store.saveModelProject(saved),
     });
-    const {
-      managedGpuRequirement: _managedGpuRequirement,
-      ...hostedTrainingSetup
-    } = project.trainingSetup;
-    const hosted = await client.upsert({
-      schemaVersion: "openpond.hostedModelProjectSync.v2",
-      portableProjectId: project.id,
-      name: project.name,
-      objective: project.objective,
-      defaultBaseModel: project.defaultBaseModel,
-      defaultDestinationId: project.defaultDestinationId,
-      trainingSetup: hostedTrainingSetup,
-      sourceRevision: project.revision,
-      sourceUpdatedAt: project.updatedAt,
-      expectedEtag: project.hosted?.teamId === access.teamId ? project.hosted.etag : null,
-    });
-    const syncedAt = new Date().toISOString();
-    const saved = ModelProjectSchema.parse({
-      ...project,
-      hosted: {
-        schemaVersion: "openpond.hostedModelProjectLink.v1",
-        teamId: access.teamId,
-        projectId: hosted.id,
-        portableProjectId: hosted.portableProjectId,
-        revision: hosted.revision,
-        etag: hosted.etag,
-        syncedSourceRevision: project.revision,
-        syncedAt,
-        tasksets: project.hosted?.teamId === access.teamId ? project.hosted.tasksets : [],
-      },
-    });
-    await this.dependencies.store.saveModelProject(saved);
-    return saved;
   }
 
   private async ensureLocalExecutor(

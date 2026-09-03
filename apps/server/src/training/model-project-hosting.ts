@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import type { SqliteStore } from "../store/store.js";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
+import { hostedModelProjectTrainingSetup } from "./model-project-hosted-projection.js";
 
 type HostedAccess = {
   apiBaseUrl: string;
@@ -51,7 +52,7 @@ export function createModelProjectHostingService(input: {
       objective: project.objective,
       defaultBaseModel: project.defaultBaseModel,
       defaultDestinationId: project.defaultDestinationId,
-      trainingSetup: project.trainingSetup,
+      trainingSetup: hostedModelProjectTrainingSetup(project.trainingSetup),
       sourceRevision: project.revision,
       sourceUpdatedAt: project.updatedAt,
     };

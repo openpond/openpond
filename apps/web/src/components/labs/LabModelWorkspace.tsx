@@ -92,11 +92,7 @@ export function LabModelRunsPage({
   const comparisonEntries = state?.comparisonSeriesEntries ?? [];
   const runEntries = useMemo(() => {
     const entries = modelRunEntries(jobs, versions, lifecycleRuns);
-    return entries.filter((entry) =>
-      mode === "evals"
-        ? entry.lifecycleRun?.kind === "evaluation"
-        : entry.lifecycleRun?.kind !== "evaluation",
-    );
+    return modelRunEntriesForMode(entries, mode);
   }, [jobs, lifecycleRuns, mode, versions]);
   const [showAllRuns, setShowAllRuns] = useState(false);
   const visibleRunEntries = showAllRuns
@@ -576,6 +572,17 @@ export function modelRunEntries(
   }
   return entries.sort((left, right) =>
     runEntryTimestamp(right).localeCompare(runEntryTimestamp(left))
+  );
+}
+
+export function modelRunEntriesForMode(
+  entries: RunEntry[],
+  mode: "training" | "evals",
+): RunEntry[] {
+  return entries.filter((entry) =>
+    mode === "evals"
+      ? entry.lifecycleRun?.kind === "evaluation"
+      : entry.lifecycleRun?.kind !== "evaluation",
   );
 }
 

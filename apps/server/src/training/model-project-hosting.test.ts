@@ -14,7 +14,10 @@ describe("Model Project hosting", () => {
       objective: "Learn a visual preference policy",
       defaultBaseModel: null,
       defaultDestinationId: "openpond_managed" as const,
-      trainingSetup: emptyTrainingSetup(),
+      trainingSetup: {
+        ...emptyTrainingSetup(),
+        managedGpuRequirement: "h100_hbm3" as const,
+      },
       hosted: null,
       tasksetSyncs: [],
       createdAt: "2026-08-25T12:00:00.000Z",
@@ -28,11 +31,13 @@ describe("Model Project hosting", () => {
       expect(new Headers(init?.headers).get("content-type")).toBe(
         "application/vnd.openpond.model-project+json;version=2",
       );
-      expect(JSON.parse(String(init?.body))).toMatchObject({
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({
         portableProjectId: project.id,
         sourceRevision: project.revision,
         expectedEtag: null,
       });
+      expect(body.trainingSetup).not.toHaveProperty("managedGpuRequirement");
       return new Response(JSON.stringify({
         project: {
           id: "hosted_project_1",
@@ -65,6 +70,7 @@ describe("Model Project hosting", () => {
       revision: 2,
       syncedSourceRevision: 4,
     });
+    expect(synced.trainingSetup.managedGpuRequirement).toBe("h100_hbm3");
     expect(saveModelProject).toHaveBeenCalledWith(synced);
   });
 

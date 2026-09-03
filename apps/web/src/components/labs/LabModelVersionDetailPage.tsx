@@ -57,6 +57,7 @@ import {
 } from "./lab-models";
 import {
   modelRunEntries,
+  modelRunEntriesForMode,
   modelVersionEntries,
   type ModelWorkspaceProps,
 } from "./LabModelWorkspace";
@@ -148,10 +149,13 @@ export function LabModelVersionDetailPage({
       entry.modelRunId === selectedJob?.metadata.modelRunId,
   ) ?? null;
   const selectedBasedOn = comparisonParentLabel(state, selectedComparisonEntry);
-  const runEntries = useMemo(
-    () => modelRunEntries(jobs, versions, lifecycleRuns),
-    [jobs, lifecycleRuns, versions]
-  );
+  const runEntries = useMemo(() => {
+    const entries = modelRunEntries(jobs, versions, lifecycleRuns);
+    return modelRunEntriesForMode(
+      entries,
+      selectedLifecycleRun?.kind === "evaluation" ? "evals" : "training",
+    );
+  }, [jobs, lifecycleRuns, selectedLifecycleRun?.kind, versions]);
   const selectedRunIndex = runEntries.findIndex(
     (entry) =>
       entry.key === selectedEntryKey ||

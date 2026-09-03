@@ -36,6 +36,7 @@ import {
   LabModelRunsPage,
   LabModelVersionsPage,
   modelRunEntries,
+  modelRunEntriesForMode,
 } from "./LabModelWorkspace";
 import { LabRunDecisionSection } from "./LabRunDecisionSection";
 import { LabStatusBadge } from "./LabStatusBadge";
@@ -302,10 +303,22 @@ export function LabWorkproductDetail({
             selectedModelLifecycleRun.adapterArtifactLineageId
         ) ?? null
       : null);
-  const modelRunHistory = useMemo(
-    () => modelRunEntries(modelJobs, modelVersions, modelLifecycleRuns),
-    [modelJobs, modelLifecycleRuns, modelVersions]
-  );
+  const modelRunHistory = useMemo(() => {
+    const entries = modelRunEntries(
+      modelJobs,
+      modelVersions,
+      modelLifecycleRuns,
+    );
+    return modelRunEntriesForMode(
+      entries,
+      selectedModelLifecycleRun?.kind === "evaluation" ? "evals" : "training",
+    );
+  }, [
+    modelJobs,
+    modelLifecycleRuns,
+    modelVersions,
+    selectedModelLifecycleRun?.kind,
+  ]);
   const selectedModelRunIndex = modelRunHistory.findIndex(
     (entry) =>
       entry.key === selectedModelEntryKey ||
