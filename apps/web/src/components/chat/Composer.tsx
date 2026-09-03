@@ -224,6 +224,8 @@ export function Composer({
   );
   const submittingScopeKeysRef = useRef<Set<string>>(new Set());
   const [cursorIndex, setCursorIndex] = useState(prompt.length);
+  const cursorIndexRef = useRef(cursorIndex);
+  cursorIndexRef.current = cursorIndex;
   const [mentionIndex, setMentionIndex] = useState(0);
   const [skillIndex, setSkillIndex] = useState(0);
   const [actionIndex, setActionIndex] = useState(0);
@@ -1434,13 +1436,17 @@ export function Composer({
     text: string,
     options: { submit: boolean },
   ) {
-    const cursor = cursorIndex;
-    const next = insertVoiceTranscript(prompt, text, cursor);
+    const currentPrompt = inputRef.current?.getPrompt() ?? prompt;
+    const cursor = Math.max(
+      0,
+      Math.min(cursorIndexRef.current, currentPrompt.length),
+    );
+    const next = insertVoiceTranscript(currentPrompt, text, cursor);
     const delivery = await deliverVoiceTranscript({
       currentScopeKey: getCurrentSubmissionScopeKey?.() ?? submissionScopeKey,
       cursorIndex: cursor,
       originScopeKey: submissionScopeKey,
-      prompt,
+      prompt: currentPrompt,
       setOriginDraft: (value) => onPromptChange(value),
       submitFromOrigin: (promptOverride) =>
         onSubmit([], null, null, {
