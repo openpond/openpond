@@ -9,7 +9,12 @@ import {
 import type { TaskCreationSnapshot } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { useNewMessageIds } from "../../hooks/useNewMessageIds";
-import { buildChatTimelineRows } from "../../lib/chat-timeline-rows";
+import { useSessionTurnCache } from "../../hooks/useSessionTurnCache";
+import {
+  buildChatTimelineRows,
+  isLatestAssistantMessageForTurn,
+  latestAssistantMessageIdsByTurn,
+} from "../../lib/chat-timeline-rows";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
 
 const TrainingStatusReceipt = lazy(() =>
@@ -37,6 +42,8 @@ export function MainChatThread({
   onScroll,
   preparingInitialScroll,
   rows,
+  sessionId,
+  turnRunning,
   userAttachmentDisplay,
   threadRef,
   workspaceRootPath,
@@ -57,6 +64,8 @@ export function MainChatThread({
   onScroll: (event: UIEvent<HTMLElement>) => void;
   preparingInitialScroll: boolean;
   rows: ReturnType<typeof buildChatTimelineRows>;
+  sessionId: string | null;
+  turnRunning: boolean;
   userAttachmentDisplay: NonNullable<MessageRowProps["userAttachmentDisplay"]>;
   threadRef: Ref<HTMLElement>;
   workspaceRootPath: string | null;
@@ -69,6 +78,17 @@ export function MainChatThread({
     [rows]
   );
   const newMessageIds = useNewMessageIds(messages, conversationKey);
+  const latestTurnId = latestMessageTurnId(messages);
+  const latestAssistantByTurn = useMemo(
+    () => latestAssistantMessageIdsByTurn(messages),
+    [messages],
+  );
+  const turnCache = useSessionTurnCache({
+    connection,
+    latestTurnId,
+    sessionId,
+    turnRunning,
+  });
 
   return (
     <section
@@ -91,6 +111,11 @@ export function MainChatThread({
             newMessageIds.has(row.message.id)
           }
           key={row.id}
+          kvCacheSummary={
+            isLatestAssistantMessageForTurn(row.message, latestAssistantByTurn) && row.message.turnId
+              ? turnCache.get(row.message.turnId) ?? null
+              : null
+          }
           message={row.message}
           onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
           onOpenFileInSidebar={onOpenFileInSidebar}
@@ -110,4 +135,12 @@ export function MainChatThread({
       ) : null}
     </section>
   );
+}
+
+function latestMessageTurnId(messages: Array<{ turnId?: string }>): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const turnId = messages[index]?.turnId;
+    if (turnId) return turnId;
+  }
+  return null;
 }

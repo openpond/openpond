@@ -33,7 +33,11 @@ import {
   projectSelectionKey,
   providerOptionsFromSettings,
 } from "../lib/app-models";
-import type { SidebarFileOpenRequest } from "../lib/sidebar-files";
+import {
+  clearHandledSidebarFileOpenRequest,
+  sidebarFileOpenRequestMatchesConversation,
+  type SidebarFileOpenRequest,
+} from "../lib/sidebar-files";
 import type { SkillSourceDocument } from "../components/app-shell/skill-source-document";
 import type { SkillPackageSourceSelection } from "../components/app-shell/skill-package-source";
 import { extensionSourceSelection } from "../components/settings/extension-source-selection";
@@ -588,8 +592,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   }, [setDiffPanelExpanded, setDiffPanelOpen]);
   const openSidebarFile = useCallback(
     (file: SidebarFileBookmark) => {
+      let destinationConversationId: string;
       if (file.workspaceKind === "local") {
         const projectId = projectSelectionKey("local", file.workspaceId);
+        destinationConversationId = `draft:${projectId}`;
         setSelectedAppId(null);
         setSelectedProjectId(projectId);
         setSelectedSessionId(null);
@@ -608,11 +614,16 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           );
           return;
         }
+        destinationConversationId = sourceSession.id;
         openSessionInChat(sourceSession.id);
       }
       setRightPanelMode("changes");
       setDiffPanelOpen(true);
-      setSidebarFileOpenRequest({ id: Date.now(), file });
+      setSidebarFileOpenRequest({
+        id: Date.now(),
+        conversationId: destinationConversationId,
+        file,
+      });
       if (!file.available) showToast(`File unavailable: ${file.path}`, "error");
     },
     [
@@ -629,15 +640,22 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     ]
   );
   useEffect(() => {
-    if (!sidebarFileOpenRequest) return;
+    if (!sidebarFileOpenRequestMatchesConversation(
+      sidebarFileOpenRequest,
+      browserConversationId,
+    )) {
+      return;
+    }
     const timer = window.setTimeout(() => {
       setRightPanelMode("changes");
       setDiffPanelOpen(true);
+      setSidebarFileOpenRequest((current) =>
+        clearHandledSidebarFileOpenRequest(current, sidebarFileOpenRequest.id)
+      );
     }, 0);
     return () => window.clearTimeout(timer);
   }, [
-    selectedProjectId,
-    selectedSessionId,
+    browserConversationId,
     setDiffPanelOpen,
     setRightPanelMode,
     sidebarFileOpenRequest,

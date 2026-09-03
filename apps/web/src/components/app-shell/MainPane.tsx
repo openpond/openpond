@@ -88,7 +88,10 @@ import {
   shouldShowRightSidebarHomePanel,
 } from "./MainPaneControls";
 import type { MainPaneProps } from "./main-pane-types";
-import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
+import {
+  sidebarFileOpenRequestMatchesConversation,
+  type ComposerAttachmentRequest,
+} from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
@@ -326,6 +329,9 @@ export function MainPane({
   } | null>(null);
   const [profileActionCatalogOverride, setProfileActionCatalogOverride] =
     useState<SandboxActionCatalogEntry[]>([]);
+  useEffect(() => {
+    setOpenDiffFileRequest(null);
+  }, [browserConversationId]);
   const selectedProfileSession = useMemo(
     () =>
       bootstrap?.sessions.find((session) => session.id === selectedSessionId) ??
@@ -401,7 +407,12 @@ export function MainPane({
     [bootstrap, connection, onError, onPayload, selectedSessionId, showToast]
   );
   useEffect(() => {
-    if (!sidebarFileOpenRequest) return;
+    if (!sidebarFileOpenRequestMatchesConversation(
+      sidebarFileOpenRequest,
+      browserConversationId,
+    )) {
+      return;
+    }
     const { file, id } = sidebarFileOpenRequest;
     setOpenDiffFileRequest({ id, path: file.path });
     if (!connection) return;
@@ -440,7 +451,7 @@ export function MainPane({
     return () => {
       cancelled = true;
     };
-  }, [connection, showToast, sidebarFileOpenRequest]);
+  }, [browserConversationId, connection, showToast, sidebarFileOpenRequest]);
   const repositoryWork =
     experience === "development" ||
     (experience === "work" && projectTarget.value !== "none");
@@ -1705,6 +1716,8 @@ export function MainPane({
                 onScroll={(event) => handleChatScroll(event.currentTarget)}
                 preparingInitialScroll={chatThreadPreparingInitialScroll}
                 rows={chatTimelineRows}
+                sessionId={browserConversationId}
+                turnRunning={turnRunning}
                 userAttachmentDisplay={
                   activeProvider === "codex" ? "compact" : "full"
                 }

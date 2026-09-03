@@ -100,6 +100,7 @@ export type HttpRouteDeps = {
   ) => Promise<unknown>;
   usageSummaryPayload: (requestUrl: URL) => Promise<unknown>;
   usageRecordsPayload: (requestUrl: URL) => Promise<unknown>;
+  usageTurnCachePayload: (requestUrl: URL) => Promise<unknown>;
   trainingPayload: (
     action: string,
     payload: unknown,

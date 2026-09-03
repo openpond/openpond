@@ -13,6 +13,7 @@ import type {
   ChatAttachmentSummary,
   SessionUserQuestion,
   SessionUserQuestionResolution,
+  UsageTurnCacheSummary,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { useChatAttachmentImageUrl } from "../../hooks/useChatAttachmentImageUrl";
@@ -48,6 +49,7 @@ type MessageRowProps = {
   billingTeamId?: string | null;
   connection?: ClientConnection | null;
   message: ChatMessage;
+  kvCacheSummary?: UsageTurnCacheSummary | null;
   onOpenBrowserLink?: (
     href: string,
     options?: { explicitFile?: boolean; newTab?: boolean }
@@ -75,6 +77,7 @@ export const MessageRow = memo(function MessageRow({
   billingTeamId = null,
   connection = null,
   message,
+  kvCacheSummary = null,
   onOpenBrowserLink,
   onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
@@ -156,6 +159,7 @@ export const MessageRow = memo(function MessageRow({
 
   const timestampLabel = formatMessageTimestamp(message.timestamp);
   const timestampTitle = formatMessageTimestampTitle(message.timestamp);
+  const kvCacheLabel = formatKvCacheRate(kvCacheSummary?.cacheHitRate ?? null);
   const profileActionAgentName =
     message.actionRun && isProfileActionRun(message.actionRun)
       ? profileActionAgentLabel(message.actionRun)
@@ -247,7 +251,7 @@ export const MessageRow = memo(function MessageRow({
           onResolve={onResolveUserQuestion}
         />
       ) : null}
-      {showFooter && (
+      {(showFooter || kvCacheSummary) ? (
         <div className="assistant-message-footer">
           {timestampLabel && (
             <time
@@ -258,6 +262,19 @@ export const MessageRow = memo(function MessageRow({
               {timestampLabel}
             </time>
           )}
+          {kvCacheSummary ? (
+            <>
+              {timestampLabel ? (
+                <span className="message-footer-separator" aria-hidden="true" />
+              ) : null}
+              <span
+                className="message-kv-cache-metric"
+                aria-label={`KV cache reuse ${kvCacheLabel}`}
+              >
+                KV {kvCacheLabel}
+              </span>
+            </>
+          ) : null}
           <button
             type="button"
             className="message-copy-button"
@@ -271,11 +288,15 @@ export const MessageRow = memo(function MessageRow({
             <Copy size={14} />
           </button>
         </div>
-      )}
+      ) : null}
     </article>
   );
 },
 areMessageRowPropsEqual);
+
+function formatKvCacheRate(rate: number | null): string {
+  return rate === null ? "—" : `${Math.round(rate * 100)}%`;
+}
 
 const ReasoningSection = memo(function ReasoningSection({
   activeWorkspaceAppId,
@@ -392,6 +413,7 @@ function areMessageRowPropsEqual(
     previous.billingOrganizationSlug === next.billingOrganizationSlug &&
     previous.billingTeamId === next.billingTeamId &&
     previous.connection === next.connection &&
+    previous.kvCacheSummary === next.kvCacheSummary &&
     previous.onOpenBrowserLink === next.onOpenBrowserLink &&
     previous.onOpenAttachmentInSidebar === next.onOpenAttachmentInSidebar &&
     previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&

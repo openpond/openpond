@@ -26,10 +26,14 @@ export function SidebarTaskListControls({
   noun,
   onFilterChange,
   onGroupByProjectChange,
+  onOnlyRunningTasksChange,
+  onShowCodexChatsChange,
   onTasksetChange,
   onSortChange,
+  onlyRunningTasks,
   openMenu,
   setOpenMenu,
+  showCodexChats,
   sort,
   selectedTasksetId,
   tasksets,
@@ -39,10 +43,14 @@ export function SidebarTaskListControls({
   noun: "chats" | "tasks";
   onFilterChange: (filter: SidebarTaskFilter) => void;
   onGroupByProjectChange: (groupByProject: boolean) => void;
+  onOnlyRunningTasksChange: (onlyRunningTasks: boolean) => void;
+  onShowCodexChatsChange: (showCodexChats: boolean) => void;
   onTasksetChange: (tasksetId: string | null) => void;
   onSortChange: (sort: SidebarTaskSort) => void;
+  onlyRunningTasks: boolean;
   openMenu: SidebarSectionMenuId | null;
   setOpenMenu: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
+  showCodexChats: boolean;
   sort: SidebarTaskSort;
   selectedTasksetId: string | null;
   tasksets: readonly SidebarTasksetFilterOption[];
@@ -64,8 +72,10 @@ export function SidebarTaskListControls({
       <div className="section-menu">
         <button
           type="button"
-          className={`section-icon ${sortMenuOpen ? "active" : ""}`}
-          aria-label={`Sort ${noun}`}
+          className={`section-icon ${
+            sortMenuOpen || !showCodexChats || onlyRunningTasks ? "active" : ""
+          }`}
+          aria-label={`${noun === "tasks" ? "Task" : "Chat"} list options`}
           aria-haspopup="menu"
           aria-expanded={sortMenuOpen}
           onClick={() =>
@@ -78,8 +88,30 @@ export function SidebarTaskListControls({
           <div
             className="section-menu-popover"
             role="menu"
-            aria-label={`Sort ${noun}`}
+            aria-label={`${noun === "tasks" ? "Task" : "Chat"} list options`}
           >
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={showCodexChats}
+              onClick={() => onShowCodexChatsChange(!showCodexChats)}
+            >
+              <span className="section-menu-check" aria-hidden="true">
+                {showCodexChats ? <Check size={13} /> : null}
+              </span>
+              <span>Show Codex chats</span>
+            </button>
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={onlyRunningTasks}
+              onClick={() => onOnlyRunningTasksChange(!onlyRunningTasks)}
+            >
+              <span className="section-menu-check" aria-hidden="true">
+                {onlyRunningTasks ? <Check size={13} /> : null}
+              </span>
+              <span>Only running tasks</span>
+            </button>
             {noun === "tasks" ? (
               <button
                 type="button"

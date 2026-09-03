@@ -20,6 +20,8 @@ import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import { IncrementalChatProjector } from "../../lib/incremental-chat-projector";
 import {
   buildChatTimelineRows,
+  isLatestAssistantMessageForTurn,
+  latestAssistantMessageIdsByTurn,
   shouldShowThinkingIndicator,
 } from "../../lib/chat-timeline-rows";
 import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
@@ -35,6 +37,7 @@ import { latestCreateImproveRunProjection } from "../../lib/create-pipeline-runt
 import { appendPendingUserChatMessage } from "../../lib/pending-chat-messages";
 import type { RuntimeEventStore } from "../../lib/runtime-event-store";
 import { useRuntimeEventSession } from "../../hooks/useRuntimeEventSession";
+import { useSessionTurnCache } from "../../hooks/useSessionTurnCache";
 import { useChatContentScrollScheduler } from "../../hooks/useChatContentScrollScheduler";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
@@ -187,6 +190,16 @@ export function RightChatPane({
     activePanelView.sessionId ?? `draft:${activePanelView.id}`
   );
   const latestMessage = activePanelView.messages.at(-1);
+  const latestAssistantByTurn = useMemo(
+    () => latestAssistantMessageIdsByTurn(activePanelView.messages),
+    [activePanelView.messages],
+  );
+  const turnCache = useSessionTurnCache({
+    connection,
+    latestTurnId: latestMessage?.turnId ?? null,
+    sessionId: activePanelView.sessionId,
+    turnRunning: activePanelView.running,
+  });
   const contentKey = [
     activePanelView.id,
     activePanelView.sessionId ?? "draft",
@@ -275,6 +288,11 @@ export function RightChatPane({
               newMessageIds.has(row.message.id)
             }
             key={row.id}
+            kvCacheSummary={
+              isLatestAssistantMessageForTurn(row.message, latestAssistantByTurn) && row.message.turnId
+                ? turnCache.get(row.message.turnId) ?? null
+                : null
+            }
             message={row.message}
             onOpenBrowserLink={handleOpenBrowserLink}
             onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}

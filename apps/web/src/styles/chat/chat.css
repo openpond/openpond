@@ -942,6 +942,20 @@ button.user-message-attachment {
   white-space: nowrap;
 }
 
+.message-footer-separator {
+  width: 1px;
+  height: 12px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.message-kv-cache-metric {
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .change-summary-card {
   display: grid;
   width: min(736px, 100%);

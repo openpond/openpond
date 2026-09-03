@@ -182,6 +182,10 @@ export const UsageRecordsQuerySchema = UsageSummaryQuerySchema.extend({
   limit: z.number().int().positive().max(500).default(100),
 });
 
+export const UsageTurnCacheQuerySchema = z.object({
+  sessionId: z.string().trim().min(1),
+});
+
 const UsageBreakdownBaseSchema = z.object({
   requests: z.number().int().nonnegative(),
   promptTokens: z.number().int().nonnegative().nullable(),
@@ -316,6 +320,24 @@ export const UsageRecordsResponseSchema = z.object({
   records: z.array(ModelUsageRecordSchema),
 });
 
+export const UsageTurnCacheSummarySchema = z.object({
+  turnId: z.string().trim().min(1),
+  requests: z.number().int().nonnegative(),
+  cacheTelemetryRequests: z.number().int().nonnegative(),
+  cachedPromptTokens: z.number().int().nonnegative().nullable(),
+  uncachedPromptTokens: z.number().int().nonnegative().nullable(),
+  cacheWritePromptTokens: z.number().int().nonnegative().nullable(),
+  cacheHitRate: z.number().min(0).max(1).nullable(),
+  cacheTelemetryCoverage: z.number().min(0).max(1),
+  providers: z.array(UsageProviderSchema),
+});
+
+export const UsageTurnCacheResponseSchema = z.object({
+  generatedAt: z.string().trim().min(1),
+  sessionId: z.string().trim().min(1),
+  turns: z.array(UsageTurnCacheSummarySchema),
+});
+
 export const UsageSignalTypeSchema = z.enum([
   "usage_spike",
   "model_usage_spike",
@@ -337,6 +359,8 @@ export type ModelUsageSource = z.infer<typeof ModelUsageSourceSchema>;
 export type ModelUsageCacheTelemetrySource = z.infer<typeof ModelUsageCacheTelemetrySourceSchema>;
 export type ModelUsageRequestKind = z.infer<typeof ModelUsageRequestKindSchema>;
 export type UsageCacheCohort = z.infer<typeof UsageCacheCohortSchema>;
+export type UsageTurnCacheSummary = z.infer<typeof UsageTurnCacheSummarySchema>;
+export type UsageTurnCacheResponse = z.infer<typeof UsageTurnCacheResponseSchema>;
 export type ModelUsageVisibility = z.infer<typeof ModelUsageVisibilitySchema>;
 export type ModelUsageStatus = z.infer<typeof ModelUsageStatusSchema>;
 export type UsageCommandSource = z.infer<typeof UsageCommandSourceSchema>;
@@ -351,6 +375,7 @@ export type UsageVisibilityFilter = z.infer<typeof UsageVisibilityFilterSchema>;
 export type UsageStatusFilter = z.infer<typeof UsageStatusFilterSchema>;
 export type UsageSummaryQuery = z.infer<typeof UsageSummaryQuerySchema>;
 export type UsageRecordsQuery = z.infer<typeof UsageRecordsQuerySchema>;
+export type UsageTurnCacheQuery = z.infer<typeof UsageTurnCacheQuerySchema>;
 export type UsageModelBreakdown = z.infer<typeof UsageModelBreakdownSchema>;
 export type UsageThreadBreakdown = z.infer<typeof UsageThreadBreakdownSchema>;
 export type UsageCommandBreakdown = z.infer<typeof UsageCommandBreakdownSchema>;

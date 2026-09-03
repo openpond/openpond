@@ -3,6 +3,8 @@ import {
   UsageRecordsResponseSchema,
   UsageSummaryQuerySchema,
   UsageSummaryResponseSchema,
+  UsageTurnCacheQuerySchema,
+  UsageTurnCacheResponseSchema,
   type ModelUsageRecord,
   type Session,
   type UsageCommandBreakdown,
@@ -18,6 +20,8 @@ import {
   type UsageStatusBreakdown,
   type UsageSummaryResponse,
   type UsageThreadBreakdown,
+  type UsageTurnCacheResponse,
+  type UsageTurnCacheSummary,
   type UsageVisibilityFilter,
 } from "@openpond/contracts";
 
@@ -66,6 +70,14 @@ type BreakdownAccumulator = {
   firstSeenAt: string | null;
   lastSeenAt: string | null;
 };
+
+const CONVERSATION_TURN_REQUEST_KINDS = new Set<ModelUsageRecord["requestKind"]>([
+  "chat_turn",
+  "tool_loop",
+  "slash_command",
+  "create_improve_planner",
+  "context_compaction",
+]);
 
 export async function usageSummaryPayload(input: {
   requestUrl: URL;
@@ -164,6 +176,56 @@ export async function usageRecordsPayload(input: {
     records: rows.slice(0, query.limit),
   };
   return UsageRecordsResponseSchema.parse(response);
+}
+
+export async function usageTurnCachePayload(input: {
+  requestUrl: URL;
+  store: UsageStore;
+}): Promise<UsageTurnCacheResponse> {
+  const query = UsageTurnCacheQuerySchema.parse({
+    sessionId: input.requestUrl.searchParams.get("sessionId") ?? undefined,
+  });
+  const records = await input.store.listModelUsageRecords({ sessionId: query.sessionId });
+  const groups = new Map<string, {
+    totals: BreakdownAccumulator;
+    providers: Set<ModelUsageRecord["provider"]>;
+  }>();
+
+  for (const record of records) {
+    if (!record.turnId || !CONVERSATION_TURN_REQUEST_KINDS.has(record.requestKind)) continue;
+    const group = groups.get(record.turnId) ?? {
+      totals: accumulator(),
+      providers: new Set<ModelUsageRecord["provider"]>(),
+    };
+    addRecord(group.totals, record);
+    group.providers.add(record.provider);
+    groups.set(record.turnId, group);
+  }
+
+  const turns = [...groups.entries()]
+    .map(([turnId, group]) => {
+      const totals = breakdownTotals(group.totals);
+      const summary: UsageTurnCacheSummary = {
+        turnId,
+        requests: totals.requests,
+        cacheTelemetryRequests: totals.cacheTelemetryRequests,
+        cachedPromptTokens: totals.cachedPromptTokens,
+        uncachedPromptTokens: totals.uncachedPromptTokens,
+        cacheWritePromptTokens: totals.cacheWritePromptTokens,
+        cacheHitRate: totals.cacheHitRate,
+        cacheTelemetryCoverage: totals.cacheTelemetryCoverage,
+        providers: [...group.providers].sort(),
+      };
+      return { summary, lastSeenAt: totals.lastSeenAt };
+    })
+    .sort((left, right) => left.lastSeenAt.localeCompare(right.lastSeenAt))
+    .map((entry) => entry.summary);
+
+  return UsageTurnCacheResponseSchema.parse({
+    generatedAt: new Date().toISOString(),
+    sessionId: query.sessionId,
+    turns,
+  });
 }
 
 function usageQueryRange(range: "7d" | "30d" | "90d" | "all", now: Date): UsageQueryRange {

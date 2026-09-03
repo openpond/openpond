@@ -83,6 +83,7 @@ import type {
   UsageRecordsResponse,
   UsageStatusFilter,
   UsageSummaryResponse,
+  UsageTurnCacheResponse,
   UsageVisibilityFilter,
   WorkspaceBranchRequest,
   WorkspaceDiffFile,
@@ -553,6 +554,13 @@ export const api = {
       `/v1/usage/records${query}`
     );
   },
+  usageTurnCache: (
+    connection: ClientConnection,
+    sessionId: string,
+  ) => apiFetch<UsageTurnCacheResponse>(
+    connection,
+    `/v1/usage/turn-cache?sessionId=${encodeURIComponent(sessionId)}`,
+  ),
   runtimeEventsPage: (
     connection: ClientConnection,
     input: {

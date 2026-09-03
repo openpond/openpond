@@ -4,7 +4,7 @@ import type { AppAction, RightChatPanel, RightPanelMode } from "../app/app-state
 import type { AppView } from "../lib/app-models";
 import {
   cloneRightSidebarConversationState,
-  defaultRightSidebarConversationStateForSwitch,
+  defaultRightSidebarConversationState,
   rightSidebarConversationState,
   rightSidebarConversationStatesEqual,
   rightSidebarWorkspacePanelStateKey,
@@ -110,9 +110,7 @@ export function useConversationSidebarState(input: {
     activeRightSidebarConversationRef.current = browserConversationId;
     const restoredState =
       rightSidebarStateByConversationRef.current.get(browserConversationId) ??
-      defaultRightSidebarConversationStateForSwitch({
-        keepOpen: currentRightSidebarConversationState.diffPanelOpen,
-      });
+      defaultRightSidebarConversationState();
     if (rightSidebarConversationStatesEqual(currentRightSidebarConversationState, restoredState))
       return;
     appDispatch({

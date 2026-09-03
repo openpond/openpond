@@ -1,5 +1,6 @@
 import type { Session } from "@openpond/contracts";
 import { sessionTaskset } from "./session-tasksets";
+import { isCodexHistorySessionId } from "./sidebar-session-projects";
 
 export type SidebarTaskFilter =
   | "active"
@@ -51,8 +52,10 @@ export function sidebarTaskRows(input: {
   doneSessions: readonly Session[];
   filter: SidebarTaskFilter;
   inProgressSessionIds: ReadonlySet<string>;
+  onlyRunningTasks?: boolean;
   selectedTasksetId?: string | null;
   previewSessionIds?: readonly string[] | null;
+  showCodexChats?: boolean;
   sort: SidebarTaskSort;
 }): Session[] {
   const rows: Session[] = [];
@@ -93,6 +96,13 @@ export function sidebarTaskRows(input: {
     }
   }
 
+  const visibleRows = rows.filter((session) =>
+    isSidebarTaskVisible(session, {
+      inProgressSessionIds: input.inProgressSessionIds,
+      onlyRunningTasks: input.onlyRunningTasks,
+      showCodexChats: input.showCodexChats,
+    })
+  );
   const previewOrder = input.previewSessionIds
     ? new Map(
         input.previewSessionIds.map((sessionId, index) => [
@@ -103,12 +113,12 @@ export function sidebarTaskRows(input: {
     : null;
 
   if (input.sort === "recent") {
-    return rows.sort((left, right) =>
+    return visibleRows.sort((left, right) =>
       compareRecentSessions(left, right, previewOrder)
     );
   }
 
-  return rows.sort((left, right) => {
+  return visibleRows.sort((left, right) => {
     const leftPreview = previewOrder?.get(left.id);
     const rightPreview = previewOrder?.get(right.id);
     if (leftPreview !== undefined || rightPreview !== undefined) {
@@ -119,6 +129,23 @@ export function sidebarTaskRows(input: {
     if (left.order !== right.order) return left.order - right.order;
     return compareRecentSessions(left, right);
   });
+}
+
+export function isSidebarTaskVisible(
+  session: Session,
+  input: {
+    inProgressSessionIds: ReadonlySet<string>;
+    onlyRunningTasks?: boolean;
+    showCodexChats?: boolean;
+  }
+): boolean {
+  if (
+    input.showCodexChats === false &&
+    (session.provider === "codex" || isCodexHistorySessionId(session.id))
+  ) {
+    return false;
+  }
+  return !input.onlyRunningTasks || input.inProgressSessionIds.has(session.id);
 }
 
 function matchesSelectedTaskset(

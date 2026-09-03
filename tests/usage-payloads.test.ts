@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { ModelUsageRecord, Session } from "@openpond/contracts";
-import { usageRecordsPayload, usageSummaryPayload } from "../apps/server/src/api/usage-payloads";
+import {
+  usageRecordsPayload,
+  usageSummaryPayload,
+  usageTurnCachePayload,
+} from "../apps/server/src/api/usage-payloads";
 
 describe("usage API payloads", () => {
   test("aggregates all-calls usage by totals, day, model, thread, and command", async () => {
@@ -187,6 +191,88 @@ describe("usage API payloads", () => {
     expect(summary.totals.requests).toBe(1);
     expect(summary.models.map((row) => [row.provider, row.model])).toEqual([["codex", "gpt-5.6"]]);
     expect(recordPayload.records.map((record) => record.requestId)).toEqual(["usage_codex"]);
+  });
+
+  test("aggregates cache telemetry by conversation turn without subagent contamination", async () => {
+    const records = [
+      usageRecord({
+        requestId: "turn_one:foreground",
+        turnId: "turn_one",
+        provider: "fireworks",
+        promptTokens: 900,
+        cachedPromptTokens: 600,
+        uncachedPromptTokens: 300,
+        cacheTelemetrySource: "provider_usage_body",
+      }),
+      usageRecord({
+        requestId: "turn_one:tool",
+        turnId: "turn_one",
+        provider: "fireworks",
+        requestKind: "tool_loop",
+        promptTokens: 400,
+        cachedPromptTokens: 380,
+        uncachedPromptTokens: 20,
+        cacheTelemetrySource: "provider_usage_body",
+        startedAt: "2026-07-04T10:01:00.000Z",
+      }),
+      usageRecord({
+        requestId: "turn_one:subagent",
+        turnId: "turn_one",
+        provider: "openai",
+        requestKind: "subagent",
+        promptTokens: 1000,
+        cachedPromptTokens: 1000,
+        uncachedPromptTokens: 0,
+        cacheTelemetrySource: "provider_usage_body",
+        startedAt: "2026-07-04T10:02:00.000Z",
+      }),
+      usageRecord({
+        requestId: "turn_two:foreground",
+        turnId: "turn_two",
+        promptTokens: 250,
+        cachedPromptTokens: null,
+        uncachedPromptTokens: null,
+        cacheTelemetrySource: null,
+        startedAt: "2026-07-04T11:00:00.000Z",
+      }),
+      usageRecord({
+        requestId: "other_session",
+        sessionId: "session_other",
+        turnId: "turn_other",
+        startedAt: "2026-07-04T12:00:00.000Z",
+      }),
+    ];
+
+    const payload = await usageTurnCachePayload({
+      requestUrl: new URL("http://127.0.0.1/v1/usage/turn-cache?sessionId=session_usage"),
+      store: usageStore(records),
+    });
+
+    expect(payload.sessionId).toBe("session_usage");
+    expect(payload.turns).toEqual([
+      {
+        turnId: "turn_one",
+        requests: 2,
+        cacheTelemetryRequests: 2,
+        cachedPromptTokens: 980,
+        uncachedPromptTokens: 320,
+        cacheWritePromptTokens: null,
+        cacheHitRate: 0.7538,
+        cacheTelemetryCoverage: 1,
+        providers: ["fireworks"],
+      },
+      {
+        turnId: "turn_two",
+        requests: 1,
+        cacheTelemetryRequests: 0,
+        cachedPromptTokens: null,
+        uncachedPromptTokens: null,
+        cacheWritePromptTokens: null,
+        cacheHitRate: null,
+        cacheTelemetryCoverage: 0,
+        providers: ["openrouter"],
+      },
+    ]);
   });
 });
 

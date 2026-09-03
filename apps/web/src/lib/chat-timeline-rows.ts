@@ -42,6 +42,28 @@ export function latestAssistantMessageId(messages: ChatMessage[]): string | null
   return null;
 }
 
+export function latestAssistantMessageIdsByTurn(
+  messages: ChatMessage[],
+): ReadonlyMap<string, string> {
+  const messageIds = new Map<string, string>();
+  for (const message of messages) {
+    if (message.role === "assistant" && message.turnId) {
+      messageIds.set(message.turnId, message.id);
+    }
+  }
+  return messageIds;
+}
+
+export function isLatestAssistantMessageForTurn(
+  message: ChatMessage,
+  latestAssistantByTurn: ReadonlyMap<string, string>,
+): boolean {
+  const turnId = message.turnId;
+  return message.role === "assistant" &&
+    turnId !== undefined &&
+    latestAssistantByTurn.get(turnId) === message.id;
+}
+
 export function shouldShowThinkingIndicator(messages: ChatMessage[]): boolean {
   const latest = messages[messages.length - 1];
   if (!latest) return true;

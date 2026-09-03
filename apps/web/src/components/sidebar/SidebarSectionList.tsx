@@ -11,6 +11,7 @@ import { sessionTaskset } from "../../lib/session-tasksets";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import {
+  isSidebarTaskVisible,
   isSidebarTaskPinned,
   sidebarTaskEmptyLabel,
   sidebarTaskRows,
@@ -160,6 +161,8 @@ export function SidebarSectionList({
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
   const [groupByProject, setGroupByProject] = useState(experience !== "chat");
+  const [showCodexChats, setShowCodexChats] = useState(true);
+  const [onlyRunningTasks, setOnlyRunningTasks] = useState(false);
   const [selectedTasksetId, setSelectedTasksetId] = useState<string | null>(
     null
   );
@@ -172,23 +175,6 @@ export function SidebarSectionList({
     useState<SidebarTaskDetail | null>(null);
   const taskNoun = experience === "chat" ? "chats" : "tasks";
   const taskSectionLabel = experience === "chat" ? "Chats" : "Tasks";
-  const regularActiveSessions = useMemo(
-    () => activeSessions.filter((session) => sessionTaskset(session) === null),
-    [activeSessions],
-  );
-  const regularSavedForLaterSessions = useMemo(
-    () => savedForLaterSessions.filter((session) => sessionTaskset(session) === null),
-    [savedForLaterSessions],
-  );
-  const activeTaskCount = Math.max(
-    0,
-    regularActiveSessions.length - regularSavedForLaterSessions.length
-  );
-  const taskShortcut = sidebarTaskShortcutState({
-    activeCount: activeTaskCount,
-    filter: taskFilter,
-    savedForLaterCount: regularSavedForLaterSessions.length,
-  });
   const projectsSectionRows = projectRows ?? [
     ...localProjectRows,
     ...cloudProjectRows,
@@ -225,6 +211,47 @@ export function SidebarSectionList({
     subagentRuntimeBySessionId,
     terminalSummaries,
   ]);
+  const visibleRegularActiveSessions = useMemo(
+    () =>
+      activeSessions.filter(
+        (session) =>
+          sessionTaskset(session) === null &&
+          isSidebarTaskVisible(session, {
+            inProgressSessionIds,
+            onlyRunningTasks,
+            showCodexChats,
+          })
+      ),
+    [activeSessions, inProgressSessionIds, onlyRunningTasks, showCodexChats],
+  );
+  const visibleRegularSavedForLaterSessions = useMemo(
+    () =>
+      savedForLaterSessions.filter(
+        (session) =>
+          sessionTaskset(session) === null &&
+          isSidebarTaskVisible(session, {
+            inProgressSessionIds,
+            onlyRunningTasks,
+            showCodexChats,
+          })
+      ),
+    [
+      inProgressSessionIds,
+      onlyRunningTasks,
+      savedForLaterSessions,
+      showCodexChats,
+    ],
+  );
+  const activeTaskCount = Math.max(
+    0,
+    visibleRegularActiveSessions.length -
+      visibleRegularSavedForLaterSessions.length
+  );
+  const taskShortcut = sidebarTaskShortcutState({
+    activeCount: activeTaskCount,
+    filter: taskFilter,
+    savedForLaterCount: visibleRegularSavedForLaterSessions.length,
+  });
   const allManualTaskRows = useMemo(
     () =>
       sidebarTaskRows({
@@ -243,15 +270,19 @@ export function SidebarSectionList({
         doneSessions: archivedSessions,
         filter: taskFilter,
         inProgressSessionIds,
+        onlyRunningTasks,
         selectedTasksetId,
         previewSessionIds: taskPreviewSessionIds,
+        showCodexChats,
         sort: taskSort,
       }),
     [
       activeSessions,
       archivedSessions,
       inProgressSessionIds,
+      onlyRunningTasks,
       selectedTasksetId,
+      showCodexChats,
       taskFilter,
       taskPreviewSessionIds,
       taskSort,
@@ -261,6 +292,15 @@ export function SidebarSectionList({
     () => {
       const byId = new Map<string, SidebarTasksetFilterOption>();
       for (const session of [...activeSessions, ...archivedSessions]) {
+        if (
+          !isSidebarTaskVisible(session, {
+            inProgressSessionIds,
+            onlyRunningTasks,
+            showCodexChats,
+          })
+        ) {
+          continue;
+        }
         const taskset = sessionTaskset(session);
         if (!taskset) continue;
         const current = byId.get(taskset.id);
@@ -271,7 +311,26 @@ export function SidebarSectionList({
         left.name.localeCompare(right.name)
       );
     },
-    [activeSessions, archivedSessions]
+    [
+      activeSessions,
+      archivedSessions,
+      inProgressSessionIds,
+      onlyRunningTasks,
+      showCodexChats,
+    ]
+  );
+  const visiblePinnedRows = useMemo(
+    () =>
+      pinnedRows.filter(
+        (row) =>
+          row.type !== "session" ||
+          isSidebarTaskVisible(row.session, {
+            inProgressSessionIds,
+            onlyRunningTasks,
+            showCodexChats,
+          })
+      ),
+    [inProgressSessionIds, onlyRunningTasks, pinnedRows, showCodexChats],
   );
   const visibleTaskRows = useMemo(
     () =>
@@ -393,7 +452,13 @@ export function SidebarSectionList({
   }
 
   function childSessionsFor(session: Session): Session[] {
-    return childSessionRowsByParentId[session.id] ?? [];
+    return (childSessionRowsByParentId[session.id] ?? []).filter((child) =>
+      isSidebarTaskVisible(child, {
+        inProgressSessionIds,
+        onlyRunningTasks,
+        showCodexChats,
+      })
+    );
   }
 
   function childSessionsExpanded(
@@ -735,24 +800,34 @@ export function SidebarSectionList({
             noun={taskNoun}
             onFilterChange={changeTaskFilter}
             onGroupByProjectChange={setGroupByProject}
+            onOnlyRunningTasksChange={(nextValue) => {
+              setOnlyRunningTasks(nextValue);
+              setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
+            }}
+            onShowCodexChatsChange={(nextValue) => {
+              setShowCodexChats(nextValue);
+              setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
+            }}
             onTasksetChange={changeTasksetFilter}
             onSortChange={changeTaskSort}
+            onlyRunningTasks={onlyRunningTasks}
             openMenu={sectionMenuOpen}
             setOpenMenu={setSectionMenuOpen}
+            showCodexChats={showCodexChats}
             sort={taskSort}
             selectedTasksetId={selectedTasksetId}
             tasksets={tasksetOptions}
           />
         }
       >
-        {pinnedRows.length > 0 ? (
+        {visiblePinnedRows.length > 0 ? (
           <SidebarSection
             label="Pinned"
             className="sidebar-pinned-section"
             collapsed={pinnedCollapsed}
             onToggleCollapsed={onTogglePinnedCollapsed}
           >
-            {pinnedRows.map(renderPinnedRow)}
+            {visiblePinnedRows.map(renderPinnedRow)}
           </SidebarSection>
         ) : null}
         {groupByProject && experience !== "chat"

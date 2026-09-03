@@ -434,34 +434,26 @@ function ComposerSubmissionControls({
   onSend: () => void;
   onStop: (reason?: string) => Promise<boolean | void> | boolean | void;
 }) {
+  const controlLabel = running ? stopLabel : sendTooltip;
   return (
-    <>
+    <button
+      type="button"
+      className={`send-button ${running ? "stop-button" : ""}`.trim()}
+      disabled={!running && sendDisabled && !voiceInputActive}
+      data-tooltip={controlLabel}
+      aria-label={controlLabel}
+      onClick={running ? () => void onStop() : onSend}
+    >
       {running ? (
-        <button
-          type="button"
-          className="send-button stop-button"
-          data-tooltip={stopLabel}
-          aria-label={stopLabel}
-          onClick={() => void onStop()}
-        >
-          {stopIcon === "pause" ? (
-            <Pause size={15} />
-          ) : (
-            <Square size={13} fill="currentColor" />
-          )}
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="send-button"
-        disabled={sendDisabled && !running && !voiceInputActive}
-        data-tooltip={sendTooltip}
-        aria-label={sendTooltip}
-        onClick={onSend}
-      >
+        stopIcon === "pause" ? (
+          <Pause size={15} />
+        ) : (
+          <Square size={13} fill="currentColor" />
+        )
+      ) : (
         <ArrowUp size={18} />
-      </button>
-    </>
+      )}
+    </button>
   );
 }
 

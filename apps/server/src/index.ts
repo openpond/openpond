@@ -80,7 +80,11 @@ import {
   runtimeEventPageRequestFromUrl,
   runtimeEventsPagePayloadFromEntries,
 } from "./api/event-page.js";
-import { usageRecordsPayload, usageSummaryPayload } from "./api/usage-payloads.js";
+import {
+  usageRecordsPayload,
+  usageSummaryPayload,
+  usageTurnCachePayload,
+} from "./api/usage-payloads.js";
 import { readProvidersFile } from "./openpond/provider-settings.js";
 import { buildProviderSettings } from "./openpond/provider-registry.js";
 import { cachedProviderCatalog } from "./openpond/provider-catalog.js";
@@ -1544,6 +1548,10 @@ export async function createOpenPondServer(
     return usageRecordsPayload({ requestUrl, store });
   }
 
+  async function usageTurnCacheRoutePayload(requestUrl: URL): Promise<unknown> {
+    return usageTurnCachePayload({ requestUrl, store });
+  }
+
   async function listLocalAgentSchedulesPayload(
     payload?: unknown
   ): Promise<unknown> {
@@ -1768,6 +1776,7 @@ export async function createOpenPondServer(
       runHostedSavedWorkPayload,
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
+      usageTurnCachePayload: usageTurnCacheRoutePayload,
       trainingPayload,
       datasetStoragePayload,
       listLocalAgentSchedulesPayload,

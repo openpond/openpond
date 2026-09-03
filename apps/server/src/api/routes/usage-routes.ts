@@ -10,5 +10,9 @@ export async function handleUsageRoutes({ deps, request, requestUrl, response }:
     sendJson(response, 200, await deps.usageRecordsPayload(requestUrl));
     return true;
   }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/usage/turn-cache") {
+    sendJson(response, 200, await deps.usageTurnCachePayload(requestUrl));
+    return true;
+  }
   return false;
 }

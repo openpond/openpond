@@ -16,14 +16,6 @@ export function defaultRightSidebarConversationState(): RightSidebarConversation
   };
 }
 
-export function defaultRightSidebarConversationStateForSwitch(input: {
-  keepOpen: boolean;
-}): RightSidebarConversationState {
-  return input.keepOpen
-    ? defaultOpenRightSidebarConversationState()
-    : defaultRightSidebarConversationState();
-}
-
 export function defaultOpenRightSidebarConversationState(): RightSidebarConversationState {
   return {
     diffPanelOpen: true,
