@@ -1,5 +1,13 @@
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { TrainingJobEvent } from "@openpond/contracts";
 
+import { Check, ChevronDown, ListFilter } from "../icons";
 import { formatDateTime } from "../training/training-model-data";
 
 export function formatBytes(value: number): string {
@@ -22,6 +30,62 @@ export function TrainingEventLog({
   events: TrainingJobEvent[];
   loading: boolean;
 }) {
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [typeSelection, setTypeSelection] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [followLatest, setFollowLatest] = useState(true);
+  const logRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const eventTypes = useMemo(() => eventTypeOptions(events), [events]);
+  const visibleEvents = useMemo(
+    () =>
+      events.filter(
+        (event) =>
+          typeSelection[trainingEventType(event)] ??
+          defaultEventTypeEnabled(trainingEventType(event)),
+      ),
+    [events, typeSelection],
+  );
+  const enabledTypeCount = eventTypes.filter(
+    (option) =>
+      typeSelection[option.id] ?? defaultEventTypeEnabled(option.id),
+  ).length;
+  const allTypesEnabled =
+    eventTypes.length > 0 && enabledTypeCount === eventTypes.length;
+  const someTypesEnabled = enabledTypeCount > 0 && !allTypesEnabled;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someTypesEnabled;
+    }
+  }, [someTypesEnabled]);
+
+  useEffect(() => {
+    if (!filterOpen) return undefined;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!filterRef.current?.contains(event.target as Node)) {
+        setFilterOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFilterOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [filterOpen]);
+
+  useLayoutEffect(() => {
+    const log = logRef.current;
+    if (!log || !followLatest) return;
+    log.scrollTop = log.scrollHeight;
+  }, [followLatest, visibleEvents]);
+
   if (loading && !events.length) {
     return <div className="training-run-placeholder">Loading run events…</div>;
   }
@@ -33,31 +97,167 @@ export function TrainingEventLog({
     );
   }
   return (
-    <div
-      aria-label="Training activity log"
-      aria-live="polite"
-      className="training-event-log"
-      role="log"
-    >
-      {events.map((event) => (
-        <div className={`training-event-log-line ${event.type}`} key={event.id}>
-          <time dateTime={event.timestamp}>{formatDateTime(event.timestamp)}</time>
-          <span>{eventLabel(event.type)}</span>
-          <code>{eventSummary(event)}</code>
+    <div className="training-event-log-shell">
+      <div className="training-event-log-toolbar">
+        <div>
+          <strong>Activity log</strong>
+          <span>
+            {visibleEvents.length.toLocaleString()} of {events.length.toLocaleString()} events
+          </span>
         </div>
-      ))}
-      {error ? (
-        <div className="training-event-log-line failure">
-          <time>—</time>
-          <span>Failure</span>
-          <code>{error}</code>
+        <div className="training-event-filter" ref={filterRef}>
+          <button
+            aria-expanded={filterOpen}
+            aria-haspopup="menu"
+            className="training-event-filter-trigger"
+            type="button"
+            onClick={() => setFilterOpen((open) => !open)}
+          >
+            <ListFilter aria-hidden="true" size={14} />
+            Event types
+            <span>{enabledTypeCount}/{eventTypes.length}</span>
+            <ChevronDown aria-hidden="true" size={13} />
+          </button>
+          {filterOpen ? (
+            <div
+              aria-label="Filter training activity by event type"
+              className="training-event-filter-menu"
+              role="menu"
+            >
+              <label className="training-event-filter-option select-all">
+                <input
+                  checked={allTypesEnabled}
+                  ref={selectAllRef}
+                  type="checkbox"
+                  onChange={(event) => {
+                    const enabled = event.currentTarget.checked;
+                    setTypeSelection(
+                      Object.fromEntries(
+                        eventTypes.map((option) => [option.id, enabled]),
+                      ),
+                    );
+                  }}
+                />
+                <span className="training-event-filter-check">
+                  <Check aria-hidden="true" size={12} />
+                </span>
+                Select all
+              </label>
+              <div className="training-event-filter-options">
+                {eventTypes.map((option) => {
+                  const enabled =
+                    typeSelection[option.id] ??
+                    defaultEventTypeEnabled(option.id);
+                  return (
+                    <label
+                      className="training-event-filter-option"
+                      key={option.id}
+                    >
+                      <input
+                        checked={enabled}
+                        type="checkbox"
+                        onChange={(event) =>
+                          setTypeSelection((current) => ({
+                            ...current,
+                            [option.id]: event.currentTarget.checked,
+                          }))
+                        }
+                      />
+                      <span className="training-event-filter-check">
+                        <Check aria-hidden="true" size={12} />
+                      </span>
+                      <span>{option.label}</span>
+                      <small>{option.count.toLocaleString()}</small>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
+      <div
+        aria-label="Training activity log"
+        aria-live="polite"
+        className="training-event-log"
+        ref={logRef}
+        role="log"
+        onScroll={(event) => {
+          const log = event.currentTarget;
+          const distanceFromBottom =
+            log.scrollHeight - log.scrollTop - log.clientHeight;
+          setFollowLatest(distanceFromBottom <= 6);
+        }}
+      >
+        <div aria-hidden="true" className="training-event-log-header">
+          <span>Time</span>
+          <span>Event type</span>
+          <span>Details</span>
+        </div>
+        {visibleEvents.map((event) => (
+          <div
+            className={`training-event-log-line ${event.type}`}
+            key={event.id}
+          >
+            <time dateTime={event.timestamp}>
+              {formatDateTime(event.timestamp)}
+            </time>
+            <span>{eventLabel(trainingEventType(event))}</span>
+            <code>{eventSummary(event)}</code>
+          </div>
+        ))}
+        {!visibleEvents.length ? (
+          <div className="training-event-log-empty">
+            No events match the selected event types.
+          </div>
+        ) : null}
+        {error ? (
+          <div className="training-event-log-line failure">
+            <time>—</time>
+            <span>Failure</span>
+            <code>{error}</code>
+          </div>
+        ) : null}
+      </div>
+      <span className="training-event-follow-state" data-following={followLatest}>
+        {followLatest ? "Following new events" : "Scroll to the bottom to resume live follow"}
+      </span>
     </div>
   );
 }
 
-function eventLabel(type: TrainingJobEvent["type"]): string {
+export function trainingEventType(event: TrainingJobEvent): string {
+  if (
+    typeof event.payload.remoteEventType === "string" &&
+    event.payload.remoteEventType.trim()
+  ) {
+    return event.payload.remoteEventType;
+  }
+  if (
+    typeof event.payload.telemetryType === "string" &&
+    event.payload.telemetryType.trim()
+  ) {
+    return event.payload.telemetryType;
+  }
+  return event.type;
+}
+
+function eventTypeOptions(events: TrainingJobEvent[]) {
+  const counts = new Map<string, number>();
+  for (const event of events) {
+    const type = trainingEventType(event);
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, count, label: eventLabel(id) }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function defaultEventTypeEnabled(type: string): boolean {
+  return type !== "metric";
+}
+
+function eventLabel(type: string): string {
   return type
     .replaceAll("_", " ")
     .replace(/^./, (value) => value.toUpperCase());

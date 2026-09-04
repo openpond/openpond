@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   ModelArtifactLineageSchema,
   ModelProjectSchema,
@@ -7,6 +7,7 @@ import {
   TrainingJobSchema,
 } from "../packages/contracts/src";
 import { contentHash } from "../packages/taskset-sdk/src";
+import { trainingRunDetail } from "../apps/server/src/training/run-detail";
 import { tasksetFixture, planFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("local training job store", () => {
@@ -92,6 +93,28 @@ describe("local training job store", () => {
     expect((await store.listTrainingJobEvents(job.id)).map((item) => item.sequence)).toEqual([0, 1]);
     expect(await store.getTrainingArtifact(artifact.id)).toEqual(artifact);
     expect((await store.listModelArtifactLineage())[0]).toMatchObject({ id: "lineage_fixture", status: "imported", promotable: false });
+  }));
+
+  test("loads live events without scanning evaluation attempts and grades", async () => withTrainingStore(async ({ store }) => {
+    const taskset = tasksetFixture({ ready: true });
+    const plan = planFixture(taskset);
+    const job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: "job_live_detail", planId: plan.id, bundleHash: "bundlehash", approvalId: "approval", destinationId: "openpond_managed", status: "running", nonProduction: false, workerPid: null, startedAt: "2026-07-12T00:00:00Z", completedAt: null, error: null, createdAt: "2026-07-12T00:00:00Z", updatedAt: "2026-07-12T00:00:00Z", metadata: {} });
+    const event = TrainingJobEventSchema.parse({ schemaVersion: "openpond.trainingJobEvent.v1", id: "event_live_detail", jobId: job.id, sequence: 0, type: "progress", timestamp: "2026-07-12T00:00:01Z", payload: { remoteEventType: "physical_gpu_worker_state" } });
+    await store.upsertTaskset(taskset);
+    await store.saveTrainingPlan(plan);
+    await store.saveTrainingJob(job);
+    await store.saveTrainingJobEvent(event);
+    const attempts = vi.spyOn(store, "listTaskAttempts");
+    const grades = vi.spyOn(store, "listGradeResultsForTaskset");
+
+    const detail = await trainingRunDetail(store, job.id, {
+      includeEvaluation: false,
+    });
+
+    expect(detail.events).toEqual([event]);
+    expect(detail.evaluation).toBeNull();
+    expect(attempts).not.toHaveBeenCalled();
+    expect(grades).not.toHaveBeenCalled();
   }));
 
   test("preserves lineage while removing retired managed-serving projections", async () => withTrainingStore(async ({ store }) => {

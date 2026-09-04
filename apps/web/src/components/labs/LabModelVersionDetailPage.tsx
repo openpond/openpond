@@ -204,7 +204,8 @@ export function LabModelVersionDetailPage({
   const detail = useTrainingRunDetail(
     connection,
     selectedJob?.id ?? null,
-    selectedJob?.status ?? null
+    selectedJob?.status ?? null,
+    detailTab === "evaluation",
   );
   const receipts = selectedJob
     ? state?.rolloutReceipts.filter(

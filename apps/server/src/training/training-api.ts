@@ -1356,8 +1356,8 @@ export function createTrainingApi(deps: {
     if (action === "job_events") return deps.store.listTrainingJobEvents(requiredString(input.jobId, "jobId"));
     if (action === "run_detail") {
       const jobId = requiredString(input.jobId, "jobId");
-      await deps.training.refreshManagedRunEvidence(jobId).catch(() => undefined);
-      return trainingRunDetail(deps.store, jobId);
+      void deps.training.refreshManagedRunEvidence(jobId).catch(() => undefined);
+      return trainingRunDetail(deps.store, jobId, { includeEvaluation: input.includeEvaluation !== false });
     }
     throw new Error(`Unknown training action ${action}.`);
   }
@@ -1554,7 +1554,7 @@ export function createTrainingApi(deps: {
       deps.store.listTasksetDrafts(profileId),
       deps.store.listTasksets(),
       deps.store.listModelProjects(profileId),
-      deps.training.activity(),
+      deps.training.activity({ background: true }),
     ]);
     return projectTrainingActivity({
       profileId,

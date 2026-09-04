@@ -432,9 +432,16 @@ export function createTrainingService(deps: {
     return (await deps.store.getRewardModelRun(runId)) ?? run;
   }
 
-  async function activity() {
-    await portableModelRuns.reconcileActive();
-    await reconcileRewardModelRuns();
+  async function activity(options: { background?: boolean } = {}) {
+    const reconciliation = Promise.all([
+      portableModelRuns.reconcileActive(),
+      reconcileRewardModelRuns(),
+    ]);
+    if (options.background) {
+      void reconciliation.catch(() => undefined);
+    } else {
+      await reconciliation;
+    }
     return { jobs: await deps.store.listTrainingJobs() };
   }
 

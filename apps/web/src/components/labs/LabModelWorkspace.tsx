@@ -13,13 +13,17 @@ import {
 
 import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
+import { useLiveClock } from "../../hooks/useLiveClock";
 import { Download, Pin } from "../icons";
 import {
+  formatDuration,
   formatDateTime,
+  terminalRunEnd,
   trainingMethodLabel,
 } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
 import {
+  isActiveRunStatus,
   LabRunStatusBadge,
   resolveRunStatus,
 } from "./LabRunStatusBadge";
@@ -99,6 +103,10 @@ export function LabModelRunsPage({
     ? runEntries
     : runEntries.slice(0, 5);
   const submittedRunCount = runEntries.length;
+  const hasActiveRun = runEntries.some((entry) =>
+    isActiveRunStatus(resolveRunStatus(entry)),
+  );
+  const liveNow = useLiveClock(hasActiveRun);
   const runNumberByKey = useMemo(() => {
     let runNumber = submittedRunCount;
     const numbers = new Map<string, number>();
@@ -144,13 +152,14 @@ export function LabModelRunsPage({
               <th>Based on</th>
               <th>Taskset</th>
               <th>Result</th>
+              <th>Duration</th>
               <th>Updated</th>
             </tr>
           </thead>
           <tbody>
             {!runEntries.length ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <div className="training-run-placeholder">
                     No runs yet.
                   </div>
@@ -228,6 +237,7 @@ export function LabModelRunsPage({
                     )}
                   </td>
                   <td>{runResult(entry)}</td>
+                  <td>{runDuration(entry, liveNow)}</td>
                   <td>
                     {formatDateTime(
                       entry.lifecycleRun?.updatedAt ??
@@ -631,6 +641,30 @@ function runResult(entry: RunEntry) {
     return "Completed";
   }
   return "No output";
+}
+
+function runDuration(entry: RunEntry, now: number): string {
+  const status = resolveRunStatus(entry);
+  const startedAt =
+    entry.lifecycleRun?.startedAt ??
+    entry.job?.startedAt ??
+    entry.job?.createdAt ??
+    null;
+  const completedAt = entry.lifecycleRun
+    ? terminalRunEnd(
+        entry.lifecycleRun.status,
+        entry.lifecycleRun.completedAt,
+        entry.lifecycleRun.updatedAt,
+      )
+    : entry.job
+      ? terminalRunEnd(
+          entry.job.status,
+          entry.job.completedAt,
+          entry.job.updatedAt,
+        )
+      : null;
+  if (!isActiveRunStatus(status)) return formatDuration(startedAt, completedAt);
+  return formatDuration(startedAt, new Date(now).toISOString());
 }
 
 function VersionEvalBadge({

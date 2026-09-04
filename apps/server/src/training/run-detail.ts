@@ -15,45 +15,19 @@ import {
 } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 
-export async function trainingRunDetail(store: SqliteStore, jobId: string): Promise<TrainingRunDetail> {
-  const job = await store.getTrainingJob(jobId);
-  if (!job) throw new Error("Training job not found.");
-  const plan = await store.getTrainingPlan(job.planId);
-  if (!plan) throw new Error("Training Plan not found for this job.");
-  const taskset = await store.getTaskset(plan.tasksetId);
-  if (!taskset) throw new Error("Taskset not found for this job.");
-  const [events, attempts, grades] = await Promise.all([
-    store.listTrainingJobEvents(job.id),
-    store.listTaskAttempts(taskset.id),
-    store.listGradeResultsForTaskset(taskset.id),
+export async function trainingRunDetail(
+  store: SqliteStore,
+  jobId: string,
+  options: { includeEvaluation?: boolean } = {},
+): Promise<TrainingRunDetail> {
+  const [job, events] = await Promise.all([
+    store.getTrainingJob(jobId),
+    store.listTrainingJobEvents(jobId),
   ]);
-  const jobAttempts = attempts.filter((attempt) => attempt.metadata.jobId === job.id && attempt.split === "frozen_eval");
-  const gradeByAttempt = new Map(grades.map((grade) => [grade.attemptId, grade]));
-  const attemptByTaskAndStage = new Map<string, TaskAttemptResult>();
-  for (const attempt of jobAttempts) attemptByTaskAndStage.set(`${attempt.taskId}:${evaluationStage(attempt)}`, attempt);
-  const examples = taskset.tasks.filter((task) => task.split === "frozen_eval").map((task) => {
-    const baseAttempt = attemptByTaskAndStage.get(`${task.id}:base`) ?? null;
-    const trainedAttempt = attemptByTaskAndStage.get(`${task.id}:trained`) ?? null;
-    return {
-      taskId: task.id,
-      input: task.input,
-      baseOutput: baseAttempt?.output ?? null,
-      trainedOutput: trainedAttempt?.output ?? null,
-      baseGrade: gradeView(baseAttempt ? gradeByAttempt.get(baseAttempt.id) ?? null : null),
-      trainedGrade: gradeView(trainedAttempt ? gradeByAttempt.get(trainedAttempt.id) ?? null : null),
-    };
-  });
-  const base = aggregate(examples.map((example) => example.baseGrade));
-  const trained = aggregate(examples.map((example) => example.trainedGrade));
-  const evaluation = jobAttempts.length ? TrainingEvaluationSummarySchema.parse({
-    schemaVersion: "openpond.trainingEvaluationSummary.v1",
-    jobId: job.id,
-    tasksetId: taskset.id,
-    base,
-    trained,
-    meanScoreDelta: base.meanScore == null || trained.meanScore == null ? null : trained.meanScore - base.meanScore,
-    examples,
-  }) : null;
+  if (!job) throw new Error("Training job not found.");
+  const evaluation = options.includeEvaluation === false
+    ? null
+    : await trainingEvaluation(store, job.id, job.planId);
   return TrainingRunDetailSchema.parse({
     schemaVersion: "openpond.trainingRunDetail.v1",
     job,
@@ -66,6 +40,70 @@ export async function trainingRunDetail(store: SqliteStore, jobId: string): Prom
       ).data ?? null,
     evaluation,
     generatedAt: new Date().toISOString(),
+  });
+}
+
+async function trainingEvaluation(
+  store: SqliteStore,
+  jobId: string,
+  planId: string,
+): Promise<TrainingRunDetail["evaluation"]> {
+  const plan = await store.getTrainingPlan(planId);
+  if (!plan) throw new Error("Training Plan not found for this job.");
+  const taskset = await store.getTaskset(plan.tasksetId);
+  if (!taskset) throw new Error("Taskset not found for this job.");
+  const [attempts, grades] = await Promise.all([
+    store.listTaskAttempts(taskset.id),
+    store.listGradeResultsForTaskset(taskset.id),
+  ]);
+  const jobAttempts = attempts.filter(
+    (attempt) =>
+      attempt.metadata.jobId === jobId && attempt.split === "frozen_eval",
+  );
+  const gradeByAttempt = new Map(
+    grades.map((grade) => [grade.attemptId, grade]),
+  );
+  const attemptByTaskAndStage = new Map<string, TaskAttemptResult>();
+  for (const attempt of jobAttempts) {
+    attemptByTaskAndStage.set(
+      `${attempt.taskId}:${evaluationStage(attempt)}`,
+      attempt,
+    );
+  }
+  const examples = taskset.tasks
+    .filter((task) => task.split === "frozen_eval")
+    .map((task) => {
+      const baseAttempt =
+        attemptByTaskAndStage.get(`${task.id}:base`) ?? null;
+      const trainedAttempt =
+        attemptByTaskAndStage.get(`${task.id}:trained`) ?? null;
+      return {
+        taskId: task.id,
+        input: task.input,
+        baseOutput: baseAttempt?.output ?? null,
+        trainedOutput: trainedAttempt?.output ?? null,
+        baseGrade: gradeView(
+          baseAttempt ? gradeByAttempt.get(baseAttempt.id) ?? null : null,
+        ),
+        trainedGrade: gradeView(
+          trainedAttempt ? gradeByAttempt.get(trainedAttempt.id) ?? null : null,
+        ),
+      };
+    });
+  const base = aggregate(examples.map((example) => example.baseGrade));
+  const trained = aggregate(examples.map((example) => example.trainedGrade));
+  if (!jobAttempts.length) return null;
+  return TrainingEvaluationSummarySchema.parse({
+    schemaVersion: "openpond.trainingEvaluationSummary.v1",
+    jobId,
+    tasksetId: taskset.id,
+    base,
+    trained,
+    meanScoreDelta:
+      base.meanScore == null || trained.meanScore == null
+        ? null
+        : trained.meanScore - base.meanScore,
+    examples,
   });
 }
 

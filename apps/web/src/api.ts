@@ -692,10 +692,16 @@ export const api = {
       connection,
       `/v1/training/datasets?profileId=${encodeURIComponent(profileId)}`
     ),
-  trainingRunDetail: (connection: ClientConnection, jobId: string) =>
+  trainingRunDetail: (
+    connection: ClientConnection,
+    jobId: string,
+    options: { includeEvaluation?: boolean } = {},
+  ) =>
     apiFetch<TrainingRunDetail>(
       connection,
-      `/v1/training/jobs/${encodeURIComponent(jobId)}/detail`
+      `/v1/training/jobs/${encodeURIComponent(jobId)}/detail?evaluation=${
+        options.includeEvaluation === false ? "false" : "true"
+      }`
     ),
   trainingRequest: <T>(
     connection: ClientConnection,

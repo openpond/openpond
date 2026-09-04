@@ -199,6 +199,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
       [item.key]: decodeURIComponent(match[1]!),
       ...(item.assignmentKey ? { [item.assignmentKey]: decodeURIComponent(match[2]!) } : {}),
       ...(item.action === "model_comparison_attempt_evidence" ? { kind: requestUrl.searchParams.get("kind") } : {}),
+      ...(item.action === "run_detail" ? { includeEvaluation: requestUrl.searchParams.get("evaluation") !== "false" } : {}),
     };
     const controller = new AbortController();
     request.once("aborted", () => controller.abort(new Error("training_request_aborted")));
