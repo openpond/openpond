@@ -111,6 +111,7 @@ export function labModelJobs(
     .filter(
       (job) =>
         planIds.has(job.planId) ||
+        job.metadata.modelProjectId === workproduct.id ||
         (typeof job.metadata.modelRunId === "string" &&
           lifecycleRunIds.has(job.metadata.modelRunId))
     )

@@ -8,30 +8,18 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { TrainingRolloutRewardChart } from "./TrainingRolloutRewardChart";
-import type { RolloutRewardGroup } from "./training-rollout-metrics";
 
 export type TrainingMetricSeries = {
   id: string;
   label: string;
   points: Array<{ step: number; value: number }>;
   format?: "number" | "percent" | "scientific";
-};
-
-export type TrainingRolloutProgress = {
-  completedGroups: number | null;
-  targetGroups: number | null;
+  xLabel?: string;
 };
 
 type MetricDisplay = "raw" | "smoothed";
 
-const EMPTY_ROLLOUT_PROGRESS: TrainingRolloutProgress = {
-  completedGroups: null,
-  targetGroups: null,
-};
-
 const LIVE_METRIC_PLACEHOLDERS: TrainingMetricSeries[] = [
-  { id: "rollout.reward", label: "Rollout reward", points: [] },
   { id: "optimizer.reward", label: "Mean reward", points: [] },
   { id: "reward.variance", label: "Reward variance", points: [] },
   { id: "optimizer.kl", label: "Policy update KL", points: [] },
@@ -46,39 +34,26 @@ const LIVE_METRIC_PLACEHOLDERS: TrainingMetricSeries[] = [
 
 export function TrainingMetricWorkbench({
   series,
-  rolloutGroups = null,
-  rolloutProgress = EMPTY_ROLLOUT_PROGRESS,
   loading = false,
   live = false,
 }: {
   series: TrainingMetricSeries[];
-  rolloutGroups?: RolloutRewardGroup[] | null;
-  rolloutProgress?: TrainingRolloutProgress;
   loading?: boolean;
   live?: boolean;
 }) {
   const [display, setDisplay] = useState<MetricDisplay>("raw");
   const cards = useMemo(() => {
-    const available = series.filter(
-      (candidate) =>
-        candidate.points.length &&
-        (rolloutGroups === null ||
-          (candidate.id !== "rollout.reward" && candidate.id !== "optimizer.reward")),
-    );
+    const available = series.filter((candidate) => candidate.points.length);
     if (!loading && !live) return available;
     const byId = new Map(available.map((candidate) => [candidate.id, candidate]));
     for (const placeholder of LIVE_METRIC_PLACEHOLDERS) {
-      if (
-        rolloutGroups !== null &&
-        (placeholder.id === "rollout.reward" || placeholder.id === "optimizer.reward")
-      ) continue;
       if (!byId.has(placeholder.id)) byId.set(placeholder.id, placeholder);
     }
     return [...byId.values()];
-  }, [live, loading, rolloutGroups, series]);
+  }, [live, loading, series]);
   const canSmooth = cards.some((metric) => metric.points.length > 1);
 
-  if (!cards.length && rolloutGroups === null) {
+  if (!cards.length) {
     return (
       <div className="training-run-placeholder">
         This run did not report chartable metrics.
@@ -104,13 +79,6 @@ export function TrainingMetricWorkbench({
         </div>
       ) : null}
       <div className="training-metric-chart-grid">
-        {rolloutGroups !== null ? (
-          <TrainingRolloutRewardChart
-            groups={rolloutGroups}
-            live={live}
-            progress={rolloutProgress}
-          />
-        ) : null}
         {cards.map((metric) => (
           <TrainingMetricChartCard
             display={display}
@@ -145,6 +113,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
     [metric.points],
   );
   const format = (value: number) => formatMetric(value, metric.format);
+  const xLabel = metric.xLabel ?? "training step";
 
   return (
     <article className="training-metric-chart-card">
@@ -167,7 +136,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
       {metric.points.length ? (
         <div
           className="training-metric-card-chart"
-          aria-label={`${metric.label} by training step`}
+          aria-label={`${metric.label} by ${xLabel}`}
         >
           <ResponsiveContainer height="100%" width="100%">
             <LineChart data={points} margin={{ top: 18, right: 18, bottom: 4, left: 0 }}>
@@ -200,6 +169,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
                     format={format}
                     label={metric.label}
                     payload={props.payload}
+                    xLabel={xLabel}
                   />
                 )}
                 isAnimationActive={false}
@@ -244,18 +214,20 @@ function MetricChartTooltip({
   payload,
   label: metricLabel,
   format,
+  xLabel,
 }: {
   active: boolean;
   payload: ReadonlyArray<{ payload?: unknown }>;
   label: string;
   format: (value: number) => string;
+  xLabel: string;
 }) {
   if (!active || !payload.length) return null;
   const point = payload[0]?.payload as { step?: unknown; value?: unknown } | undefined;
   if (typeof point?.value !== "number") return null;
   return (
     <div className="training-chart-tooltip">
-      <strong>Training step {String(point.step ?? "—")}</strong>
+      <strong>{sentenceCase(xLabel)} {String(point.step ?? "—")}</strong>
       <dl>
         <div>
           <dt>{metricLabel}</dt>
@@ -264,6 +236,10 @@ function MetricChartTooltip({
       </dl>
     </div>
   );
+}
+
+function sentenceCase(value: string): string {
+  return value.replace(/^./, (character) => character.toUpperCase());
 }
 
 function MetricStat({ label, value }: { label: string; value: string }) {

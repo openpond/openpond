@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   CreateImproveRun,
   TrainingStateResponse,
@@ -6,8 +6,14 @@ import type {
 
 import { Search } from "../icons";
 import { DropdownSelect } from "../DropdownSelect";
+import type { useTraining } from "../../hooks/useTraining";
+import type { HostedModelProjectCatalog } from "../../hooks/hosted-model-project-types";
 import type { LabWorkproductSummary } from "./lab-workproducts";
-import { ModelsTable, Pagination } from "./LabsRouteSections";
+import {
+  ModelsTable,
+  Pagination,
+  type ModelTableRow,
+} from "./LabsRouteSections";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 const PAGE_SIZE = 10;
@@ -18,7 +24,9 @@ export function LabModelsPage({
   loading,
   runs,
   state,
+  training,
   onCompare,
+  onPulled,
   onSelect,
   onUseModel,
 }: {
@@ -27,13 +35,23 @@ export function LabModelsPage({
   loading: boolean;
   runs: CreateImproveRun[];
   state: TrainingStateResponse | null;
+  training: ReturnType<typeof useTraining>;
   onCompare: () => void;
+  onPulled: (
+    projectId: string,
+    projectName: string,
+    importedJobCount: number,
+    importedMetricCount: number,
+  ) => void;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
 }) {
+  const listHostedModelProjects = training.actions.listHostedModelProjects;
   const [profileId, setProfileId] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [hostedCatalog, setHostedCatalog] =
+    useState<HostedModelProjectCatalog | null>(null);
   const comparableRunCount = state?.modelRuns.filter(
     (run) => run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1",
   ).length ?? 0;
@@ -50,28 +68,98 @@ export function LabModelsPage({
       }),
     [activeProfileId, items],
   );
+  const rows = useMemo<ModelTableRow[]>(() => {
+    const hostedByPortableId = new Map(
+      (hostedCatalog?.projects ?? []).map(
+        (item) => [item.project.portableProjectId, item] as const,
+      ),
+    );
+    const localIds = new Set(items.map((item) => item.id));
+    return [
+      ...items.map((item) => ({
+        key: item.key,
+        local: item,
+        hosted: hostedByPortableId.get(item.id) ?? null,
+        updatedAt:
+          hostedByPortableId.get(item.id)?.project.updatedAt ?? item.updatedAt,
+      })),
+      ...(hostedCatalog?.projects ?? [])
+        .filter((item) => !localIds.has(item.project.portableProjectId))
+        .map((hosted) => ({
+          key: `hosted:${hosted.project.id}`,
+          local: null,
+          hosted,
+          updatedAt: hosted.project.updatedAt,
+        })),
+    ];
+  }, [hostedCatalog?.projects, items]);
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return items
-      .filter((item) => {
-        if (profileId !== "all" && item.ownerProfileId !== profileId) {
+    return rows
+      .filter((row) => {
+        if (
+          profileId !== "all" &&
+          row.local?.ownerProfileId !== profileId
+        ) {
           return false;
         }
+        const project = row.hosted?.project;
         return (
           !normalized
-          || [item.name, item.description, item.id, item.ownerProfileId ?? ""]
+          || [
+            row.local?.name ?? project?.name ?? "",
+            row.local?.description ?? project?.objective ?? "",
+            row.local?.id ?? project?.portableProjectId ?? "",
+            row.local?.ownerProfileId ?? "",
+          ]
             .some((value) => value.toLowerCase().includes(normalized))
         );
       })
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-  }, [items, profileId, query]);
+  }, [profileId, query, rows]);
   const visible = filtered.slice(
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE,
   );
-  const emptyMessage = items.length
+  const emptyMessage = rows.length
     ? "No Models match this Profile or search."
-    : "No Models exist in this workspace yet.";
+    : "No local or hosted Model Projects were found.";
+  const loadingHosted =
+    training.busyAction === "list-hosted-model-projects";
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const cached = await listHostedModelProjects();
+      if (!cancelled && cached) setHostedCatalog(cached);
+      if (!cached?.cached) return;
+      const refreshed = await listHostedModelProjects({
+        refresh: true,
+        silent: true,
+      });
+      if (!cancelled && refreshed) setHostedCatalog(refreshed);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [listHostedModelProjects]);
+
+  async function pullHostedProject(
+    item: HostedModelProjectCatalog["projects"][number],
+  ) {
+    const result = await training.actions.pullHostedModelProject(
+      item.project.id,
+    );
+    if (!result) return;
+    onPulled(
+      result.project.id,
+      result.project.name,
+      result.importedJobCount,
+      result.importedMetricCount,
+    );
+    const catalog = await listHostedModelProjects({ silent: true });
+    if (catalog) setHostedCatalog(catalog);
+  }
 
   return (
     <div className="labs-flat-body labs-models-page">
@@ -79,7 +167,12 @@ export function LabModelsPage({
         title="Model Projects"
         description="Compose Tasksets and scorers, run training and evaluations, and manage deployable Model Versions."
         metrics={[
-          { label: "Projects", value: items.length },
+          { label: "Projects", value: rows.length },
+          {
+            label: "Hosted",
+            value: hostedCatalog?.projects.length ?? "—",
+            hint: hostedCatalog ? `Team ${hostedCatalog.teamId}` : "Loading active Team",
+          },
           { label: "Evaluation receipts", value: comparableRunCount },
           { label: "Profiles", value: profileIds.length },
         ]}
@@ -125,11 +218,13 @@ export function LabModelsPage({
         </div>
       </div>
       <ModelsTable
+        busyAction={training.busyAction}
         emptyMessage={emptyMessage}
-        items={visible}
-        loading={loading}
+        rows={visible}
+        loading={loading || (loadingHosted && !hostedCatalog && !items.length)}
         runs={runs}
         state={state}
+        onPull={(item) => void pullHostedProject(item)}
         onSelect={onSelect}
         onUseModel={onUseModel}
       />

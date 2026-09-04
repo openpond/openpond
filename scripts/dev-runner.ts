@@ -185,6 +185,21 @@ export function buildDevRunnerPlan(
   const setupCommands: DevRunnerCommand[] = [];
   const processes: DevRunnerCommand[] = [];
 
+  if (
+    options.mode === "desktop" ||
+    options.mode === "web" ||
+    options.mode === "server"
+  ) {
+    setupCommands.push(
+      command(
+        "build-dev-server",
+        pnpmBinary(env),
+        ["run", "build:dev-server"],
+        root,
+      ),
+    );
+  }
+
   if (options.mode === "desktop") {
     setupCommands.push(command("build-desktop", pnpmBinary(env), ["run", "build:desktop"], root));
     processes.push(watchedServerCommand(root, env, serverPort, serverEnv, options.watch));

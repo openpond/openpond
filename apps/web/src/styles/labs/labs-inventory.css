@@ -45,6 +45,29 @@
   gap: 8px;
 }
 
+.labs-hosted-project-identity {
+  display: grid;
+  gap: 4px;
+}
+
+.labs-hosted-project-identity span {
+  overflow: hidden;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.labs-hosted-project-identity small {
+  color: var(--muted);
+  font: 10px/1.35 var(--mono);
+}
+
+.labs-hosted-only-row td {
+  background: color-mix(in srgb, var(--panel) 90%, var(--accent));
+}
+
 .labs-dataset-advanced-details {
   margin-top: 14px;
   border-top: 1px solid var(--border);

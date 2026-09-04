@@ -4,6 +4,7 @@ import type {
   ModelComparisonSeriesEntry,
   ModelRun,
   TrainingJob,
+  TrainingMethod,
 } from "@openpond/contracts";
 import {
   managedAdapterCustomerBindingAllowed,
@@ -216,10 +217,11 @@ export function LabModelRunsPage({
                       ? "Evaluation"
                       : trainingMethodLabel(
                           entry.lifecycleRun?.method ??
-                            plan?.recipe.method
+                            plan?.recipe.method ??
+                            hostedTrainingMethod(entry.job)
                         )}
                   </td>
-                  <td>{runBasedOn(entry.lifecycleRun, comparisonEntries)}</td>
+                  <td>{runBasedOn(entry.lifecycleRun, comparisonEntries, entry.job)}</td>
                   <td>
                     {dataset ? (
                       <button
@@ -232,6 +234,8 @@ export function LabModelRunsPage({
                       >
                         {dataset.name}
                       </button>
+                    ) : typeof entry.job?.metadata.tasksetId === "string" ? (
+                      entry.job.metadata.tasksetId
                     ) : (
                       "Unavailable"
                     )}
@@ -489,12 +493,18 @@ export function LabModelVersionsPage({
 function runBasedOn(
   run: ModelRun | null,
   entries: ModelComparisonSeriesEntry[],
+  job: TrainingJob | null,
 ): string {
   const reference = run?.comparisonSeriesEntry ?? null;
   const entry = reference
     ? entries.find((candidate) => candidate.id === reference.entryId) ?? null
     : null;
-  if (!entry) return run?.kind === "evaluation" ? "Evaluated Model Version" : "Frozen base";
+  if (!entry) {
+    if (typeof job?.metadata.parentHostedArtifactId === "string") {
+      return "Prior hosted run";
+    }
+    return run?.kind === "evaluation" ? "Evaluated Model Version" : "Frozen base";
+  }
   if (entry.parent.kind === "base_model") return "Frozen base";
   const parent = entries.find(
     (candidate) =>
@@ -640,7 +650,22 @@ function runResult(entry: RunEntry) {
   ) {
     return "Completed";
   }
+  if (
+    entry.lifecycleRun?.status === "cancelled" ||
+    entry.job?.status === "cancelled"
+  ) {
+    return "Cancelled";
+  }
   return "No output";
+}
+
+function hostedTrainingMethod(job: TrainingJob | null): TrainingMethod | null {
+  const method = job?.metadata.trainingMethod;
+  return method === "sft" || method === "dpo" || method === "grpo" ||
+    method === "ppo" || method === "sdft" || method === "opd" ||
+    method === "opsd" || method === "sdpo"
+    ? method
+    : null;
 }
 
 function runDuration(entry: RunEntry, now: number): string {

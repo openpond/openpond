@@ -6,6 +6,7 @@ import { TrainingMetricWorkbench, type TrainingMetricSeries } from "./TrainingMe
 import { rolloutRewardGroups } from "./training-rollout-metrics";
 
 type SeriesDefinition<T> = { key: keyof T; id: string; label: string; format?: TrainingMetricSeries["format"] };
+const REWARD_SERIES_IDS = new Set(["optimizer.reward", "rollout.reward"]);
 
 const POLICY_SERIES: Array<SeriesDefinition<PolicyOptimizationMetric>> = [
   { key: "meanReward", id: "optimizer.reward", label: "Mean reward" },
@@ -40,19 +41,13 @@ const STEP_SERIES: Array<SeriesDefinition<SftStepMetric>> = [
 
 export function TrainingRunMetrics({ detail, loading, error, taskset = null }: { detail: TrainingRunDetail | null; loading: boolean; error: string | null; taskset?: Taskset | null }) {
   useErrorToast(error, { prefix: "Training metrics" });
-  const series = useMemo(() => detail ? metricSeries(detail) : [], [detail]);
   const groups = useMemo(() => {
-    if (!detail) return null;
-    const resolved = rolloutRewardGroups(detail.events, taskset?.tasks);
-    return resolved.length || trainingMethod(detail) === "grpo" ? resolved : null;
+    return detail ? rolloutRewardGroups(detail.events, taskset?.tasks) : [];
   }, [detail, taskset]);
-  const rolloutProgress = useMemo(() => {
-    const progress = record(detail?.job.metadata.rolloutProgress);
-    return {
-      completedGroups: nonnegativeInteger(progress.groupsCompleted),
-      targetGroups: nonnegativeInteger(progress.groupsTarget),
-    };
-  }, [detail]);
+  const series = useMemo(() => {
+    if (!detail) return [];
+    return mergeRolloutRewardSeries(metricSeries(detail), groups);
+  }, [detail, groups]);
   if (error && !detail) return <div className="training-run-placeholder">Training metrics are unavailable.</div>;
   if (!detail && !loading) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
   const live = detail
@@ -62,11 +57,38 @@ export function TrainingRunMetrics({ detail, loading, error, taskset = null }: {
     <TrainingMetricWorkbench
       live={live}
       loading={loading && !detail}
-      rolloutGroups={groups}
-      rolloutProgress={rolloutProgress}
       series={series}
     />
   );
+}
+
+export function rolloutRewardSeries(
+  groups: ReturnType<typeof rolloutRewardGroups>,
+): TrainingMetricSeries | null {
+  const points = groups.flatMap((group, index) =>
+    group.mean === null ? [] : [{ step: index + 1, value: group.mean }],
+  );
+  return points.length
+    ? {
+        id: "optimizer.reward",
+        label: "Mean reward",
+        points,
+        xLabel: "rollout group",
+      }
+    : null;
+}
+
+export function mergeRolloutRewardSeries(
+  metrics: TrainingMetricSeries[],
+  groups: ReturnType<typeof rolloutRewardGroups>,
+): TrainingMetricSeries[] {
+  const rolloutReward = rolloutRewardSeries(groups);
+  return rolloutReward
+    ? [
+        rolloutReward,
+        ...metrics.filter((metric) => !REWARD_SERIES_IDS.has(metric.id)),
+      ]
+    : metrics;
 }
 
 export function metricSeries(detail: TrainingRunDetail): TrainingMetricSeries[] {
@@ -168,10 +190,6 @@ export function eventSeries(events: TrainingRunDetail["events"]): TrainingMetric
 }
 
 function finiteNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
-function nonnegativeInteger(value: unknown): number | null {
-  const number = finiteNumber(value);
-  return number !== null && Number.isInteger(number) && number >= 0 ? number : null;
-}
 function humanizeMetric(value: string) { return value.replaceAll(/[._]/g, " ").replace(/^./, (character) => character.toUpperCase()); }
 
 function trainingMethod(detail: TrainingRunDetail): string | null {

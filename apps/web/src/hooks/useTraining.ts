@@ -30,6 +30,7 @@ import type {
   ModelRun,
   ModelBinding,
   ModelProject,
+  PublicHostedModelProjectDetail,
   CrossSystemExpertBootstrapPreview,
   CrossSystemExpertBootstrapApproval,
   DatasetImportJob,
@@ -47,6 +48,7 @@ import type {
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import { TrainingStateResponseSchema } from "@openpond/contracts";
+import type { HostedModelProjectCatalog } from "./hosted-model-project-types";
 
 export type PreferenceComparisonReview = {
   assignment: {
@@ -340,6 +342,43 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         "/models",
         project,
         "PUT",
+      ),
+    listHostedModelProjects: async (options: {
+      refresh?: boolean;
+      silent?: boolean;
+    } = {}): Promise<HostedModelProjectCatalog | null> => {
+      if (!connection) return null;
+      if (!options.silent) setBusyAction("list-hosted-model-projects");
+      try {
+        const result = await api.trainingRequest<HostedModelProjectCatalog>(
+          connection,
+          `/hosted-model-projects?profileId=${encodeURIComponent(profileId)}&refresh=${options.refresh === true}`,
+          {},
+          "GET",
+        );
+        if (!options.silent) setError(null);
+        return result;
+      } catch (caught) {
+        if (!options.silent) setError(message(caught));
+        return null;
+      } finally {
+        if (!options.silent) {
+          setBusyAction((current) =>
+            current === "list-hosted-model-projects" ? null : current,
+          );
+        }
+      }
+    },
+    pullHostedModelProject: (hostedProjectId: string) =>
+      mutate<{
+        project: ModelProject;
+        hosted: PublicHostedModelProjectDetail;
+        importedJobCount: number;
+        importedMetricCount: number;
+      }>(
+        `pull-hosted-model-project:${hostedProjectId}`,
+        `/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/pull`,
+        { profileId },
       ),
     syncModelProject: (modelId: string) =>
       mutate<ModelProject>(

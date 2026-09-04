@@ -583,7 +583,11 @@ export function LabsRoute({
             loading={training.training.loading && !models.length}
             runs={createImprove.runs}
             state={training.training.payload}
+            training={training.training}
             onCompare={() => navigateModelsRoute(modelLibraryRoute("comparisons"))}
+            onPulled={(_projectId, projectName, runCount, metricCount) => profileView.onToast?.(
+              `${projectName} pulled locally with ${runCount} runs and ${metricCount} metrics.`, "success",
+            )}
             onSelect={(key) => {
               const project = models.find((item) => item.key === key);
               if (project) navigateModelsRoute(modelProjectRoute(project.id));
@@ -920,7 +924,11 @@ export function LabsRoute({
           loading={training.training.loading && !models.length}
           runs={createImprove.runs}
           state={training.training.payload}
+          training={training.training}
           onCompare={() => navigateModelsRoute(modelLibraryRoute("comparisons"))}
+          onPulled={(_projectId, projectName, runCount, metricCount) => profileView.onToast?.(
+            `${projectName} pulled locally with ${runCount} runs and ${metricCount} metrics.`, "success",
+          )}
           onSelect={(key) => {
             const project = models.find((item) => item.key === key);
             if (project) navigateModelsRoute(modelProjectRoute(project.id));

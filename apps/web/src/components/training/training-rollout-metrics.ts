@@ -38,38 +38,6 @@ export type RolloutRewardGroup = {
   trajectories: RolloutRewardTrajectory[];
 };
 
-export type RolloutRewardProgress = {
-  completedGroups: number | null;
-  targetGroups: number | null;
-};
-
-export type RolloutRewardProgressSummary = {
-  observedTasks: number;
-  completedTasks: number;
-  activeTasks: number;
-  notStartedTasks: number;
-  targetTasks: number;
-};
-
-export function summarizeRolloutRewardProgress(
-  observedTasks: number,
-  progress: RolloutRewardProgress,
-): RolloutRewardProgressSummary {
-  const observed = Math.max(0, observedTasks);
-  const targetTasks = Math.max(progress.targetGroups ?? observed, observed);
-  const completedTasks = Math.min(
-    Math.max(0, progress.completedGroups ?? observed),
-    observed,
-  );
-  return {
-    observedTasks: observed,
-    completedTasks,
-    activeTasks: Math.max(0, observed - completedTasks),
-    notStartedTasks: Math.max(0, targetTasks - observed),
-    targetTasks,
-  };
-}
-
 type MutableGroup = Omit<
   RolloutRewardGroup,
   "mean" | "minimum" | "maximum" | "optimizerDisposition" | "optimizerStep"

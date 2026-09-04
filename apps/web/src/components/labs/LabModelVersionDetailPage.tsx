@@ -5,6 +5,7 @@ import {
   type ModelComparisonSeriesEntry,
   type ModelRun,
   type TrainingStateResponse,
+  type TrainingMethod,
 } from "@openpond/contracts";
 
 import type { ClientConnection } from "../../api";
@@ -148,7 +149,10 @@ export function LabModelVersionDetailPage({
       entry.modelRunId === selectedLifecycleRun?.id ||
       entry.modelRunId === selectedJob?.metadata.modelRunId,
   ) ?? null;
-  const selectedBasedOn = comparisonParentLabel(state, selectedComparisonEntry);
+  const selectedBasedOn =
+    typeof selectedJob?.metadata.parentHostedArtifactId === "string"
+      ? "Prior hosted run"
+      : comparisonParentLabel(state, selectedComparisonEntry);
   const runEntries = useMemo(() => {
     const entries = modelRunEntries(jobs, versions, lifecycleRuns);
     return modelRunEntriesForMode(
@@ -187,7 +191,9 @@ export function LabModelVersionDetailPage({
       )
       .sort((left, right) => right.version - left.version)[0]?.baseModel
       .modelId ??
-    null;
+    (typeof selectedJob?.metadata.baseModelId === "string"
+      ? selectedJob.metadata.baseModelId
+      : null);
   const selectedEvaluationArtifactId =
     selectedVersion?.lineage.frozenEvaluationArtifactId ?? null;
   const selectedPlan =
@@ -201,6 +207,15 @@ export function LabModelVersionDetailPage({
         (selectedLifecycleRun?.taskset.id ?? selectedPlan?.tasksetId)
     ) ??
     null;
+  const selectedTasksetName =
+    selectedTaskset?.name ??
+    (typeof selectedJob?.metadata.tasksetId === "string"
+      ? selectedJob.metadata.tasksetId
+      : "Unavailable");
+  const selectedMethod =
+    selectedLifecycleRun?.method ??
+    selectedPlan?.recipe.method ??
+    hostedTrainingMethod(selectedJob?.metadata);
   const detail = useTrainingRunDetail(
     connection,
     selectedJob?.id ?? null,
@@ -223,7 +238,7 @@ export function LabModelVersionDetailPage({
     job: detail.detail?.job ?? selectedJob,
   });
   const runActive = isActiveRunStatus(currentRunStatus);
-  const isGrpo = selectedPlan?.recipe.method === "grpo";
+  const isGrpo = selectedMethod === "grpo";
   const rolloutProgress = managedRolloutProgress(selectedJob?.metadata);
   const optimizerStepsTarget =
     (selectedPlan &&
@@ -321,7 +336,7 @@ export function LabModelVersionDetailPage({
         title={selectedLifecycleRun || selectedJob
           ? selectedRunNumber ? `Run ${selectedRunNumber}` : "Run details"
           : selectedVersion ? `Version ${selectedVersion.number}` : "Run details"}
-        description={`${trainingMethodLabel(selectedLifecycleRun?.method ?? selectedPlan?.recipe.method)} on ${baseModelName(selectedPlan, selectedBaseModelId)}`}
+        description={`${trainingMethodLabel(selectedMethod)} on ${baseModelName(selectedPlan, selectedBaseModelId)}`}
         status={<LabRunStatusBadge status={currentRunStatus} />}
         metrics={[
           {
@@ -334,7 +349,7 @@ export function LabModelVersionDetailPage({
           { label: "Based on", value: selectedBasedOn },
           {
             label: "Taskset",
-            value: selectedTaskset?.name ?? "Unavailable",
+            value: selectedTasksetName,
             onSelect: selectedTaskset
               ? () => onOpenDataset(selectedTaskset.id)
               : undefined,
@@ -410,9 +425,7 @@ export function LabModelVersionDetailPage({
           ...runConfiguration(selectedPlan),
         ]}
         evidence={managedEvidence}
-        method={trainingMethodLabel(
-          selectedLifecycleRun?.method ?? selectedPlan?.recipe.method
-        )}
+        method={trainingMethodLabel(selectedMethod)}
         output={
           selectedVersion
             ? `Version ${selectedVersion.number}`
@@ -433,7 +446,7 @@ export function LabModelVersionDetailPage({
         statusValue={
           selectedLifecycleRun?.status ?? selectedJob?.status ?? "imported"
         }
-        taskset={selectedTaskset?.name ?? "Unavailable"}
+        taskset={selectedTasksetName}
         telemetry={
           selectedLifecycleRun?.receipt?.schemaVersion
             === "openpond.modelRunReceipt.v1"
@@ -479,7 +492,7 @@ export function LabModelVersionDetailPage({
               />
               <Fact
                 label="Taskset"
-                value={selectedTaskset?.name ?? "Unavailable"}
+                value={selectedTasksetName}
               />
               <Fact
                 label="Prepared data"
@@ -790,6 +803,17 @@ function baseModelName(
       ? plan.recipe.policyOptimization.policyModel
       : null;
   return model ? modelRefName(model.id) : "Not recorded";
+}
+
+function hostedTrainingMethod(
+  metadata: Record<string, unknown> | null | undefined,
+): TrainingMethod | null {
+  const method = metadata?.trainingMethod;
+  return method === "sft" || method === "dpo" || method === "grpo" ||
+    method === "ppo" || method === "sdft" || method === "opd" ||
+    method === "opsd" || method === "sdpo"
+    ? method
+    : null;
 }
 
 function modelRefName(modelId: string) {

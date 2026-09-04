@@ -51,6 +51,7 @@ import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
 import type { createHarnessRefinerBenchmarkService } from "./harness-refiner-benchmark-service.js";
 import type { createPreferenceComparisonService } from "./preference-comparison-service.js";
 import type { createModelProjectHostingService } from "./model-project-hosting.js";
+import { runModelProjectHostingAction } from "./training-api-model-project-hosting-actions.js";
 import { trainingRunDetail } from "./run-detail.js";
 import { managedStructuredOutputContract, preferenceCalibrationSourceHash } from "./managed-rl-calibration.js";
 import {
@@ -557,13 +558,12 @@ export function createTrainingApi(deps: {
     if (action === "start_harness_refiner_benchmark") {
       return startHarnessRefinerBenchmark(deps.harnessRefinerBenchmarks, input);
     }
-    if (action === "sync_model_project") {
-      if (!deps.modelProjectHosting) {
-        throw new Error("Hosted Model Project sync is unavailable.");
-      }
-      return deps.modelProjectHosting.syncProject(
-        requiredString(input.modelId, "modelId"),
-      );
+    if (
+      action === "hosted_model_projects"
+      || action === "pull_hosted_model_project"
+      || action === "sync_model_project"
+    ) {
+      return runModelProjectHostingAction(deps.modelProjectHosting, action, input);
     }
     if (action === "publish_model_project_taskset") {
       if (!deps.modelProjectHosting) {

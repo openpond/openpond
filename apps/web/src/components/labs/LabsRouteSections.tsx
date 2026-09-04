@@ -4,6 +4,10 @@ import type {
   TaskCreationSnapshot,
   TrainingStateResponse,
 } from "@openpond/contracts";
+import type {
+  HostedModelProjectCatalog,
+  HostedModelProjectLocalState,
+} from "../../hooks/hosted-model-project-types";
 
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import { TrainingSuggestions } from "../training/TrainingSuggestions";
@@ -13,6 +17,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDashed,
+  DownloadCloud,
   Loader2,
   XCircle,
 } from "../icons";
@@ -30,6 +35,13 @@ import type { LabsRouteProps } from "./LabsRoute";
 
 const PAGE_SIZE = 10;
 const EMPTY_TIMESTAMP = new Date(0).toISOString();
+
+export type ModelTableRow = {
+  key: string;
+  local: LabWorkproductSummary | null;
+  hosted: HostedModelProjectCatalog["projects"][number] | null;
+  updatedAt: string;
+};
 export function SuggestionsTab({
   training,
   onPlanStarted,
@@ -204,19 +216,23 @@ export function WorkproductsTable({
 }
 
 export function ModelsTable({
-  items,
+  rows,
   loading,
+  busyAction,
   runs,
   state,
   emptyMessage = "No Models yet.",
+  onPull,
   onSelect,
   onUseModel,
 }: {
-  items: LabWorkproductSummary[];
+  rows: ModelTableRow[];
   loading: boolean;
+  busyAction: string | null;
   runs: CreateImproveRun[];
   state: TrainingStateResponse | null;
   emptyMessage?: string;
+  onPull: (item: HostedModelProjectCatalog["projects"][number]) => void;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
 }) {
@@ -227,7 +243,7 @@ export function ModelsTable({
       </div>
     );
   }
-  if (!items.length) {
+  if (!rows.length) {
     return <div className="labs-table-empty">{emptyMessage}</div>;
   }
   return (
@@ -245,39 +261,76 @@ export function ModelsTable({
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => {
-            const versions = labModelVersions(item, runs, state);
+          {rows.map((row) => {
+            const item = row.local;
+            const hosted = row.hosted;
+            const versions = item ? labModelVersions(item, runs, state) : [];
             const current = versions.find((version) => version.current) ?? null;
-            const runEntries = modelRunEntries(
-              labModelJobs(item, runs, state),
-              versions,
-              labLifecycleModelRuns(item, state),
-            );
+            const runEntries = item
+              ? modelRunEntries(
+                  labModelJobs(item, runs, state),
+                  versions,
+                  labLifecycleModelRuns(item, state),
+                )
+              : [];
             const recentRun = runEntries[0] ?? null;
             const recentRunStatus =
               recentRun?.lifecycleRun?.status ??
               recentRun?.job?.status ??
               "not_run";
+            const pulling = hosted
+              ? busyAction === `pull-hosted-model-project:${hosted.project.id}`
+              : false;
+            const pullable = hosted
+              ? hosted.localState === "not_pulled" ||
+                hosted.localState === "remote_ahead"
+              : false;
+            const name = item?.name ?? hosted!.project.name;
+            const description =
+              item?.description ?? hosted!.project.objective ?? "No description";
             return (
-              <tr key={item.key} onClick={() => onSelect(item.key)}>
+              <tr
+                key={row.key}
+                className={item ? undefined : "labs-hosted-only-row"}
+                onClick={item ? () => onSelect(item.key) : undefined}
+              >
                 <td>
-                  <button
-                    className="labs-workproduct-link"
-                    type="button"
-                    onClick={() => onSelect(item.key)}
-                  >
-                    <strong>{item.name}</strong>
-                    <span>{item.description}</span>
-                  </button>
+                  {item ? (
+                    <button
+                      className="labs-workproduct-link"
+                      type="button"
+                      onClick={() => onSelect(item.key)}
+                    >
+                      <strong>{name}</strong>
+                      <span>{description}</span>
+                    </button>
+                  ) : (
+                    <div className="labs-workproduct-link labs-hosted-project-identity">
+                      <strong>{name}</strong>
+                      <span>{description}</span>
+                      <small>{hosted!.project.portableProjectId}</small>
+                    </div>
+                  )}
                 </td>
                 <td>
                   <div className="labs-model-table-summary">
-                    <LabStatusBadge
-                      label={current ? "Hosted" : "Not hosted"}
-                      value={current ? "ready" : "not_run"}
-                    />
+                    {hosted ? (
+                      <LabStatusBadge
+                        label={hostedLocalStateLabel(hosted.localState)}
+                        value={hostedLocalStateTone(hosted.localState)}
+                      />
+                    ) : (
+                      <LabStatusBadge
+                        label={current ? "Hosted" : "Local only"}
+                        value={current ? "ready" : "not_run"}
+                      />
+                    )}
                     <span>
-                      {current
+                      {hosted
+                        ? hosted.project.trainingSetup.baseModel?.modelId ??
+                          hosted.project.defaultBaseModel?.modelId ??
+                          "No base model"
+                        : current
                         ? `Release ${current.number}`
                         : "No active release"}
                     </span>
@@ -285,38 +338,73 @@ export function ModelsTable({
                 </td>
                 <td>
                   <div className="labs-model-table-summary">
-                    <LabStatusBadge
-                      label={statusLabel(recentRunStatus)}
-                      value={recentRunStatus}
-                    />
+                    {item ? (
+                      <LabStatusBadge
+                        label={statusLabel(recentRunStatus)}
+                        value={recentRunStatus}
+                      />
+                    ) : (
+                      <LabStatusBadge
+                        label={hosted!.project.trainingSetup.method?.toUpperCase() ?? "Configured"}
+                        value="prepared"
+                      />
+                    )}
                     <span>
-                      {recentModelRunLabel(
-                        recentRun?.lifecycleRun ?? null,
-                        item.trainingRunCount,
-                      )}
+                      {item
+                        ? recentModelRunLabel(
+                            recentRun?.lifecycleRun ?? null,
+                            runEntries.length,
+                          )
+                        : `Hosted source r${hosted!.project.sourceRevision}`}
                     </span>
                   </div>
                 </td>
-                <td>{compactUpdatedAt(item.updatedAt)}</td>
+                <td>{compactUpdatedAt(row.updatedAt)}</td>
                 <td>
                   <div className="labs-workproduct-actions">
-                    <button
-                      className="training-button secondary labs-compact-button labs-workproduct-use"
-                      disabled={!current}
-                      title={
-                        current
-                          ? "Chat with the active Version"
-                          : "Set a passing Version active before Chat"
-                      }
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onUseModel(item.id);
-                      }}
-                    >
-                      Chat
-                    </button>
-                    <ChevronRight size={15} />
+                    {hosted && pullable ? (
+                      <button
+                        className="training-button secondary labs-compact-button"
+                        disabled={pulling}
+                        title={hostedPullTitle(hosted.localState)}
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onPull(hosted);
+                        }}
+                      >
+                        {pulling ? (
+                          <Loader2 className="spin" size={13} />
+                        ) : (
+                          <DownloadCloud size={13} />
+                        )}
+                        {pulling
+                          ? "Importing…"
+                          : hosted.localState === "remote_ahead"
+                            ? "Update"
+                            : "Pull"}
+                      </button>
+                    ) : item ? (
+                      <button
+                        className="training-button secondary labs-compact-button labs-workproduct-use"
+                        disabled={!current}
+                        title={
+                          current
+                            ? "Chat with the active Version"
+                            : hosted
+                              ? hostedPullTitle(hosted.localState)
+                              : "Set a passing Version active before Chat"
+                        }
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onUseModel(item.id);
+                        }}
+                      >
+                        Chat
+                      </button>
+                    ) : null}
+                    {item ? <ChevronRight size={15} /> : null}
                   </div>
                 </td>
               </tr>
@@ -326,6 +414,30 @@ export function ModelsTable({
       </table>
     </div>
   );
+}
+
+function hostedLocalStateLabel(state: HostedModelProjectLocalState): string {
+  if (state === "not_pulled") return "Hosted only";
+  if (state === "up_to_date") return "Local + hosted";
+  if (state === "remote_ahead") return "Update available";
+  if (state === "local_ahead") return "Local changes";
+  if (state === "diverged") return "Diverged";
+  return "Local conflict";
+}
+
+function hostedLocalStateTone(state: HostedModelProjectLocalState): string {
+  if (state === "up_to_date") return "ready";
+  if (state === "not_pulled" || state === "remote_ahead") return "prepared";
+  if (state === "local_ahead") return "running";
+  return "failed";
+}
+
+function hostedPullTitle(state: HostedModelProjectLocalState): string {
+  if (state === "not_pulled") return "Pull this hosted project locally";
+  if (state === "remote_ahead") return "Update the clean local copy from hosted";
+  if (state === "up_to_date") return "This project is current locally";
+  if (state === "local_ahead") return "Sync local changes before pulling";
+  return "Resolve the local and hosted project conflict before pulling";
 }
 
 function recentModelRunLabel(run: ModelRun | null, runCount: number): string {

@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { TrainingRunDetail } from "@openpond/contracts";
 
-import { eventSeries } from "./TrainingRunMetrics";
+import {
+  eventSeries,
+  mergeRolloutRewardSeries,
+  rolloutRewardSeries,
+} from "./TrainingRunMetrics";
 import {
   rolloutRewardGroups,
-  summarizeRolloutRewardProgress,
 } from "./training-rollout-metrics";
 
 describe("eventSeries", () => {
@@ -160,32 +163,30 @@ describe("rolloutRewardGroups", () => {
       taskId: "task-b",
       taskFamily: "family-b",
     });
-  });
-});
-
-describe("summarizeRolloutRewardProgress", () => {
-  it("keeps the planned task count distinct from completed and partial results", () => {
-    expect(summarizeRolloutRewardProgress(16, {
-      completedGroups: 15,
-      targetGroups: 26,
-    })).toEqual({
-      observedTasks: 16,
-      completedTasks: 15,
-      activeTasks: 1,
-      notStartedTasks: 10,
-      targetTasks: 26,
+    expect(rolloutRewardSeries(groups)).toMatchObject({
+      id: "optimizer.reward",
+      label: "Mean reward",
+      xLabel: "rollout group",
+      points: [
+        { step: 1, value: 0.5 },
+        { step: 2, value: 0.4 },
+      ],
     });
-
-    expect(summarizeRolloutRewardProgress(26, {
-      completedGroups: 26,
-      targetGroups: 26,
-    })).toEqual({
-      observedTasks: 26,
-      completedTasks: 26,
-      activeTasks: 0,
-      notStartedTasks: 0,
-      targetTasks: 26,
-    });
+    const merged = mergeRolloutRewardSeries([
+      { id: "optimizer.reward", label: "Mean reward", points: [{ step: 1, value: 0.3 }] },
+      { id: "rollout.reward", label: "Rollout reward", points: [{ step: 40, value: 0.2 }] },
+      { id: "optimizer.kl", label: "Policy update KL", points: [{ step: 1, value: 0.01 }] },
+    ], groups);
+    expect(merged.filter((series) => series.id.includes("reward"))).toEqual([
+      expect.objectContaining({
+        id: "optimizer.reward",
+        label: "Mean reward",
+        points: [
+          { step: 1, value: 0.5 },
+          { step: 2, value: 0.4 },
+        ],
+      }),
+    ]);
   });
 });
 

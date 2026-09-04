@@ -59,7 +59,10 @@ describe("dev runner", () => {
       web: "http://127.0.0.1:17876",
     });
     expect(plan.appHome).toBe(devAppHomePath({ OPENPOND_APP_CHANNEL: "stable" }));
-    expect(plan.setupCommands.map((command) => command.id)).toEqual(["build-desktop"]);
+    expect(plan.setupCommands.map((command) => command.id)).toEqual([
+      "build-dev-server",
+      "build-desktop",
+    ]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual([
       "server",
       "renderer",
@@ -88,7 +91,9 @@ describe("dev runner", () => {
     const plan = buildDevRunnerPlan(options, {}, root);
 
     expect(plan.ports).toEqual({ server: 19074, web: 19076 });
-    expect(plan.setupCommands).toEqual([]);
+    expect(plan.setupCommands.map((command) => command.id)).toEqual([
+      "build-dev-server",
+    ]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server", "renderer"]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
       "apps/server/src/index.ts",
@@ -189,7 +194,9 @@ describe("dev runner", () => {
     const plan = JSON.parse(result.stdout) as DevRunnerPlan;
     expect(plan.mode).toBe("server");
     expect(plan.ports).toEqual({ server: 19174, web: 19176 });
-    expect(plan.setupCommands).toEqual([]);
+    expect(plan.setupCommands.map((command) => command.id)).toEqual([
+      "build-dev-server",
+    ]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server"]);
   });
 });
