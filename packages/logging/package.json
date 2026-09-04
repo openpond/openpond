@@ -1,6 +1,6 @@
 {
   "name": "@openpond/logging",
-  "version": "0.0.70",
+  "version": "0.1.0",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "private": true,
