@@ -468,6 +468,7 @@ export function LabModelVersionDetailPage({
             detail={detail.detail}
             error={detail.error}
             loading={detail.loading}
+            taskset={selectedTaskset}
           />
         ) : null}
           {activeDetailTab === "artifacts" ? (

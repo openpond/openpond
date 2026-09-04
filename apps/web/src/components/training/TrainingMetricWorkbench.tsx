@@ -8,6 +8,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { TrainingRolloutRewardChart } from "./TrainingRolloutRewardChart";
+import type { RolloutRewardGroup } from "./training-rollout-metrics";
 
 export type TrainingMetricSeries = {
   id: string;
@@ -32,24 +34,35 @@ const LIVE_METRIC_PLACEHOLDERS: TrainingMetricSeries[] = [
 
 export function TrainingMetricWorkbench({
   series,
+  rolloutGroups = null,
   loading = false,
   live = false,
 }: {
   series: TrainingMetricSeries[];
+  rolloutGroups?: RolloutRewardGroup[] | null;
   loading?: boolean;
   live?: boolean;
 }) {
   const cards = useMemo(() => {
-    const available = series.filter((candidate) => candidate.points.length);
+    const available = series.filter(
+      (candidate) =>
+        candidate.points.length &&
+        (rolloutGroups === null ||
+          (candidate.id !== "rollout.reward" && candidate.id !== "optimizer.reward")),
+    );
     if (!loading && !live) return available;
     const byId = new Map(available.map((candidate) => [candidate.id, candidate]));
     for (const placeholder of LIVE_METRIC_PLACEHOLDERS) {
+      if (
+        rolloutGroups !== null &&
+        (placeholder.id === "rollout.reward" || placeholder.id === "optimizer.reward")
+      ) continue;
       if (!byId.has(placeholder.id)) byId.set(placeholder.id, placeholder);
     }
     return [...byId.values()];
-  }, [live, loading, series]);
+  }, [live, loading, rolloutGroups, series]);
 
-  if (!cards.length) {
+  if (!cards.length && rolloutGroups === null) {
     return (
       <div className="training-run-placeholder">
         This run did not report chartable metrics.
@@ -60,6 +73,9 @@ export function TrainingMetricWorkbench({
   return (
     <section className="training-metric-workbench" aria-label="Training metrics">
       <div className="training-metric-chart-grid">
+        {rolloutGroups !== null ? (
+          <TrainingRolloutRewardChart groups={rolloutGroups} live={live} />
+        ) : null}
         {cards.map((metric) => (
           <TrainingMetricChartCard
             key={metric.id}
@@ -138,7 +154,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
       {metric.points.length ? (
         <div
           className="training-metric-card-chart"
-          aria-label={`${metric.label} by optimizer step`}
+          aria-label={`${metric.label} by training step`}
         >
           <ResponsiveContainer height="100%" width="100%">
             <LineChart data={points} margin={{ top: 18, right: 18, bottom: 4, left: 0 }}>
@@ -172,7 +188,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
                   fontSize: 11,
                 }}
                 formatter={(value) => [format(Number(value)), metric.label]}
-                labelFormatter={(step) => `Step ${step}`}
+                labelFormatter={(step) => `Training step ${step}`}
               />
               <Line
                 activeDot={{ fill: "var(--cyan, #06b6d4)", r: 5 }}

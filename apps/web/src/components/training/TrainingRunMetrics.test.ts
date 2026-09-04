@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { TrainingRunDetail } from "@openpond/contracts";
 
 import { eventSeries } from "./TrainingRunMetrics";
+import { rolloutRewardGroups } from "./training-rollout-metrics";
 
 describe("eventSeries", () => {
   it("summarizes reward spread, best reward, validity, and retries by rollout group", () => {
@@ -48,3 +49,133 @@ describe("eventSeries", () => {
     expect(series.get("attempt.retry_count")).toEqual([{ step: 0, value: 1 }]);
   });
 });
+
+describe("rolloutRewardGroups", () => {
+  it("keeps rollout groups continuous and correlates optimizer outcomes without using rollout indexes as steps", () => {
+    const detail = {
+      events: [
+        trajectoryEvent({
+          id: "trajectory-40",
+          groupId: "group-10",
+          groupIndex: 10,
+          rolloutIndex: 40,
+          policyVersion: 8,
+          reward: 0.2,
+          rewardComponents: {
+            accuracy: { score: 1, passed: true },
+            format: 0,
+          },
+        }),
+        trajectoryEvent({
+          id: "trajectory-41",
+          groupId: "group-10",
+          groupIndex: 10,
+          rolloutIndex: 41,
+          policyVersion: 8,
+          reward: 0.8,
+        }),
+        {
+          id: "skip-10",
+          type: "metric",
+          payload: {
+            metricKind: "optimizer_disposition",
+            rolloutGroupId: "group-10",
+            remotePhase: "skipped_no_signal",
+          },
+        },
+        trajectoryEvent({
+          id: "trajectory-44",
+          groupId: "group-11",
+          groupIndex: 11,
+          rolloutIndex: 44,
+          policyVersion: 8,
+          reward: 0.4,
+        }),
+        {
+          id: "update-12",
+          type: "metric",
+          payload: {
+            metricKind: "policy_optimization",
+            step: 12,
+          },
+        },
+      ],
+    } as unknown as TrainingRunDetail;
+
+    const groups = rolloutRewardGroups(detail.events, [
+      {
+        id: "task-a",
+        split: "train",
+        clusterKey: "family-a",
+        metadata: {},
+      },
+      {
+        id: "task-b",
+        split: "train",
+        clusterKey: "family-b",
+        metadata: {},
+      },
+    ] as never);
+
+    expect(groups.map((group) => group.groupIndex)).toEqual([10, 11]);
+    expect(groups[0]).toMatchObject({
+      id: "group-10",
+      mean: 0.5,
+      minimum: 0.2,
+      maximum: 0.8,
+      optimizerDisposition: "skipped",
+      optimizerStep: null,
+      taskId: "task-a",
+      taskFamily: "family-a",
+    });
+    expect(groups[0]?.trajectories[0]?.rolloutIndex).toBe(40);
+    expect(groups[0]?.trajectories[0]?.components).toEqual([
+      {
+        id: "accuracy",
+        label: "Accuracy",
+        score: 1,
+        passed: true,
+        feedback: null,
+      },
+      {
+        id: "format",
+        label: "Format",
+        score: 0,
+        passed: null,
+        feedback: null,
+      },
+    ]);
+    expect(groups[1]).toMatchObject({
+      id: "group-11",
+      optimizerDisposition: "applied",
+      optimizerStep: 12,
+      taskId: "task-b",
+      taskFamily: "family-b",
+    });
+  });
+});
+
+function trajectoryEvent(input: {
+  id: string;
+  groupId: string;
+  groupIndex: number;
+  rolloutIndex: number;
+  policyVersion: number;
+  reward: number;
+  rewardComponents?: Record<string, unknown>;
+}) {
+  return {
+    id: input.id,
+    type: "metric",
+    payload: {
+      metricKind: "rollout_trajectory",
+      rolloutGroupId: input.groupId,
+      rolloutGroupIndex: input.groupIndex,
+      rolloutIndex: input.rolloutIndex,
+      policyVersion: input.policyVersion,
+      reward: input.reward,
+      rewardEligible: true,
+      rewardComponents: input.rewardComponents,
+    },
+  };
+}

@@ -1,8 +1,9 @@
 import { useMemo } from "react";
-import type { PolicyOptimizationMetric, SftStepMetric, TrainingRunDetail } from "@openpond/contracts";
+import type { PolicyOptimizationMetric, SftStepMetric, Taskset, TrainingRunDetail } from "@openpond/contracts";
 
 import { useErrorToast } from "../../app/AppToastContext";
 import { TrainingMetricWorkbench, type TrainingMetricSeries } from "./TrainingMetricWorkbench";
+import { rolloutRewardGroups } from "./training-rollout-metrics";
 
 type SeriesDefinition<T> = { key: keyof T; id: string; label: string; format?: TrainingMetricSeries["format"] };
 
@@ -37,22 +38,30 @@ const STEP_SERIES: Array<SeriesDefinition<SftStepMetric>> = [
   { key: "entropy", id: "optimizer.entropy", label: "Entropy" },
 ];
 
-export function TrainingRunMetrics({ detail, loading, error }: { detail: TrainingRunDetail | null; loading: boolean; error: string | null }) {
+export function TrainingRunMetrics({ detail, loading, error, taskset = null }: { detail: TrainingRunDetail | null; loading: boolean; error: string | null; taskset?: Taskset | null }) {
   useErrorToast(error, { prefix: "Training metrics" });
   const series = useMemo(() => detail ? metricSeries(detail) : [], [detail]);
+  const groups = useMemo(() => {
+    if (!detail) return null;
+    const resolved = rolloutRewardGroups(detail.events, taskset?.tasks);
+    return resolved.length || trainingMethod(detail) === "grpo" ? resolved : null;
+  }, [detail, taskset]);
   if (error && !detail) return <div className="training-run-placeholder">Training metrics are unavailable.</div>;
   if (!detail && !loading) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
   const live = detail
     ? ["queued", "starting", "running", "reconciling"].includes(detail.job.status)
     : false;
-  return <TrainingMetricWorkbench live={live} loading={loading && !detail} series={series} />;
+  return <TrainingMetricWorkbench live={live} loading={loading && !detail} rolloutGroups={groups} series={series} />;
 }
 
 export function metricSeries(detail: TrainingRunDetail): TrainingMetricSeries[] {
-  const committedUpdates = detail.job.metadata.trainingMethod === "grpo"
-    && typeof detail.job.metadata.optimizerUpdatesObserved === "number"
-      ? Math.max(0, detail.job.metadata.optimizerUpdatesObserved)
-      : null;
+  const rolloutProgress = record(detail.job.metadata.rolloutProgress);
+  const observedUpdates =
+    finiteNumber(detail.job.metadata.optimizerUpdatesObserved)
+    ?? finiteNumber(rolloutProgress.optimizerUpdatesApplied);
+  const committedUpdates = trainingMethod(detail) === "grpo" && observedUpdates !== null
+    ? Math.max(0, observedUpdates)
+    : null;
   const stepRows = uniqueByStep(detail.stepMetrics).filter((row) =>
     committedUpdates === null || row.step <= committedUpdates,
   );
@@ -145,3 +154,16 @@ export function eventSeries(events: TrainingRunDetail["events"]): TrainingMetric
 
 function finiteNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 function humanizeMetric(value: string) { return value.replaceAll(/[._]/g, " ").replace(/^./, (character) => character.toUpperCase()); }
+
+function trainingMethod(detail: TrainingRunDetail): string | null {
+  const direct = detail.job.metadata.trainingMethod;
+  if (typeof direct === "string") return direct;
+  const sourceSnapshot = record(detail.job.metadata.sourceSnapshot);
+  return typeof sourceSnapshot.method === "string" ? sourceSnapshot.method : null;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
