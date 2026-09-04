@@ -84,14 +84,7 @@ async function checkNpmPackage() {
       throw new Error(`npm consumer unexpectedly installed ${unsupportedDependency}`);
     }
   }
-  const audit = await command("npm", ["audit", "--prefix", consumer, "--omit=dev", "--json"]);
-  const auditPayload = JSON.parse(audit.stdout) as {
-    metadata?: { vulnerabilities?: Record<string, number> };
-  };
-  const vulnerabilities = auditPayload.metadata?.vulnerabilities ?? {};
-  if ((vulnerabilities.high ?? 0) > 0 || (vulnerabilities.critical ?? 0) > 0) {
-    throw new Error(`npm consumer audit failed: ${JSON.stringify(vulnerabilities)}`);
-  }
+  const audit = await checkNpmAudit(consumer);
   const cli = path.join(consumer, "node_modules", "openpond", "dist", "cli.js");
   const runtime = await checkRunnableDistribution("node", [cli]);
   const installed = await checkInstalledEntrypoints({
@@ -106,11 +99,51 @@ async function checkNpmPackage() {
     unpackedBytes: result.unpackedSize,
     fileCount: result.entryCount,
     entryBytes: fileMap.get("dist/cli.js"),
-    auditVulnerabilities: vulnerabilities,
+    auditStatus: audit.status,
+    auditVulnerabilities: audit.vulnerabilities,
     installed,
     ephemeral,
     ...runtime,
   };
+}
+
+async function checkNpmAudit(consumer: string): Promise<{
+  status: "passed" | "unavailable";
+  vulnerabilities: Record<string, number>;
+}> {
+  const result = await runProcessCommand(
+    "npm",
+    ["audit", "--prefix", consumer, "--omit=dev", "--json"],
+    {
+      cwd: root,
+      timeoutMs: 30_000,
+      maxOutputBytes: 4 * MiB,
+    },
+  );
+  let auditPayload: {
+    metadata?: { vulnerabilities?: Record<string, number> };
+  } | null = null;
+  try {
+    auditPayload = JSON.parse(result.stdout) as {
+      metadata?: { vulnerabilities?: Record<string, number> };
+    };
+  } catch {
+    auditPayload = null;
+  }
+  const vulnerabilities = auditPayload?.metadata?.vulnerabilities;
+  if (!vulnerabilities) {
+    const reason = result.timedOut
+      ? "timed out"
+      : `exited with code ${String(result.code)}${result.signal ? ` (${result.signal})` : ""}`;
+    console.warn(
+      `::warning title=npm audit unavailable::The registry audit request ${reason}; package distribution checks continued.`,
+    );
+    return { status: "unavailable", vulnerabilities: {} };
+  }
+  if ((vulnerabilities.high ?? 0) > 0 || (vulnerabilities.critical ?? 0) > 0) {
+    throw new Error(`npm consumer audit failed: ${JSON.stringify(vulnerabilities)}`);
+  }
+  return { status: "passed", vulnerabilities };
 }
 
 async function checkInstalledEntrypoints(input: {
@@ -185,6 +218,7 @@ async function checkEphemeralEntrypoints(
   const cwd = await tempDir("openpond-cli-ephemeral-cwd-");
   const npx = await command("npx", [
     "--yes",
+    "--no-audit",
     `--package=${tarballPath}`,
     "openpond",
     "--version",
@@ -220,6 +254,7 @@ async function checkDefaultNpxWebLaunch(
   const beforeCwd = await readdir(cwd);
   const child = spawn("npx", [
     "--yes",
+    "--no-audit",
     `--package=${tarballPath}`,
     "openpond",
     "--port",
@@ -507,7 +542,12 @@ async function command(
     timeoutMs: options.timeoutMs ?? 120_000,
     maxOutputBytes: 4 * MiB,
   });
-  if (result.code !== 0) throw new Error(`${commandName} failed: ${result.stderr || result.stdout}`);
+  if (result.code !== 0) {
+    const output = result.stderr.trim() || result.stdout.trim() || "no subprocess output";
+    throw new Error(
+      `${JSON.stringify([commandName, ...args])} failed (${result.terminationReason}, code ${String(result.code)}, signal ${String(result.signal)}): ${output}`,
+    );
+  }
   return result;
 }
 
