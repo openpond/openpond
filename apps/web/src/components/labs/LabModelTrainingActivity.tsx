@@ -101,9 +101,6 @@ export function TrainingEventLog({
       <div className="training-event-log-toolbar">
         <div>
           <strong>Activity log</strong>
-          <span>
-            {visibleEvents.length.toLocaleString()} of {events.length.toLocaleString()} events
-          </span>
         </div>
         <div className="training-event-filter" ref={filterRef}>
           <button
