@@ -1331,6 +1331,7 @@ export function MainPane({
       actionCatalog={composerActionCatalog}
       createImproveActions={createImproveActions}
       contextCompaction={appPreferences.contextCompaction}
+      steerActiveResponses={appPreferences.steerActiveResponses}
       busy={busy}
       codexPermissionMode={codexPermissionMode}
       codexReasoningEffort={codexReasoningEffort}
@@ -1784,6 +1785,7 @@ export function MainPane({
                 }
                 busy={turnRunning}
                 running={turnRunning}
+                steerActiveResponses={appPreferences.steerActiveResponses}
                 submissionScopeKey={composerSubmissionScopeKey}
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey
@@ -1877,6 +1879,7 @@ export function MainPane({
                 }
                 busy={turnRunning}
                 running={turnRunning}
+                steerActiveResponses={appPreferences.steerActiveResponses}
                 submissionScopeKey={composerSubmissionScopeKey}
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey

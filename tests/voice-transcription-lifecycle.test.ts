@@ -77,6 +77,26 @@ describe("voice transcription lifecycle", () => {
     expect(submitted).toBe(true);
   });
 
+  test("appends a submitted transcript after all typed text", async () => {
+    const setOriginDraft = vi.fn();
+
+    const delivery = await deliverVoiceTranscript({
+      appendToEnd: true,
+      currentScopeKey: "new-task",
+      cursorIndex: 0,
+      originScopeKey: "new-task",
+      prompt: "Typed before recording",
+      setOriginDraft,
+      submitFromOrigin: vi.fn(async () => true),
+      transcript: "dictated after it",
+    });
+
+    expect(delivery).toBe("drafted");
+    expect(setOriginDraft).toHaveBeenCalledWith(
+      "Typed before recording dictated after it",
+    );
+  });
+
   test("submits from the originating chat after navigation and clears its draft", async () => {
     const draftStore = createComposerDraftStore({
       selectedAppId: null,

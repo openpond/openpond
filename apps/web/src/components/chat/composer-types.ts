@@ -50,6 +50,7 @@ export type ComposerProps = {
   busy: boolean;
   running?: boolean;
   interruptRunningTurnBeforeSteer?: boolean;
+  steerActiveResponses?: boolean;
   submissionScopeKey?: string;
   getCurrentSubmissionScopeKey?: () => string;
   voiceInputChannelKey?: string;

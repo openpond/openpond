@@ -314,6 +314,7 @@ export const UpdateAppPreferencesRequestSchema = z.object({
   defaultNewProjectDirectory: z.string().trim().max(4096).optional(),
   defaultTeamId: z.string().trim().max(191).nullable().optional(),
   advancedWorkspaceControls: z.boolean().optional(),
+  steerActiveResponses: z.boolean().optional(),
   contextCompaction: ContextCompactionPreferencesSchema.optional(),
   training: TrainingPreferencesSchema.optional(),
   sidebarWidth: z.number().int().min(244).max(560).optional(),

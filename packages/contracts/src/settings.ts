@@ -187,6 +187,7 @@ export const AppPreferencesSchema = z.object({
   defaultNewProjectDirectory: z.string().trim().max(4096).default(""),
   defaultTeamId: z.string().trim().max(191).nullable().default(null),
   advancedWorkspaceControls: z.boolean().default(false),
+  steerActiveResponses: z.boolean().default(true),
   contextCompaction: ContextCompactionPreferencesSchema.optional().default(() =>
     ContextCompactionPreferencesSchema.parse({}),
   ),

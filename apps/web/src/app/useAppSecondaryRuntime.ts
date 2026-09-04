@@ -692,6 +692,8 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     bindTrainingSession: bindTrainingModelChatSession,
     composerDraftStore,
     onSessionCreated: (session) => {
+      setSelectedSessionId(session.id);
+      setView("chat");
       navigateDesktopRoute({ kind: "chat", sessionId: session.id });
       setDraftSubagentDelegationMode(null);
     },

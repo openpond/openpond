@@ -267,6 +267,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   defaultNewProjectDirectory: "",
   defaultTeamId: null,
   advancedWorkspaceControls: false,
+  steerActiveResponses: true,
   contextCompaction: {
     autoEnabled: true,
     triggerPercent: 85,
@@ -760,6 +761,8 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
     defaultTeamId: preferences?.defaultTeamId?.trim() || null,
     advancedWorkspaceControls:
       preferences?.advancedWorkspaceControls ?? DEFAULT_APP_PREFERENCES.advancedWorkspaceControls,
+    steerActiveResponses:
+      preferences?.steerActiveResponses ?? DEFAULT_APP_PREFERENCES.steerActiveResponses,
     contextCompaction: {
       autoEnabled:
         preferences?.contextCompaction?.autoEnabled ??

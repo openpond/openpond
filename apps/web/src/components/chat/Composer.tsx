@@ -167,6 +167,7 @@ export function Composer({
   busy,
   running = busy,
   interruptRunningTurnBeforeSteer = true,
+  steerActiveResponses = false,
   submissionScopeKey = "default",
   getCurrentSubmissionScopeKey,
   voiceInputChannelKey = submissionScopeKey,
@@ -1316,9 +1317,111 @@ export function Composer({
     });
   }
 
+  async function submitImmediateSteer(promptOverride?: string): Promise<boolean> {
+    const value = (
+      promptOverride ?? inputRef.current?.getPrompt() ?? prompt
+    ).trim();
+    if (!running || !value) return false;
+    if (attachments.length > 0 || selectedAction || selectedCommand) {
+      showToast(
+        "Steering supports a plain-text instruction. Remove files or actions before sending it.",
+        "info",
+      );
+      return false;
+    }
+    const submissionScope = submissionScopeKey;
+    if (!beginSubmissionForScope(submissionScope)) return false;
+    setAttachmentError(null);
+    try {
+      if (interruptRunningTurnBeforeSteer) {
+        const stopped = await onStop(STEER_INTERRUPTION_REASON);
+        if (stopped === false) return false;
+      }
+      const sent = await onSubmit([], null, null, {
+        preservePrompt: true,
+        promptOverride: value,
+        turnMetadata: { interactionKind: "steer" },
+      });
+      if (sent) clearComposerPrompt();
+      return sent;
+    } catch (error) {
+      setAttachmentError(
+        error instanceof Error ? error.message : String(error),
+      );
+      return false;
+    } finally {
+      finishSubmissionForScope(submissionScope);
+    }
+  }
+
+  async function submitComposerPayload(options: {
+    preservePrompt?: boolean;
+    promptOverride?: string;
+  } = {}): Promise<boolean> {
+    const submissionScope = submissionScopeKey;
+    if (!beginSubmissionForScope(submissionScope)) return false;
+    setAddMenuOpen(false);
+    setAttachmentError(null);
+    const stagedAttachments = stageAttachmentsForSubmit();
+    try {
+      setSerializingAttachmentScopeKey(
+        stagedAttachments.length > 0 ? submissionScope : null,
+      );
+      let payloads: ChatAttachment[];
+      try {
+        payloads = await Promise.all(
+          stagedAttachments.map(readComposerAttachmentPayload),
+        );
+      } finally {
+        clearSerializingAttachmentsForScope(submissionScope);
+      }
+      const selectedActionPromptOverride =
+        selectedAction && selectedDisplayPrompt && !prompt.trim()
+          ? selectedDisplayPrompt
+          : undefined;
+      const promptOverride =
+        options.promptOverride ?? selectedActionPromptOverride;
+      const sent = await onSubmit(
+        payloads,
+        selectedAction,
+        selectedCommand,
+        selectedDisplayPrompt || promptOverride || options.preservePrompt
+          ? {
+              ...(selectedDisplayPrompt
+                ? { displayPrompt: selectedDisplayPrompt }
+                : {}),
+              ...(promptOverride !== undefined ? { promptOverride } : {}),
+              ...(options.preservePrompt ? { preservePrompt: true } : {}),
+            }
+          : undefined,
+      );
+      settleStagedAttachments(
+        stagedAttachments,
+        sent ? "dispose" : "restore",
+      );
+      if (
+        sent &&
+        !shouldRetainOpenPondProfileActionAfterSubmit(selectedAction)
+      ) {
+        clearSelectedInvocation();
+      }
+      return sent;
+    } catch (error) {
+      settleStagedAttachments(stagedAttachments, "restore");
+      setAttachmentError(
+        error instanceof Error ? error.message : String(error),
+      );
+      return false;
+    } finally {
+      finishSubmissionForScope(submissionScope);
+      clearSerializingAttachmentsForScope(submissionScope);
+    }
+  }
+
   async function submitComposer() {
     if (running) {
-      stageCurrentSteerDraft();
+      if (steerActiveResponses) await submitImmediateSteer();
+      else stageCurrentSteerDraft();
       return;
     }
     if (isSubmittingCurrentScope()) return;
@@ -1338,63 +1441,7 @@ export function Composer({
       return;
     }
     if (sendDisabled) return;
-    const submissionScope = submissionScopeKey;
-    if (!beginSubmissionForScope(submissionScope)) return;
-    setAddMenuOpen(false);
-    setAttachmentError(null);
-    try {
-      const stagedAttachments = stageAttachmentsForSubmit();
-      try {
-        setSerializingAttachmentScopeKey(
-          stagedAttachments.length > 0 ? submissionScope : null
-        );
-        let payloads: ChatAttachment[];
-        try {
-          payloads = await Promise.all(
-            stagedAttachments.map(readComposerAttachmentPayload)
-          );
-        } finally {
-          clearSerializingAttachmentsForScope(submissionScope);
-        }
-        const promptOverride =
-          selectedAction && selectedDisplayPrompt && !prompt.trim()
-            ? selectedDisplayPrompt
-            : undefined;
-        const sent = await onSubmit(
-          payloads,
-          selectedAction,
-          selectedCommand,
-          selectedDisplayPrompt || promptOverride
-            ? {
-                ...(selectedDisplayPrompt
-                  ? { displayPrompt: selectedDisplayPrompt }
-                  : {}),
-                ...(promptOverride ? { promptOverride } : {}),
-              }
-            : undefined
-        );
-        settleStagedAttachments(
-          stagedAttachments,
-          sent ? "dispose" : "restore"
-        );
-        if (
-          sent &&
-          !shouldRetainOpenPondProfileActionAfterSubmit(selectedAction)
-        ) {
-          clearSelectedInvocation();
-        }
-      } catch (submitError) {
-        settleStagedAttachments(stagedAttachments, "restore");
-        throw submitError;
-      }
-    } catch (error) {
-      setAttachmentError(
-        error instanceof Error ? error.message : String(error)
-      );
-    } finally {
-      finishSubmissionForScope(submissionScope);
-      clearSerializingAttachmentsForScope(submissionScope);
-    }
+    await submitComposerPayload();
   }
 
   function submitComposerOrVoice() {
@@ -1441,15 +1488,20 @@ export function Composer({
       0,
       Math.min(cursorIndexRef.current, currentPrompt.length),
     );
-    const next = insertVoiceTranscript(currentPrompt, text, cursor);
+    const next = insertVoiceTranscript(
+      currentPrompt,
+      text,
+      options.submit ? currentPrompt.length : cursor,
+    );
     const delivery = await deliverVoiceTranscript({
+      appendToEnd: options.submit,
       currentScopeKey: getCurrentSubmissionScopeKey?.() ?? submissionScopeKey,
       cursorIndex: cursor,
       originScopeKey: submissionScopeKey,
       prompt: currentPrompt,
       setOriginDraft: (value) => onPromptChange(value),
       submitFromOrigin: (promptOverride) =>
-        onSubmit([], null, null, {
+        submitComposerPayload({
           preservePrompt: true,
           promptOverride,
         }),
@@ -1471,20 +1523,11 @@ export function Composer({
     }
     if (options.submit) {
       if (running) {
-        stageCurrentSteerDraft(next.value);
+        if (steerActiveResponses) await submitImmediateSteer(next.value);
+        else stageCurrentSteerDraft(next.value);
         return;
       }
-      const submissionScope = submissionScopeKey;
-      if (!beginSubmissionForScope(submissionScope)) return;
-      try {
-        await onSubmit([], null, null, { promptOverride: next.value });
-      } catch (error) {
-        setAttachmentError(
-          error instanceof Error ? error.message : String(error),
-        );
-      } finally {
-        finishSubmissionForScope(submissionScope);
-      }
+      await submitComposerPayload({ promptOverride: next.value });
       return;
     }
     setCursorIndex(next.cursorIndex);

@@ -18,6 +18,7 @@ describe("app preferences", () => {
       subagents: {
         delegationMode: "manual",
       },
+      steerActiveResponses: true,
     });
     expect(normalizeAppPreferences({
       defaultChatProvider: "openpond",
@@ -49,8 +50,14 @@ describe("app preferences", () => {
   });
 
   test("parses preference patches without defaulting omitted fields", () => {
-    const patch = UpdateAppPreferencesRequestSchema.parse({ openPondCommandAccessMode: "full-access" });
-    expect(patch).toEqual({ openPondCommandAccessMode: "full-access" });
+    const patch = UpdateAppPreferencesRequestSchema.parse({
+      openPondCommandAccessMode: "full-access",
+      steerActiveResponses: false,
+    });
+    expect(patch).toEqual({
+      openPondCommandAccessMode: "full-access",
+      steerActiveResponses: false,
+    });
     expect(patch).not.toHaveProperty("subagents");
   });
 

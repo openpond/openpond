@@ -53,6 +53,7 @@ export function RightChatPanelStack({
   actionCatalog = [],
   createImproveActions,
   contextCompaction,
+  steerActiveResponses,
   busy,
   codexPermissionMode,
   codexReasoningEffort,
@@ -101,6 +102,7 @@ export function RightChatPanelStack({
   actionCatalog?: SandboxActionCatalogEntry[];
   createImproveActions: ComposerCreateImproveActions;
   contextCompaction: AppPreferences["contextCompaction"];
+  steerActiveResponses: boolean;
   busy: boolean;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
@@ -377,6 +379,7 @@ export function RightChatPanelStack({
             busy={busy}
             createImproveActions={createImproveActions}
             contextCompaction={contextCompaction}
+            steerActiveResponses={steerActiveResponses}
             codexPermissionMode={codexPermissionMode}
             codexReasoningEffort={codexReasoningEffort}
             openPondCommandAccessMode={openPondCommandAccessMode}

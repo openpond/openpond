@@ -3,6 +3,7 @@ import { insertVoiceTranscript } from "./voice-text";
 export type VoiceTranscriptDelivery = "drafted" | "submitted" | "retained";
 
 export async function deliverVoiceTranscript({
+  appendToEnd = false,
   currentScopeKey,
   cursorIndex,
   originScopeKey,
@@ -11,6 +12,7 @@ export async function deliverVoiceTranscript({
   submitFromOrigin,
   transcript,
 }: {
+  appendToEnd?: boolean;
   currentScopeKey: string;
   cursorIndex: number;
   originScopeKey: string;
@@ -19,7 +21,11 @@ export async function deliverVoiceTranscript({
   submitFromOrigin: (prompt: string) => Promise<boolean>;
   transcript: string;
 }): Promise<VoiceTranscriptDelivery> {
-  const next = insertVoiceTranscript(prompt, transcript, cursorIndex);
+  const next = insertVoiceTranscript(
+    prompt,
+    transcript,
+    appendToEnd ? prompt.length : cursorIndex,
+  );
   setOriginDraft(next.value);
   if (currentScopeKey === originScopeKey) return "drafted";
 
