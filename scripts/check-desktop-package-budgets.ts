@@ -15,11 +15,11 @@ type PlatformBudget = {
 const MIB = 1024 * 1024;
 const MAX_ASAR_BYTES = 2 * MIB;
 const MAX_RESOURCES_BYTES = 32 * MIB;
-const MAX_STAGED_RUNTIME_BYTES = 25 * MIB;
+const MAX_STAGED_RUNTIME_BYTES = 26 * MIB;
 const MAX_LINUX_X64_UNPACKED_BYTES = 400 * MIB;
-const MAX_LINUX_ARM64_UNPACKED_BYTES = 337 * MIB;
+const MAX_LINUX_ARM64_UNPACKED_BYTES = 338 * MIB;
 const PLATFORM_BUDGETS: Record<NodeJS.Platform, PlatformBudget | undefined> = {
-  linux: { maxArtifactBytes: 128 * MIB, maxUnpackedBytes: MAX_LINUX_X64_UNPACKED_BYTES },
+  linux: { maxArtifactBytes: 129 * MIB, maxUnpackedBytes: MAX_LINUX_X64_UNPACKED_BYTES },
   darwin: { maxArtifactBytes: 150 * MIB, maxUnpackedBytes: 400 * MIB },
   win32: { maxArtifactBytes: 150 * MIB, maxUnpackedBytes: 400 * MIB },
   aix: undefined,

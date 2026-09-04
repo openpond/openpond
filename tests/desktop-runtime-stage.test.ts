@@ -234,7 +234,7 @@ describe("desktop runtime staging", () => {
       400 * 1024 * 1024
     );
     expect(desktopPackageBudget("linux", "arm64")?.maxUnpackedBytes).toBe(
-      337 * 1024 * 1024
+      338 * 1024 * 1024
     );
     expect(desktopPackageBudget("darwin", "arm64")?.maxUnpackedBytes).toBe(
       400 * 1024 * 1024

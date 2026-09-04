@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import { join } from "node:path";
 
@@ -61,6 +61,7 @@ describe("CLI installed-package smoke", () => {
 
   test("runs the lean embedded app-server companion over JSONL", async () => {
     const cwd = await mkdtemp(join(os.tmpdir(), "openpond-installed-app-server-cwd-"));
+    const expectedCwd = await realpath(cwd);
     const storeDir = await mkdtemp(join(os.tmpdir(), "openpond-installed-app-server-state-"));
     try {
       const stdin = [
@@ -127,7 +128,7 @@ describe("CLI installed-package smoke", () => {
         expect.objectContaining({
           id: 4,
           result: {
-            thread: expect.objectContaining({ cwd }),
+            thread: expect.objectContaining({ cwd: expectedCwd }),
           },
         }),
       ]));
