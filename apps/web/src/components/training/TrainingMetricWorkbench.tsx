@@ -18,6 +18,18 @@ export type TrainingMetricSeries = {
   format?: "number" | "percent" | "scientific";
 };
 
+export type TrainingRolloutProgress = {
+  completedGroups: number | null;
+  targetGroups: number | null;
+};
+
+type MetricDisplay = "raw" | "smoothed";
+
+const EMPTY_ROLLOUT_PROGRESS: TrainingRolloutProgress = {
+  completedGroups: null,
+  targetGroups: null,
+};
+
 const LIVE_METRIC_PLACEHOLDERS: TrainingMetricSeries[] = [
   { id: "rollout.reward", label: "Rollout reward", points: [] },
   { id: "optimizer.reward", label: "Mean reward", points: [] },
@@ -35,14 +47,17 @@ const LIVE_METRIC_PLACEHOLDERS: TrainingMetricSeries[] = [
 export function TrainingMetricWorkbench({
   series,
   rolloutGroups = null,
+  rolloutProgress = EMPTY_ROLLOUT_PROGRESS,
   loading = false,
   live = false,
 }: {
   series: TrainingMetricSeries[];
   rolloutGroups?: RolloutRewardGroup[] | null;
+  rolloutProgress?: TrainingRolloutProgress;
   loading?: boolean;
   live?: boolean;
 }) {
+  const [display, setDisplay] = useState<MetricDisplay>("raw");
   const cards = useMemo(() => {
     const available = series.filter(
       (candidate) =>
@@ -61,6 +76,7 @@ export function TrainingMetricWorkbench({
     }
     return [...byId.values()];
   }, [live, loading, rolloutGroups, series]);
+  const canSmooth = cards.some((metric) => metric.points.length > 1);
 
   if (!cards.length && rolloutGroups === null) {
     return (
@@ -72,12 +88,32 @@ export function TrainingMetricWorkbench({
 
   return (
     <section className="training-metric-workbench" aria-label="Training metrics">
+      {canSmooth ? (
+        <div className="training-metric-workbench-controls">
+          <label>
+            <span>Display</span>
+            <select
+              aria-label="Metric display"
+              onChange={(event) => setDisplay(event.currentTarget.value as MetricDisplay)}
+              value={display}
+            >
+              <option value="raw">Raw values</option>
+              <option value="smoothed">Smoothed trend</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
       <div className="training-metric-chart-grid">
         {rolloutGroups !== null ? (
-          <TrainingRolloutRewardChart groups={rolloutGroups} live={live} />
+          <TrainingRolloutRewardChart
+            groups={rolloutGroups}
+            live={live}
+            progress={rolloutProgress}
+          />
         ) : null}
         {cards.map((metric) => (
           <TrainingMetricChartCard
+            display={display}
             key={metric.id}
             loading={loading && !metric.points.length}
             metric={metric}
@@ -91,17 +127,18 @@ export function TrainingMetricWorkbench({
 
 const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
   metric,
+  display,
   loading,
   pending,
 }: {
   metric: TrainingMetricSeries;
+  display: MetricDisplay;
   loading: boolean;
   pending: boolean;
 }) {
-  const [smoothed, setSmoothed] = useState(false);
   const points = useMemo(
-    () => (smoothed ? movingAverage(metric.points, 3) : metric.points),
-    [metric.points, smoothed],
+    () => (display === "smoothed" ? movingAverage(metric.points, 3) : metric.points),
+    [display, metric.points],
   );
   const stats = useMemo(
     () => (metric.points.length ? summarize(metric.points.map((point) => point.value)) : null),
@@ -124,30 +161,6 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
         </div>
         <div className="training-metric-chart-header-actions">
           {stats ? <strong>{format(stats.latest)}</strong> : null}
-          <div
-            className="training-metric-view-toggle"
-            aria-label={`${metric.label} trend`}
-            role="group"
-          >
-            <button
-              aria-pressed={!smoothed}
-              className={!smoothed ? "active" : undefined}
-              disabled={metric.points.length < 2}
-              type="button"
-              onClick={() => setSmoothed(false)}
-            >
-              Raw
-            </button>
-            <button
-              aria-pressed={smoothed}
-              className={smoothed ? "active" : undefined}
-              disabled={metric.points.length < 2}
-              type="button"
-              onClick={() => setSmoothed(true)}
-            >
-              Smoothed
-            </button>
-          </div>
         </div>
       </header>
 
@@ -181,14 +194,15 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
                 width={66}
               />
               <Tooltip
-                contentStyle={{
-                  background: "var(--panel)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 8,
-                  fontSize: 11,
-                }}
-                formatter={(value) => [format(Number(value)), metric.label]}
-                labelFormatter={(step) => `Training step ${step}`}
+                content={(props) => (
+                  <MetricChartTooltip
+                    active={props.active}
+                    format={format}
+                    label={metric.label}
+                    payload={props.payload}
+                  />
+                )}
+                isAnimationActive={false}
               />
               <Line
                 activeDot={{ fill: "var(--cyan, #06b6d4)", r: 5 }}
@@ -224,6 +238,33 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
     </article>
   );
 });
+
+function MetricChartTooltip({
+  active,
+  payload,
+  label: metricLabel,
+  format,
+}: {
+  active: boolean;
+  payload: ReadonlyArray<{ payload?: unknown }>;
+  label: string;
+  format: (value: number) => string;
+}) {
+  if (!active || !payload.length) return null;
+  const point = payload[0]?.payload as { step?: unknown; value?: unknown } | undefined;
+  if (typeof point?.value !== "number") return null;
+  return (
+    <div className="training-chart-tooltip">
+      <strong>Training step {String(point.step ?? "—")}</strong>
+      <dl>
+        <div>
+          <dt>{metricLabel}</dt>
+          <dd>{format(point.value)}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
 
 function MetricStat({ label, value }: { label: string; value: string }) {
   return (

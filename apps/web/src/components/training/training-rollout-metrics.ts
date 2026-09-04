@@ -27,6 +27,7 @@ export type RolloutRewardGroup = {
   id: string;
   groupIndex: number;
   taskId: string | null;
+  taskLabel: string | null;
   taskFamily: string | null;
   policyVersion: number | null;
   optimizerDisposition: "applied" | "skipped" | "pending";
@@ -47,6 +48,9 @@ export function rolloutRewardGroups(
   tasks: Taskset["tasks"] = [],
 ): RolloutRewardGroup[] {
   const trainingTasks = tasks.filter((task) => task.split === "train");
+  const trainingTaskById = new Map(
+    trainingTasks.map((task) => [task.id, task] as const),
+  );
   const groups = new Map<string, MutableGroup>();
   const skipped = new Set<string>();
   const directlyApplied = new Map<string, number | null>();
@@ -59,9 +63,14 @@ export function rolloutRewardGroups(
       const id = stringValue(payload.rolloutGroupId) ?? "group-0";
       const existing = groups.get(id);
       const groupIndex = integer(payload.rolloutGroupIndex) ?? existing?.groupIndex ?? groups.size;
-      const task = trainingTasks.length
-        ? trainingTasks[groupIndex % trainingTasks.length] ?? null
-        : null;
+      const reportedTaskId = stringValue(payload.taskId);
+      const task =
+        (reportedTaskId
+          ? trainingTaskById.get(reportedTaskId)
+          : null) ??
+        (trainingTasks.length
+          ? trainingTasks[groupIndex % trainingTasks.length] ?? null
+          : null);
       const taskMetadata = record(task?.metadata);
       const trajectory: RolloutRewardTrajectory = {
         id: event.id,
@@ -81,7 +90,8 @@ export function rolloutRewardGroups(
       groups.set(id, {
         id,
         groupIndex,
-        taskId: stringValue(payload.taskId) ?? task?.id ?? existing?.taskId ?? null,
+        taskId: reportedTaskId ?? task?.id ?? existing?.taskId ?? null,
+        taskLabel: taskLabel(task) ?? existing?.taskLabel ?? null,
         taskFamily:
           stringValue(payload.taskFamily) ??
           stringValue(payload.scenarioFamily) ??
@@ -209,4 +219,22 @@ function humanize(value: string): string {
   return value
     .replaceAll(/[._-]+/g, " ")
     .replace(/^./, (character) => character.toUpperCase());
+}
+
+function taskLabel(task: Taskset["tasks"][number] | null): string | null {
+  if (!task) return null;
+  const input = record(task.input);
+  const source = [
+    input.title,
+    input.name,
+    input.prompt,
+    input.instruction,
+    input.question,
+    input.query,
+  ].find((value): value is string => typeof value === "string" && Boolean(value.trim()));
+  if (!source) return null;
+  const firstParagraph = source.trim().split(/\n\s*\n/, 1)[0]!.replaceAll(/\s+/g, " ");
+  return firstParagraph.length > 110
+    ? `${firstParagraph.slice(0, 107).trimEnd()}…`
+    : firstParagraph;
 }

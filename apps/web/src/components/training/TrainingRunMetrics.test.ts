@@ -61,6 +61,7 @@ describe("rolloutRewardGroups", () => {
           rolloutIndex: 40,
           policyVersion: 8,
           reward: 0.2,
+          taskId: "task-b",
           rewardComponents: {
             accuracy: { score: 1, passed: true },
             format: 0,
@@ -73,6 +74,7 @@ describe("rolloutRewardGroups", () => {
           rolloutIndex: 41,
           policyVersion: 8,
           reward: 0.8,
+          taskId: "task-b",
         }),
         {
           id: "skip-10",
@@ -107,12 +109,14 @@ describe("rolloutRewardGroups", () => {
         id: "task-a",
         split: "train",
         clusterKey: "family-a",
+        input: { prompt: "Inspect the first training scenario." },
         metadata: {},
       },
       {
         id: "task-b",
         split: "train",
         clusterKey: "family-b",
+        input: { prompt: "Resolve the reported customer return request.\n\nCustomer identity follows." },
         metadata: {},
       },
     ] as never);
@@ -125,8 +129,9 @@ describe("rolloutRewardGroups", () => {
       maximum: 0.8,
       optimizerDisposition: "skipped",
       optimizerStep: null,
-      taskId: "task-a",
-      taskFamily: "family-a",
+      taskId: "task-b",
+      taskLabel: "Resolve the reported customer return request.",
+      taskFamily: "family-b",
     });
     expect(groups[0]?.trajectories[0]?.rolloutIndex).toBe(40);
     expect(groups[0]?.trajectories[0]?.components).toEqual([
@@ -162,6 +167,7 @@ function trajectoryEvent(input: {
   rolloutIndex: number;
   policyVersion: number;
   reward: number;
+  taskId?: string;
   rewardComponents?: Record<string, unknown>;
 }) {
   return {
@@ -173,6 +179,7 @@ function trajectoryEvent(input: {
       rolloutGroupIndex: input.groupIndex,
       rolloutIndex: input.rolloutIndex,
       policyVersion: input.policyVersion,
+      taskId: input.taskId,
       reward: input.reward,
       rewardEligible: true,
       rewardComponents: input.rewardComponents,

@@ -46,12 +46,27 @@ export function TrainingRunMetrics({ detail, loading, error, taskset = null }: {
     const resolved = rolloutRewardGroups(detail.events, taskset?.tasks);
     return resolved.length || trainingMethod(detail) === "grpo" ? resolved : null;
   }, [detail, taskset]);
+  const rolloutProgress = useMemo(() => {
+    const progress = record(detail?.job.metadata.rolloutProgress);
+    return {
+      completedGroups: nonnegativeInteger(progress.groupsCompleted),
+      targetGroups: nonnegativeInteger(progress.groupsTarget),
+    };
+  }, [detail]);
   if (error && !detail) return <div className="training-run-placeholder">Training metrics are unavailable.</div>;
   if (!detail && !loading) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
   const live = detail
     ? ["queued", "starting", "running", "reconciling"].includes(detail.job.status)
     : false;
-  return <TrainingMetricWorkbench live={live} loading={loading && !detail} rolloutGroups={groups} series={series} />;
+  return (
+    <TrainingMetricWorkbench
+      live={live}
+      loading={loading && !detail}
+      rolloutGroups={groups}
+      rolloutProgress={rolloutProgress}
+      series={series}
+    />
+  );
 }
 
 export function metricSeries(detail: TrainingRunDetail): TrainingMetricSeries[] {
@@ -153,6 +168,10 @@ export function eventSeries(events: TrainingRunDetail["events"]): TrainingMetric
 }
 
 function finiteNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
+function nonnegativeInteger(value: unknown): number | null {
+  const number = finiteNumber(value);
+  return number !== null && Number.isInteger(number) && number >= 0 ? number : null;
+}
 function humanizeMetric(value: string) { return value.replaceAll(/[._]/g, " ").replace(/^./, (character) => character.toUpperCase()); }
 
 function trainingMethod(detail: TrainingRunDetail): string | null {
