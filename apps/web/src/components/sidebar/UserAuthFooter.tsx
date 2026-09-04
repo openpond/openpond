@@ -75,11 +75,6 @@ export function UserAuthFooter({
     organizations.find((organization) => organization.teamId === selectedTeamId) ??
     organizations[0] ??
     null;
-  const planLabel = accountPlanLabel(account, activeOrganization);
-  const teamPlanLabel = [activeOrganization?.displayName, planLabel]
-    .filter(Boolean)
-    .join(" · ");
-
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: PointerEvent) {
@@ -126,7 +121,6 @@ export function UserAuthFooter({
             </span>
             <span className="user-auth-menu-identity">
               <strong>{identity.label}</strong>
-              <span>{teamPlanLabel || "Personal workspace"}</span>
             </span>
           </div>
           {organizations.length > 0 && onSelectTeam ? (
@@ -210,22 +204,4 @@ export function UserAuthFooter({
       ) : null}
     </div>
   );
-}
-
-function accountPlanLabel(
-  account: AccountState | null,
-  organization: OpenPondOrganization | null,
-): string | null {
-  const plan = organization?.planKey?.trim();
-  if (plan) return titleCasePlan(plan);
-  const product = account?.products.find(
-    (candidate) => candidate.isActive !== false && candidate.status !== "inactive",
-  );
-  return firstPresentText(product?.name, product?.type);
-}
-
-function titleCasePlan(value: string): string {
-  return value
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
 }

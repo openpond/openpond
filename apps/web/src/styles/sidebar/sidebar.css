@@ -1907,27 +1907,17 @@ button.sidebar-project-location-row:disabled {
 }
 
 .user-auth-menu-identity {
-  display: grid;
   min-width: 0;
-  gap: 2px;
-}
-
-.user-auth-menu-identity strong,
-.user-auth-menu-identity span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .user-auth-menu-identity strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
-}
-
-.user-auth-menu-identity span {
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .user-auth-team-picker {
@@ -1958,7 +1948,10 @@ button.sidebar-project-location-row:disabled {
   outline: 0;
   background: transparent;
   color: inherit;
-  font: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 1.2;
   text-align: right;
   cursor: pointer;
 }
