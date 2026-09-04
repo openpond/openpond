@@ -75,13 +75,14 @@ export function createWorkModelToolDefinitions(deps: {
           {
             name: "schedule_work",
             description:
-              "Create durable recurring Work through the OpenPond control plane when the user directly asks to schedule the current or another task and provides an exact cadence, local date/time, and timezone. This capability does not depend on a scheduler daemon inside the sandbox. Use the conversation context to preserve the task prompt and ask only for genuinely unavailable required scheduling details. Delivery is not required: unless the user explicitly requests an external destination or format, default to managed in-app Work outputs; report-like work should create a polished PDF plus a concise in-app summary. The scheduled prompt must describe only the work to perform when the schedule fires, not the scheduling request itself.",
+              "Create a durable recurring workflow attached to the current chat when the user directly asks to schedule the current or another task and provides an exact cadence, local date/time, and timezone. Every scheduled run is sent through the attached chat so its output appears in that conversation. Use the conversation context to preserve the task prompt and ask only for genuinely unavailable required scheduling details. The scheduled prompt must describe only the work to perform when the schedule fires, not the scheduling request itself.",
             parameters: savedWorkScheduleParameters(),
             execute: async (context: ModelToolExecutionContext) => {
               const input = CreateHostedSavedWorkRequestSchema.parse({
                 ...context.args,
                 clientRequestId: `${context.turnId}:${context.callId}`,
                 sourceTurnId: context.turnId,
+                targetSessionId: context.session.id,
                 modelId:
                   context.provider === "openpond"
                     ? context.model

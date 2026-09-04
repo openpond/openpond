@@ -95,6 +95,7 @@ export const HostedSavedWorkResponseSchema = z.object({
 export const CreateHostedSavedWorkRequestSchema = z.object({
   clientRequestId: z.string().trim().min(1).max(191),
   sourceTurnId: z.string().trim().min(1).max(191).nullable().optional(),
+  targetSessionId: z.string().trim().min(1).max(191).nullable().optional(),
   name: z.string().trim().min(1).max(180),
   prompt: z.string().trim().min(1).max(20_000),
   recurrence: SavedWorkRecurrenceSchema,
@@ -127,4 +128,83 @@ export type CreateHostedSavedWorkRequest = z.infer<
 >;
 export type UpdateHostedSavedWorkRequest = z.infer<
   typeof UpdateHostedSavedWorkRequestSchema
+>;
+
+export const ChatWorkflowRunStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+]);
+
+export const ChatWorkflowSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  sessionTitle: z.string(),
+  sourceTurnId: z.string().nullable(),
+  name: z.string(),
+  prompt: z.string(),
+  recurrence: SavedWorkRecurrenceSchema,
+  enabled: z.boolean(),
+  nextRunAt: z.string().nullable(),
+  lastRunAt: z.string().nullable(),
+  lastRunStatus: ChatWorkflowRunStatusSchema.nullable(),
+  lastRunId: z.string().nullable(),
+  lastError: z.string().nullable(),
+  scheduledRunCount: z.number().int().nonnegative(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const ChatWorkflowRunSchema = z.object({
+  id: z.string(),
+  workflowId: z.string(),
+  sessionId: z.string(),
+  scheduledFor: z.string(),
+  trigger: z.enum(["schedule", "manual"]),
+  status: ChatWorkflowRunStatusSchema,
+  turnId: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.string(),
+  startedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  updatedAt: z.string(),
+});
+
+export const CreateChatWorkflowRequestSchema = z.object({
+  sessionId: z.string().trim().min(1).max(191),
+  sourceTurnId: z.string().trim().min(1).max(191).nullable().optional(),
+  name: z.string().trim().min(1).max(180),
+  prompt: z.string().trim().min(1).max(20_000),
+  recurrence: SavedWorkRecurrenceSchema,
+});
+
+export const UpdateChatWorkflowRequestSchema = z.union([
+  z.object({ enabled: z.boolean() }),
+  z.object({
+    name: z.string().trim().min(1).max(180),
+    prompt: z.string().trim().min(1).max(20_000),
+    recurrence: SavedWorkRecurrenceSchema,
+  }),
+]);
+
+export const ChatWorkflowsResponseSchema = z.object({
+  workflows: z.array(ChatWorkflowSchema),
+  runs: z.array(ChatWorkflowRunSchema),
+  asOf: z.string(),
+});
+
+export type ChatWorkflowRunStatus = z.infer<
+  typeof ChatWorkflowRunStatusSchema
+>;
+export type ChatWorkflow = z.infer<typeof ChatWorkflowSchema>;
+export type ChatWorkflowRun = z.infer<typeof ChatWorkflowRunSchema>;
+export type CreateChatWorkflowRequest = z.infer<
+  typeof CreateChatWorkflowRequestSchema
+>;
+export type UpdateChatWorkflowRequest = z.infer<
+  typeof UpdateChatWorkflowRequestSchema
+>;
+export type ChatWorkflowsResponse = z.infer<
+  typeof ChatWorkflowsResponseSchema
 >;

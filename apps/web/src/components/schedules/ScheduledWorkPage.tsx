@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
+  ChatWorkflow,
   HostedSavedWorkDefinition,
   HostedSavedWorkRun,
   HostedSavedWorkSchedule,
@@ -17,6 +18,7 @@ import type {
 import { api, type ClientConnection } from "../../api";
 import { useErrorToast } from "../../app/AppToastContext";
 import { useHostedSavedWork } from "../../hooks/useHostedSavedWork";
+import { useChatWorkflows } from "../../hooks/useChatWorkflows";
 import { useLocalAgentSchedules } from "../../hooks/useLocalAgentSchedules";
 import {
   readScheduledWorkViewMode,
@@ -46,11 +48,21 @@ import {
   ScheduledWorkCalendar,
   type ScheduledCalendarItem,
 } from "./ScheduledWorkCalendar";
-import { HostedScheduleRow, LocalScheduleRow } from "./ScheduledWorkRows";
+import {
+  ChatWorkflowRow,
+  HostedScheduleRow,
+  LocalScheduleRow,
+} from "./ScheduledWorkRows";
+import { ChatWorkflowDetail } from "./ChatWorkflowDetail";
 import {
   capitalize,
+  formatLocalTime,
   formatScheduledRunAt,
 } from "./scheduledWorkFormatting";
+import {
+  filterAndSortChatWorkflows,
+  recurrenceCadence,
+} from "./chatWorkflowFormatting";
 
 export { formatScheduledRunAt } from "./scheduledWorkFormatting";
 
@@ -61,6 +73,7 @@ type ScheduledRow = {
   schedule: HostedSavedWorkSchedule;
 };
 type CombinedScheduleRow =
+  | { kind: "chat"; workflow: ChatWorkflow }
   | { kind: "local"; schedule: LocalAgentSchedule }
   | { kind: "hosted"; row: ScheduledRow };
 
@@ -90,6 +103,7 @@ export function ScheduledWorkPage({
   onToggleDetailExpanded: () => void;
 }) {
   const savedWork = useHostedSavedWork(connection);
+  const chatWorkflows = useChatWorkflows(connection);
   const localSchedules = useLocalAgentSchedules(connection);
   const [filter, setFilter] = useState<ScheduleFilter>("all");
   const [viewMode, setViewMode] = useState<ScheduledWorkViewMode>(
@@ -109,18 +123,26 @@ export function ScheduledWorkPage({
     () => filterAndSortLocalSchedules(localSchedules.schedules, filter),
     [filter, localSchedules.schedules]
   );
+  const visibleChatWorkflows = useMemo(
+    () => filterAndSortChatWorkflows(chatWorkflows.workflows, filter),
+    [chatWorkflows.workflows, filter],
+  );
   const selectedHosted =
     rows.find((row) => hostedScheduleKey(row.schedule.id) === selectedScheduleKey) ?? null;
   const selectedLocal =
     localSchedules.schedules.find(
       (schedule) => localScheduleKey(schedule.id) === selectedScheduleKey
     ) ?? null;
+  const selectedChat =
+    chatWorkflows.workflows.find(
+      (workflow) => chatWorkflowKey(workflow.id) === selectedScheduleKey,
+    ) ?? null;
   const selectedRuns = selectedHosted
     ? savedWork.runs.filter((run) => run.scheduleId === selectedHosted.schedule.id)
     : [];
   const combinedRows = useMemo(
-    () => combineScheduleRows(visibleLocalSchedules, visibleRows),
-    [visibleLocalSchedules, visibleRows]
+    () => combineScheduleRows(visibleChatWorkflows, visibleLocalSchedules, visibleRows),
+    [visibleChatWorkflows, visibleLocalSchedules, visibleRows]
   );
   const calendarItems = useMemo<ScheduledCalendarItem[]>(
     () => combinedRows.map(calendarItemForRow),
@@ -129,12 +151,13 @@ export function ScheduledWorkPage({
 
   useErrorToast(savedWork.error, { prefix: "Workflows" });
   useErrorToast(localSchedules.error, { prefix: "Local schedules" });
+  useErrorToast(chatWorkflows.error, { prefix: "Chat workflows" });
 
   useEffect(() => {
-    if (selectedScheduleKey && !selectedHosted && !selectedLocal) {
+    if (selectedScheduleKey && !selectedHosted && !selectedLocal && !selectedChat) {
       setSelectedScheduleKey(null);
     }
-  }, [selectedHosted, selectedLocal, selectedScheduleKey]);
+  }, [selectedChat, selectedHosted, selectedLocal, selectedScheduleKey]);
 
   useEffect(() => {
     if (!detailOpen && selectedScheduleKey) setSelectedScheduleKey(null);
@@ -163,7 +186,11 @@ export function ScheduledWorkPage({
   async function refreshSchedules() {
     setManualRefreshing(true);
     try {
-      await Promise.all([savedWork.refresh(), localSchedules.refresh()]);
+      await Promise.all([
+        savedWork.refresh(),
+        localSchedules.refresh(),
+        chatWorkflows.refresh(),
+      ]);
     } finally {
       setManualRefreshing(false);
     }
@@ -172,7 +199,7 @@ export function ScheduledWorkPage({
   return (
     <section
       aria-label="Workflows"
-      className={`scheduled-work-view${selectedHosted || selectedLocal ? " detail-open" : ""}${detailExpanded ? " detail-expanded" : ""}`}
+      className={`scheduled-work-view${selectedHosted || selectedLocal || selectedChat ? " detail-open" : ""}${detailExpanded ? " detail-expanded" : ""}`}
     >
       <div className="scheduled-work-scroll">
         <div className="scheduled-work-content">
@@ -205,7 +232,7 @@ export function ScheduledWorkPage({
               <button
                 aria-label="Refresh schedules"
                 className="scheduled-icon-button"
-                disabled={!connection || savedWork.loading || localSchedules.loading}
+                disabled={!connection || savedWork.loading || localSchedules.loading || chatWorkflows.loading}
                 onClick={() => void refreshSchedules()}
                 title="Refresh schedules"
                 type="button"
@@ -237,14 +264,15 @@ export function ScheduledWorkPage({
           </header>
 
           <section
-            aria-busy={savedWork.loading || localSchedules.loading}
+            aria-busy={savedWork.loading || localSchedules.loading || chatWorkflows.loading}
             className="scheduled-list"
           >
             {!connection ? (
               <EmptyMessage>Connect to OpenPond to view scheduled Work.</EmptyMessage>
-            ) : (savedWork.loading || localSchedules.loading) &&
+            ) : (savedWork.loading || localSchedules.loading || chatWorkflows.loading) &&
               rows.length === 0 &&
-              localSchedules.schedules.length === 0 ? (
+              localSchedules.schedules.length === 0 &&
+              chatWorkflows.workflows.length === 0 ? (
               <LoadingMessage label="Loading schedules" />
             ) : savedWork.error &&
               localSchedules.error &&
@@ -262,7 +290,15 @@ export function ScheduledWorkPage({
             ) : (
               <div className="scheduled-list-rows">
                 {combinedRows.map((item) =>
-                  item.kind === "local" ? (
+                  item.kind === "chat" ? (
+                    <ChatWorkflowRow
+                      cadence={recurrenceCadence(item.workflow.recurrence)}
+                      key={chatWorkflowKey(item.workflow.id)}
+                      onSelect={() => selectSchedule(chatWorkflowKey(item.workflow.id))}
+                      selected={selectedScheduleKey === chatWorkflowKey(item.workflow.id)}
+                      workflow={item.workflow}
+                    />
+                  ) : item.kind === "local" ? (
                     <LocalScheduleRow
                       cadence={localScheduleCadence(item.schedule)}
                       key={localScheduleKey(item.schedule.id)}
@@ -317,6 +353,27 @@ export function ScheduledWorkPage({
           onDetailResizeStart={onDetailResizeStart}
           onToggleDetailExpanded={onToggleDetailExpanded}
           webBaseUrl={savedWork.webBaseUrl}
+        />
+      ) : selectedChat ? (
+        <ChatWorkflowDetail
+          detailExpanded={detailExpanded}
+          key={selectedChat.id}
+          onClose={closeDetail}
+          onDelete={async () => {
+            await chatWorkflows.remove(selectedChat.id);
+            closeDetail();
+          }}
+          onDetailResizeStart={onDetailResizeStart}
+          onRun={() => chatWorkflows.run(selectedChat.id)}
+          onToggle={() =>
+            chatWorkflows.update(selectedChat.id, {
+              enabled: !selectedChat.enabled,
+            })
+          }
+          onToggleDetailExpanded={onToggleDetailExpanded}
+          pending={chatWorkflows.pendingIds.has(selectedChat.id)}
+          runs={chatWorkflows.runs.filter((run) => run.workflowId === selectedChat.id)}
+          workflow={selectedChat}
         />
       ) : selectedLocal ? (
         <LocalScheduleDetail
@@ -728,36 +785,36 @@ export function filterAndSortLocalSchedules(
 }
 
 export function combineScheduleRows(
+  chatWorkflows: ChatWorkflow[],
   localSchedules: LocalAgentSchedule[],
   hostedRows: ScheduledRow[]
 ): CombinedScheduleRow[] {
   return [
+    ...chatWorkflows.map((workflow) => ({ kind: "chat" as const, workflow })),
     ...localSchedules.map((schedule) => ({
       kind: "local" as const,
       schedule,
     })),
     ...hostedRows.map((row) => ({ kind: "hosted" as const, row })),
   ].sort((left, right) => {
-    const leftTime = scheduleTime(
-      left.kind === "local" ? left.schedule.nextRunAt : left.row.schedule.nextRunAt
-    );
-    const rightTime = scheduleTime(
-      right.kind === "local"
-        ? right.schedule.nextRunAt
-        : right.row.schedule.nextRunAt
-    );
+    const leftTime = scheduleTime(scheduleRowNextRunAt(left));
+    const rightTime = scheduleTime(scheduleRowNextRunAt(right));
     if (leftTime !== rightTime) return leftTime - rightTime;
-    const leftName =
-      left.kind === "local" ? left.schedule.scheduleName : left.row.definition.name;
-    const rightName =
-      right.kind === "local"
-        ? right.schedule.scheduleName
-        : right.row.definition.name;
+    const leftName = scheduleRowName(left);
+    const rightName = scheduleRowName(right);
     return leftName.localeCompare(rightName);
   });
 }
 
 function calendarItemForRow(item: CombinedScheduleRow): ScheduledCalendarItem {
+  if (item.kind === "chat") {
+    return {
+      enabled: item.workflow.enabled,
+      key: chatWorkflowKey(item.workflow.id),
+      nextRunAt: item.workflow.nextRunAt,
+      title: item.workflow.name,
+    };
+  }
   if (item.kind === "local") {
     return {
       enabled: item.schedule.enabled,
@@ -777,21 +834,17 @@ function calendarItemForRow(item: CombinedScheduleRow): ScheduledCalendarItem {
 export function scheduleCadence(schedule: HostedSavedWorkSchedule): string {
   const recurrence = schedule.recurrence;
   if (!recurrence) return schedule.expression ?? "Manual";
-  const time = formatLocalTime(recurrence.localTime);
-  if (recurrence.kind === "once") {
-    return `Once on ${recurrence.startDate} at ${time} · ${recurrence.timeZone}`;
-  }
-  if (recurrence.kind === "weekdays") {
-    return `Weekdays at ${time} · ${recurrence.timeZone}`;
-  }
-  if (recurrence.kind === "weekly") {
-    const days = recurrence.weekdays?.map(capitalize).join(", ") ?? "Weekly";
-    return `${days} at ${time} · ${recurrence.timeZone}`;
-  }
-  if (recurrence.kind === "monthly") {
-    return `Monthly on day ${recurrence.dayOfMonth ?? 1} at ${time} · ${recurrence.timeZone}`;
-  }
-  return `Daily at ${time} · ${recurrence.timeZone}`;
+  return recurrenceCadence(recurrence);
+}
+
+function scheduleRowNextRunAt(item: CombinedScheduleRow): string | null {
+  if (item.kind === "chat") return item.workflow.nextRunAt;
+  return item.kind === "local" ? item.schedule.nextRunAt : item.row.schedule.nextRunAt;
+}
+
+function scheduleRowName(item: CombinedScheduleRow): string {
+  if (item.kind === "chat") return item.workflow.name;
+  return item.kind === "local" ? item.schedule.scheduleName : item.row.definition.name;
 }
 
 export function localScheduleCadence(schedule: LocalAgentSchedule): string {
@@ -888,6 +941,10 @@ function localScheduleKey(scheduleId: string): string {
   return `local:${scheduleId}`;
 }
 
+function chatWorkflowKey(workflowId: string): string {
+  return `chat:${workflowId}`;
+}
+
 function hostedScheduleKey(scheduleId: string): string {
   return `hosted:${scheduleId}`;
 }
@@ -918,15 +975,6 @@ async function openExternalUrl(
     if (result.ok) return;
   }
   window.open(url, "_blank", "noopener,noreferrer");
-}
-
-function formatLocalTime(value: string): string {
-  const [hours = "0", minutes = "00"] = value.split(":");
-  const date = new Date(2020, 0, 1, Number(hours), Number(minutes));
-  return date.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function scheduleTime(value: string | null): number {

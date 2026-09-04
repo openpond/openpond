@@ -4,6 +4,8 @@ import type {
   BootstrapPayload,
   ChatAttachment,
   ChatAttachmentSummary,
+  ChatWorkflowsResponse,
+  CreateChatWorkflowRequest,
   CreateLocalProjectRequest,
   CreateSessionRequest,
   TrainingStateResponse,
@@ -45,6 +47,7 @@ import type {
   UpdateRefinerProfileRequest,
   CreateHostedSavedWorkRequest,
   UpdateHostedSavedWorkRequest,
+  UpdateChatWorkflowRequest,
   LocalProject,
   OpenPondActionCatalogEntry,
   UpdateLocalProjectAgentSetupRequest,
@@ -752,6 +755,54 @@ export const api = {
       connection,
       `/v1/saved-work/schedules/${encodeURIComponent(scheduleId)}/run`,
       { method: "POST", body: JSON.stringify({ clientRequestId }) }
+    ),
+  chatWorkflows: (
+    connection: ClientConnection,
+    sessionId?: string | null,
+  ) => {
+    const query = sessionId
+      ? `?sessionId=${encodeURIComponent(sessionId)}`
+      : "";
+    return apiFetch<ChatWorkflowsResponse>(
+      connection,
+      `/v1/chat-workflows${query}`,
+    );
+  },
+  createChatWorkflow: (
+    connection: ClientConnection,
+    input: CreateChatWorkflowRequest,
+  ) =>
+    apiFetch<Record<string, unknown>>(connection, "/v1/chat-workflows", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateChatWorkflow: (
+    connection: ClientConnection,
+    workflowId: string,
+    input: UpdateChatWorkflowRequest,
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/chat-workflows/${encodeURIComponent(workflowId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  deleteChatWorkflow: (
+    connection: ClientConnection,
+    workflowId: string,
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/chat-workflows/${encodeURIComponent(workflowId)}`,
+      { method: "DELETE" },
+    ),
+  runChatWorkflow: (
+    connection: ClientConnection,
+    workflowId: string,
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/chat-workflows/${encodeURIComponent(workflowId)}/run`,
+      { method: "POST", body: JSON.stringify({}) },
     ),
   localAgentSchedules: (
     connection: ClientConnection,

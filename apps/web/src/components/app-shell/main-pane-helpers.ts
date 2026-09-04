@@ -145,6 +145,13 @@ export function latestCreatePipelineRuntime(
 export function promptForAppSlashCommand(
   command: ParsedComposerSlashCommand
 ): string {
+  if (command.command === "workflow") {
+    return [
+      "Create a scheduled workflow attached to this chat.",
+      "Use the schedule_work tool after resolving the exact cadence, local date/time, and timezone from my request. Ask a concise clarification only if a required scheduling detail is genuinely missing.",
+      `Workflow request: ${command.args}`,
+    ].join("\n\n");
+  }
   if (command.command === "agent")
     return command.args ? `/agent ${command.args}` : "/agent";
   if (command.command === "skill")
@@ -173,6 +180,7 @@ export function shouldSubmitComposerSlashCommandToChat(
     command.command === "goal" ||
     command.command === "agent" ||
     command.command === "skill" ||
+    command.command === "workflow" ||
     command.command === "sync-cloud"
   );
 }

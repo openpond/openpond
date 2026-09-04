@@ -1,4 +1,5 @@
 import type {
+  ChatWorkflow,
   HostedSavedWorkDefinition,
   HostedSavedWorkSchedule,
   LocalAgentSchedule,
@@ -75,6 +76,42 @@ export function HostedScheduleRow({
           {cadence}
           {schedule.nextRunAt
             ? ` · Next ${formatScheduledRunAt(schedule.nextRunAt, schedule.timeZone)}`
+            : " · No next run"}
+        </small>
+      </span>
+    </button>
+  );
+}
+
+export function ChatWorkflowRow({
+  cadence,
+  onSelect,
+  selected,
+  workflow,
+}: {
+  cadence: string;
+  onSelect: () => void;
+  selected: boolean;
+  workflow: ChatWorkflow;
+}) {
+  return (
+    <button
+      aria-current={selected ? "true" : undefined}
+      className="scheduled-list-row"
+      onClick={onSelect}
+      type="button"
+    >
+      <span className={`scheduled-status-dot ${workflow.enabled ? "active" : "paused"}`} />
+      <span className="scheduled-list-copy">
+        <span className="scheduled-list-title">
+          <strong>{workflow.name}</strong>
+          <small className="scheduled-environment-badge">Chat</small>
+        </span>
+        <span>{workflow.prompt}</span>
+        <small>
+          Runs in {workflow.sessionTitle} · {cadence}
+          {workflow.nextRunAt
+            ? ` · Next ${formatScheduledRunAt(workflow.nextRunAt, workflow.recurrence.timeZone)}`
             : " · No next run"}
         </small>
       </span>

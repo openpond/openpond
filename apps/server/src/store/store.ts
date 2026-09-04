@@ -49,7 +49,7 @@ import {
   threadDetailProjectionFromRow,
   type ThreadDetailProjection,
 } from "./store-codecs.js";
-import { SqliteWorkEvidenceStore } from "./store-work-evidence.js";
+import { SqliteChatWorkflowStore } from "./store-chat-workflows.js";
 import {
   sessionRuntimeSummaries,
   sessionWithRuntimeSummary,
@@ -178,7 +178,7 @@ type RuntimeEventRecentWindow = {
   limit: number;
 };
 
-export class SqliteStore extends SqliteWorkEvidenceStore {
+export class SqliteStore extends SqliteChatWorkflowStore {
   async snapshot(): Promise<StoreData> {
     await this.ready;
     await this.writeQueue;

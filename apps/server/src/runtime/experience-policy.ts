@@ -5,7 +5,12 @@ import type {
 } from "@openpond/contracts";
 import type { ModelToolDefinition } from "../openpond/model-tool-registry.js";
 
-const CHAT_MODEL_TOOLS = new Set(["view_image", "web_fetch", "web_search"]);
+const CHAT_MODEL_TOOLS = new Set([
+  "schedule_work",
+  "view_image",
+  "web_fetch",
+  "web_search",
+]);
 
 const WORK_MODEL_TOOLS = new Set([
   "ask_user",

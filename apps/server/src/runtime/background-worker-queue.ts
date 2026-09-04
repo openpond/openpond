@@ -33,6 +33,7 @@ export type ServerWorkQueueId =
   | "turn-follow-up"
   | "checkpoint-diff"
   | "provider-runtime-ingestion"
+  | "chat-workflow"
   | "local-agent-schedule"
   | "subagent"
   | "subagent-lifecycle";
@@ -41,6 +42,7 @@ export type ServerWorkQueues = {
   turnFollowUp: BackgroundWorkerQueue;
   checkpointDiff: BackgroundWorkerQueue;
   providerRuntimeIngestion: BackgroundWorkerQueue;
+  chatWorkflow: BackgroundWorkerQueue;
   localAgentSchedule: BackgroundWorkerQueue;
   subagent: BackgroundWorkerQueue;
   subagentLifecycle: BackgroundWorkerQueue;
@@ -144,12 +146,17 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
     queueId: "local-agent-schedule",
     logger,
   });
+  const chatWorkflow = createBackgroundWorkerQueue({
+    queueId: "chat-workflow",
+    logger,
+  });
   const subagent = createBackgroundWorkerQueue({ queueId: "subagent", logger });
   const subagentLifecycle = createBackgroundWorkerQueue({ queueId: "subagent-lifecycle", logger });
   const byId: Record<ServerWorkQueueId, BackgroundWorkerQueue> = {
     "turn-follow-up": turnFollowUp,
     "checkpoint-diff": checkpointDiff,
     "provider-runtime-ingestion": providerRuntimeIngestion,
+    "chat-workflow": chatWorkflow,
     "local-agent-schedule": localAgentSchedule,
     subagent,
     "subagent-lifecycle": subagentLifecycle,
@@ -159,6 +166,7 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
     turnFollowUp,
     checkpointDiff,
     providerRuntimeIngestion,
+    chatWorkflow,
     localAgentSchedule,
     subagent,
     subagentLifecycle,

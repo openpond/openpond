@@ -3,7 +3,6 @@ import path from "node:path"; import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import {
   CompactSessionRequestSchema,
-  CreateHostedSavedWorkRequestSchema,
   RunSessionCommandRequestSchema,
   normalizeSidebarFilePath,
   type Approval,
@@ -133,17 +132,13 @@ import {
   listSandboxIntegrationConnections,
   sandboxRequestPayload,
 } from "./openpond/sandboxes.js";
-import {
-  createHostedSavedWork,
-  deleteHostedSavedWork,
-  listHostedSavedWork,
-  runHostedSavedWork,
-  updateHostedSavedWork,
-} from "./openpond/saved-work.js";
+import { createHostedSavedWork } from "./openpond/saved-work.js";
+import { hostedSavedWorkRoutePayloads } from "./openpond/saved-work-route-payloads.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
 import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
 import { createLocalAgentScheduleLoop } from "./agents/local-agent-scheduler.js";
+import { createChatWorkflowRuntime } from "./workflows/chat-workflow-runtime.js";
 import {
   createScriptedOpenPondChatStream,
   scriptedOpenPondModelsEnabled,
@@ -795,6 +790,14 @@ export async function createOpenPondServer(
     });
   await processLocalHarnessImprovementBoundary.reconcilePending();
 
+  const chatWorkflows = createChatWorkflowRuntime({
+    store,
+    queue: workQueues.chatWorkflow,
+    getSession,
+    createHostedSavedWork,
+    isClosing: () => closing,
+    logger,
+  });
   const turnRunner = createTurnRunner({
     attachmentRootDir,
     store,
@@ -957,7 +960,7 @@ export async function createOpenPondServer(
     loadOpenPondExtensionCatalog: loadExtensionCatalog,
     readOpenPondExtensionSkill: readExtensionSkill,
     executeWebSearch: executeWebSearch ?? undefined,
-    createScheduledWork: createHostedSavedWork,
+    createScheduledWork: chatWorkflows.createScheduledWork,
     executeConnectedAppTool,
     browserToolExecutor: browserControlQueue.executor,
     manageSidebarFile: async ({ session, action, path: requestedPath }) => {
@@ -1099,6 +1102,10 @@ export async function createOpenPondServer(
     resolveSubagentPatchApplyApproval,
     runSubagentLifecycleAction,
   } = turnRunner;
+  chatWorkflows.bindTurnRuntime({
+    sendTurn,
+    isSessionTurnActive: turnRunner.isSessionTurnActive,
+  });
   const taskMinerBackgroundLoop = createTaskMinerBackgroundLoop({
     service: taskMinerService,
     loadProfileState: loadOpenPondProfileState,
@@ -1506,41 +1513,6 @@ export async function createOpenPondServer(
     return workOutputService.listWorkOutputs(await store.sessionShells());
   }
 
-  async function listHostedSavedWorkPayload(): Promise<unknown> {
-    return listHostedSavedWork();
-  }
-
-  async function createHostedSavedWorkPayload(
-    payload: unknown
-  ): Promise<unknown> {
-    return createHostedSavedWork(
-      CreateHostedSavedWorkRequestSchema.parse(payload)
-    );
-  }
-
-  async function updateHostedSavedWorkPayload(
-    scheduleId: string,
-    payload: unknown
-  ): Promise<unknown> {
-    return updateHostedSavedWork(scheduleId, payload);
-  }
-
-  async function deleteHostedSavedWorkPayload(
-    scheduleId: string
-  ): Promise<unknown> {
-    return deleteHostedSavedWork(scheduleId);
-  }
-
-  async function runHostedSavedWorkPayload(
-    scheduleId: string,
-    clientRequestId: string
-  ): Promise<unknown> {
-    if (!clientRequestId.trim()) {
-      throw new Error("clientRequestId is required to run scheduled Work.");
-    }
-    return runHostedSavedWork(scheduleId, clientRequestId);
-  }
-
   async function usageSummaryRoutePayload(requestUrl: URL): Promise<unknown> {
     return usageSummaryPayload({ requestUrl, store });
   }
@@ -1770,11 +1742,8 @@ export async function createOpenPondServer(
       classifyWorkEvidencePayload: workEvidenceApi.eligibility,
       ...harnessSettingsRoutes,
       ...refinerSettingsRoutes,
-      listHostedSavedWorkPayload,
-      createHostedSavedWorkPayload,
-      updateHostedSavedWorkPayload,
-      deleteHostedSavedWorkPayload,
-      runHostedSavedWorkPayload,
+      ...hostedSavedWorkRoutePayloads,
+      ...chatWorkflows.routePayloads,
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
       usageTurnCachePayload: usageTurnCacheRoutePayload,
@@ -1937,6 +1906,7 @@ export async function createOpenPondServer(
   workSandboxLifecycle.start();
   if (options.httpEnabled !== false) {
     localAgentScheduleLoop.start();
+    chatWorkflows.start();
     harnessEvaluationReviewScheduler.start();
   }
 
@@ -1962,6 +1932,7 @@ export async function createOpenPondServer(
     backgroundLoops: [
       taskMinerBackgroundLoop,
       localAgentScheduleLoop,
+      chatWorkflows,
       harnessEvaluationReviewScheduler,
     ],
     browserControlQueue,

@@ -4,6 +4,7 @@ export type ComposerSlashCommandId =
   | "agent"
   | "skill"
   | "goal"
+  | "workflow"
   | "train"
   | "submit-issue"
   | "sync-cloud";
@@ -47,6 +48,12 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     description: "Use Codex-native Goal mode.",
   },
   {
+    id: "workflow",
+    command: "/workflow",
+    label: "Schedule workflow",
+    description: "Create a recurring prompt that posts each run back into this chat.",
+  },
+  {
     id: "submit-issue",
     command: "/submit-issue",
     label: "Submit issue",
@@ -78,7 +85,9 @@ export function composerSlashCommandAllowedInExperience(
   command: Pick<ComposerSlashCommand, "id">,
   experience: Experience,
 ): boolean {
-  if (experience === "work") return command.id === "submit-issue";
+  if (experience === "work")
+    return command.id === "submit-issue" || command.id === "workflow";
+  if (experience === "development") return command.id !== "workflow";
   if (experience === "chat") return command.id !== "sync-cloud";
   return true;
 }

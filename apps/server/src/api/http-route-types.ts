@@ -98,6 +98,11 @@ export type HttpRouteDeps = {
     scheduleId: string,
     clientRequestId: string
   ) => Promise<unknown>;
+  listChatWorkflowsPayload: (sessionId?: string | null) => Promise<unknown>;
+  createChatWorkflowPayload: (payload: unknown) => Promise<unknown>;
+  patchChatWorkflowPayload: (workflowId: string, payload: unknown) => Promise<unknown>;
+  deleteChatWorkflowPayload: (workflowId: string) => Promise<unknown>;
+  runChatWorkflowPayload: (workflowId: string) => Promise<unknown>;
   usageSummaryPayload: (requestUrl: URL) => Promise<unknown>;
   usageRecordsPayload: (requestUrl: URL) => Promise<unknown>;
   usageTurnCachePayload: (requestUrl: URL) => Promise<unknown>;

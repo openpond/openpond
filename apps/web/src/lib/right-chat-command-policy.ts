@@ -22,6 +22,16 @@ export function rightChatCommandPolicy(
       return { kind: "send_prompt", prompt: `/skill ${args}`, requiresInstructions: false };
     case "goal":
       return { kind: "send_prompt", prompt: `/goal ${args}`, requiresInstructions: true };
+    case "workflow":
+      return {
+        kind: "send_prompt",
+        prompt: [
+          "Create a scheduled workflow attached to this chat.",
+          "Use the schedule_work tool after resolving the exact cadence, local date/time, and timezone from my request. Ask a concise clarification only if a required scheduling detail is genuinely missing.",
+          `Workflow request: ${args}`,
+        ].join("\n\n"),
+        requiresInstructions: true,
+      };
     case "train":
       return { kind: "open_training", objective: args || null };
     case "submit-issue":

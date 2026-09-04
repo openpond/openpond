@@ -17,6 +17,7 @@ import {
 import { createPreferenceComparisonTables } from "./store-preference-comparison-schema.js";
 import { createDatasetImportTables as ensureDatasetImportTables } from "./store-dataset-schema.js";
 import { createSidebarFileBookmarkTables as ensureSidebarFileBookmarkTables } from "./store-sidebar-file-bookmark-schema.js";
+import { createChatWorkflowTables as ensureChatWorkflowTables } from "./store-chat-workflow-schema.js";
 import { createHarnessWorkspaceTables as ensureHarnessWorkspaceTables } from "./store-harness-workspace-schema.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
@@ -488,7 +489,7 @@ export class SqliteStoreCore {
         ON local_agent_schedule_runs(schedule_id, created_at DESC);
     `);
   }
-
+  async createChatWorkflowTables(): Promise<void> { return ensureChatWorkflowTables((sql) => this.exec(sql)); }
   async createSubagentTables(): Promise<void> {
     await this.exec(`
       CREATE TABLE IF NOT EXISTS subagent_runs (

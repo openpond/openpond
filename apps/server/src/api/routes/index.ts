@@ -2,6 +2,7 @@ import type { HttpRouteModule } from "../http-route-types.js";
 import { handleCoreRoutes } from "./core-routes.js";
 import { handleCreateImproveRoutes } from "./create-improve-routes.js";
 import { handleCommunityRoutes } from "./community-routes.js";
+import { handleChatWorkflowRoutes } from "./chat-workflow-routes.js";
 import { handleDesktopBrowserRoutes } from "./desktop-browser-routes.js";
 import { handleEventRoutes } from "./event-routes.js";
 import { handleExtensionRoutes } from "./extension-routes.js";
@@ -31,6 +32,7 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "training", handle: handleTrainingRoutes },
   { id: "create-improve", handle: handleCreateImproveRoutes },
   { id: "communities", handle: handleCommunityRoutes },
+  { id: "chat-workflows", handle: handleChatWorkflowRoutes },
   { id: "local-agent-schedules", handle: handleLocalAgentScheduleRoutes },
   { id: "saved-work", handle: handleSavedWorkRoutes },
   { id: "usage", handle: handleUsageRoutes },

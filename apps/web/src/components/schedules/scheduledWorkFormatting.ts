@@ -26,3 +26,12 @@ export function runStatusLabel(value: string): string {
 export function capitalize(value: string): string {
   return value.replace(/^./, (character) => character.toUpperCase());
 }
+
+export function formatLocalTime(value: string): string {
+  const [hours = "0", minutes = "00"] = value.split(":");
+  const date = new Date(2020, 0, 1, Number(hours), Number(minutes));
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
