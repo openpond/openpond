@@ -4,6 +4,7 @@ import {
   DEFAULT_CHAT_PROVIDER,
   type CloudProject,
   type Experience,
+  type OpenPondApp,
   OpenPondExtension,
   type OutputRef,
   type ProductArea,
@@ -339,6 +340,24 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     expandProject(projectId);
     requestMainComposerFocus();
   }, [expandProject, requestMainComposerFocus, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView]);
+  const beginContextualNewChat = useCallback(
+    (app: OpenPondApp | null = null) => {
+      const sourceProjectId = selectedSessionId
+        ? sidebarProjectIdBySessionId[selectedSessionId] ?? null
+        : null;
+      if (!app && sourceProjectId) {
+        beginProjectChat(sourceProjectId);
+        return;
+      }
+      beginNewChat(app);
+    },
+    [
+      beginNewChat,
+      beginProjectChat,
+      selectedSessionId,
+      sidebarProjectIdBySessionId,
+    ],
+  );
   const selectSidebarTeam = useCallback(
     async (teamId: string) => {
       if (!connection || !bootstrap) return;
@@ -723,8 +742,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       if (view !== desktopRoute.view) setView(desktopRoute.view);
       return;
     }
-    setSelectedAppId(null);
-    setSelectedProjectId(null);
+    if (desktopRoute.sessionId !== null) {
+      setSelectedAppId(null);
+      setSelectedProjectId(null);
+    }
     setSelectedSessionId(desktopRoute.sessionId);
     if (view !== "chat") setView("chat");
   }, [
@@ -1020,7 +1041,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setArchivedChatsOpen,
           setCloudProjectsExpanded,
           setChatRowsVisibleCount,
-          beginNewChat,
+          beginNewChat: beginContextualNewChat,
           beginProjectChat,
           dockSessionRight: openRightChatPanel,
           selectTeamThread: (threadId) => {
