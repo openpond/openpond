@@ -21,6 +21,7 @@ type LocalRolloutClaim = ManagedRlLocalRolloutClaim;
 type ClaimResponse = {
   jobState: string;
   claim: LocalRolloutClaim | null;
+  claims?: LocalRolloutClaim[];
 };
 
 const TERMINAL_STATES = new Set(["completed", "failed", "cancelled", "budget_exhausted"]);
@@ -72,13 +73,17 @@ export class ManagedRlLocalRolloutExecutor {
   private async loop(): Promise<void> {
     while (!this.stopped) {
       while (!this.stopped && this.active.size < 4) {
+        const availableSlots = 4 - this.active.size;
         let response: ClaimResponse;
         try {
           response = await this.userRequest<ClaimResponse>(
             `/v1/managed-rl/jobs/${encodeURIComponent(this.input.runId)}/local-rollouts`,
             {
               method: "POST",
-              body: JSON.stringify({ executorId: this.executorId }),
+              body: JSON.stringify({
+                executorId: this.executorId,
+                maxClaims: availableSlots,
+              }),
             },
           );
           this._lastError = null;
@@ -91,13 +96,16 @@ export class ManagedRlLocalRolloutExecutor {
           this.stopped = true;
           break;
         }
-        if (!response.claim) break;
-        const execution = this.execute(response.claim)
-          .catch((error) => {
-            this._lastError = message(error);
-          })
-          .finally(() => this.active.delete(execution));
-        this.active.add(execution);
+        const claims = response.claims ?? (response.claim ? [response.claim] : []);
+        if (!claims.length) break;
+        for (const claim of claims.slice(0, availableSlots)) {
+          const execution = this.execute(claim)
+            .catch((error) => {
+              this._lastError = message(error);
+            })
+            .finally(() => this.active.delete(execution));
+          this.active.add(execution);
+        }
       }
       if (this.stopped) break;
       if (this.active.size > 0) {
