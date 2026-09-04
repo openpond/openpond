@@ -415,7 +415,7 @@ function DocumentPreview({ file, contentBase64 }: { file: WorkspaceDiffFile; con
     <div className="workspace-document-preview">
       <div className="workspace-document-preview-card">
         <strong>{file.path.split("/").pop()}</strong>
-        <span>Word document</span>
+        <span>{/\.pdf$/i.test(file.path) ? "PDF document" : "Word document"}</span>
         <a href={objectUrl} download={file.path.split("/").pop() || "document"}>
           Download document
         </a>
@@ -426,7 +426,9 @@ function DocumentPreview({ file, contentBase64 }: { file: WorkspaceDiffFile; con
 }
 
 function documentMimeType(path: string): string {
-  return /\.docx$/i.test(path)
+  return /\.pdf$/i.test(path)
+    ? "application/pdf"
+    : /\.docx$/i.test(path)
     ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     : "application/msword";
 }

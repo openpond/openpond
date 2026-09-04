@@ -309,6 +309,18 @@ describe("workspace diff", () => {
     expect(hashImage?.bytes.equals(imageBytes)).toBe(true);
   });
 
+  test("loads workspace PDFs as bounded base64 document previews", async () => {
+    const repoPath = await createTempDir("openpond-workspace-pdf-");
+    await git(repoPath, ["init"]);
+    const pdfBytes = Buffer.from("%PDF-1.4\npreview\n%%EOF\n", "utf8");
+    await writeFile(path.join(repoPath, "report.pdf"), pdfBytes);
+
+    const file = await loadWorkspaceFileAtPath(repoPath, "report.pdf");
+
+    expect(file.path).toBe("report.pdf");
+    expect(Buffer.from(file.content ?? "", "base64")).toEqual(pdfBytes);
+  });
+
   test("loads workspace payloads from a Codex cwd without a registered project", async () => {
     const repoPath = await createTempDir("openpond-codex-cwd-workspace-");
     const storeDir = await createTempDir("openpond-codex-cwd-store-");

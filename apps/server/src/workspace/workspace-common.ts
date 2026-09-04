@@ -27,6 +27,7 @@ const MAX_PATCH_CHARS = 24000;
 const MAX_FILE_CHARS = 80000;
 const MAX_READABLE_FILE_BYTES = 512 * 1024;
 const MAX_WORKSPACE_IMAGE_BYTES = 15 * 1024 * 1024;
+const MAX_WORKSPACE_DOCUMENT_BYTES = 20 * 1024 * 1024;
 const GENERATED_WORKSPACE_DIRS = new Set([
   ".cache",
   ".eggs",
@@ -63,6 +64,8 @@ const BINARY_WORKSPACE_EXTENSIONS = new Set([
   ".7z",
   ".avif",
   ".db",
+  ".doc",
+  ".docx",
   ".gif",
   ".gz",
   ".ico",
@@ -94,6 +97,7 @@ const LOCAL_VIDEO_CONTENT_TYPES = new Map<string, string>([
   [".mp4", "video/mp4"],
   [".webm", "video/webm"],
 ]);
+const WORKSPACE_DOCUMENT_EXTENSIONS = new Set([".doc", ".docx", ".pdf"]);
 
 function safeAppSegment(appId: string): string {
   return appId.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 120) || "app";
@@ -151,6 +155,29 @@ export async function readWorkspaceFile(repoPath: string, filePath: string): Pro
     if (!stat.isFile()) return null;
     if (!isReadableTextWorkspaceFile(filePath, stat.size)) return null;
     return truncateFileContent(await fs.readFile(target, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export async function readWorkspaceDocumentPreview(
+  repoPath: string,
+  filePath: string,
+): Promise<string | null> {
+  const normalizedPath = normalizeWorkspaceFilePath(filePath);
+  if (
+    !normalizedPath ||
+    !WORKSPACE_DOCUMENT_EXTENSIONS.has(path.extname(normalizedPath).toLowerCase())
+  ) {
+    return null;
+  }
+  const target = path.resolve(repoPath, normalizedPath);
+  const root = path.resolve(repoPath);
+  if (target !== root && !target.startsWith(`${root}${path.sep}`)) return null;
+  try {
+    const stat = await fs.lstat(target);
+    if (!stat.isFile() || stat.size > MAX_WORKSPACE_DOCUMENT_BYTES) return null;
+    return (await fs.readFile(target)).toString("base64");
   } catch {
     return null;
   }

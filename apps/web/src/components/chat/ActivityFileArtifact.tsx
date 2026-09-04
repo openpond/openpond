@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { ActivityItem } from "../../lib/app-models";
 import { copyToClipboard } from "../../lib/clipboard";
 import { revealLocalFile } from "../../lib/desktop-files";
-import { Copy, File, FileText, PanelRight } from "../icons";
+import { Copy, FileText, FolderOpen, PanelRight } from "../icons";
 
 type FileArtifact = NonNullable<ActivityItem["artifacts"]>[number];
 
@@ -39,10 +39,22 @@ export function ActivityFileArtifact({
           });
         }}
       >
-        <span className="activity-artifact-name">
-          <FileText aria-hidden size={14} />
-          <strong>{artifact.title}</strong>
-        </span>
+        {onOpenFileInSidebar ? (
+          <button
+            aria-label={`Open ${artifact.title} in right sidebar`}
+            className="activity-artifact-name"
+            type="button"
+            onClick={() => onOpenFileInSidebar(artifact.path)}
+          >
+            <FileText aria-hidden size={14} />
+            <strong>{artifact.title}</strong>
+          </button>
+        ) : (
+          <span className="activity-artifact-name">
+            <FileText aria-hidden size={14} />
+            <strong>{artifact.title}</strong>
+          </span>
+        )}
         <span className="activity-artifact-actions">
           <button
             aria-label={`Show ${artifact.title} in file browser`}
@@ -50,7 +62,7 @@ export function ActivityFileArtifact({
             type="button"
             onClick={() => void revealLocalFile(artifact.path)}
           >
-            <File aria-hidden size={14} />
+            <FolderOpen aria-hidden size={14} />
           </button>
           {onOpenFileInSidebar ? (
             <button

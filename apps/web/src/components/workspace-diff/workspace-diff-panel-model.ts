@@ -164,7 +164,7 @@ export function isMarkdownPath(filePath: string): boolean {
 }
 
 export function isDocumentPath(filePath: string): boolean {
-  return /\.(?:doc|docx)$/i.test(filePath);
+  return /\.(?:doc|docx|pdf)$/i.test(filePath);
 }
 
 function normalizeWorkspaceDiffPathValue(value: string): string {

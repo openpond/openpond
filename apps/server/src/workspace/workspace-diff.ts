@@ -14,6 +14,7 @@ import {
   parseNumstat,
   parseStatusLine,
   pathExists,
+  readWorkspaceDocumentPreview,
   readWorkspaceImageFile,
   readWorkspaceFile,
   truncatePatch,
@@ -528,10 +529,21 @@ export async function loadWorkspaceFileAtPath(repoPath: string, filePath: string
   if (isGeneratedWorkspacePath(normalizedPath)) throw new Error("File not found");
   if (initialized) {
     const detail = await loadGitWorkspaceFileAtPath(repoPath, normalizedPath);
-    if (detail) return detail;
+    if (detail) {
+      if (detail.content !== null || detail.status === "deleted") return detail;
+      const documentContent = await readWorkspaceDocumentPreview(
+        repoPath,
+        normalizedPath,
+      );
+      return documentContent === null
+        ? detail
+        : { ...detail, content: documentContent };
+    }
   }
   let resolvedPath = normalizedPath;
-  let content = await readWorkspaceFile(repoPath, resolvedPath);
+  let content =
+    (await readWorkspaceFile(repoPath, resolvedPath)) ??
+    (await readWorkspaceDocumentPreview(repoPath, resolvedPath));
   if (content === null) {
     const basenameMatch = await resolveExplicitMarkdownBasenamePath(repoPath, normalizedPath);
     if (basenameMatch) {
