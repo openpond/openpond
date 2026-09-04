@@ -325,7 +325,7 @@ export function LabModelVersionDetailPage({
         status={<LabRunStatusBadge status={currentRunStatus} />}
         metrics={[
           {
-            label: isGrpo ? "Rollout groups" : "Training steps",
+            label: isGrpo ? "Training tasks" : "Training steps",
             value: progressMetric.value,
           },
           { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },

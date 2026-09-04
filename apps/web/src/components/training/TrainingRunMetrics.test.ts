@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { TrainingRunDetail } from "@openpond/contracts";
 
 import { eventSeries } from "./TrainingRunMetrics";
-import { rolloutRewardGroups } from "./training-rollout-metrics";
+import {
+  rolloutRewardGroups,
+  summarizeRolloutRewardProgress,
+} from "./training-rollout-metrics";
 
 describe("eventSeries", () => {
   it("summarizes reward spread, best reward, validity, and retries by rollout group", () => {
@@ -156,6 +159,32 @@ describe("rolloutRewardGroups", () => {
       optimizerStep: 12,
       taskId: "task-b",
       taskFamily: "family-b",
+    });
+  });
+});
+
+describe("summarizeRolloutRewardProgress", () => {
+  it("keeps the planned task count distinct from completed and partial results", () => {
+    expect(summarizeRolloutRewardProgress(16, {
+      completedGroups: 15,
+      targetGroups: 26,
+    })).toEqual({
+      observedTasks: 16,
+      completedTasks: 15,
+      activeTasks: 1,
+      notStartedTasks: 10,
+      targetTasks: 26,
+    });
+
+    expect(summarizeRolloutRewardProgress(26, {
+      completedGroups: 26,
+      targetGroups: 26,
+    })).toEqual({
+      observedTasks: 26,
+      completedTasks: 26,
+      activeTasks: 0,
+      notStartedTasks: 0,
+      targetTasks: 26,
     });
   });
 });
