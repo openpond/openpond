@@ -101,6 +101,69 @@ describe("dev runner", () => {
     });
   });
 
+  test("plans a frozen desktop build isolated from the hot-reloading dev app", () => {
+    const options = parseDevRunnerArgs(["stable-desktop"]);
+    const plan = buildDevRunnerPlan(options, {}, root);
+
+    expect(plan.mode).toBe("stable-desktop");
+    expect(plan.ports).toEqual({ server: 17878, web: 17878 });
+    expect(plan.urls).toEqual({
+      server: "http://127.0.0.1:17878",
+      web: "http://127.0.0.1:17878",
+    });
+    expect(plan.appHome).toBe(
+      path.join(root, ".openpond", "stable-web", "data"),
+    );
+    expect(plan.setupCommands.map((command) => command.id)).toEqual([
+      "build-stable-web",
+      "build-desktop",
+    ]);
+    expect(plan.processes.map((processPlan) => processPlan.id)).toEqual([
+      "server",
+      "desktop",
+    ]);
+    expect(
+      plan.processes.find((processPlan) => processPlan.id === "server")?.args,
+    ).toEqual([
+      path.join(root, "apps", "server", "dist", "index.js"),
+      "web",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      "17878",
+      "--web-root",
+      path.join(root, ".openpond", "stable-web", "build"),
+      "--store-dir",
+      path.join(root, ".openpond", "stable-web", "data"),
+    ]);
+    expect(
+      plan.processes.find((processPlan) => processPlan.id === "desktop")?.env,
+    ).toMatchObject({
+      OPENPOND_APP_HOME: path.join(root, ".openpond", "stable-web", "data"),
+      OPENPOND_DESKTOP_USER_DATA_DIR: path.join(
+        root,
+        ".openpond",
+        "stable-desktop",
+        "user-data",
+      ),
+      OPENPOND_SERVER_PORT: "17878",
+      OPENPOND_WEB_PORT: "17878",
+      OPENPOND_WEB_URL: "http://127.0.0.1:17878",
+    });
+  });
+
+  test("requires one origin for Stable Desktop's built UI and API", () => {
+    const options = parseDevRunnerArgs([
+      "stable-desktop",
+      "--server-port=19078",
+      "--web-port=19079",
+    ]);
+
+    expect(() => buildDevRunnerPlan(options, {}, root)).toThrow(
+      "--web-port must match --server-port",
+    );
+  });
+
   test("prints the real runner plan without starting long-lived processes", () => {
     const result = spawnSync(
       process.execPath,

@@ -5,7 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export type DevRunnerMode = "desktop" | "web" | "server" | "renderer";
+export type DevRunnerMode =
+  | "desktop"
+  | "web"
+  | "server"
+  | "renderer"
+  | "stable-desktop";
 
 export type DevRunnerOptions = {
   mode: DevRunnerMode;
@@ -139,12 +144,28 @@ export function buildDevRunnerPlan(
   root = ROOT,
 ): DevRunnerPlan {
   const host = options.host;
+  const stableDesktop = options.mode === "stable-desktop";
   const serverPort =
-    options.serverPort ?? numberFromEnv(env.OPENPOND_SERVER_PORT) ?? defaultServerPort(env);
-  const webPort = options.webPort ?? numberFromEnv(env.OPENPOND_WEB_PORT) ?? 17876;
+    options.serverPort ??
+    numberFromEnv(env.OPENPOND_SERVER_PORT) ??
+    (stableDesktop ? 17878 : defaultServerPort(env));
+  const configuredWebPort =
+    options.webPort ?? numberFromEnv(env.OPENPOND_WEB_PORT);
+  if (
+    stableDesktop &&
+    configuredWebPort !== undefined &&
+    configuredWebPort !== serverPort
+  ) {
+    throw new Error(
+      "Stable Desktop serves its built UI and API from one port; --web-port must match --server-port.",
+    );
+  }
+  const webPort = stableDesktop ? serverPort : configuredWebPort ?? 17876;
   const serverUrl = `http://${host}:${serverPort}`;
   const webUrl = `http://${host}:${webPort}`;
-  const appHome = devAppHomePath(env);
+  const appHome = stableDesktop
+    ? path.join(root, ".openpond", "stable-web", "data")
+    : devAppHomePath(env);
   const baseEnv = {
     OPENPOND_APP_HOME: appHome,
     OPENPOND_SERVER_PORT: String(serverPort),
@@ -169,6 +190,59 @@ export function buildDevRunnerPlan(
     processes.push(watchedServerCommand(root, env, serverPort, serverEnv, options.watch));
     processes.push(command("renderer", pnpmBinary(env), ["--dir", "apps/web", "run", "dev"], root, rendererEnv));
     processes.push(command("desktop", electronBinary(root), ["."], path.join(root, "apps", "desktop"), desktopEnv));
+  }
+
+  if (stableDesktop) {
+    const stableWebRoot = path.join(root, ".openpond", "stable-web", "build");
+    setupCommands.push(
+      command(
+        "build-stable-web",
+        pnpmBinary(env),
+        ["run", "stable:web:build"],
+        root,
+      ),
+    );
+    setupCommands.push(
+      command("build-desktop", pnpmBinary(env), ["run", "build:desktop"], root),
+    );
+    processes.push(
+      command(
+        "server",
+        process.execPath,
+        [
+          path.join(root, "apps", "server", "dist", "index.js"),
+          "web",
+          "--hostname",
+          host,
+          "--port",
+          String(serverPort),
+          "--web-root",
+          stableWebRoot,
+          "--store-dir",
+          appHome,
+        ],
+        root,
+        { ...serverEnv, OPENPOND_REMOTE_ACCESS_TARGET: serverUrl },
+      ),
+    );
+    processes.push(
+      command(
+        "desktop",
+        electronBinary(root),
+        ["."],
+        path.join(root, "apps", "desktop"),
+        {
+          ...desktopEnv,
+          OPENPOND_DESKTOP_USER_DATA_DIR: path.join(
+            root,
+            ".openpond",
+            "stable-desktop",
+            "user-data",
+          ),
+          OPENPOND_WEB_URL: serverUrl,
+        },
+      ),
+    );
   }
 
   if (options.mode === "web") {
@@ -648,7 +722,13 @@ function parsePort(value: string, flag: string): number {
 }
 
 function parseMode(value: string): DevRunnerMode {
-  if (value === "desktop" || value === "web" || value === "server" || value === "renderer") {
+  if (
+    value === "desktop" ||
+    value === "web" ||
+    value === "server" ||
+    value === "renderer" ||
+    value === "stable-desktop"
+  ) {
     return value;
   }
   throw new Error(`Unknown dev mode: ${value}`);

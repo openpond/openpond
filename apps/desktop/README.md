@@ -9,6 +9,18 @@ pnpm dev
 
 The root dev supervisor is the supported entrypoint. It builds Desktop, runs the server through Node/tsx watch mode, starts Vite, waits for both readiness contracts, and then starts Electron with the explicit reusable server URL and capability token. It owns all three process groups and drains them in `finally` on startup failure, child exit, SIGINT, or SIGTERM. `scripts/dev-web.ts` is intentionally retired.
 
+## Frozen Desktop alongside development
+
+Run a production-built snapshot in its own Desktop window with:
+
+```bash
+pnpm stable
+```
+
+`pnpm stable:desktop` is the explicit equivalent. This command builds and stages the web UI, builds the server and Desktop main process, serves the static UI and API together on port `17878`, and launches Electron against that origin. Its server data lives in `.openpond/stable-web/data`, and its Electron profile lives in `.openpond/stable-desktop/user-data`, so it can remain open alongside the hot-reloading `pnpm dev` app without sharing a single-instance lock or local state.
+
+The running snapshot does not read later source edits or Vite updates. Stop it with `Ctrl+C`, then run `pnpm stable` again whenever you want a newly built snapshot. The supervisor stops the server it started when the stable Desktop exits; if it attached to an already-running compatible stable server on `17878`, it leaves that server running.
+
 ## Ports and environment
 
 Stable development defaults to server port `17874` and renderer port `17876`; nightly defaults the server to `17875`. Override them with `OPENPOND_SERVER_PORT`, `OPENPOND_WEB_PORT`, or the dev-runner flags. Development state is isolated in `~/.openpond/openpond-app-dev` by default (`openpond-app-nightly-dev` for nightly); set `OPENPOND_APP_HOME` explicitly to use another directory. The dev runner allows 60 seconds for a state-heavy server to become ready; override that limit with `OPENPOND_DEV_SERVER_READY_TIMEOUT_MS` when diagnosing startup behavior. Packaged Desktop uses the same 60-second allowance and supports `OPENPOND_DESKTOP_SERVER_READY_TIMEOUT_MS` for diagnostics.

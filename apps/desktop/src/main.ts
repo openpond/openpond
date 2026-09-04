@@ -810,7 +810,14 @@ function configureApplicationMenu(): void {
 }
 
 if (!app.isPackaged) {
-  app.setPath("userData", path.join(app.getPath("appData"), "openpond-dev"));
+  const configuredUserDataPath =
+    process.env.OPENPOND_DESKTOP_USER_DATA_DIR?.trim();
+  app.setPath(
+    "userData",
+    configuredUserDataPath
+      ? path.resolve(configuredUserDataPath)
+      : path.join(app.getPath("appData"), "openpond-dev"),
+  );
 }
 
 const ownsSingleInstanceLock = app.requestSingleInstanceLock();
