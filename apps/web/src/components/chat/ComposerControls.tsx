@@ -207,10 +207,6 @@ export function ComposerProjectTargetControl({
     const selected = option.value === state.value;
     const disabled = busy || option.disabled;
     const action = option.kind === "action";
-    const title =
-      option.disabled && option.disabledReason
-        ? option.disabledReason
-        : `${option.label}: ${option.detail}`;
     return (
       <button
         key={option.value}
@@ -221,7 +217,6 @@ export function ComposerProjectTargetControl({
           selected ? "selected" : ""
         } ${option.kind}`}
         disabled={disabled}
-        data-tooltip={title}
         onClick={() => {
           onChange(option.value);
           setNewMenuOpen(false);
