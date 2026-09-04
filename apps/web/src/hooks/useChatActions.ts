@@ -339,6 +339,25 @@ export function useChatActions({
   setView,
   setWorkspaceBusy,
 }: UseChatActionsInput) {
+  function refreshBootstrapAfterAcceptedTurn(
+    connectionForTurn: ClientConnection,
+  ): void {
+    void api
+      .bootstrap(connectionForTurn)
+      .then(applyBootstrapPayload)
+      .catch((refreshError) => {
+        console.warn(
+          "[chat] Message was accepted, but the post-send bootstrap refresh failed.",
+          refreshError,
+        );
+        const detail =
+          refreshError instanceof Error
+            ? refreshError.message
+            : String(refreshError);
+        setError(`Message sent, but the chat list could not refresh: ${detail}`);
+      });
+  }
+
   const activeTurnSessionIdsRef = useRef<Set<string>>(new Set());
   const providerSettings = bootstrap?.providers ?? null;
 
@@ -1005,8 +1024,7 @@ export function useChatActions({
           upsertSessionPreservingLocalSidebarState(current, payload.session)
         );
         onCodexHistoryTurnPayload?.(payload);
-        const refreshedBootstrap = await api.bootstrap(connection);
-        applyBootstrapPayload(refreshedBootstrap);
+        refreshBootstrapAfterAcceptedTurn(connection);
         return true;
       }
       const selectedMentionedSandboxApp = mentionedAppIdForTurn
@@ -1246,8 +1264,7 @@ export function useChatActions({
           ? codexReasoningEffort
           : undefined,
       });
-      const payload = await api.bootstrap(connection);
-      applyBootstrapPayload(payload);
+      refreshBootstrapAfterAcceptedTurn(connection);
       const workspaceId = session.workspaceId ?? session.appId;
       if (
         workspaceId &&
