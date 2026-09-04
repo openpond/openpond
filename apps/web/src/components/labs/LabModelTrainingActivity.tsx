@@ -254,7 +254,7 @@ function eventTypeOptions(events: TrainingJobEvent[]) {
 }
 
 function defaultEventTypeEnabled(type: string): boolean {
-  return type !== "metric";
+  return type !== "metric" && !type.endsWith("_metric");
 }
 
 function eventLabel(type: string): string {
