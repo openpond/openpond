@@ -57,6 +57,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/server-http.test.ts",
   "tests/server-work-queues.test.ts",
   "tests/session-store.test.ts",
+  "tests/sign-out-openpond-account.test.ts",
   "tests/signed-workspace-image-url.test.ts",
   "tests/sqlite-backup-retention.test.ts",
   "tests/sqlite-driver.test.ts",
