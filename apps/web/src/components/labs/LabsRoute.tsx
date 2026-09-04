@@ -33,6 +33,7 @@ import {
   modelProjectRoute,
   modelLibraryRoute,
   modelsPath,
+  modelsRouteWithDefaultProject,
   modelsSectionFromRoute,
   navigateModelsRoute,
   useModelsRoute,
@@ -155,19 +156,6 @@ export function LabsRoute({
   const selected = models.find(
     (workproduct) => workproduct.id === selectedProjectRouteId,
   ) ?? null;
-  const modelProjects = training.training.payload?.modelProjects ?? [];
-  const activeHostedTeamId =
-    training.settingsPreferences.defaultTeamId?.trim() ?? null;
-  const scopedModelProjects = useMemo(
-    () =>
-      modelProjects.filter(
-        (project) =>
-          project.hosted === null ||
-          (activeHostedTeamId !== null &&
-            project.hosted.teamId === activeHostedTeamId),
-      ),
-    [activeHostedTeamId, modelProjects],
-  );
   useEffect(() => {
     if (!profileView.connection) return;
     let cancelled = false;
@@ -186,7 +174,9 @@ export function LabsRoute({
   }, [profileView.connection, profileView.onError, profileView.onPayload]);
   useEffect(() => {
     if (!modelsRoute || typeof window === "undefined") return;
-    if (modelsRoute.kind === "index" && scopedModelProjects.length > 0) {
+    const defaultRoute = modelsRouteWithDefaultProject(modelsRoute, models);
+    if (defaultRoute !== modelsRoute) {
+      navigateModelsRoute(defaultRoute, "replace");
       return;
     }
     const canonicalPath = modelsPath(modelsRoute);
@@ -196,7 +186,7 @@ export function LabsRoute({
     ) {
       navigateModelsRoute(modelsRoute, "replace");
     }
-  }, [modelsRoute, scopedModelProjects.length]);
+  }, [models, modelsRoute]);
   useEffect(() => {
     setSelectedDatasetId(
       (modelsRoute?.kind === "project" && modelsRoute.section === "tasksets") ||

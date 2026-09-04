@@ -276,6 +276,21 @@ export function modelsSectionFromRoute(route: ModelsRoute): ModelSection {
   return route.kind === "project" ? route.section : "overview";
 }
 
+export function modelsRouteWithDefaultProject(
+  route: ModelsRoute,
+  projects: ReadonlyArray<{ id: string; updatedAt: string }>,
+): ModelsRoute {
+  if (route.kind !== "index" || projects.length === 0) return route;
+  const mostRecent = projects.reduce((current, candidate) => {
+    const updatedAtOrder = candidate.updatedAt.localeCompare(current.updatedAt);
+    return updatedAtOrder > 0
+      || (updatedAtOrder === 0 && candidate.id.localeCompare(current.id) > 0)
+      ? candidate
+      : current;
+  });
+  return modelProjectRoute(mostRecent.id);
+}
+
 export function modelsLibrarySectionFromRoute(
   route: ModelsRoute,
 ): ModelLibrarySection | null {

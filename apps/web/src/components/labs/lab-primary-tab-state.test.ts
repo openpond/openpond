@@ -7,6 +7,7 @@ import {
   modelProjectRoute,
   modelsPath,
   modelsRouteFromLocation,
+  modelsRouteWithDefaultProject,
   modelsSectionFromRoute,
 } from "./lab-primary-tab-state";
 
@@ -146,6 +147,34 @@ describe("Models path routing", () => {
       "/models/comparisons/series%201",
     );
     expect(modelsSectionFromRoute({ kind: "index" })).toBe("overview");
+  });
+
+  it("defaults the Models index to the most recently updated project", () => {
+    expect(
+      modelsRouteWithDefaultProject(
+        { kind: "index" },
+        [
+          { id: "older", updatedAt: "2026-08-01T00:00:00.000Z" },
+          { id: "newest", updatedAt: "2026-09-03T00:00:00.000Z" },
+        ],
+      ),
+    ).toEqual(modelProjectRoute("newest"));
+  });
+
+  it("preserves explicit Models destinations and an empty index", () => {
+    const projectRoute = modelProjectRoute("selected", "runs");
+    const libraryRoute = modelLibraryRoute("comparisons");
+    const projects = [{ id: "newest", updatedAt: "2026-09-03T00:00:00.000Z" }];
+
+    expect(modelsRouteWithDefaultProject(projectRoute, projects)).toBe(
+      projectRoute,
+    );
+    expect(modelsRouteWithDefaultProject(libraryRoute, projects)).toBe(
+      libraryRoute,
+    );
+    expect(modelsRouteWithDefaultProject({ kind: "index" }, [])).toEqual({
+      kind: "index",
+    });
   });
 });
 
