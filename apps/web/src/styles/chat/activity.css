@@ -441,21 +441,20 @@
 }
 
 .activity-artifact {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 9px;
+  display: inline-flex;
   align-items: center;
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
+  justify-self: start;
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.035);
-  padding: 8px 9px;
+  padding: 4px 5px 4px 9px;
   grid-column: 1 / -1;
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
 .activity-artifact:hover {
@@ -463,28 +462,82 @@
   background: rgba(255, 255, 255, 0.055);
 }
 
-.activity-artifact > span {
-  display: grid;
+.activity-artifact-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   min-width: 0;
+  max-width: min(420px, calc(100vw - 220px));
   color: var(--text);
 }
 
-.activity-artifact strong,
-.activity-artifact code {
+.activity-artifact-name strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.activity-artifact strong {
   font-size: 12px;
   font-weight: 550;
 }
 
-.activity-artifact code,
-.activity-artifact small {
-  color: var(--muted);
-  font-size: 10px;
+.activity-artifact-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 8px;
+  padding-left: 5px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.activity-artifact-actions button {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #8d9298;
+}
+
+.activity-artifact-actions button:hover,
+.activity-artifact-actions button:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f0f0ee;
+}
+
+.activity-artifact-context-menu {
+  position: fixed;
+  z-index: 130;
+  display: grid;
+  width: 164px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: #191919;
+  padding: 5px;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.46);
+}
+
+.activity-artifact-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 31px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #e8e8e8;
+  padding: 0 9px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.activity-artifact-context-menu button:hover,
+.activity-artifact-context-menu button:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .activity-artifact-image {

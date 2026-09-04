@@ -1,10 +1,4 @@
-import {
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   CircleAlert,
   Bot,
@@ -46,6 +40,7 @@ import {
 } from "./SubagentAvatarGroup";
 import { HarnessRefinerReceipt } from "./HarnessRefinerReceipt";
 import { ChatActivitySummary } from "./ChatActivitySummary";
+import { ActivityFileArtifact } from "./ActivityFileArtifact";
 
 const SUBAGENT_MESSAGE_VISIBLE_LINES = 5;
 const SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS = 280;
@@ -358,24 +353,11 @@ function ActivityArtifacts({
           );
         }
         return (
-          <button
-            type="button"
-            className="activity-artifact"
+          <ActivityFileArtifact
+            artifact={artifact}
             key={artifact.path}
-            title={`Show ${artifact.path} in its folder`}
-            onClick={() => void revealLocalFile(artifact.path)}
-          >
-            <FileText aria-hidden size={14} />
-            <span>
-              <strong>{artifact.title}</strong>
-              <code>{artifact.path}</code>
-            </span>
-            <small>
-              {artifact.sizeBytes == null
-                ? artifact.contentType
-                : formatArtifactSize(artifact.sizeBytes)}
-            </small>
-          </button>
+            onOpenFileInSidebar={onOpenFileInSidebar}
+          />
         );
       })}
     </div>
