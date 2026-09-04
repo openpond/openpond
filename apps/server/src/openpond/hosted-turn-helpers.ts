@@ -299,6 +299,7 @@ function buildOpenPondCapabilityIndexContext(
       : []),
     "- web_fetch: fetch and read a known HTTP(S) URL when the user provides a link or exact page; use web_search for discovery by query.",
     "- web_search: search current or external information when web search is available and the answer depends on current facts.",
+    "- schedule_work: create a durable one-time or recurring workflow attached to the current chat when the user asks to schedule work. Resolve the exact cadence, local date/time, and timezone, then call schedule_work; future runs and their output return to the attached chat. This is an app-native tool, not a profile skill.",
     "- action_run: search and run scoped project or profile actions from the allowed action catalog.",
     "- profile_skill: load existing profile skills for reusable instruction workflows, not app-native controls or permissions.",
     "- Capability names are not slash commands. Use available native tools or server-confirmed workflow state, and do not claim a workflow started unless server state confirms it.",
