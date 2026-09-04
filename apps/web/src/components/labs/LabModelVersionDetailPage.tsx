@@ -577,6 +577,7 @@ export function LabModelVersionDetailPage({
               error={selectedJob.error ?? detail.error}
               events={detail.detail?.events ?? []}
               loading={detail.loading}
+              pending={runActive}
             />
           ) : null}
         </div>

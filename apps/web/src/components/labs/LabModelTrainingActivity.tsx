@@ -7,7 +7,7 @@ import {
 } from "react";
 import type { TrainingJobEvent } from "@openpond/contracts";
 
-import { Check, ChevronDown, ListFilter } from "../icons";
+import { Check, ChevronDown, ListFilter, Loader2 } from "../icons";
 import { formatDateTime } from "../training/training-model-data";
 
 export function formatBytes(value: number): string {
@@ -25,10 +25,12 @@ export function TrainingEventLog({
   error,
   events,
   loading,
+  pending,
 }: {
   error: string | null;
   events: TrainingJobEvent[];
   loading: boolean;
+  pending: boolean;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [typeSelection, setTypeSelection] = useState<Record<string, boolean>>(
@@ -84,7 +86,7 @@ export function TrainingEventLog({
     const log = logRef.current;
     if (!log || !followLatest) return;
     log.scrollTop = log.scrollHeight;
-  }, [followLatest, visibleEvents]);
+  }, [error, followLatest, pending, visibleEvents]);
 
   if (loading && !events.length) {
     return <div className="training-run-placeholder">Loading run events…</div>;
@@ -203,6 +205,12 @@ export function TrainingEventLog({
             <code>{eventSummary(event)}</code>
           </div>
         ))}
+        {pending && !error ? (
+          <div className="training-event-log-loading" role="status">
+            <Loader2 aria-hidden="true" className="spin" size={14} />
+            <span className="sr-only">Waiting for new activity</span>
+          </div>
+        ) : null}
         {!visibleEvents.length ? (
           <div className="training-event-log-empty">
             No events match the selected event types.
@@ -216,9 +224,6 @@ export function TrainingEventLog({
           </div>
         ) : null}
       </div>
-      <span className="training-event-follow-state" data-following={followLatest}>
-        {followLatest ? "Following new events" : "Scroll to the bottom to resume live follow"}
-      </span>
     </div>
   );
 }
