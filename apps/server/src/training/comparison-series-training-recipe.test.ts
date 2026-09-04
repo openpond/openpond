@@ -147,7 +147,7 @@ describe("Comparison Series executable recipe", () => {
     expect(resolved.optimizer.maxSteps).toBe(16);
     expect(resolved.rollout.groupSize).toBe(4);
     expect(resolved.resourceLimits.maxRollouts).toBe(64);
-    expect(resolved.resourceLimits.maxGpuSeconds).toBe(7_200);
+    expect(resolved.resourceLimits.maxGpuSeconds).toBe(10_800);
   });
 
   it("binds a child arm to the exact Sandbox adapter and resets its optimizer", async () => {

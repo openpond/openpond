@@ -56,7 +56,7 @@ export async function comparisonSeriesTrainingRecipe(input: {
     resourceLimits: {
       ...recipe.resourceLimits,
       maxGpuSeconds: Math.min(
-        7_200,
+        10_800,
         series.benchmarkProtocol!.resources.maximumTrainingGpuSeconds,
         1_200 + optimizerSteps * 600,
       ),

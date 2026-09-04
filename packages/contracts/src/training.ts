@@ -295,7 +295,7 @@ export const RftRecipeSchema = z.object({
       .int()
       .positive()
       .max(24 * 60 * 60 * 1_000),
-    maxGpuSeconds: z.number().int().positive().max(7_200).optional(),
+    maxGpuSeconds: z.number().int().positive().max(10_800).optional(),
     maxRollouts: z.number().int().positive().max(100_000),
     maxPayloadBytes: z
       .number()
