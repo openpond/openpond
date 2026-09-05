@@ -140,8 +140,25 @@ describe("persistence data and concurrency boundaries", () => {
     const ciphertext = Buffer.concat([cipher.update("preserved-provider-key"), cipher.final()]);
     await writeFile(path.join(source, "provider-secrets.key"), oldKey.toString("base64"));
     await writeFile(path.join(source, "provider-secrets.json"), JSON.stringify({ version: 1, providers: { openai: { source: "local_secret", iv: iv.toString("base64"), ciphertext: ciphertext.toString("base64"), tag: cipher.getAuthTag().toString("base64"), createdAt: timestamp, updatedAt: timestamp } } }));
-    const report = await initializeHome(home);
+    const profileRoot = path.join(home, "profiles", "installed");
+    await mkdir(profileRoot, { recursive: true });
+    await writeFile(path.join(profileRoot, "openpond.json"), '{"profile":"installed-source"}');
+    await writeFile(path.join(home, "config.json"), JSON.stringify({ accounts: [
+      { handle: "one", baseUrl: "https://one.example", apiKey: "one-key", session: { token: "one-session" } },
+      { handle: "two", baseUrl: "https://two.example", apiKey: "two-key" },
+    ], activeProfile: { handle: "two", baseUrl: "https://two.example" },
+    openpondProfile: { repoPath: profileRoot, profile: "installed", mode: "local", profiles: [{ source: "local", repositoryId: "same-repository", repoPath: profileRoot, profile: "installed" }] } }));
+    const browserFile = path.join(home, "old-browser-sidebar.json");
+    const browserState = { activeTabId: "tab-1", tabs: [{ id: "tab-1", url: "https://example.com/saved", title: "Saved browser", faviconUrl: null, lastUpdatedAt: 123 }] };
+    await writeFile(browserFile, JSON.stringify({ conversations: { "session-1": browserState } }));
+    const report = await initializeHome(home, { sourceBrowserState: browserFile });
     expect(report.status).toBe("verified");
+    expect(getLocalRecord(home, "browser_tab_state", "session-1")?.value).toEqual(browserState);
+    const accounts = await readAccountConfiguration(home);
+    expect(accounts.activeProfile).toMatchObject({ handle: "two", baseUrl: "https://two.example" });
+    expect(accounts.accounts).toEqual(expect.arrayContaining([expect.objectContaining({ handle: "one", session: expect.objectContaining({ token: "one-session" }) }), expect.objectContaining({ handle: "two", apiKey: "two-key" })]));
+    expect(accounts.openpondProfile).toMatchObject({ repoPath: path.join(home, "library", "profiles", "installed"), profile: "installed", profiles: [{ repositoryId: "same-repository", repoPath: path.join(home, "library", "profiles", "installed") }] });
+    expect(await readFile(path.join(home, "library", "profiles", "installed", "openpond.json"), "utf8")).toBe('{"profile":"installed-source"}');
     expect((await readPreferences(home)).preferences).toMatchObject({ steerActiveResponses: false, sidebarWidth: 321 });
     expect(getLocalRecord(home, "codex_sidebar_state", "thread-1")?.value).toEqual({ pinned: true });
     expect(getLocalRecord(home, "saved_local_projects", "saved-project")?.value).toMatchObject({ id: "saved-project", path: path.join(home, "library", "harnesses", "project") });

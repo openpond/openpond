@@ -4,7 +4,7 @@ import { readConfig } from "./config.js";
 import { openStorageDatabase } from "./database.js";
 import { resolveConfigPath, storagePaths } from "./home.js";
 
-export const placementTables = new Set(["sessions", "projection_session_shells", "saved_local_projects", "profile_installations", "extension_installations", "scaffold_registrations", "refiner_bindings", "harness_release_records", "dataset_artifacts", "dataset_import_jobs", "taskset_drafts", "taskset_draft_workspaces", "local_agent_schedules"]);
+export const placementTables = new Set(["sessions", "projection_session_shells", "sidebar_file_bookmarks", "saved_local_projects", "profile_installations", "extension_installations", "scaffold_registrations", "refiner_bindings", "harness_release_records", "dataset_artifacts", "dataset_import_jobs", "taskset_drafts", "taskset_draft_workspaces", "local_agent_schedules"]);
 export function isWithinHome(file: string, home: string): boolean {
   const relative = path.relative(home, file);
   return relative === "" || relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
@@ -29,7 +29,7 @@ export async function externalStorageReferences(home: string): Promise<{ path: s
       for (const { name } of db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]) if (placementTables.has(name)) {
         const columns = db.prepare(`PRAGMA table_info(${name})`).all() as { name: string }[];
         if (columns.some((entry) => entry.name === "payload")) for (const row of db.prepare(`SELECT payload FROM ${name}`).all() as { payload: string }[]) visit(JSON.parse(row.payload));
-        for (const { name: column } of columns.filter((entry) => /(?:_path|_directory|_root)$/.test(entry.name))) {
+        for (const { name: column } of columns.filter((entry) => /(?:_path|_directory|_root)$/.test(entry.name) || entry.name === "cwd")) {
           for (const row of db.prepare(`SELECT "${column}" AS value FROM ${name}`).all() as { value: unknown }[]) if (typeof row.value === "string") add(row.value);
         }
       }

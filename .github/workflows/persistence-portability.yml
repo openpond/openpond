@@ -8,6 +8,9 @@ on:
       - "apps/desktop/src/desktop-browser-home.ts"
       - "apps/server/src/runtime/home-runtime-owner.ts"
       - "tests/persistence-boundaries.test.ts"
+      - "scripts/check-browser-migration.ts"
+      - "packages/harness/scripts/build.ts"
+      - "packages/sdk/scripts/build.ts"
       - ".github/workflows/persistence-portability.yml"
   push:
     branches: [master]
@@ -15,6 +18,7 @@ on:
       - "packages/persistence/**"
       - "apps/desktop/src/desktop-browser-home.ts"
       - "tests/persistence-boundaries.test.ts"
+      - "scripts/check-browser-migration.ts"
       - ".github/workflows/persistence-portability.yml"
 
 permissions:
@@ -48,3 +52,9 @@ jobs:
       - run: pnpm exec vitest run --project root-system tests/persistence-boundaries.test.ts
         env:
           OPENPOND_HOME: ${{ runner.temp }}/openpond-portability
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm exec tsx scripts/check-browser-migration.ts
+      - if: runner.os == 'macOS'
+        run: pnpm exec tsx scripts/check-browser-migration.ts

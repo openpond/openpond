@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,15 +36,7 @@ await build({
   logLevel: "info",
 });
 
-await run(resolveTscBin(), ["--build", "tsconfig.build.json", "--force"]);
-
-function resolveTscBin(): string {
-  const candidates = [
-    path.join(root, "node_modules/.bin/tsc"),
-    path.resolve(root, "..", "..", "node_modules/.bin/tsc"),
-  ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? "tsc";
-}
+await run(process.execPath, [createRequire(import.meta.url).resolve("typescript/bin/tsc"), "--build", "tsconfig.build.json", "--force"]);
 
 function run(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
