@@ -33,8 +33,13 @@ jobs:
           node-version: "24.18.0"
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:artifacts
+      - run: pnpm exec tsx scripts/prepare-release.ts --channel stable --version "$(node -p "require('./apps/desktop/package.json').version")"
+      - run: pnpm run package:linux:release
+      - run: pnpm run budgets:desktop-package
       - run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: xvfb-run -a pnpm run smoke:desktop:dev --skip-chat --json release-smoke/dev-render-commits.json
+      - run: xvfb-run -a pnpm run smoke:desktop:packaged --json release-smoke/packaged.json
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
