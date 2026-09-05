@@ -490,6 +490,33 @@ function registerIpcHandlers(): void {
   ipcHandlersRegistered = true;
   registerBrowserSidebarIpc(() => mainWindow, handleTrackedIpc);
   handleTrackedIpc("openpond:connection", () => ensureServer());
+  handleTrackedIpc("openpond:desktop:runtimeInfo", () => {
+    const devMode =
+      !app.isPackaged && process.env.OPENPOND_DESKTOP_DEV_MODE === "1";
+    return {
+      version: app.getVersion(),
+      releaseChannel: releaseChannel(),
+      packaged: app.isPackaged,
+      devMode,
+      canReload: devMode,
+    };
+  });
+  handleTrackedIpc("openpond:desktop:reload", (event) => {
+    if (app.isPackaged || process.env.OPENPOND_DESKTOP_DEV_MODE !== "1") {
+      return {
+        ok: false,
+        error: "App refresh is only available when OpenPond is running through pnpm dev.",
+      };
+    }
+    const window = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    if (!window || window.isDestroyed()) {
+      return { ok: false, error: "No app window is available." };
+    }
+    setTimeout(() => {
+      if (!window.isDestroyed()) window.webContents.reloadIgnoringCache();
+    }, 50);
+    return { ok: true };
+  });
   handleTrackedIpc("openpond:startup:retry", async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
     if (!window) return { ok: false, error: "No app window is available." };

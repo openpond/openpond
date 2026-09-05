@@ -19,10 +19,9 @@ import type { ProviderSecrets } from "../apps/server/src/openpond/provider-secre
 describe("provider model option capping", () => {
   test("keeps the managed OpenPond catalog and effort picker available during fallback", () => {
     const expectedModelIds = [
-      "openpond-chat",
-      "accounts/fireworks/models/kimi-k3",
-      "accounts/fireworks/models/glm-5p2",
       "accounts/fireworks/models/deepseek-v4-pro",
+      "accounts/fireworks/models/kimi-k3",
+      "accounts/fireworks/models/glm-5p3",
       "accounts/fireworks/models/deepseek-v4-flash",
       "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
       "accounts/fireworks/models/minimax-m3",
@@ -39,13 +38,61 @@ describe("provider model option capping", () => {
     ).toEqual(expectedModelIds);
     expect(
       modelOptionsForProvider("openpond", settings)[0],
-    ).toMatchObject({ value: "openpond-chat", label: "DeepSeek V4 Pro" });
+    ).toMatchObject({
+      value: "accounts/fireworks/models/deepseek-v4-pro",
+      label: "DeepSeek V4 Pro",
+    });
     expect(
       providerOptionsFromSettings(settings).find((option) => option.value === "openpond"),
     ).toEqual({ value: "openpond", label: "OpenPond Chat", description: undefined });
     for (const modelId of expectedModelIds) {
       expect(providerModelSupportsReasoning("openpond", modelId, settings)).toBe(true);
     }
+  });
+
+  test("keeps the retired OpenPond Chat alias out of saved defaults and caches", () => {
+    const settings = buildProviderSettings({
+      file: {
+        version: 1,
+        providers: {
+          openpond: {
+            enabled: true,
+            baseUrl: null,
+            defaultModel: "openpond-chat",
+            modelOverrides: ["openpond-chat"],
+            updatedAt: null,
+          },
+        },
+        modelCaches: {
+          openpond: {
+            providerId: "openpond",
+            models: [
+              {
+                id: "openpond-chat",
+                providerId: "openpond",
+                displayName: "DeepSeek V4 Pro",
+                contextWindow: 1_048_576,
+                outputLimit: 393_216,
+                lifecycleStatus: "active",
+                source: "hosted",
+                capabilities: { reasoning: true },
+              },
+            ],
+            fetchedAt: "2026-09-03T00:00:00.000Z",
+            lastError: null,
+            source: "hosted",
+          },
+        },
+      },
+    });
+
+    expect(settings.providers.openpond?.defaultModel).toBe(
+      "accounts/fireworks/models/deepseek-v4-pro",
+    );
+    expect(settings.providers.openpond?.modelOverrides).not.toContain("openpond-chat");
+    expect(modelOptionsForProvider("openpond", settings).map((option) => option.value)).not.toContain(
+      "openpond-chat",
+    );
   });
 
   test("caps large provider model lists", () => {

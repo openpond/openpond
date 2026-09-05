@@ -670,6 +670,57 @@
   font-weight: 500;
 }
 
+.account-build-footnote {
+  align-items: center;
+}
+
+.account-build-details {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-build-version,
+.account-build-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-build-context {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border-radius: 999px;
+  padding: 0 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #bdbdbd;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.account-build-context.development {
+  background: rgba(58, 163, 255, 0.13);
+  color: #8fc8ff;
+}
+
+.account-build-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.account-build-actions .settings-primary,
+.account-build-actions .settings-secondary {
+  margin: 0;
+}
+
+.account-build-actions .settings-primary.compact {
+  height: 28px;
+  border-radius: 8px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
 .account-error-footnote {
   align-items: flex-start;
 }

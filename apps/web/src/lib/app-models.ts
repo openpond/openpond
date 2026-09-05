@@ -310,7 +310,7 @@ export const EMPTY_PERSONALIZATION: PersonalizationSettings = {
 
 const OPENPOND_MODEL_OPTIONS = [
   {
-    value: DEFAULT_OPENPOND_CHAT_MODEL,
+    value: "accounts/fireworks/models/deepseek-v4-pro",
     label: "DeepSeek V4 Pro",
     description: "reasoning",
   },
@@ -320,18 +320,13 @@ const OPENPOND_MODEL_OPTIONS = [
     description: "reasoning",
   },
   {
-    value: "accounts/fireworks/models/glm-5p2",
-    label: "GLM-5.2",
-    description: "reasoning",
-  },
-  {
-    value: "accounts/fireworks/models/deepseek-v4-pro",
-    label: "DeepSeek V4 Pro (Fireworks)",
+    value: "accounts/fireworks/models/glm-5p3",
+    label: "GLM-5.3",
     description: "reasoning",
   },
   {
     value: "accounts/fireworks/models/deepseek-v4-flash",
-    label: "DeepSeek V4 Flash (Fireworks)",
+    label: "DeepSeek V4 Flash",
     description: "reasoning",
   },
   {
@@ -638,11 +633,17 @@ export function modelOptionsForProvider(
   provider: ChatProvider,
   settings?: ProviderSettings | null,
 ): DropdownOption[] {
-  const cached = providerModelCache(settings, provider)?.models ?? [];
+  const cached = (providerModelCache(settings, provider)?.models ?? []).filter(
+    (model) => provider !== "openpond" || model.id !== DEFAULT_OPENPOND_CHAT_MODEL,
+  );
   const fromCache = cached.map(modelOptionFromProviderModel);
   const config = providerConfig(settings, provider);
   const manual = [...(config?.modelOverrides ?? []), config?.defaultModel]
-    .filter((value): value is string => Boolean(value?.trim()))
+    .filter(
+      (value): value is string =>
+        Boolean(value?.trim()) &&
+        (provider !== "openpond" || value !== DEFAULT_OPENPOND_CHAT_MODEL),
+    )
     .map((value) => ({ value, label: value }));
   return uniqueDropdownOptions([...fromCache, ...manual, ...fallbackModelOptions(provider)]);
 }

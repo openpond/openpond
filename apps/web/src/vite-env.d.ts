@@ -73,6 +73,14 @@ type OpenPondConnection = {
   arch?: string;
 };
 
+type OpenPondDesktopRuntimeInfo = {
+  version: string;
+  releaseChannel: "stable" | "nightly";
+  packaged: boolean;
+  devMode: boolean;
+  canReload: boolean;
+};
+
 type OpenPondLogLine = {
   file: string;
   line: string;
@@ -250,6 +258,8 @@ interface Window {
   };
   openpond?: {
     getConnection: () => Promise<OpenPondConnection>;
+    getDesktopRuntimeInfo?: () => Promise<OpenPondDesktopRuntimeInfo>;
+    reloadDesktopApp?: () => Promise<{ ok: boolean; error?: string }>;
     browser?: {
       open: (input: BrowserOpenInput) => Promise<BrowserCommandResult>;
       newTab: (input: BrowserNewTabInput) => Promise<BrowserCommandResult>;
