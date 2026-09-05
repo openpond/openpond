@@ -4,7 +4,7 @@ import { readConfig } from "./config.js";
 import { openStorageDatabase } from "./database.js";
 import { resolveConfigPath, storagePaths } from "./home.js";
 
-export const placementTables = new Set(["sessions", "projection_session_shells", "sidebar_file_bookmarks", "saved_local_projects", "profile_installations", "extension_installations", "scaffold_registrations", "refiner_bindings", "harness_release_records", "dataset_artifacts", "dataset_import_jobs", "taskset_drafts", "taskset_draft_workspaces", "local_agent_schedules"]);
+export const placementTables = new Set(["sessions", "projection_session_shells", "sidebar_file_bookmarks", "saved_local_projects", "profile_installations", "extension_installations", "scaffold_registrations", "refiner_bindings", "harness_release_records", "dataset_artifacts", "dataset_import_jobs", "taskset_drafts", "taskset_draft_workspaces", "training_artifacts", "task_attempt_artifacts", "local_agent_schedules"]);
 export function isWithinHome(file: string, home: string): boolean {
   const relative = path.relative(home, file);
   return relative === "" || relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);

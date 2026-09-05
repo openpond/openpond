@@ -95,6 +95,8 @@ openpond config restore --home /path/to/fresh-home \
 
 Restore authenticates the encrypted archive, verifies file/object integrity and writes into a fresh home. It refuses to overwrite an existing home. External repositories and datasets are listed with availability and inclusion status; missing external data is reported. Browser engine storage is excluded from this export. After the new runtime accepts writes, restoring an earlier backup into another home excludes those newer writes; there is no automatic downgrade.
 
+Mutable artifact placement records follow the restored home. Immutable evaluation receipts retain their original bytes and hashes; recorded location mappings let evidence readers find moved files without changing those receipts.
+
 Configuration, source, history and user exports are not deleted by age. The disposable cache uses expiry and a 512 MiB payload budget; `config clear-cache` rebuilds discovery data without removing settings or history. Logs retain up to 14 days and 256 MiB. Referenced or pinned managed artifacts are protected from orphan collection, which also requires a complete reference scan and seven-day grace period. Migration snapshots retain at least two successful backups and all snapshots under 30 days old. User-exported diagnostic bundles are user-owned.
 
 POSIX storage uses private file modes. Windows uses a protected owner ACL; Windows packaged distribution remains paused as documented in the [Desktop platform policy](desktop.md). Directory flush support differs by OS, and arbitrary concurrent external filesystem edits cannot be made transactional with app writes.

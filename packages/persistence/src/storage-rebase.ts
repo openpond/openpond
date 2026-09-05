@@ -4,6 +4,8 @@ import { openStorageDatabase } from "./database.js";
 import { storagePaths } from "./home.js";
 import { isWithinHome, placementTables } from "./storage-references.js";
 
+const relocationsSql = "CREATE TABLE IF NOT EXISTS storage_path_relocations (source TEXT PRIMARY KEY, destination TEXT NOT NULL)";
+
 export type StorageMove = { from: string; to: string };
 /** Only placement fields change; durable IDs and immutable transcript/source content do not. */
 export function rebaseStoragePointers(home: string, moves: StorageMove[]): void {
@@ -26,6 +28,11 @@ export function rebaseStoragePointers(home: string, moves: StorageMove[]): void 
   const db = openStorageDatabase(file);
   try {
     db.exec("BEGIN IMMEDIATE");
+    db.exec(relocationsSql);
+    for (const row of db.prepare("SELECT source, destination FROM storage_path_relocations").all() as { source: string; destination: string }[]) {
+      db.prepare("UPDATE storage_path_relocations SET destination=? WHERE source=?").run(rebase(row.destination), row.source);
+    }
+    for (const move of ordered) if (move.from !== move.to) db.prepare("INSERT INTO storage_path_relocations VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET destination=excluded.destination").run(move.from, move.to);
     for (const { name } of db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]) if (placementTables.has(name)) {
       const columns = db.prepare(`PRAGMA table_info(${quote(name)})`).all() as { name: string; pk: number }[];
       const keys = columns.filter((entry) => entry.pk).sort((a, b) => a.pk - b.pk);
@@ -42,5 +49,18 @@ export function rebaseStoragePointers(home: string, moves: StorageMove[]): void 
       }
     }
     db.exec("COMMIT; PRAGMA wal_checkpoint(TRUNCATE)");
+  } finally { db.close(); }
+}
+
+/** Immutable receipts keep their hashed bytes; only readers translate recorded storage placement. */
+export function resolveStoredPath(home: string, recordedPath: string): string {
+  const file = storagePaths(home).database;
+  if (!path.isAbsolute(recordedPath) || !existsSync(file)) return recordedPath;
+  const db = openStorageDatabase(file, true);
+  try {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='storage_path_relocations'").get()) return recordedPath;
+    const moves = (db.prepare("SELECT source, destination FROM storage_path_relocations").all() as { source: string; destination: string }[]).sort((a, b) => b.source.length - a.source.length);
+    const move = moves.find((entry) => isWithinHome(recordedPath, entry.source));
+    return move ? path.join(move.destination, path.relative(move.source, recordedPath)) : recordedPath;
   } finally { db.close(); }
 }

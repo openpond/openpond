@@ -18,6 +18,7 @@ import {
   assertConfigRunCurrent, deleteCredential, exportRecoveryBackup, restoreRecoveryBackup, exportSettings,
   readCache, writeCache, readAccountConfiguration, recoverMigration, readMigrationJournal,
   publishManagedArtifact, withManagedArtifact, releaseArtifactReference, collectArtifactOrphans,
+  resolveStoredPath,
 } from "../packages/persistence/src/index";
 import { startRecoveryServer } from "../apps/server/src/api/startup-recovery";
 import { createOpenPondServer } from "../apps/server/src/index";
@@ -168,6 +169,8 @@ describe("persistence data and concurrency boundaries", () => {
     db.close();
     await mkdir(path.join(source, "harnesses", "project"), { recursive: true });
     await writeFile(path.join(source, "harnesses", "project", "source.json"), '{"immutable":"source-bytes"}');
+    // Immutable artifacts must survive migration without reopening copies for writing.
+    await fs.chmod(path.join(source, "harnesses", "project", "source.json"), 0o400);
     await writeFile(path.join(source, "soul-primary.md"), "Selected personality\n");
     await writeFile(path.join(source, "SOUL.md"), "Distinct stale SOUL text\n");
     await writeFile(path.join(source, "personalization.json"), JSON.stringify({ version: 1, activeTemplateId: "default", updatedAt: timestamp }));
@@ -192,6 +195,7 @@ describe("persistence data and concurrency boundaries", () => {
     await writeFile(browserFile, JSON.stringify({ conversations: { "session-1": browserState } }));
     const report = await initializeHome(home, { sourceBrowserState: browserFile });
     expect(report.status).toBe("verified");
+    expect(await readFile(path.join(home, "library", "harnesses", "project", "source.json"), "utf8")).toBe('{"immutable":"source-bytes"}');
     expect(getLocalRecord(home, "browser_tab_state", "session-1")?.value).toEqual(browserState);
     const accounts = await readAccountConfiguration(home);
     expect(accounts.activeProfile).toMatchObject({ handle: "two", baseUrl: "https://two.example" });
@@ -326,6 +330,13 @@ describe("persistence data and concurrency boundaries", () => {
     await initializeHome(home);
     await updatePreferences(home, { steerActiveResponses: false });
     await writeCredential(home, "account:backup", { token: "backup-secret" });
+    const evidencePath = path.join(home, "training", "evidence.json");
+    await mkdir(path.dirname(evidencePath), { recursive: true });
+    await writeFile(evidencePath, '{"immutable":"evidence"}');
+    const receipt = JSON.stringify({ contentHash: "unchanged-receipt-hash", artifactPath: evidencePath });
+    const receiptDb = new DatabaseSync(storagePaths(home).database);
+    receiptDb.exec("CREATE TABLE model_runs (id TEXT PRIMARY KEY, payload TEXT NOT NULL)");
+    receiptDb.prepare("INSERT INTO model_runs VALUES ('preserved-run', ?)").run(receipt); receiptDb.close();
     const artifact = await publishManagedArtifact(home, { owner: { domain: "dataset", id: "backup-dataset" }, displayName: "rows.json", mediaType: "application/json", bytes: Buffer.from("[1,2,3]") });
     const output = `${home}-export.opbk`, restored = `${home}-restored`, rejected = `${home}-wrong-key`;
     const key = Buffer.alloc(32, 19);
@@ -335,6 +346,10 @@ describe("persistence data and concurrency boundaries", () => {
       await expect(restoreRecoveryBackup(output, rejected, Buffer.alloc(32, 20))).rejects.toMatchObject({ issue: { code: "RESTORE_FAILED" } });
       await expect(readFile(storagePaths(rejected).marker)).rejects.toMatchObject({ code: "ENOENT" });
       await restoreRecoveryBackup(output, restored, key);
+      const restoredDb = new DatabaseSync(storagePaths(restored).database, { readOnly: true });
+      expect(restoredDb.prepare("SELECT payload FROM model_runs WHERE id='preserved-run'").get()?.payload).toBe(receipt); restoredDb.close();
+      expect(resolveStoredPath(restored, evidencePath)).toBe(path.join(restored, "training", "evidence.json"));
+      expect(await readFile(resolveStoredPath(restored, evidencePath), "utf8")).toBe('{"immutable":"evidence"}');
       expect((await readPreferences(restored)).preferences.steerActiveResponses).toBe(false);
       expect(await withManagedArtifact(restored, { domain: "dataset", id: "backup-dataset" }, (file) => readFile(file, "utf8"))).toBe("[1,2,3]");
       await rm(artifact.path);

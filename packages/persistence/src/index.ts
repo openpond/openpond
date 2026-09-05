@@ -26,3 +26,4 @@ export { assertHomeCompatible } from "./storage-version.js";
 
 export { assertStorageAncestors } from "./path-safety.js";
 export { protectPrivateDirectory } from "./private-permissions.js";
+export { resolveStoredPath } from "./storage-rebase.js";
