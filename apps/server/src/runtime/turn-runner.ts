@@ -1,3 +1,4 @@
+import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
   AppPreferencesSchema,
@@ -505,6 +506,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     throwIfInterrupted,
   });
   const { runHostedToolLoop } = createHostedToolLoopRuntime({
+    assertExecutionAllowed: (turnId) => assertTurnConfiguration(deps.storageHome, turnId),
     hostedToolFlags,
     nativeToolsEnabledForProvider,
     createNativeModelToolDefinitions,
@@ -833,6 +835,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    const admittedConfiguration = deps.storageHome ? await admitTurnConfiguration(deps.storageHome, session, input, payload as Record<string, unknown>) : null;
+    if (admittedConfiguration) {
+      turnPermissions.codexPermissionMode = admittedConfiguration.preferences.codexPermissionMode;
+      turnPermissions.codexReasoningEffort = admittedConfiguration.preferences.codexReasoningEffort;
+      if (turnPermissions.codexPermissionMode === "default") {
+        turnPermissions.approvalPolicy = "on-request";
+        if (turnPermissions.sandbox === "danger-full-access") turnPermissions.sandbox = "workspace-write";
+      }
+    }
     let workTurnFinalizationAttempted = false;
     session = {
       ...session,
@@ -920,10 +931,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.model ??
       session.modelRef?.modelId ??
       null;
-    const appPreferences =
-      nativeToolsEnabledForProvider(activeProvider) && subagentToolsAvailable()
-        ? await loadAppPreferences()
-        : null;
+    const appPreferences = admittedConfiguration?.preferences ?? await loadAppPreferences();
     const subagentDelegation = resolveSubagentDelegation(
       session,
       appPreferences
@@ -1038,6 +1046,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           }
         : null,
     };
+    if (admittedConfiguration && deps.storageHome) {
+      saveTurnConfiguration(deps.storageHome, turn.id, admittedConfiguration);
+      turn.metadata = { ...turn.metadata, configuration: {
+        effectiveRevision: admittedConfiguration.snapshot.effectiveRevision,
+        sources: admittedConfiguration.snapshot.sources,
+        instructionSources: admittedConfiguration.instructions.sources,
+        diagnostics: admittedConfiguration.snapshot.diagnostics,
+      } };
+    }
     await insertStoredTurn(turn);
     const initialCwd =
       (authoringRoute && selectedProfile?.mode === "local"
@@ -1068,12 +1085,18 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ...createActiveTurnSettlement(),
     };
     turnRunnerLifecycle.registerActiveTurn(sessionId, activeTurn);
+    const stopConfigurationWatch = watchTurnConfiguration(deps.storageHome, turn.id, admittedConfiguration?.snapshot.projectRoot ?? null, (reason) => {
+      activeTurn.interruptionReason = reason;
+      controller.abort();
+      if (activeTurn.codexRuntime && activeTurn.codexTurnId) void activeTurn.codexRuntime.client.interruptTurn({ threadId: activeTurn.codexRuntime.threadId, turnId: activeTurn.codexTurnId }).catch(() => undefined);
+    });
     try {
       await markSubagentContinuationRunning({
         context: subagentContinuation,
         childTurnId: turn.id,
       });
       const attachmentContexts = await materializeChatAttachments({
+        storageHome: deps.storageHome ?? attachmentRootDir,
         attachmentRootDir,
         sessionId,
         turnId: turn.id,
@@ -1182,7 +1205,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       );
       activeTurn.session = session;
       throwIfInterrupted(controller.signal);
-      const personalizationSoul = await loadPersonalizationSoul();
+      const personalizationSoul = admittedConfiguration?.instructions.personality ?? await loadPersonalizationSoul();
       const shouldLoadProfileSkills =
         (selectedHarness !== null || experienceAllowsProfileSkills(session.experience)) &&
         (session.provider === "openpond" ||
@@ -1255,6 +1278,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               sessionUsesRepositoryWork(session) &&
               browserControlAvailable(session),
             extraSystemContext,
+            userInstructionContext: admittedConfiguration?.instructions.userContext,
+            repositoryInstructionSnapshot: admittedConfiguration?.instructions.repository,
           }
         );
         const hostedPriorEvents = priorEvents;
@@ -1384,6 +1409,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               sessionUsesRepositoryWork(session) &&
               browserControlAvailable(session),
             extraSystemContext,
+            userInstructionContext: admittedConfiguration?.instructions.userContext,
+            repositoryInstructionSnapshot: admittedConfiguration?.instructions.repository,
           }
         );
         const streamByokCompactionChatTurn = async function* (streamInput: {
@@ -1520,9 +1547,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       });
       activeTurn.codexRuntime = runtime;
       throwIfInterrupted(controller.signal);
+      await assertTurnConfiguration(deps.storageHome, turn.id);
       const providerTurn = await runtime.client.startTurn({
         threadId: runtime.threadId,
-        prompt: codexPromptWithHarnessContext(providerPrompt, extraSystemContext),
+        prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")),
         cwd: turnCwd ?? session.cwd,
         model: codexModel,
         approvalPolicy: turnPermissions.approvalPolicy,
@@ -1613,6 +1641,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       });
       return failed;
     } finally {
+      stopConfigurationWatch();
       await finalizeSubagentContinuationTurn({
         context: subagentContinuation,
         childSession: session,

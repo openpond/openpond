@@ -96,7 +96,8 @@
     "@openpond/connected-apps": "workspace:*",
     "js-yaml": "^4.1.1",
     "openpond-agent-sdk": "workspace:*",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "@openpond/persistence": "workspace:*"
   },
   "devDependencies": {
     "@types/js-yaml": "4.0.9"

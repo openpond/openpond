@@ -1,3 +1,4 @@
+import { getLocalRecord, listLocalRecords, putLocalRecord } from "@openpond/persistence";
 import {
   PatchSessionRequestSchema,
   type PatchSessionRequest,
@@ -6,7 +7,6 @@ import {
 import { codexHistoryThreadIdFromSessionId } from "./codex-history.js";
 import type { SqliteStore } from "./store/store.js";
 
-const CODEX_HISTORY_SIDEBAR_PREFERENCES_TYPE = "codex_history.sidebar_preferences";
 
 export type CodexHistorySidebarPreference = {
   pinned?: boolean;
@@ -22,10 +22,10 @@ export type CodexHistorySidebarPreferences = Record<string, CodexHistorySidebarP
 export async function loadCodexHistorySidebarPreferences(
   store: SqliteStore,
 ): Promise<CodexHistorySidebarPreferences> {
-  const entries = await store.getCacheEntriesByType<unknown>(CODEX_HISTORY_SIDEBAR_PREFERENCES_TYPE);
+  const entries = listLocalRecords<unknown>(store.home, "codex_sidebar_state");
   const preferences: CodexHistorySidebarPreferences = {};
   for (const [threadId, entry] of Object.entries(entries)) {
-    const preference = normalizePreference(entry.payload);
+    const preference = normalizePreference(entry.value);
     if (Object.keys(preference).length > 0) preferences[threadId] = preference;
   }
   return preferences;
@@ -40,14 +40,10 @@ export async function patchCodexHistorySidebarPreference(
   if (!threadId) throw new Error("Codex history session not found");
 
   const input = PatchSessionRequestSchema.parse(payload);
-  const existing = await store.getCacheEntry<unknown>(CODEX_HISTORY_SIDEBAR_PREFERENCES_TYPE, threadId);
-  const updated = normalizePreference(mergePreferencePatch(normalizePreference(existing?.payload), input));
+  const existing = getLocalRecord<unknown>(store.home, "codex_sidebar_state", threadId);
+  const updated = normalizePreference(mergePreferencePatch(normalizePreference(existing?.value), input));
 
-  await store.setCacheEntry(
-    CODEX_HISTORY_SIDEBAR_PREFERENCES_TYPE,
-    threadId,
-    updated,
-  );
+  putLocalRecord(store.home, "codex_sidebar_state", threadId, updated, existing?.revision ?? null);
 
   return updated;
 }

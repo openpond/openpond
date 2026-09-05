@@ -5,6 +5,18 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "references": [{ "path": "../cloud" }, { "path": "../contracts" }],
-  "include": ["src/**/*.ts"]
+  "references": [
+    {
+      "path": "../cloud"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../persistence"
+    }
+  ],
+  "include": [
+    "src/**/*.ts"
+  ]
 }

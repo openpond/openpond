@@ -14,7 +14,7 @@ type MediaPayloads = Pick<
   | "chatAttachmentFilePayload"
 >;
 
-export function createMediaPayloads(attachmentRootDir: string): MediaPayloads {
+export function createMediaPayloads(attachmentRootDir: string, storageHome: string): MediaPayloads {
   return {
     localImagePayload: async (filePath) => {
       const image = await readLocalImageFile(filePath);
@@ -29,6 +29,7 @@ export function createMediaPayloads(attachmentRootDir: string): MediaPayloads {
     chatAttachmentImagePayload: async (input) => {
       const image = await readChatAttachmentImageFile({
         attachmentRootDir,
+        storageHome,
         sessionId: input.sessionId,
         turnId: input.turnId,
         storageName: input.storageName,
@@ -41,6 +42,7 @@ export function createMediaPayloads(attachmentRootDir: string): MediaPayloads {
       const input = ChatAttachmentFilePreviewSchema.parse(payload);
       const file = await readChatAttachmentTextFile({
         attachmentRootDir,
+        storageHome,
         sessionId: input.sessionId,
         turnId: input.turnId,
         storageName: input.storageName,

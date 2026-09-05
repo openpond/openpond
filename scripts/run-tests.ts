@@ -35,6 +35,7 @@ const nonDeterministicEnvKeys = [
   "OPENPOND_GOAL_STORAGE",
   "OPENPOND_GOAL_STORAGE_LOCATION",
   "OPENPOND_CONFIG_DIR",
+  "OPENPOND_APP_HOME",
   "OPENPOND_OPCHAT_API_KEY",
   "OPENPOND_OPCHAT_API_URL",
   "OPENPOND_OPCHAT_MODEL",
@@ -95,7 +96,7 @@ function parseSuite(raw: string | undefined): TestSuite {
 async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
   const home = await mkdtemp(path.join(os.tmpdir(), "openpond-test-home-"));
   const codexHome = path.join(home, ".codex");
-  const appHome = path.join(home, ".openpond", "openpond-app");
+  const appHome = path.join(home, ".openpond");
   await mkdir(codexHome, { recursive: true });
   await mkdir(appHome, { recursive: true });
 
@@ -108,7 +109,7 @@ async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
     LANG: "C",
     LC_ALL: "C",
     NO_COLOR: "1",
-    OPENPOND_APP_HOME: appHome,
+    OPENPOND_HOME: appHome,
     TZ: "UTC",
     USERPROFILE: home,
   };

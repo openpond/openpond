@@ -1,3 +1,4 @@
+import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import {
   useEffect,
   useMemo,
@@ -109,6 +110,7 @@ export function ScheduledWorkPage({
   const [viewMode, setViewMode] = useState<ScheduledWorkViewMode>(
     readScheduledWorkViewMode,
   );
+  useHydratedClientChoice(() => setViewMode(readScheduledWorkViewMode()));
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [selectedScheduleKey, setSelectedScheduleKey] = useState<string | null>(null);
   const rows = useMemo(

@@ -1,3 +1,4 @@
+import { clientChoiceStorage } from "./client-choice-storage";
 export type ScheduledWorkViewMode = "calendar" | "list";
 
 const STORAGE_KEY = "openpond.scheduled-work.view.v1";
@@ -23,10 +24,10 @@ export function writeScheduledWorkViewMode(
   }
 }
 
-function browserStorage(): Storage | null {
+function browserStorage(): Pick<Storage, "getItem" | "setItem"> | null {
   if (typeof window === "undefined") return null;
   try {
-    return window.localStorage;
+    return clientChoiceStorage;
   } catch {
     return null;
   }

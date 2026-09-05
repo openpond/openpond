@@ -49,7 +49,7 @@ export function localHarnessWorkspacePaths(
   workspaceId: string,
 ): LocalHarnessWorkspacePaths {
   const segment = `${safeSegment(workspaceId)}-${contentHash(workspaceId).slice(0, 16)}`;
-  const root = path.join(storeDir, "harnesses", "workspaces", segment);
+  const root = path.join(storeDir, "library", "harnesses", "workspaces", segment);
   return { root, source: path.join(root, "source") };
 }
 
@@ -328,7 +328,7 @@ export async function materializeLocalHarnessRelease(input: {
   compiled: CompiledLocalHarnessSource;
   createdAt: string;
 }): Promise<LocalHarnessReleaseRecord> {
-  const releasesRoot = path.join(input.storeDir, "harnesses", "releases");
+  const releasesRoot = path.join(input.storeDir, "library", "harnesses", "releases");
   const destination = path.join(releasesRoot, input.compiled.harnessRelease.contentHash);
   await fs.mkdir(releasesRoot, { recursive: true });
   const temporary = path.join(releasesRoot, `.${input.compiled.harnessRelease.contentHash}.materializing-${randomUUID()}`);

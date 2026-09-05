@@ -6,6 +6,8 @@ import type {
 } from "../../sandbox/types/index";
 
 export type Command =
+  | "config"
+  | "home"
   | "login"
   | "profiles"
   | "account"

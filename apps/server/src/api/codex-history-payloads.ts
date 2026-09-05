@@ -1,3 +1,4 @@
+import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "../runtime/turn-configuration.js";
 import {
   PatchSessionRequestSchema,
   SendTurnRequestSchema,
@@ -116,7 +117,16 @@ export function createCodexHistoryPayloads(input: {
     if (!threadId) throw new Error("Codex history session is missing its Codex thread id");
     const cwd = turnInput.cwd ?? current.session.cwd;
     const turnId = nextCodexHistoryTurnId(current.session.id);
+    const admission = await admitTurnConfiguration(input.store.home, current.session, turnInput, payload as Record<string, unknown>);
+    saveTurnConfiguration(input.store.home, turnId, admission);
+    turnInput.codexPermissionMode = admission.preferences.codexPermissionMode;
+    turnInput.codexReasoningEffort = admission.preferences.codexReasoningEffort;
+    if (turnInput.codexPermissionMode === "default") {
+      turnInput.approvalPolicy = "on-request";
+      if (turnInput.sandbox === "danger-full-access") turnInput.sandbox = "workspace-write";
+    }
     const attachmentContexts = await materializeChatAttachments({
+      storageHome: input.store.home,
       attachmentRootDir: input.attachmentRootDir,
       sessionId: current.session.id,
       turnId,
@@ -132,7 +142,7 @@ export function createCodexHistoryPayloads(input: {
       clientTitle: "OpenPond App",
       clientVersion: input.version,
       onNotification: () => undefined,
-      onServerRequest: async (request) => defaultServerRequestResult(request),
+      onServerRequest: async (request) => { await assertTurnConfiguration(input.store.home, turnId); return defaultServerRequestResult(request); },
     });
     let resolveReady: () => void = () => undefined;
     const ready = new Promise<void>((resolve) => {
@@ -149,6 +159,10 @@ export function createCodexHistoryPayloads(input: {
       turnId: null,
     };
     activeTurns.set(sessionId, activeTurn);
+    const stopConfigurationWatch = watchTurnConfiguration(input.store.home, turnId, admission.snapshot.projectRoot, () => {
+      activeTurn.interrupted = true;
+      if (activeTurn.turnId) void client.interruptTurn({ threadId, turnId: activeTurn.turnId }).catch(() => undefined);
+    });
     try {
       await client.resumeThread({
         threadId,
@@ -157,9 +171,10 @@ export function createCodexHistoryPayloads(input: {
         sandbox: turnInput.sandbox,
         config: codexHistorySessionConfig(turnInput.codexPermissionMode),
       });
+      await assertTurnConfiguration(input.store.home, turnId);
       const turn = await client.startTurn({
         threadId,
-        prompt: providerPrompt,
+        prompt: [admission.instructions.personality, admission.instructions.userContext, providerPrompt].filter(Boolean).join("\n\n"),
         cwd,
         model: turnInput.model,
         approvalPolicy: turnInput.approvalPolicy,
@@ -177,6 +192,7 @@ export function createCodexHistoryPayloads(input: {
       activeTurn.settled = true;
       return threadPayload(sessionId);
     } finally {
+      stopConfigurationWatch();
       activeTurn.settled = true;
       activeTurn.resolveReady();
       if (activeTurns.get(sessionId) === activeTurn) activeTurns.delete(sessionId);

@@ -1,3 +1,4 @@
+import { clientChoiceStorage, useHydratedClientChoice } from "../../lib/client-choice-storage";
 import {
   useCallback,
   useEffect,
@@ -64,6 +65,7 @@ export function VoiceInputButton({
   const phaseRef = useRef<VoiceInputPhase>("idle");
   const submitAfterStartRef = useRef(false);
   const setupNoticeAcknowledgedRef = useRef(readVoiceSetupNoticeAcknowledged());
+  useHydratedClientChoice(() => { setupNoticeAcknowledgedRef.current = readVoiceSetupNoticeAcknowledged(); });
   connectionRef.current = connection;
   disabledRef.current = disabled;
   const [phase, setPhase] = useState<VoiceInputPhase>("idle");
@@ -351,7 +353,7 @@ function voiceErrorMessage(error: unknown): string {
 function readVoiceSetupNoticeAcknowledged(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(VOICE_SETUP_NOTICE_KEY) === "true";
+    return clientChoiceStorage.getItem(VOICE_SETUP_NOTICE_KEY) === "true";
   } catch {
     return false;
   }
@@ -360,7 +362,7 @@ function readVoiceSetupNoticeAcknowledged(): boolean {
 function writeVoiceSetupNoticeAcknowledged(): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(VOICE_SETUP_NOTICE_KEY, "true");
+    clientChoiceStorage.setItem(VOICE_SETUP_NOTICE_KEY, "true");
   } catch {
     // Browsers can block storage; the in-memory ref still handles this session.
   }

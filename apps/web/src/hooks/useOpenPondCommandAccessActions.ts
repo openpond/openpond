@@ -6,7 +6,6 @@ import type {
   Session,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
-import { writeStoredOpenPondCommandAccessMode } from "../lib/openpond-command-access-preferences";
 
 export function useOpenPondCommandAccessActions({
   connection,
@@ -25,33 +24,18 @@ export function useOpenPondCommandAccessActions({
 }) {
   const changeOpenPondCommandAccessMode = useCallback(
     (mode: OpenPondCommandAccessMode, session: Session | null = selectedSession) => {
-      setOpenPondCommandAccessMode(mode);
-      writeStoredOpenPondCommandAccessMode(mode);
-
+      if (!connection) { setError("Connect to OpenPond before saving preferences."); return; }
       const sessionToPatch = session?.provider === "codex" ? null : session;
-      if (sessionToPatch) {
-        setSessions((current) =>
-          current.map((candidate) =>
-            candidate.id === sessionToPatch.id
-              ? { ...candidate, openPondCommandAccessMode: mode }
-              : candidate,
-          ),
-        );
-      }
-
-      if (!connection) return;
 
       void api
         .savePreferences(connection, { openPondCommandAccessMode: mode })
-        .then(() => {
+        .then((payload) => {
+          setOpenPondCommandAccessMode(payload.preferences.openPondCommandAccessMode);
           setBootstrap((current) =>
             current
               ? {
                   ...current,
-                  preferences: {
-                    ...current.preferences,
-                    openPondCommandAccessMode: mode,
-                  },
+                  preferences: payload.preferences,
                 }
               : current,
           );

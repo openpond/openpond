@@ -6,18 +6,47 @@
     "outDir": "dist"
   },
   "references": [
-    { "path": "../../packages/agent-runtime" },
-    { "path": "../../packages/app-server" },
-    { "path": "../../packages/cloud" },
-    { "path": "../../packages/contracts" },
-    { "path": "../../packages/harness/tsconfig.build.json" },
-    { "path": "../../packages/evals/tsconfig.build.json" },
-    { "path": "../../packages/codex-provider" },
-    { "path": "../../packages/logging" },
-    { "path": "../../packages/runtime" },
-    { "path": "../../packages/sdk/tsconfig.build.json" },
-    { "path": "../../packages/taskset-sdk" },
-    { "path": "../../packages/training-sdk" }
+    {
+      "path": "../../packages/agent-runtime"
+    },
+    {
+      "path": "../../packages/app-server"
+    },
+    {
+      "path": "../../packages/cloud"
+    },
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/harness/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/evals/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/codex-provider"
+    },
+    {
+      "path": "../../packages/logging"
+    },
+    {
+      "path": "../../packages/runtime"
+    },
+    {
+      "path": "../../packages/sdk/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/taskset-sdk"
+    },
+    {
+      "path": "../../packages/training-sdk"
+    },
+    {
+      "path": "../../packages/persistence"
+    }
   ],
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ]
 }

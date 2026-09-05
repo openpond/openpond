@@ -1,3 +1,4 @@
+import { listLocalRecords, putLocalRecord, deleteLocalRecord } from "@openpond/persistence";
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -18,8 +19,6 @@ import { now } from "../utils.js";
 import { normalizeProjectDirectory } from "./project-directories.js";
 import { runWorkspaceCommand, type WorkspacePaths } from "./workspaces.js";
 
-const LOCAL_PROJECTS_CACHE_TYPE = "local.projects";
-const LOCAL_PROJECTS_CACHE_KEY = "v1";
 const SANDBOX_TEMPLATE_SCAN_DEPTH = 2;
 const SANDBOX_TEMPLATE_MANIFEST_NAME = OPENPOND_MANIFEST_FILE_NAME;
 const IGNORED_PACKAGE_SCAN_DIRS = new Set([
@@ -320,17 +319,16 @@ export async function inferLocalProjectOpenPondLinks(
   );
 }
 
-async function saveLocalProjects(store: SqliteStore, projects: LocalProject[]): Promise<void> {
-  await store.setCacheEntry(LOCAL_PROJECTS_CACHE_TYPE, LOCAL_PROJECTS_CACHE_KEY, sortLocalProjects(projects));
+async function saveLocalProject(store: SqliteStore, project: LocalProject): Promise<void> {
+  putLocalRecord(store.home, "saved_local_projects", project.id, LocalProjectSchema.parse(project));
 }
 
 export async function listLocalProjects(store: SqliteStore): Promise<LocalProject[]> {
-  const entry = await store.getCacheEntry<unknown>(LOCAL_PROJECTS_CACHE_TYPE, LOCAL_PROJECTS_CACHE_KEY);
-  const parsed = LocalProjectListSchema.safeParse(entry?.payload);
-  if (!parsed.success) return [];
+  const projects = Object.values(listLocalRecords<LocalProject>(store.home, "saved_local_projects")).map((entry) => entry.value);
+  const parsed = LocalProjectListSchema.parse(projects);
   return sortLocalProjects(
     await Promise.all(
-      parsed.data.map(async (project) => {
+      parsed.map(async (project) => {
         const sandboxTemplate = await detectLocalProjectSandboxTemplate({
           selectedPath: project.path,
           workspacePath: project.workspacePath,
@@ -374,7 +372,7 @@ export async function upsertLocalProject(
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
-  await saveLocalProjects(store, [project, ...projects.filter((candidate) => candidate.id !== project.id)]);
+  await saveLocalProject(store, project);
   return { project, created: !existing };
 }
 
@@ -397,7 +395,7 @@ export async function refreshLocalProjectGitMetadata(store: SqliteStore, project
     sandboxTemplate,
     updatedAt: now(),
   };
-  await saveLocalProjects(store, [updated, ...projects.filter((project) => project.id !== projectId)]);
+  await saveLocalProject(store, updated);
   return updated;
 }
 
@@ -423,13 +421,12 @@ export async function updateLocalProjectAgentSetup(
       : {}),
     updatedAt: now(),
   };
-  await saveLocalProjects(store, [updated, ...projects.filter((project) => project.id !== projectId)]);
+  await saveLocalProject(store, updated);
   return updated;
 }
 
 export async function deleteLocalProject(store: SqliteStore, projectId: string): Promise<void> {
-  const projects = await listLocalProjects(store);
-  await saveLocalProjects(store, projects.filter((project) => project.id !== projectId));
+  deleteLocalRecord(store.home, "saved_local_projects", projectId);
 }
 
 export async function linkLocalProjectOpenPondApp(
@@ -458,7 +455,7 @@ export async function linkLocalProjectOpenPondApp(
     },
     updatedAt: timestamp,
   };
-  await saveLocalProjects(store, [updated, ...projects.filter((project) => project.id !== projectId)]);
+  await saveLocalProject(store, updated);
   return updated;
 }
 

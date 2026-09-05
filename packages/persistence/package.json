@@ -1,0 +1,27 @@
+{
+  "name": "@openpond/persistence",
+  "version": "0.1.1",
+  "openpondReleaseVersioned": true,
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schemas/*": {
+      "types": "./dist/schemas/*.d.ts",
+      "import": "./dist/schemas/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "toml-eslint-parser": "1.0.3",
+    "zod": "^4.1.13"
+  }
+}

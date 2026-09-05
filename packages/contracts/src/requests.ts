@@ -303,6 +303,7 @@ export type ReorderSidebarAppsRequest = z.infer<
 >;
 
 export const UpdateAppPreferencesRequestSchema = z.object({
+  expectedRevision: z.string().optional(),
   defaultChatProvider: ChatProviderSchema.optional(),
   defaultChatModel: z.string().min(1).optional(),
   defaultChatModelRef: ChatModelRefSchema.nullable().optional(),

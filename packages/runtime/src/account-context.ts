@@ -2,7 +2,6 @@ import { listConfiguredProfiles, loadGlobalConfig, setActiveProfile } from "@ope
 import type { ConfiguredProfile } from "@openpond/cloud";
 import type { RuntimeAccountContext, RuntimeLocalConfig } from "./types.js";
 import { toAccountState } from "./account-state.js";
-import { mergeRawApiBaseConfig } from "./config.js";
 import { accountToken, fallbackProfilesFromConfig, findActiveAccount, normalizeProfiles } from "./selectors.js";
 import { normalizeBaseUrl, resolveHostedChatApiBaseUrl, resolvePublicApiBaseUrl } from "./urls.js";
 
@@ -18,7 +17,7 @@ export async function loadOpenPondAccountContext(
   requestedHandle?: string | null,
   requestedBaseUrl?: string | null
 ): Promise<RuntimeAccountContext> {
-  const config = mergeRawApiBaseConfig((await loadGlobalConfig().catch(() => ({}))) as RuntimeLocalConfig);
+  const config = (await loadGlobalConfig()) as RuntimeLocalConfig;
   const profiles = await loadProfiles(config);
   const account = findActiveAccount(config, requestedHandle, requestedBaseUrl);
   const token = accountToken(account);

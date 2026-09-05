@@ -5,6 +5,18 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/runtime" }],
-  "include": ["src/**/*.ts"]
+  "references": [
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/runtime"
+    },
+    {
+      "path": "../../packages/persistence"
+    }
+  ],
+  "include": [
+    "src/**/*.ts"
+  ]
 }

@@ -47,6 +47,9 @@ export type LocalAgentSchedule = z.infer<typeof LocalAgentScheduleSchema>;
 export const LocalAgentScheduleRunSchema = z.object({
   id: z.string(),
   scheduleId: z.string(),
+  definitionSnapshot: LocalAgentScheduleSchema.optional(),
+  configurationSnapshot: z.record(z.string(), z.unknown()).optional(),
+  inputSnapshot: z.record(z.string(), z.unknown()).optional(),
   localProjectId: z.string(),
   scheduleName: z.string(),
   scheduledFor: z.string(),

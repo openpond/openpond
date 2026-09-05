@@ -1,3 +1,4 @@
+import { resolveEffectiveConfig } from "@openpond/persistence";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -251,7 +252,11 @@ export function createLocalAgentScheduleLoop(options: {
     inputOverride?: Record<string, unknown>
   ): Promise<LocalAgentScheduleRun> {
     const timestamp = now();
+    const configuration = options.store.home ? await resolveEffectiveConfig(options.store.home) : undefined;
     const run: LocalAgentScheduleRun = {
+      definitionSnapshot: structuredClone(schedule),
+      inputSnapshot: structuredClone(inputOverride ?? schedule.input),
+      ...(configuration ? { configurationSnapshot: { effectiveRevision: configuration.effectiveRevision, sources: configuration.sources } } : {}),
       id: randomUUID(),
       scheduleId: schedule.id,
       localProjectId: schedule.localProjectId,
@@ -325,6 +330,7 @@ export function createLocalAgentScheduleLoop(options: {
     let finalStatus: LocalAgentScheduleRun["status"] = "failed";
     let finalError: string | null = null;
     try {
+      if (options.store.home) await resolveEffectiveConfig(options.store.home);
       const result = await runAgentAction(schedule, run, inputOverride);
       finalStatus = result.exitCode === 0 ? "succeeded" : "failed";
       finalError =

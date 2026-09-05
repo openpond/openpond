@@ -5,6 +5,15 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "references": [{ "path": "../connected-apps" }],
-  "include": ["src/**/*.ts"]
+  "references": [
+    {
+      "path": "../connected-apps"
+    },
+    {
+      "path": "../persistence"
+    }
+  ],
+  "include": [
+    "src/**/*.ts"
+  ]
 }

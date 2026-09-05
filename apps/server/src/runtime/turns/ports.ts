@@ -434,6 +434,7 @@ export type TurnRunnerDependencies = {
     connections: ConnectedAppConnectionLike[];
   }>;
   loadPersonalizationSoul: () => Promise<string>;
+  storageHome?: string;
   loadAppPreferences?: () => Promise<AppPreferences>;
   loadProviderSettings?: () => Promise<ProviderSettings>;
   maybeCreateScaffoldForTurn: SessionWorkspaceResolver["maybeCreateScaffoldForTurn"];
@@ -451,6 +452,8 @@ export type TurnRunnerDependencies = {
       actionCatalogInstructionMode?: "text_fallback" | "native_tool" | "none";
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
       browserControlAvailable?: boolean;
+      userInstructionContext?: string;
+      repositoryInstructionSnapshot?: import("../../openpond/repository-instructions.js").RepositoryInstructionResolution | null;
       extraSystemContext?: string | null;
     }
   ) => Promise<string>;

@@ -1,3 +1,4 @@
+import { useHydratedClientChoice } from "../lib/client-choice-storage";
 import { useCallback, useMemo, useReducer, useState, type Dispatch } from "react";
 import {
   appReducer,
@@ -31,5 +32,6 @@ export function useAppState() {
     () => ({ ...createAppSetters(dispatch), setPrompt: composerDraftStore.set }),
     [composerDraftStore, dispatch],
   );
+  useHydratedClientChoice(() => setters.setDraftExperience(readLastChatTaskModeFromBrowser()));
   return { composerDraftStore, dispatch, setters, state };
 }

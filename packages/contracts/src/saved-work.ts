@@ -157,6 +157,8 @@ export const ChatWorkflowSchema = z.object({
 });
 
 export const ChatWorkflowRunSchema = z.object({
+  definitionSnapshot: ChatWorkflowSchema.optional(),
+  configurationSnapshot: z.record(z.string(), z.unknown()).optional(),
   id: z.string(),
   workflowId: z.string(),
   sessionId: z.string(),

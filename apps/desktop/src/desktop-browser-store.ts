@@ -1,88 +1,24 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import type {
-  BrowserMetadataFile,
-  StoredBrowserConversation,
-  StoredBrowserTab,
-} from "./desktop-browser-types.js";
-
-const EMPTY_METADATA: BrowserMetadataFile = { conversations: {} };
+import { getLocalRecord, putLocalRecord, deleteLocalRecord } from "@openpond/persistence";
+import type { StoredBrowserConversation, StoredBrowserTab } from "./desktop-browser-types.js";
 
 export class BrowserSidebarStore {
-  private loaded = false;
-  private metadata: BrowserMetadataFile = EMPTY_METADATA;
-
-  constructor(private readonly userDataDir: string) {}
-
+  constructor(private readonly home: string) {}
   async conversation(conversationId: string): Promise<StoredBrowserConversation> {
-    await this.ensureLoaded();
-    return cloneConversation(this.metadata.conversations[conversationId]);
+    return cloneConversation(getLocalRecord<StoredBrowserConversation>(this.home, "browser_tab_state", conversationId)?.value);
   }
-
   async saveConversation(conversationId: string, conversation: StoredBrowserConversation): Promise<void> {
-    await this.ensureLoaded();
-    this.metadata = {
-      conversations: {
-        ...this.metadata.conversations,
-        [conversationId]: cloneConversation(conversation),
-      },
-    };
-    await this.write();
+    putLocalRecord(this.home, "browser_tab_state", conversationId, cloneConversation(conversation));
   }
-
-  async updateTab(
-    conversationId: string,
-    tabId: string,
-    patch: Partial<Omit<StoredBrowserTab, "id">>,
-  ): Promise<StoredBrowserConversation> {
-    const conversation = await this.conversation(conversationId);
-    const tabs = conversation.tabs.map((tab) =>
-      tab.id === tabId ? { ...tab, ...patch, lastUpdatedAt: Date.now() } : tab,
-    );
-    const next = { ...conversation, tabs };
-    await this.saveConversation(conversationId, next);
+  async updateTab(conversationId: string, tabId: string, patch: Partial<Omit<StoredBrowserTab, "id">>): Promise<StoredBrowserConversation> {
+    const saved = getLocalRecord<StoredBrowserConversation>(this.home, "browser_tab_state", conversationId);
+    const conversation = cloneConversation(saved?.value);
+    const next = { ...conversation, tabs: conversation.tabs.map((tab) => tab.id === tabId ? { ...tab, ...patch, lastUpdatedAt: Date.now() } : tab) };
+    putLocalRecord(this.home, "browser_tab_state", conversationId, next, saved?.revision ?? null);
     return next;
   }
-
   async deleteConversation(conversationId: string): Promise<void> {
-    await this.ensureLoaded();
-    const { [conversationId]: _removed, ...conversations } = this.metadata.conversations;
-    this.metadata = { conversations };
-    await this.write();
+    deleteLocalRecord(this.home, "browser_tab_state", conversationId);
   }
-
-  private get filePath(): string {
-    return path.join(this.userDataDir, "browser-sidebar-state.json");
-  }
-
-  private async ensureLoaded(): Promise<void> {
-    if (this.loaded) return;
-    try {
-      const raw = await fs.readFile(this.filePath, "utf8");
-      this.metadata = normalizeMetadata(JSON.parse(raw));
-    } catch {
-      this.metadata = EMPTY_METADATA;
-    }
-    this.loaded = true;
-  }
-
-  private async write(): Promise<void> {
-    await fs.mkdir(this.userDataDir, { recursive: true });
-    const tempPath = `${this.filePath}.tmp`;
-    await fs.writeFile(tempPath, JSON.stringify(this.metadata, null, 2), "utf8");
-    await fs.rename(tempPath, this.filePath);
-  }
-}
-
-function normalizeMetadata(value: unknown): BrowserMetadataFile {
-  if (!value || typeof value !== "object") return EMPTY_METADATA;
-  const rawConversations = (value as { conversations?: unknown }).conversations;
-  if (!rawConversations || typeof rawConversations !== "object") return EMPTY_METADATA;
-  const conversations: Record<string, StoredBrowserConversation> = {};
-  for (const [conversationId, rawConversation] of Object.entries(rawConversations)) {
-    conversations[conversationId] = cloneConversation(rawConversation as StoredBrowserConversation | undefined);
-  }
-  return { conversations };
 }
 
 function cloneConversation(conversation: StoredBrowserConversation | undefined): StoredBrowserConversation {

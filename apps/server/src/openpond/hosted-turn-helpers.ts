@@ -70,6 +70,8 @@ export type HostedTurnHelpers = {
       actionCatalogInstructionMode?: ActionCatalogInstructionMode;
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
       browserControlAvailable?: boolean;
+      userInstructionContext?: string;
+      repositoryInstructionSnapshot?: import("./repository-instructions.js").RepositoryInstructionResolution | null;
       extraSystemContext?: string | null;
     }
   ): Promise<string>;
@@ -123,6 +125,8 @@ export function createHostedTurnHelpers(deps: {
       actionCatalogInstructionMode?: ActionCatalogInstructionMode;
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
       browserControlAvailable?: boolean;
+      userInstructionContext?: string;
+      repositoryInstructionSnapshot?: import("./repository-instructions.js").RepositoryInstructionResolution | null;
       extraSystemContext?: string | null;
     } = {}
   ): Promise<string> {
@@ -141,7 +145,7 @@ export function createHostedTurnHelpers(deps: {
       repositoryWork &&
       session.workspaceKind === "local_project"
     ) {
-      const resolution = await resolveRepositoryInstructions(session.cwd);
+      const resolution = options.repositoryInstructionSnapshot === undefined ? await resolveRepositoryInstructions(session.cwd) : options.repositoryInstructionSnapshot;
       for (const diagnostic of resolution?.diagnostics ?? []) {
         deps.onRepositoryInstructionDiagnostic?.(diagnostic, session);
       }
@@ -204,12 +208,13 @@ export function createHostedTurnHelpers(deps: {
         developmentContext,
         toolProtocol,
         workspaceContext,
+        options.userInstructionContext,
+        options.extraSystemContext,
         repositoryInstructionContext,
         capabilityIndexContext,
         connectedAppContext,
         actionCatalogContext,
         profileSkillContext,
-        options.extraSystemContext,
       ].filter((part): part is string => Boolean(part)),
     });
   }

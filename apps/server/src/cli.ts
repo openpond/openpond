@@ -1,3 +1,5 @@
+import { isRecoverableStartupError, startRecoveryServer } from "./api/startup-recovery.js";
+import { resolveOpenPondHome } from "@openpond/persistence";
 import { getBundledRuntimeVersion, openUrlWithSystemBrowser } from "@openpond/runtime";
 import { runAppServerJsonl, type AppServerInstance } from "@openpond/app-server";
 import { existsSync } from "node:fs";
@@ -22,6 +24,7 @@ type ParsedCliArgs = {
   openBrowser: boolean;
   printAccessUrl: boolean;
   storeDir: string | null;
+  sourceBrowserState?: string;
   help: boolean;
 };
 type BrowserHandoff = typeof openUrlWithSystemBrowser;
@@ -53,6 +56,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let openBrowser = false;
   let printAccessUrl = false;
   let storeDir: string | null = null;
+  let sourceBrowserState: string | undefined;
   let index = 0;
 
   const command = args[0];
@@ -86,7 +90,11 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
     } else if (arg === "--web-root") {
       webRoot = path.resolve(requireValue(args, i, arg));
       i += 1;
+    } else if (arg === "--source-browser-state") {
+      sourceBrowserState = path.resolve(requireValue(args, i, arg)); i += 1;
     } else if (arg === "--store-dir") {
+      throw new Error("--store-dir has been replaced by --home. Use --home <directory> or OPENPOND_HOME.");
+    } else if (arg === "--home") {
       storeDir = path.resolve(requireValue(args, i, arg));
       i += 1;
     } else if (arg === "--open-browser") {
@@ -104,7 +112,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   if (mode !== "web" && (openBrowser || printAccessUrl)) {
     throw new Error("Browser options are only available in web mode.");
   }
-  return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, help: false };
+  return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, sourceBrowserState, help: false };
 }
 
 function defaultWebRootCandidates(): string[] {
@@ -174,7 +182,7 @@ export async function resolveWebLaunchMessages(
 function printHelp(): void {
   console.log(`Usage:
   openpond-app-server serve [--hostname HOST] [--port PORT]
-  openpond-app-server app-server [--store-dir DIR]
+  openpond-app-server app-server [--home DIR]
   openpond-app-server web [--hostname HOST] [--port PORT] [--web-root DIR]
 
 Options:
@@ -182,7 +190,7 @@ Options:
   --hostname HOST        Bind host (default ${DEFAULT_HOST})
   --port PORT            Bind port, or 0 for any free port (default ${DEFAULT_PORT})
   --web-root DIR         Directory containing the built web UI for web mode
-  --store-dir DIR        Local app-server state directory
+  --home DIR        Local app-server state directory
   --open-browser         Open the authenticated web URL in the system browser
   --print-access-url     Print the authenticated URL instead of opening it
 `);
@@ -205,13 +213,28 @@ export async function runOpenPondServerCli(factories: ServerCliFactories): Promi
     return;
   }
 
-  const instance = await factories.createOpenPondServer({
-    host: args.host,
-    port: args.port,
-    webRoot,
-    ...(args.storeDir ? { storeDir: args.storeDir } : {}),
-    httpEnabled: true,
-  });
+  if (args.storeDir) process.env.OPENPOND_HOME = args.storeDir;
+  let instance: OpenPondServerInstance;
+  let port = args.port;
+  while (true) {
+    try {
+      instance = await factories.createOpenPondServer({ host: args.host, port, webRoot, sourceBrowserState: args.sourceBrowserState,
+        ...(args.storeDir ? { storeDir: args.storeDir } : {}), httpEnabled: true });
+      break;
+    } catch (error) {
+      if (!isRecoverableStartupError(error)) throw error;
+      const recovery = await startRecoveryServer(resolveOpenPondHome({ home: args.storeDir ?? undefined }), port, error);
+      port = recovery.port;
+      console.log(`OPENPOND_APP_SERVER_READY ${JSON.stringify({ mode: "recovery", url: recovery.url, tokenFile: recovery.tokenFile, storePath: recovery.storePath })}`);
+      console.error(`${error.issue.code}: ${error.issue.message} ${error.issue.action}`);
+      const messages = await resolveWebLaunchMessages({ baseUrl: recovery.url, openBrowser: args.openBrowser, printAccessUrl: args.printAccessUrl, token: recovery.token });
+      for (const message of messages.stdout) console.log(message);
+      for (const message of messages.stderr) console.error(message);
+      const close = () => { void recovery.close().finally(() => process.exit(0)); };
+      process.once("SIGINT", close); process.once("SIGTERM", close);
+      try { await recovery.repaired; } finally { process.off("SIGINT", close); process.off("SIGTERM", close); await recovery.close(); }
+    }
+  }
   const webBaseUrl = args.mode === "web" ? browserBaseUrl(instance) : null;
   console.log(
     `OPENPOND_APP_SERVER_READY ${JSON.stringify({
@@ -273,6 +296,7 @@ async function runAgentServer(
   createOpenPondAppServer: CreateAgentServer,
   storeDir: string | null,
 ): Promise<void> {
+  if (storeDir) process.env.OPENPOND_HOME = storeDir;
   const appServer = await createOpenPondAppServer({
     ...(storeDir ? { storeDir } : {}),
   });

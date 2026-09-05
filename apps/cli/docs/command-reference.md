@@ -4,6 +4,30 @@
 
 Parsing, aliases, command help, and this reference use the same authoritative registry.
 
+## home
+
+```text
+Usage:
+  openpond home [--home <directory>]
+```
+## config
+
+```text
+Usage:
+  openpond config <get|set|unset|path|validate|schema|doctor|migrate|recover|restart-migration|revisions|replace|effective|trust|untrust|export|backup|restore|collect-orphans|clear-cache> [key] [value] [--home <directory>] [--json]
+
+Options:
+  --dry-run
+  --expected-revision <string>
+  --file <string>
+  --key-path <json>
+  --project
+  --revision <string>
+  --source-app-home <string>
+  --source-browser-state <string>
+  --source-config <string>
+  --value <string>
+```
 ## help
 
 ```text
@@ -39,6 +63,7 @@ Options:
   --check-update
   --cwd <string>
   --help
+  --home <string>
   --json
   --profile <string>
   --sandbox-apiurl <string>
@@ -64,6 +89,7 @@ Options:
   --cwd <string>
   --force
   --help
+  --home <string>
   --json
   --path <string>
   --profile <string>
@@ -243,10 +269,10 @@ Options:
 
 ```text
 Usage:
-  openpond app-server [--store-dir DIR]
+  openpond app-server [--home DIR]
 
 Options:
-  --store-dir <string>
+  --home <string>
 ```
 ## serve
 

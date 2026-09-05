@@ -21,11 +21,21 @@ export function sandboxScopeQuery(input: SandboxScopeInput = {}): URLSearchParam
   return query;
 }
 
+const preferenceRevisions = new WeakMap<ClientConnection, string>();
+const responseOrders = new WeakMap<ClientConnection, number>();
+let requestOrder = 0;
+
 export async function apiFetch<T>(
   connection: ClientConnection,
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const order = ++requestOrder;
+  if (path === "/v1/preferences" && typeof init?.body === "string") {
+    const expectedRevision = preferenceRevisions.get(connection);
+    if (!expectedRevision) throw new Error("Reload settings before saving so changes can be checked against the current file.");
+    init = { ...init, body: JSON.stringify({ expectedRevision, ...JSON.parse(init.body) }) };
+  }
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
   headers.set("Authorization", `Bearer ${connection.token}`);
@@ -41,7 +51,12 @@ export async function apiFetch<T>(
         : response.statusText;
     throw new Error(error);
   }
-  return (await response.json()) as T;
+  const payload = await response.json();
+  const revision = payload?.configuration?.rawRevision ?? (path === "/v1/preferences" ? payload?.rawRevision : undefined);
+  if (typeof revision === "string" && order >= (responseOrders.get(connection) ?? 0)) {
+    preferenceRevisions.set(connection, revision); responseOrders.set(connection, order);
+  }
+  return payload as T;
 }
 
 export {

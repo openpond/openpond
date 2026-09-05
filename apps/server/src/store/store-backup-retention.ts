@@ -23,9 +23,14 @@ export async function pruneMigrationBackups(
     .filter((entry) => entry.isDirectory() && MIGRATION_BACKUP_DIRECTORY.test(entry.name))
     .map((entry) => entry.name)
     .sort((left, right) => right.localeCompare(left));
-  const boundedRetainCount = Math.max(0, Math.trunc(retainCount));
+  const boundedRetainCount = Math.max(2, Math.trunc(retainCount));
   const retained = migrationBackups.slice(0, boundedRetainCount);
-  const removed = migrationBackups.slice(boundedRetainCount);
+  const removed: string[] = [];
+  for (const name of migrationBackups.slice(boundedRetainCount)) {
+    const stat = await fs.stat(path.join(backupsDir, name));
+    if (stat.mtimeMs >= Date.now() - 30 * 86_400_000) retained.push(name);
+    else removed.push(name);
+  }
 
   for (const name of removed) {
     await fs.rm(path.join(backupsDir, name), { recursive: true, force: true });

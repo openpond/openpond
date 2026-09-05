@@ -139,9 +139,9 @@ export function useWorkspaceActions({
 
   function openDefaultsSettingsFromBranchDialog() {
     if (!workspaceBusy) setBranchDialogOpen(false);
-    setSettingsSection("defaults");
+    setSettingsSection("configuration");
     setView("settings");
-    navigateDesktopRoute({ kind: "settings", section: "defaults" });
+    navigateDesktopRoute({ kind: "settings", section: "configuration" });
   }
 
   async function changeWorkspaceBranch(branch: string) {

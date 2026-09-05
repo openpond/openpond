@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+import { createConfigurationPayloads } from "./api/configuration-payloads.js";
+import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
+import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
+import { initializeHome, resolveEffectiveConfig } from "@openpond/persistence";
+import { ownHomeRuntime, publishRuntimeEndpoint } from "./runtime/home-runtime-owner.js";
 import path from "node:path"; import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import {
@@ -24,8 +29,6 @@ import {
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
 import {
-  APP_PREFERENCES_CACHE_KEY,
-  APP_PREFERENCES_CACHE_TYPE,
   DEFAULT_HOST,
   DEFAULT_PORT,
   VERSION,
@@ -188,7 +191,6 @@ import { createDatasetStorageService } from "./training/dataset-storage-service.
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
-import { normalizeAppPreferences } from "./preferences.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
 import { resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
 import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
@@ -200,12 +202,17 @@ import {
 } from "./training/managed-adapter-models.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
-export async function createOpenPondServer(
-  options: OpenPondServerOptions = {}
-): Promise<OpenPondServerInstance> {
+export async function createOpenPondServer(options: OpenPondServerOptions = {}): Promise<OpenPondServerInstance> {
+  const storeDir = path.resolve(options.storeDir ?? appDataDir());
+  return ownHomeRuntime(storeDir, () => createOwnedOpenPondServer({ ...options, storeDir }));
+}
+async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promise<OpenPondServerInstance> {
   const host = options.host ?? DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
-  const storeDir = options.storeDir ?? appDataDir();
+  const storeDir = path.resolve(options.storeDir ?? appDataDir());
+  await initializeHome(storeDir, { sourceBrowserState: options.sourceBrowserState });
+  await resolveEffectiveConfig(storeDir);
+  await initializeRefinerProfile(storeDir);
   const version = options.version ?? VERSION;
   const runtimeVersion = getBundledRuntimeVersion();
   const maxHostedWorkspaceToolRounds = resolveMaxHostedWorkspaceToolRounds(
@@ -235,6 +242,9 @@ export async function createOpenPondServer(
   };
   const { token, tokenFile } = await ensureCapabilityToken(storeDir);
   const store = new SqliteStore(storeDir, { logger });
+  await store.recentTurns(1);
+  const scheduleRecovery = reconcileInterruptedScheduledWork(storeDir);
+  if (scheduleRecovery.recovered || scheduleRecovery.needsReview) logger.warn("Scheduled work requires review after restart", scheduleRecovery);
   await ensureSelectedLocalHarnessWorkspace({
     store,
     storeDir,
@@ -651,11 +661,7 @@ export async function createOpenPondServer(
     store,
     client: managedAdapterRegistryClient,
     resolveSelectedTeamId: async () => {
-      const entry = await store.getCacheEntry<unknown>(
-        APP_PREFERENCES_CACHE_TYPE,
-        APP_PREFERENCES_CACHE_KEY
-      );
-      return normalizeAppPreferences(entry?.payload).defaultTeamId;
+      return (await loadAppPreferences()).defaultTeamId;
     },
   });
   const datasetStoragePayload = async (action: "state" | "update", payload?: unknown) =>
@@ -669,11 +675,7 @@ export async function createOpenPondServer(
   const resolveManagedTrainingAccess = async () => {
     const operatorAccess = await managedRlOperatorAccess(process.env);
     if (operatorAccess) return operatorAccess;
-    const entry = await store.getCacheEntry<unknown>(
-      APP_PREFERENCES_CACHE_TYPE,
-      APP_PREFERENCES_CACHE_KEY
-    );
-    const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
+    const teamId = (await loadAppPreferences()).defaultTeamId;
     return resolveManagedAdapterUserAccess({ teamId });
   };
   const modelProjectHosting = createModelProjectHostingService({
@@ -799,6 +801,7 @@ export async function createOpenPondServer(
     logger,
   });
   const turnRunner = createTurnRunner({
+    storageHome: storeDir,
     attachmentRootDir,
     store,
     loadSelectedHarnessRuntime: (session) =>
@@ -1065,6 +1068,7 @@ export async function createOpenPondServer(
             paths: providerSecretPaths,
             providerId,
             credential,
+            expected: state.secrets.providers[providerId] ?? {},
             timestamp: now(),
           });
         },
@@ -1324,6 +1328,7 @@ export async function createOpenPondServer(
                   paths: providerSecretPaths,
                   providerId,
                   credential,
+                  expected: state.secrets.providers[providerId] ?? {},
                   timestamp: now(),
                 });
               },
@@ -1716,6 +1721,7 @@ export async function createOpenPondServer(
 
   const { httpServer, terminalWebSockets } = createOpenPondHttpSurface({
     routeOptions: {
+      configuration: createConfigurationPayloads(storeDir),
       host,
       getActualPort: () => actualPort,
       token,
@@ -1803,7 +1809,7 @@ export async function createOpenPondServer(
       workspaceFilePayload,
       saveWorkspaceFilePayload,
       workspaceImagePayload,
-      ...createMediaPayloads(attachmentRootDir),
+      ...createMediaPayloads(attachmentRootDir, storeDir),
       workspaceLspTouchPayload,
       workspaceLspActionPayload,
       workspaceLspSettingsStatusPayload,
@@ -1902,6 +1908,7 @@ export async function createOpenPondServer(
   } else {
     actualPort = 0;
   }
+  if (options.httpEnabled !== false) await publishRuntimeEndpoint(storeDir, `http://${host}:${actualPort}`, serverId);
   await turnRunner.recoverPendingSubagentCompletions();
   workSandboxLifecycle.start();
   if (options.httpEnabled !== false) {

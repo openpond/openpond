@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@openpond/contracts": "workspace:*",
+    "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*"
   }
 }

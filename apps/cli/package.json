@@ -69,15 +69,16 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@openpond/continual-support": "workspace:*",
     "@openpond/cloud": "workspace:*",
+    "@openpond/continual-support": "workspace:*",
     "@openpond/contracts": "workspace:*",
     "@openpond/local-server": "workspace:*",
+    "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*",
-    "openpond-sdk": "workspace:*",
     "@openpond/terminal": "workspace:*",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "24.13.3"
+    "@types/node": "24.13.3",
+    "openpond-sdk": "workspace:*"
   },
   "openpondBundledSourceDependencies": [
     "@openpond/continual-support",
@@ -86,6 +87,7 @@
     "@openpond/local-server",
     "@openpond/runtime",
     "openpond-sdk",
-    "@openpond/terminal"
+    "@openpond/terminal",
+    "@openpond/persistence"
   ]
 }

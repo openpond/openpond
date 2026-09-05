@@ -1,3 +1,4 @@
+import { useHydratedClientChoice } from "../lib/client-choice-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ChatAttachment,
@@ -137,6 +138,7 @@ export function useTeamChat(input: {
   stateRef.current = state;
   const [notificationMode, setNotificationModeState] =
     useState<TeamChatNotificationMode>(readTeamChatNotificationMode);
+  useHydratedClientChoice(() => setNotificationModeState(readTeamChatNotificationMode()));
   const [incomingNotification, setIncomingNotification] =
     useState<TeamChatIncomingNotification | null>(null);
   const selectedThreadIdRef = useRef<string | null>(null);

@@ -1,5 +1,4 @@
-import { loadGlobalConfig, saveConfig } from "@openpond/cloud";
-import type { LocalConfig } from "@openpond/cloud";
+import { updateGlobalConfig } from "@openpond/cloud";
 import type { RuntimeAccountContext, RuntimeLocalAccount, UpdateOpenPondAccountConfigInput } from "./types.js";
 import { loadOpenPondAccountContext } from "./account-context.js";
 import {
@@ -52,15 +51,14 @@ export async function updateOpenPondAccountConfig(
   const handle = input.handle.trim();
   if (!handle) throw new Error("OpenPond account handle is required.");
 
-  const config = (await loadGlobalConfig()) as LocalConfig & {
-    accounts?: RuntimeLocalAccount[];
-  };
+  let nextAccount!: RuntimeLocalAccount;
+  await updateGlobalConfig((config) => {
   const accounts = (config.accounts ?? []).map((account) => ({ ...account }));
   const index = findAccountIndex(accounts, handle, input.currentBaseUrl);
   if (index === -1) throw new Error(`OpenPond account not found: ${handle}`);
 
   const previousAccount = accounts[index]!;
-  const nextAccount: RuntimeLocalAccount = { ...previousAccount };
+  nextAccount = { ...previousAccount };
   applyOptionalUrl(nextAccount, "baseUrl", input.baseUrl);
   applyOptionalUrl(nextAccount, "apiBaseUrl", input.apiBaseUrl);
   applyOptionalUrl(nextAccount, "chatApiBaseUrl", input.chatApiBaseUrl);
@@ -84,10 +82,8 @@ export async function updateOpenPondAccountConfig(
   const wasActive = Boolean(activeProfile && accountMatchesSelector(previousAccount, activeProfile));
   accounts[index] = nextAccount;
 
-  await saveConfig({
-    ...config,
-    accounts,
-    activeProfile: input.setActive || wasActive ? selectorFromAccount(nextAccount) : config.activeProfile,
+  config.accounts = accounts;
+  config.activeProfile = input.setActive || wasActive ? selectorFromAccount(nextAccount) : config.activeProfile;
   });
 
   return loadOpenPondAccountContext(nextAccount.handle, nextAccount.baseUrl);

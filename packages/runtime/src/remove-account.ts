@@ -1,5 +1,4 @@
-import { loadGlobalConfig, saveConfig } from "@openpond/cloud";
-import type { LocalConfig } from "@openpond/cloud";
+import { updateGlobalConfig } from "@openpond/cloud";
 import type { RuntimeLocalAccount } from "./types.js";
 import { loadOpenPondAccountContext } from "./account-context.js";
 import {
@@ -42,9 +41,7 @@ export async function removeOpenPondAccount(input: {
   const handle = input.handle.trim();
   if (!handle) throw new Error("OpenPond account handle is required.");
 
-  const config = (await loadGlobalConfig()) as LocalConfig & {
-    accounts?: RuntimeLocalAccount[];
-  };
+  await updateGlobalConfig((config) => {
   const accounts = (config.accounts ?? []).map((account) => ({ ...account }));
   const index = findAccountIndex(accounts, handle, input.baseUrl);
   if (index === -1) throw new Error(`OpenPond account not found: ${handle}`);
@@ -58,6 +55,7 @@ export async function removeOpenPondAccount(input: {
   }
 
   accounts.splice(index, 1);
-  await saveConfig({ ...config, accounts });
+  config.accounts = accounts;
+  });
   return loadOpenPondAccountContext();
 }

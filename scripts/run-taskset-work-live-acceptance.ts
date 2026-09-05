@@ -18,7 +18,7 @@ import {
 const SERVER_URL =
   process.env.OPENPOND_APP_SERVER_URL?.trim()
   || "http://127.0.0.1:17874";
-const STORE_DIR = process.env.OPENPOND_APP_HOME?.trim() || appDataDir();
+const STORE_DIR = process.env.OPENPOND_HOME?.trim() || appDataDir();
 const TOKEN_PATH = path.join(STORE_DIR, "token");
 const RUN_LABEL = "20260730_openpond_chat_schema_v1";
 const OUTPUT_PATH = path.resolve(

@@ -254,6 +254,7 @@ export {
   loadGlobalConfig,
   saveConfig,
   saveGlobalConfig,
+  updateGlobalConfig,
   saveProfileApiKey,
   setActiveProfile,
 } from "./config.js";

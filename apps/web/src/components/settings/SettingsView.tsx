@@ -1,3 +1,4 @@
+import { ConfigurationSettings } from "./ConfigurationSettings";
 import {
   lazy,
   Suspense,
@@ -22,7 +23,7 @@ import type {
   RuntimeEvent,
   TeamChatThread,
 } from "@openpond/contracts";
-import type { ClientConnection, PreferencesPayload } from "../../api";
+import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 import { EMPTY_PERSONALIZATION, normalizePreferences } from "../../lib/app-models";
 import type { SettingsSection } from "../../lib/app-models";
 import type { TeamChatNotificationMode } from "../../lib/team-chat-notifications";
@@ -283,6 +284,7 @@ export function SettingsView({
       </div>
       <SettingsNavigation section={section} onBack={goBack} onSectionChange={changeSection} />
       <main className={`settings-content ${section === "profile" || harnessSectionActive ? "settings-content-wide" : ""}`}>
+        {section !== "configuration" ? <ConfigurationSettings connection={connection} bannerOnly onOpen={() => changeSection("configuration")} /> : null}
         {section === "account" ? (
           <AccountSettingsSection
             payload={payload}
@@ -358,8 +360,9 @@ export function SettingsView({
             onRefresh={refreshDatasetStorage}
             onSave={saveDatasetStorage}
           />
-        ) : section === "defaults" ? (
-          <div className="settings-stacked-sections">
+        ) : section === "configuration" ? (
+          <div className="settings-stacked-sections configuration-page">
+            <ConfigurationSettings connection={connection} onSaved={async () => { if (connection) onPayload(await api.bootstrap(connection)); }} />
             <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />
             <ContextSettingsSection embedded preferences={preferences} {...defaultsSettings} />
           </div>

@@ -40,7 +40,7 @@ export function DefaultsSettingsSection({
 
   return (
     <section className="account-settings">
-      <h1>Defaults</h1>
+      <h2>General</h2>
       <form className="provider-settings-form" onSubmit={(event) => void saveDefaults(event)}>
         <label className="settings-check-row">
           <input
@@ -106,7 +106,7 @@ export function DefaultsSettingsSection({
           </button>
         </div>
         <button className="settings-primary" disabled={saving || unchanged}>
-          <span>{saving ? "Saving" : "Save defaults"}</span>
+          <span>{saving ? "Saving" : "Save settings"}</span>
         </button>
       </form>
 

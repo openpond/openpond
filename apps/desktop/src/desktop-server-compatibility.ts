@@ -6,6 +6,7 @@ const DEFAULT_DESKTOP_SERVER_READY_TIMEOUT_MS = 60_000;
 
 export type DesktopServerHealth = {
   ok: boolean;
+  recovery?: boolean;
   server?: string;
   version?: string;
   runtimeVersion?: string;

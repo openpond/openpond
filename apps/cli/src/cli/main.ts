@@ -9,6 +9,7 @@ import { resolveCliTopLevelAction } from "./top-level-action";
 export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void> {
   if (await runEmbeddedCompanion(argv)) return;
   const { command, options, rest } = parseArgs(argv);
+  if (typeof options.home === "string") process.env.OPENPOND_HOME = (await import("@openpond/persistence")).resolveOpenPondHome({ home: options.home });
   const action = resolveCliTopLevelAction({ command, options });
   if (action === "version") {
     console.log(getInstalledCliVersion());
@@ -78,7 +79,12 @@ async function runEmbeddedCompanion(argv: string[]): Promise<boolean> {
 
 void runOpenPondCli().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
+  const issue = (error as { issue?: unknown }).issue;
+  if (process.argv.includes("--json")) console.log(JSON.stringify({ error: issue ?? { code: "CLI_ERROR", message } }));
+  else if (issue && typeof issue === "object") {
+    const detail = issue as { code: string; path: string; message: string; action: string };
+    console.error(`${detail.code}: ${detail.message}\n${detail.path}\n${detail.action}`);
+  } else console.error(message);
   const exitCode = typeof (error as { exitCode?: unknown }).exitCode === "number"
     ? (error as { exitCode: number }).exitCode
     : 1;

@@ -55,6 +55,7 @@ export type GithubExtensionInstallRequest = {
 };
 
 export type GithubExtensionManagerOptions = {
+  home?: string;
   rootPath?: string;
   fetch?: typeof fetch;
   now?: () => Date;

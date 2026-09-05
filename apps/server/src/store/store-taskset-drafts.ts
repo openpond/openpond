@@ -152,7 +152,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
     }
     await assertRegularPackageTree(workspace.workspacePath);
     const tasksetRoot = path.join(
-      path.dirname(this.storePath),
+      this.home,
       "training",
       "tasksets",
       input.taskset.id,
@@ -233,7 +233,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
   private workspacePath(id: string): string {
     const stableId = contentHash(id).slice(0, 24);
     return path.join(
-      path.dirname(this.storePath),
+      this.home,
       "workspaces",
       "tasksets",
       `taskset-${stableId}`,

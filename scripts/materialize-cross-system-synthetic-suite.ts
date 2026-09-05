@@ -398,7 +398,7 @@ try {
 
 function parseArguments(values: string[]): Arguments {
   let apply = false;
-  let storeDir = process.env.OPENPOND_APP_HOME
+  let storeDir = process.env.OPENPOND_HOME
     ?? path.join(process.env.HOME ?? "", ".openpond", "openpond-app");
   let suite: Arguments["suite"] = "balanced";
   let tasksetId = "";

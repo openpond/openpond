@@ -125,7 +125,7 @@ export async function runLogin(
     chatApiBaseUrl: config.chatApiBaseUrl,
     setActive: true,
   });
-  console.log("saved api key to ~/.openpond/config.json");
+  console.log("Saved account credentials to the encrypted OpenPond credential store.");
 }
 
 export async function runProfiles(

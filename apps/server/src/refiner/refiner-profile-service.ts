@@ -1,3 +1,4 @@
+import { getLocalRecord, listLocalRecords, withLocalDatabase, withFileLock, atomicWriteFile, storagePaths } from "@openpond/persistence";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -28,18 +29,16 @@ import {
 } from "@openpond/contracts";
 
 const CORE_PROMPT_IDENTITY = "OpenPond Refiner Core: evidence admission, privacy, ownership, validation, and immutable activation boundaries.";
-const initializationByRoot = new Map<string, Promise<void>>();
 
 export type RefinerProfilePaths = ReturnType<typeof refinerProfilePaths>;
 
 export function refinerProfilePaths(storeDir: string) {
-  const root = path.join(storeDir, "refiners");
+  const root = path.join(storeDir, "library", "refiners");
   return {
+    home: storeDir,
     root,
     source: path.join(root, "source", "openpond.review.json"),
     releases: path.join(root, "releases"),
-    transitions: path.join(root, "transitions"),
-    binding: path.join(root, "binding.json"),
   };
 }
 
@@ -62,14 +61,13 @@ export function createRefinerProfileRoutePayloads(storeDir: string) {
 
 export async function inspectRefinerProfile(storeDir: string): Promise<RefinerHistoryPayload> {
   const paths = refinerProfilePaths(storeDir);
-  await ensureInitialized(paths);
-  const binding = RefinerBindingSchema.parse(await readJson(paths.binding));
+  const binding = RefinerBindingSchema.parse(getLocalRecord(paths.home, "refiner_bindings", "active")?.value);
   const releases = (await readDirectoryJson(paths.releases, RefinerReleaseSchema.parse))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const currentRelease = releases.find((release) =>
     release.id === binding.release.id && release.contentHash === binding.release.contentHash);
   if (!currentRelease) throw new Error("Active Refiner release is unavailable.");
-  const transitions = (await readDirectoryJson(paths.transitions, RefinerTransitionReceiptSchema.parse))
+  const transitions = (Object.values(listLocalRecords(paths.home, "refiner_transitions")).map((entry) => RefinerTransitionReceiptSchema.parse(entry.value)))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   return RefinerHistoryPayloadSchema.parse({
     rootPath: paths.root,
@@ -86,6 +84,9 @@ export async function loadActiveRefinerRelease(storeDir: string): Promise<Refine
 }
 
 export async function updateRefinerProfile(storeDir: string, payload: unknown): Promise<RefinerHistoryPayload> {
+  return withFileLock(path.join(storagePaths(storeDir).runtime, "refiner-edit"), () => updateRefinerProfileUnlocked(storeDir, payload));
+}
+async function updateRefinerProfileUnlocked(storeDir: string, payload: unknown): Promise<RefinerHistoryPayload> {
   const request = UpdateRefinerProfileRequestSchema.parse(payload);
   const paths = refinerProfilePaths(storeDir);
   await ensureInitialized(paths);
@@ -101,12 +102,12 @@ export async function updateRefinerProfile(storeDir: string, payload: unknown): 
   ) ?? candidate;
   await persistRelease(paths, release);
   await atomicWrite(paths.source, serializeReviewProfile(profile));
-  const binding = RefinerBindingSchema.parse(await readJson(paths.binding));
+  const binding = RefinerBindingSchema.parse(getLocalRecord(paths.home, "refiner_bindings", "active")?.value);
   if (request.activate && binding.release.contentHash === release.contentHash) {
     return inspectRefinerProfile(storeDir);
   }
   if (!request.activate) {
-    const transitions = await readDirectoryJson(paths.transitions, RefinerTransitionReceiptSchema.parse);
+    const transitions = Object.values(listLocalRecords(paths.home, "refiner_transitions")).map((entry) => RefinerTransitionReceiptSchema.parse(entry.value));
     const duplicateDraft = transitions.some((receipt) =>
       !receipt.bindingChanged
       && receipt.nextRelease.contentHash === release.contentHash
@@ -127,11 +128,14 @@ export async function updateRefinerProfile(storeDir: string, payload: unknown): 
 }
 
 export async function activateRefinerRelease(storeDir: string, payload: unknown): Promise<RefinerHistoryPayload> {
+  return withFileLock(path.join(storagePaths(storeDir).runtime, "refiner-edit"), () => activateRefinerReleaseUnlocked(storeDir, payload));
+}
+async function activateRefinerReleaseUnlocked(storeDir: string, payload: unknown): Promise<RefinerHistoryPayload> {
   const request = ActivateRefinerReleaseRequestSchema.parse(payload);
   const paths = refinerProfilePaths(storeDir);
   await ensureInitialized(paths);
   const release = await readRelease(paths, request.release);
-  const binding = RefinerBindingSchema.parse(await readJson(paths.binding));
+  const binding = RefinerBindingSchema.parse(getLocalRecord(paths.home, "refiner_bindings", "active")?.value);
   if (binding.release.contentHash === release.contentHash) return inspectRefinerProfile(storeDir);
   await transition(paths, release, {
     operation: "activate",
@@ -145,11 +149,14 @@ export async function activateRefinerRelease(storeDir: string, payload: unknown)
 }
 
 export async function rollbackRefinerRelease(storeDir: string, payload: unknown): Promise<RefinerHistoryPayload> {
+  return withFileLock(path.join(storagePaths(storeDir).runtime, "refiner-edit"), () => rollbackRefinerReleaseUnlocked(storeDir, payload));
+}
+async function rollbackRefinerReleaseUnlocked(storeDir: string, payload: unknown): Promise<RefinerHistoryPayload> {
   const request = ActivateRefinerReleaseRequestSchema.parse(payload);
   const paths = refinerProfilePaths(storeDir);
   await ensureInitialized(paths);
   const release = await readRelease(paths, request.release);
-  const binding = RefinerBindingSchema.parse(await readJson(paths.binding));
+  const binding = RefinerBindingSchema.parse(getLocalRecord(paths.home, "refiner_bindings", "active")?.value);
   if (binding.release.contentHash === release.contentHash) return inspectRefinerProfile(storeDir);
   await transition(paths, release, {
     operation: "rollback",
@@ -162,26 +169,17 @@ export async function rollbackRefinerRelease(storeDir: string, payload: unknown)
   return inspectRefinerProfile(storeDir);
 }
 
-async function ensureInitialized(paths: RefinerProfilePaths): Promise<void> {
-  const active = initializationByRoot.get(paths.root);
-  if (active) return active;
-  const initialization = initialize(paths);
-  initializationByRoot.set(paths.root, initialization);
-  try {
-    await initialization;
-  } catch (error) {
-    initializationByRoot.delete(paths.root);
-    throw error;
-  }
+export async function initializeRefinerProfile(home: string): Promise<void> {
+  await withFileLock(path.join(storagePaths(home).runtime, "refiner-initialize"), () => initialize(refinerProfilePaths(home)));
 }
+async function ensureInitialized(paths: RefinerProfilePaths): Promise<void> { await initializeRefinerProfile(paths.home); }
 
 async function initialize(paths: RefinerProfilePaths): Promise<void> {
   await Promise.all([
     fs.mkdir(path.dirname(paths.source), { recursive: true, mode: 0o700 }),
     fs.mkdir(paths.releases, { recursive: true, mode: 0o700 }),
-    fs.mkdir(paths.transitions, { recursive: true, mode: 0o700 }),
   ]);
-  if (await exists(paths.binding)) return;
+  if (getLocalRecord(paths.home, "refiner_bindings", "active")) return;
   const release = createRefinerRelease({
     profile: DEFAULT_REFINER_REVIEW_PROFILE,
     coreVersion: REFINER_CORE_VERSION,
@@ -203,9 +201,11 @@ async function transition(
   release: RefinerRelease,
   input: Pick<RefinerTransitionReceipt, "operation" | "bindingChanged" | "actor" | "reason" | "authoringSkillHash">,
 ): Promise<void> {
-  const previous = await exists(paths.binding)
-    ? RefinerBindingSchema.parse(await readJson(paths.binding))
-    : null;
+  withLocalDatabase(paths.home, (db) => {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = db.prepare("SELECT payload FROM refiner_bindings WHERE id = 'active'").get() as { payload: string } | undefined;
+      const previous = row ? RefinerBindingSchema.parse(JSON.parse(row.payload)) : null;
   const now = new Date().toISOString();
   const releaseRef = immutableRef(release);
   const receiptWithoutHash = {
@@ -225,7 +225,7 @@ async function transition(
     ...receiptWithoutHash,
     contentHash: contentHash(receiptWithoutHash),
   });
-  await atomicWrite(path.join(paths.transitions, `${receipt.contentHash}.json`), canonicalJson(receipt));
+  db.prepare("INSERT INTO refiner_transitions VALUES (?, ?, 1)").run(receipt.contentHash, JSON.stringify(receipt));
   if (input.bindingChanged) {
     const binding: RefinerBinding = RefinerBindingSchema.parse({
       schemaVersion: "openpond.refinerBinding.v1",
@@ -234,8 +234,11 @@ async function transition(
       release: releaseRef,
       updatedAt: now,
     });
-    await atomicWrite(paths.binding, canonicalJson(binding));
+    db.prepare("INSERT INTO refiner_bindings VALUES ('active', ?, 1) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, revision=revision+1").run(JSON.stringify(binding));
   }
+      db.exec("COMMIT");
+    } catch (error) { db.exec("ROLLBACK"); throw error; }
+  });
 }
 
 async function persistRelease(paths: RefinerProfilePaths, release: RefinerRelease): Promise<void> {
@@ -270,9 +273,11 @@ async function exists(filePath: string): Promise<boolean> {
 }
 
 async function atomicWrite(filePath: string, contents: string, preserveExisting = false): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
-  if (preserveExisting && await exists(filePath)) return;
-  const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
-  await fs.writeFile(temporaryPath, contents, { encoding: "utf8", mode: 0o600 });
-  await fs.rename(temporaryPath, filePath);
+  await withFileLock(filePath, async () => {
+    if (preserveExisting && await exists(filePath)) {
+      if (await fs.readFile(filePath, "utf8") !== contents) throw new Error("Immutable Refiner release bytes changed.");
+      return;
+    }
+    await atomicWriteFile(filePath, contents);
+  });
 }

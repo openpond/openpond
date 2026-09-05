@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
-import { access, mkdir, readFile, rename, statfs, writeFile } from "node:fs/promises";
+import { access, mkdir, statfs } from "node:fs/promises";
 import path from "node:path";
+import { readConfig, updateConfig, resolveConfigPath } from "@openpond/persistence";
 import {
   DatasetStorageSettingsSchema,
   DatasetStorageStateSchema,
@@ -11,19 +12,13 @@ import { discoverStorageCandidates, storageKindForPath } from "./dataset-storage
 import { runCommandProbe } from "./dataset-storage-probe.js";
 
 export function createDatasetStorageService(input: { storeDir: string }) {
-  const directory = path.join(input.storeDir, "datasets");
-  const settingsPath = path.join(directory, "settings.json");
-
   async function settings(): Promise<DatasetStorageSettings> {
-    try {
-      return DatasetStorageSettingsSchema.parse(JSON.parse(await readFile(settingsPath, "utf8")));
-    } catch {
-      return DatasetStorageSettingsSchema.parse({
-        schemaVersion: "openpond.datasetStorageSettings.v1",
-        datasetStorePath: path.join(input.storeDir, "datasets"),
-        updatedAt: new Date().toISOString(),
-      });
-    }
+    const { document } = await readConfig(input.storeDir);
+    return DatasetStorageSettingsSchema.parse({
+      schemaVersion: "openpond.datasetStorageSettings.v1",
+      datasetStorePath: resolveConfigPath(document.storage?.datasets_dir ?? "datasets", input.storeDir),
+      updatedAt: "1970-01-01T00:00:00.000Z",
+    });
   }
 
   async function state() {
@@ -42,7 +37,7 @@ export function createDatasetStorageService(input: { storeDir: string }) {
       });
     }
     const storageRoots = await Promise.all(candidates.map(async (candidate) => {
-      const writable = await ensureWritable(candidate.datasetStorePath);
+      const writable = await access(candidate.datasetStorePath, constants.W_OK).then(() => true, () => false);
       const stats = await statfs(candidate.path).catch(() => null);
       return {
         ...candidate,
@@ -71,10 +66,7 @@ export function createDatasetStorageService(input: { storeDir: string }) {
     if (!await ensureWritable(updated.datasetStorePath)) {
       throw new Error("Dataset storage folder is not writable.");
     }
-    await mkdir(directory, { recursive: true });
-    const temporaryPath = `${settingsPath}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(updated, null, 2)}\n`, "utf8");
-    await rename(temporaryPath, settingsPath);
+    await updateConfig(input.storeDir, (document) => ({ ...document, storage: { ...document.storage, datasets_dir: updated.datasetStorePath } }));
     return state();
   }
 

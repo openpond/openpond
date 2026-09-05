@@ -58,11 +58,7 @@ import {
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
 } from "@openpond/cloud";
-import {
-  APP_PREFERENCES_CACHE_KEY,
-  APP_PREFERENCES_CACHE_TYPE,
-} from "../constants.js";
-import { normalizeAppPreferences } from "../preferences.js";
+import { readPreferences, updatePreferences, resolveEffectiveConfig } from "@openpond/persistence";
 import {
   loadPersonalizationSettings,
   savePersonalizationSettings,
@@ -234,7 +230,6 @@ export function createServerPayloads(deps: {
       ];
     },
   });
-  let appPreferencesUpdateQueue: Promise<void> = Promise.resolve();
   const {
     codexHistorySessionsWithLiveStatus,
     codexHistoryThreadPayload,
@@ -244,11 +239,7 @@ export function createServerPayloads(deps: {
   } = createCodexHistoryPayloads({ attachmentRootDir, store, version });
 
   async function loadAppPreferences(): Promise<AppPreferences> {
-    const entry = await store.getCacheEntry<unknown>(
-      APP_PREFERENCES_CACHE_TYPE,
-      APP_PREFERENCES_CACHE_KEY
-    );
-    return normalizeAppPreferences(entry?.payload);
+    return (await readPreferences(storeDir)).preferences;
   }
 
   async function loadProvidersFile(): Promise<ProvidersFile> {
@@ -270,7 +261,7 @@ export function createServerPayloads(deps: {
       timestamp: now(),
     });
     if (resolved.source === "hosted" && resolved.file !== file) {
-      await updateProvidersFile(providersFilePath, () => resolved.file);
+      await updateProvidersFile(providersFilePath, (latest) => ({ ...latest, catalogCache: resolved.file.catalogCache }));
     }
     return { file: resolved.file, catalog: resolved.catalog };
   }
@@ -301,24 +292,10 @@ export function createServerPayloads(deps: {
 
   async function updateAppPreferencesPayload(
     payload: unknown
-  ): Promise<{ preferences: AppPreferences }> {
-    const input = UpdateAppPreferencesRequestSchema.parse(payload);
-    let updatedPreferences: AppPreferences | null = null;
-    const update = appPreferencesUpdateQueue.then(async () => {
-      const current = await loadAppPreferences();
-      const next = normalizeAppPreferences({ ...current, ...input });
-      updatedPreferences = next;
-      if (JSON.stringify(next) !== JSON.stringify(current)) {
-        await store.setCacheEntry(
-          APP_PREFERENCES_CACHE_TYPE,
-          APP_PREFERENCES_CACHE_KEY,
-          next
-        );
-      }
-    });
-    appPreferencesUpdateQueue = update.catch(() => undefined);
-    await update;
-    return { preferences: updatedPreferences ?? (await loadAppPreferences()) };
+  ): Promise<{ preferences: AppPreferences; rawRevision: string }> {
+    const { expectedRevision, ...input } = UpdateAppPreferencesRequestSchema.parse(payload);
+    const saved = await updatePreferences(storeDir, input, expectedRevision);
+    return { preferences: saved.preferences, rawRevision: saved.config.rawRevision };
   }
 
   async function updateProviderSettingsPayload(
@@ -608,6 +585,7 @@ export function createServerPayloads(deps: {
               paths: providerSecretPaths,
               providerId,
               timestamp: now(),
+              expected: state.secrets.providers[providerId] ?? {},
               lastError: validation.ok ? null : validation.errors.join("; "),
             });
             const providers = await providerSettingsPayload();
@@ -624,6 +602,7 @@ export function createServerPayloads(deps: {
               paths: providerSecretPaths,
               providerId,
               timestamp: now(),
+              expected: state.secrets.providers[providerId] ?? {},
               lastError: message,
             });
             const providers = await providerSettingsPayload();
@@ -906,7 +885,9 @@ export function createServerPayloads(deps: {
       store.getSidebarAppPreferences(scope),
       listSidebarFileBookmarksForScope(scope),
     ]);
+    const configuration = await resolveEffectiveConfig(storeDir);
     const payload: BootstrapPayload = {
+      configuration: { rawRevision: configuration.sources.find((source) => source.layer === "user")!.revision, effectiveRevision: configuration.effectiveRevision, sources: configuration.sources, provenance: configuration.provenance },
       server: {
         id: serverId,
         host,

@@ -1,3 +1,4 @@
+import { clientChoiceStorage, subscribeClientChoices } from "../../lib/client-choice-storage";
 import { useSyncExternalStore } from "react";
 
 export const POST_TRAINING_PROGRESS_STORAGE_KEY = "openpond.post-training-progress.v1";
@@ -69,7 +70,7 @@ export function parsePostTrainingProgress(serialized: string | null): PostTraini
 function loadProgress(): PostTrainingProgress {
   if (typeof window === "undefined") return EMPTY_PROGRESS;
   try {
-    return parsePostTrainingProgress(window.localStorage.getItem(POST_TRAINING_PROGRESS_STORAGE_KEY));
+    return parsePostTrainingProgress(clientChoiceStorage.getItem(POST_TRAINING_PROGRESS_STORAGE_KEY));
   } catch {
     return EMPTY_PROGRESS;
   }
@@ -82,7 +83,7 @@ function persistProgress() {
   persistTimer = null;
   if (typeof window === "undefined" || progressSnapshot === null) return;
   try {
-    window.localStorage.setItem(
+    clientChoiceStorage.setItem(
       POST_TRAINING_PROGRESS_STORAGE_KEY,
       JSON.stringify(progressSnapshot),
     );
@@ -100,9 +101,8 @@ function attachStorageListeners() {
   if (typeof window === "undefined" || storageListenersAttached) return;
   storageListenersAttached = true;
   window.addEventListener("pagehide", persistProgress);
-  window.addEventListener("storage", (event) => {
-    if (event.key !== POST_TRAINING_PROGRESS_STORAGE_KEY) return;
-    progressSnapshot = parsePostTrainingProgress(event.newValue);
+  subscribeClientChoices(() => {
+    progressSnapshot = loadProgress();
     listeners.forEach((listener) => listener());
   });
 }

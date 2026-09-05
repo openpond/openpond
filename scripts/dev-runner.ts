@@ -167,7 +167,7 @@ export function buildDevRunnerPlan(
     ? path.join(root, ".openpond", "stable-web", "data")
     : devAppHomePath(env);
   const baseEnv = {
-    OPENPOND_APP_HOME: appHome,
+    OPENPOND_HOME: appHome,
     OPENPOND_SERVER_PORT: String(serverPort),
     OPENPOND_WEB_PORT: String(webPort),
     OPENPOND_WEB_URL: webUrl,
@@ -239,7 +239,7 @@ export function buildDevRunnerPlan(
           String(serverPort),
           "--web-root",
           stableWebRoot,
-          "--store-dir",
+          "--home",
           appHome,
         ],
         root,
@@ -689,7 +689,7 @@ export function devAppHomePath(
   env: NodeJS.ProcessEnv = process.env,
   homeDir = os.homedir(),
 ): string {
-  const explicit = env.OPENPOND_APP_HOME?.trim();
+  const explicit = env.OPENPOND_HOME?.trim();
   if (explicit) return explicit;
   const dirname = env.OPENPOND_APP_CHANNEL === "nightly"
     ? "openpond-app-nightly-dev"

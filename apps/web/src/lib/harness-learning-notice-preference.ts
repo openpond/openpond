@@ -1,3 +1,4 @@
+import { clientChoiceStorage } from "./client-choice-storage";
 export const HARNESS_LEARNING_NOTICE_DISMISSED_KEY =
   "openpond.sidebar.continuous-learning.dismissed.v1";
 
@@ -26,5 +27,5 @@ export function rememberHarnessLearningNoticeDismissed(
 }
 
 function browserPreferenceStorage(): PreferenceStorage | null {
-  return typeof window === "undefined" ? null : window.localStorage;
+  return typeof window === "undefined" ? null : clientChoiceStorage;
 }

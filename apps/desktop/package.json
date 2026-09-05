@@ -13,6 +13,8 @@
   "dependencies": {
     "@openpond/logging": "workspace:*",
     "@openpond/runtime": "workspace:*",
-    "electron": "43.1.1"
+    "electron": "43.1.1",
+    "@openpond/persistence": "workspace:*",
+    "zod": "^4.1.13"
   }
 }

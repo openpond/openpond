@@ -1,4 +1,5 @@
-import { BrowserWindow, app, ipcMain, type IpcMainInvokeEvent } from "electron";
+import { appHomePath } from "./desktop-environment.js";
+import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from "electron";
 import { BrowserSidebarStore } from "./desktop-browser-store.js";
 import { BrowserSidebarManager } from "./desktop-browser-sidebar.js";
 import {
@@ -176,7 +177,7 @@ function trustedSenderWindow(event: IpcMainInvokeEvent, getWindow: () => Browser
 function managerFor(window: BrowserWindow): BrowserSidebarManager {
   const existing = managers.get(window);
   if (existing) return existing;
-  const manager = new BrowserSidebarManager(window, new BrowserSidebarStore(app.getPath("userData")));
+  const manager = new BrowserSidebarManager(window, new BrowserSidebarStore(appHomePath()));
   managers.set(window, manager);
   activeManagers.add(manager);
   return manager;

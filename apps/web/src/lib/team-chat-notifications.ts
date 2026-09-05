@@ -1,3 +1,4 @@
+import { clientChoiceStorage } from "./client-choice-storage";
 import type {
   TeamChatMember,
   TeamChatMessage,
@@ -23,7 +24,7 @@ export type TeamChatNotificationStorage = Pick<
 
 function browserLocalStorage(): TeamChatNotificationStorage | null {
   try {
-    return typeof window === "undefined" ? null : window.localStorage;
+    return typeof window === "undefined" ? null : clientChoiceStorage;
   } catch {
     return null;
   }

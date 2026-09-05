@@ -1,3 +1,4 @@
+import { publishManagedArtifact, withManagedArtifact, atomicWriteFile } from "@openpond/persistence";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type {
@@ -85,6 +86,7 @@ export type ChatAttachmentTextFile = {
 };
 
 export async function materializeChatAttachments(input: {
+  storageHome: string;
   attachmentRootDir: string;
   sessionId: string;
   turnId: string;
@@ -117,12 +119,13 @@ export async function materializeChatAttachments(input: {
       );
       const localPath = path.join(turnDir, safeName);
       await fs.mkdir(path.dirname(localPath), { recursive: true });
-      await fs.writeFile(
-        localPath,
-        Buffer.from(attachment.contentsBase64, "base64"),
-        { mode: 0o600 }
-      );
-      context.localPath = localPath;
+      const bytes = Buffer.from(attachment.contentsBase64, "base64");
+      const artifact = await publishManagedArtifact(input.storageHome, {
+        owner: { domain: "chat_attachment", id: JSON.stringify([input.sessionId, input.turnId, safeName]) },
+        displayName: attachment.name, mediaType: attachment.mediaType, bytes,
+      });
+      await atomicWriteFile(localPath, bytes);
+      context.localPath = artifact.path;
       context.storageName = safeName;
     }
 
@@ -265,6 +268,7 @@ function chatAttachmentSummary(
 }
 
 export async function readChatAttachmentImageFile(input: {
+  storageHome: string;
   attachmentRootDir: string;
   sessionId: string;
   turnId: string;
@@ -289,22 +293,14 @@ export async function readChatAttachmentImageFile(input: {
   if (target !== turnDir && !target.startsWith(`${turnDir}${path.sep}`))
     return null;
 
-  try {
-    const stat = await fs.lstat(target);
-    if (!stat.isFile() || stat.size > MAX_CHAT_ATTACHMENT_IMAGE_BYTES)
-      return null;
-    return {
-      path: storageName,
-      contentType,
-      bytes: await fs.readFile(target),
-      sizeBytes: stat.size,
-    };
-  } catch {
-    return null;
-  }
+  return withManagedArtifact(input.storageHome, { domain: "chat_attachment", id: JSON.stringify([input.sessionId, input.turnId, storageName]) }, async (file, reference) => {
+    if (reference.sizeBytes > MAX_CHAT_ATTACHMENT_IMAGE_BYTES) return null;
+    return { path: storageName, contentType, bytes: await fs.readFile(file), sizeBytes: reference.sizeBytes };
+  });
 }
 
 export async function readChatAttachmentTextFile(input: {
+  storageHome: string;
   attachmentRootDir: string;
   sessionId: string;
   turnId: string;
@@ -318,22 +314,10 @@ export async function readChatAttachmentTextFile(input: {
   )
     return null;
 
-  try {
-    const stat = await fs.lstat(target.absolutePath);
-    if (
-      !stat.isFile() ||
-      stat.size > CHAT_ATTACHMENT_TEXT_PREVIEW_MAX_BYTES
-    )
-      return null;
-    return {
-      path: target.storageName,
-      contentType: input.contentType,
-      content: await fs.readFile(target.absolutePath, "utf8"),
-      sizeBytes: stat.size,
-    };
-  } catch {
-    return null;
-  }
+  return withManagedArtifact(input.storageHome, { domain: "chat_attachment", id: JSON.stringify([input.sessionId, input.turnId, target.storageName]) }, async (file, reference) => {
+    if (reference.sizeBytes > CHAT_ATTACHMENT_TEXT_PREVIEW_MAX_BYTES) return null;
+    return { path: target.storageName, contentType: input.contentType, content: await fs.readFile(file, "utf8"), sizeBytes: reference.sizeBytes };
+  });
 }
 
 export function chatAttachmentImageContentType(
