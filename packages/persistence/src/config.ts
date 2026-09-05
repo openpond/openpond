@@ -1,5 +1,5 @@
 import { rememberValidConfig } from "./config-recovery.js";
-import { watch } from "node:fs";
+import { realpathSync, watch } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { validateConfigDocument, type ConfigDocument, type ConfigOperation, type ConfigScope } from "./config-schema.js";
@@ -76,7 +76,8 @@ function mergeTable(base: Record<string, unknown>, overlay: Record<string, unkno
 
 export function watchConfig(home: string, changed: () => void): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const watcher = watch(path.dirname(storagePaths(home).config), { persistent: false }, (_event, filename) => {
+  // Windows short-name paths must be expanded before libuv matches change events.
+  const watcher = watch(realpathSync.native(path.dirname(storagePaths(home).config)), { persistent: false }, (_event, filename) => {
     if (filename && String(filename) !== "config.toml") return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(changed, 100);

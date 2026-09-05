@@ -1,5 +1,5 @@
 import { snapshotInstructions } from "./instruction-snapshot.js";
-import { promises as fs, watch } from "node:fs";
+import { promises as fs, realpathSync, watch } from "node:fs";
 import path from "node:path";
 import {
   resolveEffectiveConfig, assertConfigRunCurrent, getLocalRecord, putLocalRecord,
@@ -71,7 +71,7 @@ export function watchTurnConfiguration(home: string | undefined, turnId: string,
   function schedule() { if (!closed && !timer) { timer = setTimeout(() => { timer = undefined; void check(); }, 100); timer.unref(); } }
   function attach() {
     for (const directory of directories) if (!watchers.has(directory)) {
-      try { const watcher = watch(directory, { persistent: false }, schedule); watcher.on("error", schedule); watchers.set(directory, watcher); } catch { /* The parent watch observes directory creation. Admission validated readable sources. */ }
+      try { const watcher = watch(realpathSync.native(directory), { persistent: false }, schedule); watcher.on("error", schedule); watchers.set(directory, watcher); } catch { /* The parent watch observes directory creation. Admission validated readable sources. */ }
     }
   }
   function stop() { closed = true; if (timer) clearTimeout(timer); for (const watcher of watchers.values()) watcher.close(); watchers.clear(); }
