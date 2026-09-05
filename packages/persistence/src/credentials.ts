@@ -83,5 +83,17 @@ export function newCredentialId(owner: string): string { return `${owner}:${rand
 /** Opaque per-record versions expose neither plaintext nor encrypted credential bytes. */
 export async function credentialVersions(home: string, ids: string[]): Promise<Record<string, string | null>> {
   const vault = await readVault(home);
-  return Object.fromEntries([...new Set(ids)].sort().map((id) => [id, vault.records[id] ? createHash("sha256").update(JSON.stringify(vault.records[id])).digest("hex") : null]));
+  const key = ids.some((id) => vault.records[id]) ? await readKey(home, false) : null;
+  return Object.fromEntries([...new Set(ids)].sort().map((id) => {
+    const record = vault.records[id];
+    if (!record || !key) return [id, null];
+    const value = decrypt<Record<string, unknown>>(home, id, record, key).value;
+    // Provider login creates a fresh credential ID. CAS refresh retains that ID
+    // and account binding; rotating its short-lived tokens is not revocation.
+    const identity = id.startsWith("provider:") && value?.source === "chatgpt_subscription"
+      ? { id, keyId: record.keyId, source: value.source, endpoint: value.endpoint, createdAt: value.createdAt,
+          accountId: (value.oauth as { accountId?: unknown } | null)?.accountId }
+      : record;
+    return [id, createHash("sha256").update(JSON.stringify(identity)).digest("hex")];
+  }));
 }

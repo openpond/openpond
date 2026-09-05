@@ -24,7 +24,7 @@ import { startRecoveryServer } from "../apps/server/src/api/startup-recovery";
 import { createOpenPondServer } from "../apps/server/src/index";
 import { windowsPowerShellEnvironment } from "../packages/persistence/src/windows-powershell";
 import { PersistenceError } from "../packages/persistence/src/errors";
-import { writeProviderChatGptSubscriptionCredential, readProviderSecrets, deleteProviderCredential } from "../apps/server/src/openpond/provider-secrets";
+import { writeProviderChatGptSubscriptionCredential, readProviderSecrets, deleteProviderCredential, updateProviderCredentialValidation } from "../apps/server/src/openpond/provider-secrets";
 
 const run = promisify(execFile);
 describe("persistence data and concurrency boundaries", () => {
@@ -137,14 +137,25 @@ describe("persistence data and concurrency boundaries", () => {
     expect(vault.toString()).not.toContain("private-token");
   });
 
-  // A delayed OAuth refresh must not undo logout or overwrite a new login.
-  test("rejects an OAuth refresh completed after logout", async () => {
+  // Token rotation must preserve active runs, while logout and account replacement revoke them.
+  test("preserves active runs across OAuth refresh and rejects refresh after logout", async () => {
+    await initializeHome(home);
     const paths = { secretsFilePath: storagePaths(home).credentials, keyFilePath: storagePaths(home).key };
     const credential = { refreshToken: "secret-refresh", accessToken: "secret-access", expiresAt: Date.now() + 60_000, accountId: "account-1" };
     await writeProviderChatGptSubscriptionCredential({ paths, providerId: "openai", credential, timestamp: new Date().toISOString() });
     const expected = (await readProviderSecrets(paths)).providers.openai!;
+    const snapshot = await resolveEffectiveConfig(home);
+    await updateProviderCredentialValidation({ paths, providerId: "openai", timestamp: new Date().toISOString(), lastError: "Expired token", expected });
+    await assertConfigRunCurrent(home, snapshot);
+    const refreshed = (await writeProviderChatGptSubscriptionCredential({ paths, providerId: "openai", credential: { ...credential, accessToken: "new-access", refreshToken: "new-refresh" }, expected, timestamp: new Date().toISOString() })).providers.openai!;
+    expect(refreshed.credentialId).toBe(expected.credentialId);
+    expect(refreshed.revision).toBe(expected.revision! + 1);
+    expect(refreshed.lastError).toBeNull();
+    await assertConfigRunCurrent(home, snapshot);
+    await expect(writeProviderChatGptSubscriptionCredential({ paths, providerId: "openai", credential: { ...credential, accountId: "another-account" }, expected: refreshed, timestamp: new Date().toISOString() })).rejects.toMatchObject({ issue: { code: "CREDENTIAL_CONFLICT" } });
     await deleteProviderCredential({ paths, providerId: "openai", request: {} });
-    await expect(writeProviderChatGptSubscriptionCredential({ paths, providerId: "openai", credential, expected, timestamp: new Date().toISOString() })).rejects.toMatchObject({ issue: { code: "CREDENTIAL_CONFLICT" } });
+    await expect(assertConfigRunCurrent(home, snapshot)).rejects.toMatchObject({ issue: { code: "EXECUTION_POLICY_CHANGED" } });
+    await expect(writeProviderChatGptSubscriptionCredential({ paths, providerId: "openai", credential, expected: refreshed, timestamp: new Date().toISOString() })).rejects.toMatchObject({ issue: { code: "CREDENTIAL_CONFLICT" } });
     expect((await readProviderSecrets(paths)).providers.openai).toBeUndefined();
     expect(await readCredential(home, expected.credentialId!)).toBeNull();
   });

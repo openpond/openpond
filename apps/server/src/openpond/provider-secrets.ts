@@ -55,7 +55,7 @@ async function readUnlocked(paths: ProviderSecretStorePaths): Promise<ProviderSe
     }
     const saved = await readCredential<ProviderSecretRecord>(home, ref.id);
     if (!saved) throw new PersistenceError({ code: "CREDENTIAL_RECOVERY_REQUIRED", path: ref.id, message: `The credential for ${id} is missing.`, action: "Reconnect this provider in Settings or restore its credential backup." });
-    const record = { ...saved.value, credentialId: ref.id, revision: saved.revision };
+    const record = { ...saved.value, ...(metadata ? { lastValidatedAt: metadata.lastValidatedAt ?? null, lastError: metadata.lastError ?? null } : {}), credentialId: ref.id, revision: saved.revision };
     if ((record.endpoint ?? null) !== (provider.base_url ?? null)) {
       providers[id] = { ...record, value: null, oauth: null, lastError: "The provider endpoint changed. Reconnect the provider for this endpoint." };
     } else providers[id] = record;
@@ -82,6 +82,13 @@ async function save(paths: ProviderSecretStorePaths, providerId: string, record:
     const home = homeFor(paths), current = await readUnlocked(paths), existing = current.providers[providerId];
     if (expected) checkExpected(existing, expected);
     const snapshot = await readConfig(home), previous = snapshot.document.providers?.[providerId]?.credential;
+    if (expected && (previous?.source !== "secret" || previous.id !== existing?.credentialId || (snapshot.document.providers?.[providerId]?.base_url ?? null) !== (existing?.endpoint ?? null))) throw new PersistenceError({ code: "CREDENTIAL_CONFLICT", path: providerId, message: "The provider connection changed during refresh.", action: "Reconnect the provider before retrying." });
+    if (expected && existing?.source === "chatgpt_subscription" && record.source === "chatgpt_subscription" && previous?.source === "secret") {
+      if (existing.oauth?.accountId !== record.oauth?.accountId) throw new PersistenceError({ code: "CREDENTIAL_CONFLICT", path: previous.id, message: "The refreshed credential belongs to another account.", action: "Reconnect the provider before retrying." });
+      await writeCredential(home, previous.id, { ...record, endpoint: existing.endpoint ?? null, createdAt: existing.createdAt }, existing.revision);
+      deleteLocalRecord(home, "provider_connection_state", providerId);
+      return readUnlocked(paths);
+    }
     const credentialId = newCredentialId(`provider:${providerId}`);
     const value = { ...record, endpoint: snapshot.document.providers?.[providerId]?.base_url ?? null, createdAt: existing?.createdAt ?? record.createdAt };
     if (value.source !== "env") await writeCredential(home, credentialId, value, null);
@@ -89,6 +96,7 @@ async function save(paths: ProviderSecretStorePaths, providerId: string, record:
       [providerId]: { ...document.providers?.[providerId], credential: value.source === "env" ? { source: "env", name: value.envVar! } : { source: "secret", id: credentialId } },
     } }), snapshot.rawRevision);
     if (value.source === "env") putLocalRecord(home, "provider_connection_state", providerId, { createdAt: value.createdAt, updatedAt: value.updatedAt, lastValidatedAt: value.lastValidatedAt, lastError: value.lastError });
+    else deleteLocalRecord(home, "provider_connection_state", providerId);
     if (previous?.source === "secret") await deleteCredential(home, previous.id);
     return readUnlocked(paths);
   });
@@ -122,10 +130,7 @@ export async function updateProviderCredentialValidation(input: { paths: Provide
     const home = homeFor(input.paths), current = await readUnlocked(input.paths), existing = current.providers[input.providerId];
     if (!existing) return current;
     if (input.expected) checkExpected(existing, input.expected);
-    const { credentialId, revision, ...record } = existing;
-    const next = { ...record, lastValidatedAt: input.timestamp, lastError: input.lastError };
-    if (existing.source === "env") putLocalRecord(home, "provider_connection_state", input.providerId, { createdAt: next.createdAt, updatedAt: next.updatedAt, lastValidatedAt: next.lastValidatedAt, lastError: next.lastError });
-    else await writeCredential(home, credentialId!, next, revision);
+    putLocalRecord(home, "provider_connection_state", input.providerId, { createdAt: existing.createdAt, updatedAt: existing.updatedAt, lastValidatedAt: input.timestamp, lastError: input.lastError });
     return readUnlocked(input.paths);
   });
 }
