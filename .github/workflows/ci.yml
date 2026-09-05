@@ -119,7 +119,7 @@ jobs:
 
       - name: Check release and workflow behavior
         if: needs.scope.outputs.release == 'true' || needs.scope.outputs.workflow == 'true'
-        run: pnpm exec vitest run --project root-system tests/release-workflow.test.ts
+        run: pnpm exec vitest run --project root-system tests/release-version.test.ts tests/desktop-runtime-stage.test.ts
 
       - name: Build affected CLI distribution
         if: needs.scope.outputs.distribution == 'true'
