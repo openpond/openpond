@@ -124,7 +124,7 @@ describe("CLI desktop test command", () => {
         cwd: root,
         rest: ["run", "tests/desktop-scenarios/chat-two-turns.ts"],
         options: {
-          app: "release/linux-unpacked/openpond",
+          app: "release/linux-unpacked/openpond-desktop",
           packaged: "true",
         },
       });
@@ -136,7 +136,7 @@ describe("CLI desktop test command", () => {
         "tests/desktop-scenarios/chat-two-turns.ts",
         "--packaged",
         "--app",
-        "release/linux-unpacked/openpond",
+        "release/linux-unpacked/openpond-desktop",
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });

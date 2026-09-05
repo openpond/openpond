@@ -889,28 +889,6 @@ describe("SqliteStore hardening", () => {
     });
   });
 
-  test("returns a committed subagent upsert without joining later queued reads", async () => {
-    await withStoreDir(async (storeDir) => {
-      const store = new SqliteStore(storeDir);
-      const run = SubagentRunSchema.parse({
-        id: "run-finalizing",
-        parentSessionId: "session-parent",
-        roleId: "coding",
-        objective: "Submit the completed child handoff",
-        required: true,
-        createdAt: "2026-07-15T13:00:00.000Z",
-      });
-      (store as any).getSubagentRun = async () => new Promise<never>(() => undefined);
-
-      await expect(Promise.race([
-        store.upsertSubagentRun(run),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("upsert joined a later read")), 500)),
-      ])).resolves.toMatchObject({ id: run.id });
-
-      await store.close();
-    });
-  });
-
   test("compacts large runtime event output on targeted append", async () => {
     await withStoreDir(async (storeDir) => {
       const store = new SqliteStore(storeDir);

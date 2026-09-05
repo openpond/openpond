@@ -89,7 +89,7 @@ Use the CLI wrapper when validating the installed/source CLI entrypoint:
 pnpm --dir apps/cli cli harness desktop run tests/fixtures/desktop-harness/pass-scenario.ts --none --artifacts-dir tmp/desktop-harness/cli-wrapper --json tmp/desktop-harness/cli-wrapper/report.json
 openpond harness desktop run tests/desktop-scenarios/chat-two-turns.ts --isolated --json tmp/desktop-harness/chat-two-turns/report.json
 openpond harness desktop attach tests/desktop-scenarios/chat-two-turns.ts --server http://127.0.0.1:17874 --devtools-port 9333 --token-file tmp/token
-openpond harness desktop run tests/desktop-scenarios/chat-two-turns.ts --packaged --app release/linux-unpacked/openpond --json tmp/desktop-harness/packaged-chat/report.json
+openpond harness desktop run tests/desktop-scenarios/chat-two-turns.ts --packaged --app release/linux-unpacked/openpond-desktop --json tmp/desktop-harness/packaged-chat/report.json
 ```
 
 ## Proof Rules

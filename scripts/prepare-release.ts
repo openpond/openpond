@@ -17,6 +17,7 @@ type ElectronBuilderConfig = {
     };
     [key: string]: unknown;
   };
+  deb?: Record<string, unknown>;
   [key: string]: unknown;
 };
 
@@ -72,19 +73,26 @@ const releaseConfig: ElectronBuilderConfig = {
     ...(baseConfig.extraMetadata ?? {}),
     name: appPackageName,
     productName,
+    desktopName: channel === "nightly" ? "openpond-nightly.desktop" : "openpond.desktop",
     version,
     openpondReleaseChannel: channel,
   },
   linux: {
     ...(baseConfig.linux ?? {}),
+    executableName: channel === "nightly" ? "openpond-desktop-nightly" : "openpond-desktop",
     desktop: {
       ...(baseConfig.linux?.desktop ?? {}),
       entry: {
         ...(baseConfig.linux?.desktop?.entry ?? {}),
         Name: productName,
-        StartupWMClass: productName,
+        Icon: channel === "nightly" ? "openpond-desktop-nightly" : "openpond-desktop",
+        StartupWMClass: channel === "nightly" ? "openpond-nightly" : "openpond",
       },
     },
+  },
+  deb: {
+    ...(baseConfig.deb ?? {}),
+    packageName: channel === "nightly" ? "openpond-nightly" : "openpond",
   },
 };
 

@@ -1,0 +1,105 @@
+name: Publish APT repository
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Published stable GitHub release tag
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable GitHub release tag, for example v0.1.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Share this lock between manual retries and automatic stable releases. Never
+# cancel midway through publication; the publisher also rejects older versions.
+concurrency:
+  group: openpond-apt-stable
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    environment: apt-release
+    timeout-minutes: 20
+    env:
+      APT_R2_BUCKET: ${{ vars.APT_R2_BUCKET }}
+      APT_R2_ENDPOINT: ${{ vars.APT_R2_ENDPOINT }}
+      APT_SIGNING_FINGERPRINT: ${{ vars.APT_SIGNING_FINGERPRINT }}
+      APT_PUBLIC_URL: https://apt.openpond.ai
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in APT_R2_BUCKET APT_R2_ENDPOINT APT_SIGNING_FINGERPRINT; do
+            if [[ -z "${!name}" ]]; then
+              echo "Configure ${name} in the apt-release environment; see docs/apt-release.md." >&2
+              exit 1
+            fi
+          done
+          command -v aws
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apt-utils gnupg gpgv
+
+      - name: Fetch and validate published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python3 scripts/apt/download-release.py --tag "${RELEASE_TAG}" --output "${RUNNER_TEMP}/apt-assets"
+
+      - name: Build signed repository and publish
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          APT_SIGNING_PRIVATE_KEY: ${{ secrets.APT_SIGNING_PRIVATE_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.APT_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.APT_R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          AWS_PAGER: ""
+        run: |
+          set -euo pipefail
+          for name in APT_SIGNING_PRIVATE_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "Required apt-release secret ${name} is not configured." >&2
+              exit 1
+            fi
+          done
+          export GNUPGHOME
+          GNUPGHOME="$(mktemp -d "${RUNNER_TEMP}/apt-gnupg.XXXXXX")"
+          chmod 700 "${GNUPGHOME}"
+          trap 'gpgconf --kill all || true; rm -rf "${GNUPGHOME}"' EXIT
+          printf '%s' "${APT_SIGNING_PRIVATE_KEY}" | gpg --batch --import
+          unset APT_SIGNING_PRIVATE_KEY
+          python3 scripts/apt/repository.py \
+            --assets "${RUNNER_TEMP}/apt-assets" \
+            --output "${RUNNER_TEMP}/apt-repository" \
+            --version "${RELEASE_TAG#v}" \
+            --fingerprint "${APT_SIGNING_FINGERPRINT}"
+          unset APT_SIGNING_PASSPHRASE
+          python3 scripts/apt/publish.py \
+            --repository "${RUNNER_TEMP}/apt-repository" \
+            --bucket "${APT_R2_BUCKET}" --endpoint "${APT_R2_ENDPOINT}"
+
+      - name: Verify APT through the public domain
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 scripts/apt/check-client.py \
+            --url "${APT_PUBLIC_URL}" \
+            --key "${RUNNER_TEMP}/apt-repository/openpond.asc" \
+            --version "${RELEASE_TAG#v}"

@@ -381,6 +381,25 @@ jobs:
             pnpm run smoke:desktop:packaged --json "${report_path}"
           fi
 
+      - name: Verify Debian package install, upgrade and desktop launch
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          APT_SMOKE_DESKTOP: "1"
+        run: |
+          set -euo pipefail
+          packages=(release/*.deb)
+          [[ "${#packages[@]}" == 1 && -f "${packages[0]}" ]]
+          bash scripts/apt/smoke-deb.sh "${packages[0]}"
+
+      - name: Verify Debian 13 package lifecycle
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -e CI=true -v "$PWD:/workspace:ro" -w /workspace debian:13 \
+            bash -c 'apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates && bash scripts/apt/smoke-deb.sh release/*.deb'
+
       - name: Upload packaged smoke diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -395,7 +414,7 @@ jobs:
           set -euo pipefail
           mkdir -p release-publish
           shopt -s nullglob
-          files=(release/*.AppImage release/*.zip release/*.exe release/*.blockmap release/*.yml)
+          files=(release/*.AppImage release/*.deb release/*.zip release/*.exe release/*.blockmap release/*.yml)
           for index in "${!files[@]}"; do
             if [[ "$(basename "${files[$index]}")" == "builder-debug.yml" ]]; then
               unset 'files[$index]'
@@ -563,3 +582,12 @@ jobs:
           make_latest: ${{ needs.meta.outputs.make_latest }}
           files: release-assets/*
           fail_on_unmatched_files: true
+
+  apt:
+    name: Publish stable APT packages
+    needs: [meta, release]
+    if: needs.meta.outputs.channel == 'stable' && vars.APT_ENABLED == 'true'
+    uses: ./.github/workflows/publish-apt.yml
+    with:
+      tag: ${{ needs.meta.outputs.tag }}
+    secrets: inherit

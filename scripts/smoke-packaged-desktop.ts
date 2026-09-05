@@ -388,10 +388,8 @@ export function packagedAppCandidates(
     .sort((left, right) => left.localeCompare(right))
     .map((file) => path.join(root, "release", file));
   return [
-    path.join(root, "release", "linux-unpacked", "openpond-app"),
-    path.join(root, "release", "linux-unpacked", "openpond-app-nightly"),
-    path.join(root, "release", "linux-unpacked", "openpond"),
-    path.join(root, "release", "linux-unpacked", "openpond nightly"),
+    path.join(root, "release", process.arch === "arm64" ? "linux-arm64-unpacked" : "linux-unpacked", "openpond-desktop"),
+    path.join(root, "release", process.arch === "arm64" ? "linux-arm64-unpacked" : "linux-unpacked", "openpond-desktop-nightly"),
     ...linuxAppImages,
     path.join(root, "release", "openpond-0.0.1.AppImage"),
   ];
