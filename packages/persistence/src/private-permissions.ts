@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, lstatSync } from "node:fs";
 import { PersistenceError } from "./errors.js";
+import { windowsPowerShellEnvironment } from "./windows-powershell.js";
 
 const secured = new Map<string, string>();
 // Set a complete protected DACL. The path is data in the environment, never PowerShell source.
@@ -23,7 +24,7 @@ export function protectPrivateDirectory(directory: string): void {
   if (secured.get(directory) === identity) return;
   try {
     execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", setOwnerAcl], {
-      env: { ...process.env, OPENPOND_PRIVATE_DIRECTORY: directory },
+      env: windowsPowerShellEnvironment({ OPENPOND_PRIVATE_DIRECTORY: directory }),
       stdio: ["ignore", "ignore", "pipe"], timeout: 30_000, windowsHide: true,
     });
     secured.set(directory, identity);

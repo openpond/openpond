@@ -835,6 +835,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    const explicitModelChoice = Boolean(input.modelRef || input.model);
     const admittedConfiguration = deps.storageHome ? await admitTurnConfiguration(deps.storageHome, session, input, payload as Record<string, unknown>) : null;
     if (admittedConfiguration) {
       turnPermissions.codexPermissionMode = admittedConfiguration.preferences.codexPermissionMode;
@@ -1069,7 +1070,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     session = await updateSession(sessionId, {
       experience: session.experience,
       provider: activeProvider,
-      modelRef: turnModelRef,
+      modelRef: explicitModelChoice ? turnModelRef : session.modelRef,
       status: "active",
       title:
         session.title === "New chat"

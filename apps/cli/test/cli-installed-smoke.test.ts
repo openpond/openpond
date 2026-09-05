@@ -36,7 +36,7 @@ describe("CLI installed-package smoke", () => {
         {
           cwd,
           env: {
-            OPENPOND_APP_HOME: appHome,
+            OPENPOND_HOME: appHome,
             OPENPOND_FORCE_EMBEDDED_COMPANIONS: "1",
           },
           timeoutMs: 10_000,

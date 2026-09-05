@@ -20,6 +20,8 @@ import {
   publishManagedArtifact, withManagedArtifact, releaseArtifactReference, collectArtifactOrphans,
 } from "../packages/persistence/src/index";
 import { startRecoveryServer } from "../apps/server/src/api/startup-recovery";
+import { createOpenPondServer } from "../apps/server/src/index";
+import { windowsPowerShellEnvironment } from "../packages/persistence/src/windows-powershell";
 import { PersistenceError } from "../packages/persistence/src/errors";
 import { writeProviderChatGptSubscriptionCredential, readProviderSecrets, deleteProviderCredential } from "../apps/server/src/openpond/provider-secrets";
 
@@ -36,7 +38,7 @@ describe("persistence data and concurrency boundaries", () => {
     if (process.platform === "win32") {
       const { stdout } = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
         "$acl=Get-Acl -LiteralPath $env:OPENPOND_ACL_TEST_PATH; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; [pscustomobject]@{Protected=$acl.AreAccessRulesProtected; OtherAllow=@($acl.Access | Where-Object {$_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -ne $sid.Value}).Count} | ConvertTo-Json -Compress"],
-        { env: { ...process.env, OPENPOND_ACL_TEST_PATH: path.dirname(storagePaths(home).key) } });
+        { env: windowsPowerShellEnvironment({ OPENPOND_ACL_TEST_PATH: path.dirname(storagePaths(home).key) }) });
       expect(JSON.parse(stdout)).toEqual({ Protected: true, OtherAllow: 0 });
     } else {
       expect((await fs.stat(path.dirname(storagePaths(home).key))).mode & 0o777).toBe(0o700);
@@ -72,6 +74,43 @@ describe("persistence data and concurrency boundaries", () => {
     await writeFile(file, 'schema_version = 1\n[permissions]\ncommand_access = "full-access"\n');
     await expect(readConfig(home, { scope: "project" })).rejects.toMatchObject({ issue: { code: "INVALID_CONFIG" } });
   });
+
+  // A recorded config revision is insufficient if execution still uses a stale model.
+  test("executes external model edits on the next turn and preserves history through restart", async () => {
+    const calls: { requestId: string | undefined; model: string | null | undefined }[] = [];
+    const start = () => createOpenPondServer({ port: 0, storeDir: home, silent: true,
+      streamOpenPondHostedChatTurn: async function* (input) {
+        calls.push({ requestId: input.requestId, model: input.model });
+        yield { type: "text_delta", text: "Configuration applied", raw: {} };
+        yield { type: "finish", finishReason: "stop", raw: {} };
+      },
+    });
+    let server = await start();
+    async function api(route: string, body?: unknown) {
+      const response = await fetch(`${server.url}${route}`, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${server.token}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+      return { status: response.status, value: await response.json() };
+    }
+    try {
+      const session = (await api("/v1/sessions", { provider: "openpond", experience: "chat", title: "Config restart" })).value;
+      await writeFile(storagePaths(home).config, 'schema_version = 1\n[chat]\nmodel = { provider_id = "openpond", model_id = "external-model" }\n');
+      const first = await api(`/v1/sessions/${session.id}/turns`, { prompt: "Use the external setting" });
+      expect(first.value.status).toBe("completed");
+      expect(calls.find((call) => call.requestId?.startsWith(first.value.id))?.model).toBe("external-model");
+      expect(getLocalRecord<{ snapshot: { document: unknown } }>(home, "config_run_snapshots", first.value.id)?.value.snapshot.document).toMatchObject({ chat: { model: { model_id: "external-model" } } });
+      await writeFile(storagePaths(home).config, 'schema_version = 1\n[chat\n');
+      expect((await api(`/v1/sessions/${session.id}/turns`, { prompt: "Must not execute invalid configuration" })).status).toBeGreaterThanOrEqual(400);
+      await writeFile(storagePaths(home).config, 'schema_version = 1\n[chat]\nmodel = { provider_id = "openpond", model_id = "next-model" }\n');
+      await server.close(); server = await start();
+      const second = await api(`/v1/sessions/${session.id}/turns`, { prompt: "Continue after restart" });
+      expect(second.value.status).toBe("completed");
+      expect(calls.find((call) => call.requestId?.startsWith(second.value.id))?.model).toBe("next-model");
+      const store = new SqliteStore(home);
+      try {
+        const history = await store.snapshot();
+        expect(history.turns.filter((turn) => turn.sessionId === session.id).map((turn) => turn.id)).toEqual([first.value.id, second.value.id]);
+      } finally { await store.close(); }
+    } finally { await server.close(); }
+  }, 60_000);
 
   // A cache reset is safe only if both behavioral defaults and layout survive it.
   test("preserves preference changes across cache deletion and restart", async () => {

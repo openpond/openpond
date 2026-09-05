@@ -5,6 +5,7 @@ import { existsSync, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PersistenceError, isMissing } from "./errors.js";
+import { windowsPowerShellEnvironment } from "./windows-powershell.js";
 
 const execute = promisify(execFile);
 export type MigrationOptions = { sourceAppHome?: string; sourceConfig?: string; sourceBrowserState?: string; dryRun?: boolean; resolutions?: MigrationResolutions };
@@ -65,7 +66,7 @@ export async function assertMigrationSourcesStopped(sourceHome?: string, sourceC
   if (process.platform === "win32") {
     const command = "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress";
     try {
-      const { stdout } = await execute("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { maxBuffer: 4_000_000 });
+      const { stdout } = await execute("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { maxBuffer: 4_000_000, env: windowsPowerShellEnvironment() });
       const raw = JSON.parse(stdout) as unknown;
       const processes = Array.isArray(raw) ? raw : [raw];
       for (const item of processes as { ProcessId?: number; CommandLine?: string }[]) {
