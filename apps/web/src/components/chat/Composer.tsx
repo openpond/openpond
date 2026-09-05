@@ -755,10 +755,13 @@ export function Composer({
       return;
     }
     if (autoFocusAppliedRef.current || inputDisabled) return;
-    autoFocusAppliedRef.current = true;
-    window.requestAnimationFrame(() => {
+    const frame = window.requestAnimationFrame(() => {
+      autoFocusAppliedRef.current = true;
+      const focused = document.activeElement;
+      if (focused && focused !== document.body && focused !== document.documentElement) return;
       inputRef.current?.focusAtPromptIndex(prompt.length);
     });
+    return () => window.cancelAnimationFrame(frame);
   }, [autoFocus, inputDisabled, prompt.length]);
 
   useEffect(() => {

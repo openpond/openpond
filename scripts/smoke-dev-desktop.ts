@@ -515,7 +515,13 @@ async function selectProductArea(
       ),
     5_000,
     `${label} did not become the active product.`
-  );
+  ).catch(async (error: unknown) => {
+    const routeState = await evaluateValue(cdp, `({
+      location: location.href,
+      product: document.querySelector(".sidebar-experience-trigger")?.getAttribute("aria-label")
+    })`);
+    throw new Error(`${String(error)} Route state: ${JSON.stringify(routeState)}`);
+  });
 }
 
 async function selectTaskMode(
