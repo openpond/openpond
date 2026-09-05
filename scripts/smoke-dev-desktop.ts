@@ -375,7 +375,15 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
       ),
     5_000,
     "Experience menu did not open from the keyboard."
-  );
+  ).catch(async (error: unknown) => {
+    const focusState = await evaluateValue(cdp, `(() => ({
+      focused: document.hasFocus(),
+      activeElement: document.activeElement?.outerHTML?.slice(0, 1000),
+      trigger: document.querySelector(".sidebar-experience-trigger")?.outerHTML,
+      menu: document.querySelector(".sidebar-experience-popover")?.outerHTML
+    }))()`);
+    throw new Error(`${String(error)} Focus state: ${JSON.stringify(focusState)}`);
+  });
   const keyboardMenuPassed =
     keyboardMenu.labels.join(",") === "Work,Models" &&
     keyboardMenu.focusedProductArea === "chat";
@@ -507,7 +515,13 @@ async function selectProductArea(
       ),
     5_000,
     `${label} did not become the active product.`
-  );
+  ).catch(async (error: unknown) => {
+    const routeState = await evaluateValue(cdp, `({
+      location: location.href,
+      product: document.querySelector(".sidebar-experience-trigger")?.getAttribute("aria-label")
+    })`);
+    throw new Error(`${String(error)} Route state: ${JSON.stringify(routeState)}`);
+  });
 }
 
 async function selectTaskMode(

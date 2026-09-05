@@ -33,6 +33,7 @@ import {
   modelProjectRoute,
   modelLibraryRoute,
   modelsPath,
+  modelsRouteFromLocation,
   modelsRouteWithDefaultProject,
   modelsSectionFromRoute,
   navigateModelsRoute,
@@ -174,6 +175,8 @@ export function LabsRoute({
   }, [profileView.connection, profileView.onError, profileView.onPayload]);
   useEffect(() => {
     if (!modelsRoute || typeof window === "undefined") return;
+    const currentRoute = modelsRouteFromLocation(window.location);
+    if (!currentRoute || modelsPath(currentRoute) !== modelsPath(modelsRoute)) return;
     const defaultRoute = modelsRouteWithDefaultProject(modelsRoute, models);
     if (defaultRoute !== modelsRoute) {
       navigateModelsRoute(defaultRoute, "replace");

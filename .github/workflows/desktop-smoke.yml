@@ -1,0 +1,48 @@
+name: Desktop smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - "apps/web/**"
+      - "scripts/smoke-dev-desktop.ts"
+      - "scripts/desktop-harness/**"
+      - "scripts/build/**"
+      - ".github/workflows/desktop-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Desktop keyboard and renderer smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:artifacts
+      - run: pnpm exec tsx scripts/prepare-release.ts --channel stable --version "$(node -p "require('./apps/desktop/package.json').version")"
+      - run: pnpm run package:linux:release
+      - run: pnpm run budgets:desktop-package
+      - run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: xvfb-run -a pnpm run smoke:desktop:dev --skip-chat --json release-smoke/dev-render-commits.json
+      - run: xvfb-run -a pnpm run smoke:desktop:packaged --json release-smoke/packaged.json
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-smoke
+          path: release-smoke/**
+          if-no-files-found: warn

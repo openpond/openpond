@@ -1,5 +1,5 @@
 import type { ProductArea } from "@openpond/contracts";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { PRODUCT_AREA_OPTIONS } from "../../lib/experience-options";
 import { OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
 import { Check, ChevronDown } from "../icons";
@@ -15,6 +15,7 @@ export function SidebarProductMenu({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const pendingFocusRef = useRef<"first" | "last" | null>(null);
   const activeOption =
     PRODUCT_AREA_OPTIONS.find((option) => option.value === value) ??
     PRODUCT_AREA_OPTIONS[0];
@@ -38,23 +39,18 @@ export function SidebarProductMenu({
     };
   }, [open]);
 
-  const focusOption = (position: "first" | "last" | "active") => {
-    window.requestAnimationFrame(() => {
-      const options = menuOptions(menuRef.current);
-      if (!options.length) return;
-      const target =
-        position === "first"
-          ? options[0]
-          : position === "last"
-          ? options.at(-1)
-          : options.find((option) => option.dataset.productArea === value);
-      target?.focus();
-    });
-  };
+  useLayoutEffect(() => {
+    if (open && pendingFocusRef.current) focusMenuOption(menuRef.current, pendingFocusRef.current);
+    pendingFocusRef.current = null;
+  }, [open]);
 
-  const openFromKeyboard = (position: "first" | "last" | "active") => {
+  const openFromKeyboard = (position: "first" | "last") => {
+    if (open) {
+      focusMenuOption(menuRef.current, position);
+      return;
+    }
+    pendingFocusRef.current = position;
     setOpen(true);
-    focusOption(position);
   };
 
   const onTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -103,6 +99,7 @@ export function SidebarProductMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
+          pendingFocusRef.current = null;
           setOpen((current) => !current);
         }}
         onKeyDown={onTriggerKeyDown}
@@ -157,4 +154,9 @@ function menuOptions(root: HTMLDivElement | null): HTMLButtonElement[] {
   return Array.from(
     root.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
   );
+}
+
+function focusMenuOption(root: HTMLDivElement | null, position: "first" | "last"): void {
+  const options = menuOptions(root);
+  (position === "first" ? options[0] : options.at(-1))?.focus();
 }
