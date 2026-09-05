@@ -509,7 +509,7 @@ export async function loadOrReconstructEvidenceSnapshot(input: {
   const ref = input.modelRun.evaluationProgress?.evidenceSnapshot;
   if (ref) {
     const manifest = parseEvidenceSnapshotManifest(
-      JSON.parse(await fs.readFile(ref.artifactPath, "utf8")),
+      JSON.parse(await fs.readFile(resolveStoredPath(input.storeDir, ref.artifactPath), "utf8")),
     );
     if (manifest.id !== ref.id || manifest.contentHash !== ref.contentHash) {
       throw new Error("Durable benchmark evidence snapshot does not match its admitted ref.");
@@ -916,3 +916,4 @@ export function safeError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return message.trim().slice(0, 5_000) || "Harness Refiner benchmark failed.";
 }
+import { resolveStoredPath } from "@openpond/persistence";

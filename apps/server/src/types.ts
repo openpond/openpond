@@ -52,6 +52,7 @@ export type OpenPondServerOptions = {
   host?: string;
   port?: number;
   storeDir?: string;
+  sourceBrowserState?: string;
   webRoot?: string | null;
   version?: string;
   silent?: boolean;

@@ -1,3 +1,4 @@
+import { readCache, listCache, writeCache } from "@openpond/persistence";
 import type {
   Approval,
   ContextUsageSnapshot,
@@ -23,8 +24,6 @@ import {
 } from "@openpond/contracts";
 import type {
   CacheEntry,
-  CacheEntryRow,
-  CacheRow,
   PayloadRow,
   SidebarAppPreferenceRow,
   StoreData,
@@ -1500,53 +1499,17 @@ export class SqliteStore extends SqliteChatWorkflowStore {
 
   async getCacheEntry<T>(type: string, key: string): Promise<CacheEntry<T> | null> {
     await this.ready;
-    await this.writeQueue;
-    const row = await this.get<CacheRow>(
-      "SELECT payload, updated_at, error FROM cache_entries WHERE type = ? AND cache_key = ?",
-      [type, key]
-    );
-    if (!row) return null;
-    return {
-      payload: JSON.parse(row.payload) as T,
-      updatedAt: row.updated_at,
-      error: row.error,
-    };
+    return readCache<T>(this.home, type, key, { allowStale: true });
   }
 
   async getCacheEntriesByType<T>(type: string): Promise<Record<string, CacheEntry<T>>> {
     await this.ready;
-    await this.writeQueue;
-    const rows = await this.all<CacheEntryRow>(
-      "SELECT cache_key, payload, updated_at, error FROM cache_entries WHERE type = ?",
-      [type]
-    );
-    const entries: Record<string, CacheEntry<T>> = {};
-    for (const row of rows) {
-      entries[row.cache_key] = {
-        payload: JSON.parse(row.payload) as T,
-        updatedAt: row.updated_at,
-        error: row.error,
-      };
-    }
-    return entries;
+    return listCache<T>(this.home, type);
   }
 
   async setCacheEntry<T>(type: string, key: string, payload: T, error: string | null = null): Promise<CacheEntry<T>> {
     await this.ready;
-    const updatedAt = now();
-    const entry: CacheEntry<T> = { payload, updatedAt, error };
-    const write = this.writeQueue.then(async () => {
-      await this.run(
-        `INSERT INTO cache_entries (type, cache_key, payload, updated_at, error)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(type, cache_key)
-         DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at, error = excluded.error`,
-        [type, key, JSON.stringify(payload), updatedAt, error]
-      );
-    });
-    this.writeQueue = write.catch(() => undefined);
-    await write;
-    return entry;
+    return writeCache(this.home, type, key, payload, { error });
   }
 
   async setCacheError(type: string, key: string, fallbackPayload: unknown, error: string): Promise<void> {

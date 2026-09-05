@@ -1,3 +1,4 @@
+import { withOpenPondHome, resolveOpenPondHome } from "@openpond/persistence";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { createHttpRequestHandler } from "./http-routes.js";
@@ -21,7 +22,8 @@ export function createOpenPondHttpSurface({
   terminalOptions: TerminalOptions;
   webRoot?: string | null;
 }) {
-  const routeHandler = createRoutes(routeOptions);
+  const handler = createRoutes(routeOptions), home = resolveOpenPondHome();
+  const routeHandler: typeof handler = (request, response) => withOpenPondHome(home, () => handler(request, response));
   const webHandler = webRoot
     ? createStaticWebHandler({ logger: routeOptions.logger, token: routeOptions.token, webRoot })
     : null;

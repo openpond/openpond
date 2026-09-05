@@ -1,3 +1,4 @@
+import { getLocalRecord, putLocalRecord, withFileLock, storagePaths } from "@openpond/persistence";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -5,7 +6,6 @@ import path from "node:path";
 
 import {
   openPondConfigDirectory,
-  updatePrivateJsonFile,
 } from "../private-json-file.js";
 import {
   createGithubSourceClient,
@@ -25,7 +25,6 @@ import type {
 import { GithubExtensionError } from "./types.js";
 
 const REGISTRY_SCHEMA_VERSION = 1;
-const OPERATION_LOCK_STALE_MS = 2 * 60 * 1000;
 const OPERATION_LOCK_TIMEOUT_MS = 15_000;
 
 type ExtensionRegistry = {
@@ -37,8 +36,9 @@ type ExtensionRegistry = {
 export type GithubExtensionManager = ReturnType<typeof createGithubExtensionManager>;
 
 export function createGithubExtensionManager(options: GithubExtensionManagerOptions = {}) {
-  const rootPath = path.resolve(options.rootPath ?? path.join(openPondConfigDirectory(), "extensions"));
-  const registryPath = path.join(rootPath, "registry.json");
+  const home = path.resolve(options.home ?? options.rootPath ?? openPondConfigDirectory());
+  const rootPath = path.resolve(options.rootPath ?? path.join(home, "library", "extensions"));
+  const registryPath = storagePaths(home).database;
   const github = createGithubSourceClient({
     fetch: options.fetch,
     githubToken: options.githubToken,
@@ -47,7 +47,7 @@ export function createGithubExtensionManager(options: GithubExtensionManagerOpti
 
   async function list(): Promise<OpenPondExtensionCatalog> {
     try {
-      const registry = await readRegistry(registryPath);
+      const registry = await readRegistry(home);
       const extensions = await Promise.all(registry.extensions.map((extension) => hydrateExtension(rootPath, extension)));
       markInstalledSkillConflicts(extensions, await reservedSkillNames(options.reservedSkillNames));
       return {
@@ -68,7 +68,7 @@ export function createGithubExtensionManager(options: GithubExtensionManagerOpti
 
   async function preview(request: GithubExtensionInstallRequest): Promise<OpenPondExtensionPreview> {
     const resolution = await github.resolve(request);
-    const registry = await readRegistry(registryPath);
+    const registry = await readRegistry(home);
     const existing = registry.extensions.find((extension) => extension.id === resolution.preview.id) ?? null;
     assertSkillNamesAvailable(
       resolution.preview,
@@ -81,7 +81,7 @@ export function createGithubExtensionManager(options: GithubExtensionManagerOpti
   async function add(request: GithubExtensionInstallRequest): Promise<OpenPondExtension> {
     const identity = parseGithubExtensionSource(request.source);
     return withExtensionLock(rootPath, identity.id, async () => {
-      const registry = await readRegistry(registryPath);
+      const registry = await readRegistry(home);
       if (registry.extensions.some((extension) => extension.id === identity.id)) {
         throw new GithubExtensionError(`${identity.owner}/${identity.repo} is already installed.`, {
           code: "extension_already_installed",
@@ -105,7 +105,7 @@ export function createGithubExtensionManager(options: GithubExtensionManagerOpti
       });
       try {
         const reserved = await reservedSkillNames(options.reservedSkillNames);
-        await writeRegistry(registryPath, now, (current) => ({
+        await writeRegistry(home, now, (current) => ({
           ...current,
           extensions: appendInstalledExtension(current, installed, reserved),
         }));
@@ -121,7 +121,7 @@ export function createGithubExtensionManager(options: GithubExtensionManagerOpti
   async function update(request: GithubExtensionInstallRequest): Promise<OpenPondExtension> {
     const identity = parseGithubExtensionSource(request.source);
     return withExtensionLock(rootPath, identity.id, async () => {
-      const registry = await readRegistry(registryPath);
+      const registry = await readRegistry(home);
       const existing = requireInstalled(registry, identity.id);
       const resolution = await github.resolve({
         source: existing.repositoryUrl,
@@ -149,7 +149,7 @@ export function createGithubExtensionManager(options: GithubExtensionManagerOpti
       });
       try {
         const reserved = await reservedSkillNames(options.reservedSkillNames);
-        await writeRegistry(registryPath, now, (current) => ({
+        await writeRegistry(home, now, (current) => ({
           ...current,
           extensions: replaceInstalledExtension(current, installed, reserved),
         }));
@@ -186,20 +186,20 @@ export function createGithubExtensionManager(options: GithubExtensionManagerOpti
 
   async function inspect(source: string): Promise<OpenPondExtension> {
     const identity = parseGithubExtensionSource(source);
-    const registry = await readRegistry(registryPath);
+    const registry = await readRegistry(home);
     return hydrateExtension(rootPath, requireInstalled(registry, identity.id));
   }
 
   async function remove(source: string): Promise<OpenPondExtension> {
     const identity = parseGithubExtensionSource(source);
     return withExtensionLock(rootPath, identity.id, async () => {
-      const registry = await readRegistry(registryPath);
+      const registry = await readRegistry(home);
       const existing = requireInstalled(registry, identity.id);
       const target = extensionDirectory(rootPath, identity.owner, identity.repo);
       const trash = `${target}.${randomUUID()}.remove`;
       if (existsSync(target)) await rename(target, trash);
       try {
-        await writeRegistry(registryPath, now, (current) => ({
+        await writeRegistry(home, now, (current) => ({
           ...current,
           extensions: current.extensions.filter((extension) => extension.id !== existing.id),
         }));
@@ -464,33 +464,19 @@ function requireInstalled(registry: ExtensionRegistry, id: string): OpenPondExte
   });
 }
 
-async function readRegistry(registryPath: string): Promise<ExtensionRegistry> {
-  try {
-    const parsed = JSON.parse(await readFile(registryPath, "utf8")) as Partial<ExtensionRegistry>;
-    if (parsed.schemaVersion !== REGISTRY_SCHEMA_VERSION || !Array.isArray(parsed.extensions)) {
-      throw new Error("Extension registry has an unsupported format.");
-    }
-    return {
-      schemaVersion: REGISTRY_SCHEMA_VERSION,
-      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null,
-      extensions: parsed.extensions.filter(isStoredExtension),
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyRegistry();
-    throw error;
-  }
+async function readRegistry(home: string): Promise<ExtensionRegistry> {
+  const value = getLocalRecord<ExtensionRegistry>(home, "extension_installations", "registry")?.value;
+  if (!value) return emptyRegistry();
+  if (value.schemaVersion !== REGISTRY_SCHEMA_VERSION || !Array.isArray(value.extensions) || !value.extensions.every(isStoredExtension)) throw new Error("Extension registry has an unsupported format.");
+  return normalizeRegistry(value);
 }
 
-async function writeRegistry(
-  registryPath: string,
-  now: () => Date,
-  update: (registry: ExtensionRegistry) => ExtensionRegistry,
-): Promise<void> {
-  await updatePrivateJsonFile<ExtensionRegistry>(registryPath, emptyRegistry, (current) => ({
-    ...update(normalizeRegistry(current)),
-    schemaVersion: REGISTRY_SCHEMA_VERSION,
-    updatedAt: now().toISOString(),
-  }));
+async function writeRegistry(home: string, now: () => Date, update: (registry: ExtensionRegistry) => ExtensionRegistry): Promise<void> {
+  await withFileLock(path.join(storagePaths(home).runtime, "extension-registry"), async () => {
+    const current = getLocalRecord<ExtensionRegistry>(home, "extension_installations", "registry");
+    const next = update(await readRegistry(home));
+    putLocalRecord(home, "extension_installations", "registry", { ...next, schemaVersion: REGISTRY_SCHEMA_VERSION, updatedAt: now().toISOString() }, current?.revision ?? null);
+  });
 }
 
 function normalizeRegistry(value: ExtensionRegistry): ExtensionRegistry {
@@ -545,34 +531,7 @@ function backupDirectory(rootPath: string, id: string): string {
 
 async function withExtensionLock<T>(rootPath: string, id: string, operation: () => Promise<T>): Promise<T> {
   const safeId = id.replace(/[^a-z0-9.-]+/gi, "-");
-  const lockPath = path.join(rootPath, ".locks", `${safeId}.lock`);
-  await mkdir(path.dirname(lockPath), { recursive: true, mode: 0o700 });
-  const deadline = Date.now() + OPERATION_LOCK_TIMEOUT_MS;
-  while (true) {
-    try {
-      await mkdir(lockPath, { mode: 0o700 });
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const lockStat = await stat(lockPath).catch(() => null);
-      if (lockStat && Date.now() - lockStat.mtimeMs > OPERATION_LOCK_STALE_MS) {
-        await rm(lockPath, { recursive: true, force: true });
-        continue;
-      }
-      if (Date.now() >= deadline) {
-        throw new GithubExtensionError(`Timed out waiting for extension operation: ${id}`, {
-          code: "extension_operation_busy",
-          status: 409,
-        });
-      }
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    }
-  }
-  try {
-    return await operation();
-  } finally {
-    await rm(lockPath, { recursive: true, force: true });
-  }
+  return withFileLock(path.join(rootPath, ".locks", safeId), operation, OPERATION_LOCK_TIMEOUT_MS);
 }
 
 function extensionSort(left: OpenPondExtension, right: OpenPondExtension): number {

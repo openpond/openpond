@@ -5,6 +5,30 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "references": [{ "path": "../continual-support" }, { "path": "../harness/tsconfig.build.json" }, { "path": "../evals/tsconfig.build.json" }, { "path": "../cloud" }, { "path": "../connected-apps" }, { "path": "../sdk/tsconfig.build.json" }],
-  "include": ["src/**/*.ts"]
+  "references": [
+    {
+      "path": "../continual-support"
+    },
+    {
+      "path": "../harness/tsconfig.build.json"
+    },
+    {
+      "path": "../evals/tsconfig.build.json"
+    },
+    {
+      "path": "../cloud"
+    },
+    {
+      "path": "../connected-apps"
+    },
+    {
+      "path": "../sdk/tsconfig.build.json"
+    },
+    {
+      "path": "../persistence"
+    }
+  ],
+  "include": [
+    "src/**/*.ts"
+  ]
 }

@@ -1,3 +1,4 @@
+import { resolveEffectiveConfig } from "@openpond/persistence";
 import { randomUUID } from "node:crypto";
 import { CronExpressionParser } from "cron-parser";
 import type {
@@ -106,7 +107,10 @@ export function createChatWorkflowLoop(options: {
     trigger: ChatWorkflowRun["trigger"],
   ): Promise<ChatWorkflowRun> {
     const timestamp = now();
+    const configuration = options.store.home ? await resolveEffectiveConfig(options.store.home) : undefined;
     const run: ChatWorkflowRun = {
+      definitionSnapshot: structuredClone(workflow),
+      ...(configuration ? { configurationSnapshot: { effectiveRevision: configuration.effectiveRevision, sources: configuration.sources } } : {}),
       id: randomUUID(),
       workflowId: workflow.id,
       sessionId: workflow.sessionId,

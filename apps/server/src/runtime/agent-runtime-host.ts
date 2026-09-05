@@ -1,3 +1,4 @@
+import { bindHomeCallbacks, resolveOpenPondHome } from "@openpond/persistence";
 import {
   AGENT_PROTOCOL_VERSION,
   AGENT_RPC_METHODS,
@@ -91,7 +92,7 @@ export function createAgentRuntimePorts(deps: {
     };
   };
 
-  return {
+  return bindHomeCallbacks(resolveOpenPondHome(), {
     capabilities,
     createThread: deps.createSession,
     readThread: deps.getSession,
@@ -119,7 +120,7 @@ export function createAgentRuntimePorts(deps: {
     subscribeEvents: deps.subscribeRuntimeEvents,
     eventNotification: runtimeEventNotification,
     telemetry: deps.observeRuntimeOperation,
-  };
+  });
 }
 
 function runtimeEventNotification(event: RuntimeEvent): JsonRpcNotification {

@@ -1,3 +1,4 @@
+import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { RuntimeEvent, SidebarFileBookmark, SidebarFileStatus, SubagentLifecycleAction, WorkspaceDiffFile, WorkspaceDiffSummary, WorkspaceEditorPreferences, WorkspaceKind, WorkspaceLspActionResponse, WorkspaceLspDiagnostic, WorkspaceLspServerStatus } from "@openpond/contracts";
 import { normalizeSidebarFilePath, sidebarFileBookmarkId } from "@openpond/contracts";
@@ -337,6 +338,7 @@ function WorkspaceDiffPanelInner({
   const [loadFullFiles, setLoadFullFiles] = useState(false);
   const [renderMarkdown, setRenderMarkdown] = useState(true);
   const [editorControlsVisible, setEditorControlsVisible] = useState(readEditorControlsVisible);
+  useHydratedClientChoice(() => setEditorControlsVisible(readEditorControlsVisible()));
   const [wordDiffs, setWordDiffs] = useState(false);
   const [hideWhiteSpace, setHideWhiteSpace] = useState(false);
   const [splitView, setSplitView] = useState(false);

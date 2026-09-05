@@ -92,6 +92,7 @@ type PrepareHostedProviderRequest = ReturnType<
 
 export function createHostedToolLoopRuntime(deps: {
   hostedToolFlags: HostedToolRolloutFlags;
+  assertExecutionAllowed?: (turnId: string) => Promise<void>;
   nativeToolsEnabledForProvider(provider: ChatProvider): boolean;
   createNativeModelToolDefinitions(
     openPondActionCatalog: OpenPondActionCatalogEntry[],
@@ -271,8 +272,9 @@ export function createHostedToolLoopRuntime(deps: {
         inputSchema: definition.parameters,
         placement: "local" as const,
         executorAvailable: typeof definition.execute === "function",
-        execute: (args, context) =>
-          definition.execute({
+        execute: async (args, context) => {
+          await deps.assertExecutionAllowed?.(context.turnId);
+          return definition.execute({
             session: params.session,
             turnId: context.turnId,
             turnPermissions: params.turnPermissions,
@@ -285,7 +287,8 @@ export function createHostedToolLoopRuntime(deps: {
             mentionedApps: params.mentionedApps,
             userPrompt: params.userPrompt,
             turnMetadata: params.turn.metadata,
-          }),
+          });
+        },
       })),
     );
     const nativeTools: HostedChatTool[] = effectiveToolCatalog.modelTools.map(
@@ -860,6 +863,7 @@ export function createHostedToolLoopRuntime(deps: {
           );
           continue;
         }
+        await deps.assertExecutionAllowed?.(params.turn.id);
         const result = await executeWorkspaceTool(session.id, toolRequest, {
           turnId: params.turn.id,
           workspaceDiffBaseline: params.workspaceDiffBaseline,

@@ -1,15 +1,17 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
-  ProviderCredentialDeleteRequestSchema,
-  ProviderCredentialWriteRequestSchema,
-  type ProviderCredentialDeleteRequest,
-  type ProviderCredentialWriteRequest,
-  type ProviderId,
+  ProviderCredentialDeleteRequestSchema, ProviderCredentialWriteRequestSchema,
+  type ProviderCredentialDeleteRequest, type ProviderCredentialWriteRequest, type ProviderId,
 } from "@openpond/contracts";
+import {
+  readConfig, updateConfig, readCredential, writeCredential, deleteCredential, newCredentialId,
+  getLocalRecord, putLocalRecord, deleteLocalRecord, withFileLock, storagePaths, PersistenceError,
+} from "@openpond/persistence";
 
 export type ProviderSecretRecord = {
+  credentialId?: string;
+  revision?: number;
+  endpoint?: string | null;
   source: "local_secret" | "env" | "chatgpt_subscription";
   value: string | null;
   envVar: string | null;
@@ -32,318 +34,98 @@ export type ProviderSecrets = {
   providers: Record<string, ProviderSecretRecord>;
 };
 
-type ProviderSecretFileRecord = {
-  source: "local_secret" | "env" | "chatgpt_subscription";
-  envVar?: string | null;
-  ciphertext?: string | null;
-  iv?: string | null;
-  tag?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  lastValidatedAt?: string | null;
-  lastError?: string | null;
-};
-
-type ProviderSecretsFile = {
-  version: 1;
-  providers: Record<string, ProviderSecretFileRecord>;
-};
-
-const providerSecretQueues = new Map<string, Promise<void>>();
-
-export type ProviderSecretStorePaths = {
-  secretsFilePath: string;
-  keyFilePath: string;
-};
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+export type ProviderSecretStorePaths = { secretsFilePath: string; keyFilePath: string };
+function homeFor(paths: ProviderSecretStorePaths): string { return path.dirname(path.dirname(paths.secretsFilePath)); }
+function locked<T>(paths: ProviderSecretStorePaths, task: () => Promise<T>): Promise<T> {
+  return withFileLock(path.join(storagePaths(homeFor(paths)).runtime, "providers"), task);
 }
 
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function parseSecretsFile(value: unknown): ProviderSecretsFile {
-  const input = asRecord(value);
-  const rawProviders = asRecord(input.providers);
-  const providers: Record<string, ProviderSecretFileRecord> = {};
-  for (const [providerId, rawValue] of Object.entries(rawProviders)) {
-    const raw = asRecord(rawValue);
-    const source =
-      raw.source === "env" || raw.source === "local_secret" || raw.source === "chatgpt_subscription"
-        ? raw.source
-        : null;
-    if (!source) continue;
-    providers[providerId] = {
-      source,
-      envVar: stringValue(raw.envVar),
-      ciphertext: stringValue(raw.ciphertext),
-      iv: stringValue(raw.iv),
-      tag: stringValue(raw.tag),
-      createdAt: stringValue(raw.createdAt),
-      updatedAt: stringValue(raw.updatedAt),
-      lastValidatedAt: stringValue(raw.lastValidatedAt),
-      lastError: stringValue(raw.lastError),
-    };
-  }
-  return { version: 1, providers };
-}
-
-async function readSecretKey(keyFilePath: string): Promise<Buffer | null> {
-  try {
-    const raw = await fs.readFile(keyFilePath, "utf8");
-    const key = Buffer.from(raw.trim(), "base64");
-    return key.byteLength === 32 ? key : null;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-}
-
-async function ensureSecretKey(keyFilePath: string): Promise<Buffer> {
-  const existing = await readSecretKey(keyFilePath);
-  if (existing) return existing;
-  const key = randomBytes(32);
-  await fs.mkdir(path.dirname(keyFilePath), { recursive: true });
-  const tempPath = `${keyFilePath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tempPath, `${key.toString("base64")}\n`, { mode: 0o600 });
-  await fs.rename(tempPath, keyFilePath);
-  await fs.chmod(keyFilePath, 0o600).catch(() => undefined);
-  return key;
-}
-
-function encryptValue(value: string, key: Buffer): Pick<ProviderSecretFileRecord, "ciphertext" | "iv" | "tag"> {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
-  return {
-    ciphertext: ciphertext.toString("base64"),
-    iv: iv.toString("base64"),
-    tag: cipher.getAuthTag().toString("base64"),
-  };
-}
-
-function decryptValue(record: ProviderSecretFileRecord, key: Buffer | null): string | null {
-  if (!key || !record.ciphertext || !record.iv || !record.tag) return null;
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(record.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(record.tag, "base64"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(record.ciphertext, "base64")),
-    decipher.final(),
-  ]).toString("utf8");
-}
-
-async function readRawSecretsFile(secretsFilePath: string): Promise<ProviderSecretsFile> {
-  try {
-    const raw = await fs.readFile(secretsFilePath, "utf8");
-    return parseSecretsFile(JSON.parse(raw));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { version: 1, providers: {} };
-    throw error;
-  }
-}
-
-async function writeRawSecretsFile(
-  secretsFilePath: string,
-  value: ProviderSecretsFile,
-): Promise<void> {
-  await fs.mkdir(path.dirname(secretsFilePath), { recursive: true });
-  const tempPath = `${secretsFilePath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  await fs.rename(tempPath, secretsFilePath);
-  await fs.chmod(secretsFilePath, 0o600).catch(() => undefined);
-}
-
-export async function readProviderSecrets(paths: ProviderSecretStorePaths): Promise<ProviderSecrets> {
-  const raw = await readRawSecretsFile(paths.secretsFilePath);
-  const needsKey = Object.values(raw.providers).some(
-    (record) => record.source === "local_secret" || record.source === "chatgpt_subscription",
-  );
-  const key = needsKey ? await readSecretKey(paths.keyFilePath) : null;
-  const providers: Record<string, ProviderSecretRecord> = {};
-  for (const [providerId, record] of Object.entries(raw.providers)) {
-    const createdAt = record.createdAt ?? record.updatedAt ?? null;
-    const updatedAt = record.updatedAt ?? record.createdAt ?? null;
-    if (!createdAt || !updatedAt) continue;
-    if (record.source === "env") {
-      providers[providerId] = {
-        source: "env",
-        value: null,
-        envVar: record.envVar ?? null,
-        oauth: null,
-        createdAt,
-        updatedAt,
-        lastValidatedAt: record.lastValidatedAt ?? null,
-        lastError: record.lastError ?? null,
-      };
+async function readUnlocked(paths: ProviderSecretStorePaths): Promise<ProviderSecrets> {
+  const home = homeFor(paths), { document } = await readConfig(home);
+  const providers: ProviderSecrets["providers"] = {};
+  for (const [id, provider] of Object.entries(document.providers ?? {})) {
+    const ref = provider.credential;
+    if (!ref) continue;
+    const metadata = getLocalRecord<Partial<ProviderSecretRecord>>(home, "provider_connection_state", id)?.value;
+    if (ref.source === "env") {
+      providers[id] = { source: "env", value: null, envVar: ref.name, oauth: null,
+        createdAt: metadata?.createdAt ?? "1970-01-01T00:00:00.000Z", updatedAt: metadata?.updatedAt ?? "1970-01-01T00:00:00.000Z",
+        lastValidatedAt: metadata?.lastValidatedAt ?? null, lastError: metadata?.lastError ?? null, credentialId: `env:${ref.name}` };
       continue;
     }
-    let value: string | null = null;
-    let oauth: ProviderChatGptSubscriptionCredential | null = null;
-    let lastError = record.lastError ?? null;
-    try {
-      value = decryptValue(record, key);
-      if (!value) lastError = lastError ?? "Provider credential could not be decrypted.";
-      if (record.source === "chatgpt_subscription") {
-        oauth = parseChatGptSubscriptionCredential(value);
-        value = null;
-        if (!oauth) lastError = lastError ?? "Provider ChatGPT subscription credential could not be read.";
-      }
-    } catch (error) {
-      value = null;
-      oauth = null;
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-    providers[providerId] = {
-      source: record.source,
-      value,
-      envVar: null,
-      oauth,
-      createdAt,
-      updatedAt,
-      lastValidatedAt: record.lastValidatedAt ?? null,
-      lastError,
-    };
+    const saved = await readCredential<ProviderSecretRecord>(home, ref.id);
+    if (!saved) throw new PersistenceError({ code: "CREDENTIAL_RECOVERY_REQUIRED", path: ref.id, message: `The credential for ${id} is missing.`, action: "Reconnect this provider in Settings or restore its credential backup." });
+    const record = { ...saved.value, credentialId: ref.id, revision: saved.revision };
+    if ((record.endpoint ?? null) !== (provider.base_url ?? null)) {
+      providers[id] = { ...record, value: null, oauth: null, lastError: "The provider endpoint changed. Reconnect the provider for this endpoint." };
+    } else providers[id] = record;
   }
   return { version: 1, providers };
 }
-
-function parseChatGptSubscriptionCredential(value: string | null): ProviderChatGptSubscriptionCredential | null {
-  if (!value) return null;
-  const parsed = JSON.parse(value) as unknown;
-  if (!parsed || typeof parsed !== "object") return null;
-  const record = parsed as Record<string, unknown>;
-  const refreshToken = stringValue(record.refreshToken);
-  if (!refreshToken) return null;
-  return {
-    accessToken: stringValue(record.accessToken),
-    refreshToken,
-    expiresAt:
-      typeof record.expiresAt === "number" && Number.isFinite(record.expiresAt)
-        ? record.expiresAt
-        : 0,
-    accountId: stringValue(record.accountId),
-  };
+export async function readProviderSecrets(paths: ProviderSecretStorePaths): Promise<ProviderSecrets> {
+  return locked(paths, () => readUnlocked(paths));
 }
-
-export function parseProviderCredentialWriteRequest(
-  input: unknown,
-): ProviderCredentialWriteRequest {
+export function parseProviderCredentialWriteRequest(input: unknown): ProviderCredentialWriteRequest {
   return ProviderCredentialWriteRequestSchema.parse(input);
 }
-
-export function parseProviderCredentialDeleteRequest(
-  input: unknown,
-): ProviderCredentialDeleteRequest {
+export function parseProviderCredentialDeleteRequest(input: unknown): ProviderCredentialDeleteRequest {
   return ProviderCredentialDeleteRequestSchema.parse(input);
 }
-
-export async function writeProviderCredential(input: {
-  paths: ProviderSecretStorePaths;
-  providerId: string;
-  request: ProviderCredentialWriteRequest;
-  timestamp: string;
-}): Promise<ProviderSecrets> {
-  return withProviderSecretQueue(input.paths, async () => {
-    const current = await readRawSecretsFile(input.paths.secretsFilePath);
-    const existing = current.providers[input.providerId];
-    if (input.request.source === "env") {
-      current.providers[input.providerId] = {
-        source: "env",
-        envVar: input.request.envVar ?? null,
-        createdAt: existing?.createdAt ?? input.timestamp,
-        updatedAt: input.timestamp,
-        lastValidatedAt: null,
-        lastError: null,
-      };
-    } else {
-      if (!input.request.value) throw new Error("Provider credential value is required.");
-      current.providers[input.providerId] = {
-        source: "local_secret",
-        ...encryptValue(input.request.value, await ensureSecretKey(input.paths.keyFilePath)),
-        createdAt: existing?.createdAt ?? input.timestamp,
-        updatedAt: input.timestamp,
-        lastValidatedAt: null,
-        lastError: null,
-      };
-    }
-    await writeRawSecretsFile(input.paths.secretsFilePath, current);
-    return readProviderSecrets(input.paths);
+type ExpectedCredential = { credentialId?: string; revision?: number };
+function checkExpected(existing: ProviderSecretRecord | undefined, expected: ExpectedCredential): void {
+  if (!existing || existing.credentialId !== expected.credentialId || existing.revision !== expected.revision) {
+    throw new PersistenceError({ code: "CREDENTIAL_CONFLICT", path: existing?.credentialId ?? "providers", message: "The provider connection changed or was revoked.", action: "Reconnect the provider before retrying." });
+  }
+}
+async function save(paths: ProviderSecretStorePaths, providerId: string, record: ProviderSecretRecord, expected?: ExpectedCredential): Promise<ProviderSecrets> {
+  return locked(paths, async () => {
+    const home = homeFor(paths), current = await readUnlocked(paths), existing = current.providers[providerId];
+    if (expected) checkExpected(existing, expected);
+    const snapshot = await readConfig(home), previous = snapshot.document.providers?.[providerId]?.credential;
+    const credentialId = newCredentialId(`provider:${providerId}`);
+    const value = { ...record, endpoint: snapshot.document.providers?.[providerId]?.base_url ?? null, createdAt: existing?.createdAt ?? record.createdAt };
+    if (value.source !== "env") await writeCredential(home, credentialId, value, null);
+    await updateConfig(home, (document) => ({ ...document, providers: { ...document.providers,
+      [providerId]: { ...document.providers?.[providerId], credential: value.source === "env" ? { source: "env", name: value.envVar! } : { source: "secret", id: credentialId } },
+    } }), snapshot.rawRevision);
+    if (value.source === "env") putLocalRecord(home, "provider_connection_state", providerId, { createdAt: value.createdAt, updatedAt: value.updatedAt, lastValidatedAt: value.lastValidatedAt, lastError: value.lastError });
+    if (previous?.source === "secret") await deleteCredential(home, previous.id);
+    return readUnlocked(paths);
   });
 }
-
-export async function writeProviderChatGptSubscriptionCredential(input: {
-  paths: ProviderSecretStorePaths;
-  providerId: ProviderId;
-  credential: ProviderChatGptSubscriptionCredential;
-  timestamp: string;
-  lastError?: string | null;
-}): Promise<ProviderSecrets> {
-  return withProviderSecretQueue(input.paths, async () => {
-    const current = await readRawSecretsFile(input.paths.secretsFilePath);
-    const existing = current.providers[input.providerId];
-    current.providers[input.providerId] = {
-      source: "chatgpt_subscription",
-      ...encryptValue(JSON.stringify(input.credential), await ensureSecretKey(input.paths.keyFilePath)),
-      createdAt: existing?.createdAt ?? input.timestamp,
-      updatedAt: input.timestamp,
-      lastValidatedAt: input.timestamp,
-      lastError: input.lastError ?? null,
-    };
-    await writeRawSecretsFile(input.paths.secretsFilePath, current);
-    return readProviderSecrets(input.paths);
+export async function writeProviderCredential(input: { paths: ProviderSecretStorePaths; providerId: string; request: ProviderCredentialWriteRequest; timestamp: string }): Promise<ProviderSecrets> {
+  if (input.request.source !== "env" && !input.request.value) throw new Error("Provider credential value is required.");
+  return save(input.paths, input.providerId, { source: input.request.source, value: input.request.source === "env" ? null : input.request.value!, envVar: input.request.source === "env" ? input.request.envVar! : null, oauth: null,
+    createdAt: input.timestamp, updatedAt: input.timestamp, lastValidatedAt: null, lastError: null });
+}
+export async function writeProviderChatGptSubscriptionCredential(input: { paths: ProviderSecretStorePaths; providerId: ProviderId; credential: ProviderChatGptSubscriptionCredential; timestamp: string; lastError?: string | null; expected?: ExpectedCredential }): Promise<ProviderSecrets> {
+  return save(input.paths, input.providerId, { source: "chatgpt_subscription", value: null, envVar: null, oauth: input.credential,
+    createdAt: input.timestamp, updatedAt: input.timestamp, lastValidatedAt: input.timestamp, lastError: input.lastError ?? null }, input.expected);
+}
+export async function deleteProviderCredential(input: { paths: ProviderSecretStorePaths; providerId: string; request: ProviderCredentialDeleteRequest }): Promise<ProviderSecrets> {
+  return locked(input.paths, async () => {
+    const home = homeFor(input.paths), current = await readUnlocked(input.paths), existing = current.providers[input.providerId];
+    if (!existing || (input.request.source && input.request.source !== existing.source)) return current;
+    const snapshot = await readConfig(home), ref = snapshot.document.providers?.[input.providerId]?.credential;
+    await updateConfig(home, (document) => {
+      const provider = document.providers?.[input.providerId];
+      if (provider) delete provider.credential;
+      return document;
+    }, snapshot.rawRevision);
+    if (ref?.source === "secret") await deleteCredential(home, ref.id);
+    deleteLocalRecord(home, "provider_connection_state", input.providerId);
+    return readUnlocked(input.paths);
   });
 }
-
-export async function deleteProviderCredential(input: {
-  paths: ProviderSecretStorePaths;
-  providerId: string;
-  request: ProviderCredentialDeleteRequest;
-}): Promise<ProviderSecrets> {
-  return withProviderSecretQueue(input.paths, async () => {
-    const current = await readRawSecretsFile(input.paths.secretsFilePath);
-    const existing = current.providers[input.providerId];
-    if (!existing) return readProviderSecrets(input.paths);
-    if (!input.request.source || input.request.source === existing.source) {
-      delete current.providers[input.providerId];
-      await writeRawSecretsFile(input.paths.secretsFilePath, current);
-    }
-    return readProviderSecrets(input.paths);
+export async function updateProviderCredentialValidation(input: { paths: ProviderSecretStorePaths; providerId: string; timestamp: string; lastError: string | null; expected?: ExpectedCredential }): Promise<ProviderSecrets> {
+  return locked(input.paths, async () => {
+    const home = homeFor(input.paths), current = await readUnlocked(input.paths), existing = current.providers[input.providerId];
+    if (!existing) return current;
+    if (input.expected) checkExpected(existing, input.expected);
+    const { credentialId, revision, ...record } = existing;
+    const next = { ...record, lastValidatedAt: input.timestamp, lastError: input.lastError };
+    if (existing.source === "env") putLocalRecord(home, "provider_connection_state", input.providerId, { createdAt: next.createdAt, updatedAt: next.updatedAt, lastValidatedAt: next.lastValidatedAt, lastError: next.lastError });
+    else await writeCredential(home, credentialId!, next, revision);
+    return readUnlocked(input.paths);
   });
-}
-
-export async function updateProviderCredentialValidation(input: {
-  paths: ProviderSecretStorePaths;
-  providerId: string;
-  timestamp: string;
-  lastError: string | null;
-}): Promise<ProviderSecrets> {
-  return withProviderSecretQueue(input.paths, async () => {
-    const current = await readRawSecretsFile(input.paths.secretsFilePath);
-    const existing = current.providers[input.providerId];
-    if (!existing) return readProviderSecrets(input.paths);
-    current.providers[input.providerId] = {
-      ...existing,
-      lastValidatedAt: input.timestamp,
-      lastError: input.lastError,
-    };
-    await writeRawSecretsFile(input.paths.secretsFilePath, current);
-    return readProviderSecrets(input.paths);
-  });
-}
-
-function withProviderSecretQueue<T>(paths: ProviderSecretStorePaths, task: () => Promise<T>): Promise<T> {
-  const filePath = paths.secretsFilePath;
-  const previous = providerSecretQueues.get(filePath) ?? Promise.resolve();
-  const run = previous.catch(() => undefined).then(task);
-  const queued = run
-    .catch(() => undefined)
-    .then(() => {
-      if (providerSecretQueues.get(filePath) === queued) providerSecretQueues.delete(filePath);
-    });
-  providerSecretQueues.set(filePath, queued);
-  return run;
 }

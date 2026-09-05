@@ -1,3 +1,4 @@
+import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import { useCallback, useEffect, useState } from "react";
 import type { HarnessHistoryPayload } from "@openpond/contracts";
 
@@ -20,6 +21,7 @@ export function HarnessLearningSidebarCard({
     readHarnessLearningNoticeDismissed
   );
 
+  useHydratedClientChoice(() => setDismissed(readHarnessLearningNoticeDismissed()));
   const refresh = useCallback(async () => {
     if (!connection) {
       setHistory(null);

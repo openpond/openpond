@@ -1,8 +1,12 @@
+import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
+import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
+import { initializeHome, readPreferences } from "@openpond/persistence";
+import { onStartupFailure, ownHomeRuntime } from "./runtime/home-runtime-owner.js";
 import path from "node:path";
+import { mkdir } from "node:fs/promises";
 
 import { createAppServer, type AppServerInstance } from "@openpond/app-server";
 import {
-  AppPreferencesSchema,
   localPathWorkspaceId,
   type Approval,
   type ModelUsageRecord,
@@ -126,11 +130,16 @@ export const APP_SERVER_COMPOSITION: readonly AppServerCompositionService[] = [
   "jsonl_transport",
 ];
 
-export async function createOpenPondAppServer(
-  options: OpenPondAppServerOptions = {},
-): Promise<OpenPondAppServerInstance> {
+export async function createOpenPondAppServer(options: OpenPondAppServerOptions = {}): Promise<OpenPondAppServerInstance> {
   const storeDir = path.resolve(options.storeDir ?? appDataDir());
+  return ownHomeRuntime(storeDir, () => createOwnedAppServer({ ...options, storeDir }));
+}
+async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<OpenPondAppServerInstance> {
+  const storeDir = path.resolve(options.storeDir ?? appDataDir());
+  await initializeHome(storeDir);
+  await initializeRefinerProfile(storeDir);
   const workspaceDir = path.resolve(options.workspaceDir ?? process.cwd());
+  await mkdir(workspaceDir, { recursive: true });
   const version = options.version ?? VERSION;
   const runtimeVersion = getBundledRuntimeVersion();
   const logger = createLogger({
@@ -138,7 +147,12 @@ export async function createOpenPondAppServer(
     logDir: path.join(storeDir, "logs"),
     metadata: { version, runtimeVersion, placement: "hosted_work" },
   });
+  onStartupFailure(() => logger.flush());
   const store = new SqliteStore(storeDir, { logger });
+  onStartupFailure(() => store.close());
+  await store.recentTurns(1);
+  const scheduleRecovery = reconcileInterruptedScheduledWork(storeDir);
+  if (scheduleRecovery.recovered || scheduleRecovery.needsReview) logger.warn("Scheduled work requires review after restart", scheduleRecovery);
   const streamOpenPondHostedChatTurn = createScriptedOpenPondChatStream(
     options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
     { enabled: scriptedOpenPondModelsEnabled() },
@@ -189,7 +203,7 @@ export async function createOpenPondAppServer(
     store,
     defaultSessionCwd: () => workspaceDir,
     appendRuntimeEvent,
-    loadAppPreferences: async () => AppPreferencesSchema.parse({}),
+    loadAppPreferences: async () => (await readPreferences(storeDir)).preferences,
     loadLastUsedProfile: async () =>
       (await loadOpenPondProfileLibrary()).lastUsed,
   });
@@ -270,6 +284,7 @@ export async function createOpenPondAppServer(
   await harnessImprovement.reconcilePending();
 
   const turnRunner = createTurnRunner({
+    storageHome: storeDir,
     attachmentRootDir: path.join(storeDir, "attachments"),
     store,
     createSession,
@@ -317,7 +332,7 @@ export async function createOpenPondAppServer(
     listIntegrationConnections: listAppServerIntegrationConnections,
     loadPersonalizationSoul: async () =>
       (await loadPersonalizationSettings(store, storeDir)).soul,
-    loadAppPreferences: async () => AppPreferencesSchema.parse({}),
+    loadAppPreferences: async () => (await readPreferences(storeDir)).preferences,
     maybeCreateScaffoldForTurn: hostedTurnHelpers.maybeCreateScaffoldForTurn,
     hostedSystemPrompt: hostedTurnHelpers.hostedSystemPrompt,
     appendAssistantText: hostedTurnHelpers.appendAssistantText,
@@ -330,6 +345,7 @@ export async function createOpenPondAppServer(
     ),
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
   });
+  onStartupFailure(() => turnRunner.close());
   await turnRunner.recoverPendingSubagentCompletions();
 
   async function resolveApproval(

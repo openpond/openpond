@@ -74,19 +74,18 @@ describe("local paths", () => {
   });
 
   test("keeps isolated Profile state inside the app home", () => {
-    const previousConfigDir = process.env.OPENPOND_CONFIG_DIR;
+    const previousConfigDir = process.env.OPENPOND_HOME;
     const appHome = path.join(path.sep, "tmp", "openpond-harness");
     const configDir = path.join(appHome, "config");
     expect(isolatedOpenPondEnvironment(appHome)).toEqual({
-      OPENPOND_APP_HOME: appHome,
-      OPENPOND_CONFIG_DIR: configDir,
+      OPENPOND_HOME: appHome,
     });
-    process.env.OPENPOND_CONFIG_DIR = configDir;
+    process.env.OPENPOND_HOME = appHome;
     try {
-      expect(defaultLocalProfileRepoPath()).toBe(path.join(configDir, "profiles", "default-repo"));
+      expect(defaultLocalProfileRepoPath()).toBe(path.join(appHome, "library", "profiles", "default-repo"));
     } finally {
-      if (previousConfigDir === undefined) delete process.env.OPENPOND_CONFIG_DIR;
-      else process.env.OPENPOND_CONFIG_DIR = previousConfigDir;
+      if (previousConfigDir === undefined) delete process.env.OPENPOND_HOME;
+      else process.env.OPENPOND_HOME = previousConfigDir;
     }
   });
 

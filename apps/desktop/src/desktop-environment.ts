@@ -1,6 +1,6 @@
 import { app } from "electron";
 import { readFileSync } from "node:fs";
-import os from "node:os";
+import { resolveOpenPondHome, storagePaths } from "@openpond/persistence";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLogger, type Logger } from "@openpond/logging";
@@ -50,9 +50,7 @@ app.setAboutPanelOptions({
 });
 
 export function appHomePath(): string {
-  if (process.env.OPENPOND_APP_HOME) return process.env.OPENPOND_APP_HOME;
-  const dirname = releaseChannel() === "nightly" ? "openpond-app-nightly" : "openpond-app";
-  return path.join(os.homedir(), ".openpond", dirname);
+  return resolveOpenPondHome({ channel: releaseChannel() });
 }
 
 export function logDirPath(): string {
@@ -84,7 +82,7 @@ export function defaultServerPort(): number {
 }
 
 export function tokenFilePath(): string {
-  return path.join(appHomePath(), "token");
+  return storagePaths(appHomePath()).token;
 }
 
 export function pnpmBinary(): string {

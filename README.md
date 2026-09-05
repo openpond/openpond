@@ -42,7 +42,7 @@ Install the latest version from [Github Releases](https://github.com/openpond/op
 > [!NOTE]
 > package managers coming soon
 
-Conversations and settings persist under `~/.openpond/openpond-app`
+Conversations and settings persist under `~/.openpond`
 
 ### Install via git
 

@@ -1,4 +1,4 @@
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile, utimes } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -23,6 +23,8 @@ describe("SQLite migration backup retention", () => {
         const backupDir = path.join(backupsDir, name);
         await mkdir(backupDir);
         await writeFile(path.join(backupDir, "state.sqlite"), name);
+        const old = new Date(Date.now() - 31 * 86_400_000);
+        await utimes(backupDir, old, old);
       }
 
       const result = await pruneMigrationBackups(storeDir);

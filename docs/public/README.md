@@ -23,3 +23,5 @@ Start here:
 - Cloud optional: OpenPond Cloud adds hosted execution, syncing, and handoff when you want it.
 - Model agnostic: orchestration should work across Codex, BYOK providers, OpenPond-hosted models, and open source models.
 - Evidence based: goals, evals, traces, and generated artifacts make agent behavior reviewable instead of opaque.
+
+See [configuration, storage and recovery](configuration.md) for the shared home, settings, migration and backup commands.

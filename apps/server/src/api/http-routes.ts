@@ -1,3 +1,4 @@
+import { PersistenceError } from "@openpond/persistence";
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { createReadStream } from "node:fs";
@@ -176,6 +177,10 @@ export function createHttpRequestHandler(
         durationMs: Date.now() - started,
         error,
       });
+      if (error instanceof PersistenceError) {
+        sendJson(response, error.issue.code.endsWith("CONFLICT") ? 409 : 422, { error: `${error.issue.message} ${error.issue.action}`, issue: error.issue });
+        return;
+      }
       sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
     });
   };

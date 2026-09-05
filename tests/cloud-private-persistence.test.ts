@@ -1,3 +1,4 @@
+import { readAccountConfiguration } from "../packages/persistence/src/accounts";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,17 +19,17 @@ describe("private cloud persistence", () => {
 
   beforeEach(async () => {
     previousHome = process.env.HOME;
-    previousConfigDir = process.env.OPENPOND_CONFIG_DIR;
+    previousConfigDir = process.env.OPENPOND_HOME;
     home = await mkdtemp(path.join(tmpdir(), "openpond-private-persistence-"));
     process.env.HOME = home;
-    process.env.OPENPOND_CONFIG_DIR = path.join(home, ".openpond");
+    process.env.OPENPOND_HOME = path.join(home, ".openpond");
   });
 
   afterEach(async () => {
     if (previousHome === undefined) delete process.env.HOME;
     else process.env.HOME = previousHome;
-    if (previousConfigDir === undefined) delete process.env.OPENPOND_CONFIG_DIR;
-    else process.env.OPENPOND_CONFIG_DIR = previousConfigDir;
+    if (previousConfigDir === undefined) delete process.env.OPENPOND_HOME;
+    else process.env.OPENPOND_HOME = previousConfigDir;
     await rm(home, { recursive: true, force: true });
   });
 
@@ -39,8 +40,8 @@ describe("private cloud persistence", () => {
       setCachedTools({ apiBase: "https://api.example.test", apiKey, tools: [{ id: "tool-1" }] }),
     ]);
 
-    const cachePath = path.join(home, ".openpond", "cache.json");
-    const raw = await readFile(cachePath, "utf8");
+    const cachePath = path.join(home, ".openpond", "cache", "cache.sqlite");
+    const raw = (await readFile(cachePath)).toString("utf8");
     expect(raw).not.toContain(apiKey);
     expect(raw).not.toContain("opk_super");
     expect(await getCachedApps({ apiBase: "https://api.example.test", apiKey })).toEqual([]);
@@ -53,10 +54,9 @@ describe("private cloud persistence", () => {
 
   test("writes global config atomically with private permissions", async () => {
     await saveGlobalConfig({ apiKey: "opk_private_config", baseUrl: "https://example.test" });
-    const configPath = path.join(home, ".openpond", "config.json");
-    const saved = JSON.parse(await readFile(configPath, "utf8")) as {
-      accounts?: Array<{ apiKey?: string }>;
-    };
+    const configPath = path.join(home, ".openpond", "config.toml");
+    const saved = await readAccountConfiguration(path.dirname(configPath));
+    expect(await readFile(configPath, "utf8")).not.toContain("opk_private_config");
     expect(saved.accounts?.some((account) => account.apiKey === "opk_private_config")).toBe(true);
     if (process.platform !== "win32") {
       expect((await stat(path.dirname(configPath))).mode & 0o777).toBe(0o700);
@@ -76,14 +76,14 @@ describe("private cloud persistence", () => {
       mode: "builder",
       executionMode: "local",
     });
-    expect(await readdir(path.join(home, ".openpond"))).toEqual(["config.json"]);
+    expect((await readdir(path.join(home, ".openpond"), { recursive: true })).filter((name) => /\.(lock|tmp)$/.test(name))).toEqual([]);
   });
 
   test("distinguishes malformed config from an absent config", async () => {
     await expect(loadGlobalConfig()).resolves.toMatchObject({ accounts: [{ handle: "default" }] });
-    const configPath = path.join(home, ".openpond", "config.json");
+    const configPath = path.join(home, ".openpond", "config.toml");
     await mkdir(path.dirname(configPath), { recursive: true });
-    await writeFile(configPath, "{not-json", "utf8");
-    await expect(loadGlobalConfig()).rejects.toThrow("config is malformed JSON");
+    await writeFile(configPath, "schema_version = [", "utf8");
+    await expect(loadGlobalConfig()).rejects.toThrow("Configuration contains invalid TOML");
   });
 });

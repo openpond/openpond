@@ -51,6 +51,6 @@ export async function ensureApiKey(
     baseUrl,
     activeProfile: config.activeProfile,
   });
-  console.log("saved api key to ~/.openpond/config.json");
+  console.log("Saved account credentials to the encrypted OpenPond credential store.");
   return apiKey;
 }

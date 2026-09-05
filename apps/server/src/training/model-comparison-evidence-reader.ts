@@ -1,5 +1,6 @@
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
+import { resolveStoredPath } from "@openpond/persistence";
 
 import type { ModelComparisonBenchmarkReceipt, ModelRun } from "@openpond/contracts";
 
@@ -32,7 +33,7 @@ export async function readModelComparisonAttemptEvidence(input: {
   if (!artifact) throw new Error(`This attempt has no ${input.kind} artifact.`);
 
   const evidenceRoot = await realpath(path.join(input.storeDir, "training", "comparison-evaluations"));
-  const artifactPath = await realpath(artifact.artifactPath);
+  const artifactPath = await realpath(resolveStoredPath(input.storeDir, artifact.artifactPath));
   if (artifactPath !== evidenceRoot && !artifactPath.startsWith(`${evidenceRoot}${path.sep}`)) {
     throw new Error("The receipt points outside the authorized comparison-evidence store.");
   }

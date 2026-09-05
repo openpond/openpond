@@ -6,10 +6,7 @@ import type {
   CodexReasoningEffort,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
-import {
-  writeStoredCodexPermissionMode,
-  writeStoredCodexReasoningEffort,
-} from "../lib/codex-preferences";
+
 
 export function useCodexPreferenceActions({
   connection,
@@ -26,20 +23,17 @@ export function useCodexPreferenceActions({
 }) {
   const changeCodexPermissionMode = useCallback(
     (mode: CodexPermissionMode) => {
-      setCodexPermissionMode(mode);
-      writeStoredCodexPermissionMode(mode);
-      if (!connection) return;
+      if (!connection) { setError("Connect to OpenPond before saving preferences."); return; }
       void api
         .savePreferences(connection, { codexPermissionMode: mode })
-        .then(() => {
+        .then((payload) => {
+          setCodexPermissionMode(payload.preferences.codexPermissionMode);
+          setCodexReasoningEffort(payload.preferences.codexReasoningEffort);
           setBootstrap((current) =>
             current
               ? {
                   ...current,
-                  preferences: {
-                    ...current.preferences,
-                    codexPermissionMode: mode,
-                  },
+                  preferences: payload.preferences,
                 }
               : current,
           );
@@ -50,25 +44,22 @@ export function useCodexPreferenceActions({
           );
         });
     },
-    [connection, setBootstrap, setCodexPermissionMode, setError],
+    [connection, setBootstrap, setCodexPermissionMode, setCodexReasoningEffort, setError],
   );
 
   const changeCodexReasoningEffort = useCallback(
     (effort: CodexReasoningEffort) => {
-      setCodexReasoningEffort(effort);
-      writeStoredCodexReasoningEffort(effort);
-      if (!connection) return;
+      if (!connection) { setError("Connect to OpenPond before saving preferences."); return; }
       void api
         .savePreferences(connection, { codexReasoningEffort: effort })
-        .then(() => {
+        .then((payload) => {
+          setCodexPermissionMode(payload.preferences.codexPermissionMode);
+          setCodexReasoningEffort(payload.preferences.codexReasoningEffort);
           setBootstrap((current) =>
             current
               ? {
                   ...current,
-                  preferences: {
-                    ...current.preferences,
-                    codexReasoningEffort: effort,
-                  },
+                  preferences: payload.preferences,
                 }
               : current,
           );
@@ -79,7 +70,7 @@ export function useCodexPreferenceActions({
           );
         });
     },
-    [connection, setBootstrap, setCodexReasoningEffort, setError],
+    [connection, setBootstrap, setCodexPermissionMode, setCodexReasoningEffort, setError],
   );
 
   return {

@@ -22,7 +22,7 @@ describe("dev runner", () => {
       devAppHomePath({ OPENPOND_APP_CHANNEL: "nightly" }, "/test-home"),
     ).toBe("/test-home/.openpond/openpond-app-nightly-dev");
     expect(
-      devAppHomePath({ OPENPOND_APP_HOME: "/custom/openpond" }, "/test-home"),
+      devAppHomePath({ OPENPOND_HOME: "/custom/openpond" }, "/test-home"),
     ).toBe("/custom/openpond");
   });
 
@@ -74,7 +74,7 @@ describe("dev runner", () => {
       "17874",
     ]);
     expect(plan.processes.find((processPlan) => processPlan.id === "desktop")?.env).toMatchObject({
-      OPENPOND_APP_HOME: plan.appHome,
+      OPENPOND_HOME: plan.appHome,
       OPENPOND_SERVER_PORT: "17874",
       OPENPOND_WEB_PORT: "17876",
       OPENPOND_WEB_URL: "http://127.0.0.1:17876",
@@ -139,13 +139,13 @@ describe("dev runner", () => {
       "17878",
       "--web-root",
       path.join(root, ".openpond", "stable-web", "build"),
-      "--store-dir",
+      "--home",
       path.join(root, ".openpond", "stable-web", "data"),
     ]);
     expect(
       plan.processes.find((processPlan) => processPlan.id === "desktop")?.env,
     ).toMatchObject({
-      OPENPOND_APP_HOME: path.join(root, ".openpond", "stable-web", "data"),
+      OPENPOND_HOME: path.join(root, ".openpond", "stable-web", "data"),
       OPENPOND_DESKTOP_USER_DATA_DIR: path.join(
         root,
         ".openpond",

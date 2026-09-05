@@ -43,6 +43,7 @@ export const CLI_GLOBAL_OPTION_SCHEMA = {
   checkUpdate: "boolean",
   cwd: "string",
   help: "boolean",
+  home: "string",
   json: "boolean",
   profile: "string",
   sandboxApiUrl: "string",
@@ -70,6 +71,18 @@ const PROFILE_SDK_OPTION_SCHEMA = {
 } as const satisfies Record<string, CliCommandOptionKind>;
 
 export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
+  {
+    name: "home",
+    usage: "openpond home [--home <directory>]",
+    optionSchema: {},
+    handler: async () => console.log((await import("@openpond/persistence")).resolveOpenPondHome()),
+  },
+  {
+    name: "config",
+    usage: "openpond config <get|set|unset|path|validate|schema|doctor|migrate|recover|restart-migration|revisions|replace|effective|trust|untrust|export|backup|restore|collect-orphans|clear-cache> [key] [value] [--home <directory>] [--json]",
+    optionSchema: { keyPath: "json", value: "string", file: "string", project: "boolean", revision: "string", expectedRevision: "string", sourceAppHome: "string", sourceConfig: "string", sourceBrowserState: "string", dryRun: "boolean" },
+    handler: async ({ options, rest }) => (await import("./configuration-command")).runConfigurationCommand(options, rest),
+  },
   {
     name: "help",
     usage: "openpond help",
@@ -194,9 +207,9 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "app-server",
-    usage: "openpond app-server [--store-dir DIR]",
+    usage: "openpond app-server [--home DIR]",
     optionSchema: {
-      storeDir: "string",
+      home: "string",
     },
     handler: async ({ options, rest }) =>
       (await import("./app-layer")).runOpenPondServerCommand("app-server", options, rest),

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { writePrivateJsonFile } from "../private-json-file.js";
+import { readCache, writeCache, resolveOpenPondHome } from "@openpond/persistence";
 
 export const SOURCE_UPLOAD_CACHE_PATH = ".openpond/source-upload-cache.json";
 const SOURCE_UPLOAD_CACHE_SCHEMA = "openpond.source-upload-cache.v1";
@@ -45,8 +45,9 @@ export async function readSourceUploadCache(
   rootPath: string
 ): Promise<Map<string, SourceUploadCacheEntry>> {
   try {
-    const raw = await readFile(path.join(rootPath, SOURCE_UPLOAD_CACHE_PATH), "utf8");
-    const parsed = JSON.parse(raw) as Partial<SourceUploadCacheManifest>;
+    const stored = await readCache<SourceUploadCacheManifest>(resolveOpenPondHome(), "source-upload.v1", sourceScope(rootPath));
+    const parsed = stored?.payload;
+    if (!parsed) return new Map();
     if (parsed.schema !== SOURCE_UPLOAD_CACHE_SCHEMA || !parsed.entries) {
       return new Map();
     }
@@ -65,9 +66,11 @@ export async function materializeSourceUploadFile(
   file: SourceUploadCacheFile,
   cache: Map<string, SourceUploadCacheEntry>
 ): Promise<SourceUploadMaterializedFile> {
-  const cacheKey = cacheKeyForFile(file);
+  const contents = await readFile(file.absolutePath);
+  const sha256 = createHash("sha256").update(contents).digest("hex");
+  const cacheKey = cacheKeyForFile({ ...file, sha256 });
   const cached = cache.get(cacheKey);
-  if (cached) {
+  if (cached && cached.sha256 === sha256 && createHash("sha256").update(Buffer.from(cached.contentsBase64, "base64")).digest("hex") === sha256) {
     return {
       file,
       entry: {
@@ -79,7 +82,6 @@ export async function materializeSourceUploadFile(
     };
   }
 
-  const contents = await readFile(file.absolutePath);
   return {
     file,
     entry: {
@@ -87,7 +89,7 @@ export async function materializeSourceUploadFile(
       type: "file",
       contentsBase64: contents.toString("base64"),
     },
-    sha256: createHash("sha256").update(contents).digest("hex"),
+    sha256,
   };
 }
 
@@ -108,8 +110,7 @@ export async function writeSourceUploadCache(
     entries[cacheKeyForFile(cacheEntry)] = cacheEntry;
   }
 
-  const cachePath = path.join(rootPath, SOURCE_UPLOAD_CACHE_PATH);
-  await writePrivateJsonFile(cachePath, {
+  await writeCache(resolveOpenPondHome(), "source-upload.v1", sourceScope(rootPath), {
     schema: SOURCE_UPLOAD_CACHE_SCHEMA,
     generatedAt: new Date().toISOString(),
     entries,
@@ -123,7 +124,7 @@ function cacheKeyForFile(input: {
   ctimeMs: number;
   sha256?: string;
 }): string {
-  return `${input.path}\0${input.size}\0${input.mtimeMs}\0${input.ctimeMs}`;
+  return `${input.path}\0${input.sha256}`;
 }
 
 function isCacheEntry(value: unknown): value is SourceUploadCacheEntry {
@@ -138,3 +139,5 @@ function isCacheEntry(value: unknown): value is SourceUploadCacheEntry {
     typeof record.contentsBase64 === "string"
   );
 }
+
+function sourceScope(rootPath: string): string { return createHash("sha256").update(path.resolve(rootPath)).digest("hex"); }

@@ -56,7 +56,7 @@ export type SettingsSection =
   | "harness-releases"
   | "profile"
   | "skills"
-  | "defaults"
+  | "configuration"
   | "context"
   | "training"
   | "subagents"

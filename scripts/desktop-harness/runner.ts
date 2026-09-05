@@ -230,7 +230,7 @@ async function createRuntime(options: DesktopHarnessRunOptions & {
   const token = await readHarnessToken({
     token: options.token,
     tokenFile: options.tokenFile,
-    defaultTokenFile: path.join(os.homedir(), ".openpond", "openpond-app", "token"),
+    defaultTokenFile: path.join(process.env.OPENPOND_HOME || path.join(os.homedir(), ".openpond"), "secrets", "server-token"),
   });
   if (!options.serverUrl) throw new Error("--server is required for --attach mode.");
   if (!token) throw new Error("--token or --token-file is required for --attach mode.");

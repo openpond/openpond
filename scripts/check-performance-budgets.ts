@@ -277,7 +277,7 @@ export async function measureServerStartup(input: {
         healthMs,
       };
     }
-    const token = (await fs.readFile(path.join(appHome, "token"), "utf8")).trim();
+    const token = (await fs.readFile(path.join(appHome, "secrets", "server-token"), "utf8")).trim();
     const routes = await collectServerRouteMetrics({ serverUrl, token }).catch((error) =>
       failedServerRouteMetrics(
         serverUrl,

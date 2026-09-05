@@ -153,7 +153,7 @@ export async function createLocalAuthenticatedRequest(
     return fetch;
   }
   const appHome =
-    process.env.OPENPOND_APP_HOME?.trim()
+    process.env.OPENPOND_HOME?.trim()
     || path.join(os.homedir(), ".openpond", "openpond-app");
   const token = (await readFile(path.join(appHome, "token"), "utf8")).trim();
   if (!token) {

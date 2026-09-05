@@ -285,3 +285,18 @@
     grid-row: 2;
   }
 }
+
+.configuration-settings header h1 { margin-bottom: 12px; }
+.configuration-settings header p, .configuration-settings details p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.configuration-settings details { min-width: 0; border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.configuration-settings summary { cursor: pointer; font-size: 14px; font-weight: 500; }
+.configuration-settings textarea { box-sizing: border-box; resize: vertical; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 14px; line-height: 1.6; font-size: 13px; }
+.configuration-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.configuration-settings button, .configuration-settings select { border: 1px solid var(--border); border-radius: 8px; background: #242424; color: var(--text); padding: 8px 12px; }
+.configuration-settings button:disabled { opacity: .5; cursor: default; }
+.configuration-settings table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.configuration-settings th, .configuration-settings td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.configuration-settings pre { overflow: auto; font-size: 12px; }
+.configuration-settings code { overflow-wrap: anywhere; }
+.configuration-banner { margin-bottom: 24px; }
+.configuration-page h2 { font-size: 16px; font-weight: 500; margin: 0; }

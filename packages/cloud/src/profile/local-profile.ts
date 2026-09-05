@@ -228,7 +228,7 @@ type ProfileCheckCommand = "inspect" | "build" | "validate" | "eval";
 const require = createRequire(import.meta.url);
 
 export function defaultLocalProfileRepoPath(): string {
-  return path.join(openPondConfigDirectory(), "profiles", "default-repo");
+  return path.join(openPondConfigDirectory(), "library", "profiles", "default-repo");
 }
 
 export function emptyProfileState(

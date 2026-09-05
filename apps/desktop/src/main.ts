@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { prepareDesktopBrowserHome } from "./desktop-browser-home.js";
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell, systemPreferences, type MenuItemConstructorOptions } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -313,12 +315,13 @@ async function ensureServer(): Promise<ServerConnection> {
   const args = app.isPackaged
     ? [serverEntry, "web", "--port", String(launchPort)]
     : [serverEntry, "--port", String(launchPort)];
+  if (browserHomeMigration?.sourceBrowserState) args.push("--source-browser-state", browserHomeMigration.sourceBrowserState);
   desktopLogger().info("spawning server", { command, args, packaged: app.isPackaged });
   serverProcess = spawn(command, args, {
     cwd: serverWorkingDirectory(),
     env: {
       ...process.env,
-      OPENPOND_APP_HOME: appHomePath(),
+      OPENPOND_HOME: appHomePath(),
       OPENPOND_APP_CHANNEL: releaseChannel(),
       OPENPOND_APP_DOCUMENTS_DIR: app.getPath("documents"),
       ...(app.isPackaged
@@ -447,7 +450,15 @@ async function ensureRenderer(): Promise<string> {
 
 async function loadMainWindow(window: BrowserWindow): Promise<void> {
   try {
+    if (browserHomeError) throw browserHomeError;
     const server = await ensureServer();
+    if ((await health(server.serverUrl))?.recovery) {
+      const recoveryUrl = new URL(server.serverUrl);
+      if (!app.isPackaged) recoveryUrl.hash = new URLSearchParams({ returnTo: await ensureRenderer() }).toString();
+      trustedRendererUrl = recoveryUrl.toString();
+      await window.loadURL(trustedRendererUrl);
+      return;
+    }
     if (!app.isPackaged) {
       trustedRendererUrl = await ensureRenderer();
       await window.loadURL(trustedRendererUrl);
@@ -836,18 +847,21 @@ function configureApplicationMenu(): void {
   );
 }
 
-if (!app.isPackaged) {
-  const configuredUserDataPath =
-    process.env.OPENPOND_DESKTOP_USER_DATA_DIR?.trim();
-  app.setPath(
-    "userData",
-    configuredUserDataPath
-      ? path.resolve(configuredUserDataPath)
-      : path.join(app.getPath("appData"), "openpond-dev"),
-  );
+const previousBrowserUserData = process.env.OPENPOND_DESKTOP_USER_DATA_DIR?.trim()
+  ? path.resolve(process.env.OPENPOND_DESKTOP_USER_DATA_DIR)
+  : !app.isPackaged ? path.join(app.getPath("appData"), "openpond-dev") : app.getPath("userData");
+let browserHomeMigration: ReturnType<typeof prepareDesktopBrowserHome> | null = null;
+let browserHomeError: unknown = null;
+const needsBrowserMigration = !existsSync(path.join(appHomePath(), "browser", "chromium")) && existsSync(previousBrowserUserData);
+if (needsBrowserMigration) app.setPath("userData", previousBrowserUserData);
+const ownsPreviousBrowserLock = !needsBrowserMigration || app.requestSingleInstanceLock();
+if (ownsPreviousBrowserLock) {
+  try { browserHomeMigration = prepareDesktopBrowserHome(appHomePath(), previousBrowserUserData); }
+  catch (error) { browserHomeError = error; }
+  if (needsBrowserMigration) app.releaseSingleInstanceLock();
+  if (browserHomeMigration) app.setPath("userData", browserHomeMigration.userData);
 }
-
-const ownsSingleInstanceLock = app.requestSingleInstanceLock();
+const ownsSingleInstanceLock = ownsPreviousBrowserLock && app.requestSingleInstanceLock();
 if (!ownsSingleInstanceLock) app.quit();
 app.on("second-instance", () => showMainWindow());
 

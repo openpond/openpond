@@ -1,10 +1,5 @@
-import { promises as fs } from "node:fs";
+import { initializeHome, resolveOpenPondHome, storagePaths, readAccountConfiguration, updateAccountConfiguration } from "@openpond/persistence";
 import path from "node:path";
-import {
-  openPondConfigDirectory,
-  updatePrivateJsonFile,
-  writePrivateJsonFile,
-} from "./private-json-file.js";
 export type LocalSessionConfig = {
   token?: string;
   appId?: string | null;
@@ -201,7 +196,6 @@ export type LoadConfigOptions = {
   baseUrl?: string;
 };
 
-const GLOBAL_CONFIG_FILENAME = "config.json";
 const DEFAULT_ACCOUNT_HANDLE = "default";
 const ACCOUNT_SCOPED_KEYS = [
   "apiKey",
@@ -218,20 +212,7 @@ export function getConfigPath(): string {
 }
 
 function getGlobalConfigPath(): string {
-  return path.join(openPondConfigDirectory(), GLOBAL_CONFIG_FILENAME);
-}
-
-async function loadConfigFile(filePath: string): Promise<LocalConfig> {
-  try {
-    const raw = await fs.readFile(filePath, "utf-8");
-    return JSON.parse(raw) as LocalConfig;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-    if (error instanceof SyntaxError) {
-      throw new Error(`OpenPond config is malformed JSON: ${filePath}`, { cause: error });
-    }
-    throw error;
-  }
+  return storagePaths(resolveOpenPondHome()).config;
 }
 
 function hasOwn<T extends object>(value: T, key: string): boolean {
@@ -985,25 +966,23 @@ function applyTopLevelPatch(global: LocalConfig, source: LocalConfig): void {
   }
 }
 async function writeGlobalConfig(next: LocalConfig): Promise<void> {
-  await writePrivateJsonFile(getGlobalConfigPath(), next);
+  const home = resolveOpenPondHome();
+  await initializeHome(home);
+  await updateAccountConfiguration(home, () => next);
 }
-async function updateGlobalConfig(update: (current: LocalConfig) => void): Promise<LocalConfig> {
-  try {
-    return await updatePrivateJsonFile<LocalConfig>(getGlobalConfigPath(), () => ({}), (raw) => {
-      const current = normalizeGlobalConfig(raw);
-      update(current);
-      return current;
-    });
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      throw new Error(`OpenPond config is malformed JSON: ${getGlobalConfigPath()}`, { cause: error });
-    }
-    throw error;
-  }
+export async function updateGlobalConfig(update: (current: LocalConfig) => void): Promise<LocalConfig> {
+  const home = resolveOpenPondHome();
+  await initializeHome(home);
+  return await updateAccountConfiguration(home, (raw) => {
+    const current = normalizeGlobalConfig(raw as LocalConfig);
+    update(current);
+    return current;
+  }) as LocalConfig;
 }
 export async function loadGlobalConfig(): Promise<LocalConfig> {
-  const raw = await loadConfigFile(getGlobalConfigPath());
-  return normalizeGlobalConfig(raw);
+  const home = resolveOpenPondHome();
+  await initializeHome(home);
+  return normalizeGlobalConfig(await readAccountConfiguration(home) as LocalConfig);
 }
 
 export async function loadConfig(

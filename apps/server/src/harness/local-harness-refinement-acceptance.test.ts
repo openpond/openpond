@@ -1,3 +1,4 @@
+import { initializeRefinerProfile } from "../refiner/refiner-profile-service.js";
 import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -46,6 +47,7 @@ describe("Local Harness refinement acceptance", () => {
       path.join(os.tmpdir(), "openpond-harness-refinement-managed-run-"),
     );
     const store = new SqliteStore(directory);
+    await initializeRefinerProfile(directory);
     cleanup.push({ directory, store });
     const created = await createLocalHarnessWorkspace({
       store,
@@ -126,6 +128,7 @@ describe("Local Harness refinement acceptance", () => {
       path.join(os.tmpdir(), "openpond-harness-refinement-acceptance-"),
     );
     const store = new SqliteStore(directory);
+    await initializeRefinerProfile(directory);
     cleanup.push({ directory, store });
     const created = await createLocalHarnessWorkspace({
       store,
@@ -408,6 +411,7 @@ describe("Local Harness refinement acceptance", () => {
       path.join(os.tmpdir(), "openpond-harness-refinement-retry-"),
     );
     const store = new SqliteStore(directory);
+    await initializeRefinerProfile(directory);
     cleanup.push({ directory, store });
     const created = await createLocalHarnessWorkspace({
       store,

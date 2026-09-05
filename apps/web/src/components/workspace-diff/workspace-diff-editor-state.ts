@@ -1,3 +1,4 @@
+import { clientChoiceStorage } from "../../lib/client-choice-storage";
 import type {
   WorkspaceLspDiagnostic,
   WorkspaceLspServerStatus,
@@ -8,7 +9,7 @@ const EDITOR_CONTROLS_STORAGE_KEY = "openpond.workspace.editorControlsVisible";
 
 export function readEditorControlsVisible(): boolean {
   try {
-    return window.localStorage.getItem(EDITOR_CONTROLS_STORAGE_KEY) === "true";
+    return clientChoiceStorage.getItem(EDITOR_CONTROLS_STORAGE_KEY) === "true";
   } catch {
     return false;
   }
@@ -16,7 +17,7 @@ export function readEditorControlsVisible(): boolean {
 
 export function writeEditorControlsVisible(value: boolean): void {
   try {
-    window.localStorage.setItem(EDITOR_CONTROLS_STORAGE_KEY, String(value));
+    clientChoiceStorage.setItem(EDITOR_CONTROLS_STORAGE_KEY, String(value));
   } catch {
     // Storage can be unavailable in restricted browser contexts.
   }

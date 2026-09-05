@@ -1,3 +1,4 @@
+import { pruneLogs } from "./retention.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -107,6 +108,7 @@ export function createLogger(options: LoggerOptions): Logger {
   const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
   const filePath = path.join(options.logDir, options.filename ?? `${options.channel}.log`);
   let queue = Promise.resolve();
+  let lastRetentionAt = 0;
 
   async function rotateIfNeeded(nextBytes: number): Promise<void> {
     let size = 0;
@@ -134,12 +136,14 @@ export function createLogger(options: LoggerOptions): Logger {
       ...(options.metadata ?? {}),
       ...fields,
     };
-    const line = `${JSON.stringify(redact(record))}\n`;
+    let line = `${JSON.stringify(redact(record))}\n`;
+    if (Buffer.byteLength(line) > Math.max(DEFAULT_MAX_BYTES, maxBytes)) line = `${JSON.stringify({ ts: record.ts, level, channel: options.channel, message: "Oversized log record omitted", originalBytes: Buffer.byteLength(line) })}\n`;
     queue = queue
       .then(async () => {
         await fs.mkdir(options.logDir, { recursive: true });
         await rotateIfNeeded(Buffer.byteLength(line, "utf8"));
-        await fs.appendFile(filePath, line, "utf8");
+        await fs.appendFile(filePath, line, { encoding: "utf8", mode: 0o600 });
+        if (Date.now() - lastRetentionAt >= 60_000) { await pruneLogs(options.logDir, filePath); lastRetentionAt = Date.now(); }
       })
       .catch((error) => {
         console.error("OpenPond logger failed", error);

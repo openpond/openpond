@@ -1,3 +1,6 @@
+import { backup } from "node:sqlite";
+import { openStorageDatabase } from "@openpond/persistence";
+import { PersistenceError } from "@openpond/persistence";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
@@ -66,6 +69,7 @@ export type SqliteStoreCoreOptions = {
 
 export class SqliteStoreCore {
   readonly storePath: string;
+  readonly home: string;
   protected data: StoreData = { sessions: [], turns: [], events: [], approvals: [] };
   protected ready: Promise<void>;
   protected db: OpenPondSqliteConnection | null = null;
@@ -73,7 +77,8 @@ export class SqliteStoreCore {
   protected readonly logger?: Logger;
 
   constructor(storeDir: string, options: SqliteStoreCoreOptions = {}) {
-    this.storePath = path.join(storeDir, "state.sqlite");
+    this.home = path.resolve(storeDir);
+    this.storePath = path.join(this.home, "state", "state.sqlite");
     this.logger = options.logger;
     this.ready = this.load(storeDir);
   }
@@ -90,9 +95,9 @@ export class SqliteStoreCore {
   }
 
   protected async load(storeDir: string): Promise<void> {
-    await fs.mkdir(storeDir, { recursive: true });
+    await fs.mkdir(path.dirname(this.storePath), { recursive: true, mode: 0o700 });
     const hadDatabase = await this.fileExists(this.storePath);
-    await this.openDatabaseWithRecovery(storeDir);
+    await this.openDatabaseWithRecovery();
     await this.runMigrations(storeDir, hadDatabase);
     this.data = await readStoreData({
       allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
@@ -118,6 +123,7 @@ export class SqliteStoreCore {
     await this.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA foreign_keys = ON;
+      PRAGMA synchronous = FULL;
     `);
   }
 
@@ -174,45 +180,19 @@ export class SqliteStoreCore {
     return row?.user_version ?? 0;
   }
 
-  protected async openDatabaseWithRecovery(storeDir: string): Promise<void> {
+  protected async openDatabaseWithRecovery(): Promise<void> {
     try {
       this.db = await this.openDatabaseWithRetry();
-    } catch (error) {
-      if (!isConfirmedSqliteCorruption(error)) {
-        this.logger?.error("sqlite open failed without confirmed corruption; preserving database files", {
-          storePath: this.storePath,
-          error,
-        });
-        throw error;
-      }
-      this.logger?.error("sqlite open confirmed corruption; moving database files aside", {
-        storePath: this.storePath,
-        error,
-      });
-      await this.moveDatabaseFilesAside(storeDir, "open-failed");
-      this.db = await this.openDatabaseWithRetry();
-    }
-
-    try {
       await this.configureDatabase();
       await this.assertHealthyDatabaseWithRetry();
     } catch (error) {
       await this.closeDatabaseHandle();
-      if (!isConfirmedSqliteCorruption(error)) {
-        this.logger?.error("sqlite health check failed without confirmed corruption; preserving database files", {
-          storePath: this.storePath,
-          error,
-        });
-        throw error;
-      }
-      this.logger?.error("sqlite health check confirmed corruption; moving database files aside", {
-        storePath: this.storePath,
-        error,
-      });
-      await this.moveDatabaseFilesAside(storeDir, "quick-check-failed");
-      this.db = await this.openDatabaseWithRetry();
-      await this.configureDatabase();
-      await this.assertHealthyDatabaseWithRetry();
+      if (isConfirmedSqliteCorruption(error)) throw new PersistenceError({
+        code: "DATABASE_RECOVERY_REQUIRED", path: this.storePath,
+        message: "The authoritative database failed its integrity check.",
+        action: "Restore a verified backup into a separate home. Existing history has been preserved.",
+      }, { cause: error });
+      throw error;
     }
   }
 
@@ -237,37 +217,11 @@ export class SqliteStoreCore {
   }
 
   protected async backupDatabaseFiles(storeDir: string, label: string): Promise<void> {
-    await this.exec("PRAGMA wal_checkpoint(FULL)").catch(() => undefined);
     const backupDir = path.join(storeDir, "backups", `state-${timestampForPath()}-${label}`);
-    await fs.mkdir(backupDir, { recursive: true });
-    let copied = 0;
-    for (const filePath of this.databaseFiles()) {
-      try {
-        await fs.copyFile(filePath, path.join(backupDir, path.basename(filePath)));
-        copied += 1;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-    }
-    this.logger?.info("sqlite backup created", { backupDir, copied });
-  }
-
-  protected async moveDatabaseFilesAside(storeDir: string, reason: string): Promise<void> {
-    const corruptDir = path.join(storeDir, "corrupt");
-    await fs.mkdir(corruptDir, { recursive: true });
-    const stamp = timestampForPath();
-    let moved = 0;
-    for (const filePath of this.databaseFiles()) {
-      const suffix = filePath.slice(this.storePath.length);
-      const target = path.join(corruptDir, `state-${stamp}-${reason}.sqlite${suffix}`);
-      try {
-        await fs.rename(filePath, target);
-        moved += 1;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-    }
-    this.logger?.warn("sqlite database files moved aside", { reason, moved, corruptDir });
+    await fs.mkdir(backupDir, { recursive: true, mode: 0o700 });
+    const source = openStorageDatabase(this.storePath, true);
+    try { await backup(source, path.join(backupDir, "state.sqlite")); } finally { source.close(); }
+    this.logger?.info("sqlite backup created", { backupDir, copied: 1 });
   }
 
   protected databaseFiles(): string[] {

@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+import { createConfigurationPayloads } from "./api/configuration-payloads.js";
+import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
+import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
+import { initializeHome, resolveEffectiveConfig, captureConfigRun, assertConfigRunCurrent } from "@openpond/persistence";
+import { onStartupFailure, ownHomeRuntime, publishRuntimeEndpoint } from "./runtime/home-runtime-owner.js";
 import path from "node:path"; import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import {
@@ -24,8 +29,6 @@ import {
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
 import {
-  APP_PREFERENCES_CACHE_KEY,
-  APP_PREFERENCES_CACHE_TYPE,
   DEFAULT_HOST,
   DEFAULT_PORT,
   VERSION,
@@ -33,7 +36,7 @@ import {
 import { runOpenPondServerCliEntrypoint } from "./server-cli-entrypoint.js";
 import { createOpenPondAppServer } from "./app-server-runtime.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
-import { runHostedContextCompaction } from "./openpond/context-compaction/index.js";
+import { createManualCompactionRecorder } from "./runtime/manual-compaction-usage.js";
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
 import { trustedProviderContextLimit } from "./openpond/context-usage.js";
 import { createLogger } from "@openpond/logging";
@@ -119,7 +122,6 @@ import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
 import { createLocalHarnessEvaluationReviewModelStream } from "./harness/local-harness-evaluation-review-model.js";
 import { createLocalHarnessEvaluationReviewScheduler } from "./harness/local-harness-evaluation-review-scheduler.js";
-import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createWorkOutputService } from "./work/work-output-service.js";
 import { createWorkSandboxLifecycleService } from "./work/work-sandbox-lifecycle-service.js";
@@ -188,7 +190,6 @@ import { createDatasetStorageService } from "./training/dataset-storage-service.
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
-import { normalizeAppPreferences } from "./preferences.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
 import { resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
 import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
@@ -200,12 +201,17 @@ import {
 } from "./training/managed-adapter-models.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
-export async function createOpenPondServer(
-  options: OpenPondServerOptions = {}
-): Promise<OpenPondServerInstance> {
+export async function createOpenPondServer(options: OpenPondServerOptions = {}): Promise<OpenPondServerInstance> {
+  const storeDir = path.resolve(options.storeDir ?? appDataDir());
+  return ownHomeRuntime(storeDir, () => createOwnedOpenPondServer({ ...options, storeDir }));
+}
+async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promise<OpenPondServerInstance> {
   const host = options.host ?? DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
-  const storeDir = options.storeDir ?? appDataDir();
+  const storeDir = path.resolve(options.storeDir ?? appDataDir());
+  await initializeHome(storeDir, { sourceBrowserState: options.sourceBrowserState });
+  await resolveEffectiveConfig(storeDir);
+  await initializeRefinerProfile(storeDir);
   const version = options.version ?? VERSION;
   const runtimeVersion = getBundledRuntimeVersion();
   const maxHostedWorkspaceToolRounds = resolveMaxHostedWorkspaceToolRounds(
@@ -228,6 +234,7 @@ export async function createOpenPondServer(
       runtimeVersion,
     },
   });
+  onStartupFailure(() => logger.flush());
   const providersFilePath = providersConfigPath(storeDir);
   const providerSecretPaths = {
     secretsFilePath: providerSecretsConfigPath(storeDir),
@@ -235,6 +242,10 @@ export async function createOpenPondServer(
   };
   const { token, tokenFile } = await ensureCapabilityToken(storeDir);
   const store = new SqliteStore(storeDir, { logger });
+  onStartupFailure(() => store.close());
+  await store.recentTurns(1);
+  const scheduleRecovery = reconcileInterruptedScheduledWork(storeDir);
+  if (scheduleRecovery.recovered || scheduleRecovery.needsReview) logger.warn("Scheduled work requires review after restart", scheduleRecovery);
   await ensureSelectedLocalHarnessWorkspace({
     store,
     storeDir,
@@ -504,6 +515,7 @@ export async function createOpenPondServer(
     updateSession,
     appendRuntimeEvent,
   });
+  onStartupFailure(() => workSandboxLifecycle.close());
   const {
     maybeCreateScaffoldForTurn,
     hostedSystemPrompt,
@@ -578,6 +590,7 @@ export async function createOpenPondServer(
     store,
     addSessionSource: (input) => taskCreatorService.addSessionSource(input),
   });
+  onStartupFailure(() => taskMinerService.close());
   const datasetArtifactService = createDatasetArtifactService({
     store,
     workerProjectDir: path.resolve(process.cwd(), "python", "openpond-datasets"),
@@ -628,6 +641,7 @@ export async function createOpenPondServer(
       datasetArtifactService.task(tasksetId, taskId, split),
     modelJudge: taskEvaluationModelJudge,
   });
+  onStartupFailure(() => taskEvaluationService.close());
   const localBenchmarkEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
@@ -651,13 +665,10 @@ export async function createOpenPondServer(
     store,
     client: managedAdapterRegistryClient,
     resolveSelectedTeamId: async () => {
-      const entry = await store.getCacheEntry<unknown>(
-        APP_PREFERENCES_CACHE_TYPE,
-        APP_PREFERENCES_CACHE_KEY
-      );
-      return normalizeAppPreferences(entry?.payload).defaultTeamId;
+      return (await loadAppPreferences()).defaultTeamId;
     },
   });
+  onStartupFailure(() => managedAdapterSyncService.close());
   const datasetStoragePayload = async (action: "state" | "update", payload?: unknown) =>
     action === "state" ? datasetStorageService.state() : datasetStorageService.update(payload);
   const portableTrainingDependencies = createPortableTrainingServerDependencies(
@@ -669,11 +680,7 @@ export async function createOpenPondServer(
   const resolveManagedTrainingAccess = async () => {
     const operatorAccess = await managedRlOperatorAccess(process.env);
     if (operatorAccess) return operatorAccess;
-    const entry = await store.getCacheEntry<unknown>(
-      APP_PREFERENCES_CACHE_TYPE,
-      APP_PREFERENCES_CACHE_KEY
-    );
-    const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
+    const teamId = (await loadAppPreferences()).defaultTeamId;
     return resolveManagedAdapterUserAccess({ teamId });
   };
   const modelProjectHosting = createModelProjectHostingService({
@@ -702,6 +709,7 @@ export async function createOpenPondServer(
     reactivateManagedBinding: managedAdapterSyncService.reactivateBinding,
     activateManagedBinding: managedAdapterSyncService.activateBinding,
   });
+  onStartupFailure(() => trainingService.close());
   const managedAdapterChatRuntime = createManagedAdapterChatRuntime({
     store,
     client: managedAdapterRegistryClient,
@@ -752,6 +760,7 @@ export async function createOpenPondServer(
     loadProviderRuntime: localByokRuntimeState,
     version,
   });
+  onStartupFailure(() => teamChatAiExecutions.close());
 
   const {
     resolveApproval: resolveCodexApproval,
@@ -798,7 +807,9 @@ export async function createOpenPondServer(
     isClosing: () => closing,
     logger,
   });
+  onStartupFailure(() => chatWorkflows.stop());
   const turnRunner = createTurnRunner({
+    storageHome: storeDir,
     attachmentRootDir,
     store,
     loadSelectedHarnessRuntime: (session) =>
@@ -1065,6 +1076,7 @@ export async function createOpenPondServer(
             paths: providerSecretPaths,
             providerId,
             credential,
+            expected: state.secrets.providers[providerId] ?? {},
             timestamp: now(),
           });
         },
@@ -1092,6 +1104,7 @@ export async function createOpenPondServer(
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests: 3,
   });
+  onStartupFailure(() => turnRunner.close());
   const {
     sendTurn,
     interruptSessionTurn,
@@ -1112,6 +1125,7 @@ export async function createOpenPondServer(
     isClosing: () => closing,
     logger,
   });
+  onStartupFailure(() => taskMinerBackgroundLoop.stop());
   const localAgentScheduleLoop = createLocalAgentScheduleLoop({
     store,
     queue: workQueues.localAgentSchedule,
@@ -1121,6 +1135,7 @@ export async function createOpenPondServer(
     appendRuntimeEvent,
     logger,
   });
+  onStartupFailure(() => localAgentScheduleLoop.stop());
   async function resolveApproval(
     approvalId: string,
     payload: unknown
@@ -1234,130 +1249,7 @@ export async function createOpenPondServer(
     }
   }
 
-  async function runRecordedManualHostedContextCompaction(input: {
-    session: Awaited<ReturnType<typeof getSession>>;
-    events: RuntimeEvent[];
-    provider: ChatProvider;
-    model: string | null;
-    maxContextTokens?: number | null;
-    route: "openpond_hosted" | "local_byok";
-    requestId: string;
-  }) {
-    const usageState: {
-      recorder: Awaited<
-        ReturnType<typeof startProviderRequestUsageRecorder>
-      > | null;
-      finalized: boolean;
-    } = { recorder: null, finalized: false };
-
-    async function failUsageRecorder(error: unknown): Promise<void> {
-      if (!usageState.recorder || usageState.finalized) return;
-      usageState.finalized = true;
-      await usageState.recorder.fail(
-        error,
-        error instanceof Error && error.name === "AbortError"
-          ? "interrupted"
-          : "failed"
-      );
-    }
-
-    try {
-      const result = await runHostedContextCompaction({
-        session: input.session,
-        events: input.events,
-        provider: input.provider,
-        model: input.model,
-        maxContextTokens: input.maxContextTokens,
-        streamCompactionChatTurn: async function* (streamInput) {
-          usageState.recorder = await startProviderRequestUsageRecorder({
-            session: input.session,
-            turn: null,
-            provider: input.provider,
-            model: streamInput.model ?? input.model ?? "unknown",
-            requestId: input.requestId,
-            requestOrdinal: 0,
-            requestKind: "context_compaction",
-            upsert: safeUpsertModelUsageRecord,
-          });
-          try {
-            if (input.route === "openpond_hosted") {
-              for await (const delta of streamOpenPondHostedChatTurn({
-                model: streamInput.model,
-                messages: streamInput.messages,
-                requestId: streamInput.requestId,
-                signal: streamInput.signal,
-              })) {
-                if (delta.type === "text_delta" && delta.text)
-                  usageState.recorder.observeDelta({ text: delta.text });
-                if (delta.type === "reasoning_delta" && delta.text) {
-                  usageState.recorder.observeDelta({
-                    reasoningText: delta.text,
-                  });
-                }
-                if (delta.type === "usage")
-                  usageState.recorder.observeDelta({ usage: delta.usage });
-                if (delta.type === "text_delta" && delta.text)
-                  yield { text: delta.text, raw: delta.raw };
-                if (delta.type === "reasoning_delta" && delta.text)
-                  yield { reasoningText: delta.text, raw: delta.raw };
-                if (delta.type === "usage")
-                  yield { usage: delta.usage, raw: delta.raw };
-              }
-              return;
-            }
-
-            const state = await localByokRuntimeState();
-            for await (const delta of streamOpenAiCompatibleChatCompletion({
-              providerId: streamInput.provider,
-              settings: state.settings,
-              secrets: state.secrets,
-              modelId: streamInput.model,
-              messages: streamInput.messages,
-              requestId: streamInput.requestId,
-              promptCacheKey: input.session.id,
-              signal: streamInput.signal,
-              saveChatGptSubscriptionCredential: async (
-                providerId,
-                credential
-              ) => {
-                await writeProviderChatGptSubscriptionCredential({
-                  paths: providerSecretPaths,
-                  providerId,
-                  credential,
-                  timestamp: now(),
-                });
-              },
-            })) {
-              if (delta.type === "text_delta" && delta.text)
-                usageState.recorder.observeDelta({ text: delta.text });
-              if (delta.type === "reasoning_delta" && delta.text) {
-                usageState.recorder.observeDelta({ reasoningText: delta.text });
-              }
-              if (delta.type === "usage")
-                usageState.recorder.observeDelta({ usage: delta.usage });
-              if (delta.type === "text_delta" && delta.text)
-                yield { text: delta.text, raw: delta.raw };
-              if (delta.type === "reasoning_delta" && delta.text)
-                yield { reasoningText: delta.text, raw: delta.raw };
-              if (delta.type === "usage")
-                yield { usage: delta.usage, raw: delta.raw };
-            }
-          } catch (error) {
-            await failUsageRecorder(error);
-            throw error;
-          }
-        },
-      });
-      if (usageState.recorder && !usageState.finalized) {
-        usageState.finalized = true;
-        await usageState.recorder.complete();
-      }
-      return result;
-    } catch (error) {
-      await failUsageRecorder(error);
-      throw error;
-    }
-  }
+  const runRecordedManualHostedContextCompaction = createManualCompactionRecorder({ home: storeDir, safeUpsertModelUsageRecord, streamOpenPondHostedChatTurn, localByokRuntimeState, providerSecretPaths });
 
   async function compactSession(
     sessionId: string,
@@ -1370,6 +1262,8 @@ export async function createOpenPondServer(
     if (session.status === "closed")
       throw new Error("Cannot compact a closed session.");
     const requestedModel = input.model ?? session.modelRef?.modelId ?? null;
+    const configurationId = `manual-compaction:${randomUUID()}`;
+    const configuration = await captureConfigRun(storeDir, configurationId, { task: { schema_version: 1, ...(requestedModel ? { chat: { model: { provider_id: session.provider, model_id: requestedModel } } } : {}) } });
 
     const priorEvents = await store.runtimeEventsForSession(sessionId);
     const startedEvent = event({
@@ -1380,6 +1274,7 @@ export async function createOpenPondServer(
       status: "started",
       output: "Compacting conversation context",
       data: {
+        configurationId, effectiveRevision: configuration.effectiveRevision,
         version: 1,
         provider: session.provider,
         model: requestedModel,
@@ -1389,6 +1284,7 @@ export async function createOpenPondServer(
     return runAgentCompaction({
       started: async () => { await appendRuntimeEvent(startedEvent); },
       compact: async () => {
+      await assertConfigRunCurrent(storeDir, configuration);
       if (session.provider === "codex") {
         const runtime = await ensureCodexRuntime(session, {
           approvalPolicy: "on-request",
@@ -1442,6 +1338,7 @@ export async function createOpenPondServer(
         maxContextTokens,
         route: adapter.route,
         requestId: `${session.id}:context-compaction:${startedEvent.id}`,
+        configuration,
       });
       const completedEvent = event({
         sessionId,
@@ -1639,6 +1536,7 @@ export async function createOpenPondServer(
     isClosing: () => closing,
     logger,
   });
+  onStartupFailure(() => harnessEvaluationReviewScheduler.stop());
 
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({
@@ -1713,9 +1611,11 @@ export async function createOpenPondServer(
     storeDir,
     logger,
   });
+  onStartupFailure(() => voiceTranscription.close());
 
   const { httpServer, terminalWebSockets } = createOpenPondHttpSurface({
     routeOptions: {
+      configuration: createConfigurationPayloads(storeDir),
       host,
       getActualPort: () => actualPort,
       token,
@@ -1803,7 +1703,7 @@ export async function createOpenPondServer(
       workspaceFilePayload,
       saveWorkspaceFilePayload,
       workspaceImagePayload,
-      ...createMediaPayloads(attachmentRootDir),
+      ...createMediaPayloads(attachmentRootDir, storeDir),
       workspaceLspTouchPayload,
       workspaceLspActionPayload,
       workspaceLspSettingsStatusPayload,
@@ -1891,34 +1791,6 @@ export async function createOpenPondServer(
     },
     webRoot: options.webRoot ?? null,
   });
-  if (options.httpEnabled !== false) {
-    actualPort = await listenOpenPondHttpServer({
-      host,
-      httpServer,
-      logger,
-      port,
-      serverId,
-    });
-  } else {
-    actualPort = 0;
-  }
-  await turnRunner.recoverPendingSubagentCompletions();
-  workSandboxLifecycle.start();
-  if (options.httpEnabled !== false) {
-    localAgentScheduleLoop.start();
-    chatWorkflows.start();
-    harnessEvaluationReviewScheduler.start();
-  }
-
-  const status: ServerStatus = {
-    id: serverId,
-    host,
-    port: actualPort,
-    startedAt,
-    storePath: store.storePath,
-    version,
-    runtimeVersion,
-  };
   const closeServer = createServerShutdown({
     serverId,
     logger,
@@ -1952,6 +1824,37 @@ export async function createOpenPondServer(
       workSandboxLifecycle.close,
     ],
   });
+  onStartupFailure(closeServer, true);
+  if (options.httpEnabled !== false) {
+    actualPort = await listenOpenPondHttpServer({
+      host,
+      httpServer,
+      logger,
+      port,
+      serverId,
+    });
+  } else {
+    actualPort = 0;
+  }
+  if (options.httpEnabled !== false) await publishRuntimeEndpoint(storeDir, `http://${host}:${actualPort}`, serverId);
+  await turnRunner.recoverPendingSubagentCompletions();
+  workSandboxLifecycle.start();
+  if (options.httpEnabled !== false) {
+    localAgentScheduleLoop.start();
+    chatWorkflows.start();
+    harnessEvaluationReviewScheduler.start();
+  }
+
+  const status: ServerStatus = {
+    id: serverId,
+    host,
+    port: actualPort,
+    startedAt,
+    storePath: store.storePath,
+    version,
+    runtimeVersion,
+  };
+
 
   return {
     agentRuntime,

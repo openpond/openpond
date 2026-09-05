@@ -1,134 +1,27 @@
-import { promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
-import path from "node:path";
-
+import { readCache, writeCache } from "@openpond/persistence";
 import type { AppListItem } from "./api.js";
-import { openPondConfigDirectory, updatePrivateJsonFile } from "./private-json-file.js";
-
-type CacheEntry<T> = {
-  items: T;
-  updatedAt: string;
-};
-
-type CacheBucket = {
-  apps?: CacheEntry<AppListItem[]>;
-  tools?: CacheEntry<unknown[]>;
-};
-
-type CacheStore = {
-  version: 1;
-  byKey: Record<string, CacheBucket>;
-};
-
-const CACHE_FILENAME = "cache.json";
+import { openPondConfigDirectory } from "./private-json-file.js";
 
 export const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000;
-
-function getCachePath(): string {
-  return path.join(openPondConfigDirectory(), CACHE_FILENAME);
+type CacheScope = { apiBase: string; apiKey: string };
+function buildCacheKey(scope: CacheScope): string {
+  return createHash("sha256").update(JSON.stringify([scope.apiBase.replace(/\/$/, ""), scope.apiKey.trim()])).digest("hex");
 }
-
-function buildCacheKey(apiBase: string, apiKey: string): string {
-  const credentialHash = createHash("sha256").update(apiKey.trim()).digest("hex");
-  try {
-    const host = new URL(apiBase).host;
-    return `${host}:${credentialHash}`;
-  } catch {
-    return `${apiBase}:${credentialHash}`;
-  }
+async function cached<T>(namespace: string, params: CacheScope & { ttlMs?: number }): Promise<T | null> {
+  const entry = await readCache<T>(openPondConfigDirectory(), namespace, buildCacheKey(params), { allowStale: true });
+  if (!entry || Date.now() - Date.parse(entry.updatedAt) >= (params.ttlMs ?? DEFAULT_CACHE_TTL_MS)) return null;
+  return entry.payload;
 }
-
-function isFresh(updatedAt: string, ttlMs: number): boolean {
-  const timestamp = Date.parse(updatedAt);
-  if (Number.isNaN(timestamp)) {
-    return false;
-  }
-  return Date.now() - timestamp < ttlMs;
+export async function getCachedApps(params: CacheScope & { ttlMs?: number }): Promise<AppListItem[] | null> {
+  return cached("cloud.apps", params);
 }
-
-async function loadCache(): Promise<CacheStore> {
-  try {
-    const raw = await fs.readFile(getCachePath(), "utf-8");
-    const parsed = JSON.parse(raw) as CacheStore;
-    if (!parsed || typeof parsed !== "object" || !parsed.byKey) {
-      return emptyCacheStore();
-    }
-    return parsed;
-  } catch {
-    return emptyCacheStore();
-  }
+export async function setCachedApps(params: CacheScope & { apps: AppListItem[] }): Promise<void> {
+  await writeCache(openPondConfigDirectory(), "cloud.apps", buildCacheKey(params), params.apps);
 }
-
-function emptyCacheStore(): CacheStore {
-  return { version: 1, byKey: {} };
+export async function getCachedTools(params: CacheScope & { ttlMs?: number }): Promise<unknown[] | null> {
+  return cached("cloud.tools", params);
 }
-
-export async function getCachedApps(params: {
-  apiBase: string;
-  apiKey: string;
-  ttlMs?: number;
-}): Promise<AppListItem[] | null> {
-  const ttlMs = params.ttlMs ?? DEFAULT_CACHE_TTL_MS;
-  const store = await loadCache();
-  const cacheKey = buildCacheKey(params.apiBase, params.apiKey);
-  const entry = store.byKey[cacheKey]?.apps;
-  if (!entry || !isFresh(entry.updatedAt, ttlMs)) {
-    return null;
-  }
-  return Array.isArray(entry.items) ? entry.items : null;
-}
-
-export async function setCachedApps(params: {
-  apiBase: string;
-  apiKey: string;
-  apps: AppListItem[];
-}): Promise<void> {
-  await mutateCache((store) => {
-    const cacheKey = buildCacheKey(params.apiBase, params.apiKey);
-    const bucket = store.byKey[cacheKey] || {};
-    bucket.apps = {
-      items: params.apps,
-      updatedAt: new Date().toISOString(),
-    };
-    store.byKey[cacheKey] = bucket;
-  });
-}
-
-export async function getCachedTools(params: {
-  apiBase: string;
-  apiKey: string;
-  ttlMs?: number;
-}): Promise<unknown[] | null> {
-  const ttlMs = params.ttlMs ?? DEFAULT_CACHE_TTL_MS;
-  const store = await loadCache();
-  const cacheKey = buildCacheKey(params.apiBase, params.apiKey);
-  const entry = store.byKey[cacheKey]?.tools;
-  if (!entry || !isFresh(entry.updatedAt, ttlMs)) {
-    return null;
-  }
-  return Array.isArray(entry.items) ? entry.items : null;
-}
-
-export async function setCachedTools(params: {
-  apiBase: string;
-  apiKey: string;
-  tools: unknown[];
-}): Promise<void> {
-  await mutateCache((store) => {
-    const cacheKey = buildCacheKey(params.apiBase, params.apiKey);
-    const bucket = store.byKey[cacheKey] || {};
-    bucket.tools = {
-      items: params.tools,
-      updatedAt: new Date().toISOString(),
-    };
-    store.byKey[cacheKey] = bucket;
-  });
-}
-
-async function mutateCache(mutate: (store: CacheStore) => void): Promise<void> {
-  await updatePrivateJsonFile<CacheStore>(getCachePath(), emptyCacheStore, (raw) => {
-    const store = raw && typeof raw === "object" && raw.byKey ? raw : emptyCacheStore();
-    mutate(store);
-    return store;
-  });
+export async function setCachedTools(params: CacheScope & { tools: unknown[] }): Promise<void> {
+  await writeCache(openPondConfigDirectory(), "cloud.tools", buildCacheKey(params), params.tools);
 }

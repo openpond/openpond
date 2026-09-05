@@ -1,3 +1,4 @@
+import { clientChoiceStorage } from "./client-choice-storage";
 import type { Experience, ProductArea } from "@openpond/contracts";
 import type { AppView } from "./app-models";
 import type { ChatTaskMode } from "./experience-options";
@@ -41,7 +42,7 @@ export function readLastChatTaskMode(
 export function readLastChatTaskModeFromBrowser(): ChatTaskMode {
   if (typeof window === "undefined") return "chat";
   try {
-    return readLastChatTaskMode(window.localStorage);
+    return readLastChatTaskMode(clientChoiceStorage);
   } catch {
     return "chat";
   }
@@ -66,7 +67,7 @@ export function rememberLastChatTaskModeInBrowser(
 ): void {
   if (typeof window === "undefined") return;
   try {
-    rememberLastChatTaskMode(window.localStorage, experience);
+    rememberLastChatTaskMode(clientChoiceStorage, experience);
   } catch {
     // Browser storage can be unavailable in restricted contexts.
   }

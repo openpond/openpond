@@ -1,3 +1,4 @@
+import { getLocalRecord, putLocalRecord } from "@openpond/persistence";
 import {
   AccountStateSchema,
   OpenPondAppSchema,
@@ -103,11 +104,8 @@ export function createOpenPondCache(deps: {
   }
 
   async function loadScaffoldApps(scope: string): Promise<OpenPondApp[]> {
-    const entry = await store.getCacheEntry<unknown>(
-      "openpond.scaffoldApps",
-      scope
-    );
-    const rawApps = Array.isArray(entry?.payload) ? entry.payload : [];
+    const entry = getLocalRecord<unknown>(store.home, "scaffold_registrations", scope);
+    const rawApps = Array.isArray(entry?.value) ? entry.value : [];
     return rawApps
       .map((app) => OpenPondAppSchema.safeParse(app))
       .filter((result) => result.success)
@@ -123,7 +121,7 @@ export function createOpenPondCache(deps: {
       app,
       ...existing.filter((candidate) => candidate.id !== app.id),
     ];
-    await store.setCacheEntry("openpond.scaffoldApps", scope, next);
+    putLocalRecord(store.home, "scaffold_registrations", scope, next);
   }
 
   async function mergeScaffoldApps(

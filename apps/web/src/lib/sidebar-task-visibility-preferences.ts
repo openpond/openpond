@@ -1,3 +1,4 @@
+import { clientChoiceStorage } from "./client-choice-storage";
 export type SidebarTaskVisibilityPreferences = {
   showCodexChats: boolean;
   onlyRunningTasks: boolean;
@@ -47,6 +48,6 @@ export function writeSidebarTaskVisibilityPreferences(
   }
 }
 
-function browserStorage(): Storage | null {
-  return typeof window === "undefined" ? null : window.localStorage;
+function browserStorage(): Pick<Storage, "getItem" | "setItem"> | null {
+  return typeof window === "undefined" ? null : clientChoiceStorage;
 }

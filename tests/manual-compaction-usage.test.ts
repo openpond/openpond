@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -6,6 +6,8 @@ import type { RuntimeEvent, Session, UsageRecordsResponse } from "@openpond/cont
 
 import { createOpenPondServer } from "../apps/server/src/index";
 import { SqliteStore } from "../apps/server/src/store/store";
+
+import { initializeHome, updateConfig, writeCache } from "@openpond/persistence";
 
 const originalFetch = globalThis.fetch;
 
@@ -32,6 +34,7 @@ describe("manual context compaction usage", () => {
   test("records manual hosted compaction usage as a session-level background row", async () => {
     const storeDir = await mkdtemp(join(tmpdir(), "openpond-manual-compaction-usage-"));
     const session = sessionFixture("session_manual_compaction");
+    await initializeHome(storeDir);
     const store = new SqliteStore(storeDir);
     await store.mutate((data) => {
       data.sessions.push(session);
@@ -159,6 +162,7 @@ describe("manual context compaction usage", () => {
       provider: "zai",
       modelId: "zai/glm-5.2",
     });
+    await initializeHome(storeDir);
     const store = new SqliteStore(storeDir);
     await store.mutate((data) => {
       data.sessions.push(session);
@@ -252,6 +256,7 @@ describe("manual context compaction usage", () => {
       provider: "zai",
       modelId: "zai/glm-5.2",
     });
+    await initializeHome(storeDir);
     const store = new SqliteStore(storeDir);
     await store.mutate((data) => {
       data.sessions.push(session);
@@ -341,44 +346,19 @@ async function writeZaiProviderFiles(storeDir: string, input: { contextWindow: n
             source: "manual",
           },
         ];
-  await writeFile(
-    join(storeDir, "providers.json"),
-    `${JSON.stringify({
-      version: 1,
-      providers: {
-        zai: {
-          enabled: true,
-          baseUrl: "https://provider.example/v1",
-          defaultModel: "zai/glm-5.2",
-          modelOverrides: [],
-          updatedAt: "2026-07-04T12:00:00.000Z",
-        },
-      },
-      modelCaches: {
-        zai: {
-          providerId: "zai",
-          models: model,
-          fetchedAt: "2026-07-04T12:00:00.000Z",
-          lastError: null,
-          source: input.contextWindow === null ? "none" : "manual",
-        },
-      },
-    }, null, 2)}\n`,
-  );
-  await writeFile(
-    join(storeDir, "provider-secrets.json"),
-    `${JSON.stringify({
-      version: 1,
-      providers: {
-        zai: {
-          source: "env",
-          envVar: "OPENPOND_TEST_ZAI_KEY",
-          createdAt: "2026-07-04T12:00:00.000Z",
-          updatedAt: "2026-07-04T12:00:00.000Z",
-        },
-      },
-    }, null, 2)}\n`,
-  );
+  await updateConfig(storeDir, (document) => ({ ...document, providers: { zai: {
+    enabled: true,
+    base_url: "https://provider.example/v1",
+    default_model: "zai/glm-5.2",
+    model_overrides: [],
+    credential: { source: "env", name: "OPENPOND_TEST_ZAI_KEY" },
+  } } }));
+  await writeCache(storeDir, "providers", "catalog", {
+    modelCaches: { zai: {
+      providerId: "zai", models: model, fetchedAt: "2026-07-04T12:00:00.000Z",
+      lastError: null, source: input.contextWindow === null ? "none" : "manual",
+    } },
+  });
 }
 
 async function serverSnapshot(storeDir: string): Promise<{ events: RuntimeEvent[] }> {

@@ -152,7 +152,7 @@ function isCompiledExecutable(): boolean {
 }
 
 function forwardedOptions(options: CliOptions): string[] {
-  const ignored = new Set(["account", "handle", "baseUrl", "noOpen", "tui"]);
+  const ignored = new Set(["account", "handle", "baseUrl", "noOpen", "tui", "home"]);
   const args: string[] = [];
   for (const [key, value] of Object.entries(options)) {
     if (ignored.has(key)) continue;

@@ -4,9 +4,27 @@
     "composite": true,
     "rootDir": "src",
     "outDir": "dist",
-    "lib": ["ES2022", "DOM"],
-    "types": ["node", "electron"]
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node",
+      "electron"
+    ]
   },
-  "references": [{ "path": "../../packages/logging" }, { "path": "../../packages/runtime" }],
-  "include": ["src/**/*.ts"]
+  "references": [
+    {
+      "path": "../../packages/logging"
+    },
+    {
+      "path": "../../packages/runtime"
+    },
+    {
+      "path": "../../packages/persistence"
+    }
+  ],
+  "include": [
+    "src/**/*.ts"
+  ]
 }

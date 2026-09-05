@@ -1,3 +1,4 @@
+import { connectClientChoices, useHydratedClientChoice, clientChoiceSaveIssue } from "../lib/client-choice-storage";
 import {
   useCallback,
   useEffect,
@@ -21,14 +22,6 @@ import type {
 import { api, resolveConnection, type ClientConnection, type PreferencesPayload } from "../api";
 import { normalizePreferences, parseProjectSelection, projectSelectionKey } from "../lib/app-models";
 import { latestReadyLocalCreateImproveProfileRefreshKey } from "../lib/create-pipeline-profile-refresh";
-import {
-  codexPreferencesWithLocalOverrides,
-  storedCodexPreferenceSyncPatch,
-} from "../lib/codex-preferences";
-import {
-  openPondCommandAccessPreferencesWithLocalOverride,
-  storedOpenPondCommandAccessPreferenceSyncPatch,
-} from "../lib/openpond-command-access-preferences";
 import {
   normalizeOpenPondOrganization,
   resolveDefaultOpenPondOrganization,
@@ -125,10 +118,7 @@ export function useAppBootstrap(params: {
   const sessionsRef = useRef<Session[]>([]);
   const codexHistorySessionsRef = useRef<Session[]>([]);
   const bootstrapServerIdRef = useRef<string | null>(null);
-  const codexPreferenceSyncKeyRef = useRef<string | null>(null);
-  const openPondCommandAccessPreferenceSyncKeyRef = useRef<string | null>(null);
   const defaultTeamSyncKeyRef = useRef<string | null>(null);
-  const latestDefaultTeamIdRef = useRef("");
   const startupReadyRef = useRef(false);
   const startupStartedAtRef = useRef(Date.now());
   const startupCompleteTimerRef = useRef<number | null>(null);
@@ -210,7 +200,6 @@ export function useAppBootstrap(params: {
               serverId: payload.server.id,
             },
       );
-      latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
       setBootstrap(payload);
       if (sameServer) runtimeEventStore.mergeBootstrap(payload.events);
       else runtimeEventStore.replace(payload.events);
@@ -286,7 +275,6 @@ export function useAppBootstrap(params: {
   );
 
   const applyPreferencesPayload = useCallback((payload: PreferencesPayload) => {
-    latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
     setBootstrap((current) => (current ? { ...current, preferences: payload.preferences } : current));
   }, []);
 
@@ -302,14 +290,14 @@ export function useAppBootstrap(params: {
   ]);
 
   useEffect(() => {
-    setCodexPermissionMode(codexPreferencesWithLocalOverrides(bootstrap?.preferences).codexPermissionMode);
+    setCodexPermissionMode(normalizePreferences(bootstrap?.preferences).codexPermissionMode);
   }, [
     bootstrap?.preferences.codexPermissionMode,
     setCodexPermissionMode,
   ]);
 
   useEffect(() => {
-    setCodexReasoningEffort(codexPreferencesWithLocalOverrides(bootstrap?.preferences).codexReasoningEffort);
+    setCodexReasoningEffort(normalizePreferences(bootstrap?.preferences).codexReasoningEffort);
   }, [
     bootstrap?.preferences.codexReasoningEffort,
     setCodexReasoningEffort,
@@ -317,62 +305,11 @@ export function useAppBootstrap(params: {
 
   useEffect(() => {
     setOpenPondCommandAccessMode(
-      openPondCommandAccessPreferencesWithLocalOverride(bootstrap?.preferences).openPondCommandAccessMode,
+      normalizePreferences(bootstrap?.preferences).openPondCommandAccessMode,
     );
   }, [
     bootstrap?.preferences.openPondCommandAccessMode,
     setOpenPondCommandAccessMode,
-  ]);
-
-  useEffect(() => {
-    if (!connection || !bootstrap) return;
-    const patch = storedCodexPreferenceSyncPatch(bootstrap.preferences);
-    const syncKey = JSON.stringify(patch);
-    if (syncKey === "{}") {
-      codexPreferenceSyncKeyRef.current = null;
-      return;
-    }
-    if (codexPreferenceSyncKeyRef.current === syncKey) return;
-    codexPreferenceSyncKeyRef.current = syncKey;
-    void api
-      .savePreferences(connection, patch)
-      .then(applyPreferencesPayload)
-      .catch((syncError) => {
-        codexPreferenceSyncKeyRef.current = null;
-        setError(syncError instanceof Error ? syncError.message : String(syncError));
-      });
-  }, [
-    applyPreferencesPayload,
-    bootstrap,
-    bootstrap?.preferences.codexPermissionMode,
-    bootstrap?.preferences.codexReasoningEffort,
-    connection,
-    setError,
-  ]);
-
-  useEffect(() => {
-    if (!connection || !bootstrap) return;
-    const patch = storedOpenPondCommandAccessPreferenceSyncPatch(bootstrap.preferences);
-    const syncKey = JSON.stringify(patch);
-    if (syncKey === "{}") {
-      openPondCommandAccessPreferenceSyncKeyRef.current = null;
-      return;
-    }
-    if (openPondCommandAccessPreferenceSyncKeyRef.current === syncKey) return;
-    openPondCommandAccessPreferenceSyncKeyRef.current = syncKey;
-    void api
-      .savePreferences(connection, patch)
-      .then(applyPreferencesPayload)
-      .catch((syncError) => {
-        openPondCommandAccessPreferenceSyncKeyRef.current = null;
-        setError(syncError instanceof Error ? syncError.message : String(syncError));
-      });
-  }, [
-    applyPreferencesPayload,
-    bootstrap,
-    bootstrap?.preferences.openPondCommandAccessMode,
-    connection,
-    setError,
   ]);
 
   useEffect(() => {
@@ -446,42 +383,13 @@ export function useAppBootstrap(params: {
           completeStartup();
           return;
         }
-        const latestDefaultTeamId = latestDefaultTeamIdRef.current;
-        if (latestDefaultTeamId && latestDefaultTeamId !== currentDefaultTeamId) {
+        if (currentDefaultTeamId) {
+          setError("The configured default team is unavailable for this account. Select an available team in account settings.");
           completeStartup();
           return;
         }
-        const preloadAgentsPromise = preloadTeamAgents(fallbackTeamId);
-        defaultTeamSyncKeyRef.current = defaultTeamPreferenceSyncKey(
-          accountKey,
-          fallbackTeamId,
-          bootstrap.accountMeta.asOf ?? "initial",
-        );
-        const updatedPayload = await api.savePreferences(connection, { defaultTeamId: fallbackTeamId });
-        await preloadAgentsPromise;
-        const latestDefaultTeamIdAfterSave = latestDefaultTeamIdRef.current;
-        if (cancelled) {
-          if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== fallbackTeamId) {
-            void api
-              .savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave })
-              .then(applyPreferencesPayload)
-              .catch((defaultTeamError) => {
-                setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
-              });
-          }
-          return;
-        }
-        if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== fallbackTeamId) {
-          applyPreferencesPayload(
-            await api.savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave }),
-          );
-          completeStartup();
-          return;
-        }
-        if (!cancelled) {
-          applyPreferencesPayload(updatedPayload);
-          completeStartup();
-        }
+        await preloadTeamAgents(fallbackTeamId);
+        if (!cancelled) completeStartup();
       })
       .catch((defaultTeamError) => {
         if (cancelled) return;
@@ -536,6 +444,16 @@ export function useAppBootstrap(params: {
     };
   }, [connection, organizationRefreshAccountKey]);
 
+  useHydratedClientChoice(() => {
+    const issue = clientChoiceSaveIssue();
+    if (issue) setError(issue);
+    else setError((current) => current?.startsWith("Preference changes have not been saved.") ? null : current);
+  });
+  useEffect(() => {
+    if (!connection) return;
+    void connectClientChoices(connection).catch((error) => setError(String(error)));
+  }, [connection, organizationRefreshAccountKey, setError]);
+
   const load = useCallback(async () => {
     setBlockingStartupStage("connecting");
     setRuntimeEventStreamStart(null);
@@ -543,6 +461,7 @@ export function useAppBootstrap(params: {
     setConnection((current) => (isSameConnection(current, nextConnection) ? current : nextConnection));
     setBlockingStartupStage("account");
     const payload = await api.bootstrap(nextConnection);
+    await connectClientChoices(nextConnection);
     applyBootstrapPayload(payload);
     completeStartup();
     setError((current) =>

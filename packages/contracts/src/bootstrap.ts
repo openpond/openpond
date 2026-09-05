@@ -29,6 +29,7 @@ export const BootstrapPayloadSchema = z.object({
   server: ServerStatusSchema,
   account: AccountStateSchema,
   codex: CodexStatusSchema,
+  configuration: z.object({ rawRevision: z.string(), effectiveRevision: z.string(), sources: z.array(z.object({ layer: z.string(), path: z.string(), revision: z.string() })), provenance: z.record(z.string(), z.object({ layer: z.string(), path: z.string(), revision: z.string() })) }).optional(),
   preferences: AppPreferencesSchema.optional().default(() => AppPreferencesSchema.parse({})),
   providers: ProviderSettingsSchema.optional().default(() => ProviderSettingsSchema.parse({})),
   personalization: PersonalizationSettingsSchema.optional().default(() =>

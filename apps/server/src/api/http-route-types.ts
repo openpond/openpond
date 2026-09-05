@@ -34,6 +34,7 @@ export type ChatAttachmentImagePayloadRequest = {
 };
 
 export type HttpRouteDeps = {
+  configuration?: ReturnType<typeof import("./configuration-payloads.js").createConfigurationPayloads>;
   host: string;
   getActualPort: () => number;
   token: string;

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { promises as fs } from "node:fs";
-import os from "node:os";
+import { resolveOpenPondHome, storagePaths } from "@openpond/persistence";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -16,10 +16,7 @@ let serverProcess: ChildProcessWithoutNullStreams | null = null;
 let stopServerPromise: Promise<void> | null = null;
 
 function tokenFilePath(): string {
-  const appHome =
-    process.env.OPENPOND_APP_HOME ||
-    path.join(os.homedir(), ".openpond", "openpond-app");
-  return path.join(appHome, "token");
+  return storagePaths(resolveOpenPondHome()).token;
 }
 
 async function readToken(): Promise<string | null> {

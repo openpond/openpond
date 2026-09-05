@@ -37,6 +37,7 @@ describe("chat attachment file previews", () => {
     try {
       const materialized = await materializeChatAttachments({
         attachmentRootDir,
+        storageHome: attachmentRootDir,
         sessionId: "session-1",
         turnId: "turn-1",
         attachments,
@@ -62,6 +63,7 @@ describe("chat attachment file previews", () => {
 
       const preview = await readChatAttachmentTextFile({
         attachmentRootDir,
+        storageHome: attachmentRootDir,
         sessionId: "session-1",
         turnId: "turn-1",
         storageName: "notes.md",
@@ -86,6 +88,7 @@ describe("chat attachment file previews", () => {
       await expect(
         readChatAttachmentTextFile({
           attachmentRootDir,
+        storageHome: attachmentRootDir,
           sessionId: "session-1",
           turnId: "turn-1",
           storageName: "../outside.txt",
@@ -95,6 +98,7 @@ describe("chat attachment file previews", () => {
       await expect(
         readChatAttachmentTextFile({
           attachmentRootDir,
+        storageHome: attachmentRootDir,
           sessionId: "session-1",
           turnId: "turn-1",
           storageName: "screen.png",

@@ -1,24 +1,65 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/actions" },
-    { "path": "packages/agent-runtime" },
-    { "path": "packages/app-server" },
-    { "path": "packages/harness/tsconfig.build.json" },
-    { "path": "packages/evals/tsconfig.build.json" },
-    { "path": "packages/cloud" },
-    { "path": "packages/connected-apps" },
-    { "path": "packages/continual-support" },
-    { "path": "packages/contracts" },
-    { "path": "packages/codex-provider" },
-    { "path": "packages/logging" },
-    { "path": "packages/runtime" },
-    { "path": "packages/sdk/tsconfig.build.json" },
-    { "path": "packages/taskset-sdk" },
-    { "path": "packages/training-sdk" },
-    { "path": "apps/server" },
-    { "path": "apps/web" },
-    { "path": "apps/terminal" },
-    { "path": "apps/desktop" }
+    {
+      "path": "packages/persistence"
+    },
+    {
+      "path": "packages/actions"
+    },
+    {
+      "path": "packages/agent-runtime"
+    },
+    {
+      "path": "packages/app-server"
+    },
+    {
+      "path": "packages/harness/tsconfig.build.json"
+    },
+    {
+      "path": "packages/evals/tsconfig.build.json"
+    },
+    {
+      "path": "packages/cloud"
+    },
+    {
+      "path": "packages/connected-apps"
+    },
+    {
+      "path": "packages/continual-support"
+    },
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/codex-provider"
+    },
+    {
+      "path": "packages/logging"
+    },
+    {
+      "path": "packages/runtime"
+    },
+    {
+      "path": "packages/sdk/tsconfig.build.json"
+    },
+    {
+      "path": "packages/taskset-sdk"
+    },
+    {
+      "path": "packages/training-sdk"
+    },
+    {
+      "path": "apps/server"
+    },
+    {
+      "path": "apps/web"
+    },
+    {
+      "path": "apps/terminal"
+    },
+    {
+      "path": "apps/desktop"
+    }
   ]
 }

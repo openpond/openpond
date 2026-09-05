@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { inspectRefinerProfile, rollbackRefinerRelease, updateRefinerProfile } from "./refiner-profile-service.js";
+import { initializeRefinerProfile, inspectRefinerProfile, rollbackRefinerRelease, updateRefinerProfile } from "./refiner-profile-service.js";
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -12,6 +12,7 @@ describe("Refiner profile service", () => {
   test("creates immutable adjacent releases and can roll back", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "openpond-refiner-"));
     roots.push(root);
+    await initializeRefinerProfile(root);
     const initial = await inspectRefinerProfile(root);
     const draft = await updateRefinerProfile(root, {
       profile: { ...initial.currentRelease.profile, version: "draft" },

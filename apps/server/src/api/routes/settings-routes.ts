@@ -7,6 +7,15 @@ export async function handleSettingsRoutes({
   requestUrl,
   response,
 }: HttpRouteContext): Promise<boolean> {
+  if (requestUrl.pathname === "/v1/configuration" && deps.configuration) {
+    if (request.method === "GET") sendJson(response, 200, await deps.configuration.status(requestUrl.searchParams.get("projectRoot") ?? undefined, requestUrl.searchParams.get("accountId") ?? undefined));
+    else if (request.method === "POST") sendJson(response, 200, await deps.configuration.mutate(await readJson(request)));
+    else sendJson(response, 405, { error: "Method not allowed" });
+    return true;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/configuration/schema" && deps.configuration) {
+    sendJson(response, 200, deps.configuration.schema()); return true;
+  }
   const {
     gitAvailabilityPayload,
     startGitInstallPayload,

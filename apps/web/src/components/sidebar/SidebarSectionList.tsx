@@ -1,3 +1,4 @@
+import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import type { Session } from "@openpond/contracts";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -168,6 +169,7 @@ export function SidebarSectionList({
   const [taskVisibility, setTaskVisibility] = useState(
     readSidebarTaskVisibilityPreferences,
   );
+  useHydratedClientChoice(() => setTaskVisibility(readSidebarTaskVisibilityPreferences()));
   const { onlyRunningTasks, showCodexChats } = taskVisibility;
   const [selectedTasksetId, setSelectedTasksetId] = useState<string | null>(
     null

@@ -21,11 +21,33 @@ export function sandboxScopeQuery(input: SandboxScopeInput = {}): URLSearchParam
   return query;
 }
 
+const preferenceRevisions = new WeakMap<ClientConnection, string>();
+const responseOrders = new WeakMap<ClientConnection, number>();
+const preferenceWrites = new WeakMap<ClientConnection, Promise<unknown>>();
+let requestOrder = 0;
+
 export async function apiFetch<T>(
   connection: ClientConnection,
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  if (path === "/v1/preferences" && typeof init?.body === "string") {
+    const previous = preferenceWrites.get(connection) ?? Promise.resolve();
+    const write = previous.catch(() => undefined).then(() => performFetch<T>(connection, path, init));
+    preferenceWrites.set(connection, write);
+    try { return await write; }
+    finally { if (preferenceWrites.get(connection) === write) preferenceWrites.delete(connection); }
+  }
+  return performFetch<T>(connection, path, init);
+}
+
+async function performFetch<T>(connection: ClientConnection, path: string, init?: RequestInit): Promise<T> {
+  const order = ++requestOrder;
+  if (path === "/v1/preferences" && typeof init?.body === "string") {
+    const expectedRevision = preferenceRevisions.get(connection);
+    if (!expectedRevision) throw new Error("Reload settings before saving so changes can be checked against the current file.");
+    init = { ...init, body: JSON.stringify({ expectedRevision, ...JSON.parse(init.body) }) };
+  }
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
   headers.set("Authorization", `Bearer ${connection.token}`);
@@ -41,7 +63,12 @@ export async function apiFetch<T>(
         : response.statusText;
     throw new Error(error);
   }
-  return (await response.json()) as T;
+  const payload = await response.json();
+  const revision = payload?.configuration?.rawRevision ?? (path === "/v1/preferences" ? payload?.rawRevision : undefined);
+  if (typeof revision === "string" && order >= (responseOrders.get(connection) ?? 0)) {
+    preferenceRevisions.set(connection, revision); responseOrders.set(connection, order);
+  }
+  return payload as T;
 }
 
 export {

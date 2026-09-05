@@ -38,7 +38,7 @@ describe("Taskset draft persistence", () => {
       expect(await readFile(path.join(workspace!.workspacePath, "taskset.json"), "utf8"))
         .toContain("Store proof");
 
-      const db = openTestDatabase(path.join(directory, "state.sqlite"));
+      const db = openTestDatabase(path.join(directory, "state", "state.sqlite"));
       try {
         const row = await getTestSql<{ payload: string }>(
           db,

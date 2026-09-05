@@ -182,7 +182,7 @@ async function checkInstalledEntrypoints(input: {
     cwd: await tempDir("openpond-cli-tui-cwd-"),
     env: {
       HOME: tuiHome,
-      OPENPOND_APP_HOME: path.join(tuiHome, ".openpond", "openpond-app"),
+      OPENPOND_HOME: path.join(tuiHome, ".openpond", "openpond-app"),
       USERPROFILE: tuiHome,
     },
     stdin: "/exit\n",
@@ -264,7 +264,7 @@ async function checkDefaultNpxWebLaunch(
     env: {
       ...process.env,
       HOME: userHome,
-      OPENPOND_APP_HOME: appHome,
+      OPENPOND_HOME: appHome,
       OPENPOND_BROWSER_CAPTURE_FILE: browserCapture,
       OPENPOND_FORCE_EMBEDDED_COMPANIONS: "1",
       PATH: `${browserBin}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -364,7 +364,7 @@ async function checkRunnableDistribution(commandName: string, prefixArgs: string
   const cwd = await tempDir("openpond-cli-cwd-");
   const appHome = await tempDir("openpond-cli-home-");
   const env = {
-    OPENPOND_APP_HOME: appHome,
+    OPENPOND_HOME: appHome,
     OPENPOND_FORCE_EMBEDDED_COMPANIONS: "1",
   };
   const durations: number[] = [];

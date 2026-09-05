@@ -93,7 +93,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSection>([
   "harness-releases",
   "profile",
   "skills",
-  "defaults",
+  "configuration",
   "context",
   "training",
   "subagents",
