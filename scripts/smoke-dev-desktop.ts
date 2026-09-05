@@ -375,7 +375,15 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
       ),
     5_000,
     "Experience menu did not open from the keyboard."
-  );
+  ).catch(async (error: unknown) => {
+    const focusState = await evaluateValue(cdp, `(() => ({
+      focused: document.hasFocus(),
+      activeElement: document.activeElement?.outerHTML?.slice(0, 1000),
+      trigger: document.querySelector(".sidebar-experience-trigger")?.outerHTML,
+      menu: document.querySelector(".sidebar-experience-popover")?.outerHTML
+    }))()`);
+    throw new Error(`${String(error)} Focus state: ${JSON.stringify(focusState)}`);
+  });
   const keyboardMenuPassed =
     keyboardMenu.labels.join(",") === "Work,Models" &&
     keyboardMenu.focusedProductArea === "chat";
