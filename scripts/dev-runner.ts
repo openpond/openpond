@@ -644,7 +644,7 @@ async function readToken(file: string): Promise<string | null> {
 }
 
 function tokenFilePath(appHome: string): string {
-  return path.join(appHome, "token");
+  return path.join(appHome, "secrets", "server-token");
 }
 
 function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {

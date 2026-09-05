@@ -8,7 +8,7 @@ import { promises as fs } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -221,6 +221,25 @@ describe("persistence data and concurrency boundaries", () => {
     } finally { await migrated.close(); }
     expect((await initializeHome(home)).status).toBe("current");
     expect(await readFile(path.join(source, "state.sqlite"))).toBeTruthy();
+  });
+
+  // Development upgrades must preserve the previously shared login without importing stable history.
+  test("imports shared account custody into the known development home without selecting stable history", async () => {
+    const global = path.join(home, ".openpond"), development = path.join(global, "openpond-app-dev");
+    await mkdir(development, { recursive: true });
+    await mkdir(path.join(global, "openpond-app"));
+    const devDb = new DatabaseSync(path.join(development, "state.sqlite"));
+    devDb.exec("CREATE TABLE sessions (id TEXT PRIMARY KEY, payload TEXT); INSERT INTO sessions VALUES ('development', '{}')"); devDb.close();
+    const stableDb = new DatabaseSync(path.join(global, "openpond-app", "state.sqlite"));
+    stableDb.exec("CREATE TABLE sessions (id TEXT PRIMARY KEY, payload TEXT); INSERT INTO sessions VALUES ('stable', '{}')"); stableDb.close();
+    await writeFile(path.join(global, "config.json"), JSON.stringify({ accounts: [{ handle: "developer", baseUrl: "https://dev.example", apiKey: "development-key" }] }));
+    const machineHome = vi.spyOn(os, "homedir").mockReturnValue(home);
+    try {
+      await initializeHome(development);
+      expect((await readAccountConfiguration(development)).accounts).toMatchObject([{ handle: "developer", apiKey: "development-key" }]);
+      const migrated = new DatabaseSync(storagePaths(development).database, { readOnly: true });
+      expect(migrated.prepare("SELECT id FROM sessions").all()).toEqual([{ id: "development" }]); migrated.close();
+    } finally { machineHome.mockRestore(); }
   });
 
   // Existing state without a layout marker must never be overwritten by an unrelated import.

@@ -11,8 +11,11 @@ const execute = promisify(execFile);
 export type MigrationOptions = { sourceAppHome?: string; sourceConfig?: string; sourceBrowserState?: string; dryRun?: boolean; resolutions?: MigrationResolutions };
 export async function discoverMigrationSources(home: string, options: MigrationOptions) {
   const nightly = home === path.join(os.homedir(), ".openpond-nightly");
-  const oldGlobal = nightly ? path.join(os.homedir(), ".openpond") : home;
-  const appCandidates = [home, path.join(oldGlobal, nightly ? "openpond-app-nightly" : "openpond-app")].filter((root) => existsSync(path.join(root, "state.sqlite")) || existsSync(path.join(root, "providers.json")));
+  const globalHome = path.join(os.homedir(), ".openpond");
+  const development = ["openpond-app-dev", "openpond-app-nightly-dev"].some((name) => home === path.join(globalHome, name));
+  const oldGlobal = nightly || development ? globalHome : home;
+  // The known development layout shared account config, but never the stable app database.
+  const appCandidates = (development ? [home] : [home, path.join(oldGlobal, nightly ? "openpond-app-nightly" : "openpond-app")]).filter((root) => existsSync(path.join(root, "state.sqlite")) || existsSync(path.join(root, "providers.json")));
   const configCandidates = [...new Set([path.join(oldGlobal, "config.json"), path.join(home, "config", "config.json")])].filter(existsSync);
   const issues: { code: string; message: string; paths: string[] }[] = [];
   if (!options.sourceAppHome && appCandidates.length > 1) issues.push({ code: "AMBIGUOUS_APP_HOME", message: "Select the previous app home with --source-app-home.", paths: appCandidates });
