@@ -91,6 +91,9 @@ async function main(): Promise<void> {
     );
     const devtoolsTargetMs = Date.now() - launchedAt;
     cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
+    // Headless X11 runners have no window manager to activate the test window.
+    // Keep keyboard focus and animation-frame delivery deterministic there.
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
     await waitForRendererBridge(cdp, timeoutMs);
     const rendererBridgeMs = Date.now() - launchedAt;
     const rendererState = await waitForRendererReady(cdp, timeoutMs);

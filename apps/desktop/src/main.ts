@@ -847,8 +847,9 @@ function configureApplicationMenu(): void {
   );
 }
 
-const previousBrowserUserData = process.env.OPENPOND_DESKTOP_USER_DATA_DIR?.trim()
-  ? path.resolve(process.env.OPENPOND_DESKTOP_USER_DATA_DIR)
+const explicitBrowserUserData = process.env.OPENPOND_DESKTOP_USER_DATA_DIR?.trim() || app.commandLine.getSwitchValue("user-data-dir").trim();
+const previousBrowserUserData = explicitBrowserUserData
+  ? path.resolve(explicitBrowserUserData)
   : !app.isPackaged ? path.join(app.getPath("appData"), "openpond-dev") : app.getPath("userData");
 let browserHomeMigration: ReturnType<typeof prepareDesktopBrowserHome> | null = null;
 let browserHomeError: unknown = null;
