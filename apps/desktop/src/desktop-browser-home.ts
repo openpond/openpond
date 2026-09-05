@@ -1,6 +1,6 @@
 import { assertStorageAncestors, protectPrivateDirectory } from "@openpond/persistence";
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, cpSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, cpSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
@@ -80,8 +80,14 @@ function saveReceipt(file: string, receipt: Receipt): void {
   } finally { rmSync(temporary, { force: true }); }
 }
 function flush(file: string): void {
-  if (process.platform === "win32" && lstatSync(file).isDirectory()) return;
-  const descriptor = openSync(file, "r"); try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
+  const stat = lstatSync(file), windows = process.platform === "win32";
+  if (windows && stat.isDirectory()) return;
+  const readonlyCopy = windows && !(stat.mode & 0o200);
+  if (readonlyCopy) chmodSync(file, stat.mode | 0o200);
+  try {
+    const descriptor = openSync(file, windows ? "r+" : "r");
+    try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
+  } finally { if (readonlyCopy) chmodSync(file, stat.mode); }
 }
 function digest(file: string): string {
   const hash = createHash("sha256"), buffer = Buffer.alloc(1024 * 1024), descriptor = openSync(file, "r");

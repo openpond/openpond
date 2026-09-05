@@ -72,8 +72,9 @@ export async function snapshotCopy(source: string, target: string): Promise<void
     const temporary = `${target}.${randomUUID()}.snapshot`;
     try {
       await fs.copyFile(source, temporary, fs.constants.COPYFILE_EXCL);
-      if (process.platform !== "win32") await fs.chmod(temporary, stat.mode & 0o100 ? 0o700 : 0o600);
-      const handle = await fs.open(temporary, "r");
+      // Only this new copy changes mode; Windows requires a writable handle to flush.
+      await fs.chmod(temporary, stat.mode & 0o100 ? 0o700 : 0o600);
+      const handle = await fs.open(temporary, "r+");
       try { await handle.sync(); } finally { await handle.close(); }
       await fs.link(temporary, target);
       if (process.platform !== "win32") {

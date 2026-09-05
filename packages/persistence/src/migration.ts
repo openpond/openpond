@@ -92,7 +92,7 @@ async function captureSources(journal: MigrationJournal): Promise<void> {
       const temporary = `${target}.${randomUUID()}.tmp`, db = openStorageDatabase(originalDb, true);
       try {
         await backup(db, temporary);
-        const file = await fs.open(temporary, "r"); try { await file.sync(); } finally { await file.close(); }
+        const file = await fs.open(temporary, "r+"); try { await file.sync(); } finally { await file.close(); }
         await fs.rename(temporary, target);
         if (process.platform !== "win32") { const directory = await fs.open(path.dirname(target), "r"); try { await directory.sync(); } finally { await directory.close(); } }
       }
@@ -165,10 +165,10 @@ async function install(journal: MigrationJournal): Promise<void> {
         const temporary = `${target}.${randomUUID()}.migration`;
         try {
           await fs.copyFile(source, temporary);
-          // copyFile preserves immutable artifact permissions; flushing needs no write access.
-          const handle = await fs.open(temporary, "r");
+          // Make only the new copy writable for Windows FlushFileBuffers.
+          await fs.chmod(temporary, file.executable ? 0o700 : 0o600);
+          const handle = await fs.open(temporary, "r+");
           try { await handle.sync(); } finally { await handle.close(); }
-          if (process.platform !== "win32") await fs.chmod(temporary, file.executable ? 0o700 : 0o600);
           await fs.rename(temporary, target);
         } finally { await fs.rm(temporary, { force: true }); }
       }
