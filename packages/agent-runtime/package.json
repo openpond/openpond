@@ -1,6 +1,6 @@
 {
   "name": "@openpond/agent-runtime",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "openpondReleaseVersioned": true,
   "description": "Private host-neutral agent execution engine for OpenPond app-server",
   "license": "MIT",
