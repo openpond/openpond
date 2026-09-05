@@ -169,8 +169,9 @@ describe("persistence data and concurrency boundaries", () => {
     db.close();
     await mkdir(path.join(source, "harnesses", "project"), { recursive: true });
     await writeFile(path.join(source, "harnesses", "project", "source.json"), '{"immutable":"source-bytes"}');
-    // Immutable artifacts must survive migration without reopening copies for writing.
-    await fs.chmod(path.join(source, "harnesses", "project", "source.json"), 0o400);
+    // Attachment import creates immutable objects; installation must handle their read-only mode.
+    await mkdir(path.join(source, "attachments", "session-1", "turn-1"), { recursive: true });
+    await writeFile(path.join(source, "attachments", "session-1", "turn-1", "kept.txt"), "Preserved attachment");
     await writeFile(path.join(source, "soul-primary.md"), "Selected personality\n");
     await writeFile(path.join(source, "SOUL.md"), "Distinct stale SOUL text\n");
     await writeFile(path.join(source, "personalization.json"), JSON.stringify({ version: 1, activeTemplateId: "default", updatedAt: timestamp }));
@@ -195,7 +196,7 @@ describe("persistence data and concurrency boundaries", () => {
     await writeFile(browserFile, JSON.stringify({ conversations: { "session-1": browserState } }));
     const report = await initializeHome(home, { sourceBrowserState: browserFile });
     expect(report.status).toBe("verified");
-    expect(await readFile(path.join(home, "library", "harnesses", "project", "source.json"), "utf8")).toBe('{"immutable":"source-bytes"}');
+    expect(await withManagedArtifact(home, { domain: "chat_attachment", id: JSON.stringify(["session-1", "turn-1", "kept.txt"]) }, (file) => readFile(file, "utf8"))).toBe("Preserved attachment");
     expect(getLocalRecord(home, "browser_tab_state", "session-1")?.value).toEqual(browserState);
     const accounts = await readAccountConfiguration(home);
     expect(accounts.activeProfile).toMatchObject({ handle: "two", baseUrl: "https://two.example" });

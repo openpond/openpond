@@ -165,7 +165,8 @@ async function install(journal: MigrationJournal): Promise<void> {
         const temporary = `${target}.${randomUUID()}.migration`;
         try {
           await fs.copyFile(source, temporary);
-          const handle = await fs.open(temporary, "r+");
+          // copyFile preserves immutable artifact permissions; flushing needs no write access.
+          const handle = await fs.open(temporary, "r");
           try { await handle.sync(); } finally { await handle.close(); }
           if (process.platform !== "win32") await fs.chmod(temporary, file.executable ? 0o700 : 0o600);
           await fs.rename(temporary, target);
