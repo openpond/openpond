@@ -8,6 +8,7 @@ export async function bundleServer(): Promise<void> {
     entryPoints: [fromRoot("apps", "server", "src", "index.ts")],
     outfile,
     external: ["node-pty"],
+    minifyWhitespace: true,
   });
   await makeExecutable(outfile);
 }
