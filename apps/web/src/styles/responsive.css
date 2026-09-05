@@ -168,6 +168,15 @@
     text-align: left;
   }
 
+  .account-build-footnote {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .account-build-actions {
+    justify-content: flex-start;
+  }
+
   .lsp-language-row {
     grid-template-columns: 1fr;
     align-items: stretch;

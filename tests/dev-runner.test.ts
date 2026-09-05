@@ -78,6 +78,7 @@ describe("dev runner", () => {
       OPENPOND_SERVER_PORT: "17874",
       OPENPOND_WEB_PORT: "17876",
       OPENPOND_WEB_URL: "http://127.0.0.1:17876",
+      OPENPOND_DESKTOP_DEV_MODE: "1",
     });
   });
 
@@ -155,6 +156,9 @@ describe("dev runner", () => {
       OPENPOND_WEB_PORT: "17878",
       OPENPOND_WEB_URL: "http://127.0.0.1:17878",
     });
+    expect(
+      plan.processes.find((processPlan) => processPlan.id === "desktop")?.env,
+    ).not.toHaveProperty("OPENPOND_DESKTOP_DEV_MODE");
   });
 
   test("requires one origin for Stable Desktop's built UI and API", () => {

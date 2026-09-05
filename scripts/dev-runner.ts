@@ -204,7 +204,13 @@ export function buildDevRunnerPlan(
     setupCommands.push(command("build-desktop", pnpmBinary(env), ["run", "build:desktop"], root));
     processes.push(watchedServerCommand(root, env, serverPort, serverEnv, options.watch));
     processes.push(command("renderer", pnpmBinary(env), ["--dir", "apps/web", "run", "dev"], root, rendererEnv));
-    processes.push(command("desktop", electronBinary(root), ["."], path.join(root, "apps", "desktop"), desktopEnv));
+    processes.push(command(
+      "desktop",
+      electronBinary(root),
+      ["."],
+      path.join(root, "apps", "desktop"),
+      { ...desktopEnv, OPENPOND_DESKTOP_DEV_MODE: "1" },
+    ));
   }
 
   if (stableDesktop) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
-import { Plus, RefreshCw, Settings, Trash2 } from "../icons";
+import { ExternalLink, Plus, RefreshCw, Settings, Trash2 } from "../icons";
 import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
 import { AccountAvatar, AccountStateBadge } from "../account/AccountBadges";
@@ -92,6 +92,9 @@ export function AccountSettingsSection({
   const [savingEndpointKey, setSavingEndpointKey] = useState<string | null>(
     null
   );
+  const [desktopRuntimeInfo, setDesktopRuntimeInfo] =
+    useState<OpenPondDesktopRuntimeInfo | null>(null);
+  const [reloadingDesktop, setReloadingDesktop] = useState(false);
   const {
     confirmAction: confirmAccountAction,
     confirmDialog: accountConfirmDialog,
@@ -176,6 +179,42 @@ export function AccountSettingsSection({
     endpointDialogKey && savingEndpointKey === endpointDialogKey
   );
   const shouldWarnAccountScopeChange = signedIn || authError;
+  const buildVersion = firstPresentText(
+    desktopRuntimeInfo?.version,
+    payload?.server.version,
+    "Loading"
+  );
+  const buildContext = desktopRuntimeInfo
+    ? desktopRuntimeInfo.devMode
+      ? "Dev mode"
+      : desktopRuntimeInfo.packaged
+      ? `${capitalize(desktopRuntimeInfo.releaseChannel)} build`
+      : "Local build"
+    : null;
+  const signUpUrl = accountSignUpUrl(
+    firstPresentText(
+      activeCandidate?.baseUrl,
+      account?.activeProfile?.baseUrl,
+      account?.baseUrl,
+      "https://openpond.ai"
+    )
+  );
+
+  useEffect(() => {
+    const getDesktopRuntimeInfo = window.openpond?.getDesktopRuntimeInfo;
+    if (!getDesktopRuntimeInfo) return;
+    let cancelled = false;
+    void getDesktopRuntimeInfo()
+      .then((info) => {
+        if (!cancelled) setDesktopRuntimeInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setDesktopRuntimeInfo(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!connection || !organizationCacheKey) {
@@ -361,6 +400,34 @@ export function AccountSettingsSection({
     }
   }
 
+  async function reloadDesktopApp() {
+    const reload = window.openpond?.reloadDesktopApp;
+    if (!reload || reloadingDesktop) return;
+    setReloadingDesktop(true);
+    onError(null);
+    try {
+      const result = await reload();
+      if (!result.ok) {
+        throw new Error(result.error ?? "OpenPond could not refresh the app.");
+      }
+    } catch (caught) {
+      setReloadingDesktop(false);
+      onError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }
+
+  async function openSignUp() {
+    const browser = window.openpond?.browser;
+    if (browser?.openExternal) {
+      const result = await browser.openExternal({
+        conversationId: "openpond-account-sign-up",
+        url: signUpUrl,
+      });
+      if (result.ok) return;
+    }
+    window.open(signUpUrl, "_blank", "noopener,noreferrer");
+  }
+
   return (
     <section className="account-settings">
       <div className="account-settings-title">
@@ -544,9 +611,49 @@ export function AccountSettingsSection({
         </div>
       )}
 
-      <div className="settings-footnote">
-        <span>{payload?.server.runtimeVersion ?? "Runtime loading"}</span>
-        <strong>{connection?.serverUrl ?? "loading"}</strong>
+      <div className="settings-footnote account-build-footnote">
+        <div className="account-build-details">
+          <span>Build version</span>
+          <div className="account-build-version">
+            <strong>{formatBuildVersion(buildVersion)}</strong>
+            {buildContext ? (
+              <span
+                className={`account-build-context${
+                  desktopRuntimeInfo?.devMode ? " development" : ""
+                }`}
+              >
+                {buildContext}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="account-build-actions">
+          {desktopRuntimeInfo?.canReload ? (
+            <button
+              className="settings-secondary compact"
+              disabled={reloadingDesktop}
+              type="button"
+              title="Reload the local Electron app"
+              onClick={() => void reloadDesktopApp()}
+            >
+              <RefreshCw
+                className={reloadingDesktop ? "settings-spin" : undefined}
+                size={14}
+              />
+              <span>{reloadingDesktop ? "Refreshing" : "Refresh app"}</span>
+            </button>
+          ) : null}
+          {!signedIn ? (
+            <button
+              className="settings-primary compact account-sign-up-action"
+              type="button"
+              onClick={() => void openSignUp()}
+            >
+              <span>Sign up</span>
+              <ExternalLink size={13} />
+            </button>
+          ) : null}
+        </div>
       </div>
       {accountError ? (
         <div className="settings-footnote warning account-error-footnote">
@@ -631,4 +738,22 @@ function customEnvironmentName(value?: string | null): string {
   const trimmed = value?.trim();
   if (!trimmed || trimmed.toLowerCase() === "production") return "custom";
   return trimmed;
+}
+
+function accountSignUpUrl(baseUrl: string): string {
+  try {
+    return new URL("/login", baseUrl).toString();
+  } catch {
+    return "https://openpond.ai/login";
+  }
+}
+
+function formatBuildVersion(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "Loading") return "Loading";
+  return trimmed.startsWith("v") ? trimmed : `v${trimmed}`;
+}
+
+function capitalize(value: string): string {
+  return value ? `${value[0]!.toUpperCase()}${value.slice(1)}` : value;
 }

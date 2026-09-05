@@ -79,6 +79,9 @@ const VISION_REASONING_MODEL_CAPABILITIES: Partial<ProviderModelCapabilities> = 
 
 const LEGACY_OPENAI_DEFAULT_MODEL = "gpt-5.5";
 const CURRENT_OPENAI_DEFAULT_MODEL = "gpt-5.6-sol";
+const LEGACY_OPENPOND_CHAT_MODEL = "openpond-chat";
+const DEFAULT_OPENPOND_MANAGED_MODEL =
+  "accounts/fireworks/models/deepseek-v4-pro";
 const CURRENT_OPENAI_MODEL_IDS = new Set([
   "gpt-5.6-sol",
   "gpt-5.6-terra",
@@ -130,14 +133,13 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
       toolCalling: true,
     },
     defaultEnabled: true,
-    defaultModel: "openpond-chat",
+    defaultModel: DEFAULT_OPENPOND_MANAGED_MODEL,
     modelCacheSource: "hosted",
     models: [
       {
-        id: "openpond-chat",
+        id: DEFAULT_OPENPOND_MANAGED_MODEL,
         displayName: "DeepSeek V4 Pro",
         contextWindow: 1_048_576,
-        outputLimit: 393_216,
         capabilities: REASONING_MODEL_CAPABILITIES,
       },
       {
@@ -147,20 +149,14 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
         capabilities: VISION_REASONING_MODEL_CAPABILITIES,
       },
       {
-        id: "accounts/fireworks/models/glm-5p2",
-        displayName: "GLM-5.2",
-        contextWindow: 1_048_576,
-        capabilities: REASONING_MODEL_CAPABILITIES,
-      },
-      {
-        id: "accounts/fireworks/models/deepseek-v4-pro",
-        displayName: "DeepSeek V4 Pro (Fireworks)",
+        id: "accounts/fireworks/models/glm-5p3",
+        displayName: "GLM-5.3",
         contextWindow: 1_048_576,
         capabilities: REASONING_MODEL_CAPABILITIES,
       },
       {
         id: "accounts/fireworks/models/deepseek-v4-flash",
-        displayName: "DeepSeek V4 Flash (Fireworks)",
+        displayName: "DeepSeek V4 Flash",
         contextWindow: 1_048_576,
         capabilities: REASONING_MODEL_CAPABILITIES,
       },
@@ -353,11 +349,6 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
         capabilities: REASONING_MODEL_CAPABILITIES,
       },
       {
-        id: "z-ai/glm-5.2",
-        displayName: "GLM-5.2",
-        capabilities: REASONING_MODEL_CAPABILITIES,
-      },
-      {
         id: "qwen/qwen3-coder",
         displayName: "Qwen3 Coder",
         capabilities: REASONING_MODEL_CAPABILITIES,
@@ -405,16 +396,9 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
       reasoning: true,
     },
     defaultBaseUrl: ZAI_CODING_PLAN_BASE_URL,
-    defaultModel: "glm-5.2",
+    defaultModel: "glm-5.1",
     modelCacheSource: "curated",
     models: [
-      {
-        id: "glm-5.2",
-        displayName: "GLM-5.2",
-        contextWindow: 1_000_000,
-        outputLimit: 128_000,
-        capabilities: REASONING_MODEL_CAPABILITIES,
-      },
       {
         id: "glm-5.1",
         displayName: "GLM-5.1",
@@ -591,11 +575,18 @@ function normalizeOpenPondManagedPreset(
   if (!fallback) return preset;
   const models = new Map<string, ProviderPresetModel>();
   for (const model of [...fallback.models, ...preset.models]) {
+    if (model.id === LEGACY_OPENPOND_CHAT_MODEL) continue;
     if (!models.has(model.id)) models.set(model.id, model);
   }
+  const defaultModel =
+    preset.defaultModel &&
+    preset.defaultModel !== LEGACY_OPENPOND_CHAT_MODEL &&
+    models.has(preset.defaultModel)
+      ? preset.defaultModel
+      : fallback.defaultModel;
   return {
     ...preset,
-    defaultModel: preset.defaultModel ?? fallback.defaultModel,
+    defaultModel,
     models: [...models.values()],
   };
 }
@@ -662,12 +653,19 @@ function providerConfigForPreset(
   const storedDefaultModel =
     OPENAI_FAMILY_PROVIDER_IDS.has(preset.id) && stored?.defaultModel === LEGACY_OPENAI_DEFAULT_MODEL
       ? CURRENT_OPENAI_DEFAULT_MODEL
+      : preset.id === "openpond" && stored?.defaultModel === LEGACY_OPENPOND_CHAT_MODEL
+        ? preset.defaultModel
       : stored?.defaultModel;
   return ProviderConfigSchema.parse({
     enabled: stored?.enabled ?? preset.defaultEnabled ?? false,
     baseUrl: storedBaseUrl ?? presetBaseUrl,
     defaultModel: storedDefaultModel ?? preset.defaultModel ?? null,
-    modelOverrides: stored?.modelOverrides ?? [],
+    modelOverrides:
+      preset.id === "openpond"
+        ? (stored?.modelOverrides ?? []).filter(
+            (modelId) => modelId !== LEGACY_OPENPOND_CHAT_MODEL,
+          )
+        : stored?.modelOverrides ?? [],
     updatedAt: stored?.updatedAt ?? null,
   });
 }
@@ -773,6 +771,10 @@ function modelCacheForSettings(
   const cachedModels =
     preset.id === "openai"
       ? (existing?.models ?? []).filter((model) => model.id !== LEGACY_OPENAI_DEFAULT_MODEL)
+      : preset.id === "openpond"
+        ? (existing?.models ?? []).filter(
+            (model) => model.id !== LEGACY_OPENPOND_CHAT_MODEL,
+          )
       : existing?.models ?? [];
   const starterModels = starterModelsForPreset(preset, config, cacheSource);
   const modelCandidates = STARTER_MODELS_FIRST_PROVIDER_IDS.has(preset.id)
