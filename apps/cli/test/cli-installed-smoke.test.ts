@@ -99,7 +99,7 @@ describe("CLI installed-package smoke", () => {
         [
           join(cliRoot, packageJson.bin!.openpond!),
           "app-server",
-          "--store-dir",
+          "--home",
           storeDir,
         ],
         {

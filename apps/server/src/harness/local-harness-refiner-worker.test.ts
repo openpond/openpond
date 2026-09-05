@@ -1,3 +1,4 @@
+import { initializeRefinerProfile } from "../refiner/refiner-profile-service.js";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -76,6 +77,7 @@ afterEach(async () => {
 async function fixture(runId: string) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-refiner-"));
   const store = new SqliteStore(directory);
+    await initializeRefinerProfile(directory);
   cleanup.push({ directory, store });
   const created = await createLocalHarnessWorkspace({
     store,

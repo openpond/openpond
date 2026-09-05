@@ -81,7 +81,7 @@ export async function runConfigurationCommand(options: Options, rest: string[]):
     return;
   }
   await initializeHome(home);
-  if (command === "clear-cache") { clearCache(home); print({ cleared: true, path: storagePaths(home).cache }); return; }
+  if (command === "clear-cache") { await clearCache(home); print({ cleared: true, path: storagePaths(home).cache }); return; }
   const snapshot = await readConfig(home);
   if (command === "get") {
     if (!rest[1] && !options.keyPath) { print(snapshot); return; }

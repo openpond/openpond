@@ -119,7 +119,6 @@ export function useAppBootstrap(params: {
   const codexHistorySessionsRef = useRef<Session[]>([]);
   const bootstrapServerIdRef = useRef<string | null>(null);
   const defaultTeamSyncKeyRef = useRef<string | null>(null);
-  const latestDefaultTeamIdRef = useRef("");
   const startupReadyRef = useRef(false);
   const startupStartedAtRef = useRef(Date.now());
   const startupCompleteTimerRef = useRef<number | null>(null);
@@ -201,7 +200,6 @@ export function useAppBootstrap(params: {
               serverId: payload.server.id,
             },
       );
-      latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
       setBootstrap(payload);
       if (sameServer) runtimeEventStore.mergeBootstrap(payload.events);
       else runtimeEventStore.replace(payload.events);
@@ -277,7 +275,6 @@ export function useAppBootstrap(params: {
   );
 
   const applyPreferencesPayload = useCallback((payload: PreferencesPayload) => {
-    latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
     setBootstrap((current) => (current ? { ...current, preferences: payload.preferences } : current));
   }, []);
 
@@ -386,42 +383,13 @@ export function useAppBootstrap(params: {
           completeStartup();
           return;
         }
-        const latestDefaultTeamId = latestDefaultTeamIdRef.current;
-        if (latestDefaultTeamId && latestDefaultTeamId !== currentDefaultTeamId) {
+        if (currentDefaultTeamId) {
+          setError("The configured default team is unavailable for this account. Select an available team in account settings.");
           completeStartup();
           return;
         }
-        const preloadAgentsPromise = preloadTeamAgents(fallbackTeamId);
-        defaultTeamSyncKeyRef.current = defaultTeamPreferenceSyncKey(
-          accountKey,
-          fallbackTeamId,
-          bootstrap.accountMeta.asOf ?? "initial",
-        );
-        const updatedPayload = await api.savePreferences(connection, { defaultTeamId: fallbackTeamId });
-        await preloadAgentsPromise;
-        const latestDefaultTeamIdAfterSave = latestDefaultTeamIdRef.current;
-        if (cancelled) {
-          if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== fallbackTeamId) {
-            void api
-              .savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave })
-              .then(applyPreferencesPayload)
-              .catch((defaultTeamError) => {
-                setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
-              });
-          }
-          return;
-        }
-        if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== fallbackTeamId) {
-          applyPreferencesPayload(
-            await api.savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave }),
-          );
-          completeStartup();
-          return;
-        }
-        if (!cancelled) {
-          applyPreferencesPayload(updatedPayload);
-          completeStartup();
-        }
+        await preloadTeamAgents(fallbackTeamId);
+        if (!cancelled) completeStartup();
       })
       .catch((defaultTeamError) => {
         if (cancelled) return;

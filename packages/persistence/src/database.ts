@@ -1,3 +1,4 @@
+import { protectPrivateDirectory } from "./private-permissions.js";
 import { assertStorageAncestors } from "./path-safety.js";
 import { mkdirSync, chmodSync, existsSync, lstatSync } from "node:fs";
 import path from "node:path";
@@ -27,7 +28,7 @@ type RecordRow = { payload: string; revision: number };
 
 export function openStorageDatabase(filePath: string, readOnly = false): DatabaseSync {
   assertStorageAncestors(path.dirname(filePath));
-  if (!readOnly) mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  if (!readOnly) { mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 }); protectPrivateDirectory(path.dirname(filePath)); }
   if (existsSync(filePath) && lstatSync(filePath).isSymbolicLink()) throw new PersistenceError({ code: "UNSAFE_STORAGE_PATH", path: filePath, message: "Storage database cannot be a symbolic link.", action: "Choose a regular local database file." });
   const db = new DatabaseSync(filePath, { readOnly });
   try {

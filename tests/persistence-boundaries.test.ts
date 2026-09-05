@@ -1,3 +1,10 @@
+import { createCipheriv } from "node:crypto";
+import { SessionSchema, LocalAgentScheduleSchema, LocalAgentScheduleRunSchema } from "@openpond/contracts";
+import { SqliteStore } from "../apps/server/src/store/store";
+import { reconcileInterruptedScheduledWork } from "../apps/server/src/runtime/scheduled-work-recovery";
+import { ownHomeRuntime } from "../apps/server/src/runtime/home-runtime-owner";
+import { prepareDesktopBrowserHome } from "../apps/desktop/src/desktop-browser-home";
+import { promises as fs } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
@@ -9,6 +16,7 @@ import {
   initializeHome, readConfig, patchConfig, updatePreferences, readPreferences, clearCache,
   writeCredential, readCredential, storagePaths, getLocalRecord, resolveEffectiveConfig, setProjectTrust,
   assertConfigRunCurrent, deleteCredential, exportRecoveryBackup, restoreRecoveryBackup, exportSettings,
+  readCache, writeCache, readAccountConfiguration, recoverMigration, readMigrationJournal,
   publishManagedArtifact, withManagedArtifact, releaseArtifactReference, collectArtifactOrphans,
 } from "../packages/persistence/src/index";
 import { startRecoveryServer } from "../apps/server/src/api/startup-recovery";
@@ -20,6 +28,22 @@ describe("persistence data and concurrency boundaries", () => {
   let home: string;
   beforeEach(async () => { home = await mkdtemp(path.join(tmpdir(), "openpond-storage-boundary-")); });
   afterEach(async () => { await rm(home, { recursive: true, force: true }); });
+
+  // Vault custody must not inherit access granted to unrelated machine users.
+  test("restricts credential custody to the current OS user", async () => {
+    await initializeHome(home);
+    await writeCredential(home, "private-owner", { token: "private" });
+    if (process.platform === "win32") {
+      const { stdout } = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+        "$acl=Get-Acl -LiteralPath $env:OPENPOND_ACL_TEST_PATH; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; [pscustomobject]@{Protected=$acl.AreAccessRulesProtected; OtherAllow=@($acl.Access | Where-Object {$_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -ne $sid.Value}).Count} | ConvertTo-Json -Compress"],
+        { env: { ...process.env, OPENPOND_ACL_TEST_PATH: path.dirname(storagePaths(home).key) } });
+      expect(JSON.parse(stdout)).toEqual({ Protected: true, OtherAllow: 0 });
+    } else {
+      expect((await fs.stat(path.dirname(storagePaths(home).key))).mode & 0o777).toBe(0o700);
+      expect((await fs.stat(storagePaths(home).key)).mode & 0o777).toBe(0o600);
+      expect((await fs.stat(storagePaths(home).credentials)).mode & 0o777).toBe(0o600);
+    }
+  }, 30_000);
 
   // Independent CLI processes must not lose each other's settings or accept stale edits.
   test("serializes separate process edits and preserves manual TOML comments", async () => {
@@ -53,7 +77,7 @@ describe("persistence data and concurrency boundaries", () => {
   test("preserves preference changes across cache deletion and restart", async () => {
     await initializeHome(home);
     await updatePreferences(home, { sidebarWidth: 315, steerActiveResponses: false, defaultChatProvider: "openai", defaultChatModel: "chosen-model" });
-    clearCache(home);
+    await clearCache(home);
     await initializeHome(home);
     expect((await readPreferences(home)).preferences).toMatchObject({ sidebarWidth: 315, steerActiveResponses: false, defaultChatModelRef: { providerId: "openai", modelId: "chosen-model" } });
     const text = await readFile(storagePaths(home).config, "utf8");
@@ -87,26 +111,107 @@ describe("persistence data and concurrency boundaries", () => {
 
   // Migration must preserve durable SQL rows and settings while retaining the original backup.
   test("imports old preferences and retains history and schedule rows without executing them", async () => {
-    const source = path.join(home, "openpond-app");
+    const source = path.join(home, "openpond-app"), timestamp = new Date().toISOString();
     await mkdir(source);
+    const oldStore = new SqliteStore(source);
+    await oldStore.mutate((data) => { data.sessions.push(SessionSchema.parse({ id: "session-1", provider: "openpond", title: "Saved history", appId: null, appName: null, cwd: source, codexThreadId: null, createdAt: timestamp, updatedAt: timestamp, status: "idle", pinned: true, archived: false, order: 3 })); });
+    const schedule = LocalAgentScheduleSchema.parse({ id: "disabled-schedule", localProjectId: "saved-project", localProjectName: "Saved", agentRootPath: path.join(source, "harnesses", "project"), agentName: "saved", scheduleName: "daily", scheduleType: "rate", scheduleExpression: "1 hour", timezone: "UTC", targetAction: "run", enabledByDefault: true, enabled: false, sourceHash: "unchanged-source", manifestHash: null, nextRunAt: null, lastRunAt: null, lastRunStatus: null, lastRunId: null, lastError: null, createdAt: timestamp, updatedAt: timestamp });
+    await oldStore.upsertLocalAgentSchedule(schedule); await oldStore.close();
+    await fs.rename(storagePaths(source).database, path.join(source, "state.sqlite"));
+    await rm(path.join(source, "state"), { recursive: true, force: true });
     const db = new DatabaseSync(path.join(source, "state.sqlite"));
-    db.exec("CREATE TABLE cache_entries (type TEXT, cache_key TEXT, payload TEXT, updated_at TEXT, error TEXT); CREATE TABLE sessions (id TEXT PRIMARY KEY, payload TEXT); CREATE TABLE schedules (id TEXT PRIMARY KEY, payload TEXT);");
-    db.prepare("INSERT INTO cache_entries VALUES (?, ?, ?, ?, NULL)").run("app_preferences", "global", JSON.stringify({ steerActiveResponses: false, sidebarWidth: 321 }), new Date().toISOString());
-    db.prepare("INSERT INTO cache_entries VALUES (?, ?, ?, ?, NULL)").run("codex_history.sidebar_preferences", "thread-1", JSON.stringify({ pinned: true }), new Date().toISOString());
-    db.prepare("INSERT INTO sessions VALUES (?, ?)").run("session-1", JSON.stringify({ title: "Saved history", messages: ["keep"] }));
-    db.prepare("INSERT INTO schedules VALUES (?, ?)").run("schedule-1", JSON.stringify({ status: "running", externalReceipt: "already-sent" }));
+    db.exec("CREATE TABLE IF NOT EXISTS cache_entries (type TEXT, cache_key TEXT, payload TEXT, updated_at TEXT, error TEXT);");
+    const cache = db.prepare("INSERT INTO cache_entries (type,cache_key,payload,updated_at,error) VALUES (?, ?, ?, ?, NULL)");
+    cache.run("app_preferences", "global", JSON.stringify({ steerActiveResponses: false, sidebarWidth: 321 }), timestamp);
+    cache.run("codex_history.sidebar_preferences", "thread-1", JSON.stringify({ pinned: true }), timestamp);
+    cache.run("personalization", "active_template_id", JSON.stringify("file:soul-primary.md"), timestamp);
+    cache.run("local.projects", "global", JSON.stringify([{ id: "saved-project", path: path.join(source, "harnesses", "project"), name: "Saved" }]), timestamp);
     db.close();
+    await mkdir(path.join(source, "harnesses", "project"), { recursive: true });
+    await writeFile(path.join(source, "harnesses", "project", "source.json"), '{"immutable":"source-bytes"}');
+    await writeFile(path.join(source, "soul-primary.md"), "Selected personality\n");
+    await writeFile(path.join(source, "SOUL.md"), "Distinct stale SOUL text\n");
+    await writeFile(path.join(source, "personalization.json"), JSON.stringify({ version: 1, activeTemplateId: "default", updatedAt: timestamp }));
+    const externalDataset = path.join(tmpdir(), `${path.basename(home)}-offline-dataset`);
+    await mkdir(path.join(source, "datasets"));
+    await writeFile(path.join(source, "datasets", "settings.json"), JSON.stringify({ schemaVersion: "openpond.datasetStorageSettings.v1", datasetStorePath: externalDataset, updatedAt: timestamp }));
+    await writeFile(path.join(source, "providers.json"), JSON.stringify({ version: 1, providers: { openai: { enabled: true, baseUrl: "https://provider.example/v1", defaultModel: "fixture-model", modelOverrides: [], updatedAt: timestamp } } }));
+    const oldKey = Buffer.alloc(32, 31), iv = Buffer.alloc(12, 32), cipher = createCipheriv("aes-256-gcm", oldKey, iv);
+    const ciphertext = Buffer.concat([cipher.update("preserved-provider-key"), cipher.final()]);
+    await writeFile(path.join(source, "provider-secrets.key"), oldKey.toString("base64"));
+    await writeFile(path.join(source, "provider-secrets.json"), JSON.stringify({ version: 1, providers: { openai: { source: "local_secret", iv: iv.toString("base64"), ciphertext: ciphertext.toString("base64"), tag: cipher.getAuthTag().toString("base64"), createdAt: timestamp, updatedAt: timestamp } } }));
     const report = await initializeHome(home);
     expect(report.status).toBe("verified");
     expect((await readPreferences(home)).preferences).toMatchObject({ steerActiveResponses: false, sidebarWidth: 321 });
     expect(getLocalRecord(home, "codex_sidebar_state", "thread-1")?.value).toEqual({ pinned: true });
-    const migrated = new DatabaseSync(storagePaths(home).database, { readOnly: true });
-    expect(migrated.prepare("SELECT payload FROM sessions").get()?.payload).toContain("Saved history");
-    expect(migrated.prepare("SELECT payload FROM schedules").get()?.payload).toContain("already-sent");
-    migrated.close();
+    expect(getLocalRecord(home, "saved_local_projects", "saved-project")?.value).toMatchObject({ id: "saved-project", path: path.join(home, "library", "harnesses", "project") });
+    const config = (await readConfig(home)).document;
+    expect(config.storage?.datasets_dir).toBe(externalDataset);
+    expect(config.providers?.openai?.default_model).toBe("fixture-model");
+    expect((await readCredential<{ value: string }>(home, "provider:openai"))?.value.value).toBe("preserved-provider-key");
+    expect(await readFile(path.join(home, "instructions", "personalities", `${config.personalization!.active!.slice(7)}.md`), "utf8")).toBe("Selected personality");
+    const originals = await fs.readdir(path.join(home, "instructions", "imported-originals"));
+    expect(await Promise.all(originals.map((name) => readFile(path.join(home, "instructions", "imported-originals", name), "utf8")))).toEqual(expect.arrayContaining(["Selected personality\n", "Distinct stale SOUL text\n"]));
+    const migrated = new SqliteStore(home);
+    try {
+      expect(await migrated.getSession("session-1")).toMatchObject({ title: "Saved history", pinned: true, order: 3, cwd: home });
+      expect(await migrated.getLocalAgentSchedule(schedule.id)).toMatchObject({ enabled: false, nextRunAt: null, sourceHash: "unchanged-source", agentRootPath: path.join(home, "library", "harnesses", "project") });
+      expect(await migrated.listDueLocalAgentSchedules(timestamp)).toEqual([]);
+    } finally { await migrated.close(); }
     expect((await initializeHome(home)).status).toBe("current");
     expect(await readFile(path.join(source, "state.sqlite"))).toBeTruthy();
   });
+
+  // Existing state without a layout marker must never be overwritten by an unrelated import.
+  test("refuses migration into an occupied destination and preserves its database", async () => {
+    const store = new SqliteStore(home);
+    await store.snapshot(); await store.close();
+    const before = await readFile(storagePaths(home).database);
+    await writeFile(path.join(home, "providers.json"), JSON.stringify({ version: 1, providers: {} }));
+    await expect(initializeHome(home)).rejects.toMatchObject({ issue: { code: "MIGRATION_CONFLICT" } });
+    expect(await readFile(storagePaths(home).database)).toEqual(before);
+  });
+
+  // A process can die after any durable rename, including before its journal acknowledgement.
+  test("recovers interrupted preparation, file installation and completion without reimporting new source bytes", async () => {
+    for (const phase of ["prepared", "config.toml", "state.sqlite", "storage.json", "committed"]) {
+      const target = path.join(home, phase), source = path.join(target, "openpond-app");
+      await mkdir(source, { recursive: true });
+      const sourceDb = new DatabaseSync(path.join(source, "state.sqlite"));
+      sourceDb.exec("CREATE TABLE sessions (id TEXT PRIMARY KEY, payload TEXT); INSERT INTO sessions VALUES ('kept','{\"title\":\"History\"}');");
+      sourceDb.close();
+      await writeFile(path.join(target, "config.json"), JSON.stringify({ accounts: [
+        { handle: "first", baseUrl: "https://one.example", apiKey: "first-key", session: { token: "first-session" } },
+        { handle: "second", baseUrl: "https://two.example", apiKey: "second-key" },
+      ], activeProfile: { handle: "second", baseUrl: "https://two.example" } }));
+      const rename = fs.rename.bind(fs);
+      let interrupted = false;
+      const spy = vi.spyOn(fs, "rename").mockImplementation(async (from, to) => {
+        await rename(from, to);
+        if (interrupted) return;
+        const output = String(to);
+        const journalPhase = output === path.join(target, "runtime", "migration.json") && ["prepared", "committed"].includes(phase)
+          ? JSON.parse(await readFile(output, "utf8")).status === phase : false;
+        if (journalPhase || output === (phase === "state.sqlite" ? storagePaths(target).database : path.join(target, phase))) {
+          interrupted = true;
+          throw new Error("Simulated interruption after durable rename");
+        }
+      });
+      try { await expect(initializeHome(target)).rejects.toBeDefined(); } finally { spy.mockRestore(); }
+      expect(interrupted).toBe(true);
+      expect(await readMigrationJournal(target)).toBeTruthy();
+      await recoverMigration(target);
+      expect((await initializeHome(target)).status).toBe("current");
+      expect((await readAccountConfiguration(target)).accounts).toEqual(expect.arrayContaining([
+        expect.objectContaining({ handle: "first", apiKey: "first-key", session: expect.objectContaining({ token: "first-session" }) }),
+        expect.objectContaining({ handle: "second", apiKey: "second-key" }),
+      ]));
+      const restored = new DatabaseSync(storagePaths(target).database, { readOnly: true });
+      expect(restored.prepare("SELECT id FROM sessions").get()?.id).toBe("kept"); restored.close();
+      expect((await readMigrationJournal(target))?.status).toBe("verified");
+    }
+  }, process.platform === "win32" ? 180_000 : 30_000);
+
   // A trusted project cannot acquire host authority; a captured turn cannot survive revocation.
   test("resolves trusted project values atomically and checks current revocations", async () => {
     await initializeHome(home);
@@ -165,6 +270,7 @@ describe("persistence data and concurrency boundaries", () => {
     await initializeHome(home);
     await updatePreferences(home, { steerActiveResponses: false });
     await writeCredential(home, "account:backup", { token: "backup-secret" });
+    const artifact = await publishManagedArtifact(home, { owner: { domain: "dataset", id: "backup-dataset" }, displayName: "rows.json", mediaType: "application/json", bytes: Buffer.from("[1,2,3]") });
     const output = `${home}-export.opbk`, restored = `${home}-restored`, rejected = `${home}-wrong-key`;
     const key = Buffer.alloc(32, 19);
     try {
@@ -174,6 +280,9 @@ describe("persistence data and concurrency boundaries", () => {
       await expect(readFile(storagePaths(rejected).marker)).rejects.toMatchObject({ code: "ENOENT" });
       await restoreRecoveryBackup(output, restored, key);
       expect((await readPreferences(restored)).preferences.steerActiveResponses).toBe(false);
+      expect(await withManagedArtifact(restored, { domain: "dataset", id: "backup-dataset" }, (file) => readFile(file, "utf8"))).toBe("[1,2,3]");
+      await rm(artifact.path);
+      await expect(exportRecoveryBackup(home, `${output}-missing`, key)).rejects.toMatchObject({ issue: { code: "ARTIFACT_UNAVAILABLE" } });
       expect((await readCredential<{ token: string }>(restored, "account:backup"))?.value.token).toBe("backup-secret");
       await expect(restoreRecoveryBackup(output, home, key)).rejects.toThrow("fresh, empty home");
       expect(JSON.stringify(await exportSettings(home))).not.toContain("backup-secret");
@@ -197,6 +306,64 @@ describe("persistence data and concurrency boundaries", () => {
       release(); expect(await read).toBe("immutable notes");
       expect((await collectArtifactOrphans(home)).removed).toEqual([artifact.sha256]);
     } finally { release(); await read; clock.mockRestore(); }
+  });
+
+  // Corrupt disposable data must rebuild without touching behavioral defaults or history.
+  test("rebuilds a corrupt cache without replacing authoritative state", async () => {
+    await initializeHome(home);
+    await updatePreferences(home, { steerActiveResponses: false });
+    await writeCache(home, "catalog", "one", { name: "rebuildable" });
+    await writeFile(storagePaths(home).cache, "broken sqlite");
+    expect(await readCache(home, "catalog", "one")).toBeNull();
+    await writeCache(home, "catalog", "one", { name: "fresh" });
+    expect((await readCache<{ name: string }>(home, "catalog", "one"))?.payload.name).toBe("fresh");
+    expect((await readPreferences(home)).preferences.steerActiveResponses).toBe(false);
+  });
+
+  // Two launchers and two SQL writers cannot claim the same scheduled occurrence twice.
+  test("retains unique schedule claims and pauses uncertain work after restart", async () => {
+    await initializeHome(home);
+    const first = new SqliteStore(home);
+    await first.recentTurns(1);
+    const second = new SqliteStore(home);
+    await second.recentTurns(1);
+    const timestamp = new Date().toISOString();
+    const schedule = LocalAgentScheduleSchema.parse({ id: "schedule-proof", localProjectId: "project-proof", localProjectName: "Proof", agentRootPath: home, agentName: "proof", scheduleName: "daily", scheduleType: "rate", scheduleExpression: "1 hour", timezone: "UTC", targetAction: "run", enabledByDefault: true, enabled: true, sourceHash: "source-proof", manifestHash: null, nextRunAt: timestamp, lastRunAt: null, lastRunStatus: null, lastRunId: null, lastError: null, createdAt: timestamp, updatedAt: timestamp });
+    await first.upsertLocalAgentSchedule(schedule);
+    const run = LocalAgentScheduleRunSchema.parse({ id: "run-proof", scheduleId: schedule.id, definitionSnapshot: schedule, configurationSnapshot: { schema_version: 1 }, localProjectId: schedule.localProjectId, scheduleName: schedule.scheduleName, scheduledFor: timestamp, trigger: "schedule", status: "running", targetAction: "run", startedAt: timestamp, completedAt: null, exitCode: null, stdout: null, stderr: null, result: null, traceArtifactRef: null, error: null, createdAt: timestamp, updatedAt: timestamp });
+    try {
+      const claims = await Promise.allSettled([first.insertLocalAgentScheduleRun(run), second.insertLocalAgentScheduleRun({ ...run, id: "duplicate-proof" })]);
+      expect(claims.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+    } finally { await first.close(); await second.close(); }
+    const runtime = await ownHomeRuntime(home, async () => ({ close: async () => {} }));
+    try {
+      await expect(ownHomeRuntime(home, async () => ({ close: async () => {} }))).rejects.toMatchObject({ issue: { code: "RUNTIME_ALREADY_RUNNING" } });
+      expect(reconcileInterruptedScheduledWork(home)).toEqual({ recovered: 0, needsReview: 1 });
+      expect(reconcileInterruptedScheduledWork(home)).toEqual({ recovered: 0, needsReview: 0 });
+      const restarted = new SqliteStore(home);
+      try {
+        expect(await restarted.getLocalAgentSchedule(schedule.id)).toMatchObject({ enabled: false, nextRunAt: null, lastRunStatus: "failed" });
+        expect(await restarted.listDueLocalAgentSchedules(timestamp)).toEqual([]);
+        await expect(restarted.insertLocalAgentScheduleRun({ ...run, id: "after-restart" })).rejects.toThrow();
+      } finally { await restarted.close(); }
+    } finally { await runtime.close(); }
+  });
+
+  // A crash between native profile rename and receipt commit must verify the prepared tree.
+  test("recovers a prepared native browser rename and rejects altered profile bytes", async () => {
+    const previous = path.join(home, "previous-browser"), targetHome = path.join(home, "new-home");
+    await mkdir(previous);
+    await writeFile(path.join(previous, "Cookies"), "preserved browser state");
+    const profile = prepareDesktopBrowserHome(targetHome, previous);
+    const journal = path.join(targetHome, "browser", "native-migration.json");
+    const receipt = JSON.parse(await readFile(journal, "utf8"));
+    await writeFile(journal, JSON.stringify({ ...receipt, status: "prepared" }));
+    prepareDesktopBrowserHome(targetHome, previous);
+    expect(JSON.parse(await readFile(journal, "utf8")).status).toBe("committed");
+    await writeFile(journal, JSON.stringify({ ...receipt, status: "prepared" }));
+    await writeFile(path.join(profile.userData, "Cookies"), "altered before recovery");
+    expect(() => prepareDesktopBrowserHome(targetHome, previous)).toThrow("could not be migrated");
+    expect(await readFile(path.join(previous, "Cookies"), "utf8")).toBe("preserved browser state");
   });
 
 });

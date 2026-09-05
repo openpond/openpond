@@ -1,3 +1,4 @@
+import { updateAccountConfiguration, readAccountConfiguration } from "../packages/persistence/src/accounts";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -21,27 +22,13 @@ test("logging out clears only the active account credentials", async () => {
   const configDir = path.join(tempHome, ".openpond");
   const configPath = path.join(configDir, "config.json");
   await mkdir(configDir, { recursive: true });
-  await writeFile(
-    configPath,
-    JSON.stringify({
-      activeProfile: { handle: "active", baseUrl: "https://openpond.ai" },
-      accounts: [
-        {
-          handle: "active",
-          apiKey: "opk_active",
-          token: "legacy-token",
-          session: { token: "session-token", appId: "app-1" },
-          baseUrl: "https://openpond.ai",
-        },
-        {
-          handle: "other",
-          apiKey: "opk_other",
-          baseUrl: "https://staging.openpond.ai",
-        },
-      ],
-    }),
-    "utf8",
-  );
+  await updateAccountConfiguration(configDir, () => ({
+    activeProfile: { handle: "active", baseUrl: "https://openpond.ai" },
+    accounts: [
+      { handle: "active", apiKey: "opk_active", session: { token: "session-token", appId: "app-1" }, baseUrl: "https://openpond.ai" },
+      { handle: "other", apiKey: "opk_other", baseUrl: "https://staging.openpond.ai" },
+    ],
+  }));
 
   const script = `
     import { signOutOpenPondAccount } from "./packages/runtime/src/sign-out-account.ts";
@@ -54,17 +41,17 @@ test("logging out clears only the active account credentials", async () => {
       cwd: path.resolve(import.meta.dirname, ".."),
       env: {
         ...process.env,
-        OPENPOND_CONFIG_DIR: configDir,
+        OPENPOND_HOME: configDir,
       },
     },
   );
 
   expect(result.stderr).toBe("");
   expect(result.exitCode).toBe(0);
-  const saved = JSON.parse(await readFile(configPath, "utf8"));
-  expect(saved.accounts[0]).toEqual({
+  const saved = await readAccountConfiguration(configDir);
+  expect(saved.accounts![0]).toEqual({
     handle: "active",
     baseUrl: "https://openpond.ai",
   });
-  expect(saved.accounts[1].apiKey).toBe("opk_other");
+  expect(saved.accounts![1].apiKey).toBe("opk_other");
 });

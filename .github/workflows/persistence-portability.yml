@@ -1,0 +1,50 @@
+name: Persistence portability
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packages/persistence/**"
+      - "apps/desktop/src/desktop-browser-home.ts"
+      - "apps/server/src/runtime/home-runtime-owner.ts"
+      - "tests/persistence-boundaries.test.ts"
+      - ".github/workflows/persistence-portability.yml"
+  push:
+    branches: [master]
+    paths:
+      - "packages/persistence/**"
+      - "apps/desktop/src/desktop-browser-home.ts"
+      - "tests/persistence-boundaries.test.ts"
+      - ".github/workflows/persistence-portability.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: persistence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boundaries:
+    name: Storage boundaries (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run build:sdk
+      - run: pnpm exec vitest run --project root-system tests/persistence-boundaries.test.ts
+        env:
+          OPENPOND_HOME: ${{ runner.temp }}/openpond-portability

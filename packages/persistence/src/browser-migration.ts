@@ -6,7 +6,7 @@ import { storagePaths } from "./home.js";
 import path from "node:path";
 import { PersistenceError } from "./errors.js";
 
-const browserStateSchema = z.strictObject({ conversations: z.record(z.string(), z.strictObject({
+export const browserStateSchema = z.strictObject({ conversations: z.record(z.string(), z.strictObject({
   activeTabId: z.string().nullable(),
   tabs: z.array(z.strictObject({ id: z.string().min(1), url: z.string(), title: z.string().nullable(), faviconUrl: z.string().nullable(), lastUpdatedAt: z.number().finite() })),
 })) });

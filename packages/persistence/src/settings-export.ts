@@ -9,6 +9,16 @@ export async function exportSettings(home: string) {
     if (parent && Object.hasOwn(parent, key)) { delete parent[key]; requiresRebinding.push({ path: [...at, key], reason }); }
   }
   for (const section of ["accounts", "providers"] as const) for (const [id, value] of Object.entries(document[section] ?? {})) omit(value, "credential", [section, id], "Reconnect or bind a credential on the destination device.");
+  for (const section of ["accounts", "providers"] as const) for (const [id, value] of Object.entries(document[section] ?? {})) {
+    for (const key of ["base_url", "api_base_url", "chat_api_base_url"]) {
+      const endpoint = (value as Record<string, unknown>)[key];
+      if (typeof endpoint !== "string") continue;
+      try {
+        const url = new URL(endpoint);
+        if (url.username || url.password || [...url.searchParams.keys()].some((name) => /token|key|secret|password|credential|signature/i.test(name)) || url.hash) omit(value, key, [section, id], "Rebind this endpoint without embedded authentication data.");
+      } catch { omit(value, key, [section, id], "Validate and bind this endpoint on the destination device."); }
+    }
+  }
   omit(document.storage, "datasets_dir", ["storage"], "Choose the dataset storage root on the destination device.");
   omit(document.projects, "new_project_directory", ["projects"], "Choose the local projects directory.");
   omit(document.personalization, "user_instructions", ["personalization"], "Transfer the instruction source and bind its destination path.");

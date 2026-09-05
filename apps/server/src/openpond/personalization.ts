@@ -14,7 +14,7 @@ function personalityPath(home: string, id: string): string {
   return path.join(storagePaths(home).instructions, "personalities", `${id.slice(7)}.md`);
 }
 function validateText(text: string, filePath?: string): string {
-  if (text.length > SOUL_MAX_CHARS) throw new PersistenceError({ code: "INVALID_INSTRUCTIONS", path: filePath ?? "personalization", message: `Personality text exceeds ${SOUL_MAX_CHARS} characters.`, action: "Shorten the personality text before using it." });
+  if (text.trim().length > SOUL_MAX_CHARS) throw new PersistenceError({ code: "INVALID_INSTRUCTIONS", path: filePath ?? "personalization", message: `Personality text exceeds ${SOUL_MAX_CHARS} characters.`, action: "Shorten the personality text before using it." });
   return text.trim();
 }
 async function templatesWithFiles(home: string): Promise<PersonalizationTemplate[]> {

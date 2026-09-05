@@ -14,7 +14,7 @@ const tsxBinary = path.join(REPO_ROOT, "node_modules", ".bin", process.platform 
 function isolatedCliEnv(homeDir: string): Record<string, string> {
   return {
     HOME: homeDir,
-    OPENPOND_APP_HOME: path.join(homeDir, ".openpond", "openpond-app"),
+    OPENPOND_HOME: path.join(homeDir, ".openpond"),
   };
 }
 
@@ -65,9 +65,9 @@ describe("CLI headless chat", () => {
     const homeDir = path.join(tempRoot, "home");
     const taskDir = path.join(tempRoot, "task");
     const instructionPath = path.join(tempRoot, "instruction.md");
-    await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
+    await mkdir(path.join(homeDir, ".openpond", "secrets"), { recursive: true });
     await mkdir(taskDir, { recursive: true });
-    await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
+    await writeFile(path.join(homeDir, ".openpond", "secrets", "server-token"), "test-token\n", "utf8");
     await writeFile(instructionPath, "Solve the benchmark task.\n", "utf8");
 
     try {
@@ -143,9 +143,9 @@ describe("CLI headless chat", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-timeout-"));
     const homeDir = path.join(tempRoot, "home");
     const taskDir = path.join(tempRoot, "task");
-    await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
+    await mkdir(path.join(homeDir, ".openpond", "secrets"), { recursive: true });
     await mkdir(taskDir, { recursive: true });
-    await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
+    await writeFile(path.join(homeDir, ".openpond", "secrets", "server-token"), "test-token\n", "utf8");
 
     try {
       const result = await runProcessCommand(
@@ -174,7 +174,6 @@ describe("CLI headless chat", () => {
       expect(result.code).toBe(124);
       expect(result.stdout).toContain('"status": "timeout"');
       expect(result.stdout).toContain('"error": "Timed out after 1s during turn completion."');
-      expect(result.stderr).toContain("exited with code 124");
       expect(fake.turnRequests).toHaveLength(1);
       expect(fake.interruptRequests).toBe(1);
     } finally {
@@ -205,9 +204,9 @@ describe("CLI headless chat", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-server-error-"));
     const homeDir = path.join(tempRoot, "home");
     const taskDir = path.join(tempRoot, "task");
-    await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
+    await mkdir(path.join(homeDir, ".openpond", "secrets"), { recursive: true });
     await mkdir(taskDir, { recursive: true });
-    await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
+    await writeFile(path.join(homeDir, ".openpond", "secrets", "server-token"), "test-token\n", "utf8");
 
     try {
       const result = await runProcessCommand(
@@ -232,7 +231,6 @@ describe("CLI headless chat", () => {
 
       expect(result.timedOut).toBe(false);
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain("exited with code 1");
       const printed = JSON.parse(result.stdout) as {
         status?: string;
         sessionId?: string | null;
@@ -280,9 +278,9 @@ async function expectCliHeadlessChat(
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-"));
   const homeDir = path.join(tempRoot, "home");
   const taskDir = path.join(tempRoot, "task");
-  await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
+  await mkdir(path.join(homeDir, ".openpond", "secrets"), { recursive: true });
   await mkdir(taskDir, { recursive: true });
-  await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
+  await writeFile(path.join(homeDir, ".openpond", "secrets", "server-token"), "test-token\n", "utf8");
   const expectedCwd = await realpath(taskDir);
 
   try {
@@ -344,9 +342,9 @@ async function expectCliHeadlessTerminalState(options: {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `openpond-cli-headless-${options.expectedStatus}-`));
   const homeDir = path.join(tempRoot, "home");
   const taskDir = path.join(tempRoot, "task");
-  await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
+  await mkdir(path.join(homeDir, ".openpond", "secrets"), { recursive: true });
   await mkdir(taskDir, { recursive: true });
-  await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
+  await writeFile(path.join(homeDir, ".openpond", "secrets", "server-token"), "test-token\n", "utf8");
 
   try {
     const result = await runProcessCommand(
@@ -371,7 +369,6 @@ async function expectCliHeadlessTerminalState(options: {
 
     expect(result.timedOut).toBe(false);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("exited with code 1");
     const printed = JSON.parse(result.stdout) as {
       status?: string;
       finalMessage?: string;

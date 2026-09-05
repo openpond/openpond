@@ -21,9 +21,9 @@ Durable sessions, events, approvals, usage, and projections live in the local SQ
 
 ## Data locations
 
-The default application home is `~/.openpond/openpond-app`. It contains the capability token, SQLite state, logs, attachments, provider configuration, and app-owned caches. Account CLI configuration lives in `~/.openpond/config.json` and `~/.openpond/cache.json`; those files are written atomically with private permissions.
+The default home is `~/.openpond` for stable and `~/.openpond-nightly` for nightly. `config.toml` holds user settings, `state/state.sqlite` holds durable records, and `secrets/` holds encrypted authentication and the private local server token. Use `OPENPOND_HOME` or `--home` for an isolated home.
 
-Set `OPENPOND_APP_HOME` only when you intentionally want an isolated app home, such as a test or separate channel. Stable and nightly Desktop channels use distinct Electron identities and release metadata.
+Settings → Customization → Configuration exposes the shared file, effective values and recovery controls. Existing installations migrate automatically when their sources are unambiguous and stopped. See [configuration, storage and recovery](configuration.md) for the old-to-new mapping, script changes, backups and downgrade limits.
 
 ## Diagnostics and recovery
 

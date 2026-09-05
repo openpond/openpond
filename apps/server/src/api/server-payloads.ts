@@ -58,7 +58,7 @@ import {
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
 } from "@openpond/cloud";
-import { readPreferences, updatePreferences, resolveEffectiveConfig } from "@openpond/persistence";
+import { readPreferences, updatePreferences, resolveEffectiveConfig, configToPreferences, layoutPreferences } from "@openpond/persistence";
 import {
   loadPersonalizationSettings,
   savePersonalizationSettings,
@@ -899,7 +899,7 @@ export function createServerPayloads(deps: {
       },
       account: accountStateForClient(openPond.account),
       codex,
-      preferences,
+      preferences: configToPreferences(configuration.document, layoutPreferences(preferences)),
       providers,
       personalization,
       apps: openPond.apps,

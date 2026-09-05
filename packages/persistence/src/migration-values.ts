@@ -12,7 +12,7 @@ import { writeCredential } from "./credentials.js";
 import { putLocalRecord, openStorageDatabase, PERSISTENCE_TABLES_SQL } from "./database.js";
 import { storagePaths } from "./home.js";
 import { writeCache } from "./cache.js";
-import { assertNoUnmappedFields, normalizeImportedPreferences, validateImportedAccounts } from "./migration-validation.js";
+import { ImportedProviderSecretsSchema, ImportedOAuthSchema, ImportedPersonalitySchema, ImportedDatasetSettingsSchema, assertNoUnmappedFields, normalizeImportedPreferences, validateImportedAccounts } from "./migration-validation.js";
 import { PersistenceError } from "./errors.js";
 
 export function migrationConflict(filePath: string, message: string): PersistenceError {
@@ -64,7 +64,7 @@ export async function importPreferenceRecords(stage: string, originalHome: strin
     else if (row.type === "codex_history.sidebar_preferences") putLocalRecord(stage, "codex_sidebar_state", row.cache_key, value);
     else if (row.type === "personalization") putLocalRecord(stage, "account_selection", "imported_personality", value);
     else if (row.type === "openpond.scaffoldApps") putLocalRecord(stage, "scaffold_registrations", row.cache_key, value);
-    else if (row.type.startsWith("openpond.") || row.type === "training.hosted-model-project-catalog.v1") writeCache(stage, row.type, row.cache_key, value, { error: row.error });
+    else if (["openpond.account", "openpond.apps", "openpond.cloudProjects", "training.hosted-model-project-catalog.v1"].includes(row.type)) await writeCache(stage, row.type, row.cache_key, value, { error: row.error });
     else throw migrationConflict(file, `Unmapped cache namespace: ${row.type}`);
   }
   const cleaned = openStorageDatabase(file);
@@ -81,10 +81,13 @@ export async function importProviderConfig(stage: string, sourceHome?: string): 
   const providers: NonNullable<ConfigDocument["providers"]> = {};
   for (const [id, entry] of Object.entries(parsed.providers)) providers[id] = { enabled: entry.enabled, ...(entry.baseUrl ? { base_url: entry.baseUrl } : {}), ...(entry.defaultModel ? { default_model: entry.defaultModel } : {}), model_overrides: entry.modelOverrides };
   await updateConfig(stage, (current) => ({ ...current, providers }));
-  writeCache(stage, "providers", "catalog", { modelCaches: parsed.modelCaches, catalogCache: raw.catalogCache ?? null });
+  await writeCache(stage, "providers", "catalog", { modelCaches: parsed.modelCaches, catalogCache: raw.catalogCache ?? null });
   const secretFile = path.join(sourceHome, "provider-secrets.json");
-  const secrets = await readJsonFile<{ version?: number; providers?: Record<string, Record<string, unknown>> }>(secretFile, () => ({}));
-  if (!secrets.providers) return;
+  const rawSecrets = await readJsonFile<unknown>(secretFile, () => null);
+  if (rawSecrets === null) return;
+  const parsedSecrets = ImportedProviderSecretsSchema.safeParse(rawSecrets);
+  if (!parsedSecrets.success) throw migrationConflict(secretFile, "The provider vault has an unsupported version or field.");
+  const secrets = parsedSecrets.data;
   const keyText = await readOptionalFile(path.join(sourceHome, "provider-secrets.key"));
   const key = keyText ? Buffer.from(keyText.trim(), "base64") : null;
   for (const [id, record] of Object.entries(secrets.providers)) {
@@ -95,7 +98,7 @@ export async function importProviderConfig(stage: string, sourceHome?: string): 
         const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(String(record.iv), "base64"));
         decipher.setAuthTag(Buffer.from(String(record.tag), "base64"));
         value = Buffer.concat([decipher.update(Buffer.from(String(record.ciphertext), "base64")), decipher.final()]).toString("utf8");
-        if (record.source === "chatgpt_subscription") { oauth = JSON.parse(value); value = null; }
+        if (record.source === "chatgpt_subscription") { oauth = ImportedOAuthSchema.parse(JSON.parse(value)); value = null; }
       } catch { throw migrationConflict(secretFile, "The saved provider credential failed integrity verification."); }
     }
     const credentialId = `provider:${id}`;
@@ -114,12 +117,16 @@ export async function importPersonalization(stage: string, sourceHome?: string):
       if (!entry.isFile() || !(directory === sourceHome ? /^soul-.+\.md$/i : /\.md$/i).test(entry.name)) continue;
       const content = await fs.readFile(path.join(directory, entry.name), "utf8");
       const id = `imported-${createHash("sha256").update(content).digest("hex").slice(0, 16)}`;
-      await atomicWriteFile(path.join(stage, "instructions", "personalities", `${id}.md`), content);
+      await preserveImportedPersonality(stage, id, content);
       templates.set(`file:${path.relative(sourceHome, path.join(directory, entry.name)).split(path.sep).join("/")}`, { id, content });
     }
   }
   const activeSoul = await readOptionalFile(path.join(sourceHome, "SOUL.md"));
-  const personalization = await readJsonFile<{ activeTemplateId?: string }>(path.join(sourceHome, "personalization.json"), () => ({}));
+  const stateFile = path.join(sourceHome, "personalization.json");
+  const rawState = await readJsonFile<unknown>(stateFile, () => null);
+  const parsedState = rawState === null ? null : ImportedPersonalitySchema.safeParse(rawState);
+  if (parsedState && !parsedState.success) throw migrationConflict(stateFile, "Personalization has an unsupported version or field.");
+  const personalization: { activeTemplateId?: string } = parsedState?.success ? parsedState.data : {};
   const { getLocalRecord } = await import("./database.js");
   const selected = getLocalRecord<string>(stage, "account_selection", "imported_personality")?.value ?? personalization.activeTemplateId ?? "default";
   const template = templates.get(selected);
@@ -127,18 +134,28 @@ export async function importPersonalization(stage: string, sourceHome?: string):
   let active = template ? `custom:${template.id}` : builtin ? `builtin:${builtin.id}` : "builtin:default";
   if (activeSoul?.trim() && !template && !builtin) {
     const id = `imported-${createHash("sha256").update(activeSoul).digest("hex").slice(0, 16)}`;
-    await atomicWriteFile(path.join(stage, "instructions", "personalities", `${id}.md`), activeSoul);
+    await preserveImportedPersonality(stage, id, activeSoul);
     active = `custom:${id}`;
   } else if (activeSoul?.trim() && activeSoul.trim() !== (template?.content ?? builtin?.content)?.trim()) {
     const id = `preserved-${createHash("sha256").update(activeSoul).digest("hex").slice(0, 16)}`;
-    await atomicWriteFile(path.join(stage, "instructions", "personalities", `${id}.md`), activeSoul);
+    await preserveImportedPersonality(stage, id, activeSoul);
   }
   await updateConfig(stage, (config) => ({ ...config, personalization: { ...config.personalization, active } }));
 }
 
 export async function importDatasetPreference(stage: string, sourceHome?: string): Promise<void> {
   if (!sourceHome) return;
-  const settings = await readJsonFile<{ datasetStorePath?: string }>(path.join(sourceHome, "datasets", "settings.json"), () => ({}));
+  const settingsFile = path.join(sourceHome, "datasets", "settings.json");
+  const rawSettings = await readJsonFile<unknown>(settingsFile, () => null);
+  const parsedSettings = rawSettings === null ? null : ImportedDatasetSettingsSchema.safeParse(rawSettings);
+  if (parsedSettings && !parsedSettings.success) throw migrationConflict(settingsFile, "Dataset settings have an unsupported version or field.");
+  const settings: { datasetStorePath?: string } = parsedSettings?.success ? parsedSettings.data : {};
   if (settings.datasetStorePath) await updateConfig(stage, (config) => ({ ...config, storage: { ...config.storage, datasets_dir: settings.datasetStorePath } }));
   validateConfigDocument((await readConfig(stage)).document);
+}
+
+async function preserveImportedPersonality(stage: string, id: string, content: string): Promise<void> {
+  await atomicWriteFile(path.join(stage, "instructions", "imported-originals", `${id}.md`), content);
+  // The previous runtime used trimmed text capped at 8,000 characters.
+  await atomicWriteFile(path.join(stage, "instructions", "personalities", `${id}.md`), content.trim().slice(0, 8000));
 }

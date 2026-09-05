@@ -1,4 +1,4 @@
-import { readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import {
@@ -33,7 +33,7 @@ async function userVersion(filePath: string): Promise<number> {
 }
 
 const withStoreDir = (run: (storeDir: string) => Promise<void>) =>
-  withTempDirectory("openpond-store-test-", run);
+  withTempDirectory("openpond-store-test-", async (home) => { await mkdir(path.join(home, "state"), { recursive: true }); await run(home); });
 
 function sqliteBusyError(): Error & { code: string } {
   return Object.assign(new Error("SQLITE_BUSY: database is locked"), { code: "SQLITE_BUSY" });
@@ -64,13 +64,13 @@ describe("SqliteStore hardening", () => {
       await store.snapshot();
       await store.close();
 
-      expect(await userVersion(path.join(storeDir, "state.sqlite"))).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      expect(await userVersion(path.join(storeDir, "state", "state.sqlite"))).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
     });
   });
 
   test("migrates version 52 stores to immutable Model Currency snapshot storage", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const initialStore = new SqliteStore(storeDir);
       await initialStore.snapshot();
       await initialStore.close();
@@ -99,7 +99,7 @@ describe("SqliteStore hardening", () => {
 
   test("migrates version 43 usage storage to cache telemetry columns", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const initialStore = new SqliteStore(storeDir);
       await initialStore.snapshot();
       await initialStore.close();
@@ -137,7 +137,7 @@ describe("SqliteStore hardening", () => {
 
   test("migrates version 47 stores to Reward Model lifecycle tables", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const initialStore = new SqliteStore(storeDir);
       await initialStore.snapshot();
       await initialStore.close();
@@ -173,7 +173,7 @@ describe("SqliteStore hardening", () => {
 
   test("migrates version 40 stores to benchmark run storage", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const initialStore = new SqliteStore(storeDir);
       await initialStore.snapshot();
       await initialStore.close();
@@ -209,7 +209,7 @@ describe("SqliteStore hardening", () => {
 
   test("migrates version 34 stores to immutable Work evidence tables", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const initialStore = new SqliteStore(storeDir);
       await initialStore.snapshot();
       await initialStore.close();
@@ -245,7 +245,7 @@ describe("SqliteStore hardening", () => {
 
   test("retires Goal and Insights storage while preserving parent-scoped subagents", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const store = new SqliteStore(storeDir);
       await store.upsertSubagentRun(SubagentRunSchema.parse({
         id: "subagent-run-v32",
@@ -261,17 +261,10 @@ describe("SqliteStore hardening", () => {
         body: "Keep this lifecycle message",
         createdAt: "2026-07-27T13:00:01.000Z",
       }));
-      await store.setCacheEntry("local.projects", "v1", [
-        { id: "project-keep", name: "Keep" },
-        {
-          id: "system_openpond_insights",
-          name: "OpenPond Insights",
-          systemKind: "openpond.insights",
-        },
-      ]);
       await store.close();
 
       const db = openTestDatabase(storePath);
+      await run(db, "INSERT INTO cache_entries(type,cache_key,payload,updated_at,error) VALUES(?,?,?,?,NULL)", ["local.projects", "v1", JSON.stringify([{id:"project-keep",name:"Keep"},{id:"system_openpond_insights",name:"OpenPond Insights",systemKind:"openpond.insights"}]), "2026-07-27T13:00:00.000Z"]);
       await run(db, "ALTER TABLE subagent_runs ADD COLUMN parent_goal_id TEXT");
       await run(db, "ALTER TABLE subagent_messages ADD COLUMN parent_goal_id TEXT");
       const runRow = await get<{ payload: string }>(
@@ -478,14 +471,12 @@ describe("SqliteStore hardening", () => {
         },
       ]);
       await expect(migrated.listModelUsageRecords()).resolves.toEqual([]);
-      await expect(migrated.getCacheEntry<Array<{ id: string }>>("local.projects", "v1"))
-        .resolves.toMatchObject({
-          payload: [{ id: "project-keep" }],
-        });
       await migrated.close();
 
       const migratedDb = openTestDatabase(storePath);
       try {
+        const projects = await get<{payload:string}>(migratedDb, "SELECT payload FROM cache_entries WHERE type='local.projects' AND cache_key='v1'");
+        expect(JSON.parse(projects.payload)).toEqual([{id:"project-keep",name:"Keep"}]);
         const retiredTables = await all<{ name: string }>(
           migratedDb,
           `SELECT name FROM sqlite_master
@@ -538,7 +529,7 @@ describe("SqliteStore hardening", () => {
 
   test("creates Taskset revision storage for databases already migrated past training v11", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const initialStore = new SqliteStore(storeDir);
       await initialStore.snapshot();
       await initialStore.close();
@@ -568,7 +559,7 @@ describe("SqliteStore hardening", () => {
 
   test("backs up an existing unversioned database before migrating", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const db = openTestDatabase(storePath);
       await run(db, "CREATE TABLE legacy_marker (id INTEGER PRIMARY KEY)");
       await close(db);
@@ -583,18 +574,14 @@ describe("SqliteStore hardening", () => {
     });
   });
 
-  test("moves corrupt database files aside and starts fresh", async () => {
+  test("preserves corrupt authoritative bytes and refuses to create empty history", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       await writeFile(storePath, "not a sqlite database", "utf8");
-
       const store = new SqliteStore(storeDir);
-      await store.snapshot();
-      await store.close();
-
-      expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
-      const corruptFiles = await readdir(path.join(storeDir, "corrupt"));
-      expect(corruptFiles.some((file) => file.includes("quick-check-failed") && file.endsWith(".sqlite"))).toBe(true);
+      await expect(store.snapshot()).rejects.toMatchObject({ issue: { code: "DATABASE_RECOVERY_REQUIRED" } });
+      expect(await readFile(storePath, "utf8")).toBe("not a sqlite database");
+      expect(await readdir(storeDir)).not.toContain("corrupt");
     });
   });
 
@@ -620,7 +607,7 @@ describe("SqliteStore hardening", () => {
 
   test("preserves database files when transient busy health checks exhaust retries", async () => {
     await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
+      const storePath = path.join(storeDir, "state", "state.sqlite");
       const initial = new SqliteStore(storeDir);
       await initial.mutate((data) => {
         data.sessions.push(session("session-preserved-after-exhausted-busy"));
@@ -661,7 +648,7 @@ describe("SqliteStore hardening", () => {
 
       expect(attempts).toBe(3);
       expect(await readdir(storeDir)).not.toContain("corrupt");
-      expect(await userVersion(path.join(storeDir, "state.sqlite"))).toBe(
+      expect(await userVersion(path.join(storeDir, "state", "state.sqlite"))).toBe(
         CURRENT_SQLITE_SCHEMA_VERSION,
       );
     });
@@ -738,7 +725,7 @@ describe("SqliteStore hardening", () => {
 
       await store.close();
 
-      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
+      const db = openTestDatabase(path.join(storeDir, "state", "state.sqlite"));
       try {
         const rows = await all<{ name: string }>(
           db,
@@ -873,7 +860,7 @@ describe("SqliteStore hardening", () => {
 
       await store.close();
 
-      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
+      const db = openTestDatabase(path.join(storeDir, "state", "state.sqlite"));
       try {
         const counts = await get<{ sessions: number; turns: number; approvals: number }>(
           db,
@@ -929,7 +916,7 @@ describe("SqliteStore hardening", () => {
 
       await store.close();
 
-      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
+      const db = openTestDatabase(path.join(storeDir, "state", "state.sqlite"));
       try {
         const row = await get<{ payload: string; sequence: number }>(
           db,

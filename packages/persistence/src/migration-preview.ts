@@ -1,3 +1,4 @@
+import { externalStorageReferences } from "./storage-references.js";
 import { randomUUID } from "node:crypto";
 import { promises as fs, existsSync } from "node:fs";
 import os from "node:os";
@@ -36,6 +37,6 @@ export async function previewMigration(home: string, sources: MigrationOptions, 
     let estimatedBytes = 0;
     for (const entry of journal.files) estimatedBytes += (await fs.lstat(path.join(journal.stage, entry.path))).size;
     const credentialRecords = Object.values(imported.document.accounts ?? {}).filter((account) => account.credential?.source === "secret").length + Object.values(imported.document.providers ?? {}).filter((provider) => provider.credential?.source === "secret").length;
-    return { issues: [], counts, destinations, conflicts, estimatedBytes, credentialRecords, layoutVersion: 1, configSchemaVersion: imported.document.schema_version };
+    return { issues: [], counts, destinations, conflicts, estimatedBytes, credentialRecords, externalRoots: await externalStorageReferences(journal.stage), layoutVersion: 1, configSchemaVersion: imported.document.schema_version };
   } finally { await fs.rm(journal.stage, { recursive: true, force: true }); await fs.rm(temporary, { recursive: true, force: true }); }
 }

@@ -20,3 +20,9 @@ export * from "./recovery-backup.js";
 export * from "./settings-export.js";
 
 export { MigrationResolutionsSchema } from "./migration-conflicts.js";
+
+export { withOpenPondHome, bindHomeCallbacks } from "./home-context.js";
+export { assertHomeCompatible } from "./storage-version.js";
+
+export { assertStorageAncestors } from "./path-safety.js";
+export { protectPrivateDirectory } from "./private-permissions.js";

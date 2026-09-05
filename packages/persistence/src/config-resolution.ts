@@ -5,7 +5,8 @@ import path from "node:path";
 import { readConfig, mergeConfig } from "./config.js";
 import { validateConfigDocument, type ConfigDocument } from "./config-schema.js";
 import { configToPreferences, preferencesToConfig } from "./preference-config.js";
-import { AppPreferencesSchema } from "./schemas/settings.js";
+import { AppPreferencesSchema, PERSONALIZATION_TEMPLATES } from "./schemas/settings.js";
+import { readOptionalFile } from "./private-file.js";
 import { getLocalRecord, putLocalRecord } from "./database.js";
 import { PersistenceError, isMissing, type PersistenceIssue } from "./errors.js";
 import { resolveConfigPath } from "./home.js";
@@ -105,6 +106,12 @@ function checkScope(document: ConfigDocument, layer: "profile" | "task" | "turn"
 async function validateRequiredSources(home: string, document: ConfigDocument): Promise<void> {
   const defaults = document.defaults;
   if (defaults?.account_id && (!document.accounts?.[defaults.account_id] || document.accounts[defaults.account_id].enabled === false)) throw new PersistenceError({ code: "INVALID_ACCOUNT_DEFAULT", path: "defaults.account_id", message: "The default account is missing or disabled.", action: "Choose an enabled account or remove the explicit default." });
+  const active = document.personalization?.active;
+  if (active && document.personalization?.mode !== "disabled") {
+    const file = active.startsWith("custom:") ? path.join(home, "instructions", "personalities", `${active.slice(7)}.md`) : active;
+    const text = active.startsWith("custom:") ? await readOptionalFile(file) : PERSONALIZATION_TEMPLATES.find((entry) => entry.id === active.slice(8))?.content;
+    if (text == null || text.trim().length > 8000) throw new PersistenceError({ code: "MISSING_INSTRUCTION_SOURCE", path: file, message: "The selected personality is missing or exceeds its supported size.", action: "Restore its Markdown file or select an available personality in Settings." });
+  }
   const required = document.personalization?.user_instructions;
   if (required) {
     const file = resolveConfigPath(required, home);

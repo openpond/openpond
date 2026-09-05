@@ -1,3 +1,4 @@
+import { getLocalRecord } from "../packages/persistence/src/database";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -40,8 +41,7 @@ describe("GitHub extension manager", () => {
     expect(installed.sourcePath).toBe(path.join(rootPath, "github", "acme", "pond-skills", "current"));
     await expect(readFile(path.join(installed.sourcePath, "skills/release-notes/SKILL.md"), "utf8"))
       .resolves.toContain("Release Notes");
-    await expect(readFile(path.join(rootPath, "registry.json"), "utf8"))
-      .resolves.toContain("github:acme/pond-skills");
+    expect(JSON.stringify(getLocalRecord(rootPath, "extension_installations", "registry")?.value)).toContain("github:acme/pond-skills");
 
     const catalog = await manager.list();
     expect(catalog.error).toBeNull();

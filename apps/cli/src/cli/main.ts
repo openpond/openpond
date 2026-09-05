@@ -80,7 +80,7 @@ async function runEmbeddedCompanion(argv: string[]): Promise<boolean> {
 void runOpenPondCli().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   const issue = (error as { issue?: unknown }).issue;
-  if (process.argv.includes("--json")) console.log(JSON.stringify({ error: issue ?? { code: "CLI_ERROR", message } }));
+  if (process.argv.includes("--json") && !(error instanceof Error && error.name === "OpenPondChildProcessExitError")) console.log(JSON.stringify({ error: issue ?? { code: "CLI_ERROR", message } }));
   else if (issue && typeof issue === "object") {
     const detail = issue as { code: string; path: string; message: string; action: string };
     console.error(`${detail.code}: ${detail.message}\n${detail.path}\n${detail.action}`);

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { withLocalDatabase } from "./database.js";
+import { openStorageDatabase, withLocalDatabase } from "./database.js";
 import { privateDirectory, atomicWriteFile, withFileLock } from "./private-file.js";
 import { storagePaths } from "./home.js";
 import { PersistenceError, isMissing } from "./errors.js";
@@ -19,6 +19,25 @@ const artifactPath = (home: string, hash: string) => path.join(home, "artifacts"
 const lockPath = (home: string) => path.join(storagePaths(home).runtime, "artifacts");
 function database<T>(home: string, action: Parameters<typeof withLocalDatabase<T>>[1]): T { return withLocalDatabase(home, (db) => { db.exec(SQL); return action(db); }); }
 function invalid(file: string): PersistenceError { return new PersistenceError({ code: "ARTIFACT_UNAVAILABLE", path: file, message: "A referenced artifact is missing or failed its checksum.", action: "Restore the object from a verified backup. Its reference has been preserved." }); }
+
+/** Recovery must establish that every durable reference has complete, authentic bytes. */
+export async function validateManagedArtifacts(home: string): Promise<void> {
+  const db = openStorageDatabase(storagePaths(home).database, true);
+  let rows: { sha256: string; payload: string }[];
+  try {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE name='managed_artifact_references'").get()) return;
+    rows = db.prepare("SELECT DISTINCT o.sha256,o.payload FROM managed_artifact_objects o JOIN managed_artifact_references r ON r.sha256=o.sha256").all() as typeof rows;
+  } finally { db.close(); }
+  for (const row of rows) {
+    const file = artifactPath(home, row.sha256);
+    try {
+      const record = manifestSchema.parse(JSON.parse(row.payload));
+      const manifest = manifestSchema.parse(JSON.parse(await fs.readFile(`${file}.json`, "utf8")));
+      const stat = await fs.lstat(file);
+      if (!stat.isFile() || record.sha256 !== row.sha256 || JSON.stringify(record) !== JSON.stringify(manifest) || stat.size !== record.sizeBytes || await digestFile(file) !== row.sha256) throw invalid(file);
+    } catch { throw invalid(file); }
+  }
+}
 
 /** Bytes and immutable manifest are durable before their authoritative reference commits. */
 export async function publishManagedArtifact(home: string, input: { owner: ArtifactOwner; displayName: string; mediaType: string } & ({ bytes: Uint8Array } | { sourceFile: string })): Promise<ArtifactReference & { path: string }> {

@@ -1,10 +1,11 @@
+import { currentOpenPondHome } from "./home-context.js";
 import os from "node:os";
 import path from "node:path";
 import { PersistenceError } from "./errors.js";
 
 export function resolveOpenPondHome(options: { home?: string; channel?: "stable" | "nightly"; env?: NodeJS.ProcessEnv } = {}): string {
   const env = options.env ?? process.env;
-  const explicit = options.home?.trim() || env.OPENPOND_HOME?.trim();
+  const explicit = options.home?.trim() || (options.env ? undefined : currentOpenPondHome()) || env.OPENPOND_HOME?.trim();
   if (explicit) return path.resolve(expandHome(explicit));
   for (const name of ["OPENPOND_APP_HOME", "OPENPOND_CONFIG_DIR"] as const) {
     if (env[name]?.trim()) {

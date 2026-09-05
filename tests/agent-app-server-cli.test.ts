@@ -28,7 +28,7 @@ describe("openpond app-server process boundary", () => {
         require.resolve("tsx/cli"),
         path.resolve("apps/cli/src/cli/main.ts"),
         "app-server",
-        "--store-dir",
+        "--home",
         storeDir,
       ],
       {

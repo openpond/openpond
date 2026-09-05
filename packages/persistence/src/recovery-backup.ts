@@ -1,13 +1,15 @@
+import { rebaseStoragePointers } from "./storage-rebase.js";
+import { externalStorageReferences } from "./storage-references.js";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { backup } from "node:sqlite";
 import { acquireFileLock, atomicWriteFile, privateDirectory } from "./private-file.js";
-import { storagePaths, resolveConfigPath } from "./home.js";
+import { storagePaths } from "./home.js";
 import { initializeHome, validateMigratedHome } from "./migration.js";
 import { snapshotCopy, fileReceipts } from "./migration-files.js";
 import { openStorageDatabase } from "./database.js";
-import { readConfig, updateConfig } from "./config.js";
+import { updateConfig } from "./config.js";
 import { encryptBackup, decryptBackup, within, type BackupManifest } from "./backup-format.js";
 import { PersistenceError, isMissing } from "./errors.js";
 
@@ -35,10 +37,7 @@ export async function exportRecoveryBackup(home: string, destination: string, ke
       try { await backup(db, storagePaths(stage).database); } finally { db.close(); }
     }
     await validateMigratedHome(stage);
-    const config = (await readConfig(home)).document;
-    const roots = new Set<string>();
-    if (config.storage?.datasets_dir) { const directory = resolveConfigPath(config.storage.datasets_dir, home); if (!within(directory, home)) roots.add(directory); }
-    const externalRoots = await Promise.all([...roots].map(async (root) => ({ path: root, available: Boolean(await fs.stat(root).catch(() => null)), included: false as const })));
+    const externalRoots = await externalStorageReferences(home);
     const entries: BackupManifest["entries"] = [];
     for (const receipt of await fileReceipts(stage)) {
       if (receipt.path.endsWith("-wal") || receipt.path.endsWith("-shm") || /^(config\.toml|secrets[\\/](?:credentials\.json|server-token))\.lock(?:\.|$)/.test(receipt.path)) continue;
@@ -86,26 +85,5 @@ async function rebaseRestoredPointers(stage: string, original: string, destinati
     ...(config.personalization?.user_instructions && path.isAbsolute(config.personalization.user_instructions) ? { personalization: { ...config.personalization, user_instructions: rebase(config.personalization.user_instructions) } } : {}),
     ...(config.projects?.new_project_directory && path.isAbsolute(config.projects.new_project_directory) ? { projects: { ...config.projects, new_project_directory: rebase(config.projects.new_project_directory) } } : {}),
   }));
-  const file = storagePaths(stage).database;
-  if (!await fs.stat(file).catch(() => null)) return;
-  const db = openStorageDatabase(file);
-  try {
-    // Rebase mutable placement pointers; audit events and immutable release documents retain exact bytes.
-    const tables = new Set(["sessions", "saved_local_projects", "profile_installations", "refiner_bindings", "harness_release_records", "dataset_artifacts", "dataset_import_jobs", "taskset_drafts"]);
-    function visit(value: unknown, key = ""): unknown {
-      if (typeof value === "string" && /(?:path|directory|root|cwd)$/i.test(key) && key !== "repositoryId" && path.isAbsolute(value)) return rebase(value);
-      if (Array.isArray(value)) return value.map((entry) => visit(entry, key));
-      if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, visit(entry, key)]));
-      return value;
-    }
-    db.exec("BEGIN IMMEDIATE");
-    for (const { name } of db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]) if (tables.has(name)) {
-      const columns = db.prepare(`PRAGMA table_info(${name})`).all() as { name: string; pk: number }[];
-      const id = columns.find((entry) => entry.pk === 1)?.name;
-      if (!id || !columns.some((entry) => entry.name === "payload")) continue;
-      for (const row of db.prepare(`SELECT ${id} AS id, payload FROM ${name}`).all() as { id: string; payload: string }[]) db.prepare(`UPDATE ${name} SET payload=? WHERE ${id}=?`).run(JSON.stringify(visit(JSON.parse(row.payload))), row.id);
-      if (columns.some((entry) => entry.name === "bundle_path")) for (const row of db.prepare(`SELECT ${id} AS id,bundle_path FROM ${name}`).all() as { id: string; bundle_path: string }[]) db.prepare(`UPDATE ${name} SET bundle_path=? WHERE ${id}=?`).run(rebase(row.bundle_path), row.id);
-    }
-    db.exec("COMMIT; PRAGMA wal_checkpoint(TRUNCATE)");
-  } finally { db.close(); }
+  rebaseStoragePointers(stage, [{ from: original, to: destination }]);
 }

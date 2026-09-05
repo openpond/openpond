@@ -1,3 +1,4 @@
+import { updateAccountConfiguration, readAccountConfiguration, type PersistedAccountConfiguration } from "../packages/persistence/src/accounts";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -18,9 +19,9 @@ afterEach(async () => {
 async function writeConfig(value: unknown): Promise<string> {
   if (!tempHome) throw new Error("missing temp home");
   const configDir = path.join(tempHome, ".openpond");
-  const configPath = path.join(configDir, "config.json");
+  const configPath = path.join(configDir, "config.toml");
   await mkdir(configDir, { recursive: true });
-  await writeFile(configPath, JSON.stringify(value, null, 2), "utf8");
+  await updateAccountConfiguration(configDir, () => value as PersistedAccountConfiguration);
   return configPath;
 }
 
@@ -58,12 +59,12 @@ describe("updateOpenPondAccountConfig", () => {
     `;
     const { exitCode, stdout, stderr } = await runTestProcess(process.execPath, ["--import", "tsx", "-e", script], {
       cwd: path.resolve(import.meta.dirname, ".."),
-      env: { ...process.env, HOME: tempHome! },
+      env: { ...process.env, OPENPOND_HOME: path.join(tempHome!, ".openpond") },
     });
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     const context = JSON.parse(stdout);
-    const saved = JSON.parse(await readFile(configPath, "utf8"));
+    const saved = await readAccountConfiguration(path.dirname(configPath));
 
     expect(saved.activeProfile).toEqual({ handle: "qa", baseUrl: "https://new-web.example" });
     expect(saved.accounts).toEqual([

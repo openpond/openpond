@@ -1,3 +1,4 @@
+import { updateAccountConfiguration, readAccountConfiguration, type PersistedAccountConfiguration } from "../packages/persistence/src/accounts";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -18,9 +19,9 @@ afterEach(async () => {
 async function writeConfig(value: unknown): Promise<string> {
   if (!tempHome) throw new Error("missing temp home");
   const configDir = path.join(tempHome, ".openpond");
-  const configPath = path.join(configDir, "config.json");
+  const configPath = path.join(configDir, "config.toml");
   await mkdir(configDir, { recursive: true });
-  await writeFile(configPath, JSON.stringify(value, null, 2), "utf8");
+  await updateAccountConfiguration(configDir, () => value as PersistedAccountConfiguration);
   return configPath;
 }
 
@@ -37,7 +38,7 @@ async function runRemove(
     cwd: path.resolve(import.meta.dirname, ".."),
     env: {
       ...process.env,
-      OPENPOND_CONFIG_DIR: path.join(tempHome!, ".openpond"),
+      OPENPOND_HOME: path.join(tempHome!, ".openpond"),
     },
   });
 }
@@ -68,7 +69,7 @@ describe("removeOpenPondAccount", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("removed");
 
-    const saved = JSON.parse(await readFile(configPath, "utf8"));
+    const saved = await readAccountConfiguration(path.dirname(configPath));
     expect(saved.activeProfile).toEqual({
       handle: "active",
       baseUrl: "https://openpond.ai",
@@ -103,7 +104,7 @@ describe("removeOpenPondAccount", () => {
       "Switch to another OpenPond account before removing the active account."
     );
 
-    const saved = JSON.parse(await readFile(configPath, "utf8"));
+    const saved = await readAccountConfiguration(path.dirname(configPath));
     expect(saved.accounts).toHaveLength(1);
   });
 });

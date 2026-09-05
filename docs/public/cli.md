@@ -12,7 +12,7 @@ Run the complete local web app directly from npm:
 npx openpond@latest
 ```
 
-This starts the local server, passes its authenticated URL directly to the system browser, and remains attached to the terminal. Press `Ctrl+C` to stop it. Conversations, settings, attachments, and other application state persist under `~/.openpond/openpond-app`; the directory where the command was invoked is not modified. npm's downloaded package cache is separate from OpenPond application data.
+This starts the local server, passes its authenticated URL directly to the system browser, and remains attached to the terminal. Press `Ctrl+C` to stop it. Conversations, settings, attachments, and other application state persist under `~/.openpond`; the directory where the command was invoked is not modified. npm's downloaded package cache is separate from OpenPond application data.
 
 The npm path requires Node.js 24.18 or newer in the Node 24 release line. For repeated use, `npm install --global openpond` installs the same package and `openpond` has the same web-first default behavior.
 
@@ -43,7 +43,7 @@ Project Actions use `openpond/actions` by default. `actions check` validates and
 
 ## Authentication and configuration
 
-`openpond login` stores account credentials in `~/.openpond/config.json`. Use `--account` or `OPENPOND_ACCOUNT` to select a saved account, and `--base-url` when the same handle exists at more than one endpoint. Configuration and caches are private, atomic, and locked across concurrent CLI processes.
+`openpond login` stores account credentials in the encrypted vault under `~/.openpond/secrets/`; non-secret account definitions live in `config.toml`. Use `--account` or `OPENPOND_ACCOUNT` to select a saved account, and `--base-url` when the same handle exists at more than one endpoint. Configuration and caches are private, atomic, and locked across concurrent CLI processes.
 
 Local `serve` and `ui` use an app-home capability token rather than a cloud API key. A normal web launch hands the authenticated URL directly to the browser without printing the token. `openpond ui --no-open` intentionally prints that URL for headless or remote workflows, so treat it as a secret.
 
@@ -64,3 +64,5 @@ Unknown options are rejected by the selected command schema. Arguments after `--
 `openpond --check-update` checks the npm version for npm-installed clients. GitHub archive users should use GitHub releases or rerun the installer for their selected version/channel. Stable tags publish both npm provenance and GitHub checksums only after supported Desktop and CLI smokes pass; nightlies publish GitHub artifacts only.
 
 The complete package guide lives in [apps/cli/README.md](../../apps/cli/README.md).
+
+See [configuration, storage and recovery](configuration.md) for the shared home, settings, migration and backup commands.

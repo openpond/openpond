@@ -23,6 +23,7 @@ export function sandboxScopeQuery(input: SandboxScopeInput = {}): URLSearchParam
 
 const preferenceRevisions = new WeakMap<ClientConnection, string>();
 const responseOrders = new WeakMap<ClientConnection, number>();
+const preferenceWrites = new WeakMap<ClientConnection, Promise<unknown>>();
 let requestOrder = 0;
 
 export async function apiFetch<T>(
@@ -30,6 +31,17 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  if (path === "/v1/preferences" && typeof init?.body === "string") {
+    const previous = preferenceWrites.get(connection) ?? Promise.resolve();
+    const write = previous.catch(() => undefined).then(() => performFetch<T>(connection, path, init));
+    preferenceWrites.set(connection, write);
+    try { return await write; }
+    finally { if (preferenceWrites.get(connection) === write) preferenceWrites.delete(connection); }
+  }
+  return performFetch<T>(connection, path, init);
+}
+
+async function performFetch<T>(connection: ClientConnection, path: string, init?: RequestInit): Promise<T> {
   const order = ++requestOrder;
   if (path === "/v1/preferences" && typeof init?.body === "string") {
     const expectedRevision = preferenceRevisions.get(connection);

@@ -1,3 +1,4 @@
+import { assertStorageAncestors, protectPrivateDirectory } from "@openpond/persistence";
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, cpSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -15,7 +16,9 @@ type Receipt = z.infer<typeof ReceiptSchema>;
 export function prepareDesktopBrowserHome(home: string, previousUserData: string): { userData: string; sourceBrowserState?: string } {
   const browser = path.join(home, "browser"), userData = path.join(browser, "chromium");
   const metadata = path.join(previousUserData, "browser-sidebar-state.json"), journal = path.join(browser, "native-migration.json");
+  assertStorageAncestors(browser);
   mkdirSync(browser, { recursive: true, mode: 0o700 });
+  protectPrivateDirectory(browser);
   if (lstatSync(browser).isSymbolicLink()) throw new Error("Native browser storage cannot be a symbolic link.");
   try {
     if (existsSync(journal)) {

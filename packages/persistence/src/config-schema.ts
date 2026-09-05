@@ -6,14 +6,21 @@ import { SubagentDelegationModeSchema, SubagentIsolationModeSchema, SubagentTool
 const string = z.string().trim().min(1);
 const pathString = z.string().trim().max(4096);
 const identifier = string.max(200).refine((value) => !["__proto__", "prototype", "constructor"].includes(value), "Reserved identifier");
+const endpoint = string.max(2048).refine((value) => {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.hash &&
+      ![...url.searchParams.keys()].some((key) => /(?:token|secret|password|authorization|api[_-]?key|credential)/i.test(key));
+  } catch { return false; }
+}, "Use an HTTP endpoint without embedded credentials; configure authentication through a credential reference.");
 const model = z.strictObject({ provider_id: ProviderIdSchema, model_id: string.max(300) });
 const inheritedModel = z.discriminatedUnion("mode", [z.strictObject({ mode: z.literal("inherit") }), z.strictObject({ mode: z.literal("custom"), ref: model })]);
 export const CredentialReferenceSchema = z.discriminatedUnion("source", [
   z.strictObject({ source: z.literal("secret"), id: identifier }),
   z.strictObject({ source: z.literal("env"), name: string.regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(160) }),
 ]);
-const account = z.strictObject({ handle: string, base_url: string.optional(), api_base_url: string.optional(), chat_api_base_url: string.optional(), environment: string.optional(), credential: CredentialReferenceSchema.optional(), enabled: z.boolean().optional() });
-const provider = z.strictObject({ enabled: z.boolean().optional(), base_url: string.max(2048).optional(), default_model: string.max(300).optional(), model_overrides: z.array(string.max(300)).max(500).optional(), credential: CredentialReferenceSchema.optional() });
+const account = z.strictObject({ handle: string, base_url: endpoint.optional(), api_base_url: endpoint.optional(), chat_api_base_url: endpoint.optional(), environment: string.optional(), credential: CredentialReferenceSchema.optional(), enabled: z.boolean().optional() });
+const provider = z.strictObject({ enabled: z.boolean().optional(), base_url: endpoint.optional(), default_model: string.max(300).optional(), model_overrides: z.array(string.max(300)).max(500).optional(), credential: CredentialReferenceSchema.optional() });
 const language = z.strictObject({ mode: z.enum(["auto", "disabled", "custom"]).optional(), custom_command: pathString.optional() });
 const cap = z.union([z.number().int().min(1).max(32), z.literal("unlimited")]);
 const role = z.strictObject({
@@ -37,6 +44,7 @@ export const ConfigSchema = z.strictObject({
   defaults: z.strictObject({ account_id: identifier.optional(), team_id: string.max(191).optional(), profile_ref: profileRef.optional() }).optional(),
   editor: z.strictObject({ language_servers: z.enum(["auto", "off"]).optional(), diagnostics_while_editing: z.boolean().optional(), check_on_save: z.boolean().optional(), languages: z.strictObject({ typescript: language.optional(), python: language.optional(), rust: language.optional() }).optional() }).optional(),
   training: z.strictObject({ default_model: inheritedModel.optional(), creation_mode: z.enum(["defaults", "customize"]).optional(), auto_approve_evidence: z.boolean().optional() }).optional(),
+  notifications: z.strictObject({ team_chat: z.enum(["all", "direct_mentions", "none"]).optional() }).optional(),
   ui: z.strictObject({ advanced_workspace_controls: z.boolean().optional() }).optional(),
   runtime: z.strictObject({ execution_mode: z.enum(["local", "hosted"]).optional(), mode: z.enum(["general", "builder"]).optional() }).optional(),
   personalization: z.strictObject({ active: string.regex(/^(builtin|custom):[a-zA-Z0-9_-]+$/).optional(), mode: z.enum(["enabled", "disabled"]).optional(), user_instructions: pathString.optional() }).optional(),

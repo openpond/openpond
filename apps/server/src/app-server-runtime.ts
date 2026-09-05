@@ -1,7 +1,7 @@
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
 import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
 import { initializeHome, readPreferences } from "@openpond/persistence";
-import { ownHomeRuntime } from "./runtime/home-runtime-owner.js";
+import { onStartupFailure, ownHomeRuntime } from "./runtime/home-runtime-owner.js";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
 
@@ -147,7 +147,9 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     logDir: path.join(storeDir, "logs"),
     metadata: { version, runtimeVersion, placement: "hosted_work" },
   });
+  onStartupFailure(() => logger.flush());
   const store = new SqliteStore(storeDir, { logger });
+  onStartupFailure(() => store.close());
   await store.recentTurns(1);
   const scheduleRecovery = reconcileInterruptedScheduledWork(storeDir);
   if (scheduleRecovery.recovered || scheduleRecovery.needsReview) logger.warn("Scheduled work requires review after restart", scheduleRecovery);
@@ -343,6 +345,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     ),
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
   });
+  onStartupFailure(() => turnRunner.close());
   await turnRunner.recoverPendingSubagentCompletions();
 
   async function resolveApproval(

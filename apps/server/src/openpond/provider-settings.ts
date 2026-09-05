@@ -77,7 +77,7 @@ export function mergeProviderConfigPatch(input: {
 export async function readProvidersFile(filePath: string): Promise<ProvidersFile> {
   const home = path.dirname(filePath);
   const { document } = await readConfig(home);
-  const cache = readCache<Pick<ProvidersFile, "modelCaches" | "catalogCache">>(home, "providers", "catalog", { allowStale: true });
+  const cache = await readCache<Pick<ProvidersFile, "modelCaches" | "catalogCache">>(home, "providers", "catalog", { allowStale: true });
   return normalizeProvidersFile({
     ...cache?.payload,
     providers: Object.fromEntries(Object.entries(document.providers ?? {}).map(([id, value]) => [id, {
@@ -108,7 +108,7 @@ export async function updateProvidersFile(
       return { ...document, ...(Object.keys(providers).length || document.providers ? { providers } : {}) };
     });
     if (JSON.stringify([current.modelCaches, current.catalogCache]) !== JSON.stringify([next.modelCaches, next.catalogCache])) {
-      writeCache(home, "providers", "catalog", { modelCaches: next.modelCaches, catalogCache: next.catalogCache });
+      await writeCache(home, "providers", "catalog", { modelCaches: next.modelCaches, catalogCache: next.catalogCache });
     }
     return readProvidersFile(filePath);
   });

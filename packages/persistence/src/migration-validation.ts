@@ -56,3 +56,13 @@ function migrateSubagentDefaults(value: unknown): unknown {
     ...(roles === undefined ? {} : { roles }),
   } };
 }
+
+const optionalText = z.string().nullable().optional();
+export const ImportedProviderSecretsSchema = z.strictObject({ version: z.literal(1), providers: z.record(z.string().min(1), z.strictObject({
+  source: z.enum(["local_secret", "env", "chatgpt_subscription"]), envVar: optionalText,
+  ciphertext: optionalText, iv: optionalText, tag: optionalText,
+  createdAt: optionalText, updatedAt: optionalText, lastValidatedAt: optionalText, lastError: optionalText,
+})) });
+export const ImportedOAuthSchema = z.strictObject({ accessToken: z.string().nullable(), refreshToken: z.string().min(1), expiresAt: z.number().finite(), accountId: z.string().nullable() });
+export const ImportedPersonalitySchema = z.strictObject({ version: z.literal(1), activeTemplateId: z.string(), updatedAt: z.string() });
+export const ImportedDatasetSettingsSchema = z.strictObject({ schemaVersion: z.literal("openpond.datasetStorageSettings.v1"), datasetStorePath: z.string().min(1), updatedAt: z.string() });

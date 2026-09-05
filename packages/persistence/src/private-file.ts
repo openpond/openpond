@@ -1,3 +1,4 @@
+import { protectPrivateDirectory } from "./private-permissions.js";
 import { assertStorageAncestors } from "./path-safety.js";
 import { randomUUID, createHash } from "node:crypto";
 import { promises as fs, constants } from "node:fs";
@@ -25,7 +26,7 @@ export async function privateDirectory(directory: string): Promise<void> {
   assertStorageAncestors(directory);
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   if ((await fs.lstat(directory)).isSymbolicLink()) throw new PersistenceError({ code: "UNSAFE_STORAGE_PATH", path: directory, message: "Managed storage directories cannot be symbolic links.", action: "Select a regular local storage folder." });
-  if (process.platform !== "win32") await fs.chmod(directory, 0o700);
+  protectPrivateDirectory(directory);
 }
 
 export async function atomicWriteFile(filePath: string, content: string | Uint8Array, options: { privateParent?: boolean } = {}): Promise<void> {

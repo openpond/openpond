@@ -17,13 +17,13 @@ Run a production-built snapshot in its own Desktop window with:
 pnpm stable
 ```
 
-`pnpm stable:desktop` is the explicit equivalent. This command builds and stages the web UI, builds the server and Desktop main process, serves the static UI and API together on port `17878`, and launches Electron against that origin. Its server data lives in `.openpond/stable-web/data`, and its Electron profile lives in `.openpond/stable-desktop/user-data`, so it can remain open alongside the hot-reloading `pnpm dev` app without sharing a single-instance lock or local state.
+`pnpm stable:desktop` is the explicit equivalent. This command builds and stages the web UI, builds the server and Desktop main process, serves the static UI and API together on port `17878`, and launches Electron against that origin. Its server data lives in `.openpond/stable-web/data`, and its Electron profile lives under that home in `browser/chromium`, so it can remain open alongside the hot-reloading `pnpm dev` app without sharing a single-instance lock or local state.
 
 The running snapshot does not read later source edits or Vite updates. Stop it with `Ctrl+C`, then run `pnpm stable` again whenever you want a newly built snapshot. The supervisor stops the server it started when the stable Desktop exits; if it attached to an already-running compatible stable server on `17878`, it leaves that server running.
 
 ## Ports and environment
 
-Stable development defaults to server port `17874` and renderer port `17876`; nightly defaults the server to `17875`. Override them with `OPENPOND_SERVER_PORT`, `OPENPOND_WEB_PORT`, or the dev-runner flags. Development state is isolated in `~/.openpond/openpond-app-dev` by default (`openpond-app-nightly-dev` for nightly); set `OPENPOND_APP_HOME` explicitly to use another directory. The dev runner allows 60 seconds for a state-heavy server to become ready; override that limit with `OPENPOND_DEV_SERVER_READY_TIMEOUT_MS` when diagnosing startup behavior. Packaged Desktop uses the same 60-second allowance and supports `OPENPOND_DESKTOP_SERVER_READY_TIMEOUT_MS` for diagnostics.
+Stable development defaults to server port `17874` and renderer port `17876`; nightly defaults the server to `17875`. Override them with `OPENPOND_SERVER_PORT`, `OPENPOND_WEB_PORT`, or the dev-runner flags. Development state is isolated in `~/.openpond/openpond-app-dev` by default (`openpond-app-nightly-dev` for nightly); set `OPENPOND_HOME` explicitly to use another directory. The dev runner allows 60 seconds for a state-heavy server to become ready; override that limit with `OPENPOND_DEV_SERVER_READY_TIMEOUT_MS` when diagnosing startup behavior. Packaged Desktop uses the same 60-second allowance and supports `OPENPOND_DESKTOP_SERVER_READY_TIMEOUT_MS` for diagnostics.
 
 Desktop reuses a server only when an explicit server URL or reuse policy is present and the matching capability token is available. Reused servers are never signalled by Desktop. Directly launching Electron without the supervisor is still supported: Desktop then owns its fallback server and renderer processes.
 
@@ -66,3 +66,5 @@ pnpm smoke:desktop:packaged
 The dev smoke proves preload/renderer/server health and a browser-level render boundary: character-by-character composer typing must not commit the sidebar. The packaged smoke proves SQLite startup, browser snapshot/screenshot/input, detached-view cleanup, and app shutdown.
 
 Release CI runs packaged Desktop smokes on Linux and signed, notarized macOS builds for x64 and arm64. Windows is paused until an equivalent NSIS smoke is restored.
+
+Shared storage layout, migration and backup commands are documented in [configuration and recovery](../../docs/public/configuration.md).

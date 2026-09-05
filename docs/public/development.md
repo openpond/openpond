@@ -67,3 +67,5 @@ docs/
 scripts/           # development supervision, builds, verification, and release tooling
 tests/             # root unit, integration, contract, live, and smoke tests
 ```
+
+See [configuration, storage and recovery](configuration.md) for the shared home, settings, migration and backup commands.

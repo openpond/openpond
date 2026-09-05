@@ -1,4 +1,5 @@
 import { previewMigration } from "./migration-preview.js";
+import { validateManagedArtifacts } from "./artifacts.js";
 import { resolveMigrationTarget } from "./migration-conflicts.js";
 import { assertStorageAncestors } from "./path-safety.js";
 import { importBrowserMetadataOnce } from "./browser-migration.js";
@@ -50,6 +51,12 @@ export async function initializeHome(home: string, options: MigrationOptions = {
       await readConfig(home);
       await atomicWriteFile(storagePaths(home).marker, `${JSON.stringify({ ...STORAGE_LAYOUT, migrationId: null }, null, 2)}\n`);
       return report(home, "new", null);
+    }
+    // A missing marker is not evidence that a destination is empty. Never replace
+    // authoritative data from a partially configured or separately initialized home.
+    for (const destination of [storagePaths(home).database, storagePaths(home).credentials]) {
+      if (destination && existsSync(destination)) throw migrationConflict(destination,
+        "The destination already contains authoritative state. Import the previous installation into a fresh home; existing history and credentials have been preserved.");
     }
     await assertMigrationSourcesStopped(sources.sourceAppHome, sources.sourceConfig);
     const id = `migration-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
@@ -136,6 +143,7 @@ export async function validateMigratedHome(home: string): Promise<void> {
       if (integrity.length !== 1 || Object.values(integrity[0]!)[0] !== "ok" || db.prepare("PRAGMA foreign_key_check").all().length) throw migrationConflict(storagePaths(home).database, "The imported database failed integrity checks.");
       db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     } finally { db.close(); }
+    await validateManagedArtifacts(home);
   }
 }
 async function install(journal: MigrationJournal): Promise<void> {

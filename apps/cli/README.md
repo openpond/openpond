@@ -10,7 +10,7 @@ Launch the complete local web app without installing it globally:
 npx openpond@latest
 ```
 
-The command starts a local OpenPond server, passes its authenticated URL directly to your system browser, and stays attached until you press `Ctrl+C`. Application state persists under `~/.openpond/openpond-app`; the directory where you invoke the command is not modified. npm maintains its own package cache separately.
+The command starts a local OpenPond server, passes its authenticated URL directly to your system browser, and stays attached until you press `Ctrl+C`. Application state persists under `~/.openpond`; the directory where you invoke the command is not modified. npm maintains its own package cache separately.
 
 Node.js 24.18 or newer in the Node 24 release line is required. Other installation and launch forms remain available:
 
@@ -28,7 +28,7 @@ openpond tui
 curl -fsSL https://openpond.ai/install.sh | bash
 ```
 
-Login (stores key in `~/.openpond/config.json`):
+Login (stores authentication in the encrypted home vault):
 
 ```bash
 openpond login
@@ -83,9 +83,9 @@ Global account selection:
 
 Command reference:
 
-- `openpond login`: prompt for API key and save to `~/.openpond/config.json`.
+- `openpond login`: prompt for an API key and save it in the encrypted home vault.
 - `openpond login --api-key <key>`: save the API key without prompting.
-- `openpond profiles list`: list redacted local profiles from `~/.openpond/config.json`.
+- `openpond profiles list`: list redacted local accounts from the shared home configuration.
 - `openpond profiles use <name> [--base-url <url>]`: switch the active local profile.
 - `openpond profiles save <name> --api-key <key> [--base-url <url>] [--environment <name>]`: save or update a local profile API key.
 - `openpond account`: fetch current account/profile fields and active products for the selected API key.

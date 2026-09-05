@@ -338,7 +338,7 @@ Use that package in both placements:
 
 The sandbox supervisor should launch the pinned CLI with the sandbox workspace
 as its current directory and a durable state directory, for example
-`openpond app-server --store-dir <durable-state-dir>`. The supervisor owns the
+`openpond app-server --home <durable-state-dir>`. The supervisor owns the
 process and exchanges newline-delimited JSON-RPC on stdin/stdout. Readiness is
 the successful `initialize`/`initialized` handshake followed by
 `runtime/capabilities` and `harness/validate`; there is no app-server HTTP port

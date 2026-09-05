@@ -1,8 +1,10 @@
+import { browserStateSchema } from "./browser-migration.js";
+import { rebaseStoragePointers, type StorageMove } from "./storage-rebase.js";
 import { publishManagedArtifact } from "./artifacts.js";
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { readJsonFile } from "./private-file.js";
-import { getLocalRecord, putLocalRecord, withLocalDatabase } from "./database.js";
+import { getLocalRecord, putLocalRecord } from "./database.js";
 import { migrationConflict } from "./migration-values.js";
 import { snapshotCopy, type MigrationJournal } from "./migration-files.js";
 
@@ -47,11 +49,18 @@ export async function importAdditionalDomains(journal: MigrationJournal): Promis
   }
   if (journal.sourceBrowserState) {
     const file = path.join(journal.backup, "browser-sidebar-state.json");
-    const metadata = await readJsonFile<{ conversations?: Record<string, unknown> }>(file, () => ({}));
-    if (!metadata.conversations || typeof metadata.conversations !== "object" || Array.isArray(metadata.conversations)) throw migrationConflict(file, "Unsupported browser tab metadata.");
+    const parsed = browserStateSchema.safeParse(await readJsonFile<unknown>(file, () => null));
+    if (!parsed.success) throw migrationConflict(file, "Unsupported browser tab metadata.");
+    const metadata = parsed.data;
     for (const [id, conversation] of Object.entries(metadata.conversations)) putLocalRecord(journal.stage, "browser_tab_state", id, conversation);
   }
-  if (journal.sourceAppHome) rebaseManagedHarnessReleasePaths(journal);
+  const moves: StorageMove[] = [];
+  if (journal.sourceAppHome) {
+    for (const name of ["harnesses", "refiners"]) moves.push({ from: path.join(journal.sourceAppHome, name), to: path.join(journal.home, "library", name) });
+    moves.push({ from: journal.sourceAppHome, to: journal.home });
+  }
+  if (journal.sourceConfig) for (const name of ["profiles", "extensions"]) moves.push({ from: path.join(path.dirname(journal.sourceConfig), name), to: path.join(journal.home, "library", name) });
+  rebaseStoragePointers(journal.stage, moves);
   const attachments = path.join(journal.stage, "attachments");
   if (existsSync(attachments)) await importAttachments(journal.stage, attachments, []);
 }
@@ -59,18 +68,6 @@ function within(file: string, root: string): boolean {
   const relative = path.relative(root, file);
   return relative === "" || !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative);
 }
-function rebaseManagedHarnessReleasePaths(journal: MigrationJournal): void {
-  withLocalDatabase(journal.stage, (db) => {
-    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='harness_release_records'").get()) return;
-    const root = path.join(journal.sourceAppHome!, "harnesses");
-    for (const row of db.prepare("SELECT content_hash, bundle_path, payload FROM harness_release_records").all() as { content_hash: string; bundle_path: string; payload: string }[]) {
-      if (!within(row.bundle_path, root)) continue;
-      const bundlePath = path.join(journal.home, "library", "harnesses", path.relative(root, row.bundle_path));
-      db.prepare("UPDATE harness_release_records SET bundle_path=?, payload=? WHERE content_hash=?").run(bundlePath, JSON.stringify({ ...JSON.parse(row.payload), bundlePath }), row.content_hash);
-    }
-  });
-}
-
 async function importAttachments(home: string, directory: string, parts: string[]): Promise<void> {
   for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name), segments = [...parts, entry.name];
