@@ -1,0 +1,37 @@
+name: APT repository checks
+
+on:
+  pull_request:
+    paths:
+      - scripts/apt/**
+      - .github/workflows/publish-apt.yml
+      - .github/workflows/apt-checks.yml
+  push:
+    branches: [master]
+    paths:
+      - scripts/apt/**
+      - .github/workflows/publish-apt.yml
+      - .github/workflows/apt-checks.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repository:
+    strategy:
+      matrix:
+        distribution: [ubuntu:24.04, debian:13]
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.distribution }}
+    timeout-minutes: 10
+    steps:
+      - name: Install repository tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates python3 apt-utils gnupg gpgv git
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - name: Verify signed APT downloads and interrupted publication
+        run: python3 -m unittest discover -s scripts/apt -p 'test_*.py'

@@ -236,8 +236,8 @@ function defaultPackagedDesktopPath(root: string): string | null {
           path.join(root, "release", "win-arm64-unpacked", "openpond nightly.exe"),
         ]
       : [
-          path.join(root, "release", "linux-unpacked", "openpond"),
-          path.join(root, "release", "linux-unpacked", "openpond nightly"),
+          path.join(root, "release", process.arch === "arm64" ? "linux-arm64-unpacked" : "linux-unpacked", "openpond-desktop"),
+          path.join(root, "release", process.arch === "arm64" ? "linux-arm64-unpacked" : "linux-unpacked", "openpond-desktop-nightly"),
           path.join(root, "release", "openpond-0.0.1.AppImage"),
         ];
   return candidates.find((candidate) => existsSync(candidate)) ?? null;

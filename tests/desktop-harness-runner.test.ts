@@ -18,7 +18,7 @@ describe("desktop harness runner", () => {
       "--grep",
       "chat",
       "--app",
-      "release/linux-unpacked/openpond",
+      "release/linux-unpacked/openpond-desktop",
       "--artifacts-dir",
       "tmp/harness",
       "--json=tmp/harness/report.json",
@@ -31,7 +31,7 @@ describe("desktop harness runner", () => {
       scenarioPaths: ["tests/desktop-scenarios/chat-two-turns.ts"],
       launchMode: "none",
       grep: "chat",
-      appPath: "release/linux-unpacked/openpond",
+      appPath: "release/linux-unpacked/openpond-desktop",
       artifactsDir: "tmp/harness",
       jsonPath: "tmp/harness/report.json",
       timeoutMs: 1234,
@@ -45,12 +45,12 @@ describe("desktop harness runner", () => {
       "run",
       "tests/desktop-scenarios/chat-two-turns.ts",
       "--packaged",
-      "--app=release/linux-unpacked/openpond",
+      "--app=release/linux-unpacked/openpond-desktop",
     ]);
 
     expect(options).toMatchObject({
       launchMode: "packaged",
-      appPath: "release/linux-unpacked/openpond",
+      appPath: "release/linux-unpacked/openpond-desktop",
     });
   });
 
