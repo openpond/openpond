@@ -3,10 +3,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TasksetSourceRefSchema } from "@openpond/contracts";
 import { learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
-import { createModelStarterCreationRequest } from "openpond-sdk/model-starters";
+import { createModelStarterCreationRequest, validateResolvedModelStarter } from "openpond-sdk/model-starters";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { withTempDirectory } from "./helpers/temp-directory.js";
-import { createInvoiceStarterPackage } from "../examples/training/invoice-extraction/package.js";
+import starterImportFixture from "./fixtures/model-starter-import.json";
 import { prepareModelStarterTaskset } from "../apps/server/src/training/model-starter-taskset.js";
 import { createModelStarterCreationService } from "../apps/server/src/training/model-starter-creation-service.js";
 import { createModelStarterRuntime } from "../apps/server/src/training/model-starter-runtime.js";
@@ -33,7 +33,7 @@ it("publishes a model-owned authored Taskset with only explicitly approved train
 });
 
 async function starterInput() {
-  const resolved = createInvoiceStarterPackage();
+  const resolved = validateResolvedModelStarter(structuredClone(starterImportFixture));
   const request = await createModelStarterCreationRequest({ profileId: "profile", modelId: "model", name: "Invoices", starter: learningRef(resolved.starter), startingModel: resolved.starter.startingModel, method: "sft" });
   const createdAt = "2026-09-06T20:00:00.000Z";
   const source = TasksetSourceRefSchema.parse({ schemaVersion: "openpond.generatedDatasetSource.v1", kind: "generated", id: "source", profileId: "profile", title: "Original test invoices", sourceHash: resolved.starter.contentHash, occurredAt: createdAt, licensingStatus: "approved", secretScanStatus: "passed", piiScanStatus: "passed", generatorId: "invoice-fixture", generatorVersion: "1", generatorHash: resolved.taskset.contentHash, seed: 0, metadata: {} });
