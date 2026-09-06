@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { ZodError } from "zod";
 import { OpenPondModelProjectApiError } from "openpond-sdk/model-projects";
+import { OpenPondModelStarterCatalogError } from "openpond-sdk/model-starter-catalog";
 import { readJson, sendBinary, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
 import {
@@ -13,6 +14,21 @@ import {
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
+  if ((request.method === "GET" && requestUrl.pathname === "/v1/training/model-starters") ||
+    (request.method === "POST" && ["/v1/training/model-starters/preview", "/v1/training/model-starters/create"].includes(requestUrl.pathname))) {
+    try {
+      const listing = request.method === "GET";
+      const action = listing ? "model_starter_catalog" : requestUrl.pathname.endsWith("/preview") ? "model_starter_preview" : "create_model_from_starter";
+      const query = Object.fromEntries(requestUrl.searchParams);
+      const body = listing ? { ...query, ...(query.limit === undefined ? {} : { limit: Number(query.limit) }) } : await readJson(request, { maxBytes: 65_536 });
+      sendJson(response, 200, await deps.trainingPayload(action, body, requestUrl));
+    } catch (error) {
+      if (error instanceof OpenPondModelStarterCatalogError) sendJson(response, error.status, { code: error.code, error: error.message });
+      else if (error instanceof ZodError) sendJson(response, 400, { code: "model_starter_request_invalid", error: "Starter request or publication does not match its contract." });
+      else throw error;
+    }
+    return true;
+  }
   if ((request.method === "PUT" && requestUrl.pathname === "/v1/training/models") ||
     (request.method === "POST" && requestUrl.pathname === "/v1/training/models/check")) {
     try {

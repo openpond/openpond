@@ -66,14 +66,7 @@ function createLearningTransaction(db: OpenPondSqliteConnection, scope: string, 
     },
     async put(kind, value, expectedRevision, index) {
       assertOpen();
-      const resource = learningResourceSchemas[kind].parse(value);
-      const current = db.get<RevisionRow>("SELECT revision FROM learning_resources WHERE scope = ? AND kind = ? AND id = ?", [scope, kind, resource.id]);
-      if ((current?.revision ?? 0) !== expectedRevision) throw new LearningConflictError(kind, resource.id, expectedRevision, current?.revision ?? 0);
-      if (resource.revision !== expectedRevision + 1) throw new Error("learning_resource_revision_invalid");
-      db.run("INSERT INTO learning_revisions (scope, kind, id, revision, payload) VALUES (?, ?, ?, ?, ?)", [scope, kind, resource.id, resource.revision, JSON.stringify(resource)]);
-      db.run(`INSERT INTO learning_resources (scope, kind, id, revision, parent_id, status) VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT (scope, kind, id) DO UPDATE SET revision = excluded.revision, parent_id = excluded.parent_id, status = excluded.status`,
-      [scope, kind, resource.id, resource.revision, index?.parentId ?? null, index?.status ?? null]);
+      putLearningResourceInTransaction(db, scope, kind, value, expectedRevision, index);
     },
     async list(kind, query) {
       assertOpen();
@@ -111,4 +104,17 @@ function createLearningTransaction(db: OpenPondSqliteConnection, scope: string, 
       if (!current) db.run("INSERT INTO learning_family_splits (scope, namespace, kind, key, split) VALUES (?, ?, ?, ?, ?)", [scope, namespace, kind, key, split]);
     },
   };
+}
+
+/** Synchronous storage boundary for callers already owning the transaction.
+ * Domain validation and authorization must precede this storage operation. */
+export function putLearningResourceInTransaction<K extends LearningResourceKind>(db: OpenPondSqliteConnection, scope: string, kind: K, value: LearningResourceFor<K>, expectedRevision: number, index?: { parentId?: string; status?: string }) {
+  const resource = learningResourceSchemas[kind].parse(value);
+  const current = db.get<RevisionRow>("SELECT revision FROM learning_resources WHERE scope = ? AND kind = ? AND id = ?", [scope, kind, resource.id]);
+  if ((current?.revision ?? 0) !== expectedRevision) throw new LearningConflictError(kind, resource.id, expectedRevision, current?.revision ?? 0);
+  if (resource.revision !== expectedRevision + 1) throw new Error("learning_resource_revision_invalid");
+  db.run("INSERT INTO learning_revisions (scope, kind, id, revision, payload) VALUES (?, ?, ?, ?, ?)", [scope, kind, resource.id, resource.revision, JSON.stringify(resource)]);
+  db.run(`INSERT INTO learning_resources (scope, kind, id, revision, parent_id, status) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT (scope, kind, id) DO UPDATE SET revision = excluded.revision, parent_id = excluded.parent_id, status = excluded.status`,
+  [scope, kind, resource.id, resource.revision, index?.parentId ?? null, index?.status ?? null]);
 }

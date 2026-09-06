@@ -173,6 +173,7 @@ import {
 import { createTrainingService } from "./training/training-service.js";
 import { requireReleasedTaskset } from "./training/local-taskset-release.js";
 import { createModelProjectHostingService } from "./training/model-project-hosting.js";
+import { createModelStarterRuntime } from "./training/model-starter-runtime.js";
 import { managedRlOperatorAccess } from "./training/managed-rl-operator-access.js";
 import { createTrainingApi } from "./training/training-api.js";
 import { runLocalHarnessEvaluationBaseline } from "./harness/local-harness-taskset-review.js";
@@ -754,6 +755,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     harnessRefinerBenchmarks,
     preferenceComparisons: preferenceComparisonService,
     modelProjectHosting,
+    modelStarters: createModelStarterRuntime({ store, home: storeDir, resolveAccess: resolveManagedTrainingAccess }),
     modelStream: trainingModelStream,
   });
   const trainingPayload = trainingApi.request;
