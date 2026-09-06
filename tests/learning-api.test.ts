@@ -45,6 +45,10 @@ test("public learning SDK crosses the authenticated HTTP boundary with retries, 
       await expect(sdk.submitExample({ ...fixture.example, input: { question: "Conflicting retry" } })).rejects.toMatchObject({ status: 409, code: "learning_idempotency_conflict" });
       await expect(sdk.get("evidence", "missing")).rejects.toMatchObject({ status: 404, code: "learning_resource_not_found" });
       const evidence = TaskEvidenceSchema.parse(first.resources[0]);
+      expect(await sdk.inspectEvidence(learningRef(evidence))).toMatchObject({ evidence: learningRef(evidence), definition: evidence.submission.taskDefinition, inspection: { evidenceValidity: "valid", taskReady: true, observedOutputValid: true, issues: [] } });
+      await expect(sdk.inspectEvidence({ ...learningRef(evidence), contentHash: "0".repeat(64) })).rejects.toMatchObject({ status: 409 });
+      const otherScope = new OpenPondLearningClient({ baseUrl, apiKey: "test-local-owner", scope: "other-workspace" });
+      await expect(otherScope.inspectEvidence(learningRef(evidence))).rejects.toMatchObject({ status: 404 });
       const grade = TaskGradeRunSchema.parse((await sdk.command({ operationId: "grade-http", action: "queue_grade", evidence: learningRef(evidence), target: "observed", proposedTarget: null, timeoutMs: 30_000, maximumSpendUsd: 0 })).resources[0]);
       await runtime.drain();
       expect(await sdk.get("grade", grade.id)).toMatchObject({ status: "completed", composition: { training: { passed: false } } });

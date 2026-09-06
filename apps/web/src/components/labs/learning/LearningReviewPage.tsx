@@ -1,8 +1,8 @@
 import { Fragment, useState } from "react";
-import { learningRef, inspectTaskEvidence, sameLearningRef, TaskAdmissionDecisionSchema, TaskGradeRunSchema, type OpenPondLearningClient, type TaskEvidence, type TaskGradeRun } from "openpond-sdk/learning";
+import { learningRef, sameLearningRef, TaskAdmissionDecisionSchema, TaskGradeRunSchema, type OpenPondLearningClient, type TaskEvidence, type TaskGradeRun } from "openpond-sdk/learning";
 import { ModelProjectPageHeader } from "../ModelProjectPageHeader";
 import { LearningActions, LearningError, LearningJsonField, LearningPager, LearningValue, parseLearningObject } from "./LearningFields";
-import { learningOperationId, useLearningMutation, useLearningResource, useLearningResources } from "./useLearningResources";
+import { learningOperationId, useLearningInspection, useLearningMutation, useLearningResource, useLearningResources } from "./useLearningResources";
 import { LearningFeedback } from "./LearningFeedback";
 import { RewardCompositionDetails } from "./RewardCompositionView";
 import { useDraftNavigation } from "../useDraftNavigation";
@@ -39,7 +39,7 @@ function EvidenceReview({ client, evidence, onBack, onBatches, onChanged }: { cl
   const mutation = useLearningMutation(client);
   const proposalSnapshot = JSON.stringify({ target, note });
   const proposalGuard = useDraftNavigation({ name: "review proposal", dirty: proposalSnapshot !== savedProposal, busy: mutation.busy, save: saveProposal });
-  const inspection = definition.resource ? inspectTaskEvidence(evidence, definition.resource) : null;
+  const { inspection, error: inspectionError } = useLearningInspection(client, learningRef(evidence));
   const gradeMap = new Map<string, TaskGradeRun>();
   for (const grade of [...queued, ...(grades.page?.items ?? []), observedReceipt.resource, targetReceipt.resource]) {
     if (grade && sameLearningRef(grade.evidence, learningRef(evidence)) && grade.revision >= (gradeMap.get(grade.id)?.revision ?? 0)) gradeMap.set(grade.id, grade);
@@ -64,7 +64,7 @@ function EvidenceReview({ client, evidence, onBack, onBatches, onChanged }: { cl
   }
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     <ModelProjectPageHeader title={evidence.submission.exampleId} description={`Attempt ${evidence.submission.attemptId} · evidence release ${evidence.revision} · ${evidence.submission.split}`} actions={<button type="button" className="training-button secondary" onClick={onBack}>Back to review</button>} />
-    <LearningError error={mutation.error ?? definition.error ?? decisions.error ?? grades.error ?? observedReceipt.error ?? targetReceipt.error} />{notice ? <p role="status">{notice}</p> : null}
+    <LearningError error={mutation.error ?? inspectionError ?? definition.error ?? decisions.error ?? grades.error ?? observedReceipt.error ?? targetReceipt.error} />{notice ? <p role="status">{notice}</p> : null}
     <p>Task: {inspection ? inspection.taskReady ? "Ready for grading and review" : "Needs correction" : "Loading contract…"}. Family: {evidence.submission.familyKey ?? "Unresolved"}.</p>
     {inspection?.issues.length ? <ul>{inspection.issues.map((issue, index) => <li key={index}>{issue.path}: {issue.message}</li>)}</ul> : null}
     {currentDecision ? <LearningValue label="Current decision" value={{ task: currentDecision.taskAdmissibility, observedResponse: currentDecision.observedQuality, supervisedTarget: currentDecision.targetApproval, reviewer: currentDecision.actor.id, note: currentDecision.note }} /> : <p>No decision exists for this evidence revision.</p>}

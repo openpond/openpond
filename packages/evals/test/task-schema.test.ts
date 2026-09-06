@@ -2,6 +2,36 @@ import { expect, test } from "vitest";
 import { assertBoundedTaskJson, TASK_JSON_SCHEMA_DIALECT, validateTaskSchema, validateTaskValue } from "../src/task-schema.js";
 import { gradeEvidence } from "../src/graders.js";
 import { TaskRecordSchema } from "../src/tasksets.js";
+import { createContext, Script } from "node:vm";
+import { build } from "esbuild";
+import { fileURLToPath } from "node:url";
+import { Ajv2020 } from "ajv/dist/2020.js";
+
+// Hosted editors parse portable definitions in browsers where CSP prohibits
+// runtime code generation. Schema checking must work in that same boundary.
+test("validates authored schemas without runtime code generation", async () => {
+  const bundle = await build({
+    stdin: { contents: 'import { validateTaskSchema } from "./src/task-schema.ts"; globalThis.results = [validateTaskSchema({type:"object",properties:{answer:{type:"string"}},required:["answer"],additionalProperties:false}), validateTaskSchema({type:"bogus"}), validateTaskSchema({type:"array",minItems:-1}), validateTaskSchema({unknownKeyword:true})];', resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "js" },
+    bundle: true, platform: "browser", target: "es2022", format: "iife", write: false,
+  });
+  const context = createContext({ TextEncoder, TextDecoder }, { codeGeneration: { strings: false, wasm: false } });
+  new Script(bundle.outputFiles[0]!.text).runInContext(context);
+  expect(context.results.map((result: { valid: boolean }) => result.valid)).toEqual([true, false, false, false]);
+});
+
+// A compact browser meta-schema must preserve dialect validation for supported
+// keywords; otherwise Desktop could publish malformed definitions to a worker.
+test("the browser profile preserves supported JSON Schema keyword constraints", () => {
+  const ajv = new Ajv2020({ strict: false, validateFormats: false });
+  const candidates: unknown[] = [null, false, true, -1, 0, 0.5, 1, "string", "bogus", [], ["string"], ["string", "string"], [1], {}];
+  const keywords = ["type", "enum", "const", "default", "title", "description", "examples", "readOnly", "writeOnly", "deprecated", "multipleOf", "maximum", "exclusiveMaximum", "minimum", "exclusiveMinimum", "maxLength", "minLength", "contentEncoding", "contentMediaType", "maxItems", "minItems", "uniqueItems", "maxContains", "minContains", "maxProperties", "minProperties", "required", "dependentRequired", "properties", "$defs", "dependentSchemas", "allOf", "anyOf", "oneOf", "prefixItems", "items", "additionalProperties", "not", "if", "then", "else", "contains", "unevaluatedProperties", "unevaluatedItems", "propertyNames", "$comment"];
+  for (const keyword of keywords) for (const value of candidates) {
+    const schema = { [keyword]: value };
+    let runtimeAccepts = true;
+    try { ajv.compile(schema); } catch { runtimeAccepts = false; }
+    expect(validateTaskSchema(schema).valid, `${keyword}: ${JSON.stringify(value)}`).toBe(runtimeAccepts);
+  }
+});
 
 // Regression: required-key checks previously accepted incorrectly typed or out-of-range nested values.
 test("JSON Schema validates nested constraints without coercion, mutation or remote resolution", () => {

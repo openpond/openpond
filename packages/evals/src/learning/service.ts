@@ -9,6 +9,7 @@ import { LearningCommandSchema, type LearningCommand, type PublishLearningResour
 import { LearningConflictError, learningEvidenceId, learningOperationId, requireLearningRelease, requireLearningResource, type LearningRepository, type LearningResourceFor, type LearningResourceKind, type LearningResourcePage, type LearningResourcePointer, type LearningResourceQuery, type LearningStoredResource, type LearningTransaction } from "./repository.js";
 import { validateSourceSubmission } from "./admission.js";
 import { LearningTextAssetSchema, verifyLearningTextAsset } from "./assets.js";
+import { LearningRevisionRefSchema } from "./contracts.js";
 
 export type LearningActor = { id: string; role: "editor" | "reviewer" | "source"; sourceId?: string };
 export type LearningServiceContext = { scope: string; actor: LearningActor };
@@ -283,6 +284,15 @@ export function createLearningService(repository: LearningRepository, options: {
 
   return {
     command,
+    async inspectEvidence(context: LearningServiceContext, reference: LearningRevisionRef) {
+      authorizeRead(context);
+      const ref = LearningRevisionRefSchema.parse(reference);
+      return repository.transaction(context.scope, async (transaction) => {
+        const evidence = await requireLearningRelease(transaction, "evidence", ref);
+        const definition = await requireLearningRelease(transaction, "definition", evidence.submission.taskDefinition);
+        return { evidence: learningRef(evidence), definition: learningRef(definition), inspection: inspectTaskEvidence(evidence, definition) };
+      });
+    },
     async get<K extends LearningResourceKind>(context: LearningServiceContext, kind: K, id: string, revision?: number): Promise<LearningResourceFor<K>> {
       authorizeRead(context);
       return repository.transaction(context.scope, (transaction) => requireLearningResource(transaction, kind, id, revision));

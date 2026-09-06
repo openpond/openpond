@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createModelProjectsClient, createModelProjectSaveRequest, OpenPondModelProjectApiError } from "openpond-sdk/model-projects";
 import { OpenPondLearningClient, learningRef } from "openpond-sdk/learning";
+import { OpenPondTasksetCatalogClient, OpenPondTasksetCatalogError } from "openpond-sdk/taskset-catalog";
 
 // HTTP-only verification. Uses a previously reviewed batch and never starts a
 // model, grading job, or training job. Credentials remain in process memory.
@@ -19,6 +20,7 @@ assert(scope, "A personal staging workspace is required.");
 const headers = { authorization: `Bearer ${apiKey}`, "X-OpenPond-Team-Id": scope };
 const models = createModelProjectsClient({ baseUrl, headers });
 const learning = new OpenPondLearningClient({ baseUrl, apiKey, scope });
+const catalog = new OpenPondTasksetCatalogClient({ baseUrl, apiKey, teamId: scope });
 const batch = await learning.get("batch", "learning-smoke-9c58618a-ee03-4208-b7d1-73cc45636067:batch");
 const binding = await learning.get("binding", batch.rewardBinding.id, batch.rewardBinding.revision);
 assert.deepEqual(learningRef(binding), batch.rewardBinding);
@@ -47,4 +49,13 @@ assert.equal(detail.resources.filter((resource) => resource.resourceId === recei
 const configured = await models.saveConfiguration(await createModelProjectSaveRequest({ ...editable, name: revised.name, trainingSetup: { rewardBindingRef: batch.rewardBinding, tasksetRef: { id: receipt.releaseId, revision: receipt.revision, contentHash: receipt.contentHash }, tasksetRelease: { id: receipt.releaseId, contentHash: receipt.contentHash } } }, revised.revision));
 assert.equal(configured.trainingSetup.tasksetRef?.contentHash, receipt.contentHash);
 assert.deepEqual((await models.get(saved.id)).project.trainingSetup.rewardBindingRef, batch.rewardBinding);
-process.stdout.write(JSON.stringify({ status: "PASS", modelId: saved.id, tasksetId: receipt.tasksetId, revision: configured.revision, checks: ["Reward before Tasks", "retry receipt", "revision conflict", "concurrent publication", "exact attachment"] }) + "\n");
+const page = await catalog.list({ modelProjectId: saved.id, limit: 1 });
+assert.equal(page.items.length, 1);
+assert.equal(page.nextCursor, null);
+assert.equal(page.items[0]!.id, receipt.tasksetId);
+assert.deepEqual((await catalog.get(receipt.tasksetId)).release, configured.trainingSetup.tasksetRef);
+assert.deepEqual(await catalog.resolve(configured.trainingSetup.tasksetRef!), page.items[0]);
+assert.equal("tasks" in page.items[0]!, false);
+assert.equal(JSON.stringify(page).includes("r2://"), false);
+await assert.rejects(catalog.resolve({ ...configured.trainingSetup.tasksetRef!, contentHash: "f".repeat(64) }), (error: unknown) => error instanceof OpenPondTasksetCatalogError && error.status === 404);
+process.stdout.write(JSON.stringify({ status: "PASS", modelId: saved.id, tasksetId: receipt.tasksetId, revision: configured.revision, checks: ["Reward before Tasks", "retry receipt", "revision conflict", "concurrent publication", "exact attachment", "catalog metadata and exact release"] }) + "\n");
