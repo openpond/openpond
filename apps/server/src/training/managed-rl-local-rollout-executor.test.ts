@@ -54,7 +54,8 @@ describe("Managed RL local execution task resolution", () => {
         trainingSampleSha256s: ["sample-1", "sample-2"],
       },
       evaluationEvidence: { private: "not part of the completion contract" },
-    })).toEqual({
+    }, "evaluation:task:1")).toEqual({
+      deliveryId: "evaluation:task:1",
       status: "succeeded",
       executorId: "desktop-executor",
       environmentSha256: "a".repeat(64),
@@ -66,4 +67,10 @@ describe("Managed RL local execution task resolution", () => {
       },
     });
   });
+});
+
+// A late failure must identify its own task rather than terminate a newer claim.
+it("binds failure completion to its delivery without forwarding partial private outputs", () => {
+  expect(managedRlSandboxCompletion({ status: "failed", executorId: "desktop-executor", errorCode: "task_failed", policyResult: { private: true } }, "evaluation:task:1")).toEqual({ status: "failed", executorId: "desktop-executor", errorCode: "task_failed", deliveryId: "evaluation:task:1" });
+  expect(() => managedRlSandboxCompletion({ status: "failed" }, "")).toThrow("delivery_missing");
 });
