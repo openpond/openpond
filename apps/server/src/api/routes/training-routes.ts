@@ -1,6 +1,8 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
+import { ZodError } from "zod";
+import { OpenPondModelProjectApiError } from "openpond-sdk/model-projects";
 import { readJson, sendBinary, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
 import {
@@ -11,6 +13,16 @@ import {
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
+  if (request.method === "PUT" && requestUrl.pathname === "/v1/training/models") {
+    try {
+      sendJson(response, 200, await deps.trainingPayload("save_model_project", await readJson(request, { maxBytes: 524_288 }), requestUrl));
+    } catch (error) {
+      if (error instanceof OpenPondModelProjectApiError) sendJson(response, error.status, { code: error.code, error: error.message });
+      else if (error instanceof ZodError) sendJson(response, 400, { code: "model_configuration_invalid", error: "Model configuration does not match its contract." });
+      else throw error;
+    }
+    return true;
+  }
   if (request.method === "GET" && requestUrl.pathname === "/v1/training") {
     sendJson(response, 200, await deps.trainingPayload("state", {}, requestUrl));
     return true;
@@ -102,8 +114,8 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
     { method: "POST", path: "/v1/training/taskset-drafts", action: "init_taskset_draft", status: 201 },
     { method: "POST", path: "/v1/training/taskset-drafts/import", action: "import_taskset_draft_package", status: 201 },
+    { method: "POST", path: "/v1/training/learning-batches/prepare", action: "prepare_learning_batch", status: 201 },
     { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
-    { method: "PUT", path: "/v1/training/models", action: "save_model_project" },
     { method: "POST", path: "/v1/training/comparison-series", action: "save_model_comparison_series", status: 201 },
     { method: "PUT", path: "/v1/training/continual-support/issue-reviews", action: "save_continual_support_issue_review" },
     { method: "POST", path: "/v1/training/continual-learning/daily-batches/import", action: "import_continual_learning_daily_batch", status: 201 },

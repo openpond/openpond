@@ -61,10 +61,19 @@ export const GeneratedDatasetSourceRefSchema =
     generatorHash: HashSchema,
   });
 
+export const LearningBatchDatasetSourceRefSchema = ExternalDatasetSourceBaseSchema.extend({
+  schemaVersion: z.literal("openpond.learningBatchDatasetSource.v1"),
+  kind: z.literal("learning_batch"),
+  batch: z.object({ id: IdSchema, revision: z.number().int().positive(), contentHash: HashSchema }).strict(),
+  taskDefinition: z.object({ id: IdSchema, revision: z.number().int().positive(), contentHash: HashSchema }).strict(),
+  admittedBy: IdSchema,
+});
+
 export const ExternalDatasetSourceRefSchema = z.discriminatedUnion("kind", [
   HuggingFaceDatasetSourceRefSchema,
   UploadedFileDatasetSourceRefSchema,
   GeneratedDatasetSourceRefSchema,
+  LearningBatchDatasetSourceRefSchema,
 ]);
 
 export type DatasetSourceReviewStatus = z.infer<

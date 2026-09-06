@@ -20,6 +20,7 @@ const PAGE_SIZE = 10;
 
 export function LabModelsPage({
   activeProfileId,
+  hostedScope,
   items,
   loading,
   runs,
@@ -29,8 +30,10 @@ export function LabModelsPage({
   onPulled,
   onSelect,
   onUseModel,
+  onConfigure,
 }: {
   activeProfileId: string;
+  hostedScope: string | null;
   items: LabWorkproductSummary[];
   loading: boolean;
   runs: CreateImproveRun[];
@@ -45,13 +48,14 @@ export function LabModelsPage({
   ) => void;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
+  onConfigure: (modelId: string) => void;
 }) {
   const listHostedModelProjects = training.actions.listHostedModelProjects;
   const [profileId, setProfileId] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [hostedCatalog, setHostedCatalog] =
-    useState<HostedModelProjectCatalog | null>(null);
+  const [hostedResult, setHostedResult] = useState<{ scope: string; catalog: HostedModelProjectCatalog } | null>(null);
+  const hostedCatalog = hostedResult?.scope === hostedScope ? hostedResult.catalog : null;
   const comparableRunCount = state?.modelRuns.filter(
     (run) => run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1",
   ).length ?? 0;
@@ -128,21 +132,22 @@ export function LabModelsPage({
     training.busyAction === "list-hosted-model-projects";
 
   useEffect(() => {
+    if (!hostedScope) return;
     let cancelled = false;
     void (async () => {
       const cached = await listHostedModelProjects();
-      if (!cancelled && cached) setHostedCatalog(cached);
+      if (!cancelled && cached) setHostedResult({ scope: hostedScope, catalog: cached });
       if (!cached?.cached) return;
       const refreshed = await listHostedModelProjects({
         refresh: true,
         silent: true,
       });
-      if (!cancelled && refreshed) setHostedCatalog(refreshed);
+      if (!cancelled && refreshed) setHostedResult({ scope: hostedScope, catalog: refreshed });
     })();
     return () => {
       cancelled = true;
     };
-  }, [listHostedModelProjects]);
+  }, [listHostedModelProjects, hostedScope]);
 
   async function pullHostedProject(
     item: HostedModelProjectCatalog["projects"][number],
@@ -158,20 +163,20 @@ export function LabModelsPage({
       result.importedMetricCount,
     );
     const catalog = await listHostedModelProjects({ silent: true });
-    if (catalog) setHostedCatalog(catalog);
+    if (catalog && hostedScope) setHostedResult({ scope: hostedScope, catalog });
   }
 
   return (
     <div className="labs-flat-body labs-models-page">
       <ModelProjectPageHeader
-        title="Model Projects"
+        title="Models"
         description="Compose Tasksets and scorers, run training and evaluations, and manage deployable Model Versions."
         metrics={[
           { label: "Projects", value: rows.length },
           {
             label: "Hosted",
             value: hostedCatalog?.projects.length ?? "—",
-            hint: hostedCatalog ? `Team ${hostedCatalog.teamId}` : "Loading active Team",
+            hint: hostedCatalog ? `Team ${hostedCatalog.teamId}` : hostedScope ? "Loading active team" : "Sign in to load hosted models",
           },
           { label: "Evaluation receipts", value: comparableRunCount },
           { label: "Profiles", value: profileIds.length },
@@ -227,6 +232,7 @@ export function LabModelsPage({
         onPull={(item) => void pullHostedProject(item)}
         onSelect={onSelect}
         onUseModel={onUseModel}
+        onConfigure={onConfigure}
       />
       <Pagination page={page} total={filtered.length} onChange={setPage} />
     </div>

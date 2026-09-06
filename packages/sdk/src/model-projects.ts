@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 
 import {
   MODEL_PROJECT_API_RESPONSE_MAX_BYTES,
@@ -6,6 +7,7 @@ import {
   OPENPOND_MODEL_PROJECT_MEDIA_TYPE,
   OpenPondProtocolError,
   assertCanonicalPayloadSize,
+  canonicalSha256,
   parseBoundedJson,
 } from "./protocol.js";
 
@@ -164,6 +166,56 @@ export const ModelProjectSchema = z
     updatedAt: TimestampSchema,
   })
   .strict();
+
+/** User-editable configuration. Execution and hosting receipts are server-owned. */
+export const ModelProjectEditableSchema = ModelProjectSchema.pick({
+  id: true,
+  profileId: true,
+  name: true,
+  objective: true,
+  defaultBaseModel: true,
+  defaultDestinationId: true,
+  trainingSetup: true,
+});
+
+/** Zero creates a new Model; a positive revision updates that exact revision. */
+export const ModelProjectSaveRequestSchema = z.object({
+  schemaVersion: z.literal("openpond.modelProjectSave.v1"),
+  operationId: IdSchema,
+  expectedRevision: z.number().int().nonnegative(),
+  project: ModelProjectEditableSchema,
+}).strict();
+
+export type ModelProjectSaveRequest = z.infer<typeof ModelProjectSaveRequestSchema>;
+
+export function parseModelProjectSaveRequest(value: unknown): ModelProjectSaveRequest {
+  try {
+    assertBoundedTaskJson(value, MODEL_PROJECT_SYNC_MAX_BYTES);
+  } catch {
+    throw new OpenPondModelProjectApiError(400, {
+      schemaVersion: "openpond.modelProjectApiError.v2", code: "model_configuration_json_invalid",
+      message: "Model configuration must be bounded JSON data.", retryable: false, requestId: null, details: {},
+    });
+  }
+  return ModelProjectSaveRequestSchema.parse(value);
+}
+
+/** Stable across transport retries; excludes server-owned revision/timestamps. */
+export async function createModelProjectSaveRequest(
+  project: z.input<typeof ModelProjectEditableSchema>,
+  expectedRevision: number,
+): Promise<ModelProjectSaveRequest> {
+  assertBoundedTaskJson(project, MODEL_PROJECT_SYNC_MAX_BYTES);
+  const editable = ModelProjectEditableSchema.parse(project);
+  assertCanonicalPayloadSize(editable, MODEL_PROJECT_SYNC_MAX_BYTES, "Model configuration");
+  const hash = await canonicalSha256({ project: editable, expectedRevision });
+  return parseModelProjectSaveRequest({
+    schemaVersion: "openpond.modelProjectSave.v1",
+    operationId: `model-save:${hash}`,
+    expectedRevision,
+    project: editable,
+  });
+}
 
 export const HostedModelProjectSyncSchema = z
   .object({

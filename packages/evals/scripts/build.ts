@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, rename, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { copyFile, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { build } from "esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,7 +13,8 @@ const staging = path.join(root, "node_modules", ".cache", `evals-dist-${randomUU
 
 await mkdir(staging, { recursive: true });
 try {
-  await run(resolveTscBin(), [
+  await run(process.execPath, [
+    createRequire(import.meta.url).resolve("typescript/bin/tsc"),
     "--project",
     "tsconfig.build.json",
     "--outDir",
@@ -22,6 +24,13 @@ try {
     "--tsBuildInfoFile",
     path.join(staging, ".tsbuildinfo"),
   ]);
+  const worker = await build({
+    entryPoints: [path.join(root, "src/javascript-verifier-worker.ts")],
+    bundle: true, platform: "node", target: "node22.14", format: "cjs",
+    write: false, minify: true, legalComments: "none",
+  });
+  await writeFile(path.join(staging, "javascript-verifier-worker-source.js"), `export const javascriptVerifierWorkerSource = ${JSON.stringify(worker.outputFiles[0]!.text)};\n`);
+  await copyFile(path.join(root, "src/javascript-verifier-worker-source.d.ts"), path.join(staging, "types/javascript-verifier-worker-source.d.ts"));
   await publishBuild(staging, dist);
 } finally {
   await rm(staging, { force: true, recursive: true });
@@ -66,14 +75,6 @@ async function filesBelow(directory: string, prefix = ""): Promise<string[]> {
     else if (entry.isFile()) files.push(relative);
   }
   return files;
-}
-
-function resolveTscBin(): string {
-  const candidates = [
-    path.join(root, "node_modules/.bin/tsc"),
-    path.resolve(root, "..", "..", "node_modules/.bin/tsc"),
-  ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? "tsc";
 }
 
 function run(command: string, args: string[]): Promise<void> {

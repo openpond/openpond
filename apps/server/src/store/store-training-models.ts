@@ -21,9 +21,9 @@ import {
   RolloutTrajectoryReceiptSchema,
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
-import { SqliteStoreCore } from "./store-core.js";
+import { SqliteLearningStore } from "./store-learning.js";
 
-export class SqliteTrainingModelStore extends SqliteStoreCore {
+export class SqliteTrainingModelStore extends SqliteLearningStore {
   async saveModelCurrencySnapshot(snapshotInput: ModelCurrencySnapshot): Promise<ModelCurrencySnapshot> {
     const snapshot = ModelCurrencySnapshotSchema.parse(snapshotInput);
     const existing = await this.getModelCurrencySnapshot(snapshot.id);

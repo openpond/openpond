@@ -171,6 +171,7 @@ import {
   resolveMaxHostedWorkspaceToolRounds,
 } from "./server-entry-helpers.js";
 import { createTrainingService } from "./training/training-service.js";
+import { requireReleasedTaskset } from "./training/local-taskset-release.js";
 import { createModelProjectHostingService } from "./training/model-project-hosting.js";
 import { managedRlOperatorAccess } from "./training/managed-rl-operator-access.js";
 import { createTrainingApi } from "./training/training-api.js";
@@ -693,8 +694,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     storeDir,
     ...portableTrainingDependencies,
     resolveManagedTrainingAccess,
-    loadProfileState: loadOpenPondProfileState,
     resolveReleasedHarness,
+    resolveTasksetRelease: (taskset) => requireReleasedTaskset(benchmarkTasksets, taskset),
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;
@@ -756,6 +757,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     modelStream: trainingModelStream,
   });
   const trainingPayload = trainingApi.request;
+  trainingApi.learning.start();
+  onStartupFailure(() => trainingApi.learning.close());
   const teamChatAiExecutions = createTeamChatAiExecutionService({
     loadProviderRuntime: localByokRuntimeState,
     version,
@@ -1811,6 +1814,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     closeEventSubscribers,
     terminalWebSockets,
     runtimeClosers: [
+      trainingApi.learning.close,
       waitForOpenPondRefresh,
       turnRunner.close,
       teamChatAiExecutions.close,

@@ -1,3 +1,5 @@
+import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
+import { requireReleasedTaskset } from "./local-taskset-release.js";
 import {
   BaseModelPreferenceSchema,
   ChatModelRefSchema,
@@ -6,7 +8,6 @@ import {
   CreateHuggingFaceDatasetImportRequestSchema,
   DatasetCatalogResponseSchema,
   GraderSpecSchema,
-  ModelProjectSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
@@ -28,7 +29,6 @@ import {
   type PreferenceComparisonPurpose,
   type PreferenceComparisonRelease,
   type PreferenceReviewer,
-  type TasksetRelease,
 } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 import {
@@ -103,6 +103,9 @@ import { createModelComparisonRuntime } from "./model-comparison-runtime.js";
 import { handleModelComparisonAction } from "./training-api-model-comparison-actions.js";
 import { handleContinualLearningAction } from "./training-api-continual-learning-actions.js";
 import { readTasksetGraderDetails } from "./taskset-grader-details.js";
+import { createLocalLearningRuntime } from "./learning-runtime.js";
+import { parseModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
 import {
   boundedInteger,
@@ -147,6 +150,8 @@ export function createTrainingApi(deps: {
   modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
   modelStream?: import("./taskset-work-attempt-runner.js").TasksetWorkModelStream;
 }) {
+  let learning: ReturnType<typeof createLocalLearningRuntime> | undefined;
+  const learningRuntime = () => learning ??= createLocalLearningRuntime(deps.store);
   const {
     series: comparisonSeries,
     evaluations: comparisonEvaluations,
@@ -164,6 +169,9 @@ export function createTrainingApi(deps: {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<unknown> {
     const input = record(payload);
+    if (action === "learning_command") return learningRuntime().command(payload);
+    if (action === "learning_read") return learningRuntime().read(payload);
+    if (action === "prepare_learning_batch") return prepareLocalLearningBatch(deps.store, deps.storeDir, payload);
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "activity") return activity(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "portable_catalog") {
@@ -661,20 +669,7 @@ export function createTrainingApi(deps: {
       return { grader, taskset: refreshedTaskset, hostedSync };
     }
     if (action === "save_model_project") {
-      const project = ModelProjectSchema.parse(input);
-      const existing = await deps.store.getModelProject(project.id);
-      if (existing && existing.profileId !== project.profileId) {
-        throw new Error("Model profile does not match the active Profile.");
-      }
-      if (existing && existing.revision !== project.revision) {
-        throw new Error("Model Project changed since it was opened. Refresh and try again.");
-      }
-      return deps.store.saveModelProject({
-        ...project,
-        revision: existing ? existing.revision + 1 : project.revision,
-        createdAt: existing?.createdAt ?? project.createdAt,
-        updatedAt: new Date().toISOString(),
-      });
+      return deps.store.saveModelProjectConfiguration(parseModelProjectSaveRequest(input));
     }
     if (action === "version_model_project_onto_managed_rl_base") {
       const modelProjectId = requiredString(
@@ -1033,7 +1028,6 @@ export function createTrainingApi(deps: {
       const context = compileDesktopHarnessContext({
         taskset,
         tasksetRelease,
-        adapterId: "openpond-preference-comparisons-v1",
         model: { providerId: "custom-openai-compatible", modelId: "synthetic-collection-fixture-v1" },
       });
       const assignments = [];
@@ -1241,7 +1235,15 @@ export function createTrainingApi(deps: {
         if (!setup.tasksetRef) {
           throw new Error("The Model Project training setup has no Taskset.");
         }
-        const taskset = await requireTaskset(deps.store, setup.tasksetRef.id);
+        const comparisonEntry = comparisonEntryId
+          ? await deps.store.getModelComparisonSeriesEntry(comparisonEntryId)
+          : null;
+        if (comparisonEntryId && (!comparisonEntry || comparisonEntry.modelProjectId !== modelProject.id)) {
+          throw new Error("The requested Comparison Series entry does not belong to this Model Project.");
+        }
+        const reference = comparisonEntry?.taskset ?? setup.tasksetRef;
+        const taskset = await deps.store.getTasksetRevision(reference.id, reference.revision, reference.contentHash);
+        if (!taskset) throw new Error("The selected immutable training Taskset is unavailable.");
         const release = await requireReleasedTaskset(
           deps.benchmarkTasksets,
           taskset,
@@ -1785,7 +1787,7 @@ export function createTrainingApi(deps: {
     return creation;
   }
 
-  return { request, state };
+  return { request, state, get learning() { return learningRuntime(); } };
 }
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
@@ -1883,17 +1885,6 @@ async function requireTasksetDraft(store: SqliteStore, draftId: string) {
   if (!draft) throw new Error("Taskset draft was not found.");
   return draft;
 }
-async function requireReleasedTaskset(
-  benchmarkTasksets: BenchmarkTasksets,
-  taskset: Awaited<ReturnType<typeof requireTaskset>>,
-): Promise<TasksetRelease> {
-  const release = await benchmarkTasksets.releaseForTaskset(taskset);
-  if (release) return release;
-  return materializePortableTasksetRelease({
-    taskset,
-    adapterId: "openpond-preference-comparisons-v1",
-  }).tasksetRelease;
-}
 async function bindTasksetPreferenceComparison(input: {
   store: SqliteStore;
   taskset: Awaited<ReturnType<typeof requireTaskset>>;
@@ -1917,50 +1908,6 @@ async function bindTasksetPreferenceComparison(input: {
     ...unhashed,
     contentHash: computeTasksetHash(unhashed),
   }));
-}
-function humanPreferenceReviewer(reviewerKey: string): PreferenceReviewer {
-  const id = `human-reviewer:${reviewerKey}`;
-  return {
-    kind: "human",
-    releaseRef: {
-      id,
-      contentHash: contentHash({ schemaVersion: "openpond.humanPreferenceReviewer.v1", reviewerKey }),
-    },
-  };
-}
-async function preferenceComparisonReviewPayload(
-  store: SqliteStore,
-  assignment: Awaited<ReturnType<PreferenceComparisons["nextAssignment"]>> & {},
-  reviewer: PreferenceReviewer,
-) {
-  const taskset = await store.getTaskset(assignment.tasksetId);
-  const task = taskset?.tasks.find((candidate) => candidate.id === assignment.assignment.taskRef.id) ?? null;
-  const attempts = await store.listTaskAttempts(assignment.tasksetId);
-  const attemptById = new Map(attempts.map((attempt) => [attempt.id, attempt]));
-  const candidates = await Promise.all(assignment.assignment.presentedCandidateOrder.map(async (attemptId, index) => {
-    const candidate = assignment.assignment.candidates.find((item) => item.attemptRef.id === attemptId)!;
-    const attempt = attemptById.get(attemptId) ?? null;
-    const artifacts = await store.listTaskAttemptArtifacts({ attemptId });
-    const visibleIds = new Set(candidate.visibleArtifactIds);
-    return {
-      label: `candidate-${index + 1}`,
-      attemptId,
-      output: attempt?.output ?? {},
-      artifacts: artifacts
-        .filter((artifact) => visibleIds.has(artifact.id))
-        .map((artifact) => ({
-          id: artifact.id,
-          mediaType: artifact.mediaType,
-          sizeBytes: artifact.sizeBytes,
-        })),
-    };
-  }));
-  return {
-    assignment,
-    reviewer,
-    taskPrompt: task?.input ?? null,
-    candidates,
-  };
 }
 function nullableBaseModelPreference(value: unknown, legacyId: unknown): BaseModelPreference | null {
   const parsed = BaseModelPreferenceSchema.safeParse(value);

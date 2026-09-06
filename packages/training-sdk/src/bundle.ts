@@ -16,6 +16,7 @@ import {
   type TrainingPlan,
 } from "@openpond/contracts";
 import { canonicalJson, contentHash, sha256 } from "@openpond/taskset-sdk";
+import { TaskBatchPackageMetadataSchema } from "@openpond/evals";
 
 export type ProjectedTrainingData = {
   path: string;
@@ -128,6 +129,10 @@ function inlineTrainingData(
     taskset.learningSignals.demonstrations.flatMap((signal) =>
       signal.approved && signal.taskId ? [signal.taskId] : []),
   );
+  const learning = taskset.metadata.learning === undefined ? null : TaskBatchPackageMetadataSchema.parse(taskset.metadata.learning);
+  const supervisedTarget = (task: Taskset["tasks"][number]) => learning
+    ? learning.admissions.find((entry) => entry.taskId === task.id)?.supervisedTarget ?? null
+    : task.expectedOutput;
   const seed = plan.recipe.method === "grpo"
     ? plan.recipe.rollout.seed
     : plan.recipe.method === "ppo"
@@ -183,18 +188,19 @@ function inlineTrainingData(
         plan.recipe.method === "grpo"
         || plan.recipe.method === "ppo"
         || (
-          task.expectedOutput !== null
+          supervisedTarget(task) !== null
           && approvedDemonstrations.has(task.id)
         )
       ))
     .map((task) => ({
       priority: contentHash([taskset.contentHash, seed, "train", task.id]),
       record: plan.recipe.method === "grpo" || plan.recipe.method === "ppo"
-        ? { id: task.id, input: task.input, tags: task.tags }
+        ? { id: task.id, input: task.input, policyVisibleContext: task.policyVisibleContext, tags: task.tags }
         : {
             id: task.id,
             input: task.input,
-            expectedOutput: task.expectedOutput,
+            policyVisibleContext: task.policyVisibleContext,
+            expectedOutput: supervisedTarget(task),
             tags: task.tags,
           },
     }))

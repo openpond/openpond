@@ -4,10 +4,25 @@ import {
   HostedModelProjectSyncSchema,
   ModelProjectSchema,
   createModelProjectsClient,
+  createModelProjectSaveRequest,
+  parseModelProjectSaveRequest,
 } from "../src/model-projects.js";
 
 const HASH = "a".repeat(64);
 const NOW = "2026-08-26T20:00:00.000Z";
+
+// Durable retries identify authored content, while hostile recursive recipes and
+// attempts to replace server-owned hosting receipts never enter the save path.
+it("builds stable Model save requests and bounds untrusted recipe JSON", async () => {
+  const editable = { id: "model-one", profileId: "default", name: "One", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: setup() };
+  const request = await createModelProjectSaveRequest(editable, 0);
+  expect(await createModelProjectSaveRequest({ ...editable }, 0)).toEqual(request);
+  expect((await createModelProjectSaveRequest({ ...editable, name: "Two" }, 0)).operationId).not.toBe(request.operationId);
+  expect(() => parseModelProjectSaveRequest({ ...request, project: { ...request.project, hosted: null } })).toThrow();
+  let nested: unknown = {};
+  for (let index = 0; index < 60; index++) nested = { child: nested };
+  expect(() => parseModelProjectSaveRequest({ ...request, project: { ...request.project, trainingSetup: { ...request.project.trainingSetup, recipe: nested } } })).toThrow(expect.objectContaining({ status: 400, code: "model_configuration_json_invalid" }));
+});
 
 function setup() {
   return {

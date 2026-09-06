@@ -48,6 +48,7 @@ import type {
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import { TrainingStateResponseSchema } from "@openpond/contracts";
+import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import type { HostedModelProjectCatalog } from "./hosted-model-project-types";
 
 export type PreferenceComparisonReview = {
@@ -336,11 +337,15 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       `/comparison-series-entries/${encodeURIComponent(input.entryId)}/promotion`,
       input,
     ),
-    saveModelProject: (project: ModelProject) =>
+    saveModelProject: async (project: ModelProject, expectedRevision = project.revision) =>
       mutate<ModelProject>(
         "save-model-project",
         "/models",
-        project,
+        await createModelProjectSaveRequest({
+          id: project.id, profileId: project.profileId, name: project.name,
+          objective: project.objective, defaultBaseModel: project.defaultBaseModel,
+          defaultDestinationId: project.defaultDestinationId, trainingSetup: project.trainingSetup,
+        }, expectedRevision),
         "PUT",
       ),
     listHostedModelProjects: async (options: {
@@ -408,6 +413,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       "/scorers",
       { grader, tasksetId, modelProjectId: modelProjectId ?? null },
     ),
+    prepareLearningBatch: (batchId: string) => mutate<Taskset>("prepare-learning-batch", "/learning-batches/prepare", { profileId, batchId }),
     createTasksetDraft: (name = "") =>
       mutate<TasksetDraft>(
         "create-taskset-draft",

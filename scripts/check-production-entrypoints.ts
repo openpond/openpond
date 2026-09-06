@@ -33,6 +33,8 @@ for (const relativePath of [
   "apps/cli/examples/sandbox-templates/service-with-actions/src/server.ts",
   "packages/taskset-sdk/src/cli.ts",
   "packages/training-sdk/src/cli.ts",
+  // Compiled into the public Evals worker-source export by its package build.
+  "packages/evals/src/javascript-verifier-worker.ts",
 ]) {
   addEntrypoint(path.join(root, relativePath));
 }

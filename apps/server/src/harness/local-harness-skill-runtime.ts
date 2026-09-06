@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { parseProfileSkillMarkdown } from "@openpond/cloud";
 import type { HarnessWorkspace, OpenPondProfileSkill } from "@openpond/contracts";
-import { sha256 } from "@openpond/harness";
+import { assertContentHash, sha256 } from "@openpond/harness";
 
 import type { ProfileSkillReadResult } from "../openpond/model-tool-registry.js";
 import type { ProfileSkillRuntime } from "../runtime/hosted-turn/native-tools-runtime.js";
@@ -29,7 +29,21 @@ export async function loadSelectedLocalHarnessSkillRuntime(
 
 export async function loadSelectedLocalHarnessRuntime(
   store: SqliteStore,
+  reference?: { id: string; contentHash: string } | null,
 ): Promise<SelectedLocalHarnessRuntime | null> {
+  if (reference) {
+    const release = await store.getHarnessReleaseRecord(reference.contentHash);
+    if (!release || release.harnessRelease.id !== reference.id) {
+      throw new Error("The selected immutable Harness release is unavailable.");
+    }
+    const workspace = await store.getHarnessWorkspace(release.workspaceId);
+    if (!workspace || workspace.ownerScope.kind !== "personal" || workspace.ownerScope.id !== DESKTOP_PERSONAL_HARNESS_OWNER_ID) {
+      throw new Error("The selected Harness release is not available to this local owner.");
+    }
+    assertContentHash(release.agentSnapshot, "Selected Agent snapshot");
+    assertContentHash(release.harnessRelease, "Selected Harness release");
+    return loadLocalHarnessRuntimeFromRelease({ workspace, release });
+  }
   const release = await resolveSelectedLocalHarnessRelease(store);
   if (!release) return null;
   const workspace = await store.getSelectedHarnessWorkspace({

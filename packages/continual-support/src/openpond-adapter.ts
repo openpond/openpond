@@ -32,7 +32,7 @@ export function createOpenPondContinualBenchAdapter(): ContinualBenchRunnerAdapt
       const revision = integer(saved.revision);
       if (!seriesId || !revision) throw new Error("OpenPond did not return the saved Comparison Series identity and revision.");
       await json(context.request, `${trimSlash(context.baseUrl)}/v1/training/comparison-series/${encodeURIComponent(seriesId)}/seal`, "POST", { expectedRevision: revision });
-      return { comparisonSeriesId: seriesId, canonicalUrl: `/models/comparisons/${encodeURIComponent(seriesId)}`, protocolHash: manifest.contentHash };
+      return { comparisonSeriesId: seriesId, canonicalUrl: `/models/runs/series/${encodeURIComponent(seriesId)}`, protocolHash: manifest.contentHash };
     },
     report(seriesId, context) {
       return context.loadReport(seriesId);

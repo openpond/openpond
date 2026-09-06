@@ -15,6 +15,7 @@ import "../../styles/labs/labs-model-comparison.css";
 export type LabPrimaryTab =
   | "overview"
   | "tasksets"
+  | "rewards"
   | "training"
   | "evals"
   | "versions"
@@ -48,7 +49,7 @@ export function LabsView({
               type="button"
               onClick={onCreateModel}
             >
-              <span>New Model Project</span>
+              <span>Create model</span>
             </button>
           ) : null}
         </div>

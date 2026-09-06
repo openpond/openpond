@@ -10,7 +10,7 @@ import {
 } from "@openpond/contracts";
 import { validateTrainingCompatibility, type TrainingDestination } from "@openpond/training-sdk";
 
-type TasksetResolver = (id: string) => Promise<Taskset | null>;
+type TasksetResolver = (id: string, contentHash: string) => Promise<Taskset | null>;
 
 export class PortablePreparationTrainingDestination
   implements TrainingDestination
@@ -49,7 +49,7 @@ export class PortablePreparationTrainingDestination
   async validate(
     plan: TrainingPlan,
   ): Promise<TrainingCompatibilityReport> {
-    const taskset = await this.options.resolveTaskset(plan.tasksetId);
+    const taskset = await this.options.resolveTaskset(plan.tasksetId, plan.tasksetHash);
     if (!taskset) throw new Error("Taskset not found.");
     return validateAgainst(taskset, plan, await this.capabilities());
   }

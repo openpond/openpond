@@ -73,7 +73,7 @@ export async function gradeTasksetEvaluationAttempt(
       createdAt: input.now?.() ?? new Date().toISOString(),
     };
   }
-  const verified = crossSystemGrade(input.attempt.metadata);
+  const verified = input.learning ? null : crossSystemGrade(input.attempt.metadata);
   if (!verified) {
     try {
       return await gradeAttempt(input);

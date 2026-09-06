@@ -11,9 +11,9 @@ const manifest = JSON.parse(
   peerDependencies?: Record<string, string>;
 };
 const dependencies = Object.keys(manifest.dependencies ?? {});
-if (dependencies.join(",") !== "zod") {
+if (dependencies.sort().join(",") !== "@jitl/quickjs-singlefile-cjs-release-sync,ajv,quickjs-emscripten-core,zod") {
   throw new Error(
-    `@openpond/evals runtime dependencies must contain only zod; found ${dependencies.join(", ") || "none"}.`,
+    `@openpond/evals runtime dependencies must contain only the portable schema and JavaScript verifier runtimes; found ${dependencies.join(", ") || "none"}.`,
   );
 }
 const peers = Object.keys(manifest.peerDependencies ?? {});

@@ -30,7 +30,6 @@ export function Sidebar(props: SidebarProps) {
     setSelectedProjectId,
     setSelectedSessionId,
     setSidebarOpen,
-    setSettingsSection,
     setView,
     view,
     modelProjects,
@@ -116,9 +115,7 @@ export function Sidebar(props: SidebarProps) {
             connection={props.connection}
             onOpenSettings={() => {
               setSectionMenuOpen(null);
-              setSettingsSection("harness");
-              setView("settings");
-              navigateDesktopRoute({ kind: "settings", section: "harness" });
+              void navigateDesktopRoute({ kind: "settings", section: "harness" });
             }}
           />
         )}
@@ -131,15 +128,11 @@ export function Sidebar(props: SidebarProps) {
             onOpenChange={setAccountMenu}
             onOpenActivity={() => {
               setSectionMenuOpen(null);
-              setSettingsSection("usage");
-              setView("settings");
-              navigateDesktopRoute({ kind: "settings", section: "usage" });
+              void navigateDesktopRoute({ kind: "settings", section: "usage" });
             }}
             onOpenSettings={() => {
               setSectionMenuOpen(null);
-              setSettingsSection("account");
-              setView("settings");
-              navigateDesktopRoute({ kind: "settings", section: "account" });
+              void navigateDesktopRoute({ kind: "settings", section: "account" });
             }}
             onSelectTeam={props.onSelectTeam}
             onLogOut={props.onLogOut}

@@ -1,12 +1,12 @@
 # Subagent Lifecycle Working Notes
 
-**Status:** Implemented; OpenPond Goal-coupled portions superseded
+**Status:** Historical lifecycle design; superseded for current behavior by the [September 5 subagent runtime audit and update spec](working-docs/agent-harness/2026-09-05-subagent-runtime-audit-and-update-spec.md).
 
-**Scope:** Preserve bounded child execution, parent review, messaging, watcher, workspace isolation, and cleanup while making the parent task the only OpenPond-owned scope
+**Scope:** Preserve the earlier lifecycle design and evidence. Do not use this document as the current runtime contract.
 
 ## Latest checkpoint
 
-**2026-07-27:** Subagents are now parent-task scoped only. `parentSessionId` is the durable owner; `parentGoalId`, Goal-scoped messaging/query modes, Goal lifecycle coupling, and Goal-derived child projections have been removed. The watcher, parent wake, status/join/cancel/message tools, required review and revision states, worktree/sandbox handling, retained-workspace cleanup, and child-session lifecycle remain. The earlier Goal-aware sections below are retained as historical implementation context and are superseded by [Remove OpenPond Goals and Insights, Preserve Codex Goals](working-docs/agent-harness/2026-07-27-openpond-goal-insights-removal.md).
+**2026-09-05:** Subagents remain parent-task scoped, with `parentSessionId` as owner. Correction to the former July 27 checkpoint: commit `2f85e09c` on July 19 removed the watcher and mandatory review/revision state machine and reset historical run/message/activity transport records. Current tools support start, status, join, follow-up, messaging and cancellation; ordinary child final answers return automatically. The new audit records serial scheduling and completion-delivery defects requiring updates. Goal ownership was separately removed by [Remove OpenPond Goals and Insights, Preserve Codex Goals](working-docs/agent-harness/2026-07-27-openpond-goal-insights-removal.md). All detailed lifecycle implementation claims below are historical.
 
 Purpose: capture near-term direction for OpenPond subagents, especially in light of stronger agentic models such as GPT-5.6-class systems.
 

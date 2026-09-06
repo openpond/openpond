@@ -9,6 +9,7 @@ import { OpenPondProjectActionsClient } from "./project-actions.js";
 import { OpenPondProfileActionsClient } from "./profile-actions.js";
 import { OpenPondWorkflowsClient } from "./workflows.js";
 import type { OpenPondClientOptions } from "./types.js";
+import { OpenPondLearningClient } from "./learning.js";
 
 export class OpenPondClient {
   readonly sandboxes: OpenPondSandboxClient;
@@ -16,12 +17,14 @@ export class OpenPondClient {
   readonly workflows: OpenPondWorkflowsClient;
   readonly actions: OpenPondProjectActionsClient;
   readonly profileActions: OpenPondProfileActionsClient;
+  readonly learning: (scope: string) => OpenPondLearningClient;
 
   constructor(options: OpenPondClientOptions) {
     const apiKey = options.apiKey.trim();
     if (!apiKey) throw new Error("OpenPond API key is required");
 
     const apiBaseUrl = options.baseUrl?.trim() || "https://api.openpond.ai";
+    this.learning = (scope) => new OpenPondLearningClient({ apiKey, baseUrl: apiBaseUrl, scope });
     this.sandboxes = createOpenPondSandboxClient({
       apiKey,
       baseUrl: apiBaseUrl,
@@ -89,6 +92,8 @@ export type {
   OpenPondWorkflowWeekday,
 } from "./workflows.js";
 export * from "./refiner.js";
+export { OpenPondLearningClient, OpenPondLearningError } from "./learning.js";
+export type { OpenPondLearningClientOptions, LearningRequestOptions } from "./learning.js";
 
 export * from "@openpond/cloud/sandbox/client";
 export * from "@openpond/cloud/sandbox/types";

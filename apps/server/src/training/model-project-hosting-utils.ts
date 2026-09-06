@@ -30,10 +30,6 @@ export function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
 }
 
-export function isProjectSyncConflict(value: unknown): boolean {
-  return errorMessage(value).startsWith("model_project_sync_conflict (");
-}
-
 export async function requireProject(
   store: SqliteStore,
   projectId: string,

@@ -51,6 +51,9 @@ import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
 import { SqliteTasksetDraftStore } from "./store-taskset-drafts.js";
+import type { ModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { commitModelProjectSave } from "./store-model-project-authoring.js";
+import { commitModelProjectHosting } from "./store-model-project-hosting.js";
 import {
   appendTrainingChatSearchText,
   trainingChatFtsQuery,
@@ -457,6 +460,14 @@ export class SqliteTrainingStore extends SqliteTasksetDraftStore {
     return taskset;
   }
 
+  async getTasksetByHash(id: string, contentHash: string): Promise<Taskset | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM taskset_revisions WHERE taskset_id = ? AND content_hash = ?",
+      [id, contentHash],
+      parseStoredTaskset,
+    );
+  }
+
   async upsertTaskset(tasksetInput: Taskset): Promise<Taskset> {
     const taskset = TasksetSchema.parse(tasksetInput);
     const existingRevision = await this.getTasksetRevision(taskset.id, taskset.revision);
@@ -660,6 +671,26 @@ export class SqliteTrainingStore extends SqliteTasksetDraftStore {
       [project.id, project.profileId, JSON.stringify(project), project.createdAt, project.updatedAt],
     );
     return project;
+  }
+
+  async saveModelProjectConfiguration(request: ModelProjectSaveRequest): Promise<ModelProject> {
+    await this.ready;
+    const operation = this.writeQueue.then(() => {
+      if (!this.db) throw new Error("Model save failed because the local store is closed.");
+      return commitModelProjectSave(this.db, request);
+    });
+    this.writeQueue = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
+  async saveModelProjectHosting(previous: ModelProject | null, next: ModelProject, replace = false): Promise<ModelProject> {
+    await this.ready;
+    const operation = this.writeQueue.then(() => {
+      if (!this.db) throw new Error("Model synchronization failed because the local store is closed.");
+      return commitModelProjectHosting(this.db, previous, next, replace);
+    });
+    this.writeQueue = operation.then(() => undefined, () => undefined);
+    return operation;
   }
 
   async getModelProject(id: string): Promise<ModelProject | null> {

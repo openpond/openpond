@@ -225,6 +225,7 @@ export function ModelsTable({
   onPull,
   onSelect,
   onUseModel,
+  onConfigure,
 }: {
   rows: ModelTableRow[];
   loading: boolean;
@@ -235,6 +236,7 @@ export function ModelsTable({
   onPull: (item: HostedModelProjectCatalog["projects"][number]) => void;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
+  onConfigure: (modelId: string) => void;
 }) {
   if (loading) {
     return (
@@ -404,7 +406,7 @@ export function ModelsTable({
                         Chat
                       </button>
                     ) : null}
-                    {item ? <ChevronRight size={15} /> : null}
+                    {item ? <><button type="button" className="training-button secondary labs-compact-button" onClick={(event) => { event.stopPropagation(); onConfigure(item.id); }}>Configure</button><ChevronRight size={15} /></> : null}
                   </div>
                 </td>
               </tr>

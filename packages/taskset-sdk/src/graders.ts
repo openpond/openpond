@@ -6,6 +6,8 @@ import {
   type TaskDataRecord,
 } from "@openpond/contracts";
 import { contentHash } from "./hashing.js";
+import { gradeLearningBatchAttempt } from "./learning-graders.js";
+import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
 
 export type ModelJudgeRunner = (input: {
   grader: Extract<GraderSpec, { kind: "model_judge" }>;
@@ -24,6 +26,7 @@ export type CustomVerifierRunner = (input: {
   grader: Extract<GraderSpec, { kind: "custom_verifier" }>;
   task: TaskDataRecord;
   attempt: TaskAttemptResult;
+  signal?: AbortSignal;
 }) => Promise<{ score: number; passed: boolean; feedback: string; evidenceRefs?: string[] }>;
 
 export async function gradeAttempt(input: {
@@ -33,7 +36,13 @@ export async function gradeAttempt(input: {
   modelJudge?: ModelJudgeRunner;
   customVerifier?: CustomVerifierRunner;
   now?: () => string;
+  learning?: { binding: RewardBinding; rewards: RewardRelease[] };
+  signal?: AbortSignal;
 }): Promise<GradeResult> {
+  if (input.learning) return gradeLearningBatchAttempt({ ...input, learning: input.learning });
+  if (input.graders.some((grader) => grader.metadata.rewardBinding !== undefined)) {
+    throw new Error("This Taskset requires its immutable public Reward binding to grade an attempt.");
+  }
   const now = input.now ?? (() => new Date().toISOString());
   const graderSetHash = contentHash(input.graders);
   if (input.attempt.infrastructureError) {

@@ -3,9 +3,7 @@ import {
   Suspense,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type ReactNode,
 } from "react";
 import {
   type CreateImproveCandidate,
@@ -108,7 +106,7 @@ export function LabWorkproductDetail({
   onRejectCandidate,
   onResume,
   onRevise,
-  renderModelRunEditor,
+  onNewModelRun,
   benchmarkDefaultModel,
   benchmarkProviderSettings,
   initialBenchmarkModel = null,
@@ -176,14 +174,7 @@ export function LabWorkproductDetail({
     input: CreateImproveReviewActionInput,
     revision: string
   ) => Promise<void>;
-  renderModelRunEditor: (input: {
-    initialTasksetId: string | null;
-    modelId: string;
-    modelName: string;
-    onCancel: () => void;
-    onFinished: () => Promise<void>;
-    onSectionChange: (section: "run" | "dataset") => void;
-  }) => ReactNode;
+  onNewModelRun: (initialTasksetId: string | null) => void;
   candidateReview: {
     diff: WorkspaceDiffSummary | null;
     error: string | null;
@@ -207,11 +198,6 @@ export function LabWorkproductDetail({
   );
   const [activeTab, setActiveTab] = useState<WorkproductDetailTab>(
     "overview"
-  );
-  const [editingTrainingSetup, setEditingTrainingSetup] = useState(false);
-  const [editorSection, setEditorSection] = useState<"run" | "dataset">("run");
-  const editorExitTargetRef = useRef<"overview" | "runs" | "collection">(
-    "runs"
   );
   const setSelectedModelEntryKey = onSelectedModelEntryKeyChange;
   const [benchmarkOpen, setBenchmarkOpen] = useState(initialBenchmarkOpen);
@@ -334,20 +320,7 @@ export function LabWorkproductDetail({
   const locationSegments = useMemo(
     () =>
       workproduct.kind === "model"
-        ? editingTrainingSetup
-          ? [
-              {
-                label: "Training",
-                onSelect: () => requestEditorExit("runs"),
-              },
-              {
-                label: "New run",
-              },
-              ...(editorSection === "dataset"
-                ? [{ label: "New Taskset" }]
-                : []),
-            ]
-          : selectedModelEntryKey
+        ? selectedModelEntryKey
           ? [
               {
                 label: selectedModelEntryKey.startsWith("version:")
@@ -384,8 +357,6 @@ export function LabWorkproductDetail({
           ).map((label) => ({ label })),
     [
       activeTab,
-      editorSection,
-      editingTrainingSetup,
       modelSection,
       selectedChangeCommit,
       selectedChangeRunId,
@@ -441,8 +412,6 @@ export function LabWorkproductDetail({
     setSelectedRunId(preferredRunId);
     setSelectedChangeRunId(null);
     setActiveTab("overview");
-    setEditingTrainingSetup(false);
-    setEditorSection("run");
   }, [workproduct.key]);
 
   useEffect(() => {
@@ -491,10 +460,6 @@ export function LabWorkproductDetail({
       kindOnSelect:
         workproduct.kind === "model"
           ? () => {
-              if (editingTrainingSetup) {
-                requestEditorExit("collection");
-                return;
-              }
               onClose();
             }
           : undefined,
@@ -502,11 +467,6 @@ export function LabWorkproductDetail({
       workproductOnSelect:
         workproduct.kind === "model"
           ? () => {
-              if (editingTrainingSetup) {
-                requestEditorExit("overview");
-                return;
-              }
-              setEditingTrainingSetup(false);
               setSelectedModelEntryKey(null);
               setActiveTab("overview");
             }
@@ -527,45 +487,6 @@ export function LabWorkproductDetail({
     [onCandidateReviewChange]
   );
 
-  function requestEditorExit(target: "overview" | "runs" | "collection") {
-    editorExitTargetRef.current = target;
-    document.getElementById("model-run-editor-cancel")?.click();
-  }
-
-  if (workproduct.kind === "model" && editingTrainingSetup) {
-    return (
-      <div className="labs-model-run-modal-backdrop" role="presentation">
-        <section
-          aria-label="New Run"
-          aria-modal="true"
-          className="labs-model-run-modal"
-          role="dialog"
-        >
-          {renderModelRunEditor({
-            initialTasksetId: taskset?.id ?? null,
-            modelId: workproduct.id,
-            modelName: workproduct.name,
-            onCancel: () => {
-              const target = editorExitTargetRef.current;
-              setEditingTrainingSetup(false);
-              setEditorSection("run");
-              if (target === "collection") {
-                onClose();
-                return;
-              }
-              setActiveTab(target);
-            },
-            onFinished: async () => {
-              setEditingTrainingSetup(false);
-              setEditorSection("run");
-              setActiveTab("runs");
-            },
-            onSectionChange: setEditorSection,
-          })}
-        </section>
-      </div>
-    );
-  }
 
   return (
     <div className="training-model-detail labs-workproduct-detail">
@@ -722,7 +643,7 @@ export function LabWorkproductDetail({
                 mode={modelSection}
                 onOpenDataset={onOpenDataset}
                 onOpenEntry={setSelectedModelEntryKey}
-                onNewRun={() => setEditingTrainingSetup(true)}
+                onNewRun={() => onNewModelRun(taskset?.id ?? null)}
               />
             ) : null}
             {modelSection === "versions" ? (

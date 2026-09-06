@@ -5,6 +5,7 @@ import {
   type TasksetReadinessReport,
 } from "@openpond/contracts";
 import { contentHash, validateTaskset } from "@openpond/taskset-sdk";
+import { TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
 
 export function buildTasksetReadiness(input: {
   taskset: Taskset;
@@ -24,6 +25,10 @@ export function buildTasksetReadiness(input: {
   const requiresPreferencePairs = authoredTrainingMethod === "dpo";
   const requiresOnlineReward = authoredTrainingMethod === "grpo" || authoredTrainingMethod === "ppo";
   const approvedDemonstrationTaskIds = new Set(input.taskset.learningSignals.demonstrations.filter((signal) => signal.approved && signal.taskId).map((signal) => signal.taskId!));
+  const learning = input.taskset.metadata.learning === undefined ? null : TaskBatchPackageMetadataSchema.parse(input.taskset.metadata.learning);
+  const hasSupervisedTarget = (task: Taskset["tasks"][number]) => learning
+    ? learning.admissions.some((entry) => entry.taskId === task.id && entry.supervisedTarget !== null)
+    : task.expectedOutput != null;
   const artifact = input.taskset.datasetArtifact;
   const approvedArtifactSignals = new Set(
     metadataStrings(input.taskset.metadata.approvedArtifactSignals),
@@ -34,11 +39,11 @@ export function buildTasksetReadiness(input: {
       || field.semanticRole === "expected_output"
       || field.semanticRole === "chosen"),
   );
-  const allTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && (task.expectedOutput || requiresOnlineReward));
+  const allTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && (hasSupervisedTarget(task) || requiresOnlineReward));
   const trainTasks = requiresApprovedDemonstrations
     ? allTrainTasks.filter((task) => approvedDemonstrationTaskIds.has(task.id))
     : allTrainTasks;
-  const unapprovedTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.expectedOutput && !approvedDemonstrationTaskIds.has(task.id));
+  const unapprovedTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && hasSupervisedTarget(task) && !approvedDemonstrationTaskIds.has(task.id));
   const frozenTasks = input.taskset.tasks.filter(
     (task) =>
       task.split === "frozen_eval" &&

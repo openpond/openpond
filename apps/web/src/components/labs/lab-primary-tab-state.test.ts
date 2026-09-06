@@ -1,220 +1,51 @@
 import { describe, expect, it } from "vitest";
-
 import {
-  desktopPath,
-  desktopRouteFromLocation,
-  modelLibraryRoute,
-  modelProjectRoute,
-  modelsPath,
-  modelsRouteFromLocation,
-  modelsRouteWithDefaultProject,
-  modelsSectionFromRoute,
+  changeModelsScope, desktopPath, desktopRouteFromLocation, MODELS_PAGES, modelsLocation,
+  modelsPath, modelsRouteFromLocation, settingsReturnRoute,
 } from "./lab-primary-tab-state";
 
-describe("Models path routing", () => {
-  it("parses canonical project, resource, and detail-tab paths", () => {
-    expect(
-      modelsRouteFromLocation({
-        pathname: "/models/project_1/tasksets/taskset_1/tasks",
-      }),
-    ).toEqual({
-      kind: "project",
-      projectId: "project_1",
-      section: "tasksets",
-      resourceId: "taskset_1",
-      detailTab: "tasks",
-    });
-    expect(
-      modelsRouteFromLocation({
-        pathname: "/models/project_1/tasksets/taskset_1/graders",
-      }),
-    ).toMatchObject({
-      section: "tasksets",
-      resourceId: "taskset_1",
-      detailTab: "graders",
-    });
-    expect(
-      modelsRouteFromLocation({ pathname: "/models/project_1/runs" }),
-    ).toMatchObject({
-      kind: "project",
-      projectId: "project_1",
-      section: "runs",
-    });
-    expect(
-      modelsRouteFromLocation({
-        pathname: "/models/project_1/runs/run_1/details",
-      }),
-    ).toMatchObject({
-      section: "runs",
-      resourceId: "run_1",
-      detailTab: "details",
-    });
-    expect(
-      modelsRouteFromLocation({
-        pathname: "/models/project_1/runs/run_1/metrics",
-      }),
-    ).toMatchObject({
-      section: "runs",
-      resourceId: "run_1",
-      detailTab: "metrics",
-    });
-    expect(
-      modelsRouteFromLocation({ pathname: "/models/project_1/versions" }),
-    ).toMatchObject({
-      kind: "project",
-      projectId: "project_1",
-      section: "versions",
-    });
-    expect(
-      modelsRouteFromLocation({
-        pathname: "/models/project_1/runs/run_1/not-a-tab",
-      }),
-    ).toBeNull();
+describe("Models page, scope and resource route boundary", () => {
+  // Regression: scope was encoded as a separate page tree, and changing models discarded the active page.
+  it("round-trips every page and retains compatible views while clearing the previous model's detail", () => {
+    for (const page of MODELS_PAGES) {
+      const original = modelsLocation(page, "model A");
+      const url = new URL(modelsPath(original), "https://local.invalid");
+      expect(modelsRouteFromLocation(url)).toEqual(original);
+      expect(changeModelsScope(original, "model B")).toEqual(modelsLocation(page, "model B"));
+      expect(changeModelsScope(original, null)).toEqual(modelsLocation(page));
+    }
+    const run = modelsLocation("runs", "model A", { collection: "series", resourceId: "series/with slash", detailTab: "entry:1", query: "recent", after: "cursor-1" });
+    expect(modelsRouteFromLocation(new URL(modelsPath(run), "https://local.invalid"))).toEqual(run);
+    expect(changeModelsScope(run, "model B")).toEqual(modelsLocation("runs", "model B", { collection: "series" }));
+    expect(modelsRouteFromLocation({ pathname: "/models" })).toEqual(modelsLocation());
   });
 
-  it("converts legacy query locations once without making them canonical", () => {
-    expect(
-      modelsRouteFromLocation({
-        pathname: "/",
-        search: "?modelProjectId=project_1&modelsTab=training",
-      }),
-    ).toMatchObject({
-      kind: "project",
-      projectId: "project_1",
-      section: "runs",
-    });
-    expect(modelsRouteFromLocation({ pathname: "/models/runs" })).toBeNull();
-  });
-
-  it("parses global resource libraries and their details", () => {
-    expect(modelsRouteFromLocation({ pathname: "/models/projects" })).toEqual({
-      kind: "library",
-      section: "projects",
-      resourceId: null,
-      detailTab: null,
-    });
-    expect(modelsRouteFromLocation({ pathname: "/models/tasksets" })).toEqual({
-      kind: "library",
-      section: "tasksets",
-      resourceId: null,
-      detailTab: null,
-    });
-    expect(
-      modelsRouteFromLocation({ pathname: "/models/comparisons/series_1" }),
-    ).toEqual({
-      kind: "library",
-      section: "comparisons",
-      resourceId: "series_1",
-      detailTab: null,
-    });
-    expect(
-      modelsRouteFromLocation({
-        pathname: "/models/tasksets/taskset_1/scoring",
-      }),
-    ).toEqual({
-      kind: "library",
-      section: "tasksets",
-      resourceId: "taskset_1",
-      detailTab: "scoring",
-    });
-    expect(
-      modelsRouteFromLocation({
-        pathname: "/models/tasksets/taskset_1/graders",
-      }),
-    ).toEqual({
-      kind: "library",
-      section: "tasksets",
-      resourceId: "taskset_1",
-      detailTab: "graders",
-    });
-    expect(
-      modelsRouteFromLocation({ pathname: "/models/reviews/review_1/nope" }),
-    ).toBeNull();
-    expect(
-      modelsRouteFromLocation({ pathname: "/models/scorers/judge_1/evidence" }),
-    ).toBeNull();
-    expect(modelsRouteFromLocation({ pathname: "/models/scoring" })).toBeNull();
-  });
-
-  it("serializes paths without query-string navigation state", () => {
-    const route = modelProjectRoute("project with spaces", "evals");
-    expect(modelsPath(route)).toBe("/models/project%20with%20spaces/evals");
-    expect(modelsPath(modelLibraryRoute("scorers", "judge 1"))).toBe(
-      "/models/scorers/judge%201",
-    );
-    expect(modelsPath(modelLibraryRoute("projects"))).toBe("/models/projects");
-    expect(modelsPath(modelLibraryRoute("comparisons", "series 1"))).toBe(
-      "/models/comparisons/series%201",
-    );
-    expect(modelsSectionFromRoute({ kind: "index" })).toBe("overview");
-  });
-
-  it("defaults the Models index to the most recently updated project", () => {
-    expect(
-      modelsRouteWithDefaultProject(
-        { kind: "index" },
-        [
-          { id: "older", updatedAt: "2026-08-01T00:00:00.000Z" },
-          { id: "newest", updatedAt: "2026-09-03T00:00:00.000Z" },
-        ],
-      ),
-    ).toEqual(modelProjectRoute("newest"));
-  });
-
-  it("preserves explicit Models destinations and an empty index", () => {
-    const projectRoute = modelProjectRoute("selected", "runs");
-    const libraryRoute = modelLibraryRoute("comparisons");
-    const projects = [{ id: "newest", updatedAt: "2026-09-03T00:00:00.000Z" }];
-
-    expect(modelsRouteWithDefaultProject(projectRoute, projects)).toBe(
-      projectRoute,
-    );
-    expect(modelsRouteWithDefaultProject(libraryRoute, projects)).toBe(
-      libraryRoute,
-    );
-    expect(modelsRouteWithDefaultProject({ kind: "index" }, [])).toEqual({
-      kind: "index",
-    });
+  // Regression: ambiguous execution IDs and retired paths silently selected the wrong resource or project.
+  it("preserves typed resource identities and reserves creation and series routes", () => {
+    for (const ref of ["model-run:same", "job:same", "reward-run:same"]) {
+      const route = modelsLocation("runs", null, { resourceId: ref, detailTab: "metrics" });
+      expect(modelsRouteFromLocation(new URL(modelsPath(route), "https://local.invalid"))).toEqual(route);
+    }
+    expect(modelsRouteFromLocation({ pathname: "/models/runs/new/model-a", search: "?model=model-a" })).toEqual(modelsLocation("runs", "model-a", { collection: "new", resourceId: "model-a" }));
+    expect(modelsRouteFromLocation({ pathname: "/models/tasksets/drafts/draft-a" })).toEqual(modelsLocation("tasksets", null, { collection: "drafts", resourceId: "draft-a" }));
+    for (const pathname of ["/models/project-a/tasksets", "/models/projects/project-a", "/models/scorers", "/models/runs/new", "/models/versions/version-a/lineage", "/models/evaluations/not-a-view/anything", "/models/tasksets/t/graders", "/models/tasksets/%ZZ"]) expect(modelsRouteFromLocation({ pathname })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models", search: "?model=a&model=b" })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models", search: "?modelProjectId=old&modelsTab=training" })).toBeNull();
   });
 });
 
-describe("Settings and chat path routing", () => {
-  it("parses canonical settings and chat paths", () => {
-    expect(desktopRouteFromLocation({ pathname: "/settings/providers" })).toEqual({
-      kind: "settings",
-      section: "providers",
-    });
+describe("Settings and other Desktop destinations", () => {
+  // Regression: configuring a provider discarded the originating run draft and returned to new chat.
+  it("carries a bounded canonical Models return location without allowing external redirects", () => {
+    const origin = modelsLocation("tasksets", "model-a", { collection: "drafts", resourceId: "draft-a" });
+    const settings = { kind: "settings" as const, section: "providers" as const, returnTo: modelsPath(origin) };
+    const location = new URL(desktopPath(settings), "https://local.invalid");
+    const parsed = desktopRouteFromLocation(location);
+    expect(parsed).toEqual(settings);
+    expect(settingsReturnRoute(parsed)).toEqual({ kind: "models", route: origin });
+    expect(settingsReturnRoute({ ...settings, returnTo: "//attacker.invalid/models" })).toEqual({ kind: "chat", sessionId: null });
     expect(desktopRouteFromLocation({ pathname: "/settings/unknown" })).toBeNull();
-    expect(desktopRouteFromLocation({ pathname: "/chat/session%201" })).toEqual({
-      kind: "chat",
-      sessionId: "session 1",
-    });
-    expect(desktopRouteFromLocation({ pathname: "/chat/new" })).toEqual({
-      kind: "chat",
-      sessionId: null,
-    });
-  });
-
-  it("serializes settings and chat paths without query strings", () => {
-    expect(desktopPath({ kind: "settings", section: "dataset-storage" })).toBe(
-      "/settings/dataset-storage",
-    );
-    expect(desktopPath({ kind: "chat", sessionId: "session 1" })).toBe(
-      "/chat/session%201",
-    );
-    expect(desktopPath({ kind: "chat", sessionId: null })).toBe("/chat/new");
-  });
-
-  it("uses canonical paths for the other primary destinations", () => {
-    expect(desktopRouteFromLocation({ pathname: "/apps" })).toEqual({
-      kind: "view",
-      view: "apps",
-    });
-    expect(desktopRouteFromLocation({ pathname: "/workflows" })).toEqual({
-      kind: "view",
-      view: "scheduled",
-    });
-    expect(desktopPath({ kind: "view", view: "outputs" })).toBe("/outputs");
-    expect(desktopPath({ kind: "view", view: "projects" })).toBe("/projects");
+    expect(desktopPath({ kind: "view", view: "scheduled" })).toBe("/workflows");
+    expect(desktopRouteFromLocation({ pathname: "/chat/session%201" })).toEqual({ kind: "chat", sessionId: "session 1" });
   });
 });

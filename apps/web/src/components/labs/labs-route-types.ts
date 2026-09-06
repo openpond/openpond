@@ -19,6 +19,7 @@ export type LabsRouteProps = {
   onNewModel: (
     initialTasksetId?: string,
     learnedPreferenceReward?: LearnedPreferenceRewardBinding | null,
+    modelId?: string,
   ) => void;
   onUseAgent: (actionId: string, agentName: string) => void;
   onCreateAgent: (

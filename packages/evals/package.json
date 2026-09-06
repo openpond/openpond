@@ -1,9 +1,10 @@
 {
   "name": "@openpond/evals",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Portable Tasksets, graders, evaluation runs, receipts, conformance fixtures, and Work evidence for OpenPond Harnesses",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/types/index.d.ts",
   "files": [
@@ -13,9 +14,30 @@
     "README.md",
     "CONTRACT.md",
     "RELEASING.md",
+    "LEARNING.md",
     "LICENSE"
   ],
   "exports": {
+    "./javascript-verifier/node": {
+      "types": "./dist/types/javascript-verifier-node.d.ts",
+      "import": "./dist/javascript-verifier-node.js"
+    },
+    "./javascript-verifier": {
+      "types": "./dist/types/javascript-verifier.d.ts",
+      "import": "./dist/javascript-verifier.js"
+    },
+    "./task-schema": {
+      "types": "./dist/types/task-schema.d.ts",
+      "import": "./dist/task-schema.js"
+    },
+    "./learning": {
+      "types": "./dist/types/learning/index.d.ts",
+      "import": "./dist/learning/index.js"
+    },
+    "./rewards": {
+      "types": "./dist/types/rewards.d.ts",
+      "import": "./dist/rewards.js"
+    },
     ".": {
       "types": "./dist/types/index.d.ts",
       "import": "./dist/index.js"
@@ -91,7 +113,7 @@
     "node": ">=22.14.0 <25"
   },
   "scripts": {
-    "build": "tsx scripts/generate-telemetry-schemas.ts && tsx scripts/build.ts",
+    "build": "tsx scripts/generate-telemetry-schemas.ts && tsx scripts/generate-learning-schemas.ts && tsx scripts/build.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project evals",
     "check:api": "tsx scripts/check-public-package.ts",
@@ -100,6 +122,9 @@
     "publish:check": "pnpm run build && pnpm run check:api && pnpm run check:consumer && npm pack --dry-run"
   },
   "dependencies": {
+    "@jitl/quickjs-singlefile-cjs-release-sync": "0.32.0",
+    "ajv": "^8.20.0",
+    "quickjs-emscripten-core": "0.32.0",
     "zod": "^4.1.13"
   },
   "peerDependencies": {
@@ -108,6 +133,7 @@
   "devDependencies": {
     "@openpond/harness": "workspace:*",
     "@types/node": "24.13.3",
+    "esbuild": "0.28.1",
     "tsx": "4.23.1",
     "typescript": "^5.9.3",
     "vitest": "4.1.10"
