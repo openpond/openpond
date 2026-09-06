@@ -33,7 +33,7 @@ export function useDraftNavigation(input: { dirty: boolean; busy?: boolean; name
     setOpen(false);
     callback?.(allowed);
   };
-  const dialog = open ? <AppDialog ariaLabel={input.save ? `Save ${input.name} before leaving` : `Discard ${input.name}`} className="labs-rename-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled={saving} onClose={() => resolve(false)}>
+  const dialog = open ? <AppDialog ariaLabel={input.save ? `Save ${input.name} before leaving` : `Discard ${input.name}`} className="labs-rename-dialog labs-draft-exit-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled={saving} onClose={() => resolve(false)}>
     <h2>{input.save ? `Save ${input.name} before leaving?` : `Discard ${input.name}?`}</h2>
     <p>{input.save ? "Your changes can be saved before opening the next page." : "This setup has not been saved. Keep editing or discard it to leave."}</p>
     {error ? <p role="alert">{error}</p> : null}

@@ -68,6 +68,22 @@ function hostedProject() {
 }
 
 describe("Model Project SDK contracts", () => {
+  // Configuration uses a distinct JSON transport and must preserve retry
+  // identity and domain conflicts when moved between Desktop and hosted UI.
+  it("sends exact configuration requests and exposes authoritative conflicts", async () => {
+    const request = await createModelProjectSaveRequest({ id: "project-1", profileId: "team-1", name: "Support model", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { rewardBindingRef: { id: "reward-first", revision: 2, contentHash: HASH } } }, 3);
+    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ accept: "application/json", "content-type": "application/json", authorization: "Bearer test" });
+      expect(JSON.parse(String(init?.body))).toEqual(request);
+      return Response.json(hostedProject());
+    });
+    const client = createModelProjectsClient({ baseUrl: "https://api.openpond.test", fetch, headers: { authorization: "Bearer test" } });
+    expect((await client.saveConfiguration(request)).id).toBe("hosted-project-1");
+    expect(fetch.mock.calls[0]?.[0]).toBe("https://api.openpond.test/v1/model-projects/configuration/save");
+    fetch.mockImplementationOnce(async () => Response.json({ schemaVersion: "openpond.modelProjectApiError.v2", code: "model_revision_conflict", message: "Model changed.", retryable: false, requestId: null, details: {} }, { status: 409 }));
+    await expect(client.saveConfiguration(request)).rejects.toMatchObject({ status: 409, code: "model_revision_conflict" });
+  });
+
   it("stores one bounded current setup on the Project", () => {
     const project = ModelProjectSchema.parse({
       schemaVersion: "openpond.modelProject.v2",

@@ -6,6 +6,7 @@ import {
   type ModelProjectConfigurationCheck,
 } from "openpond-sdk/model-projects";
 import { validateTaskset } from "@openpond/taskset-sdk";
+import { requireLearningRelease } from "@openpond/evals/learning";
 import type { TrainingDestinationCapabilities } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import { projectBaseModelCandidates } from "./base-model-candidates.js";
@@ -45,6 +46,18 @@ export async function checkModelProjectConfiguration(input: {
     if (!candidate?.available) error("model_base_unavailable", "The selected starting model is unavailable on the execution owner. Choose an available model or choose later.", "trainingSetup.baseModel");
   }
   const ref = project.trainingSetup.tasksetRef;
+  const rewardBindingRef = project.trainingSetup.rewardBindingRef;
+  if (rewardBindingRef) {
+    try {
+      await input.store.learningRepository().transaction(project.profileId, async (tx) => {
+        const binding = await requireLearningRelease(tx, "binding", rewardBindingRef);
+        for (const source of binding.sources) await requireLearningRelease(tx, "reward", source.reward);
+      });
+      if (!ref) findings.push({ code: "model_reward_tasks_deferred", severity: "warning", field: "trainingSetup.rewardBindingRef", message: "Reward saved independently. Task compatibility will be checked when tasks are attached." });
+    } catch {
+      error("model_reward_unavailable", "The exact Reward configuration is unavailable in this Profile.", "trainingSetup.rewardBindingRef");
+    }
+  }
   if (!ref) {
     deferred.push("taskset");
     if (project.trainingSetup.tasksetRelease) error("model_taskset_required", "Choose the Taskset corresponding to this release.", "trainingSetup.tasksetRef");
