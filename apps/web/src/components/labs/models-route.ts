@@ -1,6 +1,6 @@
 export const MODELS_PAGES = ["models", "tasksets", "rewards", "evaluations", "runs", "versions", "serving"] as const;
 export type ModelsPage = (typeof MODELS_PAGES)[number];
-export type ModelsCollection = "default" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers";
+export type ModelsCollection = "default" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers" | "combined";
 export interface ModelsRoute {
   page: ModelsPage;
   modelId: string | null;
@@ -15,7 +15,7 @@ export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
   models: "Models", tasksets: "Tasksets", rewards: "Rewards", evaluations: "Evaluations", runs: "Runs", versions: "Versions", serving: "Serving",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
-  tasksets: ["drafts", "formats", "batches"], rewards: ["scorers"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
+  tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
 };
 const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
   tasksets: ["overview", "tasks", "reward", "attempts", "releases"],
@@ -48,7 +48,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
     if (!resourceId || detailTab) return null;
   } else if (collection === "series") {
     // A series entry is an identity, not a display tab.
-  } else if (["review", "formats", "batches", "comparisons", "scorers"].includes(collection)) {
+  } else if (["review", "formats", "batches", "comparisons", "scorers", "combined"].includes(collection)) {
     if (detailTab) return null;
   } else if (detailTab && !detailTabs[page]?.includes(detailTab)) return null;
   if (page === "serving" && detailTab) return null;

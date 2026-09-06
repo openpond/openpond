@@ -6,7 +6,7 @@ import { LearningActions, LearningError, LearningJsonField } from "./LearningFie
 import { useLearningMutation } from "./useLearningResources";
 
 export function LearningIntake({ client, definition, onReview }: { client: OpenPondLearningClient | null; definition: TaskDefinition; onReview: (id: string) => void }) {
-  const [initial] = useState(() => JSON.stringify({ schemaVersion: "openpond.taskExample.v1", sourceId: `${definition.id}-direct`, idempotencyKey: `example-${crypto.randomUUID()}`, taskDefinition: learningRef(definition), exampleId: "your-record-id", attemptId: "attempt-1", occurredAt: new Date().toISOString(), familyKey: "your-family-id", split: "train", input: {}, observedOutput: null, expected: null, evaluatorContext: null, assets: [], provenance: { sourceRecordRef: null, mappingHash: null } }, null, 2));
+  const [initial] = useState(() => JSON.stringify({ schemaVersion: "openpond.taskExample.v1", sourceId: definition.revision === 1 ? `${definition.id}-direct` : `${definition.id}-r${definition.revision}-direct`, idempotencyKey: `example-${crypto.randomUUID()}`, taskDefinition: learningRef(definition), exampleId: "your-record-id", attemptId: "attempt-1", occurredAt: new Date().toISOString(), familyKey: "your-family-id", split: "train", input: {}, observedOutput: null, expected: null, evaluatorContext: null, assets: [], provenance: { sourceRecordRef: null, mappingHash: null } }, null, 2));
   const [draft, setDraft] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [receipts, setReceipts] = useState<Array<{ row: number; id: string; revision: number }>>([]);

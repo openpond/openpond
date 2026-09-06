@@ -22,6 +22,7 @@ import { ModelRunEditorPage } from "./ModelRunEditorPage";
 import { ModelsResourceDetail } from "./ModelsResourceDetail";
 import { ModelsAggregatePage } from "./ModelsAggregatePage";
 import { LearningRewardsPage } from "./learning/LearningRewardsPage";
+import { LearningCombinedRewardsPage } from "./learning/LearningCombinedRewardsPage";
 import { LearningTaskFormatsPage } from "./learning/LearningTaskFormatsPage";
 import { LearningReviewPage } from "./learning/LearningReviewPage";
 import { LearningBatchesPage } from "./learning/LearningBatchesPage";
@@ -165,7 +166,7 @@ export function LabsRoute(props: LabsRouteProps) {
       onOpenFiles={(id) => { training.onSelectedTasksetIdChange(id); training.onOpenTasksetFiles(); }} onToast={toast} onTrainModel={startRun}
     />}</>;
   } else if (route.page === "rewards") {
-    page = <><ModelsLocalViews route={route} views={[["default", "Reusable Rewards"], ["scorers", "Taskset graders"]]} />{route.collection === "scorers" ? <LabScoringPage busy={training.training.busyAction === "create-scorer"} defaultModel={training.defaultModel} onOpenTaskset={openTaskset} onCreateScorer={createScorer} onSelectedScorerIdChange={(id) => open(modelsResourceLocation(route, id))} selectedScorerId={route.resourceId} providerSettings={training.providerSettings} state={scopedState} /> : <LearningRewardsPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} />}</>;
+    page = <><ModelsLocalViews route={route} views={[["default", "Reusable Rewards"], ["combined", "Combined Rewards"], ["scorers", "Taskset graders"]]} />{route.collection === "scorers" ? <LabScoringPage busy={training.training.busyAction === "create-scorer"} defaultModel={training.defaultModel} onOpenTaskset={openTaskset} onCreateScorer={createScorer} onSelectedScorerIdChange={(id) => open(modelsResourceLocation(route, id))} selectedScorerId={route.resourceId} providerSettings={training.providerSettings} state={scopedState} /> : route.collection === "combined" ? <LearningCombinedRewardsPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} /> : <LearningRewardsPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} />}</>;
   } else if (route.page === "evaluations") {
     page = <>
       <ModelsLocalViews route={route} views={[["results", "Results"], ["review", "Example review"], ["comparisons", "Comparison review"]]} />

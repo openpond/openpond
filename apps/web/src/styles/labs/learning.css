@@ -79,3 +79,11 @@
   padding-block: 16px;
   border-bottom: 1px solid var(--border);
 }
+
+.learning-binding-fields { margin-block: 20px; }
+.learning-bound-source { min-width: 0; margin-block: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+.learning-bound-source legend { padding-inline: 6px; font-size: 13px; font-weight: 600; }
+.learning-binding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
+.learning-bound-source .learning-actions label { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.learning-bound-source small { overflow-wrap: anywhere; }
+@media (max-width: 650px) { .learning-binding-grid { grid-template-columns: 1fr; } }

@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { expect, test } from "vitest";
 import { OpenPondLearningClient } from "../packages/sdk/src/learning";
 import { createLearningTextAsset, LearningSourceSchema, learningRef, TaskDefinitionSchema, TaskEvidenceSchema, TaskGradeRunSchema } from "@openpond/evals/learning";
-import { createRewardRelease, createRewardBinding } from "@openpond/evals/rewards";
+import { createRewardRelease, createRewardBinding, RewardBindingSchema } from "@openpond/evals/rewards";
 import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src/api/http-routes";
 import { createLocalLearningRuntime } from "../apps/server/src/training/learning-runtime";
 import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
@@ -63,6 +63,27 @@ test("public learning SDK crosses the authenticated HTTP boundary with retries, 
       await runtime.drain();
       expect(await sdk.get("grade", codeGrade.id)).toMatchObject({ status: "completed", composition: { training: { passed: true, score: 1 } } });
       expect(await sdk.get("grade", grade.id)).toMatchObject({ status: "completed", composition: { training: { passed: false } } });
+      // A recipe edit must not change an already published task binding or its
+      // weighted result. Forged provenance must roll back the whole publication.
+      const combinedContent = { ...bindingContent, id: "combined-recipe", name: "Answer checks", description: "Two independent checks", sources: [
+        { ...fixture.binding.sources[0]!, graderId: "expected-answer", hardGate: false, weight: 1 },
+        { ...codeBinding.sources[0]!, graderId: "private-answer", hardGate: false, weight: 3 },
+      ] };
+      const recipe = RewardBindingSchema.parse((await sdk.command({ action: "publish", operationId: "recipe", kind: "binding", expectedRevision: 0, content: combinedContent })).resources[0]);
+      const { name: _recipeName, description: _recipeDescription, ...copiedContent } = combinedContent;
+      const copied = { ...copiedContent, id: "copied-binding", recipeRef: learningRef(recipe) };
+      await expect(sdk.command({ action: "publish", operationId: "bad-recipe", kind: "binding", expectedRevision: 0, content: { ...copied, recipeRef: { ...learningRef(recipe), contentHash: "0".repeat(64) } } })).rejects.toMatchObject({ status: 409 });
+      await expect(sdk.get("binding", copied.id)).rejects.toMatchObject({ status: 404 });
+      const bound = RewardBindingSchema.parse((await sdk.command({ action: "publish", operationId: "copy-recipe", kind: "binding", expectedRevision: 0, content: copied })).resources[0]);
+      await sdk.command({ action: "publish", operationId: "edit-recipe", kind: "binding", expectedRevision: 1, content: { ...combinedContent, revision: 2, sources: combinedContent.sources.map((source) => ({ ...source, weight: 1 })) } });
+      expect(await sdk.get("binding", copied.id)).toEqual(bound);
+      expect(await sdk.get("binding", recipe.id, 1)).toEqual(recipe);
+      const combinedDefinition = TaskDefinitionSchema.parse((await sdk.command({ action: "publish", operationId: "combined-definition", kind: "definition", expectedRevision: 0, content: { ...definitionContent, id: "combined-definition", rewardBinding: learningRef(bound) } })).resources[0]);
+      const combinedSource = LearningSourceSchema.parse((await sdk.command({ action: "publish", operationId: "combined-source", kind: "source", expectedRevision: 0, content: { ...content, id: "combined-source", taskDefinition: learningRef(combinedDefinition) } })).resources[0]);
+      const combinedEvidence = TaskEvidenceSchema.parse((await sdk.submitExample({ ...fixture.example, sourceId: combinedSource.id, taskDefinition: learningRef(combinedDefinition), evaluatorContext: { answer: "wrong" } })).resources[0]);
+      const combinedGrade = TaskGradeRunSchema.parse((await sdk.command({ operationId: "grade-combined", action: "queue_grade", evidence: learningRef(combinedEvidence), target: "observed", proposedTarget: null, timeoutMs: 5_000, maximumSpendUsd: 0 })).resources[0]);
+      await runtime.drain();
+      expect(await sdk.get("grade", combinedGrade.id)).toMatchObject({ status: "completed", composition: { binding: learningRef(bound), training: { score: 0.75, passed: false }, results: [{ graderId: "expected-answer", normalizedScore: 0 }, { graderId: "private-answer", normalizedScore: 1 }] } });
       const forgedActor = await fetch(`${baseUrl}/v1/learning/commands`, { method: "POST", headers: { Authorization: "Bearer test-local-owner", "Content-Type": "application/json" }, body: JSON.stringify({ scope: learningContext.scope, actor: { id: "forged" }, command: { action: "submit_example", operationId: "forged", example: fixture.example } }) });
       expect(forgedActor.status).toBe(400);
       // Raw producers must hit the complexity bound before recursive Zod parsing.

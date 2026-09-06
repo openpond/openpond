@@ -79,6 +79,7 @@ export function createLearningService(repository: LearningRepository, options: {
         break;
       }
       case "binding": {
+        if (input.content.recipeRef) await requireLearningRelease(transaction, "binding", input.content.recipeRef);
         const rewards = await Promise.all(input.content.sources.map((source) => requireLearningRelease(transaction, "reward", source.reward)));
         resource = createRewardBinding(input.content, rewards);
         break;

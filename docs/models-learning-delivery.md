@@ -23,14 +23,23 @@ atomic source-plus-Reward publication. Local code grading uses the public
 QuickJS interpreter in a cancellable worker; the older Taskset code adapter uses
 that same execution boundary. Browser publication and exact source reopening,
 authenticated HTTP grading with evaluator context, and clean-package worker
-execution have been verified. LLM calibration/execution, learned-model execution,
-Combined Reward editing and model creation remain open work.
+execution have been verified. Combined Rewards now publish reusable recipes with
+exact source releases, roles, normalization, weights and gates. Task-format edits
+copy those settings into independent bindings and retain recipe provenance. Each
+format release owns its direct source; previous producers keep their contract.
+Review shows the execution receipt's per-source raw/normalized scores and feedback.
+LLM calibration/execution, learned-model execution and model creation remain open.
 
 The browser journey published a Reward and task format, imported an incorrect
 observed answer, graded a corrected target separately, approved the task and
 target, sealed a batch, selected an existing model and reopened its saved run
 setup. Browser Back/Keep editing retained an unsaved Reward editor. Review
 proposals can be saved as pending feedback before leaving.
+
+The combined-Reward browser journey publishes two sources, copies the recipe into
+a task format, imports an example and executes both graders successfully. The
+HTTP boundary test also proves the 3:1 weighted score stays 0.75 after editing the
+reusable recipe, and forged recipe provenance cannot publish a partial binding.
 
 Preparing a batch rechecks its exact historical evidence and review snapshots,
 scans its content, creates a private Taskset projection and calculates actual
@@ -87,7 +96,9 @@ The first PR checks exposed a Windows compiler-launch issue, missing test-tier
 entries, eager learning initialization in isolated API tests, and a renderer size
 overage. The compiler now runs through Node, boundary tests use the system tier,
 initialization follows service use, and public Evals exports support tree shaking.
-The affected tests and renderer size budget pass locally; CI must confirm Windows.
+CI for `e30a4472` passes, including Windows/macOS/Linux storage, Desktop smoke,
+unit/system tests, builds and CLI distribution. The later combined-Reward change
+passes local typechecking and the authenticated grading test; its CI is pending.
 
 The isolated browser profile has no configured training destination. No executed
 candidate training, full starter qualification, hosted parity or automatic
