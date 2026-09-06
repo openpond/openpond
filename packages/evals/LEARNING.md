@@ -12,6 +12,12 @@ with `{ "scope": "<profile-or-team>", "command": { ... } }` and a Bearer token.
 Reads use `POST /v1/learning/read`. Scope is a requested ownership boundary; the
 host must authorize it from the credential and assign the actor itself.
 
+Task-schema authoring uses a precompiled JSON Schema 2020-12 meta-validator plus
+the bounded keyword/reference checks. Parsing definitions in a browser requires
+no runtime code generation and works under a Content Security Policy without
+`unsafe-eval`. The execution owner separately compiles schemas when validating
+submitted values; schema publication alone is not evidence that an example passes.
+
 ## Data flow
 
 1. Publish a Reward, then a binding, task definition and source. Use

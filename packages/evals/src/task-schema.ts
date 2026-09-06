@@ -2,6 +2,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ValidateFunction } from "ajv";
 
 import { contentHash } from "@openpond/harness";
+import validateMetaSchema from "./task-schema-meta-validator.js";
 
 export const TASK_JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema";
 export const TASK_VALUE_MAX_BYTES = 1_048_576;
@@ -15,6 +16,12 @@ const schemaMaps = new Set(["properties", "$defs", "dependentSchemas"]);
 const schemaArrays = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
 const schemaChildren = new Set(["items", "additionalProperties", "not", "if", "then", "else", "contains", "unevaluatedProperties", "unevaluatedItems", "propertyNames"]);
 const unsupported = new Set(["pattern", "patternProperties", "format", "$id", "$anchor", "$dynamicAnchor", "$dynamicRef", "$recursiveRef", "$recursiveAnchor", "$async", "$data", "contentSchema"]);
+const supported = new Set([
+  ...schemaMaps, ...schemaArrays, ...schemaChildren,
+  "$schema", "$ref", "$comment", "type", "enum", "const", "title", "description", "default", "examples", "readOnly", "writeOnly", "deprecated",
+  "multipleOf", "maximum", "exclusiveMaximum", "minimum", "exclusiveMinimum", "maxLength", "minLength", "contentEncoding", "contentMediaType",
+  "maxItems", "minItems", "uniqueItems", "maxContains", "minContains", "maxProperties", "minProperties", "required", "dependentRequired",
+]);
 
 /** Bound producer-controlled JSON before hashing, schema compilation or validation. */
 export function assertBoundedTaskJson(value: unknown, maxBytes = TASK_VALUE_MAX_BYTES): void {
@@ -48,7 +55,7 @@ export function assertBoundedTaskJson(value: unknown, maxBytes = TASK_VALUE_MAX_
 /** No remote resolution, custom code, data mutation, regex or format plugins. */
 export function validateTaskSchema(schema: unknown): TaskSchemaResult {
   try {
-    validator(schema);
+    assertTaskSchema(schema);
     return { valid: true, issues: [] };
   } catch (error) {
     return { valid: false, issues: [{ path: "", code: "task_schema_invalid", message: error instanceof Error ? error.message : "Task schema is invalid." }] };
@@ -73,13 +80,23 @@ export function validateTaskValue(schema: unknown, value: unknown): TaskSchemaRe
   }
 }
 
-function validator(schema: unknown): ValidateFunction {
+function assertTaskSchema(schema: unknown): void {
   assertBoundedTaskJson(schema, TASK_SCHEMA_MAX_BYTES);
   inspectSchema(schema, schema, new Set(), 0, { remaining: 2_048 });
+  if (!validateMetaSchema(schema)) {
+    const error = validateMetaSchema.errors?.[0];
+    throw new Error(`Task schema ${error?.instancePath ?? ""} ${error?.message ?? "is invalid"}.`);
+  }
+}
+
+function validator(schema: unknown): ValidateFunction {
+  assertTaskSchema(schema);
   const hash = contentHash(schema);
   const cached = validators.get(hash);
   if (cached) return cached;
-  const ajv = new Ajv2020({ allErrors: false, ownProperties: true, strict: true, strictTypes: false, strictTuples: false, strictRequired: false, validateFormats: false, inlineRefs: false, loopRequired: 32, loopEnum: 32 });
+  // The precompiled meta-schema and bounded keyword profile are authoritative
+  // for schema validity. Ajv compiles values only on the execution owner.
+  const ajv = new Ajv2020({ allErrors: false, ownProperties: true, strict: true, strictSchema: false, strictTypes: false, strictTuples: false, strictRequired: false, validateFormats: false, validateSchema: false, inlineRefs: false, loopRequired: 32, loopEnum: 32 });
   const compiled = ajv.compile(schema as Record<string, unknown>);
   if (validators.size >= 64) validators.delete(validators.keys().next().value!);
   validators.set(hash, compiled);
@@ -95,7 +112,7 @@ function inspectSchema(value: unknown, root: unknown, ancestors: Set<unknown>, d
   const schema = value as Record<string, unknown>;
   if (schema.$schema !== undefined && schema.$schema !== TASK_JSON_SCHEMA_DIALECT) throw new Error(`Task schemas must use ${TASK_JSON_SCHEMA_DIALECT}.`);
   for (const [key, child] of Object.entries(schema)) {
-    if (unsupported.has(key)) throw new Error(`Task schema keyword ${key} is not supported by the bounded validator.`);
+    if (unsupported.has(key) || !supported.has(key)) throw new Error(`Task schema keyword ${key} is not supported by the bounded validator.`);
     if (key === "$ref") {
       if (typeof child !== "string" || !child.startsWith("#/$defs/")) throw new Error("Task schema references must be local JSON pointers into $defs.");
       let target = root;

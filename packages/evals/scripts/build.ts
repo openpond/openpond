@@ -31,6 +31,8 @@ try {
   });
   await writeFile(path.join(staging, "javascript-verifier-worker-source.js"), `export const javascriptVerifierWorkerSource = ${JSON.stringify(worker.outputFiles[0]!.text)};\n`);
   await copyFile(path.join(root, "src/javascript-verifier-worker-source.d.ts"), path.join(staging, "types/javascript-verifier-worker-source.d.ts"));
+  await copyFile(path.join(root, "src/task-schema-meta-validator.js"), path.join(staging, "task-schema-meta-validator.js"));
+  await copyFile(path.join(root, "src/task-schema-meta-validator.d.ts"), path.join(staging, "types/task-schema-meta-validator.d.ts"));
   await publishBuild(staging, dist);
 } finally {
   await rm(staging, { force: true, recursive: true });

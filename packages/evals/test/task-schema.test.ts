@@ -2,6 +2,21 @@ import { expect, test } from "vitest";
 import { assertBoundedTaskJson, TASK_JSON_SCHEMA_DIALECT, validateTaskSchema, validateTaskValue } from "../src/task-schema.js";
 import { gradeEvidence } from "../src/graders.js";
 import { TaskRecordSchema } from "../src/tasksets.js";
+import { createContext, Script } from "node:vm";
+import { build } from "esbuild";
+import { fileURLToPath } from "node:url";
+
+// Hosted editors parse portable definitions in browsers where CSP prohibits
+// runtime code generation. Schema checking must work in that same boundary.
+test("validates authored schemas without runtime code generation", async () => {
+  const bundle = await build({
+    stdin: { contents: 'import { validateTaskSchema } from "./src/task-schema.ts"; globalThis.results = [validateTaskSchema({type:"object",properties:{answer:{type:"string"}},required:["answer"],additionalProperties:false}), validateTaskSchema({type:"bogus"}), validateTaskSchema({type:"array",minItems:-1}), validateTaskSchema({unknownKeyword:true})];', resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "js" },
+    bundle: true, platform: "browser", target: "es2022", format: "iife", write: false,
+  });
+  const context = createContext({ TextEncoder, TextDecoder }, { codeGeneration: { strings: false, wasm: false } });
+  new Script(bundle.outputFiles[0]!.text).runInContext(context);
+  expect(context.results.map((result: { valid: boolean }) => result.valid)).toEqual([true, false, false, false]);
+});
 
 // Regression: required-key checks previously accepted incorrectly typed or out-of-range nested values.
 test("JSON Schema validates nested constraints without coercion, mutation or remote resolution", () => {
