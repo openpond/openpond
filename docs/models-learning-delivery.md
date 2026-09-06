@@ -28,7 +28,15 @@ exact source releases, roles, normalization, weights and gates. Task-format edit
 copy those settings into independent bindings and retain recipe provenance. Each
 format release owns its direct source; previous producers keep their contract.
 Review shows the execution receipt's per-source raw/normalized scores and feedback.
-LLM calibration/execution, learned-model execution and model creation remain open.
+LLM calibration/execution and learned-model execution remain open.
+
+Model creation now uses Setup → Tasks → Reward, one Taskset selector, an explicit
+Add tasks later draft option, final-only persistence and Configure reopening.
+The browser verified creation, exact Taskset restoration and unsaved-edit
+retention/discard. Existing configuration edits pin the originally opened Model
+revision rather than adopting background refreshes. The Reward step inspects the
+selected release; embedded Reward authoring, harness selection and server-side
+configuration checks still need their execution-backed integration.
 
 The browser journey published a Reward and task format, imported an incorrect
 observed answer, graded a corrected target separately, approved the task and

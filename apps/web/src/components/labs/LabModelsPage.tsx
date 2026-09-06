@@ -30,6 +30,7 @@ export function LabModelsPage({
   onPulled,
   onSelect,
   onUseModel,
+  onConfigure,
 }: {
   activeProfileId: string;
   hostedScope: string | null;
@@ -47,6 +48,7 @@ export function LabModelsPage({
   ) => void;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
+  onConfigure: (modelId: string) => void;
 }) {
   const listHostedModelProjects = training.actions.listHostedModelProjects;
   const [profileId, setProfileId] = useState("all");
@@ -230,6 +232,7 @@ export function LabModelsPage({
         onPull={(item) => void pullHostedProject(item)}
         onSelect={onSelect}
         onUseModel={onUseModel}
+        onConfigure={onConfigure}
       />
       <Pagination page={page} total={filtered.length} onChange={setPage} />
     </div>

@@ -1,239 +1,86 @@
 import { useMemo, useState, type FormEvent } from "react";
-import type {
-  BaseModelCandidate,
-  BaseModelPreference,
-  ChatModelRef,
-  ProviderSettings,
-} from "@openpond/contracts";
-
+import type { BaseModelCandidate, BaseModelPreference, ModelProject, Taskset } from "@openpond/contracts";
+import type { OpenPondLearningClient } from "openpond-sdk/learning";
 import { AppDialog } from "../dialogs/AppDialog";
 import { DropdownSelect } from "../DropdownSelect";
 import { X } from "../icons";
-import {
-  chatModelFromValue,
-  chatModelValue,
-  labChatModelOptions,
-} from "./lab-chat-model-options";
+import { useDraftNavigation } from "./useDraftNavigation";
+import { ModelCreationReward } from "./ModelCreationReward";
 
 export type LabModelCreateInput = {
   id: string;
   name: string;
   description: string | null;
   defaultBaseModel: BaseModelPreference | null;
-  benchmarkModel: ChatModelRef | null;
-  purpose: "train" | "benchmark";
+  tasksetRef: ModelProject["trainingSetup"]["tasksetRef"];
+  expectedRevision: number;
 };
+const STEPS = ["Setup", "Tasks", "Reward"] as const;
 
-export function LabModelCreateDialog({
-  baseModelCandidates,
-  busy,
-  defaultBenchmarkModel,
-  initialName,
-  onClose,
-  onCreate,
-  onManageModels,
-  providerSettings,
-}: {
-  baseModelCandidates: BaseModelCandidate[];
-  busy: boolean;
-  defaultBenchmarkModel: ChatModelRef;
-  initialName: string;
-  onClose: () => void;
-  onCreate: (input: LabModelCreateInput) => Promise<boolean>;
-  onManageModels: () => void;
-  providerSettings: ProviderSettings | null;
+export function LabModelCreateDialog({ baseModelCandidates, tasksets, busy, initialName, project = null, learningClient, onClose, onCreate, onSaved, onManageModels }: {
+  baseModelCandidates: BaseModelCandidate[]; tasksets: Taskset[]; busy: boolean; initialName: string;
+  project?: ModelProject | null; learningClient: OpenPondLearningClient | null; onClose: () => void;
+  onCreate: (input: LabModelCreateInput) => Promise<boolean>; onSaved: () => void; onManageModels: () => void;
 }) {
-  const listedCandidates = useMemo(
-    () => labModelCreateCandidates(baseModelCandidates),
-    [baseModelCandidates],
-  );
-  const [name, setName] = useState(initialName);
-  const [id] = useState(() => `model_${crypto.randomUUID()}`);
-  const [description, setDescription] = useState("");
-  const [baseModelKey, setBaseModelKey] = useState("");
-  const [purpose, setPurpose] = useState<"train" | "benchmark">("train");
-  const benchmarkModelOptions = useMemo(
-    () => labChatModelOptions(providerSettings, defaultBenchmarkModel),
-    [defaultBenchmarkModel, providerSettings],
-  );
-  const [benchmarkModelValue, setBenchmarkModelValue] = useState(
-    chatModelValue(defaultBenchmarkModel),
-  );
+  const listedCandidates = useMemo(() => labModelCreateCandidates(baseModelCandidates), [baseModelCandidates]);
+  const [id] = useState(() => project?.id ?? `model_${crypto.randomUUID()}`);
+  const [expectedRevision] = useState(project?.revision ?? 0);
+  const initial = { name: project?.name ?? initialName, description: project?.objective ?? "", baseModel: project?.trainingSetup.baseModel ?? project?.defaultBaseModel ?? null, tasksetRef: project?.trainingSetup.tasksetRef ?? null, deferTasks: project ? !project.trainingSetup.tasksetRef : false };
+  const [draft, setDraft] = useState(initial);
+  const [initialSnapshot] = useState(() => JSON.stringify(initial));
+  const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const normalizedName = name.trim().replace(/\s+/g, " ");
-
+  const [checked, setChecked] = useState<string | null>(null);
+  const selectedTaskset = tasksets.find((taskset) => sameTaskset(taskset, draft.tasksetRef)) ?? null;
+  const selectedBase = listedCandidates.find((candidate) => JSON.stringify(candidate.preference) === JSON.stringify(draft.baseModel));
+  const normalizedName = draft.name.trim().replace(/\s+/g, " ");
+  const snapshot = JSON.stringify(draft);
+  const patch = (update: Partial<typeof draft>) => { setDraft((current) => ({ ...current, ...update })); setError(null); setChecked(null); };
+  const guard = useDraftNavigation({ name: "model setup", dirty: snapshot !== initialSnapshot, busy, onLeave: onClose });
+  function checkSetup() {
+    if (!normalizedName) return "Name this model.";
+    if (!draft.deferTasks && !selectedTaskset) return "Choose an available Taskset release, or explicitly add tasks later.";
+    if (draft.baseModel && (!selectedBase || !selectedBase.available)) return "The selected starting model is unavailable. Choose an available model or choose later.";
+    if (selectedTaskset && !selectedTaskset.tasks.length && !selectedTaskset.datasetArtifact) return "The selected Taskset has no tasks or dataset artifact.";
+    return null;
+  }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!normalizedName || busy) return;
-    setError(null);
-    const selected =
-      listedCandidates.find(
-        (candidate) => candidate.selectionKey === baseModelKey,
-      ) ?? null;
-    const created = await onCreate({
-      id,
-      name: normalizedName,
-      description: description.trim() || null,
-      defaultBaseModel: selected?.preference ?? null,
-      benchmarkModel: purpose === "benchmark"
-        ? chatModelFromValue(benchmarkModelValue)
-        : null,
-      purpose,
-    });
-    if (!created) {
-      setError("OpenPond could not create the Model. Review the latest error and try again.");
-    }
+    if (busy) return;
+    if (step < 2) { if (step === 0 && !normalizedName) setError("Name this model."); else if (step === 1 && !draft.deferTasks && !selectedTaskset) setError("Choose a Taskset or add tasks later."); else { setError(null); setStep(step + 1); } return; }
+    const problem = checkSetup();
+    if (problem) { setError(problem); return; }
+    const created = await onCreate({ id, name: normalizedName, description: draft.description.trim() || null, defaultBaseModel: draft.baseModel, tasksetRef: draft.deferTasks ? null : draft.tasksetRef, expectedRevision });
+    if (!created) setError("The configuration could not be saved. Your edits remain here; check the reported error and retry.");
+    else { guard.allowNextNavigation(); onSaved(); }
   }
-
-  return (
-    <AppDialog
-      ariaLabel="New model"
-      backdropClassName="labs-rename-backdrop"
-      className="labs-rename-dialog labs-model-create-dialog"
-      dismissDisabled={busy}
-      initialFocusKey={initialName}
-      onClose={onClose}
-    >
-      <header>
-        <div>
-          <h2>New model</h2>
-          <p>Create the Model now. Tasksets, runs, and releases can be added later.</p>
-        </div>
-        <button
-          aria-label="Close new model"
-          disabled={busy}
-          type="button"
-          onClick={onClose}
-        >
-          <X size={16} />
-        </button>
-      </header>
-      <form onSubmit={(event) => void submit(event)}>
-        <fieldset className="labs-model-create-purpose">
-          <legend>What do you want to do?</legend>
-          <button
-            className={purpose === "train" ? "selected" : undefined}
-            type="button"
-            onClick={() => setPurpose("train")}
-          >
-            <strong>Train a model</strong>
-            <small>Create runs and trained Versions from your Tasksets.</small>
-          </button>
-          <button
-            className={purpose === "benchmark" ? "selected" : undefined}
-            type="button"
-            onClick={() => setPurpose("benchmark")}
-          >
-            <strong>Benchmark a model</strong>
-            <small>Create the Model, then configure a controlled evaluation.</small>
-          </button>
+  return <>
+    <AppDialog ariaLabel={project ? "Edit model" : "New model"} backdropClassName="labs-rename-backdrop" className="labs-rename-dialog labs-model-create-dialog" dismissDisabled={busy} initialFocusKey={id} onClose={() => { void guard.requestLeave(onClose); }}>
+      <header><div><h2>{project ? "Edit model" : "New model"}</h2><p>Choose the model’s purpose, tasks and quality checks. Training starts separately from Runs.</p></div><button aria-label="Close model setup" disabled={busy} type="button" onClick={() => { void guard.requestLeave(onClose); }}><X size={16} /></button></header>
+      <nav className="model-create-steps" aria-label="Model setup steps">{STEPS.map((label, index) => <button type="button" key={label} disabled={busy || (!project && index > step)} aria-current={step === index ? "step" : undefined} onClick={() => { setStep(index); setError(null); }}>{index + 1}. {label}</button>)}</nav>
+      <form onSubmit={(event) => { void submit(event); }}>
+        <fieldset disabled={busy} className="model-create-fields">
+          {step === 0 ? <>
+            <label><span>Name</span><input data-autofocus maxLength={200} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
+            <label><span>Purpose</span><textarea maxLength={5000} rows={3} placeholder="What should this model do well?" value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>
+            <div className="labs-model-create-field"><span>Starting model</span><div className="labs-model-create-select-row"><DropdownSelect label="Starting model" value={selectedBase?.selectionKey ?? ""} options={[{ value: "", label: draft.baseModel && !selectedBase ? `${draft.baseModel.modelId} · unavailable` : "Choose later" }, ...listedCandidates.map((candidate) => ({ value: candidate.selectionKey, label: `${candidate.label} · ${candidate.sourceLabel}${candidate.available ? "" : " · Unavailable"}`, disabled: !candidate.available }))]} onChange={(key) => patch({ baseModel: listedCandidates.find((candidate) => candidate.selectionKey === key)?.preference ?? null })} /><button aria-label="Manage starting models" className="labs-model-create-add" title="Manage models in Compute settings" type="button" onClick={() => { void guard.requestLeave(onManageModels); }}>+</button></div></div>
+          </> : step === 1 ? <>
+            <label><span>Taskset</span><select disabled={draft.deferTasks} value={selectedTaskset ? tasksetKey(selectedTaskset) : ""} onChange={(event) => { const taskset = tasksets.find((taskset) => tasksetKey(taskset) === event.target.value); patch({ tasksetRef: taskset ? { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash } : null }); }}><option value="">Choose a Taskset</option>{tasksets.map((taskset) => <option key={tasksetKey(taskset)} value={tasksetKey(taskset)}>{taskset.name} · release {taskset.revision}</option>)}</select></label>
+            <label className="model-create-checkbox"><input type="checkbox" checked={draft.deferTasks} onChange={(event) => patch({ deferTasks: event.target.checked })} /><span>Add tasks later · save as a draft</span></label>
+            {!draft.deferTasks && selectedTaskset ? <><p>{selectedTaskset.tasks.length || selectedTaskset.datasetArtifact?.rowCount || 0} tasks · {selectedTaskset.objective}</p>{selectedTaskset.tasks[0] ? <details><summary>Example task</summary><pre>{JSON.stringify({ input: selectedTaskset.tasks[0].input, expectedOutput: selectedTaskset.tasks[0].expectedOutput }, null, 2)}</pre></details> : null}</> : !tasksets.length ? <p>Create or import a Taskset from Tasksets, then select its published release here.</p> : null}
+          </> : <>
+            {draft.deferTasks ? <p>This model will remain a draft. Attach a Taskset to configure its Rewards.</p> : selectedTaskset ? <ModelCreationReward client={learningClient} taskset={selectedTaskset} /> : <p>Return to Tasks and select an available release.</p>}
+            <button type="button" className="training-button secondary" onClick={() => { const problem = checkSetup(); setError(problem); setChecked(problem ? null : snapshot); }}>Check setup</button>
+            {checked === snapshot ? <p role="status">{draft.deferTasks ? "Draft configuration checked. Tasks and Rewards are deferred." : "Configuration checked: model selection and Taskset attachment are consistent. Training readiness is checked when preparing a run."}</p> : null}
+          </>}
         </fieldset>
-        <label>
-          <span>Name</span>
-          <input
-            data-autofocus
-            maxLength={200}
-            required
-            value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-        </label>
-        <label>
-          <span>Description <small>Optional</small></span>
-          <textarea
-            maxLength={5_000}
-            rows={3}
-            value={description}
-            onChange={(event) => setDescription(event.currentTarget.value)}
-          />
-        </label>
-        {purpose === "benchmark" ? (
-          <label className="labs-model-create-field">
-            <span>Model to benchmark</span>
-            <select
-              aria-label="Model to benchmark"
-              value={benchmarkModelValue}
-              onChange={(event) => setBenchmarkModelValue(event.target.value)}
-            >
-              {benchmarkModelOptions.map((group) => (
-                <optgroup key={group.providerId} label={group.providerLabel}>
-                  {group.models.map((model) => (
-                    <option key={model.value} value={model.value}>
-                      {model.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <small>
-              Uses the same chat-provider catalog as the composer. The choice is
-              pinned in the saved benchmark receipt.
-            </small>
-          </label>
-        ) : (
-          <div className="labs-model-create-field">
-            <span>Starting model <small>Optional</small></span>
-            <div className="labs-model-create-select-row">
-              <DropdownSelect
-                label="Starting model"
-                value={baseModelKey}
-                options={[
-                  { value: "", label: "Choose later" },
-                  ...listedCandidates.map((candidate) => ({
-                    value: candidate.selectionKey,
-                    label: `${candidate.label} · ${candidate.sourceLabel}${
-                      candidate.available ? "" : " · Unavailable"
-                    }`,
-                    disabled: !candidate.available,
-                  })),
-                ]}
-                onChange={setBaseModelKey}
-              />
-              <button
-                aria-label="Add starting model"
-                className="labs-model-create-add"
-                disabled={busy}
-                title="Manage models in Compute settings"
-                type="button"
-                onClick={onManageModels}
-              >
-                +
-              </button>
-            </div>
-          </div>
-        )}
-        {error ? (
-          <div className="labs-rename-error" role="alert">{error}</div>
-        ) : null}
-        <footer>
-          <button disabled={busy} type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            disabled={!normalizedName || busy}
-            type="submit"
-          >
-            {busy
-              ? "Creating…"
-              : purpose === "benchmark"
-              ? "Create and benchmark"
-              : "Create model"}
-          </button>
-        </footer>
+        {error ? <div className="labs-rename-error" role="alert">{error}</div> : null}
+        <footer><button disabled={busy} type="button" onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button>{step > 0 ? <button disabled={busy} type="button" onClick={() => { setStep(step - 1); setError(null); }}>Back</button> : null}<button disabled={busy || !normalizedName} type="submit">{busy ? "Saving…" : step < 2 ? "Continue" : project ? "Save changes" : "Create model"}</button></footer>
       </form>
     </AppDialog>
-  );
+    {guard.dialog}
+  </>;
 }
-
-
-export function labModelCreateCandidates(
-  candidates: BaseModelCandidate[],
-): BaseModelCandidate[] {
-  return candidates.filter(
-    (candidate) =>
-      !(
-        candidate.preference.source === "builtin"
-        && candidate.nonProduction
-      ),
-  );
-}
+export function labModelCreateCandidates(candidates: BaseModelCandidate[]): BaseModelCandidate[] { return candidates.filter((candidate) => !(candidate.preference.source === "builtin" && candidate.nonProduction)); }
+function tasksetKey(taskset: Taskset) { return `${taskset.id}:${taskset.revision}:${taskset.contentHash}`; }
+function sameTaskset(taskset: Taskset, ref: ModelProject["trainingSetup"]["tasksetRef"]) { return ref && taskset.id === ref.id && taskset.revision === ref.revision && taskset.contentHash === ref.contentHash; }

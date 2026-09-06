@@ -481,3 +481,13 @@
     flex-direction: column;
   }
 }
+
+.labs-model-create-dialog { width: min(820px, calc(100vw - 40px)); max-height: calc(100vh - 48px); overflow: auto; }
+.model-create-steps { display: flex; gap: 8px; padding-block: 14px; }
+.model-create-steps button { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; }
+.model-create-steps button[aria-current="step"] { color: var(--text); background: var(--panel); border-color: var(--muted); }
+.model-create-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.model-create-fields > p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.model-create-fields pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 12px; background: var(--panel); border-radius: 6px; }
+.labs-model-create-dialog .model-create-checkbox { display: flex; align-items: center; gap: 10px; }
+.labs-model-create-dialog .model-create-checkbox input { width: auto; }
