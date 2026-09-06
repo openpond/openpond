@@ -13,9 +13,10 @@ import {
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
-  if (request.method === "PUT" && requestUrl.pathname === "/v1/training/models") {
+  if ((request.method === "PUT" && requestUrl.pathname === "/v1/training/models") ||
+    (request.method === "POST" && requestUrl.pathname === "/v1/training/models/check")) {
     try {
-      sendJson(response, 200, await deps.trainingPayload("save_model_project", await readJson(request, { maxBytes: 524_288 }), requestUrl));
+      sendJson(response, 200, await deps.trainingPayload(request.method === "PUT" ? "save_model_project" : "check_model_project", await readJson(request, { maxBytes: 524_288 }), requestUrl));
     } catch (error) {
       if (error instanceof OpenPondModelProjectApiError) sendJson(response, error.status, { code: error.code, error: error.message });
       else if (error instanceof ZodError) sendJson(response, 400, { code: "model_configuration_invalid", error: "Model configuration does not match its contract." });

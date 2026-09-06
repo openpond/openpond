@@ -13,6 +13,7 @@ import { createTrainingPlanLifecycleService } from "../apps/server/src/training/
 import { PortablePreparationTrainingDestination } from "../apps/server/src/training/destinations";
 import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter";
+import { checkModelProjectConfiguration } from "../apps/server/src/training/model-project-configuration-check";
 
 // A second window must not overwrite a stale Model, and retrying a lost response
 // must return the committed receipt even if another window has edited it since.
@@ -29,6 +30,17 @@ test("saves model configuration with exact ownership, revisions, and durable ret
       trainingSetup: ModelProjectTrainingSetupSchema.parse({ tasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash } }),
     };
     const request = await createModelProjectSaveRequest(project, 0);
+    const check = (input: unknown) => checkModelProjectConfiguration({ store: first, request: input, destinations: async () => [] });
+    const checked = await check(request);
+    expect(checked.canSave).toBe(true);
+    expect(checked.deferred).toEqual(["base_model"]);
+    expect(await first.listModelProjects()).toHaveLength(0);
+    const unavailable = await check(await createModelProjectSaveRequest({ ...project,
+      defaultBaseModel: { schemaVersion: "openpond.baseModelPreference.v1", modelId: "unavailable", revision: null,
+        tokenizerRevision: null, chatTemplateHash: null, modelAssetId: null, source: "managed" },
+    }, 0));
+    expect(unavailable).toMatchObject({ canSave: false, findings: expect.arrayContaining([expect.objectContaining({ code: "model_base_unavailable" })]) });
+    expect(unavailable.configurationHash).not.toBe(checked.configurationHash);
     const saved = await first.saveModelProjectConfiguration(request);
     expect(saved.revision).toBe(1);
     expect(saved.trainingSetup.tasksetRef).toEqual(project.trainingSetup.tasksetRef);
@@ -40,6 +52,9 @@ test("saves model configuration with exact ownership, revisions, and durable ret
     expect(edits.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
     expect(edits.find((entry) => entry.status === "rejected")).toMatchObject({ reason: { status: 409, code: "model_revision_conflict" } });
     expect((await first.getModelProject(project.id))?.revision).toBe(2);
+    expect((await check(request)).canSave).toBe(true);
+    expect(await check(await createModelProjectSaveRequest({ ...project, name: "Stale new configuration" }, 1)))
+      .toMatchObject({ canSave: false, findings: expect.arrayContaining([expect.objectContaining({ code: "model_revision_conflict" })]) });
     expect(await second.saveModelProjectConfiguration(request)).toEqual(saved);
     await expect(second.saveModelProjectConfiguration({ ...request, project: { ...project, name: "Reused operation" } })).rejects.toMatchObject({ status: 409, code: "model_operation_conflict" });
     await expect(second.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...project, profileId: "other" }, 2))).rejects.toMatchObject({ status: 404, code: "model_not_found" });

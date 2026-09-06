@@ -100,7 +100,7 @@ describe("server CORS headers", () => {
 
     expect(result).toEqual({ allowed: true, origin: null });
     expect(response.headers.get("access-control-allow-origin")).toBeUndefined();
-    expect(response.headers.get("access-control-allow-headers")).toBe("authorization, content-type");
+    expect(response.headers.get("access-control-allow-headers")).toBe("authorization, content-type, x-openpond-team-id");
   });
 
   test("allows loopback renderer origins", () => {

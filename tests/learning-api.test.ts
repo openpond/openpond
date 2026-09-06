@@ -28,6 +28,16 @@ test("public learning SDK crosses the authenticated HTTP boundary with retries, 
     const baseUrl = `http://127.0.0.1:${address.port}`;
     const sdk = new OpenPondLearningClient({ baseUrl, apiKey: "test-local-owner", scope: learningContext.scope });
     try {
+      // Desktop's browser transport sends the SDK's hosted scope header too.
+      // A Node-only HTTP test would otherwise miss a blocked browser preflight.
+      const preflight = await fetch(`${baseUrl}/v1/learning/read`, { method: "OPTIONS", headers: {
+        Origin: "http://127.0.0.1:17882", "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization,content-type,x-openpond-team-id",
+      } });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:17882");
+      expect(preflight.headers.get("access-control-allow-headers")?.split(",").map((value) => value.trim().toLowerCase()))
+        .toEqual(expect.arrayContaining(["authorization", "content-type", "x-openpond-team-id"]));
       const denied = new OpenPondLearningClient({ baseUrl, apiKey: "wrong", scope: learningContext.scope });
       await expect(denied.list("source")).rejects.toMatchObject({ status: 401 });
       const first = await sdk.submitExample(fixture.example);

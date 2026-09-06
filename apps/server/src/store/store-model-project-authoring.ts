@@ -12,6 +12,18 @@ import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 
 type PayloadRow = { payload: string };
 
+export function findModelProjectSave(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest): ModelProject | null {
+  const request = parseModelProjectSaveRequest(value);
+  const prior = db.get<PayloadRow & { request_hash: string }>(
+    "SELECT request_hash, payload FROM model_project_save_operations WHERE profile_id = ? AND operation_id = ?",
+    [request.project.profileId, request.operationId],
+  );
+  if (!prior) return null;
+  const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
+  if (prior.request_hash !== hash) fail(409, "model_operation_conflict", "This save operation was already used with different Model configuration.");
+  return ModelProjectSchema.parse(JSON.parse(prior.payload));
+}
+
 /** Called inside the store's write queue; no await can split the SQLite transaction. */
 export function commitModelProjectSave(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest): ModelProject {
   const request = parseModelProjectSaveRequest(value);
@@ -19,15 +31,10 @@ export function commitModelProjectSave(db: OpenPondSqliteConnection, value: Mode
   const { project, operationId, expectedRevision } = request;
   db.exec("BEGIN IMMEDIATE");
   try {
-    const prior = db.get<PayloadRow & { request_hash: string }>(
-      "SELECT request_hash, payload FROM model_project_save_operations WHERE profile_id = ? AND operation_id = ?",
-      [project.profileId, operationId],
-    );
+    const prior = findModelProjectSave(db, request);
     if (prior) {
-      if (prior.request_hash !== hash) fail(409, "model_operation_conflict", "This save operation was already used with different Model configuration.");
-      const result = ModelProjectSchema.parse(JSON.parse(prior.payload));
       db.exec("COMMIT");
-      return result;
+      return prior;
     }
     const row = db.get<PayloadRow>("SELECT payload FROM model_projects WHERE id = ?", [project.id]);
     const existing = row ? ModelProjectSchema.parse(JSON.parse(row.payload)) : null;

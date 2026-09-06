@@ -188,6 +188,30 @@ export const ModelProjectSaveRequestSchema = z.object({
 
 export type ModelProjectSaveRequest = z.infer<typeof ModelProjectSaveRequestSchema>;
 
+/** A read-only configuration check; it does not establish training or grader quality. */
+export const ModelProjectConfigurationCheckSchema = z.object({
+  schemaVersion: z.literal("openpond.modelProjectConfigurationCheck.v1"),
+  configurationHash: HashSchema,
+  projectId: IdSchema,
+  expectedRevision: z.number().int().nonnegative(),
+  checkedAt: TimestampSchema,
+  canSave: z.boolean(),
+  deferred: z.array(z.enum(["base_model", "taskset"])).max(2),
+  findings: z.array(z.object({
+    code: IdSchema,
+    severity: z.enum(["error", "warning"]),
+    message: z.string().min(1).max(5000),
+    field: z.string().min(1).max(500).nullable(),
+  }).strict()).max(100),
+}).strict();
+
+export type ModelProjectConfigurationCheck = z.infer<typeof ModelProjectConfigurationCheckSchema>;
+
+export async function modelProjectConfigurationHash(request: ModelProjectSaveRequest): Promise<string> {
+  const parsed = parseModelProjectSaveRequest(request);
+  return canonicalSha256({ project: parsed.project, expectedRevision: parsed.expectedRevision });
+}
+
 export function parseModelProjectSaveRequest(value: unknown): ModelProjectSaveRequest {
   try {
     assertBoundedTaskJson(value, MODEL_PROJECT_SYNC_MAX_BYTES);
