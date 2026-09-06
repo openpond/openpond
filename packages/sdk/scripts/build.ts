@@ -25,6 +25,7 @@ await build({
     "model-projects": path.join(root, "src/model-projects.ts"),
     training: path.join(root, "src/training.ts"),
     learning: path.join(root, "src/learning.ts"),
+    "taskset-catalog": path.join(root, "src/taskset-catalog.ts"),
   },
   outdir: dist,
   bundle: true,
