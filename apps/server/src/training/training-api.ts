@@ -1381,7 +1381,7 @@ export function createTrainingApi(deps: {
     if (action === "job_events") return deps.store.listTrainingJobEvents(requiredString(input.jobId, "jobId"));
     if (action === "run_detail") {
       const jobId = requiredString(input.jobId, "jobId");
-      void deps.training.refreshManagedRunEvidence(jobId).catch(() => undefined);
+      await deps.training.refreshManagedRunEvidence(jobId);
       return trainingRunDetail(deps.store, jobId, { includeEvaluation: input.includeEvaluation !== false });
     }
     throw new Error(`Unknown training action ${action}.`);

@@ -93,7 +93,7 @@ export function useTrainingRunDetail(
     const cached = connectionCache(connection).get(jobId);
     setDetail(cached?.detail ?? null);
     void refresh(includeEvaluation);
-  }, [connection, includeEvaluation, jobId, refresh]);
+  }, [connection, includeEvaluation, jobId, jobStatus, refresh]);
 
   useEffect(() => {
     if (

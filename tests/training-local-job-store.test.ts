@@ -7,7 +7,7 @@ import {
   TrainingJobSchema,
 } from "../packages/contracts/src";
 import { contentHash } from "../packages/taskset-sdk/src";
-import { trainingRunDetail } from "../apps/server/src/training/run-detail";
+import { createTrainingApi } from "../apps/server/src/training/training-api";
 import { tasksetFixture, planFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("local training job store", () => {
@@ -95,7 +95,7 @@ describe("local training job store", () => {
     expect((await store.listModelArtifactLineage())[0]).toMatchObject({ id: "lineage_fixture", status: "imported", promotable: false });
   }));
 
-  test("loads live events without scanning evaluation attempts and grades", async () => withTrainingStore(async ({ store }) => {
+  test("refreshes run evidence before responding without scanning evaluation attempts and grades", async () => withTrainingStore(async ({ store }) => {
     const taskset = tasksetFixture({ ready: true });
     const plan = planFixture(taskset);
     const job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: "job_live_detail", planId: plan.id, bundleHash: "bundlehash", approvalId: "approval", destinationId: "openpond_managed", status: "running", nonProduction: false, workerPid: null, startedAt: "2026-07-12T00:00:00Z", completedAt: null, error: null, createdAt: "2026-07-12T00:00:00Z", updatedAt: "2026-07-12T00:00:00Z", metadata: {} });
@@ -103,13 +103,22 @@ describe("local training job store", () => {
     await store.upsertTaskset(taskset);
     await store.saveTrainingPlan(plan);
     await store.saveTrainingJob(job);
-    await store.saveTrainingJobEvent(event);
     const attempts = vi.spyOn(store, "listTaskAttempts");
     const grades = vi.spyOn(store, "listGradeResultsForTaskset");
-
-    const detail = await trainingRunDetail(store, job.id, {
+    let finishRefresh!: () => void;
+    const refreshPending = new Promise<void>((resolve) => { finishRefresh = resolve; });
+    const refreshManagedRunEvidence = vi.fn(async () => {
+      await refreshPending;
+      await store.saveTrainingJobEvent(event);
+    });
+    const api = createTrainingApi({ store, training: { refreshManagedRunEvidence } } as never);
+    const response = api.request("run_detail", {
+      jobId: job.id,
       includeEvaluation: false,
     });
+    await vi.waitFor(() => expect(refreshManagedRunEvidence).toHaveBeenCalledWith(job.id));
+    finishRefresh();
+    const detail = await response as { events: unknown[]; evaluation: unknown };
 
     expect(detail.events).toEqual([event]);
     expect(detail.evaluation).toBeNull();
