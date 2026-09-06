@@ -65,6 +65,25 @@ for untrusted schemas and deliberately rejects unsupported capabilities.
 
 ## Host responsibilities
 
+Authored verifier code and rubrics use immutable `asset` resources. Publish source
+and its Reward with `publish_resources`; the service checks UTF-8 size, SHA-256,
+full reference identity, scope and evaluator visibility in the same transaction.
+Editing source creates a new asset identity. Existing Rewards retain their bytes.
+
+`@openpond/evals/javascript-verifier/node` executes ESM verifier source in a
+worker containing a fresh QuickJS WebAssembly interpreter. The verifier receives
+JSON data and returns `{ score, passed, feedback, evidenceRefs? }`. It has no host
+functions or import loader. Memory, stack, source/result sizes and execution time
+are bounded; cancellation settles only after the worker has terminated. The
+interpreter and worker are embedded in the package, so a clean install needs no
+separate WASM download or native compiler. Browser/worker hosts can use the
+portable `@openpond/evals/javascript-verifier` entry point directly.
+
+This boundary follows the [QuickJS runtime isolation and resource APIs](https://github.com/justjake/quickjs-emscripten).
+Node's [VM documentation](https://nodejs.org/api/vm.html) explicitly excludes
+untrusted-code isolation; the local Taskset adapter now uses the same public
+interpreter worker as task-evidence grading.
+
 Implement `LearningRepository.transaction` with serialized writes and atomic
 rollback. Persist immutable historical revisions, exact operation receipts and
 unique split reservations. Never share a transaction object after it closes.

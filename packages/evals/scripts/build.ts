@@ -2,7 +2,8 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { copyFile, mkdir, readdir, rename, rm } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { build } from "esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +24,13 @@ try {
     "--tsBuildInfoFile",
     path.join(staging, ".tsbuildinfo"),
   ]);
+  const worker = await build({
+    entryPoints: [path.join(root, "src/javascript-verifier-worker.ts")],
+    bundle: true, platform: "node", target: "node22.14", format: "cjs",
+    write: false, minify: true, legalComments: "none",
+  });
+  await writeFile(path.join(staging, "javascript-verifier-worker-source.js"), `export const javascriptVerifierWorkerSource = ${JSON.stringify(worker.outputFiles[0]!.text)};\n`);
+  await copyFile(path.join(root, "src/javascript-verifier-worker-source.d.ts"), path.join(staging, "types/javascript-verifier-worker-source.d.ts"));
   await publishBuild(staging, dist);
 } finally {
   await rm(staging, { force: true, recursive: true });

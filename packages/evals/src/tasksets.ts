@@ -54,10 +54,13 @@ export const ModelJudgeGraderSpecSchema = GraderBaseSchema.extend({
   kind: z.literal("model_judge"),
   rubricRef: ImmutableAssetRefSchema,
   calibrationStatus: z.enum(["pending", "passed", "failed"]),
+  model: z.object({ providerId: ReleaseIdSchema, modelId: ReleaseIdSchema, revision: z.string().trim().min(1).max(500).nullable() }).strict().optional(),
+  temperature: z.number().min(0).max(2).optional(),
 }).strict();
 export const CustomVerifierGraderSpecSchema = GraderBaseSchema.extend({
   kind: z.literal("custom_verifier"),
   verifierRef: ImmutableAssetRefSchema,
+  exportName: z.string().trim().min(1).max(240).optional(),
   timeoutMs: z.number().int().positive().max(300_000),
   networkPolicy: z.literal("none"),
 }).strict();

@@ -3,10 +3,12 @@ import { ReleaseIdSchema } from "@openpond/harness";
 
 import { LearningJsonObjectSchema, LearningRevisionRefSchema, LearningSourceContentSchema, TaskDefinitionContentSchema, TaskExampleSubmissionSchema, TaskFeedbackSubmissionSchema, LearningPolicyContentSchema } from "./contracts.js";
 import { RewardBindingContentSchema, RewardReleaseContentSchema } from "../rewards.js";
+import { LearningTextAssetContentSchema } from "./assets.js";
 
 const command = z.object({ operationId: ReleaseIdSchema });
 const publish = command.extend({ action: z.literal("publish"), expectedRevision: z.number().int().nonnegative() });
 export const PublishLearningResourceCommandSchema = z.discriminatedUnion("kind", [
+  publish.extend({ kind: z.literal("asset"), content: LearningTextAssetContentSchema }).strict(),
   publish.extend({ kind: z.literal("definition"), content: TaskDefinitionContentSchema }).strict(),
   publish.extend({ kind: z.literal("reward"), content: RewardReleaseContentSchema }).strict(),
   publish.extend({ kind: z.literal("binding"), content: RewardBindingContentSchema }).strict(),

@@ -69,6 +69,40 @@
                 "passed",
                 "failed"
               ]
+            },
+            "model": {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "modelId": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "providerId",
+                "modelId",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "temperature": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2
             }
           },
           "required": [
@@ -87,6 +121,11 @@
             },
             "verifierRef": {
               "$ref": "#/$defs/__schema1"
+            },
+            "exportName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
             },
             "timeoutMs": {
               "type": "integer",

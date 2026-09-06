@@ -5,8 +5,10 @@ import { assertLearningContentHash, LearningSourceSchema, TaskAdmissionDecisionS
 import { RewardBindingSchema, RewardReleaseSchema } from "../rewards.js";
 import { TasksetReleaseSchema } from "../tasksets.js";
 import { LearningDomainError } from "./errors.js";
+import { LearningTextAssetSchema } from "./assets.js";
 
 export const learningResourceSchemas = {
+  asset: LearningTextAssetSchema,
   definition: TaskDefinitionSchema, reward: RewardReleaseSchema, binding: RewardBindingSchema,
   source: LearningSourceSchema, evidence: TaskEvidenceSchema, feedback: TaskFeedbackSchema,
   decision: TaskAdmissionDecisionSchema, batch: TaskBatchSchema, policy: LearningPolicySchema,

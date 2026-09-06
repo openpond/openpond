@@ -80,6 +80,7 @@
     "__schema1": {
       "type": "string",
       "enum": [
+        "asset",
         "definition",
         "reward",
         "binding",

@@ -8,6 +8,7 @@ import { learningRef, LearningSourceSchema, LearningPolicySchema, sameLearningRe
 import { LearningCommandSchema, type LearningCommand, type PublishLearningResourceCommand } from "./operations.js";
 import { LearningConflictError, learningEvidenceId, learningOperationId, requireLearningRelease, requireLearningResource, type LearningRepository, type LearningResourceFor, type LearningResourceKind, type LearningResourcePage, type LearningResourcePointer, type LearningResourceQuery, type LearningStoredResource, type LearningTransaction } from "./repository.js";
 import { validateSourceSubmission } from "./admission.js";
+import { LearningTextAssetSchema, verifyLearningTextAsset } from "./assets.js";
 
 export type LearningActor = { id: string; role: "editor" | "reviewer" | "source"; sourceId?: string };
 export type LearningServiceContext = { scope: string; actor: LearningActor };
@@ -55,7 +56,28 @@ export function createLearningService(repository: LearningRepository, options: {
     if (input.content.revision !== input.expectedRevision + 1) throw new LearningDomainError("learning_publication_revision_invalid", 422);
     let resource: LearningStoredResource;
     switch (input.kind) {
-      case "reward": resource = createRewardRelease(input.content); break;
+      case "asset": {
+        resource = LearningTextAssetSchema.parse(sealLearningContent(input.content));
+        const existing = await transaction.get("asset", resource.id, 1);
+        if (existing?.contentHash === resource.contentHash) return pointer("asset", existing);
+        break;
+      }
+      case "reward": {
+        resource = createRewardRelease(input.content);
+        const implementation = input.content.implementation;
+        const references = [
+          ...input.content.assets,
+          ...("verifierRef" in implementation ? [implementation.verifierRef] : []),
+          ...("rubricRef" in implementation ? [implementation.rubricRef] : []),
+          ...("inputContract" in implementation ? [implementation.inputContract] : []),
+        ];
+        for (const reference of references) {
+          const asset = await requireLearningResource(transaction, "asset", reference.id, 1);
+          verifyLearningTextAsset(asset, reference);
+          if (reference.visibility === "policy") throw new LearningDomainError("reward_asset_visibility_invalid", 422, "Reward source and rubrics must be private to the evaluator.");
+        }
+        break;
+      }
       case "binding": {
         const rewards = await Promise.all(input.content.sources.map((source) => requireLearningRelease(transaction, "reward", source.reward)));
         resource = createRewardBinding(input.content, rewards);

@@ -18,6 +18,14 @@ receipts together, validates the attached Taskset's exact revision and Profile,
 and preserves server-owned hosting records. Competing edits have one winner;
 replaying a save returns its original receipt even after subsequent edits.
 
+Rewards now have typed source controls, immutable stored code/rubric assets and
+atomic source-plus-Reward publication. Local code grading uses the public
+QuickJS interpreter in a cancellable worker; the older Taskset code adapter uses
+that same execution boundary. Browser publication and exact source reopening,
+authenticated HTTP grading with evaluator context, and clean-package worker
+execution have been verified. LLM calibration/execution, learned-model execution,
+Combined Reward editing and model creation remain open work.
+
 The browser journey published a Reward and task format, imported an incorrect
 observed answer, graded a corrected target separately, approved the task and
 target, sealed a batch, selected an existing model and reopened its saved run

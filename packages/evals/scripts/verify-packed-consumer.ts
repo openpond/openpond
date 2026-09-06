@@ -57,6 +57,9 @@ import path from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { LearningCommandRequestSchema, LearningSourceSchema, TaskExampleSubmissionSchema, sealLearningContent, validateSourceSubmission } from "@openpond/evals/learning";
 import { RewardReleaseSchema } from "@openpond/evals/rewards";
+import { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-verifier/node";
+const verifierResult = await executeJavaScriptVerifierInWorker({ source: "export function verify({ output }) { return { score: Number(output.answer === 4), passed: output.answer === 4, feedback: 'Packed verifier executed' }; }", value: { output: { answer: 4 } }, timeoutMs: 5000 });
+if (!verifierResult.passed || verifierResult.score !== 1) throw new Error("Packed JavaScript verifier did not execute");
 const definitionRef = { id: "consumer-definition", revision: 1, contentHash: "a".repeat(64) };
 const source = LearningSourceSchema.parse(sealLearningContent({ schemaVersion: "openpond.learningSource.v1", id: "consumer-source", revision: 1, name: "Consumer source", kind: "direct", taskDefinition: definitionRef, enabled: true, allowedSplits: ["train"], mapping: null, adapterVersion: null }));
 const example = TaskExampleSubmissionSchema.parse({ schemaVersion: "openpond.taskExample.v1", sourceId: source.id, taskDefinition: definitionRef, idempotencyKey: "consumer-example", exampleId: "example", attemptId: "attempt", occurredAt: "2026-09-06T12:00:00.000Z", familyKey: "family", split: "train", input: { question: "Two plus two?" }, observedOutput: { answer: "5" }, expected: { answer: "4" }, evaluatorContext: { private: true }, assets: [], provenance: { sourceRecordRef: null, mappingHash: null } });
@@ -214,6 +217,8 @@ import type {
 import type { MetricObservation, RunTelemetryEvent } from "@openpond/evals/telemetry";
 import type { LearningRepository, LearningCommand, TaskExampleSubmission, TaskGradeExecutor } from "@openpond/evals/learning";
 import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
+import type { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-verifier/node";
+void (null as unknown as Parameters<typeof executeJavaScriptVerifierInWorker>[0]);
 void (null as unknown as LearningRepository | LearningCommand | TaskExampleSubmission | TaskGradeExecutor | RewardBinding | RewardRelease);
 void (null as unknown as HarnessRelease | AttemptReceipt | ArtifactManifest | CanonicalRolloutRecord | EnvironmentRelease | EvaluationRunner | GraderEvidence | RewardReceipt | RunManifest | TaskRecord | WorkEvidenceReceipt | MetricObservation | RunTelemetryEvent);
 `);

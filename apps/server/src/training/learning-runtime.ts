@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
-  createBuiltinTaskGradeExecutor, createLearningService, createTaskGradeWorker,
+  createLearningService, createTaskGradeWorker,
   LearningCommandRequestSchema, LearningReadRequestSchema, type TaskGradeExecutor,
   assertLearningRequestJson,
 } from "@openpond/evals/learning";
 import type { SqliteLearningStore } from "../store/store-learning.js";
+import { createLocalTaskGradeExecutor } from "./learning-grade-executor.js";
 
 export function createLocalLearningRuntime(store: SqliteLearningStore, options: {
   executor?: TaskGradeExecutor;
@@ -12,7 +13,7 @@ export function createLocalLearningRuntime(store: SqliteLearningStore, options: 
 } = {}) {
   const repository = store.learningRepository();
   const service = createLearningService(repository);
-  const worker = createTaskGradeWorker(repository, options.executor ?? createBuiltinTaskGradeExecutor(), { workerId: `local-${randomUUID()}` });
+  const worker = createTaskGradeWorker(repository, options.executor ?? createLocalTaskGradeExecutor(repository), { workerId: `local-${randomUUID()}` });
   let interval: ReturnType<typeof setInterval> | null = null;
   let draining: Promise<void> | null = null;
   let closed = false;
