@@ -87,3 +87,8 @@
 .learning-bound-source .learning-actions label { display: flex; flex-direction: row; align-items: center; gap: 8px; }
 .learning-bound-source small { overflow-wrap: anywhere; }
 @media (max-width: 650px) { .learning-binding-grid { grid-template-columns: 1fr; } }
+
+.learning-editor-dialog { width: min(760px, calc(100vw - 48px)); }
+.learning-editor-dialog > .learning-workspace { width: 100%; padding: 0; gap: 20px; }
+.learning-editor-dialog .learning-workspace label { margin-block: 0; }
+.learning-editor-dialog .model-project-page-header { border-bottom: 0; padding-bottom: 0; }

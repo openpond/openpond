@@ -17,7 +17,7 @@ export interface ModelsAggregateRow {
   updatedAt: string;
 }
 
-export function modelAggregateRows(page: "runs" | "versions", state: TrainingStateResponse, models: LabWorkproductSummary[], runs: CreateImproveRun[]): ModelsAggregateRow[] {
+export function modelAggregateRows(page: "runs" | "versions", state: TrainingStateResponse, models: LabWorkproductSummary[], runs: CreateImproveRun[], modelId: string | null = null): ModelsAggregateRow[] {
   const modelNames = new Map(models.map((model) => [model.id, model.name]));
   if (page === "versions") {
     return models.flatMap((model) => labModelVersions(model, runs, state).map((version) => ({
@@ -39,24 +39,28 @@ export function modelAggregateRows(page: "runs" | "versions", state: TrainingSta
     if (!plan?.modelId || !modelNames.has(plan.modelId)) continue;
     rows.push({ ref: `job:${job.id}`, modelId: plan.modelId, modelName: modelNames.get(plan.modelId)!, kind: "Training", label: job.id, status: job.status, tasksetId: plan.tasksetId, updatedAt: job.updatedAt });
   }
-  for (const run of state.rewardModelRuns) {
+  for (const run of modelId ? [] : state.rewardModelRuns) {
     rows.push({ ref: `reward-run:${run.id}`, modelId: null, modelName: `Reward ${run.rewardModelId}`, kind: "Reward training", label: run.id, status: run.status, tasksetId: run.taskset.id, updatedAt: run.updatedAt });
+  }
+  for (const series of state.comparisonSeries) {
+    if (!modelNames.has(series.modelProjectId)) continue;
+    rows.push({ ref: `series:${series.id}`, modelId: series.modelProjectId, modelName: modelNames.get(series.modelProjectId)!, kind: "Model comparison", label: series.name, status: series.status, tasksetId: series.seedTaskset.id, updatedAt: series.updatedAt });
   }
   return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function ModelsAggregatePage({ page, state, models, runs, query, after, onSearch, onPage, onOpen, onNewRun }: {
+export function ModelsAggregatePage({ page, state, models, runs, modelId, query, after, onSearch, onPage, onOpen, onNewRun, onNewComparison }: {
   page: "runs" | "versions"; state: TrainingStateResponse | null; models: LabWorkproductSummary[]; runs: CreateImproveRun[];
-  query: string; after: string | null; onSearch: (query: string) => void; onPage: (after: string | null) => void;
-  onOpen: (row: ModelsAggregateRow) => void; onNewRun: () => void;
+  modelId: string | null; query: string; after: string | null; onSearch: (query: string) => void; onPage: (after: string | null) => void;
+  onOpen: (row: ModelsAggregateRow) => void; onNewRun: () => void; onNewComparison: () => void;
 }) {
-  const rows = useMemo(() => state ? modelAggregateRows(page, state, models, runs) : [], [page, state, models, runs]);
+  const rows = useMemo(() => state ? modelAggregateRows(page, state, models, runs, modelId) : [], [page, state, models, runs, modelId]);
   const search = query.trim().toLowerCase();
   const filtered = search ? rows.filter((row) => `${row.modelName} ${row.kind} ${row.label}`.toLowerCase().includes(search)) : rows;
   const start = after ? filtered.findIndex((row) => row.ref === after) + 1 : 0;
   const visible = filtered.slice(start, start + 25);
   return <div className="labs-flat-body labs-resource-page">
-    <ModelProjectPageHeader title={page === "runs" ? "Runs" : "Versions"} description={page === "runs" ? "Training and reward training across your models." : "Trained versions with their parent model and source Taskset."} actions={page === "runs" ? <button className="training-button" type="button" onClick={onNewRun}>New training run</button> : undefined} />
+    <ModelProjectPageHeader title={page === "runs" ? "Runs" : "Versions"} description={page === "runs" ? "Training, Reward training, and model comparisons." : "Trained versions with their parent model and source Taskset."} actions={page === "runs" ? <div className="model-build-actions"><button className="training-button secondary" type="button" onClick={onNewComparison}>New comparison</button><button className="training-button" type="button" onClick={onNewRun}>New training run</button></div> : undefined} />
     <label className="labs-search"><span className="sr-only">Search {page}</span><input placeholder={`Search ${page}`} value={query} onChange={(event) => onSearch(event.target.value)} /></label>
     {!state ? <p role="status">Loading {page}…</p> : <div className="training-table-wrap"><table className="training-data-table">
       <thead><tr><th>{page === "runs" ? "Run" : "Version"}</th><th>Model or reward</th><th>Type</th><th>Status</th><th>Taskset</th><th>Updated</th></tr></thead>

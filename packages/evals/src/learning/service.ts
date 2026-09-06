@@ -1,3 +1,4 @@
+import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft } from "./authoring-service.js";
 import { LearningDomainError } from "./errors.js";
 import { contentHash } from "@openpond/harness";
 
@@ -33,6 +34,8 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       let pointers: LearningResourcePointer[];
       switch (input.action) {
+        case "save_draft": pointers = [await saveAuthoringDraft(transaction, input, now())]; break;
+        case "archive_draft": pointers = [await archiveAuthoringDraft(transaction, input.draft, now())]; break;
         case "publish": pointers = [await publish(transaction, input)]; break;
         case "publish_resources": {
           pointers = [];
@@ -47,6 +50,10 @@ export function createLearningService(repository: LearningRepository, options: {
         case "cancel_grade": pointers = [await cancelGrade(transaction, input)]; break;
         case "review": pointers = [await review(transaction, input, context.actor.id)]; break;
         case "seal_batch": pointers = await seal(transaction, input, context.actor.id); break;
+      }
+      if (input.action === "publish" || input.action === "publish_resources") {
+        const finalized = await finalizeAuthoringDraft(transaction, input, pointers, now());
+        if (finalized) pointers.push(finalized);
       }
       await transaction.saveOperation(operationId, { requestHash, resources: pointers });
       return { operationId: input.operationId, resources: await Promise.all(pointers.map((pointer) => requireLearningResource(transaction, pointer.kind, pointer.id, pointer.revision))) };

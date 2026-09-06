@@ -121,6 +121,7 @@
     "__schema1": {
       "type": "string",
       "enum": [
+        "draft",
         "asset",
         "definition",
         "reward",

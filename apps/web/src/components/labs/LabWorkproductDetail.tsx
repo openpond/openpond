@@ -326,8 +326,8 @@ export function LabWorkproductDetail({
                 label: selectedModelEntryKey.startsWith("version:")
                   ? "Versions"
                   : selectedModelLifecycleRun?.kind === "evaluation"
-                    ? "Evals"
-                    : "Training",
+                    ? "Evaluations"
+                    : "Runs",
                 onSelect: () => {
                   setSelectedModelEntryKey(null);
                 },
@@ -345,7 +345,7 @@ export function LabWorkproductDetail({
               },
             ]
           : modelSection === "training"
-            ? [{ label: "Training" }]
+            ? [{ label: "Runs" }]
             : modelSection === "versions"
               ? [{ label: "Versions" }]
               : []

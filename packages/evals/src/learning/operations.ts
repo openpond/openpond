@@ -3,10 +3,11 @@ import { ReleaseIdSchema } from "@openpond/harness";
 
 import { LearningJsonObjectSchema, LearningRevisionRefSchema, LearningSourceContentSchema, TaskDefinitionContentSchema, TaskExampleSubmissionSchema, TaskFeedbackSubmissionSchema, LearningPolicyContentSchema } from "./contracts.js";
 import { RewardBindingContentSchema, RewardReleaseContentSchema } from "../rewards.js";
+import { AuthoringDraftInputSchema, AuthoringDraftFinalizationSchema } from "./authoring.js";
 import { LearningTextAssetContentSchema } from "./assets.js";
 
 const command = z.object({ operationId: ReleaseIdSchema });
-const publish = command.extend({ action: z.literal("publish"), expectedRevision: z.number().int().nonnegative() });
+const publish = command.extend({ action: z.literal("publish"), expectedRevision: z.number().int().nonnegative(), finalizeDraft: AuthoringDraftFinalizationSchema.optional() });
 export const PublishLearningResourceCommandSchema = z.discriminatedUnion("kind", [
   publish.extend({ kind: z.literal("asset"), content: LearningTextAssetContentSchema }).strict(),
   publish.extend({ kind: z.literal("definition"), content: TaskDefinitionContentSchema }).strict(),
@@ -17,7 +18,8 @@ export const PublishLearningResourceCommandSchema = z.discriminatedUnion("kind",
 ]);
 export const PublishLearningResourcesCommandSchema = command.extend({
   action: z.literal("publish_resources"),
-  resources: z.array(z.union(PublishLearningResourceCommandSchema.options.map((schema) => schema.omit({ operationId: true, action: true })))).min(1).max(20),
+  finalizeDraft: AuthoringDraftFinalizationSchema.optional(),
+  resources: z.array(z.union(PublishLearningResourceCommandSchema.options.map((schema) => schema.omit({ operationId: true, action: true, finalizeDraft: true })))).min(1).max(20),
 }).strict();
 export const SubmitTaskExampleCommandSchema = command.extend({ action: z.literal("submit_example"), example: TaskExampleSubmissionSchema }).strict();
 export const SubmitTaskFeedbackCommandSchema = command.extend({ action: z.literal("submit_feedback"), feedback: TaskFeedbackSubmissionSchema }).strict();
@@ -33,6 +35,9 @@ export const ReviewTaskEvidenceCommandSchema = command.extend({
 export const SealTaskBatchCommandSchema = command.extend({ action: z.literal("seal_batch"), batchId: ReleaseIdSchema, taskDefinition: LearningRevisionRefSchema, purpose: z.enum(["supervised_training", "reward_training", "evaluation"]), evidence: z.array(LearningRevisionRefSchema).min(1).max(10_000), decisions: z.array(LearningRevisionRefSchema).min(1).max(10_000) }).strict();
 export const CancelTaskGradeCommandSchema = command.extend({ action: z.literal("cancel_grade"), gradeId: ReleaseIdSchema, expectedRevision: z.number().int().positive() }).strict();
 
-export const LearningCommandSchema = z.union([PublishLearningResourceCommandSchema, PublishLearningResourcesCommandSchema, SubmitTaskExampleCommandSchema, SubmitTaskFeedbackCommandSchema, ApplyTaskCorrectionCommandSchema, ResolveTaskFeedbackCommandSchema, QueueTaskGradeCommandSchema, ReviewTaskEvidenceCommandSchema, SealTaskBatchCommandSchema, CancelTaskGradeCommandSchema]);
+export const SaveAuthoringDraftCommandSchema = command.extend({ action: z.literal("save_draft"), expectedRevision: z.number().int().nonnegative(), draft: AuthoringDraftInputSchema }).strict();
+export const ArchiveAuthoringDraftCommandSchema = command.extend({ action: z.literal("archive_draft"), draft: LearningRevisionRefSchema }).strict();
+
+export const LearningCommandSchema = z.union([SaveAuthoringDraftCommandSchema, ArchiveAuthoringDraftCommandSchema,PublishLearningResourceCommandSchema, PublishLearningResourcesCommandSchema, SubmitTaskExampleCommandSchema, SubmitTaskFeedbackCommandSchema, ApplyTaskCorrectionCommandSchema, ResolveTaskFeedbackCommandSchema, QueueTaskGradeCommandSchema, ReviewTaskEvidenceCommandSchema, SealTaskBatchCommandSchema, CancelTaskGradeCommandSchema]);
 export type LearningCommand = z.infer<typeof LearningCommandSchema>;
 export type PublishLearningResourceCommand = z.infer<typeof PublishLearningResourceCommandSchema>;

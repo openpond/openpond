@@ -85,3 +85,11 @@ on every request.
 Call `learning.publishBatch({ batchId, modelProjectId })` against the hosted API after sealing an approved batch. This stores its immutable Taskset package and attaches the exact release to the model. It does not start training. The service authorizes the model and batch in the same team and deduplicates publication by release identity.
 
 Model configuration can save `trainingSetup.rewardBindingRef` before selecting a Taskset. The reference pins a binding ID, revision and content hash; task compatibility and training readiness remain separate checks. Use `createModelProjectSaveRequest` with `createModelProjectsClient().checkConfiguration()` / `.saveConfiguration()` for hosted configuration operations, and `configurationCandidates()` for available starting models. Keep one request identity for transport retries.
+
+## Durable authoring drafts
+
+Reward, combined Reward and task-format editors save incomplete work separately from published releases. Use `AuthoringDraftInputSchema` with the corresponding typed fields schema. Drafts preserve incomplete JSON and JavaScript as strings; publishing still validates the finished resource. Drafts belong to the workspace and are not available to source credentials.
+
+Send `save_draft` with a stable `operationId`, the draft input and its `expectedRevision` (zero for a new draft). Retry the identical command after an uncertain response. Distinct edits against the same revision conflict rather than overwriting each other. List with `client.list("draft", { parentId: "reward", status: "draft", limit: 20 })`; the other target kinds are `definition` and `binding`.
+
+A draft's target and exact base release remain fixed. To publish, include `finalizeDraft: { draft: learningRef(savedDraft), targetKind: savedDraft.targetKind, release: learningRef(publishedRelease) }` in the `publish` or `publish_resources` command. The release and the draft's published status commit in one transaction; stale draft finalization rolls back publication. Archive unfinished work with `archive_draft` and its exact draft reference. Archived and published drafts cannot accept further edits.
