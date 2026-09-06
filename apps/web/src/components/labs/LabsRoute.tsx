@@ -1,3 +1,4 @@
+import { LabComparisonSeriesCreateDialog } from "./LabComparisonSeriesCreateDialog";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LearnedPreferenceRewardBinding } from "@openpond/contracts";
 import { api } from "../../api";
@@ -38,6 +39,7 @@ export type { LabsRouteProps } from "./labs-route-types";
 
 export function LabsRoute(props: LabsRouteProps) {
   const { profileView, training } = props;
+  const [comparisonCreateOpen, setComparisonCreateOpen] = useState(false);
   const profile = profileView.payload?.profile ?? null;
   const profileId = profile?.activeProfile ?? "default";
   const learningClient = useLearningClient(profileView.connection, profileId);
@@ -74,6 +76,7 @@ export function LabsRoute(props: LabsRouteProps) {
     if (!workspaceChanged) return;
     priorWorkspace.current = workspaceKey;
     setModelCreateOpen(false);
+    setComparisonCreateOpen(false);
     setImportSource(null);
     setRunTarget(null);
     void navigateModelsRoute(modelsLocation(), "replace");
@@ -186,7 +189,6 @@ export function LabsRoute(props: LabsRouteProps) {
     page = <LabServingPage modelProjectId={route.modelId} state={state} />;
   } else if (route.page === "runs" && route.collection === "series") {
     page = <>
-      <ModelsLocalViews route={route} views={[["default", "Runs"], ["series", "Series"]]} />
       <LabModelComparisonsPage connection={profileView.connection} state={scopedState} training={training.training} selectedSeriesId={route.resourceId} selectedEntryId={route.detailTab}
         onSelectedSeriesIdChange={(id) => open(modelsResourceLocation(route, id))} onSelectedEntryIdChange={(id, entryId) => open(modelsResourceLocation(route, id, entryId))}
         onOpenEvaluation={(id) => open(modelsLocation("evaluations", route.modelId, { resourceId: id }))} onOpenProject={(id) => open(modelsLocation("models", id))}
@@ -199,25 +201,24 @@ export function LabsRoute(props: LabsRouteProps) {
       onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
       onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setEditingModelId(id); setModelCreateOpen(true); }}
     />;
-  } else if ((route.page === "runs" || route.page === "versions") && !route.modelId && !route.resourceId) {
+  } else if ((route.page === "runs" || (route.page === "versions" && !route.modelId)) && !route.resourceId) {
     page = <>
-      {route.page === "runs" ? <ModelsLocalViews route={route} views={[["default", "Runs"], ["series", "Series"]]} /> : null}
-      <ModelsAggregatePage page={route.page} state={state} models={models} runs={createImprove.runs} query={route.query} after={route.after}
+      <ModelsAggregatePage modelId={route.modelId} page={route.page} state={scopedState} models={route.modelId ? models.filter((model) => model.id === route.modelId) : models} runs={createImprove.runs} query={route.query} after={route.after}
         onSearch={(query) => open({ ...route, query, after: null })} onPage={(after) => open({ ...route, after })}
-        onOpen={(row) => open(modelsResourceLocation(route, row.ref))} onNewRun={() => startRun()}
+        onOpen={(row) => open(row.ref.startsWith("series:") ? modelsLocation("runs", route.modelId, { collection: "series", resourceId: row.ref.slice(7) }) : modelsResourceLocation(route, row.ref))} onNewRun={() => startRun()} onNewComparison={() => setComparisonCreateOpen(true)}
       />
     </>;
   } else {
     const ownerId = modelResourceOwner(route, state);
     const owner = models.find((model) => model.id === ownerId) ?? null;
     page = owner ? <>
-      {route.page === "runs" ? <ModelsLocalViews route={route} views={[["default", "Runs"], ["series", "Series"]]} /> : null}
       <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }
   const tab: LabPrimaryTab = route?.page === "models" ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" ? "evals" : route?.page ?? "overview";
   return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setEditingModelId(null); setModelCreateOpen(true); }}>
     {page}
+    {comparisonCreateOpen && scopedState ? <LabComparisonSeriesCreateDialog busy={Boolean(training.training.busyAction)} profileId={scopedState.profileId} state={scopedState} onClose={() => setComparisonCreateOpen(false)} onCreate={async (series) => { const saved = await training.training.actions.saveComparisonSeries(series); if (!saved) return false; setComparisonCreateOpen(false); open(modelsLocation("runs", route?.modelId ?? null, { collection: "series", resourceId: saved.id })); return true; }} /> : null}
     {modelCreateOpen ? <LabModelCreateDialog key={`${workspaceKey}:${editingModelId ?? "new"}`} project={state?.modelProjects.find((project) => project.id === editingModelId) ?? null} tasksets={labModelTasksets(state).filter((taskset) => taskset.profileId === profileId)} learningClient={learningClient} baseModelCandidates={state?.baseModelCandidates ?? []} busy={training.training.busyAction === "save-model-project"} initialName={nextModelName(state?.modelProjects ?? [])} onClose={() => setModelCreateOpen(false)} onCheck={(input) => training.training.actions.checkModelProject(modelConfiguration(input), input.expectedRevision)} onCreate={createModel} onSaved={() => { setModelCreateOpen(false); setEditingModelId(null); open(modelsLocation()); }} onManageModels={training.onOpenTrainingSettings} renderTasksetBuilder={(onPublished, onClose) => <TasksetDraftEditor defaultModel={training.defaultModel} training={training.training} onBack={onClose} onPublished={onPublished} />} /> : null}
     {importSource === "source" ? <DatasetSourcePickerDialog onClose={() => setImportSource(null)} onSelect={async (source) => {
       if (source === "build") { const draft = await training.training.actions.createTasksetDraft(); if (!draft) return; setImportSource(null); open(modelsLocation("tasksets", route?.modelId ?? null, { collection: "drafts", resourceId: draft.id })); }

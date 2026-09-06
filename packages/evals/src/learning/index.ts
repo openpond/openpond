@@ -7,3 +7,4 @@ export * from "./service.js";
 export * from "./grade-worker.js";
 export * from "./transport.js";
 export * from "./errors.js";
+export * from "./authoring.js";

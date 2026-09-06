@@ -129,10 +129,6 @@ export function LabModelRunsPage({
         description={mode === "evals"
           ? "Evaluation-only runs, held-out results, and grader evidence."
           : "Training runs, optimizer progress, checkpoints, and immutable outputs."}
-        metrics={[
-          { label: mode === "evals" ? "Eval runs" : "Training runs", value: submittedRunCount },
-          { label: "Latest activity", value: runEntries[0] ? formatDateTime(entryTimestamp(runEntries[0])) : "None" },
-        ]}
         actions={!readOnly && mode === "training" ? (
             <button
               className="training-button"
