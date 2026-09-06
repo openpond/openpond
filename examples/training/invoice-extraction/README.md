@@ -8,4 +8,6 @@ Build the integrity-checked package with `pnpm exec tsx examples/training/invoic
 
 `packages/sdk/test/invoice-starter.test.ts` executes the verifier for every correct reference and corrupted invoice number, plus invented totals in every missing-total case. Package boundary tests reject dependency substitution, changed executable graders, schema-invalid examples and split contamination.
 
+The hashed Taskset metadata includes the authoring pipeline's acceptance of the 40 original training targets and 80 positive/negative calibration fixtures drawn from that training split. This is automated synthetic authoring provenance, not a human-review receipt. The creation runtime scans the resolved package, preserves held-out splits and executes readiness separately from authored expectations.
+
 This is an authored package, not a trained model or qualified starter. Catalog publication, idempotent user creation, recorded baseline/training/evaluation receipts, and the complete Desktop journey remain pending. The manifest's evidence references remain null until those operations produce actual results. The synthetic task count is a starting fixture set, not evidence that training improves performance.

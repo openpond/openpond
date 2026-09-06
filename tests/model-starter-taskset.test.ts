@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TasksetSourceRefSchema } from "@openpond/contracts";
@@ -9,6 +9,7 @@ import { withTempDirectory } from "./helpers/temp-directory.js";
 import { createInvoiceStarterPackage } from "../examples/training/invoice-extraction/package.js";
 import { prepareModelStarterTaskset } from "../apps/server/src/training/model-starter-taskset.js";
 import { createModelStarterCreationService } from "../apps/server/src/training/model-starter-creation-service.js";
+import { createModelStarterRuntime } from "../apps/server/src/training/model-starter-runtime.js";
 
 // Importing curated examples must preserve held-out splits and exact verifier
 // bytes, and must never invent approval of an unreviewed supervised target.
@@ -118,4 +119,25 @@ it("materializes exact files before creation and retries without reopening the c
     expect(await service.create(fixture.request, "profile")).toEqual(saved);
     expect(resolutions).toBe(beforeRetry);
   } finally { await store.close(); }
+}));
+
+// The installed runtime must resolve the public catalog payload and use its
+// hashed authoring data, rather than accepting caller-supplied approval fields.
+it("creates through the runtime using only the hosted package's authored targets", async () => withTempDirectory("starter-runtime-", async home => {
+  const store = new SqliteStore(home);
+  const fixture = await starterInput();
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async url => {
+    expect(String(url)).toContain("/v1/model-starter-catalog/releases/");
+    return Response.json(fixture.package);
+  });
+  try {
+    const runtime = createModelStarterRuntime({ store, home, resolveAccess: async () => ({ apiBaseUrl: "https://catalog.invalid", token: "test", teamId: "team" }) });
+    expect((await runtime.preview(fixture.request.starter)).tasks).toHaveLength(3);
+    await expect(runtime.create({ ...fixture.request, approvedTrainingTaskIds: ["forged"] })).rejects.toThrow();
+    const saved = await runtime.create(fixture.request);
+    const taskset = await store.getTaskset(saved.trainingSetup.tasksetRef!.id);
+    expect(taskset!.learningSignals.demonstrations).toHaveLength(40);
+    expect(taskset!.learningSignals.demonstrations.every(signal => taskset!.tasks.find(task => task.id === signal.taskId)?.split === "train")).toBe(true);
+    expect(taskset!.graderFixtures).toHaveLength(80);
+  } finally { fetchMock.mockRestore(); await store.close(); }
 }));

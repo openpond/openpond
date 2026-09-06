@@ -108,6 +108,7 @@ import { parseModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
 import { checkModelProjectConfiguration } from "./model-project-configuration-check.js";
+import type { createModelStarterRuntime } from "./model-starter-runtime.js";
 import {
   boundedInteger,
   optionalComparisonEntryRef,
@@ -149,6 +150,7 @@ export function createTrainingApi(deps: {
   harnessRefinerBenchmarks?: HarnessRefinerBenchmarks;
   preferenceComparisons?: PreferenceComparisons;
   modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
+  modelStarters?: ReturnType<typeof createModelStarterRuntime>;
   modelStream?: import("./taskset-work-attempt-runner.js").TasksetWorkModelStream;
 }) {
   let learning: ReturnType<typeof createLocalLearningRuntime> | undefined;
@@ -170,6 +172,12 @@ export function createTrainingApi(deps: {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<unknown> {
     const input = record(payload);
+    if (action === "model_starter_catalog" || action === "model_starter_preview" || action === "create_model_from_starter") {
+      if (!deps.modelStarters) throw new Error("The model starter runtime is unavailable.");
+      if (action === "model_starter_catalog") return deps.modelStarters.list(input);
+      if (action === "model_starter_preview") return deps.modelStarters.preview(input);
+      return deps.modelStarters.create(input);
+    }
     if (action === "learning_command") return learningRuntime().command(payload);
     if (action === "learning_read") return learningRuntime().read(payload);
     if (action === "learning_credentials") return learningRuntime().credentials(payload);
