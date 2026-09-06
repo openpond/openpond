@@ -21,6 +21,7 @@ import {
   type TasksetRelease,
   type VerifierSetRelease,
   type OptimizerTrainingSample,
+  type BoundRewardResult,
 } from "@openpond/evals";
 import {
   materializePortableTasksetRelease,
@@ -326,6 +327,7 @@ export function projectDesktopCanonicalReceipts(input: {
       ),
       evidenceRef: attemptReceipt.graderEvidenceRefs[index] ?? null,
       gradeScored: input.grade.score !== null,
+      boundResult: input.grade.rewardComposition?.results.find((result) => result.graderId === component.graderId),
     }),
   );
   const outputComponents = verifyRequiredOutputs({ requiredOutputs, manifest: artifactManifest });
@@ -357,6 +359,7 @@ export function projectDesktopCanonicalReceipts(input: {
     metadata: {
       legacyGradeRef: input.grade.id,
       legacyAttemptRef: input.attempt.id,
+      ...(input.grade.rewardComposition ? { rewardComposition: input.grade.rewardComposition } : {}),
     },
   });
   return { attemptReceipt, artifactManifest, rewardReceipt };
@@ -451,19 +454,20 @@ function portableRewardComponent(input: {
   grader: PortableGraderSpec | undefined;
   evidenceRef: ImmutableArtifactRef | null;
   gradeScored: boolean;
+  boundResult?: BoundRewardResult;
 }): RewardComponentReceipt {
   if (!input.grader) {
     throw new Error(`Grade component ${input.component.graderId} has no admitted Verifier definition.`);
   }
-  const status = input.gradeScored ? "scored" as const : "unscorable" as const;
+  const status = (input.boundResult ? input.boundResult.status === "scored" : input.gradeScored) ? "scored" as const : "unscorable" as const;
   const rewardEligible = status === "scored" && input.component.rewardEligible;
   const evidenceRefs = input.evidenceRef ? [input.evidenceRef] : [];
   return {
     verifierId: input.component.graderId,
     verifierVersion: input.component.graderVersion,
     status,
-    rawScore: status === "scored" ? input.component.score : null,
-    normalizedScore: status === "scored" ? input.component.score : null,
+    rawScore: status === "scored" ? input.boundResult?.rawScore ?? input.component.score : null,
+    normalizedScore: status === "scored" ? input.boundResult?.normalizedScore ?? input.component.score : null,
     weight: input.grader.weight,
     passed: input.component.passed,
     hardGate: input.component.hardGate,

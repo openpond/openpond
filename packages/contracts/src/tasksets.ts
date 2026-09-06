@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RewardCompositionSchema } from "@openpond/evals/rewards";
 import { ChatModelRefSchema } from "./providers.js";
 import { CodexReasoningEffortSchema } from "./settings.js";
 import { TrainingTacticSchema } from "./task-mining.js";
@@ -614,6 +615,7 @@ export const GradeResultSchema = z.object({
   failureClass: TaskFailureClassSchema.nullable(),
   feedback: z.array(z.string().trim().min(1).max(20_000)).max(1_000).default([]),
   rewardEligible: z.boolean(),
+  rewardComposition: RewardCompositionSchema.optional(),
   createdAt: TimestampSchema,
 });
 

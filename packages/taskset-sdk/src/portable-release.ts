@@ -28,6 +28,8 @@ import {
 
 import { canonicalJson } from "./canonical-json.js";
 import { contentHash } from "./hashing.js";
+import { TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
+import { compileBoundGraders } from "@openpond/evals/rewards";
 
 export function materializePortableTasksetRelease(input: {
   taskset: Taskset;
@@ -41,7 +43,8 @@ export function materializePortableTasksetRelease(input: {
 } {
   const environment = portableEnvironment(input.taskset);
   const tools = portableTools(input.taskset);
-  const graders = input.taskset.graders.map(portableGrader);
+  const learning = input.taskset.metadata.learning === undefined ? null : TaskBatchPackageMetadataSchema.parse(input.taskset.metadata.learning);
+  const graders = learning ? compileBoundGraders(learning.binding, learning.rewards) : input.taskset.graders.map(portableGrader);
   const tasks = input.selectedTasks?.length
     ? input.selectedTasks
     : input.taskset.tasks;
@@ -100,6 +103,7 @@ export function materializePortableTasksetRelease(input: {
       sourceTasksetHash: input.taskset.contentHash,
       sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
       environmentResources: input.taskset.environment.resources ?? [],
+      ...(learning ? { learning } : {}),
     },
   });
   const draft = input.admittedTasksetRelease
@@ -268,6 +272,7 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
         })
       : ImmutableAssetRefSchema.parse(grader.metadata.portableVerifierRef),
     timeoutMs: grader.timeoutMs,
+    exportName: grader.exportName,
     networkPolicy: "none",
   };
   if (grader.kind === "human") return {

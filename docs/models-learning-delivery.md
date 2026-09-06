@@ -70,6 +70,16 @@ readiness. Training export preserves the approved supervised target and policy
 context; expected answers and evaluator context remain separate. Preparation and
 export do not constitute executed training or a quality improvement.
 
+Prepared batches now execute the public Reward composer during Taskset evaluation
+and fixture audits. Code source is materialized from exact owned assets; grading
+resolves evaluator context through the immutable admission rather than copying
+it into policy inputs. Public composition receipts retain training/evaluation
+roles and raw/normalized scores through the canonical reward receipt. A boundary
+test verifies the 3:1 score remains 0.75 after source edits, lower-is-better
+normalization works, an evaluation-only gate leaves training reward unchanged,
+missing required code is unscorable, and approved-target exports exclude private
+context. This completes local grading continuity, not hosted optimizer execution.
+
 Public artifacts are prepared as `@openpond/evals@0.7.0` and
 `openpond-sdk@0.1.0`. Packed clean consumers verify runtime exports, TypeScript
 declarations, generated JSON Schema and SDK transport. The SDK release workflow

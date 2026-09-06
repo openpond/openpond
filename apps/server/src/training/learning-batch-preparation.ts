@@ -20,7 +20,13 @@ export async function prepareLocalLearningBatch(store: SqliteStore, storeDir: st
     const rewards = await Promise.all(binding.sources.map((source) => requireLearningRelease(transaction, "reward", source.reward)));
     const evidence = await Promise.all(batch.examples.map((entry) => requireLearningRelease(transaction, "evidence", entry.evidence)));
     const decisions = await Promise.all(batch.examples.map((entry) => requireLearningRelease(transaction, "decision", entry.decision)));
-    return { batch, definition, binding, rewards, evidence, decisions };
+    const assetIds = new Set(rewards.flatMap((reward) => [
+      ...reward.assets.map((asset) => asset.id),
+      ...(reward.implementation.kind === "custom_verifier" ? [reward.implementation.verifierRef.id]
+        : reward.implementation.kind === "model_judge" || reward.implementation.kind === "human" ? [reward.implementation.rubricRef.id] : []),
+    ]));
+    const assets = await Promise.all([...assetIds].map((id) => requireLearningResource(transaction, "asset", id, 1)));
+    return { batch, definition, binding, rewards, evidence, decisions, assets };
   });
   const existingId = `learning-${contentHash([input.profileId, snapshot.batch.contentHash]).slice(0, 40)}`;
   const existing = await store.getTaskset(existingId);
@@ -37,9 +43,9 @@ export async function prepareLocalLearningBatch(store: SqliteStore, storeDir: st
     licensingStatus: "approved", secretScanStatus: scan.secretStatus, piiScanStatus: scan.piiStatus,
     metadata: { admission: "explicit_local_batch_review", privacyScanner: "openpond-evidence-v1", findings: scan.findings },
   });
-  const { taskset, release } = materializeLearningBatchTaskset({ ...snapshot, profileId: input.profileId, source });
+  const { taskset, release, generatedFiles } = materializeLearningBatchTaskset({ ...snapshot, profileId: input.profileId, source });
   const directory = path.join(storeDir, "training", "tasksets", taskset.id);
-  await buildTaskset(taskset, directory);
+  await buildTaskset(taskset, directory, { generatedFiles });
   await writeFile(path.join(directory, "learning-taskset.release.json"), JSON.stringify(release), { encoding: "utf8", mode: 0o600 });
   return ensureReadiness(taskset);
 

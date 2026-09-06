@@ -1,7 +1,8 @@
-import { GraderSpecSchema, TasksetSchema, type GraderFixture, type LearningSignalInventory, type TasksetSourceRef } from "@openpond/contracts";
-import { compileTaskBatch, learningRef, taskBatchPackageMetadata, type RewardBinding, type RewardComposition, type RewardRelease, type TaskAdmissionDecision, type TaskBatch, type TaskDefinition, type TaskEvidence } from "@openpond/evals";
+import { TasksetSchema, type GeneratedTaskFile, type GraderFixture, type LearningSignalInventory, type TasksetSourceRef } from "@openpond/contracts";
+import { compileTaskBatch, learningRef, taskBatchPackageMetadata, verifyLearningTextAsset, type LearningTextAsset, type RewardBinding, type RewardComposition, type RewardRelease, type TaskAdmissionDecision, type TaskBatch, type TaskDefinition, type TaskEvidence } from "@openpond/evals";
 import { computeTasksetHash } from "./validation.js";
 import { contentHash } from "./hashing.js";
+import { learningVerifierModule, projectLearningBatchGraders } from "./learning-graders.js";
 
 /** Private product projection of an already sealed public batch. The public
  * compiler rechecks every evidence/decision snapshot before adaptation. */
@@ -9,6 +10,7 @@ export function materializeLearningBatchTaskset(input: {
   batch: TaskBatch; definition: TaskDefinition; binding: RewardBinding; rewards: RewardRelease[];
   evidence: TaskEvidence[]; decisions: TaskAdmissionDecision[]; profileId: string;
   source: TasksetSourceRef;
+  assets?: LearningTextAsset[];
 }) {
   const release = compileTaskBatch(input);
   const metadata = taskBatchPackageMetadata(release);
@@ -19,6 +21,12 @@ export function materializeLearningBatchTaskset(input: {
   for (const admission of metadata.admissions) {
     const evidence = input.evidence.find((item) => item.id === admission.evidence.id)!;
     const decision = input.decisions.find((item) => item.id === admission.decision.id)!;
+    if (input.batch.purpose === "reward_training" && decision.grade?.training.status === "scored") signals.rewards.push({
+      id: `reward-${admission.taskId}`, taskId: admission.taskId, kind: "reward", task: input.definition.instructions,
+      rules: [{ id: input.binding.id, points: 1, condition: "Execute the released Reward binding with its declared normalization, weights and gates." }],
+      otherwisePoints: 0, executable: true, approved: true, confidence: 1, sourceRefs: [sourceId], artifactRef: input.binding.id,
+      metadata: { rewardBinding: learningRef(input.binding), evidence: admission.evidence, decision: admission.decision },
+    });
     if (admission.supervisedTarget !== null) signals.demonstrations.push({ kind: "demonstration", id: `demo-${admission.taskId}`, taskId: admission.taskId, sourceRefs: [sourceId], artifactRef: admission.decision.id, approved: true, confidence: 1, prompt: null, response: JSON.stringify(admission.supervisedTarget), metadata: { evidence: admission.evidence, decision: admission.decision, targetGradeHash: decision.targetGrade?.contentHash } });
     for (const [kind, output, grade] of [["observed", evidence.submission.observedOutput, decision.grade], ["target", decision.approvedTarget, decision.targetGrade]] as const) {
       const outcome = fixtureOutcome(grade);
@@ -27,11 +35,15 @@ export function materializeLearningBatchTaskset(input: {
     }
   }
   if (!fixtures.length) throw new Error("Grade at least one reviewed response before preparing this batch. Grader fixtures must come from actual receipts.");
-  const graders = release.graders.map((grader) => {
-    if (grader.kind === "model_judge" || grader.kind === "custom_verifier") throw new Error(`Reward ${grader.id} needs a configured local execution adapter before this batch can be prepared.`);
-    const reward = input.rewards.find((reward) => input.binding.sources.some((source) => source.graderId === grader.id && source.reward.id === reward.id));
-    return GraderSpecSchema.parse({ ...grader, label: reward?.name ?? grader.id, metadata: { rewardBinding: learningRef(input.binding) } });
-  });
+  const graders = projectLearningBatchGraders(input.binding, input.rewards, input.assets);
+  const generatedFiles: GeneratedTaskFile[] = [];
+  for (const grader of release.graders) {
+    if (grader.kind !== "custom_verifier") continue;
+    const asset = input.assets?.find((asset) => asset.id === grader.verifierRef.id);
+    if (!asset) throw new Error(`Reward ${grader.id} is missing its immutable verifier source.`);
+    const module = learningVerifierModule(grader.verifierRef.contentHash);
+    if (!generatedFiles.some((file) => file.path === module)) generatedFiles.push({ path: module, role: "verifier", content: verifyLearningTextAsset(asset, grader.verifierRef) });
+  }
   const taskset = TasksetSchema.parse({
     schemaVersion: "openpond.taskset.v1", id: `learning-${contentHash([input.profileId, input.batch.contentHash]).slice(0, 40)}`, revision: 1,
     profileId: input.profileId, profileRelease: null, createImproveRunId: null, name: `${input.definition.name} · ${input.batch.examples.length} approved examples`, objective: input.definition.instructions,
@@ -45,12 +57,12 @@ export function materializeLearningBatchTaskset(input: {
     readiness: null, contentHash: "00000000", createdAt: input.batch.sealedAt, updatedAt: input.batch.sealedAt,
     metadata: { learning: metadata, learningRelease: learningRef(release), trainingMethod: input.batch.purpose === "supervised_training" ? "sft" : input.batch.purpose === "reward_training" ? "grpo" : "none", tasksetOutputContract: { kind: "structured", schema: input.definition.outputSchema } },
   });
-  return { taskset: TasksetSchema.parse({ ...taskset, contentHash: computeTasksetHash(taskset) }), release };
+  return { taskset: TasksetSchema.parse({ ...taskset, contentHash: computeTasksetHash(taskset) }), release, generatedFiles };
 }
 
 function fixtureOutcome(grade: RewardComposition | null) {
   if (!grade) return null;
-  const outcomes = [grade.training, grade.evaluation].filter((outcome) => outcome.status !== "not_configured");
-  if (!outcomes.length || outcomes.some((outcome) => outcome.status !== "scored")) return null;
-  return { passed: outcomes.every((outcome) => outcome.passed === true), rewardEligible: grade.training.status === "scored" };
+  const outcome = grade.training.status === "not_configured" ? grade.evaluation : grade.training;
+  if (outcome.status !== "scored") return null;
+  return { passed: outcome.passed === true, rewardEligible: grade.training.status === "scored" };
 }
