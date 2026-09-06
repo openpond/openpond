@@ -1028,7 +1028,6 @@ export function createTrainingApi(deps: {
       const context = compileDesktopHarnessContext({
         taskset,
         tasksetRelease,
-        adapterId: "openpond-preference-comparisons-v1",
         model: { providerId: "custom-openai-compatible", modelId: "synthetic-collection-fixture-v1" },
       });
       const assignments = [];
