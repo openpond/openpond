@@ -53,6 +53,7 @@ import { normalizeSessionPayload } from "./store-persistence.js";
 import { SqliteTasksetDraftStore } from "./store-taskset-drafts.js";
 import type { ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { commitModelProjectSave, findModelProjectSave } from "./store-model-project-authoring.js";
+import { commitModelStarterCreation, findModelStarterCreation, type ModelStarterCommitInput } from "./store-model-starters.js";
 import { commitModelProjectHosting } from "./store-model-project-hosting.js";
 import {
   appendTrainingChatSearchText,
@@ -685,6 +686,23 @@ export class SqliteTrainingStore extends SqliteTasksetDraftStore {
     const operation = this.writeQueue.then(() => {
       if (!this.db) throw new Error("Model save failed because the local store is closed.");
       return commitModelProjectSave(this.db, request);
+    });
+    this.writeQueue = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
+  async findModelStarterCreation(request: ModelStarterCommitInput["request"]): Promise<ModelProject | null> {
+    await this.ready;
+    await this.writeQueue;
+    if (!this.db) throw new Error("Starter lookup failed because the local store is closed.");
+    return findModelStarterCreation(this.db, request);
+  }
+
+  async saveModelStarterCreation(input: ModelStarterCommitInput): Promise<ModelProject> {
+    await this.ready;
+    const operation = this.writeQueue.then(() => {
+      if (!this.db) throw new Error("Starter creation failed because the local store is closed.");
+      return commitModelStarterCreation(this.db, input);
     });
     this.writeQueue = operation.then(() => undefined, () => undefined);
     return operation;

@@ -28,44 +28,47 @@ export function findModelProjectSave(db: OpenPondSqliteConnection, value: ModelP
 
 /** Called inside the store's write queue; no await can split the SQLite transaction. */
 export function commitModelProjectSave(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest): ModelProject {
-  const request = parseModelProjectSaveRequest(value);
-  const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
-  const { project, operationId, expectedRevision } = request;
   db.exec("BEGIN IMMEDIATE");
   try {
-    const prior = findModelProjectSave(db, request);
-    if (prior) {
-      db.exec("COMMIT");
-      return prior;
-    }
-    const row = db.get<PayloadRow>("SELECT payload FROM model_projects WHERE id = ?", [project.id]);
-    const existing = row ? ModelProjectSchema.parse(JSON.parse(row.payload)) : null;
-    if (existing && existing.profileId !== project.profileId) fail(404, "model_not_found", "Model is not available in this Profile.");
-    if ((existing?.revision ?? 0) !== expectedRevision) fail(409, "model_revision_conflict", "Model changed since it was opened. Refresh before saving.");
-    assertTaskset(db, request);
-    assertReward(db, request);
-    const timestamp = new Date().toISOString();
-    const saved = ModelProjectSchema.parse({
-      ...existing,
-      ...project,
-      schemaVersion: "openpond.modelProject.v2",
-      revision: expectedRevision + 1,
-      hosted: existing?.hosted ?? null,
-      tasksetSyncs: existing?.tasksetSyncs ?? [],
-      createdAt: existing?.createdAt ?? timestamp,
-      updatedAt: timestamp,
-    });
-    db.run(`INSERT INTO model_projects (id, profile_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`,
-    [saved.id, saved.profileId, JSON.stringify(saved), saved.createdAt, saved.updatedAt]);
-    db.run("INSERT INTO model_project_save_operations (profile_id, operation_id, request_hash, payload) VALUES (?, ?, ?, ?)",
-      [saved.profileId, operationId, hash, JSON.stringify(saved)]);
+    const saved = saveModelProjectInTransaction(db, value);
     db.exec("COMMIT");
     return saved;
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+/** The caller owns the transaction and write queue. */
+export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest): ModelProject {
+  const request = parseModelProjectSaveRequest(value);
+  const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
+  const { project, operationId, expectedRevision } = request;
+  const prior = findModelProjectSave(db, request);
+  if (prior) return prior;
+  const row = db.get<PayloadRow>("SELECT payload FROM model_projects WHERE id = ?", [project.id]);
+  const existing = row ? ModelProjectSchema.parse(JSON.parse(row.payload)) : null;
+  if (existing && existing.profileId !== project.profileId) fail(404, "model_not_found", "Model is not available in this Profile.");
+  if ((existing?.revision ?? 0) !== expectedRevision) fail(409, "model_revision_conflict", "Model changed since it was opened. Refresh before saving.");
+  assertTaskset(db, request);
+  assertReward(db, request);
+  const timestamp = new Date().toISOString();
+  const saved = ModelProjectSchema.parse({
+    ...existing,
+    ...project,
+    schemaVersion: "openpond.modelProject.v2",
+    revision: expectedRevision + 1,
+    hosted: existing?.hosted ?? null,
+    tasksetSyncs: existing?.tasksetSyncs ?? [],
+    createdAt: existing?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  });
+  db.run(`INSERT INTO model_projects (id, profile_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`,
+  [saved.id, saved.profileId, JSON.stringify(saved), saved.createdAt, saved.updatedAt]);
+  db.run("INSERT INTO model_project_save_operations (profile_id, operation_id, request_hash, payload) VALUES (?, ?, ?, ?)",
+    [saved.profileId, operationId, hash, JSON.stringify(saved)]);
+  return saved;
 }
 
 function assertTaskset(db: OpenPondSqliteConnection, request: ModelProjectSaveRequest) {
