@@ -1,7 +1,8 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { createHash } from "node:crypto";
 import { expect, test } from "vitest";
-import { OpenPondLearningClient } from "../packages/sdk/src/learning";
+import { OpenPondLearningClient, createSourceCredentialRequest } from "../packages/sdk/src/learning";
 import { createLearningTextAsset, LearningSourceSchema, learningRef, TaskDefinitionSchema, TaskEvidenceSchema, TaskGradeRunSchema } from "@openpond/evals/learning";
 import { createRewardRelease, createRewardBinding, RewardBindingSchema } from "@openpond/evals/rewards";
 import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src/api/http-routes";
@@ -19,7 +20,8 @@ test("public learning SDK crosses the authenticated HTTP boundary with retries, 
     const server = createServer(createHttpRequestHandler({
       host: "127.0.0.1", getActualPort: () => 0, token: "test-local-owner", version: "test", runtimeVersion: "test",
       logger: { info() {}, warn() {}, error() {} },
-      trainingPayload: async (action: string, payload: unknown) => action === "learning_command" ? runtime.command(payload) : runtime.read(payload),
+      trainingPayload: async (action: string, payload: unknown) => action === "learning_command" ? runtime.command(payload) : action === "learning_credentials" ? runtime.credentials(payload) : action === "learning_source_config" ? runtime.sourceConfiguration(payload) : runtime.read(payload),
+      learningProducerPayload: (endpoint, apiKey, payload) => runtime.producerRequest(endpoint, apiKey, payload),
     } as unknown as HttpRouteDeps));
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -45,6 +47,39 @@ test("public learning SDK crosses the authenticated HTTP boundary with retries, 
       await expect(sdk.submitExample({ ...fixture.example, input: { question: "Conflicting retry" } })).rejects.toMatchObject({ status: 409, code: "learning_idempotency_conflict" });
       await expect(sdk.get("evidence", "missing")).rejects.toMatchObject({ status: 404, code: "learning_resource_not_found" });
       const evidence = TaskEvidenceSchema.parse(first.resources[0]);
+      // A producer key is durable, scoped to one source and cannot reach owner
+      // reads, grading, credential management or unrelated server capabilities.
+      const credentialRequest = createSourceCredentialRequest({ sourceId: fixture.source.id, name: "Application intake", expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
+      const [issued, issuedRetry] = await Promise.all([sdk.createSourceCredential(credentialRequest), sdk.createSourceCredential(credentialRequest)]);
+      expect(issuedRetry).toEqual(issued);
+      await expect(sdk.createSourceCredential({ ...credentialRequest, name: "Conflicting retry" })).rejects.toMatchObject({ status: 409 });
+      const producer = new OpenPondLearningClient({ baseUrl, apiKey: issued.apiKey, scope: learningContext.scope });
+      expect(await producer.sourceConfiguration(fixture.source.id)).toEqual({ scope: learningContext.scope, source: learningRef(fixture.source), taskDefinition: fixture.source.taskDefinition, enabled: true, allowedSplits: fixture.source.allowedSplits });
+      const listed = await sdk.listSourceCredentials(fixture.source.id, { limit: 1 });
+      expect(listed).toEqual({ items: [issued.credential], nextCursor: null });
+      expect(JSON.stringify(listed)).not.toContain(issued.apiKey);
+      const producerExample = { ...fixture.example, exampleId: "producer-example", idempotencyKey: "producer-example" };
+      const produced = await producer.submitExample(producerExample);
+      expect(await producer.submitExample(producerExample)).toEqual(produced);
+      const producedEvidence = TaskEvidenceSchema.parse(produced.resources[0]);
+      expect((await producer.submitFeedback({ schemaVersion: "openpond.taskFeedback.v1", sourceId: fixture.source.id, exampleId: producerExample.exampleId, attemptId: producerExample.attemptId, idempotencyKey: "producer-feedback", expectedEvidenceHash: producedEvidence.contentHash, occurredAt: new Date().toISOString(), kind: "outcome", value: { resolved: true }, note: "Application outcome" })).resources[0]).toMatchObject({ status: "pending_review" });
+      await expect(producer.submitExample({ ...producerExample, sourceId: "another-source" })).rejects.toMatchObject({ status: 403 });
+      await expect(new OpenPondLearningClient({ baseUrl, apiKey: issued.apiKey, scope: "other-workspace" }).submitExample(producerExample)).rejects.toMatchObject({ status: 403 });
+      await expect(producer.get("evidence", evidence.id)).rejects.toMatchObject({ status: 401 });
+      await expect(producer.listSourceCredentials(fixture.source.id)).rejects.toMatchObject({ status: 401 });
+      await expect(producer.command({ operationId: "producer-cannot-grade", action: "queue_grade", evidence: learningRef(evidence), target: "observed", proposedTarget: null, timeoutMs: 30_000, maximumSpendUsd: 0 })).rejects.toMatchObject({ status: 403 });
+      expect((await fetch(`${baseUrl}/v1/state`, { headers: { Authorization: `Bearer ${issued.apiKey}` } })).status).toBe(401);
+      const reopenedStore = new SqliteLearningStore(home);
+      const reopenedRuntime = createLocalLearningRuntime(reopenedStore);
+      try { expect(await reopenedRuntime.producerRequest("source-config", issued.apiKey, { scope: learningContext.scope, sourceId: fixture.source.id })).toMatchObject({ source: learningRef(fixture.source) }); }
+      finally { await reopenedRuntime.close(); await reopenedStore.close(); }
+      const revoked = await sdk.revokeSourceCredential(fixture.source.id, issued.credential.id);
+      expect(await sdk.revokeSourceCredential(fixture.source.id, issued.credential.id)).toEqual(revoked);
+      await expect(producer.submitExample(producerExample)).rejects.toMatchObject({ status: 401 });
+      const expiredRequest = createSourceCredentialRequest({ sourceId: fixture.source.id, name: "Expired fixture", expiresAt: new Date(Date.now() - 1_000).toISOString() });
+      await store.createLearningSourceCredential({ ...issued.credential, id: "expired-fixture", keyPrefix: expiredRequest.apiKey.slice(0, expiredRequest.apiKey.lastIndexOf("_")), expiresAt: expiredRequest.expiresAt, revokedAt: null }, createHash("sha256").update(expiredRequest.apiKey).digest("hex"), "expired-fixture");
+      await expect(new OpenPondLearningClient({ baseUrl, apiKey: expiredRequest.apiKey, scope: learningContext.scope }).sourceConfiguration(fixture.source.id)).rejects.toMatchObject({ status: 401 });
+      await expect(sdk.createSourceCredential(createSourceCredentialRequest({ sourceId: fixture.source.id, name: "Expired", expiresAt: new Date(Date.now() - 1_000).toISOString() }))).rejects.toMatchObject({ status: 400 });
       expect(await sdk.inspectEvidence(learningRef(evidence))).toMatchObject({ evidence: learningRef(evidence), definition: evidence.submission.taskDefinition, inspection: { evidenceValidity: "valid", taskReady: true, observedOutputValid: true, issues: [] } });
       await expect(sdk.inspectEvidence({ ...learningRef(evidence), contentHash: "0".repeat(64) })).rejects.toMatchObject({ status: 409 });
       const otherScope = new OpenPondLearningClient({ baseUrl, apiKey: "test-local-owner", scope: "other-workspace" });

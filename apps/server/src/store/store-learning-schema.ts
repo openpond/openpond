@@ -33,4 +33,13 @@ CREATE TABLE IF NOT EXISTS learning_family_splits (
   split TEXT NOT NULL,
   PRIMARY KEY (scope, namespace, kind, key)
 );
+CREATE TABLE IF NOT EXISTS learning_source_credentials (
+  id TEXT PRIMARY KEY,
+  scope TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  key_hash TEXT NOT NULL UNIQUE,
+  request_hash TEXT NOT NULL,
+  payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS learning_source_credentials_scope_idx ON learning_source_credentials (scope, source_id, id);
 `;

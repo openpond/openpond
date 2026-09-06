@@ -6,6 +6,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { HttpBodyError, applyCorsHeaders, hasAuth, sendBinary, sendJson, sendText } from "./http.js";
 import type { HttpRouteDeps } from "./http-route-types.js";
 import { AUTHENTICATED_ROUTE_TABLE } from "./routes/index.js";
+import { handleLearningProducerRoutes } from "./routes/learning-routes.js";
 import {
   verifySignedChatAttachmentImageRequest,
   verifySignedLocalImageRequest,
@@ -158,6 +159,7 @@ export function createHttpRequestHandler(
         return;
       }
       if (!hasAuth(request, requestUrl, token)) {
+        if (await handleLearningProducerRoutes({ deps, request, requestUrl, response })) return;
         sendJson(response, 401, { error: "Unauthorized" });
         return;
       }

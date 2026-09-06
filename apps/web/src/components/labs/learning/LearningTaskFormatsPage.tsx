@@ -6,6 +6,7 @@ import { useLearningResource, useLearningResources } from "./useLearningResource
 import { LearningIntake } from "./LearningIntake";
 import { TaskFormatEditor } from "./TaskFormatEditor";
 import { RewardBindingSummary } from "./RewardBindingSummary";
+import { LearningSourceCredentials } from "./LearningSourceCredentials";
 
 export function LearningTaskFormatsPage({ client, selectedId, after, onSelect, onPage, onReview }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (after: string | null) => void; onReview: (id: string) => void }) {
   const definitions = useLearningResources(client, "definition", { limit: 30, ...(after ? { afterId: after } : {}) });
@@ -22,6 +23,7 @@ export function LearningTaskFormatsPage({ client, selectedId, after, onSelect, o
       <p>{definition.instructions}</p><p>Release {definition.revision} · {definition.contentHash}</p>
       <details><summary>Input and output contracts</summary><LearningValue label="Input schema" value={definition.inputSchema} /><LearningValue label="Output schema" value={definition.outputSchema} /></details>
       <LearningError error={binding.error} />{binding.resource ? <RewardBindingSummary client={client} binding={binding.resource} /> : null}
+      <details><summary>Connect an application</summary><LearningSourceCredentials key={`${definition.id}:${definition.revision}`} client={client} sourceId={definition.revision === 1 ? `${definition.id}-direct` : `${definition.id}-r${definition.revision}-direct`} /></details>
       <LearningIntake key={`${definition.id}:${definition.revision}`} client={client} definition={definition} onReview={onReview} />
     </> : selectedId ? <><p role="status">{selected.error ? "This task format is unavailable." : "Loading task format…"}</p><button type="button" className="training-button secondary" onClick={() => onSelect(null)}>All task formats</button></> : <>
       <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Task format</th><th>Category</th><th>Release</th></tr></thead><tbody>{definitions.page?.items.map((definition) => <tr key={definition.id}><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(definition.id)}><strong>{definition.name}</strong><small>{definition.description}</small></button></td><td>{definition.category}</td><td>{definition.revision}</td></tr>)}</tbody></table></div>

@@ -43,6 +43,43 @@ All client requests support an optional `AbortSignal`. Aborting a request does
 not cancel remote compute; use `cancel_grade` and read the authoritative terminal
 job state. Page through list responses with `nextCursor` as `afterId`.
 
+## Connect an application
+
+In the task format, open **Connect an application** and create a source credential.
+Copy it into the application's secret store before closing the panel. Credentials
+expire within 90 days and can be revoked from the same panel. The list contains
+metadata and key prefixes only; hosts store secret hashes.
+
+Use that credential as `OPENPOND_API_KEY` in the examples above. It authorizes
+`submitExample`, `submitFeedback` and `sourceConfiguration(sourceId)` for exactly
+one source and scope. Configuration returns the source and task-definition
+references, allowed splits and enabled status. It does not expose private
+evidence. Reading resources, grading, review, publication, training and credential
+management require the owning user's authenticated client.
+
+Owners can also manage credentials through the SDK:
+
+```ts
+import { createSourceCredentialRequest } from "openpond-sdk/learning";
+
+const request = createSourceCredentialRequest({
+  sourceId,
+  name: "Application intake",
+  expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+});
+const issued = await ownerClient.createSourceCredential(request);
+// Store issued.apiKey securely. Never log it or commit the prepared request.
+const page = await ownerClient.listSourceCredentials(sourceId, { limit: 30 });
+await ownerClient.revokeSourceCredential(sourceId, issued.credential.id);
+```
+
+Keep the prepared request in memory for a transport retry: the same operation ID
+and content returns the same credential, while changed content conflicts.
+Revocation is idempotent; repeating creation does not reactivate a revoked key.
+Use a new prepared request for a new credential. Disabling a source also prevents
+new evidence submission. Hosts enforce authentication, expiry and source scope
+on every request.
+
 ## Publish a reviewed batch to a hosted model
 
 Call `learning.publishBatch({ batchId, modelProjectId })` against the hosted API after sealing an approved batch. This stores its immutable Taskset package and attaches the exact release to the model. It does not start training. The service authorizes the model and batch in the same team and deduplicates publication by release identity.

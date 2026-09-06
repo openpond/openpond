@@ -39,7 +39,7 @@ def main():
             # Do not print request headers or echoed evidence from error bodies.
             raise RuntimeError("Learning API rejected the request (HTTP %s)." % error.code) from None
 
-    source = post("read", {"action": "get", "scope": scope, "kind": "source", "id": source_id})
+    source = post("source-config", {"scope": scope, "sourceId": source_id})
     with open(filename, encoding="utf-8") as handle:
         example = json.load(handle)
     example.update(schemaVersion="openpond.taskExample.v1", sourceId=source_id, taskDefinition=source["taskDefinition"])

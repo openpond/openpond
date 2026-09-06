@@ -172,6 +172,8 @@ export function createTrainingApi(deps: {
     const input = record(payload);
     if (action === "learning_command") return learningRuntime().command(payload);
     if (action === "learning_read") return learningRuntime().read(payload);
+    if (action === "learning_credentials") return learningRuntime().credentials(payload);
+    if (action === "learning_source_config") return learningRuntime().sourceConfiguration(payload);
     if (action === "prepare_learning_batch") return prepareLocalLearningBatch(deps.store, deps.storeDir, payload);
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "activity") return activity(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
