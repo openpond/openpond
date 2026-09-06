@@ -12,6 +12,12 @@ intake, SDK submissions, grading, example review, feedback resolution and batch
 sealing use one portable domain service. Local SQLite stores historical releases,
 operation receipts, family/split reservations and leased grading jobs.
 
+Model configuration saves now use a public SDK request with explicit create/edit
+revisions and stable operation identity. SQLite commits configuration and retry
+receipts together, validates the attached Taskset's exact revision and Profile,
+and preserves server-owned hosting records. Competing edits have one winner;
+replaying a save returns its original receipt even after subsequent edits.
+
 The browser journey published a Reward and task format, imported an incorrect
 observed answer, graded a corrected target separately, approved the task and
 target, sealed a batch, selected an existing model and reopened its saved run
@@ -68,6 +74,12 @@ checks actual readiness and approved-target export. Public Evals tests cover
 schema validation and grader semantics; clean packed consumers exercise the
 distribution boundary. Repository type, structure, reachability, dependency,
 workflow and hygiene checks remain required.
+
+The first PR checks exposed a Windows compiler-launch issue, missing test-tier
+entries, eager learning initialization in isolated API tests, and a renderer size
+overage. The compiler now runs through Node, boundary tests use the system tier,
+initialization follows service use, and public Evals exports support tree shaking.
+The affected tests and renderer size budget pass locally; CI must confirm Windows.
 
 The isolated browser profile has no configured training destination. No executed
 candidate training, full starter qualification, hosted parity or automatic

@@ -28,7 +28,7 @@ export function buildTasksetReadiness(input: {
   const learning = input.taskset.metadata.learning === undefined ? null : TaskBatchPackageMetadataSchema.parse(input.taskset.metadata.learning);
   const hasSupervisedTarget = (task: Taskset["tasks"][number]) => learning
     ? learning.admissions.some((entry) => entry.taskId === task.id && entry.supervisedTarget !== null)
-    : task.expectedOutput !== null;
+    : task.expectedOutput != null;
   const artifact = input.taskset.datasetArtifact;
   const approvedArtifactSignals = new Set(
     metadataStrings(input.taskset.metadata.approvedArtifactSignals),

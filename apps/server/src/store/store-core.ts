@@ -56,6 +56,7 @@ import { retireGoalAndInsightsStorageState } from "./store-goal-insights-retirem
 import { retireLegacyHarnessBenchmarkRuns } from "./store-harness-benchmark-retirement.js";
 import { TRAINING_TABLES_SQL } from "./store-training-base-schema.js";
 import { LEARNING_TABLES_SQL } from "./store-learning-schema.js";
+import { MODEL_PROJECT_AUTHORING_TABLES_SQL } from "./store-model-project-authoring-schema.js";
 import { pruneMigrationBackups } from "./store-backup-retention.js";
 
 type UserVersionRow = { user_version: number };
@@ -71,6 +72,10 @@ export type SqliteStoreCoreOptions = {
 export class SqliteStoreCore {
   async createLearningTables(): Promise<void> {
     await this.exec(LEARNING_TABLES_SQL);
+  }
+
+  async createModelProjectAuthoringTables(): Promise<void> {
+    await this.exec(MODEL_PROJECT_AUTHORING_TABLES_SQL);
   }
 
   readonly storePath: string;

@@ -7,7 +7,6 @@ import {
   CreateHuggingFaceDatasetImportRequestSchema,
   DatasetCatalogResponseSchema,
   GraderSpecSchema,
-  ModelProjectSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
@@ -105,6 +104,7 @@ import { handleModelComparisonAction } from "./training-api-model-comparison-act
 import { handleContinualLearningAction } from "./training-api-continual-learning-actions.js";
 import { readTasksetGraderDetails } from "./taskset-grader-details.js";
 import { createLocalLearningRuntime } from "./learning-runtime.js";
+import { parseModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
 import {
@@ -150,7 +150,8 @@ export function createTrainingApi(deps: {
   modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
   modelStream?: import("./taskset-work-attempt-runner.js").TasksetWorkModelStream;
 }) {
-  const learning = createLocalLearningRuntime(deps.store);
+  let learning: ReturnType<typeof createLocalLearningRuntime> | undefined;
+  const learningRuntime = () => learning ??= createLocalLearningRuntime(deps.store);
   const {
     series: comparisonSeries,
     evaluations: comparisonEvaluations,
@@ -168,8 +169,8 @@ export function createTrainingApi(deps: {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<unknown> {
     const input = record(payload);
-    if (action === "learning_command") return learning.command(payload);
-    if (action === "learning_read") return learning.read(payload);
+    if (action === "learning_command") return learningRuntime().command(payload);
+    if (action === "learning_read") return learningRuntime().read(payload);
     if (action === "prepare_learning_batch") return prepareLocalLearningBatch(deps.store, deps.storeDir, payload);
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "activity") return activity(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
@@ -668,20 +669,7 @@ export function createTrainingApi(deps: {
       return { grader, taskset: refreshedTaskset, hostedSync };
     }
     if (action === "save_model_project") {
-      const project = ModelProjectSchema.parse(input);
-      const existing = await deps.store.getModelProject(project.id);
-      if (existing && existing.profileId !== project.profileId) {
-        throw new Error("Model profile does not match the active Profile.");
-      }
-      if (existing && existing.revision !== project.revision) {
-        throw new Error("Model Project changed since it was opened. Refresh and try again.");
-      }
-      return deps.store.saveModelProject({
-        ...project,
-        revision: existing ? existing.revision + 1 : project.revision,
-        createdAt: existing?.createdAt ?? project.createdAt,
-        updatedAt: new Date().toISOString(),
-      });
+      return deps.store.saveModelProjectConfiguration(parseModelProjectSaveRequest(input));
     }
     if (action === "version_model_project_onto_managed_rl_base") {
       const modelProjectId = requiredString(
@@ -1792,7 +1780,7 @@ export function createTrainingApi(deps: {
     return creation;
   }
 
-  return { request, state, learning };
+  return { request, state, get learning() { return learningRuntime(); } };
 }
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }

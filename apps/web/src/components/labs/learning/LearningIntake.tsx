@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { learningRef, TaskEvidenceSchema, TaskExampleSubmissionSchema, sameLearningRef, validateSourceSubmission, type OpenPondLearningClient, type TaskDefinition } from "openpond-sdk/learning";
-import { assertBoundedTaskJson } from "@openpond/evals";
+import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import { useDraftNavigation } from "../useDraftNavigation";
 import { LearningActions, LearningError, LearningJsonField } from "./LearningFields";
 import { useLearningMutation } from "./useLearningResources";

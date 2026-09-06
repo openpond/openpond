@@ -113,6 +113,7 @@ export function ModelRunEditorPage({
       );
   }
   const [project, setProject] = useState(initialProjectRef.current);
+  const [savedRevision, setSavedRevision] = useState(persistedProject?.revision ?? 0);
   const initialSetupRef = useRef<ModelProjectEditorState | null>(null);
   if (!initialSetupRef.current) {
     const current = projectEditorState(initialProjectRef.current);
@@ -252,9 +253,10 @@ export function ModelRunEditorPage({
       },
       updatedAt: timestamp,
     };
-    const savedProject = await training.actions.saveModelProject(nextProject);
+    const savedProject = await training.actions.saveModelProject(nextProject, savedRevision);
     if (!savedProject) return null;
     setProject(savedProject);
+    setSavedRevision(savedProject.revision);
     const savedSetup = projectEditorState(savedProject);
     setSetup(savedSetup);
     setSavedSnapshot(comparableEditor(savedProject, savedSetup));

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { LearningJsonObjectSchema } from "openpond-sdk/learning";
-import { assertBoundedTaskJson } from "@openpond/evals";
+import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 
 export function parseLearningObject(text: string) {
   const value: unknown = JSON.parse(text);

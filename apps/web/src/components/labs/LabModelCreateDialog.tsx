@@ -16,6 +16,7 @@ import {
 } from "./lab-chat-model-options";
 
 export type LabModelCreateInput = {
+  id: string;
   name: string;
   description: string | null;
   defaultBaseModel: BaseModelPreference | null;
@@ -47,6 +48,7 @@ export function LabModelCreateDialog({
     [baseModelCandidates],
   );
   const [name, setName] = useState(initialName);
+  const [id] = useState(() => `model_${crypto.randomUUID()}`);
   const [description, setDescription] = useState("");
   const [baseModelKey, setBaseModelKey] = useState("");
   const [purpose, setPurpose] = useState<"train" | "benchmark">("train");
@@ -69,6 +71,7 @@ export function LabModelCreateDialog({
         (candidate) => candidate.selectionKey === baseModelKey,
       ) ?? null;
     const created = await onCreate({
+      id,
       name: normalizedName,
       description: description.trim() || null,
       defaultBaseModel: selected?.preference ?? null,

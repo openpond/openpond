@@ -101,7 +101,7 @@ export function LabsRoute(props: LabsRouteProps) {
     profileView.onSkillCommand?.(`$openpond-taskset-authoring ${taskset ? `Improve the ${taskset.name} Taskset (${taskset.id}).` : "Create a Taskset."} Save through the Taskset draft/publication operations and return to ${returnTo}.`, "openpond");
   }
   async function createModel(input: LabModelCreateInput): Promise<boolean> {
-    const saved = await training.training.actions.saveModelProject({ ...newProject(profileId, input.description, undefined, input.name), defaultBaseModel: input.defaultBaseModel });
+    const saved = await training.training.actions.saveModelProject({ ...newProject(profileId, input.description, input.id, input.name), defaultBaseModel: input.defaultBaseModel }, 0);
     if (!saved) return false;
     setModelCreateOpen(false);
     open(modelsLocation());

@@ -6,7 +6,7 @@ import {
   type LearningResourceFor, type LearningResourceKind, type LearningResourcePage,
   type LearningResourceQuery, type TaskExampleSubmission, type TaskFeedbackSubmission,
 } from "@openpond/evals/learning";
-import { assertBoundedTaskJson } from "@openpond/evals";
+import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 
 export * from "@openpond/evals/learning";
 export * from "@openpond/evals/rewards";

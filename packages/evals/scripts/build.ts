@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { copyFile, mkdir, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,8 @@ const staging = path.join(root, "node_modules", ".cache", `evals-dist-${randomUU
 
 await mkdir(staging, { recursive: true });
 try {
-  await run(resolveTscBin(), [
+  await run(process.execPath, [
+    createRequire(import.meta.url).resolve("typescript/bin/tsc"),
     "--project",
     "tsconfig.build.json",
     "--outDir",
@@ -66,14 +67,6 @@ async function filesBelow(directory: string, prefix = ""): Promise<string[]> {
     else if (entry.isFile()) files.push(relative);
   }
   return files;
-}
-
-function resolveTscBin(): string {
-  const candidates = [
-    path.join(root, "node_modules/.bin/tsc"),
-    path.resolve(root, "..", "..", "node_modules/.bin/tsc"),
-  ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? "tsc";
 }
 
 function run(command: string, args: string[]): Promise<void> {

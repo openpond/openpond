@@ -4,6 +4,7 @@
   "description": "Portable Tasksets, graders, evaluation runs, receipts, conformance fixtures, and Work evidence for OpenPond Harnesses",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/types/index.d.ts",
   "files": [
@@ -17,6 +18,10 @@
     "LICENSE"
   ],
   "exports": {
+    "./task-schema": {
+      "types": "./dist/types/task-schema.d.ts",
+      "import": "./dist/task-schema.js"
+    },
     "./learning": {
       "types": "./dist/types/learning/index.d.ts",
       "import": "./dist/learning/index.js"
