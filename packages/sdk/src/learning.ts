@@ -19,6 +19,13 @@ export interface OpenPondLearningClientOptions {
   fetch?: typeof globalThis.fetch;
 }
 export interface LearningRequestOptions { signal?: AbortSignal }
+export const LearningBatchPublicationSchema = z.object({
+  batchId: z.string().trim().min(1).max(500), modelProjectId: z.string().trim().min(1).max(500),
+}).strict();
+export const LearningBatchPublicationResultSchema = z.object({
+  batchId: z.string().min(1), projectId: z.string().min(1), tasksetId: z.string().min(1),
+  releaseId: z.string().min(1), revision: z.number().int().positive(), contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
 export class OpenPondLearningError extends Error {
   constructor(readonly status: number, readonly code: string, message: string, readonly details: unknown) {
     super(message);
@@ -62,7 +69,15 @@ export class OpenPondLearningClient {
     return z.object({ items: z.array(learningResourceSchemas[kind]).max(100), nextCursor: z.string().nullable() }).strict().parse(await this.#request("read", request, options)) as LearningResourcePage<K>;
   }
 
-  async #request(endpoint: "commands" | "read", body: unknown, options: LearningRequestOptions): Promise<unknown> {
+  /** Hosted publication only: stores an immutable package and attaches it, without starting training. */
+  async publishBatch(input: z.infer<typeof LearningBatchPublicationSchema>, options: LearningRequestOptions = {}) {
+    const request = LearningBatchPublicationSchema.parse(input);
+    const result = LearningBatchPublicationResultSchema.parse(await this.#request("publish-batch", { ...request, scope: this.#options.scope }, options));
+    if (result.batchId !== request.batchId) throw new OpenPondLearningError(502, "batch_identity_mismatch", "Published batch response did not match the requested batch.", null);
+    return result;
+  }
+
+  async #request(endpoint: "commands" | "read" | "publish-batch", body: unknown, options: LearningRequestOptions): Promise<unknown> {
     assertBoundedTaskJson(body, 16_777_216);
     const response = await (this.#options.fetch ?? globalThis.fetch)(`${this.#options.baseUrl}/v1/learning/${endpoint}`, {
       method: "POST", headers: { Authorization: `Bearer ${this.#options.apiKey}`, "Content-Type": "application/json", Accept: "application/json", "X-OpenPond-Team-Id": this.#options.scope }, body: JSON.stringify(body), signal: options.signal,

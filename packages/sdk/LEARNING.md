@@ -42,3 +42,9 @@ historical batches.
 All client requests support an optional `AbortSignal`. Aborting a request does
 not cancel remote compute; use `cancel_grade` and read the authoritative terminal
 job state. Page through list responses with `nextCursor` as `afterId`.
+
+## Publish a reviewed batch to a hosted model
+
+Call `learning.publishBatch({ batchId, modelProjectId })` against the hosted API after sealing an approved batch. This stores its immutable Taskset package and attaches the exact release to the model. It does not start training. The service authorizes the model and batch in the same team and deduplicates publication by release identity.
+
+Model configuration can save `trainingSetup.rewardBindingRef` before selecting a Taskset. The reference pins a binding ID, revision and content hash; task compatibility and training readiness remain separate checks. Use `createModelProjectSaveRequest` with `createModelProjectsClient().checkConfiguration()` / `.saveConfiguration()` for hosted configuration operations, and `configurationCandidates()` for available starting models. Keep one request identity for transport retries.

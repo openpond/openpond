@@ -8,6 +8,8 @@ import {
 } from "openpond-sdk/model-projects";
 import { canonicalJson } from "openpond-sdk/training";
 import { TasksetSchema } from "@openpond/contracts";
+import { assertLearningContentHash } from "@openpond/evals/learning";
+import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 
 type PayloadRow = { payload: string };
@@ -41,6 +43,7 @@ export function commitModelProjectSave(db: OpenPondSqliteConnection, value: Mode
     if (existing && existing.profileId !== project.profileId) fail(404, "model_not_found", "Model is not available in this Profile.");
     if ((existing?.revision ?? 0) !== expectedRevision) fail(409, "model_revision_conflict", "Model changed since it was opened. Refresh before saving.");
     assertTaskset(db, request);
+    assertReward(db, request);
     const timestamp = new Date().toISOString();
     const saved = ModelProjectSchema.parse({
       ...existing,
@@ -75,6 +78,21 @@ function assertTaskset(db: OpenPondSqliteConnection, request: ModelProjectSaveRe
   const taskset = row ? TasksetSchema.parse(JSON.parse(row.payload)) : null;
   if (!taskset || taskset.profileId !== request.project.profileId) fail(404, "model_taskset_not_found", "The selected Taskset revision is not available in this Profile.");
   if (taskset.contentHash !== reference.contentHash) fail(409, "model_taskset_changed", "The selected Taskset does not match its immutable content hash.");
+}
+
+function assertReward(db: OpenPondSqliteConnection, request: ModelProjectSaveRequest) {
+  const reference = request.project.trainingSetup.rewardBindingRef;
+  if (!reference) return;
+  function read(kind: "binding" | "reward", ref: { id: string; revision: number; contentHash: string }) {
+    const row = db.get<PayloadRow>("SELECT payload FROM learning_revisions WHERE scope = ? AND kind = ? AND id = ? AND revision = ?", [request.project.profileId, kind, ref.id, ref.revision]);
+    if (!row) fail(404, "model_reward_unavailable", "The exact Reward configuration is unavailable in this Profile.");
+    const resource = (kind === "binding" ? RewardBindingSchema : RewardReleaseSchema).parse(JSON.parse(row.payload));
+    if (resource.contentHash !== ref.contentHash) fail(409, "model_reward_changed", "The selected Reward does not match its immutable content hash.");
+    assertLearningContentHash(resource);
+    return resource;
+  }
+  const binding = RewardBindingSchema.parse(read("binding", reference));
+  for (const source of binding.sources) read("reward", source.reward);
 }
 
 function fail(status: number, code: string, message: string): never {

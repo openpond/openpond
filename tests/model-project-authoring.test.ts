@@ -14,6 +14,29 @@ import { PortablePreparationTrainingDestination } from "../apps/server/src/train
 import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter";
 import { checkModelProjectConfiguration } from "../apps/server/src/training/model-project-configuration-check";
+import { learningRef } from "@openpond/evals/learning";
+import { learningContext, learningFixture } from "./helpers/learning-fixtures";
+
+// A Reward chosen before tasks must survive saving, while a forged or foreign
+// immutable reference must be rejected by the save boundary without a UI check.
+test("saves an independent Reward and enforces its exact scope and release", async () => withTempDirectory("model-reward-", async (home) => {
+  const store = new SqliteStore(home);
+  try {
+    const fixture = await learningFixture(store.learningRepository());
+    const project = { id: "reward-first", profileId: learningContext.scope, name: "Reward first", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { rewardBindingRef: learningRef(fixture.binding) } };
+    const request = await createModelProjectSaveRequest(project, 0);
+    const checked = await checkModelProjectConfiguration({ store, request, destinations: async () => [] });
+    expect(checked.canSave).toBe(true);
+    expect(checked.deferred).toContain("taskset");
+    const saved = await store.saveModelProjectConfiguration(request);
+    expect(saved.trainingSetup.tasksetRef).toBeNull();
+    expect(saved.trainingSetup.rewardBindingRef).toEqual(learningRef(fixture.binding));
+    await expect(store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...project, id: "foreign-reward", profileId: "foreign" }, 0))).rejects.toMatchObject({ code: "model_reward_unavailable" });
+    await expect(store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...project, id: "forged-reward", trainingSetup: { rewardBindingRef: { ...learningRef(fixture.binding), contentHash: "f".repeat(64) } } }, 0))).rejects.toMatchObject({ code: "model_reward_changed" });
+    expect(await store.getModelProject("foreign-reward")).toBeNull();
+    expect(await store.getModelProject("forged-reward")).toBeNull();
+  } finally { await store.close(); }
+}));
 
 // A second window must not overwrite a stale Model, and retrying a lost response
 // must return the committed receipt even if another window has edited it since.

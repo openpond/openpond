@@ -491,3 +491,15 @@
 .model-create-fields pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 12px; background: var(--panel); border-radius: 6px; }
 .labs-model-create-dialog .model-create-checkbox { display: flex; align-items: center; gap: 10px; }
 .labs-model-create-dialog .model-create-checkbox input { width: auto; }
+
+.labs-model-create-dialog > header { padding: 22px 24px 8px; }
+.labs-model-create-dialog .model-create-steps { padding: 12px 24px; gap: 6px; }
+.labs-model-create-dialog .model-create-steps button { flex: 0 1 auto; border: 0; padding: 8px 14px; }
+.labs-model-create-dialog > form { padding: 12px 24px 24px; gap: 24px; }
+.model-create-fields { display: grid; gap: 22px; }
+.model-create-fields > label { display: grid; gap: 8px; }
+.labs-model-create-dialog .labs-model-create-select-row select { flex: 1; }
+.labs-draft-exit-dialog { display: grid; gap: 18px; padding: 24px; }
+.labs-draft-exit-dialog > p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.labs-draft-exit-dialog .model-build-actions { margin-top: 4px; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.labs-model-taskset-dialog { width: min(1000px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow: auto; padding: 24px; }

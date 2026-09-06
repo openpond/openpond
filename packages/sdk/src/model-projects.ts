@@ -72,6 +72,7 @@ export const ModelProjectRecipeDocumentSchema = z
 export const ModelProjectTrainingSetupSchema = z
   .object({
     tasksetRef: ModelProjectVersionedRefSchema.nullable().default(null),
+    rewardBindingRef: ModelProjectVersionedRefSchema.nullable().optional(),
     tasksetRelease: ModelProjectImmutableRefSchema.nullable().default(null),
     harnessRelease: ModelProjectImmutableRefSchema.nullable().default(null),
     baseModel: ModelProjectBaseModelSchema.nullable().default(null),
@@ -206,6 +207,10 @@ export const ModelProjectConfigurationCheckSchema = z.object({
 }).strict();
 
 export type ModelProjectConfigurationCheck = z.infer<typeof ModelProjectConfigurationCheckSchema>;
+
+export const ModelProjectBaseModelCandidateSchema = z.object({
+  id: IdSchema, name: z.string().min(1).max(500), available: z.boolean(), preference: ModelProjectBaseModelSchema,
+}).strict();
 
 export async function modelProjectConfigurationHash(request: ModelProjectSaveRequest): Promise<string> {
   const parsed = parseModelProjectSaveRequest(request);
@@ -397,6 +402,23 @@ export function createModelProjectsClient(input: {
   }
 
   return {
+    async configurationCandidates() {
+      return z.object({ candidates: z.array(ModelProjectBaseModelCandidateSchema).max(1000) }).strict().parse(
+        await request("/v1/model-projects/configuration/candidates", { headers: { accept: "application/json" } }),
+      ).candidates;
+    },
+    async checkConfiguration(value: ModelProjectSaveRequest) {
+      const parsed = parseModelProjectSaveRequest(value);
+      return ModelProjectConfigurationCheckSchema.parse(await request("/v1/model-projects/configuration/check", {
+        method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify(parsed),
+      }));
+    },
+    async saveConfiguration(value: ModelProjectSaveRequest) {
+      const parsed = parseModelProjectSaveRequest(value);
+      return HostedModelProjectSummarySchema.parse(await request("/v1/model-projects/configuration/save", {
+        method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify(parsed),
+      }));
+    },
     async upsert(project: HostedModelProjectSync) {
       assertCanonicalPayloadSize(
         project,
