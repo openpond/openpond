@@ -40,8 +40,8 @@ export function ModelCreationReward({ client, taskset, bindingRef, onChange }: {
     <LearningError error={bindings.error ?? selected.error ?? mutation.error} />
     <div className="labs-model-create-select-row"><select aria-label="Reward" value={bindingRef ? `${bindingRef.id}:${bindingRef.revision}` : ""} onChange={(event) => { const binding = bindings.page?.items.find((item) => `${item.id}:${item.revision}` === event.target.value); onChange(binding ? learningRef(binding) : null); }}>
       <option value="">{taskset ? "Use Taskset Reward" : "Choose later"}</option>
-      {bindingRef && !bindings.page?.items.some((item) => item.id === bindingRef.id && item.revision === bindingRef.revision) ? <option value={`${bindingRef.id}:${bindingRef.revision}`}>{selected.resource?.name ?? bindingRef.id} · release {bindingRef.revision}</option> : null}
-      {bindings.page?.items.map((binding) => <option key={binding.id} value={`${binding.id}:${binding.revision}`}>{binding.name} · release {binding.revision}</option>)}
+      {bindingRef && !bindings.page?.items.some((item) => item.id === bindingRef.id && item.revision === bindingRef.revision) ? <option value={`${bindingRef.id}:${bindingRef.revision}`}>{selected.resource?.name || bindingRef.id} · release {bindingRef.revision}</option> : null}
+      {bindings.page?.items.map((binding) => <option key={binding.id} value={`${binding.id}:${binding.revision}`}>{binding.name || binding.id} · release {binding.revision}</option>)}
     </select><button type="button" className="labs-model-create-add" aria-label="Create Reward" onClick={() => setEditor("reward")}>+</button></div>
     <LearningPager after={after} next={bindings.page?.nextCursor} onPage={setAfter} />
     <button type="button" className="training-button secondary" onClick={() => setEditor("combined")}>Combine Rewards</button>

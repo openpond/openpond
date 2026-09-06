@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -13,9 +13,14 @@
     "TRAINING_PROTOCOL.md",
     "LICENSE",
     "examples",
-    "LEARNING.md"
+    "LEARNING.md",
+    "TASKSETS.md"
   ],
   "exports": {
+    "./taskset-catalog": {
+      "types": "./dist/types/packages/sdk/src/taskset-catalog.d.ts",
+      "import": "./dist/taskset-catalog.js"
+    },
     "./learning": {
       "types": "./dist/types/packages/sdk/src/learning.d.ts",
       "import": "./dist/learning.js"
