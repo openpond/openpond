@@ -15,10 +15,10 @@ import {
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
   if ((request.method === "GET" && requestUrl.pathname === "/v1/training/model-starters") ||
-    (request.method === "POST" && ["/v1/training/model-starters/preview", "/v1/training/model-starters/create"].includes(requestUrl.pathname))) {
+    (request.method === "POST" && ["/v1/training/model-starters/preview", "/v1/training/model-starters/check", "/v1/training/model-starters/create"].includes(requestUrl.pathname))) {
     try {
       const listing = request.method === "GET";
-      const action = listing ? "model_starter_catalog" : requestUrl.pathname.endsWith("/preview") ? "model_starter_preview" : "create_model_from_starter";
+      const action = listing ? "model_starter_catalog" : requestUrl.pathname.endsWith("/preview") ? "model_starter_preview" : requestUrl.pathname.endsWith("/check") ? "check_model_starter" : "create_model_from_starter";
       const query = Object.fromEntries(requestUrl.searchParams);
       const body = listing ? { ...query, ...(query.limit === undefined ? {} : { limit: Number(query.limit) }) } : await readJson(request, { maxBytes: 65_536 });
       sendJson(response, 200, await deps.trainingPayload(action, body, requestUrl));

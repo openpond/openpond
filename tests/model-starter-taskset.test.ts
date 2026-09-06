@@ -1,15 +1,138 @@
 import { expect, it, vi } from "vitest";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { TasksetSourceRefSchema } from "@openpond/contracts";
+import { TasksetSourceRefSchema, TrainingDestinationCapabilitiesSchema } from "@openpond/contracts";
 import { learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
-import { createModelStarterCreationRequest, validateResolvedModelStarter } from "openpond-sdk/model-starters";
+import { ModelStarterSchema, createModelStarterCreationRequest, validateResolvedModelStarter } from "openpond-sdk/model-starters";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { withTempDirectory } from "./helpers/temp-directory.js";
 import starterImportFixture from "./fixtures/model-starter-import.json";
 import { prepareModelStarterTaskset } from "../apps/server/src/training/model-starter-taskset.js";
 import { createModelStarterCreationService } from "../apps/server/src/training/model-starter-creation-service.js";
 import { createModelStarterRuntime } from "../apps/server/src/training/model-starter-runtime.js";
+import { projectBaseModelCandidates } from "../apps/server/src/training/base-model-candidates.js";
+import { openStorageDatabase } from "@openpond/persistence";
+import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
+import { attemptFixture, sftRecipeFixture } from "./helpers/training-fixtures.js";
+import { materializePortableTasksetRelease, computeTasksetHash } from "@openpond/taskset-sdk";
+import { buildTasksetTrainingBundle } from "@openpond/training-sdk";
+import { resolveTasksetTrainingReward, resolveManagedTasksetReward } from "../apps/server/src/training/taskset-reward-binding.js";
+import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release.js";
+import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
+
+// A valid release reference alone must never admit missing or altered private code.
+it("exports verified private Reward assets separately from policy task assets", async () => withTempDirectory("starter-private-export-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const input = await starterInput();
+    const saved = await store.saveModelStarterCreation(input);
+    expect(saved.trainingSetup.managedRolloutPlacement).toBe("remote");
+    const taskset = (await store.getTaskset(saved.trainingSetup.tasksetRef!.id))!;
+    const resolved = await resolveTasksetTrainingReward(store, taskset);
+    expect(await resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: false })).toEqual(resolved);
+    await expect(resolveManagedTasksetReward(store, taskset, { placement: "local", hasLearnedPreferenceReward: false })).rejects.toThrow("additional managed execution adapter");
+    await expect(resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: true })).rejects.toThrow("additional managed execution adapter");
+    const previouslySaved = { ...taskset, metadata: { ...taskset.metadata } };
+    delete previouslySaved.metadata.rewardExecution;
+    previouslySaved.contentHash = computeTasksetHash(previouslySaved);
+    const published = await requireReleasedTaskset({ releaseForTaskset: async () => null }, previouslySaved, store);
+    expect(published.metadata.rewardExecution).toEqual(resolved.rewardExecution);
+    // Admission must resolve reference-only authoring records without changing
+    // the published verifier graph or accepting a substituted binding.
+    const admission = { taskset: previouslySaved, tasksetRelease: published, model: { providerId: "openpond", modelId: "fixture" } };
+    const context = compileDesktopHarnessContext({ ...admission, rewardExecution: resolved.rewardExecution });
+    expect(context.tasksetRelease.contentHash).toBe(published.contentHash);
+    expect(context.verifierSetRelease.contentHash).toBe(published.verifierSetRelease!.contentHash);
+    expect(() => compileDesktopHarnessContext(admission)).toThrow("exact published Reward binding");
+    expect(() => compileDesktopHarnessContext({ ...admission, rewardExecution: { ...resolved.rewardExecution!, binding: { ...resolved.rewardExecution!.binding, contentHash: "0".repeat(64) } } })).toThrow("exact published Reward binding");
+    const hash = "a".repeat(64);
+    const build = (verifierAssets = resolved.verifierAssets) => buildTasksetTrainingBundle({
+      taskset, rewardExecution: resolved.rewardExecution, verifierAssets,
+      modelProject: { ...saved, trainingSetup: { ...saved.trainingSetup, recipe: sftRecipeFixture(), baseModel: { ...input.request.startingModel, revision: "pinned-model", tokenizerRevision: "pinned-tokenizer", chatTemplateHash: hash } } },
+      modelRunId: "starter-private-export", runtime: { adapterId: "local-harness", placement: "local", capabilityReceipt: hash, runtimeVersion: "1", dataPlane: null },
+      compute: { adapterId: "openpond-managed", kind: "local", deviceOrPool: "cpu", capabilityReceipt: hash, provider: null },
+      engine: { adapterId: "local-training-worker", workerVersion: "1", workerImageDigest: null, upstreamRevision: "test", capabilityReceipt: hash },
+      approval: { approvalHash: hash, approvedAt: input.createdAt, maximumSpendUsd: 0 }, openpondRelease: "test", workerProtocol: "test",
+      harnessRelease: { id: "test-harness", contentHash: hash }, tasksetRelease: { id: "test-taskset", contentHash: hash },
+    });
+    const bundle = build();
+    const privateFile = JSON.parse(new TextDecoder().decode(bundle.assets.get("reward-binding.json")));
+    expect(privateFile).toEqual({ kind: "reward_binding_v1", ...resolved.rewardExecution, assets: input.package.assets });
+    expect(new TextDecoder().decode(bundle.assets.get("dataset/train.json"))).not.toContain(JSON.stringify(input.package.assets[0]!.text).slice(1, -1));
+    expect(bundle.resolvedBundleManifest.files.some(file => file.path === "reward-binding.json")).toBe(true);
+    expect(() => build([])).toThrow("private verifier asset");
+    expect(() => build(resolved.verifierAssets.map(asset => ({ ...asset, text: `${asset.text}\n// changed` })))).toThrow();
+  } finally { await store.close(); }
+}));
+
+// Hosted publication must preserve composition and reject a substituted Reward.
+it("preserves the exact starter Reward binding in the portable release", async () => {
+  const input = await starterInput();
+  const { taskset } = prepareModelStarterTaskset(input);
+  const portable = materializePortableTasksetRelease({ taskset, adapterId: "starter-test" });
+  expect(portable.tasksetRelease.metadata.rewardExecution).toEqual({ binding: input.package.rewardBinding, rewards: input.package.rewards });
+  expect(portable.tasksetRelease.metadata.learning).toBeUndefined();
+  expect(() => materializePortableTasksetRelease({ taskset: { ...taskset, metadata: { ...taskset.metadata, rewardBinding: { ...input.package.rewardBinding, contentHash: "0".repeat(64) } } }, adapterId: "starter-test" })).toThrow("exact published Reward binding");
+  expect(() => materializePortableTasksetRelease({ taskset, adapterId: "starter-test", rewardExecution: { binding: input.package.rewardBinding, rewards: input.package.rewards.map(reward => ({ ...reward, name: "Tampered" })) } })).toThrow();
+});
+
+// Authored starter checks use the same public binding executor as learning
+// batches, including rejection of wrong output and an attributable composition.
+it("grades an imported starter through its published Reward binding", async () => withTempDirectory("starter-grading-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const input = await starterInput();
+    const saved = await store.saveModelStarterCreation(input);
+    const taskset = (await store.getTaskset(saved.trainingSetup.tasksetRef!.id))!;
+    const task = taskset.tasks[0]!;
+    const service = createTaskEvaluationService({ store, storeDir: home });
+    const correct = await service.grade({ tasksetId: taskset.id, taskId: task.id, attempt: attemptFixture({ id: "starter-correct", tasksetId: taskset.id, taskId: task.id, split: task.split, output: task.expectedOutput! }) });
+    expect(correct).toMatchObject({ score: 1, passed: true, rewardEligible: true });
+    expect(correct.rewardComposition).toBeDefined();
+    const wrong = await service.grade({ tasksetId: taskset.id, taskId: task.id, attempt: attemptFixture({ id: "starter-wrong", tasksetId: taskset.id, taskId: task.id, split: task.split, output: { ...task.expectedOutput, invoiceNumber: "WRONG" } }) });
+    expect(wrong).toMatchObject({ score: 0, passed: false, rewardEligible: true });
+  } finally { await store.close(); }
+}));
+
+// Existing v59 installations must gain starter receipts without losing models.
+it("upgrades an existing local database before reading starter operation receipts", async () => withTempDirectory("starter-upgrade-", async home => {
+  const input = await starterInput();
+  const original = new SqliteStore(home);
+  const saved = await original.saveModelStarterCreation(input);
+  const databasePath = original.storePath;
+  await original.close();
+  const database = openStorageDatabase(databasePath);
+  try { database.exec("DROP TABLE model_starter_creation_operations; PRAGMA user_version = 59;"); }
+  finally { database.close(); }
+  const upgraded = new SqliteStore(home);
+  try {
+    expect(await upgraded.findModelStarterCreation(input.request)).toBeNull();
+    expect(await upgraded.getModelProject(saved.id)).toEqual(saved);
+  } finally { await upgraded.close(); }
+}));
+
+// Setup checks must not create resources or report unavailable compute as ready.
+it("checks an import without persistence and rejects unavailable starting models", async () => withTempDirectory("starter-check-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const input = await starterInput();
+    const service = createModelStarterCreationService({ store, home, catalog: { resolve: async () => input } });
+    const unavailable = await service.check(input.request, "profile", []);
+    expect(unavailable.canSave).toBe(false);
+    expect(unavailable.findings).toContainEqual(expect.objectContaining({ code: "model_base_unavailable", severity: "error" }));
+    const destination = TrainingDestinationCapabilitiesSchema.parse({ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: "openpond_managed", available: true, methods: ["sft"], parameterizations: ["lora"], modelAllowlist: [input.request.startingModel.modelId], maxDatasetBytes: null, environmentPlacements: ["remote"], nonProduction: false, unavailableReason: null, checkedAt: input.createdAt });
+    const { schemaVersion: _schema, operationId: _operation, ...intent } = input.request;
+    const request = await createModelStarterCreationRequest({ ...intent, startingModel: projectBaseModelCandidates({ destinations: [destination] })[0]!.preference });
+    const report = await service.check(request, "profile", [destination]);
+    expect(report.canSave).toBe(true);
+    const unsupported = await service.check(request, "profile", [{ ...destination, methods: [] }]);
+    expect(unsupported.canSave).toBe(false);
+    expect(unsupported.findings).toContainEqual(expect.objectContaining({ code: "starter_method_unavailable" }));
+    expect(await store.getModelProject(request.modelId)).toBeNull();
+    expect(await store.findModelStarterCreation(request)).toBeNull();
+    await expect(service.check(request, "other", [destination])).rejects.toThrow("authorized Profile");
+  } finally { await store.close(); }
+}));
 
 // Importing curated examples must preserve held-out splits and exact verifier
 // bytes, and must never invent approval of an unreviewed supervised target.
@@ -30,6 +153,26 @@ it("publishes a model-owned authored Taskset with only explicitly approved train
   expect(() => prepareModelStarterTaskset({ ...input, approvedTrainingTaskIds: [resolved.taskset.tasks.find(task => task.split === "frozen_eval")!.id] })).toThrow("training task");
   expect(() => prepareModelStarterTaskset({ ...input, approvedTrainingTaskIds: [] })).toThrow("approved demonstrations");
   expect(() => prepareModelStarterTaskset({ ...input, source: { ...source, secretScanStatus: "pending" } })).toThrow("secret scanning");
+});
+
+// A GRPO import must execute the pinned Reward and keep held-out tasks out of
+// training signals without treating authored fixtures as execution receipts.
+it("prepares verifier-based GRPO from approved training tasks and preserves private evaluation splits", async () => {
+  const input = await starterInput();
+  const { contentHash: _oldHash, ...content } = input.package.starter;
+  const starter = ModelStarterSchema.parse(sealLearningContent({ ...content, revision: content.revision + 1, supportedMethods: ["grpo"], defaultMethod: "grpo" }));
+  const request = await createModelStarterCreationRequest({ profileId: input.request.profileId, modelId: input.request.modelId, name: input.request.name, starter: learningRef(starter), startingModel: starter.startingModel, method: "grpo" });
+  const configured = { ...input, request, package: { ...input.package, starter }, source: { ...input.source, sourceHash: starter.contentHash } };
+  expect(() => prepareModelStarterTaskset(configured)).toThrow("every training task");
+  const approvedTrainingTaskIds = input.package.taskset.tasks.filter(task => task.split === "train").map(task => task.id);
+  const prepared = prepareModelStarterTaskset({ ...configured, approvedTrainingTaskIds });
+  expect(prepared.taskset.capabilities.compatibleMethods).toEqual(["grpo"]);
+  expect(prepared.taskset.learningSignals.rewards.map(reward => reward.taskId)).toEqual(approvedTrainingTaskIds);
+  expect(prepared.taskset.learningSignals.rewards.every(reward => reward.executable)).toBe(true);
+  expect(prepared.taskset.graders[0]!.kind).toBe("custom_verifier");
+  expect(prepared.generatedFiles[0]!.content).toBe(input.package.assets[0]!.text);
+  expect(prepared.taskset.tasks.filter(task => task.split === "frozen_eval")).toHaveLength(20);
+  expect(prepared.taskset.readiness).toBeNull();
 });
 
 async function starterInput() {
@@ -72,6 +215,9 @@ it("rolls back imported resources when a later immutable dependency conflicts", 
     const { contentHash: _hash, ...definition } = input.package.taskDefinition;
     const conflict = TaskDefinitionSchema.parse(sealLearningContent({ ...definition, description: "An existing different definition" }));
     await store.learningRepository().transaction(input.request.profileId, async tx => { await tx.put("definition", conflict, 0); });
+    const check = await createModelStarterCreationService({ store, home, catalog: { resolve: async () => input } }).check(input.request, input.request.profileId, []);
+    expect(check.canSave).toBe(false);
+    expect(check.findings).toContainEqual(expect.objectContaining({ code: "starter_dependency_conflict" }));
     await expect(store.saveModelStarterCreation(input)).rejects.toThrow("dependency conflicts");
     expect(await store.getModelProject(input.request.modelId)).toBeNull();
     expect(await store.getTaskset(prepareModelStarterTaskset(input).taskset.id)).toBeNull();

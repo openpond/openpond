@@ -207,7 +207,9 @@ export function preparationReview(
     : "No remote data movement";
   const spend =
     preparation.quoteUsd == null
-      ? "No provider spend quoted"
+      ? preparation.maximumSpendUsd != null
+        ? `Maximum spend $${preparation.maximumSpendUsd.toFixed(2)}; compute is selected within this ceiling after approval`
+        : "A provider price and spend ceiling have not been set"
       : `Quote $${preparation.quoteUsd.toFixed(2)}; maximum $${
           preparation.maximumSpendUsd?.toFixed(2) ?? "not set"
         }`;
@@ -217,6 +219,7 @@ export function preparationReview(
     }.`,
     `Downloads: ${downloads}.`,
     `Data: ${movement}.`,
+    `Rollout execution: ${preparation.runtime?.placement === "remote" ? "Hosted Sandboxes" : preparation.runtime?.placement ?? "not resolved"}.`,
     `${spend}. Retention: ${
       preparation.retentionDays == null
         ? "local policy"

@@ -36,7 +36,7 @@ export function prepareTrainingSelection(input: {
         : !input.modelCached
           ? "model_download_required"
           : "ready";
-  const downloads: TrainingPreparationPlan["downloads"] = input.modelCached
+  const downloads: TrainingPreparationPlan["downloads"] = input.modelCached || input.providerManaged
     ? []
     : [{
         kind: "model",
@@ -62,7 +62,10 @@ export function prepareTrainingSelection(input: {
     compute: input.manifest.compute,
     engine: input.manifest.engine,
     downloads,
-    dataMovement: [],
+    dataMovement: input.providerManaged ? [
+      { direction: "upload" as const, label: "Approved training bundle and private validation tasks", bytes: null },
+      { direction: "download" as const, label: "Trained model and execution evidence", bytes: null },
+    ] : [],
     quoteUsd: input.quoteUsd,
     maximumSpendUsd: input.maximumSpendUsd,
     retentionDays: input.retentionDays,

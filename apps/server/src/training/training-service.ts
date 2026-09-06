@@ -32,6 +32,7 @@ import { createDestinationTrainingEngineRegistry } from "./managed-training-engi
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 import { createPortableModelRunService } from "./portable-model-run-service.js";
 import { compileDesktopHarnessContext } from "./portable-evals-adapter.js";
+import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
 import { createPortableTrainingServiceSupport } from "./portable-training-service-support.js";
 import { createTrainingArtifactExportService } from "./training-artifact-export-service.js";
 import { createTrainingModelBindingService } from "./training-model-binding-service.js";
@@ -205,6 +206,7 @@ export function createTrainingService(deps: {
       }
       const context = compileDesktopHarnessContext({
         taskset,
+        rewardExecution: await resolveTasksetRewardBinding(deps.store, taskset),
         tasksetRelease: await deps.resolveTasksetRelease?.(taskset),
         releasedHarness,
         model: {

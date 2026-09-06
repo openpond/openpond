@@ -50,6 +50,8 @@ import { api, type ClientConnection } from "../api";
 import { TrainingStateResponseSchema } from "@openpond/contracts";
 import { checkModelConfiguration, modelConfigurationRequest } from "../lib/model-project-configuration";
 import type { HostedModelProjectCatalog } from "./hosted-model-project-types";
+import { createModelStarterActions } from "./model-starter-actions";
+export type { ModelStarterPreview, ModelStarterPage } from "./model-starter-actions";
 
 export type PreferenceComparisonReview = {
   assignment: {
@@ -213,6 +215,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   }, [connection, hasActiveWork, profileId, refresh]);
 
   const actions = useMemo(() => ({
+    ...createModelStarterActions(connection, mutate),
     saveComparisonSeries: (series: ModelComparisonSeries) =>
       mutate<ModelComparisonSeries>(
         "save-comparison-series",

@@ -27,6 +27,7 @@ import {
   materializePortableTasksetRelease,
   portableTasksetEnvironment,
   portableTasksetTools,
+  type TasksetRewardExecution,
 } from "@openpond/taskset-sdk";
 import {
   AgentSnapshotSchema,
@@ -68,6 +69,7 @@ export function compileDesktopHarnessContext(input: {
   profile?: OpenPondProfileState | null;
   releasedHarness?: Pick<DesktopHarnessContext, "agentSnapshot" | "harnessRelease"> | null;
   tasksetRelease?: TasksetRelease | null;
+  rewardExecution?: TasksetRewardExecution;
   /**
    * The immutable Taskset Release includes an adapter conformance binding.
    * Callers that project evidence for an already-admitted release must use the
@@ -105,6 +107,7 @@ export function compileDesktopHarnessContext(input: {
     selectedTasks: sourceTasks,
     adapterId: input.adapterId ?? desktopTasksetRuntimeAdapterId(input.taskset),
     admittedTasksetRelease: input.tasksetRelease,
+    rewardExecution: input.rewardExecution,
   });
   const now = input.now ?? (() => new Date().toISOString());
   const runManifest = createRunManifest({

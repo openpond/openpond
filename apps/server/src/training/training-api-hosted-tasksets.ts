@@ -3,6 +3,8 @@ import { materializePortableTasksetRelease } from "@openpond/taskset-sdk";
 
 import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
 import type { createModelProjectHostingService } from "./model-project-hosting.js";
+import type { SqliteStore } from "../store/store.js";
+import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
 
 type BenchmarkTasksets = ReturnType<typeof createBenchmarkTasksetService>;
 type ModelProjectHosting = ReturnType<typeof createModelProjectHostingService>;
@@ -13,11 +15,13 @@ export async function publishTasksetToHostedProject(input: {
   modelId: string | null;
   modelProjectHosting?: ModelProjectHosting;
   taskset: ReturnType<typeof TasksetSchema.parse>;
+  store: SqliteStore;
 }) {
   if (!input.modelId || !input.modelProjectHosting) {
     return {
       draft: input.draft,
       taskset: input.taskset,
+      rewardExecution: await resolveTasksetRewardBinding(input.store, input.taskset),
       hostedSync: { state: "local" as const, error: null },
     };
   }

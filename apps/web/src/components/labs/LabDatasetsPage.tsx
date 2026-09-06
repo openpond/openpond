@@ -24,6 +24,7 @@ import { LabTasksetGraders } from "./LabTasksetGraders";
 import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { modelProjectTasksetIds } from "./models-resource-scope";
 
 const PAGE_SIZE = 10;
 type TasksetListItem =
@@ -105,9 +106,7 @@ export function LabDatasetsPage({
     : null;
   const filtered = useMemo<TasksetListItem[]>(() => {
     const normalized = query.trim().toLowerCase();
-    const attachedTasksetIds = new Set(
-      project?.tasksetSyncs.map((sync) => sync.localTasksetId) ?? [],
-    );
+    const attachedTasksetIds = modelProjectTasksetIds(project);
     return [
       ...(modelProjectId ? [] : (state?.tasksetDrafts ?? []))
         .filter((draft) => draft.status !== "published")
@@ -119,7 +118,7 @@ export function LabDatasetsPage({
       .filter(({ value }) => !normalized || [value.name, value.objective, value.id]
         .some((candidate) => candidate.toLowerCase().includes(normalized)))
       .sort((left, right) => right.value.updatedAt.localeCompare(left.value.updatedAt));
-  }, [modelProjectId, project?.tasksetSyncs, query, state?.tasksetDrafts, tasksets]);
+  }, [modelProjectId, project, query, state?.tasksetDrafts, tasksets]);
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const modelCountByDataset = useMemo(() => {
     const counts = new Map<string, number>();
@@ -314,7 +313,7 @@ export function LabDatasetsPage({
         metrics={[
           {
             label: modelProjectId ? "Attached releases" : "Tasksets",
-            value: modelProjectId ? project?.tasksetSyncs.length ?? 0 : filtered.length,
+            value: modelProjectId ? modelProjectTasksetIds(project).size : filtered.length,
           },
           { label: "Tasks", value: filtered.reduce((total, item) => total + item.value.tasks.length, 0) },
           { label: "Graders", value: filtered.reduce((total, item) => total + ("graders" in item.value ? item.value.graders.length : 0), 0) },
@@ -427,7 +426,9 @@ export function LabDatasetsPage({
                           ? "Syncing"
                           : sync?.state === "sync_failed"
                             ? "Retry required"
-                            : "Not attached"}
+                            : project?.trainingSetup.tasksetRef?.id === taskset.id
+                              ? "Local"
+                              : "Not attached"}
                     </td>
                   ) : null}
                   <td>

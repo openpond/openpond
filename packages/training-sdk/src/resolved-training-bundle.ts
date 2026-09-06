@@ -34,7 +34,11 @@ import {
   computeTasksetHash,
   contentHash,
   sha256,
+  resolvePortableTasksetRewardExecution,
+  type TasksetRewardExecution,
 } from "@openpond/taskset-sdk";
+import { compileBoundGraders } from "@openpond/evals/rewards";
+import { verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
 
 export type TasksetTrainingBundle = {
   manifest: HarnessRunManifest;
@@ -70,6 +74,8 @@ export function buildTasksetTrainingBundle(input: {
   harnessRelease: ImmutableReleaseRef;
   tasksetRelease: ImmutableReleaseRef;
   tasksetAssetBytes?: ReadonlyMap<string, Uint8Array>;
+  rewardExecution?: TasksetRewardExecution;
+  verifierAssets?: LearningTextAsset[];
 }): TasksetTrainingBundle {
   const { taskset, modelProject, harnessRelease, tasksetRelease } = input;
   const setup = modelProject.trainingSetup;
@@ -110,6 +116,23 @@ export function buildTasksetTrainingBundle(input: {
     }),
   };
   const assets = new Map<string, Uint8Array>();
+  const rewardExecution = resolvePortableTasksetRewardExecution(taskset, input.rewardExecution);
+  if (rewardExecution) {
+    const verifierAssets = input.verifierAssets ?? [];
+    const references = compileBoundGraders(rewardExecution.binding, rewardExecution.rewards)
+      .flatMap(grader => grader.kind === "custom_verifier" ? [grader.verifierRef] : []);
+    const expected = new Set(references.map(reference => reference.id));
+    if (new Set(verifierAssets.map(asset => asset.id)).size !== verifierAssets.length
+      || verifierAssets.some(asset => !expected.has(asset.id))) throw new Error("Unexpected or duplicate private verifier asset.");
+    for (const reference of references) {
+      const asset = verifierAssets.find(asset => asset.id === reference.id);
+      if (!asset || reference.visibility !== "verifier") throw new Error("Training bundle requires its private verifier asset.");
+      verifyLearningTextAsset(asset, reference);
+    }
+    addJsonAsset(assets, "reward-binding.json", { kind: "reward_binding_v1", binding: rewardExecution.binding, rewards: rewardExecution.rewards, assets: verifierAssets });
+  } else if (input.verifierAssets?.length) {
+    throw new Error("Private verifier assets require a published Reward binding.");
+  }
   addJsonAsset(assets, "environment.json", {
     schemaVersion: "openpond.harnessEnvironment.v1",
     environment: taskset.environment,

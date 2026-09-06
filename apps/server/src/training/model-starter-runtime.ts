@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { GraderFixtureSchema, TasksetSourceRefSchema } from "@openpond/contracts";
+import type { TrainingDestinationCapabilities } from "@openpond/contracts";
 import { OpenPondModelStarterCatalogClient } from "openpond-sdk/model-starter-catalog";
 import { ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
 import { parseModelStarterCreationRequest, previewModelStarter } from "openpond-sdk/model-starters";
@@ -42,6 +43,10 @@ export function createModelStarterRuntime(input: {
   return {
     async list(query: unknown) { return (await client()).list(z.object({ limit: z.number().optional(), afterId: z.string().optional() }).strict().parse(query)); },
     async preview(reference: unknown) { return previewModelStarter(await (await client()).resolve(ModelProjectVersionedRefSchema.parse(reference))); },
+    async check(value: unknown, destinations: TrainingDestinationCapabilities[]) {
+      const request = parseModelStarterCreationRequest(value);
+      return creation.check(request, request.profileId, destinations);
+    },
     async create(value: unknown) {
       const request = parseModelStarterCreationRequest(value);
       // The authenticated local-server token owns all local Profiles, matching

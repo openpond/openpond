@@ -86,4 +86,7 @@ it("pins creation intent and projects previews without private task fields", asy
   const preview = previewModelStarter(resolved);
   expect(preview.tasks).toEqual([{ id: "task-0", input: resolved.taskset.tasks[0]!.input, policyVisibleContext: resolved.taskset.tasks[0]!.policyVisibleContext }]);
   expect(preview.counts).toEqual({ train: 1, validation: 0, frozenEvaluation: 1 });
+  expect(preview.reward.checks[0]).toMatchObject({ name: resolved.rewards[0]!.name, kind: "custom_verifier" });
+  expect(JSON.stringify(preview)).not.toContain(resolved.assets[0]!.text);
+  expect(preview.reward.checks[0]).not.toHaveProperty("verifierRef");
 });

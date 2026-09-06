@@ -240,6 +240,7 @@ export function ModelRunSetupContent({
             || setup.method === "ppo"
           ) ? (
             <TrainingStartDialog
+              environmentPlacement={setup.destinationId === "openpond_managed" ? setup.managedRolloutPlacement : undefined}
               key={`${selectedTaskset.id}:${selectedTaskset.revision}:${setup.method}:${setup.runPreset}`}
               baseModelCandidates={baseModelCandidates}
               connection={connection}

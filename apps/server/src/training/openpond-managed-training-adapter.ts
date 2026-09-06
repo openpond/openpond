@@ -56,6 +56,7 @@ import { resolveTasksetEvaluationAssetBytes } from "./taskset-work-assets.js";
 import { continuationResumeFrom } from "./openpond-managed-training-continuation.js";
 import { managedTrainingEvidenceFromPublic } from "./openpond-managed-training-evidence.js";
 import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
+import { resolveManagedTasksetReward } from "./taskset-reward-binding.js";
 export { continuationResumeFrom };
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
@@ -394,6 +395,15 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           });
         }
         if (!requiresHarness) {
+          let boundReward = false;
+          try {
+            const resolved = await resolveManagedTasksetReward(this.dependencies.store, taskset, { placement: plan.runtime.placement,
+              hasLearnedPreferenceReward: plan.recipe.method === "grpo" && Boolean(plan.recipe.reward.learnedPreference) });
+            boundReward = Boolean(resolved.rewardExecution);
+          } catch (error) {
+            issues.push({ code: "managed_reward_binding_invalid", path: "taskset.metadata.rewardBinding",
+              message: error instanceof Error ? error.message : "The pinned Reward or its private verifier assets could not be verified." });
+          }
           const learnedPreference = plan.recipe.method === "grpo"
             ? plan.recipe.reward.learnedPreference ?? null
             : null;
@@ -416,7 +426,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
                 "Stateless learned-reward tasks require one immutable structured output contract.",
             });
           } else if (
-            !learnedPreference &&
+            !learnedPreference && !boundReward &&
             scoredTasks.some(
               (task) =>
                 typeof task.expectedOutput?.text !== "string" &&

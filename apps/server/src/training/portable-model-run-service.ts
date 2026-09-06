@@ -40,6 +40,7 @@ import {
 import { resolvePortableBindings } from "./portable-training-catalog.js";
 import { resolveTasksetTrainingAssetBytes } from "./taskset-work-assets.js";
 import { comparisonSeriesTrainingRecipe } from "./comparison-series-training-recipe.js";
+import { resolveTasksetTrainingReward } from "./taskset-reward-binding.js";
 
 export function createPortableModelRunService(deps: {
   store: SqliteStore;
@@ -230,6 +231,7 @@ export function createPortableModelRunService(deps: {
         })
       : new Map<string, Uint8Array>();
     const graph = buildTasksetTrainingBundle({
+      ...await resolveTasksetTrainingReward(deps.store, taskset),
       taskset,
       modelProject: preparedProject,
       modelRunId,

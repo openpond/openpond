@@ -32,6 +32,7 @@ export function TrainingCatalogSetup({
   selectedCatalogModel,
   configurationContent,
   inlineProviderApproval,
+  environmentPlacement,
 }: {
   busy: boolean;
   catalog: TrainingCatalog | null;
@@ -49,6 +50,7 @@ export function TrainingCatalogSetup({
   selectedCatalogModel: CatalogModel | null;
   configurationContent?: ReactNode;
   inlineProviderApproval?: ReactNode;
+  environmentPlacement?: "local" | "remote";
 }) {
   return (
     <>
@@ -222,9 +224,15 @@ export function TrainingCatalogSetup({
             </dd>
           </div>
           <div>
-            <dt>Harness runtime</dt>
+            <dt>Rollout execution</dt>
             <dd>
-              {selectedComputeTarget?.runtimeAdapterId ?? "Resolving…"}
+              {environmentPlacement === "remote"
+                ? "Hosted Sandboxes"
+                : environmentPlacement === "local"
+                  ? "Local runtime"
+                  : selectedComputeTarget?.executionMode === "provider_native"
+                    ? "Shown during Run review"
+                    : selectedComputeTarget?.runtimeAdapterId ?? "Resolving…"}
             </dd>
           </div>
           <div>

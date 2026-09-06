@@ -61,6 +61,7 @@ export function TrainingStartDialog({
   hideMethodTabs = false,
   approvalPresentation = "inline",
   configurationContent,
+  environmentPlacement,
 }: TrainingStartDialogProps) {
   const {
     primaryMethod,
@@ -535,6 +536,7 @@ export function TrainingStartDialog({
         catalog={catalog}
         catalogError={catalogError}
         selectedComputeTarget={selectedComputeTarget}
+        environmentPlacement={environmentPlacement}
         modelSearch={modelSearch}
         onModelSearchChange={setModelSearch}
         baseModelKey={baseModelKey}
@@ -622,8 +624,7 @@ export function TrainingStartDialog({
         </div>
       ) : destination?.nonProduction ? (
         <p className="training-start-note">
-          This local worker is an experimental correctness run. It does not claim useful model
-          quality.
+          This training destination is experimental. Evaluate the resulting version before relying on its quality.
         </p>
       ) : null}
       {hideActions ? (
