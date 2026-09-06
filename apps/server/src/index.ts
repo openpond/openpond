@@ -1651,6 +1651,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       usageRecordsPayload: usageRecordsRoutePayload,
       usageTurnCachePayload: usageTurnCacheRoutePayload,
       trainingPayload,
+      learningProducerPayload: (endpoint, apiKey, payload) => trainingApi.learning.producerRequest(endpoint, apiKey, payload),
       datasetStoragePayload,
       listLocalAgentSchedulesPayload,
       syncLocalAgentSchedulesPayload,

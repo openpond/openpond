@@ -6,6 +6,8 @@ import {
 } from "@openpond/evals/learning";
 import type { SqliteLearningStore } from "../store/store-learning.js";
 import { createLocalTaskGradeExecutor } from "./learning-grade-executor.js";
+import { createLocalLearningCredentials } from "./learning-credentials.js";
+import { LearningDomainError } from "@openpond/evals/learning";
 
 export function createLocalLearningRuntime(store: SqliteLearningStore, options: {
   executor?: TaskGradeExecutor;
@@ -19,6 +21,7 @@ export function createLocalLearningRuntime(store: SqliteLearningStore, options: 
   let closed = false;
   // The authenticated local server token owns this installation. Request bodies cannot supply a reviewer identity.
   const context = (scope: string) => ({ scope, actor: { id: `local-user:${scope}`, role: "reviewer" as const } });
+  const credentials = createLocalLearningCredentials(store, (scope, id) => service.get(context(scope), "source", id));
   async function drain() {
     if (closed) return;
     if (draining) return draining;
@@ -32,6 +35,16 @@ export function createLocalLearningRuntime(store: SqliteLearningStore, options: 
   }
   function wake() { void drain().catch(options.onError ?? ((error) => console.error("Local learning worker failed", error))); }
   return {
+    async credentials(raw: unknown) { assertLearningRequestJson(raw); return credentials.manage(raw); },
+    async sourceConfiguration(raw: unknown) { assertLearningRequestJson(raw); return credentials.sourceConfiguration(raw); },
+    async producerRequest(endpoint: "commands" | "source-config", apiKey: string, raw: unknown) {
+      const credential = await credentials.authenticate(apiKey);
+      assertLearningRequestJson(raw);
+      if (endpoint === "source-config") return credentials.sourceConfiguration(raw, credential);
+      const request = LearningCommandRequestSchema.parse(raw);
+      if (request.scope !== credential.scope) throw new LearningDomainError("learning_scope_not_authorized", 403);
+      return service.command({ scope: credential.scope, actor: { id: credential.id, role: "source", sourceId: credential.sourceId } }, request.command);
+    },
     async command(raw: unknown) {
       assertLearningRequestJson(raw);
       const request = LearningCommandRequestSchema.parse(raw);

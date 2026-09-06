@@ -8,12 +8,12 @@ import {
   type LearningTransaction,
 } from "@openpond/evals/learning";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
-import { SqliteStoreCore } from "./store-core.js";
+import { SqliteLearningCredentialStore } from "./store-learning-credentials.js";
 
 type RevisionRow = { revision: number };
 type PayloadRow = { payload: string };
 
-export class SqliteLearningStore extends SqliteStoreCore {
+export class SqliteLearningStore extends SqliteLearningCredentialStore {
   async listLearningScopes(): Promise<string[]> {
     await this.ready;
     await this.writeQueue;

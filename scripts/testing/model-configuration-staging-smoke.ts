@@ -45,7 +45,7 @@ const attached = await Promise.all(Array.from({ length: 3 }, () => learning.publ
 assert.equal(new Set(attached.map((receipt) => receipt.tasksetId)).size, 1);
 const receipt = attached[0]!;
 const detail = await models.get(saved.id);
-assert.equal(detail.resources.filter((resource) => resource.resourceId === receipt.tasksetId).length, 1);
+assert.equal(detail.resources.filter((resource) => resource.kind === "taskset_release" && resource.ref.id === receipt.tasksetId).length, 1);
 const configured = await models.saveConfiguration(await createModelProjectSaveRequest({ ...editable, name: revised.name, trainingSetup: { rewardBindingRef: batch.rewardBinding, tasksetRef: { id: receipt.releaseId, revision: receipt.revision, contentHash: receipt.contentHash }, tasksetRelease: { id: receipt.releaseId, contentHash: receipt.contentHash } } }, revised.revision));
 assert.equal(configured.trainingSetup.tasksetRef?.contentHash, receipt.contentHash);
 assert.deepEqual((await models.get(saved.id)).project.trainingSetup.rewardBindingRef, batch.rewardBinding);

@@ -8,9 +8,11 @@ import {
   type LearningResourceQuery, type TaskExampleSubmission, type TaskFeedbackSubmission,
 } from "@openpond/evals/learning";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
+import { LearningSourceCredentialSchema, LearningSourceCredentialRequestSchema, LearningSourceCredentialCreatedSchema, LearningSourceCredentialPageSchema, LearningSourceConfigurationRequestSchema, LearningSourceConfigurationSchema, type LearningSourceCredentialRequest } from "./learning-credentials.js";
 
 export * from "@openpond/evals/learning";
 export * from "@openpond/evals/rewards";
+export * from "./learning-credentials.js";
 
 export interface OpenPondLearningClientOptions {
   apiKey: string;
@@ -72,6 +74,42 @@ export class OpenPondLearningClient {
     return result;
   }
 
+  /** Prepare once with createSourceCredentialRequest and reuse it for retries. */
+  async createSourceCredential(input: Omit<Extract<LearningSourceCredentialRequest, { action: "create" }>, "action" | "scope">, options: LearningRequestOptions = {}) {
+    const request = LearningSourceCredentialRequestSchema.parse({ ...input, action: "create", scope: this.#options.scope });
+    const result = LearningSourceCredentialCreatedSchema.parse(await this.#request("credentials", request, options));
+    this.#assertCredentialScope(result.credential, input.sourceId);
+    if (result.apiKey !== input.apiKey || !input.apiKey.startsWith(`${result.credential.keyPrefix}_`)) throw new OpenPondLearningError(502, "credential_identity_mismatch", "Credential response did not match the prepared credential.", null);
+    return result;
+  }
+
+  async listSourceCredentials(sourceId: string, query: { afterId?: string; limit?: number } = {}, options: LearningRequestOptions = {}) {
+    const request = LearningSourceCredentialRequestSchema.parse({ ...query, action: "list", scope: this.#options.scope, sourceId });
+    const result = LearningSourceCredentialPageSchema.parse(await this.#request("credentials", request, options));
+    if (result.items.length > (query.limit ?? 30)) throw new OpenPondLearningError(502, "credential_page_invalid", "Credential response exceeded the requested page size.", null);
+    for (const item of result.items) this.#assertCredentialScope(item, sourceId);
+    return result;
+  }
+
+  async revokeSourceCredential(sourceId: string, id: string, options: LearningRequestOptions = {}) {
+    const request = LearningSourceCredentialRequestSchema.parse({ action: "revoke", scope: this.#options.scope, sourceId, id });
+    const result = LearningSourceCredentialSchema.parse(await this.#request("credentials", request, options));
+    this.#assertCredentialScope(result, sourceId);
+    if (result.id !== id || result.revokedAt === null) throw new OpenPondLearningError(502, "credential_revocation_mismatch", "Credential revocation did not match the requested credential.", null);
+    return result;
+  }
+
+  async sourceConfiguration(sourceId: string, options: LearningRequestOptions = {}) {
+    const request = LearningSourceConfigurationRequestSchema.parse({ scope: this.#options.scope, sourceId });
+    const result = LearningSourceConfigurationSchema.parse(await this.#request("source-config", request, options));
+    if (result.scope !== this.#options.scope || result.source.id !== sourceId) throw new OpenPondLearningError(502, "source_identity_mismatch", "Source configuration did not match the requested source.", null);
+    return result;
+  }
+
+  #assertCredentialScope(value: { scope: string; sourceId: string }, sourceId: string) {
+    if (value.scope !== this.#options.scope || value.sourceId !== sourceId) throw new OpenPondLearningError(502, "credential_scope_mismatch", "Credential response did not match the requested source.", null);
+  }
+
   async list<K extends LearningResourceKind>(kind: K, query: Partial<LearningResourceQuery> = {}, options: LearningRequestOptions = {}): Promise<LearningResourcePage<K>> {
     const request = LearningReadRequestSchema.parse({ action: "list", scope: this.#options.scope, kind, ...query });
     return z.object({ items: z.array(learningResourceSchemas[kind]).max(100), nextCursor: z.string().nullable() }).strict().parse(await this.#request("read", request, options)) as LearningResourcePage<K>;
@@ -85,7 +123,7 @@ export class OpenPondLearningClient {
     return result;
   }
 
-  async #request(endpoint: "commands" | "read" | "publish-batch", body: unknown, options: LearningRequestOptions): Promise<unknown> {
+  async #request(endpoint: "commands" | "read" | "publish-batch" | "credentials" | "source-config", body: unknown, options: LearningRequestOptions): Promise<unknown> {
     assertBoundedTaskJson(body, 16_777_216);
     const response = await (this.#options.fetch ?? globalThis.fetch)(`${this.#options.baseUrl}/v1/learning/${endpoint}`, {
       method: "POST", headers: { Authorization: `Bearer ${this.#options.apiKey}`, "Content-Type": "application/json", Accept: "application/json", "X-OpenPond-Team-Id": this.#options.scope }, body: JSON.stringify(body), signal: options.signal,
