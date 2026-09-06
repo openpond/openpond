@@ -41,8 +41,8 @@ import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.
 import { hostedModelJudgeCallCost } from "./evaluation-grader-cost.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import { reviewRefMatches, variance } from "./evaluation-service-statistics.js";
-import { TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
 import { createLearningBatchVerifier } from "./learning-batch-verifier.js";
+import { createTasksetBindingVerifier, resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
 
 type AuditFixtureInput = {
   label:
@@ -134,6 +134,7 @@ export function createTaskEvaluationService(deps: {
     const profile = !releasedHarness && deps.loadProfileState ? await deps.loadProfileState() : null;
     const portable = compileDesktopHarnessContext({
       taskset,
+      rewardExecution: await resolveTasksetRewardBinding(deps.store, taskset),
       selectedTask: task,
       profile,
       releasedHarness,
@@ -256,7 +257,7 @@ export function createTaskEvaluationService(deps: {
       task,
       attempt,
       graders: taskset.graders,
-      learning: taskset.metadata.learning === undefined ? undefined : TaskBatchPackageMetadataSchema.parse(taskset.metadata.learning),
+      learning: await resolveTasksetRewardBinding(deps.store, taskset),
       modelJudge: deps.modelJudge
         ? async (judgeInput) => {
             modelJudgeCalls += 1;
@@ -360,7 +361,7 @@ export function createTaskEvaluationService(deps: {
         task,
         attempt,
         graders: taskset.graders,
-        learning: taskset.metadata.learning === undefined ? undefined : TaskBatchPackageMetadataSchema.parse(taskset.metadata.learning),
+        learning: await resolveTasksetRewardBinding(deps.store, taskset),
         modelJudge: deps.modelJudge ?? undefined,
         customVerifier,
       });
@@ -945,6 +946,7 @@ export function createTaskEvaluationService(deps: {
       return undefined;
     }
     if (taskset.metadata.learning !== undefined) return createLearningBatchVerifier(deps.store, taskset);
+    if (taskset.metadata.rewardBinding !== undefined) return createTasksetBindingVerifier(deps.store, taskset);
     const profile = deps.storeDir
       ? null
       : await (deps.loadProfileState ?? loadOpenPondProfileState)();

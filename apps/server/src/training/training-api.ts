@@ -1,5 +1,6 @@
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
 import { requireReleasedTaskset } from "./local-taskset-release.js";
+import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
 import {
   BaseModelPreferenceSchema,
   ChatModelRefSchema,
@@ -172,10 +173,11 @@ export function createTrainingApi(deps: {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<unknown> {
     const input = record(payload);
-    if (action === "model_starter_catalog" || action === "model_starter_preview" || action === "create_model_from_starter") {
+    if (action === "model_starter_catalog" || action === "model_starter_preview" || action === "check_model_starter" || action === "create_model_from_starter") {
       if (!deps.modelStarters) throw new Error("The model starter runtime is unavailable.");
       if (action === "model_starter_catalog") return deps.modelStarters.list(input);
       if (action === "model_starter_preview") return deps.modelStarters.preview(input);
+      if (action === "check_model_starter") return deps.modelStarters.check(input, await deps.training.destinations());
       return deps.modelStarters.create(input);
     }
     if (action === "learning_command") return learningRuntime().command(payload);
@@ -260,6 +262,7 @@ export function createTrainingApi(deps: {
       }
       const portable = materializePortableTasksetRelease({
         taskset: releaseTaskset,
+        rewardExecution: await resolveTasksetRewardBinding(deps.store, releaseTaskset),
         adapterId: "openpond-managed-calibration-v1",
       });
       if (
@@ -381,7 +384,7 @@ export function createTrainingApi(deps: {
       const taskset = await requireTaskset(deps.store, tasksetId);
       const published = await preferenceComparisons.publishRelease({
         tasksetId,
-        tasksetRelease: await requireReleasedTaskset(deps.benchmarkTasksets, taskset),
+        tasksetRelease: await requireReleasedTaskset(deps.benchmarkTasksets, taskset, deps.store),
         release: PreferenceComparisonReleaseSchema.parse(input.release),
         publisherKey: requiredString(input.publisherKey, "publisherKey"),
         retentionUntil: nullableString(input.retentionUntil),
@@ -595,6 +598,7 @@ export function createTrainingApi(deps: {
       const release = await requireReleasedTaskset(
         deps.benchmarkTasksets,
         taskset,
+        deps.store,
       );
       return deps.modelProjectHosting.publishTaskset({
         projectId: requiredString(input.modelId, "modelId"),
@@ -662,6 +666,7 @@ export function createTrainingApi(deps: {
         const release = await requireReleasedTaskset(
           deps.benchmarkTasksets,
           refreshedTaskset,
+          deps.store,
         );
         try {
           await deps.modelProjectHosting.publishTaskset({
@@ -819,6 +824,7 @@ export function createTrainingApi(deps: {
           : null;
         if (!taskset) throw new Error("Published Taskset draft lost its immutable Taskset revision.");
         return publishTasksetToHostedProject({
+          store: deps.store,
           benchmarkTasksets: deps.benchmarkTasksets,
           draft,
           modelProjectHosting: deps.modelProjectHosting,
@@ -853,6 +859,7 @@ export function createTrainingApi(deps: {
       });
       await deps.store.saveTasksetDraft(published);
       return publishTasksetToHostedProject({
+        store: deps.store,
         benchmarkTasksets: deps.benchmarkTasksets,
         draft: published,
         modelProjectHosting: deps.modelProjectHosting,
@@ -979,7 +986,7 @@ export function createTrainingApi(deps: {
       const taskset = await requireTaskset(deps.store, collection.tasksetId);
       const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
       const actorKey = requiredString(input.actorKey, "actorKey");
-      const tasksetRelease = await requireReleasedTaskset(deps.benchmarkTasksets, taskset);
+      const tasksetRelease = await requireReleasedTaskset(deps.benchmarkTasksets, taskset, deps.store);
       let comparisonReleaseId = string(input.comparisonReleaseId);
       if (!comparisonReleaseId) {
         const rubric = `Fixture-only systems smoke for: ${taskset.objective}`;
@@ -1041,6 +1048,7 @@ export function createTrainingApi(deps: {
       // a configured provider and is never eligible to execute a model call.
       const context = compileDesktopHarnessContext({
         taskset,
+        rewardExecution: await resolveTasksetRewardBinding(deps.store, taskset),
         tasksetRelease,
         model: { providerId: "custom-openai-compatible", modelId: "synthetic-collection-fixture-v1" },
       });
@@ -1261,6 +1269,7 @@ export function createTrainingApi(deps: {
         const release = await requireReleasedTaskset(
           deps.benchmarkTasksets,
           taskset,
+          deps.store,
         );
         await deps.modelProjectHosting.publishTaskset({
           projectId: modelProject.id,

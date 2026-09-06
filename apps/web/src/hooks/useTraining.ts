@@ -50,6 +50,11 @@ import { api, type ClientConnection } from "../api";
 import { TrainingStateResponseSchema } from "@openpond/contracts";
 import { checkModelConfiguration, modelConfigurationRequest } from "../lib/model-project-configuration";
 import type { HostedModelProjectCatalog } from "./hosted-model-project-types";
+import type { ModelStarter, ModelStarterCreationRequest, previewModelStarter } from "openpond-sdk/model-starters";
+import { ModelProjectConfigurationCheckSchema } from "openpond-sdk/model-projects";
+
+export type ModelStarterPreview = ReturnType<typeof previewModelStarter>;
+export type ModelStarterPage = { items: ModelStarter[]; nextCursor: string | null };
 
 export type PreferenceComparisonReview = {
   assignment: {
@@ -213,6 +218,19 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   }, [connection, hasActiveWork, profileId, refresh]);
 
   const actions = useMemo(() => ({
+    listModelStarters: async (afterId?: string) => {
+      if (!connection) throw new Error("Connect to OpenPond to browse model starters.");
+      return api.trainingRequest<ModelStarterPage>(connection, `/model-starters?limit=30${afterId ? `&afterId=${encodeURIComponent(afterId)}` : ""}`, {}, "GET");
+    },
+    previewModelStarter: async (starter: ModelStarter) => {
+      if (!connection) throw new Error("Connect to OpenPond to preview a starter.");
+      return api.trainingRequest<ModelStarterPreview>(connection, "/model-starters/preview", { id: starter.id, revision: starter.revision, contentHash: starter.contentHash });
+    },
+    checkModelStarter: async (request: ModelStarterCreationRequest) => {
+      if (!connection) throw new Error("Connect to OpenPond to check this starter.");
+      return ModelProjectConfigurationCheckSchema.parse(await api.trainingRequest(connection, "/model-starters/check", request));
+    },
+    createModelFromStarter: (request: ModelStarterCreationRequest) => mutate<ModelProject>("create-model-from-starter", "/model-starters/create", request),
     saveComparisonSeries: (series: ModelComparisonSeries) =>
       mutate<ModelComparisonSeries>(
         "save-comparison-series",

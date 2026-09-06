@@ -35,6 +35,7 @@ import { newProject, nextModelName } from "./model-run-editor-helpers";
 import { computeProfileAgentRunSyncKey, trainingModelRunSyncKey } from "./LabsRouteSections";
 import { modelsLocation, modelsPath, modelsResourceLocation, MODELS_PAGE_LABELS, navigateModelsRoute, useModelsRoute, type ModelsRoute } from "./lab-primary-tab-state";
 import type { LabsRouteProps } from "./labs-route-types";
+import type { ModelStarterPreview } from "../../hooks/useTraining";
 export type { LabsRouteProps } from "./labs-route-types";
 
 export function LabsRoute(props: LabsRouteProps) {
@@ -48,6 +49,8 @@ export function LabsRoute(props: LabsRouteProps) {
   const state = training.training.payload;
   const [modelCreateOpen, setModelCreateOpen] = useState(false);
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [starterPreview, setStarterPreview] = useState<ModelStarterPreview | null>(null);
+  const savedModelId = useRef<string | null>(null);
   const [importSource, setImportSource] = useState<"source" | DatasetCreateSource | null>(null);
   const [runTarget, setRunTarget] = useState<{ tasksetId?: string; reward?: LearnedPreferenceRewardBinding | null } | null>(null);
   const [selectedRunTarget, setSelectedRunTarget] = useState("");
@@ -76,6 +79,7 @@ export function LabsRoute(props: LabsRouteProps) {
     if (!workspaceChanged) return;
     priorWorkspace.current = workspaceKey;
     setModelCreateOpen(false);
+    setStarterPreview(null);
     setComparisonCreateOpen(false);
     setImportSource(null);
     setRunTarget(null);
@@ -113,8 +117,9 @@ export function LabsRoute(props: LabsRouteProps) {
     return { ...project, name: input.name, objective: input.description, defaultBaseModel: input.defaultBaseModel, trainingSetup: { ...project.trainingSetup, baseModel: input.defaultBaseModel, rewardBindingRef: input.rewardBindingRef, tasksetRef: input.tasksetRef, tasksetRelease: sameTaskset ? project.trainingSetup.tasksetRelease : null, ...(!sameTaskset ? { recipe: null, method: null } : {}) } };
   }
   async function createModel(input: LabModelCreateInput): Promise<boolean> {
-    const saved = await training.training.actions.saveModelProject(modelConfiguration(input), input.expectedRevision);
+    const saved = input.starterRequest ? await training.training.actions.createModelFromStarter(input.starterRequest) : await training.training.actions.saveModelProject(modelConfiguration(input), input.expectedRevision);
     if (!saved) return false;
+    savedModelId.current = saved.id;
     toast(`${saved.name} ${input.expectedRevision ? "updated" : "created"}.`, "success");
     return true;
   }
@@ -199,7 +204,8 @@ export function LabsRoute(props: LabsRouteProps) {
   } else if (route.page === "models" && !route.modelId) {
     page = <LabModelsPage activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
       onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
-      onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setEditingModelId(id); setModelCreateOpen(true); }}
+      onSelectStarter={(preview) => { setStarterPreview(preview); setEditingModelId(null); setModelCreateOpen(true); }}
+      onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}
     />;
   } else if ((route.page === "runs" || (route.page === "versions" && !route.modelId)) && !route.resourceId) {
     page = <>
@@ -216,10 +222,10 @@ export function LabsRoute(props: LabsRouteProps) {
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }
   const tab: LabPrimaryTab = route?.page === "models" ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" ? "evals" : route?.page ?? "overview";
-  return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setEditingModelId(null); setModelCreateOpen(true); }}>
+  return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
     {page}
     {comparisonCreateOpen && scopedState ? <LabComparisonSeriesCreateDialog busy={Boolean(training.training.busyAction)} profileId={scopedState.profileId} state={scopedState} onClose={() => setComparisonCreateOpen(false)} onCreate={async (series) => { const saved = await training.training.actions.saveComparisonSeries(series); if (!saved) return false; setComparisonCreateOpen(false); open(modelsLocation("runs", route?.modelId ?? null, { collection: "series", resourceId: saved.id })); return true; }} /> : null}
-    {modelCreateOpen ? <LabModelCreateDialog key={`${workspaceKey}:${editingModelId ?? "new"}`} project={state?.modelProjects.find((project) => project.id === editingModelId) ?? null} tasksets={labModelTasksets(state).filter((taskset) => taskset.profileId === profileId)} learningClient={learningClient} baseModelCandidates={state?.baseModelCandidates ?? []} busy={training.training.busyAction === "save-model-project"} initialName={nextModelName(state?.modelProjects ?? [])} onClose={() => setModelCreateOpen(false)} onCheck={(input) => training.training.actions.checkModelProject(modelConfiguration(input), input.expectedRevision)} onCreate={createModel} onSaved={() => { setModelCreateOpen(false); setEditingModelId(null); open(modelsLocation()); }} onManageModels={training.onOpenTrainingSettings} renderTasksetBuilder={(onPublished, onClose) => <TasksetDraftEditor defaultModel={training.defaultModel} training={training.training} onBack={onClose} onPublished={onPublished} />} /> : null}
+    {modelCreateOpen ? <LabModelCreateDialog key={`${workspaceKey}:${editingModelId ?? starterPreview?.starter.contentHash ?? "new"}`} starter={starterPreview ? { preview: starterPreview, profileId } : null} project={state?.modelProjects.find((project) => project.id === editingModelId) ?? null} tasksets={labModelTasksets(state).filter((taskset) => taskset.profileId === profileId)} learningClient={learningClient} baseModelCandidates={state?.baseModelCandidates ?? []} busy={training.training.busyAction === "save-model-project" || training.training.busyAction === "create-model-from-starter"} initialName={nextModelName(state?.modelProjects ?? [])} onClose={() => setModelCreateOpen(false)} onCheck={(input) => input.starterRequest ? training.training.actions.checkModelStarter(input.starterRequest) : training.training.actions.checkModelProject(modelConfiguration(input), input.expectedRevision)} onCreate={createModel} onSaved={() => { setModelCreateOpen(false); setEditingModelId(null); setStarterPreview(null); open(modelsLocation("models", savedModelId.current)); }} onManageModels={training.onOpenTrainingSettings} renderTasksetBuilder={(onPublished, onClose) => <TasksetDraftEditor defaultModel={training.defaultModel} training={training.training} onBack={onClose} onPublished={onPublished} />} /> : null}
     {importSource === "source" ? <DatasetSourcePickerDialog onClose={() => setImportSource(null)} onSelect={async (source) => {
       if (source === "build") { const draft = await training.training.actions.createTasksetDraft(); if (!draft) return; setImportSource(null); open(modelsLocation("tasksets", route?.modelId ?? null, { collection: "drafts", resourceId: draft.id })); }
       else setImportSource(source);

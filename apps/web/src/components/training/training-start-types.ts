@@ -65,4 +65,5 @@ export type TrainingStartDialogProps = {
   hideMethodTabs?: boolean;
   approvalPresentation?: "inline" | "dialog";
   configurationContent?: ReactNode;
+  environmentPlacement?: "local" | "remote";
 };

@@ -193,7 +193,7 @@ import { createPortableTrainingServerDependencies } from "./training/portable-tr
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
-import { resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
+import { resolveHostedApiAccess, resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
 import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
 import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
 import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
@@ -696,7 +696,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     ...portableTrainingDependencies,
     resolveManagedTrainingAccess,
     resolveReleasedHarness,
-    resolveTasksetRelease: (taskset) => requireReleasedTaskset(benchmarkTasksets, taskset),
+    resolveTasksetRelease: (taskset) => requireReleasedTaskset(benchmarkTasksets, taskset, store),
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;
@@ -755,7 +755,11 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     harnessRefinerBenchmarks,
     preferenceComparisons: preferenceComparisonService,
     modelProjectHosting,
-    modelStarters: createModelStarterRuntime({ store, home: storeDir, resolveAccess: resolveManagedTrainingAccess }),
+    modelStarters: createModelStarterRuntime({ store, home: storeDir, resolveAccess: async () => {
+      const teamId = (await loadAppPreferences()).defaultTeamId?.trim();
+      if (!teamId) throw new Error("Select an OpenPond workspace to browse model starters.");
+      return { ...await resolveHostedApiAccess(), teamId };
+    } }),
     modelStream: trainingModelStream,
   });
   const trainingPayload = trainingApi.request;

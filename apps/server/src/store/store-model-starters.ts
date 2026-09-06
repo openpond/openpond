@@ -29,7 +29,7 @@ export async function commitModelStarterCreation(db: OpenPondSqliteConnection, i
   const modelRequest = await createModelProjectSaveRequest({
     id: request.modelId, profileId: request.profileId, name: request.name, objective: resolved.taskDefinition.instructions,
     defaultBaseModel: request.startingModel, defaultDestinationId: null,
-    trainingSetup: { tasksetRef: learningRef(taskset), rewardBindingRef: learningRef(resolved.rewardBinding), baseModel: request.startingModel, method: request.method },
+    trainingSetup: { tasksetRef: learningRef(taskset), rewardBindingRef: learningRef(resolved.rewardBinding), baseModel: request.startingModel, method: request.method, managedRolloutPlacement: "remote" },
   }, 0);
   db.exec("BEGIN IMMEDIATE");
   try {

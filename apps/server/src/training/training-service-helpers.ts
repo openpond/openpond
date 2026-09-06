@@ -99,6 +99,13 @@ export function withAuthoritativeRecipeHashes(
   const optimizerIterations = positiveInteger(optimizer.iterations, 2);
   return {
     ...candidate,
+    resourceLimits: {
+      ...resourceLimits,
+      maxGpuSeconds: resourceLimits.maxGpuSeconds ?? Math.min(
+        10_800,
+        Math.ceil(positiveInteger(resourceLimits.wallTimeMs, 180_000) / 1_000),
+      ),
+    },
     reward: {
       ...reward,
       graderHash: contentHash(taskset.graders),

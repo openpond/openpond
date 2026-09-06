@@ -294,13 +294,12 @@ export function ModelRunEditorPage({
       retentionDays: runApproval.retentionDays,
     });
     if (!preparation) return;
+    const approvalCeiling = preparation.maximumSpendUsd ?? preparation.quoteUsd;
     const confirmed = await confirmAction({
       title: "Review and start training",
       body: preparationReview(preparation),
-      confirmLabel: preparation.quoteUsd
-        ? `Approve up to $${(
-            preparation.maximumSpendUsd ?? preparation.quoteUsd
-          ).toFixed(2)} and run`
+      confirmLabel: approvalCeiling != null && approvalCeiling > 0
+        ? `Approve up to $${approvalCeiling.toFixed(2)} and run`
         : "Start exact run",
       cancelLabel: "Back",
     });

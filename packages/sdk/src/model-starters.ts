@@ -102,11 +102,19 @@ export function validateModelStarterCreation(value: unknown, packageValue: unkno
 /** Explicit projection keeps frozen examples, expected outputs, privileged
  * context and verifier source out of read-only model-facing previews. */
 export function previewModelStarter(value: unknown) {
-  const { starter, taskset, taskDefinition } = validateResolvedModelStarter(value);
+  const { starter, taskset, taskDefinition, rewardBinding, rewards } = validateResolvedModelStarter(value);
   return {
     starter,
     inputSchema: taskDefinition.inputSchema,
     outputSchema: taskDefinition.outputSchema,
+    reward: {
+      name: rewardBinding.name,
+      description: rewardBinding.description,
+      checks: rewardBinding.sources.map(source => {
+        const reward = rewards.find(reward => sameLearningRef(source.reward, learningRef(reward)))!;
+        return { name: reward.name, description: reward.description, kind: reward.implementation.kind, role: source.role, weight: source.weight, required: source.required, hardGate: source.hardGate };
+      }),
+    },
     tasks: starter.previewTaskIds.map(id => {
       const task = taskset.tasks.find(task => task.id === id)!;
       return { id: task.id, input: task.input, policyVisibleContext: task.policyVisibleContext };

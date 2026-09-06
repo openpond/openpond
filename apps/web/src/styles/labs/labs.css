@@ -964,3 +964,13 @@
   color: var(--muted);
   font-size: 10px;
 }
+
+.model-starter-catalog { display: grid; gap: 16px; margin-bottom: 24px; }
+.model-starter-catalog h2, .model-starter-catalog h3, .model-starter-catalog p { margin: 0; }
+.model-starter-catalog header, .model-starter-cards article { display: grid; gap: 8px; }
+.model-starter-catalog p, .model-starter-cards article > span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.model-starter-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px; }
+.model-starter-cards article { align-content: start; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.model-starter-cards article > button { justify-self: start; margin-top: 8px; }
+.model-starter-catalog nav { display: flex; gap: 8px; }
+.model-setup-checked { display: flex; align-items: center; gap: 8px; color: var(--success, #22834b); }

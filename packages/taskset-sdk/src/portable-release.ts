@@ -29,13 +29,34 @@ import {
 import { canonicalJson } from "./canonical-json.js";
 import { contentHash } from "./hashing.js";
 import { TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
-import { compileBoundGraders } from "@openpond/evals/rewards";
+import { compileBoundGraders, RewardBindingSchema, RewardReleaseSchema, type RewardBinding, type RewardRelease } from "@openpond/evals/rewards";
+
+export type TasksetRewardExecution = { binding: RewardBinding; rewards: RewardRelease[] };
+
+export function resolvePortableTasksetRewardExecution(taskset: Taskset, supplied?: TasksetRewardExecution): TasksetRewardExecution | null {
+  const learning = taskset.metadata.learning === undefined ? null : TaskBatchPackageMetadataSchema.parse(taskset.metadata.learning);
+  const embedded = taskset.metadata.rewardExecution as { binding?: unknown; rewards?: unknown } | undefined;
+  const execution = supplied ?? (embedded ? {
+    binding: RewardBindingSchema.parse(embedded.binding),
+    rewards: RewardReleaseSchema.array().parse(embedded.rewards),
+  } : learning);
+  if (taskset.metadata.rewardBinding !== undefined) {
+    const reference = taskset.metadata.rewardBinding as Partial<RewardBinding> | null;
+    if (!execution || !reference || reference.id !== execution.binding.id
+      || reference.revision !== execution.binding.revision || reference.contentHash !== execution.binding.contentHash) {
+      throw new Error("Portable Taskset requires its exact published Reward binding.");
+    }
+  }
+  if (execution) compileBoundGraders(execution.binding, execution.rewards);
+  return execution ? { binding: execution.binding, rewards: execution.rewards } : null;
+}
 
 export function materializePortableTasksetRelease(input: {
   taskset: Taskset;
   selectedTasks?: TaskDataRecord[];
   adapterId: string;
   admittedTasksetRelease?: TasksetRelease | null;
+  rewardExecution?: TasksetRewardExecution;
 }): {
   environmentRelease: ReturnType<typeof createEnvironmentRelease>;
   verifierSetRelease: ReturnType<typeof createVerifierSetRelease>;
@@ -44,7 +65,9 @@ export function materializePortableTasksetRelease(input: {
   const environment = portableEnvironment(input.taskset);
   const tools = portableTools(input.taskset);
   const learning = input.taskset.metadata.learning === undefined ? null : TaskBatchPackageMetadataSchema.parse(input.taskset.metadata.learning);
-  const graders = learning ? compileBoundGraders(learning.binding, learning.rewards) : input.taskset.graders.map(portableGrader);
+  const embedded = input.taskset.metadata.rewardExecution;
+  const rewardExecution = resolvePortableTasksetRewardExecution(input.taskset, input.rewardExecution);
+  const graders = rewardExecution ? compileBoundGraders(rewardExecution.binding, rewardExecution.rewards) : input.taskset.graders.map(portableGrader);
   const tasks = input.selectedTasks?.length
     ? input.selectedTasks
     : input.taskset.tasks;
@@ -104,6 +127,7 @@ export function materializePortableTasksetRelease(input: {
       sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
       environmentResources: input.taskset.environment.resources ?? [],
       ...(learning ? { learning } : {}),
+      ...(rewardExecution && (input.rewardExecution || embedded) ? { rewardExecution: { binding: rewardExecution.binding, rewards: rewardExecution.rewards } } : {}),
     },
   });
   const draft = input.admittedTasksetRelease

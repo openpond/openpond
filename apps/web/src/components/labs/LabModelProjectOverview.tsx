@@ -14,6 +14,7 @@ import {
 } from "./LabRunStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { LabProjectMetricCharts } from "./LabProjectMetricCharts";
+import { modelProjectTasksetIds } from "./models-resource-scope";
 
 export function LabModelProjectOverview({
   actions,
@@ -48,6 +49,7 @@ export function LabModelProjectOverview({
   const currentVersion = versions.find((version) => version.current) ?? versions[0] ?? null;
   const trainingModel = modelProject?.trainingSetup.baseModel ?? modelProject?.defaultBaseModel ?? null;
   const servingReady = currentVersion?.lineage.managedServing?.customerBindingAllowed ?? false;
+  const tasksetCount = modelProjectTasksetIds(modelProject).size;
 
   return (
     <div className="labs-model-overview">
@@ -76,7 +78,7 @@ export function LabModelProjectOverview({
               : "Not started",
             hint: currentRun
               ? `${runKindLabel(currentRun)} · ${formatDateTime(currentRun.updatedAt)}`
-              : `${modelProject?.tasksetSyncs.length ?? 0} attached Taskset release${modelProject?.tasksetSyncs.length === 1 ? "" : "s"}`,
+              : `${tasksetCount} attached Taskset release${tasksetCount === 1 ? "" : "s"}`,
             onSelect: currentRun ? () => onOpenRun(currentRun.id) : undefined,
             ariaLabel: currentRun
               ? `Open ${runKindLabel(currentRun)} run with status ${statusLabel(currentRun.status)}`
