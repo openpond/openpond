@@ -331,7 +331,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         this.dependencies.store.getTrainingApproval(plan.execution.approvalId),
       ]);
       const taskset = trainingPlan
-        ? await this.dependencies.store.getTaskset(trainingPlan.tasksetId)
+        ? await this.dependencies.store.getTasksetByHash(trainingPlan.tasksetId, trainingPlan.tasksetHash)
         : null;
       if (
         !trainingPlan ||
@@ -459,7 +459,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     if (!trainingPlan) {
       throw new Error("The managed training plan is no longer available.");
     }
-    const taskset = await this.dependencies.store.getTaskset(trainingPlan.tasksetId);
+    const taskset = await this.dependencies.store.getTasksetByHash(trainingPlan.tasksetId, trainingPlan.tasksetHash);
     if (!taskset) {
       throw new Error("The managed training Taskset is no longer available.");
     }
@@ -949,7 +949,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       access,
       fetchImpl: this.fetchImpl,
       saveModelProject: (saved) =>
-        this.dependencies.store.saveModelProject(saved),
+        this.dependencies.store.saveModelProjectHosting(project, saved),
     });
   }
 

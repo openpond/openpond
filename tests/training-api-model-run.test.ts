@@ -78,10 +78,13 @@ describe("training API Model Run approval forwarding", () => {
           id: "model_1",
           trainingSetup: {
             destinationId: "openpond_managed",
-            tasksetRef: { id: "taskset_1" },
+            tasksetRef: { id: "taskset_1", revision: 3, contentHash: "b".repeat(64) },
           },
         })),
-        getTaskset: vi.fn(async () => taskset),
+        getTasksetRevision: vi.fn(async (id, revision, hash) => {
+          expect([id, revision, hash]).toEqual(["taskset_1", 3, "b".repeat(64)]);
+          return taskset;
+        }),
       },
       training: { startModelRun },
     } as never);

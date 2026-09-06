@@ -136,7 +136,7 @@ describe("Model Project hosting", () => {
         latestJobIds: ["job_1", "job_2"],
       });
     });
-    const saveModelProject = vi.fn(async (value: unknown) => value);
+    const saveModelProjectHosting = vi.fn(async (_previous: unknown, value: unknown) => value);
     const saveTrainingJob = vi.fn(async (value: unknown) => value);
     const saveTrainingJobEvent = vi.fn(async (value: unknown) => value);
     const service = createModelProjectHostingService({
@@ -144,7 +144,7 @@ describe("Model Project hosting", () => {
         listModelProjects: vi.fn(async () => []),
         getModelProject: vi.fn(async () => null),
         getTrainingJob: vi.fn(async () => null),
-        saveModelProject,
+        saveModelProjectHosting,
         saveTrainingJob,
         saveTrainingJobEvent,
         getCacheEntry: vi.fn(async () => null),
@@ -192,7 +192,7 @@ describe("Model Project hosting", () => {
     expect(pulled.hosted).toMatchObject({ jobCount: 2 });
     expect(pulled.importedJobCount).toBe(1);
     expect(pulled.importedMetricCount).toBe(6);
-    expect(saveModelProject).toHaveBeenCalledWith(pulled.project);
+    expect(saveModelProjectHosting).toHaveBeenCalledWith(null, pulled.project, true);
     expect(saveTrainingJob).toHaveBeenCalledWith(expect.objectContaining({
       id: hostedJob.id,
       status: "succeeded",
@@ -229,7 +229,7 @@ describe("Model Project hosting", () => {
           ...pulled.project,
           revision: pulled.project.revision + 1,
         })),
-        saveModelProject,
+        saveModelProjectHosting,
         saveTrainingJob: vi.fn(async (value: unknown) => value),
       } as never,
       resolveAccess: async () => ({
@@ -314,7 +314,7 @@ describe("Model Project hosting", () => {
       createdAt: "2026-08-25T12:00:00.000Z",
       updatedAt: "2026-08-25T12:30:00.000Z",
     };
-    const saveModelProject = vi.fn(async (value: unknown) => value);
+    const saveModelProjectHosting = vi.fn(async (_previous: unknown, value: unknown) => value);
     const request = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       expect(new Headers(init?.headers).get("accept")).toBe(
         "application/vnd.openpond.model-project+json;version=2",
@@ -341,7 +341,7 @@ describe("Model Project hosting", () => {
     const service = createModelProjectHostingService({
       store: {
         getModelProject: vi.fn(async () => project),
-        saveModelProject,
+        saveModelProjectHosting,
       } as never,
       resolveAccess: async () => ({
         apiBaseUrl: "https://hosted.example.test",
@@ -362,10 +362,10 @@ describe("Model Project hosting", () => {
       syncedSourceRevision: 4,
     });
     expect(synced.trainingSetup.managedGpuRequirement).toBe("h100_hbm3");
-    expect(saveModelProject).toHaveBeenCalledWith(synced);
+    expect(saveModelProjectHosting).toHaveBeenCalledWith(project, synced);
   });
 
-  test("retries a stale hosted container ETag with the local source revision", async () => {
+  test("preserves a stale hosted ETag conflict without bypassing the concurrent edit", async () => {
     const project = {
       schemaVersion: "openpond.modelProject.v2" as const,
       id: "model_project_1",
@@ -408,7 +408,7 @@ describe("Model Project hosting", () => {
     const service = createModelProjectHostingService({
       store: {
         getModelProject: vi.fn(async () => project),
-        saveModelProject: vi.fn(async (value: unknown) => value),
+        saveModelProjectHosting: vi.fn(async (_previous: unknown, value: unknown) => value),
       } as never,
       resolveAccess: async () => ({
         apiBaseUrl: "https://hosted.example.test",
@@ -419,10 +419,8 @@ describe("Model Project hosting", () => {
       fetch: request as typeof fetch,
     });
 
-    const synced = await service.syncProject(project.id);
-
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(synced.hosted?.etag).toBe("b".repeat(64));
+    await expect(service.syncProject(project.id)).rejects.toThrow("model_project_sync_conflict");
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   test("preserves hosted validation codes in sync errors", async () => {
@@ -444,7 +442,7 @@ describe("Model Project hosting", () => {
     const service = createModelProjectHostingService({
       store: {
         getModelProject: vi.fn(async () => project),
-        saveModelProject: vi.fn(async (value: unknown) => value),
+        saveModelProjectHosting: vi.fn(async (_previous: unknown, value: unknown) => value),
       } as never,
       resolveAccess: async () => ({
         apiBaseUrl: "https://hosted.example.test",
@@ -524,7 +522,7 @@ describe("Model Project hosting", () => {
     const service = createModelProjectHostingService({
       store: {
         getModelProject: vi.fn(async () => saved),
-        saveModelProject: vi.fn(async (value: unknown) => {
+        saveModelProjectHosting: vi.fn(async (_previous: unknown, value: unknown) => {
           saved = value;
           return value;
         }),

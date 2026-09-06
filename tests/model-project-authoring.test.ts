@@ -1,8 +1,16 @@
 import { expect, test } from "vitest";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { TrainingPreparationPlanSchema } from "@openpond/contracts";
+import { TrainingAdapterRegistry, TrainingDestinationRegistry } from "@openpond/training-sdk";
+import { computeTasksetHash, sha256 } from "@openpond/taskset-sdk";
 import { createModelProjectSaveRequest, ModelProjectTrainingSetupSchema } from "openpond-sdk/model-projects";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { withTempDirectory } from "./helpers/temp-directory";
-import { tasksetFixture } from "./helpers/training-fixtures";
+import { sftRecipeFixture, tasksetFixture } from "./helpers/training-fixtures";
+import { createPortableModelRunService } from "../apps/server/src/training/portable-model-run-service";
+import { createTrainingPlanLifecycleService } from "../apps/server/src/training/training-plan-lifecycle-service";
+import { PortablePreparationTrainingDestination } from "../apps/server/src/training/destinations";
 
 // A second window must not overwrite a stale Model, and retrying a lost response
 // must return the committed receipt even if another window has edited it since.
@@ -46,4 +54,92 @@ test("saves model configuration with exact ownership, revisions, and durable ret
     expect((await reopened.getModelProject("model-authoring"))?.revision).toBe(2);
     expect(await reopened.listModelProjects()).toHaveLength(1);
   } finally { await reopened.close(); }
+}));
+
+// Run admission must retain its Taskset and Model snapshot when another window
+// edits both while preparation is in flight; producing a quote must not undo it.
+test("prepares an immutable run without overwriting a concurrent Model edit", async () => withTempDirectory("model-admission-", async (home) => {
+  const store = new SqliteStore(home);
+  try {
+    const taskset = await store.upsertTaskset(tasksetFixture({ ready: true }));
+    const reference = { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash };
+    const recipe = sftRecipeFixture();
+    const project = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({
+      id: "admitted-model", profileId: taskset.profileId, name: "Before edit", objective: null,
+      defaultBaseModel: null, defaultDestinationId: "openpond_managed",
+      trainingSetup: ModelProjectTrainingSetupSchema.parse({
+        tasksetRef: reference, recipe, method: "sft", destinationId: "openpond_managed",
+        baseModel: { schemaVersion: "openpond.baseModelPreference.v1", modelId: recipe.baseModel.id,
+          revision: recipe.baseModel.revision, tokenizerRevision: recipe.baseModel.tokenizerRevision,
+          chatTemplateHash: sha256("admitted-template"), source: "local", modelAssetId: null },
+      }),
+    }, 0));
+    const registry = new TrainingDestinationRegistry();
+    registry.register(new PortablePreparationTrainingDestination("openpond_managed", {
+      resolveTaskset: (id, hash) => store.getTasksetByHash(id, hash),
+      estimatedCostUsd: 0, methods: ["sft"], environmentPlacements: ["local", "remote"], assumptions: [],
+    }));
+    const lifecycle = createTrainingPlanLifecycleService({ store, storeDir: home, registry,
+      projectArtifactRows: async () => { throw new Error("Fixture has inline training rows."); },
+    });
+    const stop = new Error("Prepared fixture without launching compute");
+    let prepared = false;
+    const service = createPortableModelRunService({
+      store, storeDir: home, adapters: new TrainingAdapterRegistry(),
+      catalog: async () => { throw new Error("No compute launch in this boundary test."); },
+      approve: async () => { throw new Error("No compute approval in this boundary test."); },
+      resolveReleasedHarness: async ({ modelProject }) => {
+        expect(modelProject).toEqual(project);
+        await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({
+          id: project.id, profileId: project.profileId, name: "Concurrent edit", objective: project.objective,
+          defaultBaseModel: project.defaultBaseModel, defaultDestinationId: project.defaultDestinationId,
+          trainingSetup: project.trainingSetup,
+        }, 1));
+        const newer = { ...taskset, revision: taskset.revision + 1, name: "New Taskset revision" };
+        newer.tasks = taskset.tasks.map((task) => ({ ...task, expectedOutput: { text: "Changed target" } }));
+        newer.contentHash = computeTasksetHash(newer);
+        await store.upsertTaskset(newer);
+        return { harnessRelease: { id: "harness-admission", contentHash: sha256("harness-admission") },
+          tasksetRelease: { id: "taskset-admission", contentHash: sha256("taskset-admission") } };
+      },
+      prepare: async ({ modelProject }) => {
+        expect(modelProject.name).toBe("Before edit");
+        expect(modelProject.revision).toBe(1);
+        expect(modelProject.trainingSetup.tasksetRef).toEqual(reference);
+        return TrainingPreparationPlanSchema.parse({ schemaVersion: "openpond.trainingPreparationPlan.v1",
+          modelRunId: "admission", state: "ready", reason: null, runtime: null, compute: null, engine: null,
+          downloads: [], dataMovement: [], quoteUsd: 0, maximumSpendUsd: 0, retentionDays: null,
+          sideEffectsStarted: false, contentHash: sha256("prepared") });
+      },
+      prepareStart: async (input) => {
+        expect(input.tasksetRef).toEqual(reference);
+        const result = await lifecycle.prepareStart(input);
+        expect(result.plan.tasksetHash).toBe(reference.contentHash);
+        const bundle = await lifecycle.buildBundle(result.plan.id);
+        const rows = await readFile(path.join(bundle.directory, "data/train.jsonl"), "utf8");
+        expect(rows).toContain("Hello friend");
+        expect(rows).not.toContain("Changed target");
+        prepared = true;
+        throw stop;
+      },
+    });
+    await expect(service.start({ modelProjectId: project.id, maximumSpendUsd: 0, exportApproved: true })).rejects.toBe(stop);
+    expect(prepared).toBe(true);
+    const saved = await store.getModelProject(project.id);
+    expect(saved?.name).toBe("Concurrent edit");
+    expect(saved?.revision).toBe(2);
+    expect(saved?.trainingSetup.harnessRelease).toBeNull();
+    expect(saved?.trainingSetup.tasksetRef).toEqual(reference);
+    const hostedReceipt = { ...project, hosted: {
+      schemaVersion: "openpond.hostedModelProjectLink.v1" as const, teamId: "team-1", projectId: "hosted-model",
+      portableProjectId: project.id, revision: 1, etag: sha256("hosted-revision"), syncedSourceRevision: 1,
+      syncedAt: new Date().toISOString(), tasksets: [],
+    } };
+    const linked = await store.saveModelProjectHosting(project, hostedReceipt);
+    expect(linked.name).toBe("Concurrent edit");
+    expect(linked.revision).toBe(2);
+    expect(linked.hosted?.syncedSourceRevision).toBe(1);
+    await expect(store.saveModelProjectHosting(project, hostedReceipt, true)).rejects.toMatchObject({ status: 409, code: "model_hosting_conflict" });
+    expect((await store.getModelProject(project.id))?.name).toBe("Concurrent edit");
+  } finally { await store.close(); }
 }));

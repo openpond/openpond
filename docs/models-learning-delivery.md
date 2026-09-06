@@ -38,6 +38,21 @@ revision rather than adopting background refreshes. The Reward step inspects the
 selected release; embedded Reward authoring, harness selection and server-side
 configuration checks still need their execution-backed integration.
 
+Run preparation now owns a Model snapshot and never rewrites saved configuration.
+Taskset selection survives newer revisions through quoting, bundling and managed
+launch/recovery. Publication and training resolve the same Taskset envelope.
+An explicit Harness reference resolves its historical release and verified source;
+without one, the Taskset owns the policy. Materialization copies only declared
+files, verifies their bytes, tolerates concurrent preparation and rejects changed
+execution files on reuse. Tests preserve release A after advancing to B and prove
+that concurrent Model edits survive preparation. This does not yet prove that
+every rollout adapter consumes the selected instructions and skills.
+Hosted sync receipts now merge server-owned state atomically without replacing
+local configuration. Hosted pulls compare the originally read local state before
+replacement, and an ETag conflict remains a conflict instead of retrying without
+the comparison token. The SQLite test preserves a concurrent edit through a late
+hosted receipt and rejects a stale hosted pull.
+
 The browser journey published a Reward and task format, imported an incorrect
 observed answer, graded a corrected target separately, approved the task and
 target, sealed a batch, selected an existing model and reopened its saved run
@@ -104,9 +119,9 @@ The first PR checks exposed a Windows compiler-launch issue, missing test-tier
 entries, eager learning initialization in isolated API tests, and a renderer size
 overage. The compiler now runs through Node, boundary tests use the system tier,
 initialization follows service use, and public Evals exports support tree shaking.
-CI for `e30a4472` passes, including Windows/macOS/Linux storage, Desktop smoke,
-unit/system tests, builds and CLI distribution. The later combined-Reward change
-passes local typechecking and the authenticated grading test; its CI is pending.
+CI through `ddf1fe1f` passes, including Windows/macOS/Linux storage, Desktop smoke,
+unit/system tests, builds and CLI distribution. The admission changes also pass
+the SQLite concurrency, historical-bundle and Harness-source boundary checks.
 
 The isolated browser profile has no configured training destination. No executed
 candidate training, full starter qualification, hosted parity or automatic

@@ -1,4 +1,4 @@
-import type { TrainingDestinationCapabilities } from "@openpond/contracts";
+import type { ModelProject, TrainingDestinationCapabilities } from "@openpond/contracts";
 import type { TrainingAdapterRegistry } from "@openpond/training-sdk";
 import type { SqliteStore } from "../store/store.js";
 import { projectBaseModelCandidates } from "./base-model-candidates.js";
@@ -42,15 +42,17 @@ export function createPortableTrainingServiceSupport(input: {
 
   async function prepare(inputPlan: {
     modelProjectId: string;
+    modelProject?: ModelProject;
     maximumSpendUsd?: number | null;
     retentionDays?: number | null;
   }) {
-    const modelProject = await input.store.getModelProject(
+    const modelProject = inputPlan.modelProject ?? await input.store.getModelProject(
       inputPlan.modelProjectId,
     );
     if (!modelProject) {
       throw new Error("A saved Model Project is required.");
     }
+    if (modelProject.id !== inputPlan.modelProjectId) throw new Error("Model preparation identity does not match the selected configuration.");
     const trainingCatalog = await catalog();
     return preparePortableModelRun({
       modelProject,

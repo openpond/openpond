@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { SqliteStore } from "../store/store.js";
 import { loadSelectedLocalHarnessRuntime } from "../harness/local-harness-skill-runtime.js";
 import { waitForWorkReceiptSettlement } from "../openpond/work-runtime-service.js";
@@ -44,13 +45,14 @@ export function createBenchmarkRuntimeComposition(input: {
     store: input.store,
     storeDir: input.storeDir,
   });
-  const resolveReleasedHarness = async () => {
-    const runtime = await loadSelectedLocalHarnessRuntime(input.store);
+  const resolveReleasedHarness = async (reference?: { id: string; contentHash: string } | null) => {
+    const runtime = await loadSelectedLocalHarnessRuntime(input.store, reference);
     return runtime
       ? {
           agentSnapshot: runtime.release.agentSnapshot,
           harnessRelease: runtime.release.harnessRelease,
           instructionContext: runtime.instructionContext,
+          sourcePath: path.join(runtime.release.bundlePath, "source"),
         }
       : null;
   };

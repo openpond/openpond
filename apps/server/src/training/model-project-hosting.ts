@@ -28,7 +28,6 @@ import {
   buildIntent,
   canReplaceFromHosted,
   errorMessage,
-  isProjectSyncConflict,
   requireProject,
   upsertTasksetSync,
 } from "./model-project-hosting-utils.js";
@@ -251,7 +250,7 @@ export function createModelProjectHostingService(input: {
       createdAt: existing?.createdAt ?? summary.createdAt,
       updatedAt: summary.sourceUpdatedAt,
     });
-    const saved = await input.store.saveModelProject(project);
+    const saved = await input.store.saveModelProjectHosting(existing, project, true);
     const importedMetricCount = await importHostedJobs(
       saved,
       hostedJobs,
@@ -390,29 +389,15 @@ export function createModelProjectHostingService(input: {
       sourceRevision: project.revision,
       sourceUpdatedAt: project.updatedAt,
     };
-    let hosted: { project: unknown };
-    try {
-      hosted = await requestJson<{ project: unknown }>({
-        access,
-        pathname: `/v1/model-projects/${encodeURIComponent(project.id)}`,
-        method: "PUT",
-        body: {
-          ...syncBody,
-          expectedEtag: project.hosted?.etag ?? null,
-        },
-      });
-    } catch (caught) {
-      if (!isProjectSyncConflict(caught)) throw caught;
-      // Desktop is the authoring source for this container. A prior successful
-      // release publication can leave its local container ETag behind; retry
-      // the same source revision without the stale compare-and-swap token.
-      hosted = await requestJson<{ project: unknown }>({
-        access,
-        pathname: `/v1/model-projects/${encodeURIComponent(project.id)}`,
-        method: "PUT",
-        body: { ...syncBody, expectedEtag: null },
-      });
-    }
+    const hosted = await requestJson<{ project: unknown }>({
+      access,
+      pathname: `/v1/model-projects/${encodeURIComponent(project.id)}`,
+      method: "PUT",
+      body: {
+        ...syncBody,
+        expectedEtag: project.hosted?.etag ?? null,
+      },
+    });
     const hostedProject = HostedProjectSchema.parse(hosted.project);
     const syncedAt = new Date().toISOString();
     const saved = ModelProjectSchema.parse({
@@ -431,8 +416,7 @@ export function createModelProjectHostingService(input: {
           : [],
       },
     });
-    await input.store.saveModelProject(saved);
-    return saved;
+    return input.store.saveModelProjectHosting(project, saved);
   }
 
   async function publishTaskset(inputValue: {
@@ -549,8 +533,7 @@ export function createModelProjectHostingService(input: {
         lastError: null,
       }),
     });
-    await input.store.saveModelProject(saved);
-    return saved;
+    return input.store.saveModelProjectHosting(project, saved);
   }
 
   async function requestJson<T>(request: {
@@ -618,7 +601,7 @@ export function createModelProjectHostingService(input: {
   }): Promise<void> {
     const project = await requireProject(input.store, value.projectId);
     const timestamp = new Date().toISOString();
-    await input.store.saveModelProject(ModelProjectSchema.parse({
+    await input.store.saveModelProjectHosting(project, ModelProjectSchema.parse({
       ...project,
       tasksetSyncs: upsertTasksetSync(project.tasksetSyncs ?? [], {
         localTasksetId: value.taskset.id,

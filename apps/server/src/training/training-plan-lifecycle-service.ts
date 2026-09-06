@@ -26,6 +26,7 @@ import { assertTasksetExecutableForTraining } from "./training-execution-readine
 export type TrainingStartInput = {
   modelId: string;
   tasksetId: string;
+  tasksetRef?: { id: string; revision: number; contentHash: string };
   destinationId: TrainingDestinationId;
   recipe: unknown;
   environmentPlacement?: "local" | "remote";
@@ -50,7 +51,12 @@ export function createTrainingPlanLifecycleService(deps: {
   async function createPlan(
     input: Omit<TrainingStartInput, "maximumCostUsd">,
   ) {
-    const taskset = await deps.store.getTaskset(input.tasksetId);
+    if (input.tasksetRef && input.tasksetRef.id !== input.tasksetId) {
+      throw new Error("Training Taskset identity does not match the selected release.");
+    }
+    const taskset = input.tasksetRef
+      ? await deps.store.getTasksetRevision(input.tasksetRef.id, input.tasksetRef.revision, input.tasksetRef.contentHash)
+      : await deps.store.getTaskset(input.tasksetId);
     if (!taskset) throw new Error("Taskset not found.");
     assertTasksetExecutableForTraining(taskset);
     const recipe = TrainingRecipeSchema.parse(
@@ -104,7 +110,7 @@ export function createTrainingPlanLifecycleService(deps: {
   async function buildBundle(planId: string) {
     const plan = await deps.store.getTrainingPlan(planId);
     if (!plan) throw new Error("Training Plan not found.");
-    const taskset = await deps.store.getTaskset(plan.tasksetId);
+    const taskset = await deps.store.getTasksetByHash(plan.tasksetId, plan.tasksetHash);
     if (!taskset) throw new Error("Taskset not found.");
     const directory = path.join(
       deps.storeDir,
@@ -278,10 +284,10 @@ export function createTrainingPlanLifecycleService(deps: {
     if (!plan || !bundle || bundle.planId !== plan.id) {
       throw new Error("Prepared Training Plan and Bundle do not match.");
     }
-    const taskset = await deps.store.getTaskset(plan.tasksetId);
+    const taskset = await deps.store.getTasksetByHash(plan.tasksetId, plan.tasksetHash);
     if (!taskset || taskset.contentHash !== plan.tasksetHash) {
       throw new Error(
-        "The prepared Training Plan is stale. Prepare a new quote from the current Taskset.",
+        "The prepared Training Plan's immutable Taskset is unavailable.",
       );
     }
     assertTasksetExecutableForTraining(taskset);

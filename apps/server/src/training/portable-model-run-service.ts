@@ -8,12 +8,15 @@ import {
   TrainingRecipeSchema,
   TrainingExecutionRefSchema,
   TrainingJobSchema,
+  TrainingDestinationIdSchema,
   type TrainingApproval,
   type TrainingCatalog,
   type TrainingJob,
   type ModelComparisonEntryRef,
   type TrainingPreparationPlan,
   type TrainingPreparedStart,
+  type ModelProject,
+  type TrainingDestinationId,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
@@ -45,15 +48,15 @@ export function createPortableModelRunService(deps: {
   catalog(): Promise<TrainingCatalog>;
   prepare(input: {
     modelProjectId: string;
+    modelProject: ModelProject;
     maximumSpendUsd?: number | null;
     retentionDays?: number | null;
   }): Promise<TrainingPreparationPlan>;
   prepareStart(input: {
     modelId: string;
     tasksetId: string;
-    destinationId: NonNullable<
-      Awaited<ReturnType<SqliteStore["getModelProject"]>>
-    >["trainingSetup"]["destinationId"];
+    tasksetRef: { id: string; revision: number; contentHash: string };
+    destinationId: TrainingDestinationId;
     recipe: unknown;
     environmentPlacement?: "local" | "remote";
     exportApproved?: boolean;
@@ -113,7 +116,7 @@ export function createPortableModelRunService(deps: {
       tasksetRef.revision,
       tasksetRef.contentHash,
     );
-    if (!taskset) {
+    if (!taskset || taskset.profileId !== sourceProject.profileId) {
       throw new Error("The Model Project Taskset release is stale.");
     }
     if (comparisonEntry) {
@@ -122,6 +125,7 @@ export function createPortableModelRunService(deps: {
         trainingSetup: {
           ...setup,
           tasksetRef: comparisonEntry.taskset,
+          tasksetRelease: null,
         },
       };
       setup = sourceProject.trainingSetup;
@@ -146,20 +150,21 @@ export function createPortableModelRunService(deps: {
       taskset,
       modelProject: sourceProject,
     });
-    sourceProject = await deps.store.saveModelProject({
+    // Admission owns a snapshot. Preparing a run must not rewrite the user's
+    // configuration or race a concurrent edit or Comparison Series attempt.
+    sourceProject = {
       ...sourceProject,
-      revision: sourceProject.revision + 1,
       trainingSetup: {
         ...setup,
         recipe,
         harnessRelease: releasedHarness.harnessRelease,
         tasksetRelease: releasedHarness.tasksetRelease,
       },
-      updatedAt: new Date().toISOString(),
-    });
+    };
     setup = sourceProject.trainingSetup;
     const preparation = await deps.prepare({
       modelProjectId: sourceProject.id,
+      modelProject: sourceProject,
       maximumSpendUsd: input.maximumSpendUsd,
       retentionDays: input.retentionDays,
     });
@@ -178,7 +183,8 @@ export function createPortableModelRunService(deps: {
     const prepared = await deps.prepareStart({
       modelId: sourceProject.id,
       tasksetId: tasksetRef.id,
-      destinationId: setup.destinationId,
+      tasksetRef,
+      destinationId: TrainingDestinationIdSchema.parse(setup.destinationId),
       recipe,
       environmentPlacement:
         setup.destinationId === "openpond_managed"

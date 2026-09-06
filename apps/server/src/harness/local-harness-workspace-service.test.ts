@@ -30,6 +30,7 @@ import {
 } from "./local-harness-skill-runtime.js";
 import { applyLocalHarnessRefinerProposal } from "./local-harness-refiner.js";
 import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
+import { materializeHarnessSource } from "../training/materialize-harness-source.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import {
   ensureLocalHarnessRunOverlay,
@@ -636,6 +637,24 @@ describe("local Harness workspace service", () => {
     );
     expect(base.harnessRelease.contentHash).not.toBe(candidate.release.harnessRelease.contentHash);
     const admittedAfterAdvance = await loadSelectedLocalHarnessRuntime(store);
+    const pinnedBeforeAdvance = await loadSelectedLocalHarnessRuntime(store, {
+      id: base.harnessRelease.id, contentHash: base.harnessRelease.contentHash,
+    });
+    expect(pinnedBeforeAdvance?.release.harnessRelease).toEqual(base.harnessRelease);
+    const materialization = {
+      sourcePath: path.join(base.bundlePath, "source"), storeDir: directory,
+      harnessHash: base.harnessRelease.contentHash, files: base.harnessRelease.files,
+    };
+    await Promise.all([materializeHarnessSource(materialization), materializeHarnessSource(materialization)]);
+    const executionInstruction = path.join(directory, "training", "harnesses", base.harnessRelease.contentHash, "source", "instructions", "system.md");
+    expect(await fs.readFile(executionInstruction, "utf8")).toBe(await fs.readFile(path.join(base.bundlePath, "source", "instructions", "system.md"), "utf8"));
+    expect(await fs.readFile(executionInstruction, "utf8")).not.toBe(instruction);
+    await fs.chmod(executionInstruction, 0o644);
+    await fs.writeFile(executionInstruction, "Changed execution instructions");
+    await expect(materializeHarnessSource(materialization)).rejects.toThrow("immutable bytes");
+    await expect(loadSelectedLocalHarnessRuntime(store, {
+      id: "different-release", contentHash: base.harnessRelease.contentHash,
+    })).rejects.toThrow("immutable Harness release is unavailable");
     expect(admittedBeforeAdvance?.release.harnessRelease.contentHash).toBe(base.harnessRelease.contentHash);
     expect(admittedAfterAdvance?.release.harnessRelease.contentHash).toBe(
       candidate.release.harnessRelease.contentHash,

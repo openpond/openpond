@@ -32,7 +32,7 @@ export async function ensureManagedRlLocalExecutor(input: {
       ? await input.dependencies.store.getTrainingPlan(localJob.planId)
       : null;
     const trainingTaskset = trainingPlan
-      ? await input.dependencies.store.getTaskset(trainingPlan.tasksetId)
+      ? await input.dependencies.store.getTasksetByHash(trainingPlan.tasksetId, trainingPlan.tasksetHash)
       : null;
     if (
       !trainingPlan

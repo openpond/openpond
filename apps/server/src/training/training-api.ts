@@ -1,4 +1,5 @@
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
+import { requireReleasedTaskset } from "./local-taskset-release.js";
 import {
   BaseModelPreferenceSchema,
   ChatModelRefSchema,
@@ -28,7 +29,6 @@ import {
   type PreferenceComparisonPurpose,
   type PreferenceComparisonRelease,
   type PreferenceReviewer,
-  type TasksetRelease,
 } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 import {
@@ -1236,7 +1236,15 @@ export function createTrainingApi(deps: {
         if (!setup.tasksetRef) {
           throw new Error("The Model Project training setup has no Taskset.");
         }
-        const taskset = await requireTaskset(deps.store, setup.tasksetRef.id);
+        const comparisonEntry = comparisonEntryId
+          ? await deps.store.getModelComparisonSeriesEntry(comparisonEntryId)
+          : null;
+        if (comparisonEntryId && (!comparisonEntry || comparisonEntry.modelProjectId !== modelProject.id)) {
+          throw new Error("The requested Comparison Series entry does not belong to this Model Project.");
+        }
+        const reference = comparisonEntry?.taskset ?? setup.tasksetRef;
+        const taskset = await deps.store.getTasksetRevision(reference.id, reference.revision, reference.contentHash);
+        if (!taskset) throw new Error("The selected immutable training Taskset is unavailable.");
         const release = await requireReleasedTaskset(
           deps.benchmarkTasksets,
           taskset,
@@ -1877,17 +1885,6 @@ async function requireTasksetDraft(store: SqliteStore, draftId: string) {
   const draft = await store.getTasksetDraft(draftId);
   if (!draft) throw new Error("Taskset draft was not found.");
   return draft;
-}
-async function requireReleasedTaskset(
-  benchmarkTasksets: BenchmarkTasksets,
-  taskset: Awaited<ReturnType<typeof requireTaskset>>,
-): Promise<TasksetRelease> {
-  const release = await benchmarkTasksets.releaseForTaskset(taskset);
-  if (release) return release;
-  return materializePortableTasksetRelease({
-    taskset,
-    adapterId: "openpond-preference-comparisons-v1",
-  }).tasksetRelease;
 }
 async function bindTasksetPreferenceComparison(input: {
   store: SqliteStore;

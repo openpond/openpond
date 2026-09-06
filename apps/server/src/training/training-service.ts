@@ -1,8 +1,7 @@
-import { access, cp, mkdir, rename, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import {
   type GradeResult,
-  type OpenPondProfileState,
   type ModelProject,
   type RewardModelVersion,
   RewardModelRunSchema,
@@ -49,6 +48,7 @@ import {
 } from "./reward-model-qualification-store.js";
 import { bindLearnedPreferenceReward } from "./learned-preference-reward-binding.js";
 import { createTrainingModelConfigurationService } from "./training-model-controls.js";
+import { materializeHarnessSource } from "./materialize-harness-source.js";
 import type { TasksetWorkAttemptRuntime } from "./taskset-work-attempt-runner.js";
 
 export function createTrainingService(deps: {
@@ -75,10 +75,11 @@ export function createTrainingService(deps: {
     teamId: string;
   }>;
   searchTrainingModels?: (query: string) => Promise<RegistryModelSearchResult[]>;
-  loadProfileState?: () => Promise<OpenPondProfileState>;
-  resolveReleasedHarness?: () => Promise<{
+  resolveTasksetRelease?: (taskset: Taskset) => Promise<TasksetRelease>;
+  resolveReleasedHarness?: (reference?: { id: string; contentHash: string } | null) => Promise<{
     agentSnapshot: import("@openpond/harness").AgentSnapshot;
     harnessRelease: import("@openpond/harness").HarnessRelease;
+    sourcePath?: string;
   } | null>;
 } & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();
@@ -86,7 +87,7 @@ export function createTrainingService(deps: {
     setModelPinned,
     updateModelConfiguration,
   } = createTrainingModelConfigurationService(deps.store);
-  const resolveTaskset = (id: string) => deps.store.getTaskset(id);
+  const resolveTaskset = (id: string, contentHash: string) => deps.store.getTasksetByHash(id, contentHash);
   const { projectArtifactRows } = createTrainingDatasetSelection({
     storeDir: deps.storeDir,
     projectDatasetArtifact: deps.projectDatasetArtifact,
@@ -191,22 +192,41 @@ export function createTrainingService(deps: {
     prepareStart,
     approve,
     resolveReleasedHarness: async ({ taskset, modelProject }) => {
-      const releasedHarness = await deps.resolveReleasedHarness?.() ?? null;
-      const profile = !releasedHarness && deps.loadProfileState ? await deps.loadProfileState() : null;
+      const selectedHarness = modelProject.trainingSetup.harnessRelease;
+      // An absent selection means the Taskset owns its policy. Personal
+      // instructions must never be silently injected into a benchmark.
+      const releasedHarness = selectedHarness
+        ? await deps.resolveReleasedHarness?.(selectedHarness) ?? null
+        : null;
+      if (selectedHarness && (!releasedHarness
+        || releasedHarness.harnessRelease.id !== selectedHarness.id
+        || releasedHarness.harnessRelease.contentHash !== selectedHarness.contentHash)) {
+        throw new Error("The configured immutable Harness release could not be resolved.");
+      }
       const context = compileDesktopHarnessContext({
         taskset,
-        profile,
+        tasksetRelease: await deps.resolveTasksetRelease?.(taskset),
         releasedHarness,
         model: {
           providerId: "openpond",
           modelId: modelProject.trainingSetup.baseModel!.modelId,
         },
       });
-      if (profile?.sourcePath) {
+      const selectedTaskset = modelProject.trainingSetup.tasksetRelease;
+      if (selectedTaskset && (selectedTaskset.id !== context.tasksetRelease.id
+        || selectedTaskset.contentHash !== context.tasksetRelease.contentHash)) {
+        throw new Error("The configured Taskset release does not match the selected Taskset revision.");
+      }
+      const sourcePath = releasedHarness?.sourcePath;
+      if (releasedHarness && context.harnessRelease.files.length && !sourcePath) {
+        throw new Error("The selected Harness release has no verified execution source.");
+      }
+      if (sourcePath) {
         await materializeHarnessSource({
-          sourcePath: profile.sourcePath,
+          sourcePath,
           storeDir: deps.storeDir,
           harnessHash: context.harnessRelease.contentHash,
+          files: context.harnessRelease.files,
         });
       }
       return {
@@ -751,39 +771,4 @@ function objectRef(value: unknown, label: string): { id: string; contentHash: st
 function isInventoryFile(value: unknown): value is { path: string; sha256: string; sizeBytes: number } {
   const parsed = recordOrNull(value);
   return Boolean(parsed && typeof parsed.path === "string" && typeof parsed.sha256 === "string" && typeof parsed.sizeBytes === "number");
-}
-
-async function materializeHarnessSource(input: {
-  sourcePath: string;
-  storeDir: string;
-  harnessHash: string;
-}): Promise<void> {
-  const root = path.join(
-    input.storeDir,
-    "training",
-    "harnesses",
-    input.harnessHash,
-    "source",
-  );
-  try {
-    await access(root);
-    return;
-  } catch {
-    // Materialize once per immutable Harness hash.
-  }
-  await mkdir(path.dirname(root), { recursive: true });
-  const temporary = `${root}.materializing-${process.pid}`;
-  await rm(temporary, { recursive: true, force: true });
-  try {
-    await cp(path.resolve(input.sourcePath), temporary, {
-      recursive: true,
-      force: false,
-      errorOnExist: true,
-    });
-    await rename(temporary, root).catch(async (error: NodeJS.ErrnoException) => {
-      if (error.code !== "EEXIST") throw error;
-    });
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
 }
