@@ -14,6 +14,7 @@ const tasksets = new OpenPondTasksetCatalogClient({
 });
 const page = await tasksets.list({ limit: 30, modelProjectId });
 const item = await tasksets.get(page.items[0].id);
+const selected = await tasksets.resolve(item.release);
 const next = page.nextCursor
   ? await tasksets.list({ limit: 30, modelProjectId, afterId: page.nextCursor })
   : null;

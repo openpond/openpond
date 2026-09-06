@@ -17,7 +17,9 @@ it("binds catalog responses to workspace, identity and bounded pages", async () 
     .mockResolvedValueOnce(Response.json(item))
     .mockResolvedValueOnce(Response.json({ ...item, teamId: "other-team" }))
     .mockResolvedValueOnce(Response.json({ items: [{ ...item, teamId: "other-team" }], nextCursor: null }))
-    .mockResolvedValueOnce(Response.json({ code: "taskset_not_found", message: "Taskset is unavailable." }, { status: 404 }));
+    .mockResolvedValueOnce(Response.json({ code: "taskset_not_found", message: "Taskset is unavailable." }, { status: 404 }))
+    .mockResolvedValueOnce(Response.json(item))
+    .mockResolvedValueOnce(Response.json({ ...item, release: { ...item.release, revision: 2 } }));
   const client = new OpenPondTasksetCatalogClient({ baseUrl: "https://api.example.test", apiKey: "test", teamId: "team-one", fetch });
   expect(await client.list({ limit: 1, modelProjectId: "model/one" })).toEqual({ items: [item], nextCursor: item.id });
   expect(fetch.mock.calls[0]![0]).toBe("https://api.example.test/v1/taskset-catalog?limit=1&modelProjectId=model%2Fone");
@@ -26,6 +28,8 @@ it("binds catalog responses to workspace, identity and bounded pages", async () 
   await expect(client.get(item.id)).rejects.toMatchObject({ code: "catalog_identity_mismatch" });
   await expect(client.list()).rejects.toMatchObject({ code: "catalog_scope_mismatch" });
   await expect(client.get(item.id)).rejects.toMatchObject({ status: 404, code: "taskset_not_found" });
+  expect(await client.resolve(item.release)).toEqual(item);
+  await expect(client.resolve(item.release)).rejects.toMatchObject({ code: "catalog_release_mismatch" });
   const tooLarge = new OpenPondTasksetCatalogClient({ baseUrl: "https://api.example.test", apiKey: "test", teamId: "team-one", fetch: async () => new Response(new Uint8Array(4_194_305)) });
   await expect(tooLarge.list()).rejects.toMatchObject({ code: "response_too_large" });
   expect(() => HostedTasksetSummarySchema.parse({ ...item, privateSource: "private bytes" })).toThrow();

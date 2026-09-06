@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const IdSchema = z.string().trim().min(1).max(500);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
+export const TasksetCatalogReleaseRefSchema = z.object({ id: IdSchema, revision: z.number().int().positive(), contentHash: HashSchema }).strict();
 
 /** Inventory metadata only. Task rows, evaluator source, and object locations
  * are resolved separately by an authorized package operation. */
@@ -9,7 +10,7 @@ export const HostedTasksetSummarySchema = z.object({
   schemaVersion: z.literal("openpond.hostedTasksetSummary.v1"),
   id: IdSchema,
   teamId: IdSchema,
-  release: z.object({ id: IdSchema, revision: z.number().int().positive(), contentHash: HashSchema }).strict(),
+  release: TasksetCatalogReleaseRefSchema,
   name: z.string().min(1).max(500),
   description: z.string().max(20_000),
   taskCount: z.number().int().nonnegative(),
@@ -72,6 +73,14 @@ export class OpenPondTasksetCatalogClient {
     const parsed = IdSchema.parse(id);
     const item = HostedTasksetSummarySchema.parse(await this.#request(`/${encodeURIComponent(parsed)}`, options.signal));
     if (item.id !== parsed || item.teamId !== this.#options.teamId) throw new OpenPondTasksetCatalogError(502, "catalog_identity_mismatch", "Taskset metadata did not match the requested identity.");
+    return item;
+  }
+
+  /** Resolve a saved portable reference without scanning inventory pages. */
+  async resolve(release: z.infer<typeof TasksetCatalogReleaseRefSchema>, options: { signal?: AbortSignal } = {}): Promise<HostedTasksetSummary> {
+    const parsed = TasksetCatalogReleaseRefSchema.parse(release);
+    const item = HostedTasksetSummarySchema.parse(await this.#request(`/releases/${encodeURIComponent(parsed.id)}/${parsed.revision}/${parsed.contentHash}`, options.signal));
+    if (item.teamId !== this.#options.teamId || item.release.id !== parsed.id || item.release.revision !== parsed.revision || item.release.contentHash !== parsed.contentHash) throw new OpenPondTasksetCatalogError(502, "catalog_release_mismatch", "Taskset metadata did not match the requested immutable release.");
     return item;
   }
 
