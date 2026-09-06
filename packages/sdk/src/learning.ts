@@ -65,7 +65,7 @@ export class OpenPondLearningClient {
   async #request(endpoint: "commands" | "read", body: unknown, options: LearningRequestOptions): Promise<unknown> {
     assertBoundedTaskJson(body, 16_777_216);
     const response = await (this.#options.fetch ?? globalThis.fetch)(`${this.#options.baseUrl}/v1/learning/${endpoint}`, {
-      method: "POST", headers: { Authorization: `Bearer ${this.#options.apiKey}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body), signal: options.signal,
+      method: "POST", headers: { Authorization: `Bearer ${this.#options.apiKey}`, "Content-Type": "application/json", Accept: "application/json", "X-OpenPond-Team-Id": this.#options.scope }, body: JSON.stringify(body), signal: options.signal,
       redirect: "error",
     });
     const payload = await readBoundedLearningResponse(response);

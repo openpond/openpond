@@ -21,7 +21,9 @@ python3 submit.py SOURCE_ID example.json
 
 Use the URL of the execution owner: a local OpenPond server or the hosted API
 where the learning service is deployed. The server authorizes the requested
-profile/team scope. These variables are example configuration, not arguments
+profile/team scope. The SDK and Python example send the selected scope in
+`X-OpenPond-Team-Id` so hosted requests select that team before authorization;
+the local server uses the profile scope in the request body. These variables are example configuration, not arguments
 that should be committed with credentials.
 
 Assign stable example/attempt identities and preserve `idempotencyKey`, timestamp
