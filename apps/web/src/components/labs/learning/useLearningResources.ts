@@ -1,6 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OpenPondLearningClient, type LearningCommand, type LearningResourceFor, type LearningResourceKind, type LearningResourcePage, type LearningResourceQuery } from "openpond-sdk/learning";
 import type { ClientConnection } from "../../../api";
+import type { LearningRevisionRef, TaskEvidenceInspectionResult } from "openpond-sdk/learning";
+
+export function useLearningInspection(client: OpenPondLearningClient | null, evidence: LearningRevisionRef) {
+  const { id, revision, contentHash } = evidence;
+  const key = `${id}:${revision}:${contentHash}`;
+  const [state, setState] = useState<{ client: OpenPondLearningClient | null; key: string; result: TaskEvidenceInspectionResult | null; error: string | null } | null>(null);
+  useEffect(() => {
+    const abort = new AbortController();
+    async function read() {
+      try {
+        if (!client) throw new Error("Connect to OpenPond to validate this example.");
+        const result = await client.inspectEvidence({ id, revision, contentHash }, { signal: abort.signal });
+        if (!abort.signal.aborted) setState({ client, key, result, error: null });
+      } catch (error) {
+        if (!abort.signal.aborted) setState({ client, key, result: null, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    void read();
+    return () => abort.abort();
+  }, [client, id, revision, contentHash, key]);
+  const current = state?.client === client && state?.key === key ? state : null;
+  return { inspection: current?.result?.inspection ?? null, error: current?.error ?? null };
+}
 
 export function useLearningClient(connection: ClientConnection | null, scope: string) {
   return useMemo(() => connection ? new OpenPondLearningClient({ baseUrl: connection.serverUrl, apiKey: connection.token, scope }) : null, [connection, scope]);

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "evidence": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "definition": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "inspection": {
+      "type": "object",
+      "properties": {
+        "evidenceValidity": {
+          "type": "string",
+          "enum": [
+            "valid",
+            "invalid"
+          ]
+        },
+        "taskReady": {
+          "type": "boolean"
+        },
+        "observedOutputValid": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issues": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema1"
+          }
+        }
+      },
+      "required": [
+        "evidenceValidity",
+        "taskReady",
+        "observedOutputValid",
+        "issues"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "evidence",
+    "definition",
+    "inspection"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "contentHash",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "__schema1": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "urn:openpond:learning:v1:evidence-inspection",
+  "$comment": "Generated from @openpond/evals. Cross-resource identity, authorization, idempotency, admission, grading and split constraints are enforced by the shared domain service in addition to this structural schema."
+}

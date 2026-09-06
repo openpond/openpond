@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   LearningCommandRequestSchema, LearningOperationResultSchema, LearningReadRequestSchema,
+  TaskEvidenceInspectionResultSchema, sameLearningRef, type LearningRevisionRef,
   assertLearningRequestJson,
   learningResourceSchemas, type LearningCommand, type LearningOperationResult,
   type LearningResourceFor, type LearningResourceKind, type LearningResourcePage,
@@ -62,6 +63,13 @@ export class OpenPondLearningClient {
   async get<K extends LearningResourceKind>(kind: K, id: string, revision?: number, options: LearningRequestOptions = {}): Promise<LearningResourceFor<K>> {
     const request = LearningReadRequestSchema.parse({ action: "get", scope: this.#options.scope, kind, id, ...(revision === undefined ? {} : { revision }) });
     return learningResourceSchemas[kind].parse(await this.#request("read", request, options)) as LearningResourceFor<K>;
+  }
+
+  async inspectEvidence(evidence: LearningRevisionRef, options: LearningRequestOptions = {}) {
+    const request = LearningReadRequestSchema.parse({ action: "inspect_evidence", scope: this.#options.scope, evidence });
+    const result = TaskEvidenceInspectionResultSchema.parse(await this.#request("read", request, options));
+    if (!sameLearningRef(result.evidence, evidence)) throw new OpenPondLearningError(502, "evidence_identity_mismatch", "Inspection did not match the requested evidence release.", null);
+    return result;
   }
 
   async list<K extends LearningResourceKind>(kind: K, query: Partial<LearningResourceQuery> = {}, options: LearningRequestOptions = {}): Promise<LearningResourcePage<K>> {

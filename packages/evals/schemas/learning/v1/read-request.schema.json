@@ -6,6 +6,47 @@
       "properties": {
         "action": {
           "type": "string",
+          "const": "inspect_evidence"
+        },
+        "scope": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "evidence": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "contentHash": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "contentHash",
+            "revision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "action",
+        "scope",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
           "const": "get"
         },
         "scope": {

@@ -4,12 +4,50 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import standaloneCode from "ajv/dist/standalone/index.js";
 import { build } from "esbuild";
 
-// Compile the fixed dialect meta-schema during the package build. Authored task
+// Compile the supported dialect profile during the package build. Authored task
 // schemas remain data in browsers with CSP; only server-side value validation
 // compiles their executable validators.
-const ajv = new Ajv2020({ code: { source: true, esm: true }, allErrors: false, validateFormats: false });
-const validate = ajv.getSchema("https://json-schema.org/draft/2020-12/schema");
-if (!validate) throw new Error("JSON Schema 2020-12 meta-schema is unavailable.");
+const child = { $ref: "#" };
+const schemaMap = { $ref: "#/$defs/schemaMap" };
+const schemaArray = { $ref: "#/$defs/schemaArray" };
+const stringArray = { $ref: "#/$defs/stringArray" };
+const natural = { $ref: "#/$defs/natural" };
+const schemaType = { $ref: "#/$defs/schemaType" };
+// This declarative meta-schema describes exactly the bounded 2020-12 keyword
+// profile. Reference locality, expansion and JSON budgets are checked separately.
+const profile = {
+  $defs: {
+    schemaMap: { type: "object", additionalProperties: child },
+    schemaArray: { type: "array", items: child, minItems: 1, maxItems: 32 },
+    stringArray: { type: "array", items: { type: "string" }, uniqueItems: true },
+    natural: { type: "integer", minimum: 0 },
+    schemaType: { enum: ["array", "boolean", "integer", "null", "number", "object", "string"] },
+  },
+  type: ["object", "boolean"],
+  additionalProperties: false,
+  properties: {
+    $schema: { const: "https://json-schema.org/draft/2020-12/schema" },
+    $ref: { type: "string" }, $comment: { type: "string" },
+    $defs: schemaMap, properties: schemaMap, dependentSchemas: schemaMap,
+    allOf: schemaArray, anyOf: schemaArray, oneOf: schemaArray, prefixItems: schemaArray,
+    items: child, additionalProperties: child, not: child, if: child, then: child, else: child,
+    contains: child, unevaluatedProperties: child, unevaluatedItems: child, propertyNames: child,
+    type: { anyOf: [schemaType, { type: "array", items: schemaType, minItems: 1, uniqueItems: true }] },
+    enum: { type: "array", minItems: 1 }, const: true, default: true,
+    title: { type: "string" }, description: { type: "string" }, examples: { type: "array" },
+    readOnly: { type: "boolean" }, writeOnly: { type: "boolean" }, deprecated: { type: "boolean" },
+    multipleOf: { type: "number", exclusiveMinimum: 0 },
+    maximum: { type: "number" }, exclusiveMaximum: { type: "number" },
+    minimum: { type: "number" }, exclusiveMinimum: { type: "number" },
+    maxLength: natural, minLength: natural, maxItems: natural, minItems: natural,
+    maxContains: natural, minContains: natural, maxProperties: natural, minProperties: natural,
+    uniqueItems: { type: "boolean" }, required: stringArray,
+    dependentRequired: { type: "object", additionalProperties: stringArray },
+    contentEncoding: { type: "string" }, contentMediaType: { type: "string" },
+  },
+};
+const ajv = new Ajv2020({ code: { source: true, esm: true }, inlineRefs: false, strictTypes: false, allErrors: false, messages: false, validateFormats: false });
+const validate = ajv.compile(profile);
 const compiled = await build({
   stdin: { contents: standaloneCode(ajv, validate), resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "js" },
   bundle: true, platform: "browser", target: "es2022", format: "esm", write: false, minify: true,
