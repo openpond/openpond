@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   type ModelEvaluationReceipt,
   type ModelEvaluationStopReceipt,
@@ -538,28 +538,35 @@ export function LabModelVersionDetailPage({
           ) : null}
           {activeDetailTab === "evaluation" ? (
             <div className="training-run-evaluation">
-              <TrainingRunEvaluation
-                detail={detail.detail}
-                loading={detail.loading}
-                pending={runActive}
-              />
+              {!detail.detail?.evaluation && managedEvidence?.evaluations.length ? (
+                <p className="training-muted">
+                  Hosted evaluation scores are shown below. Per-task outputs have not been imported.
+                </p>
+              ) : (
+                <TrainingRunEvaluation
+                  detail={detail.detail}
+                  loading={detail.loading}
+                  pending={runActive}
+                />
+              )}
               {!detail.detail?.evaluation &&
               managedEvidence?.evaluations.length ? (
                 <dl className="labs-inline-facts">
                   {managedEvidence.evaluations.map((evaluation) => (
-                    <Fact
-                      key={`${evaluation.kind}:${evaluation.policyVersion}`}
-                      label={
-                        evaluation.kind === "baseline"
-                          ? "Baseline score"
-                          : "Candidate score"
-                      }
-                      value={
-                        evaluation.score == null
+                    <Fragment key={`${evaluation.kind}:${evaluation.policyVersion}`}>
+                      <Fact
+                        label={evaluation.kind === "baseline" ? "Baseline score" : "Candidate score"}
+                        value={evaluation.score == null ? "Not reported" : evaluation.score.toFixed(6)}
+                      />
+                      <Fact
+                        label={evaluation.kind === "baseline" ? "Baseline coverage" : "Candidate coverage"}
+                        value={evaluation.taskCount == null
                           ? "Not reported"
-                          : evaluation.score.toFixed(6)
-                      }
-                    />
+                          : evaluation.targetTaskCount == null
+                            ? `${evaluation.taskCount} tasks scored`
+                            : `${evaluation.taskCount} of ${evaluation.targetTaskCount} tasks scored`}
+                      />
+                    </Fragment>
                   ))}
                 </dl>
               ) : null}

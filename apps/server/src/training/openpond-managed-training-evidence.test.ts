@@ -23,7 +23,10 @@ describe("managed training evidence projection", () => {
         { type: "gpu_allocation_state", data: { provider: "runpod", gpuType: "A100", gpuCount: 2, hourlyCostUsd: 1.5 } },
       ] as never,
       outputs: {
-        outputs: [],
+        outputs: [
+          { kind: "evaluation", metadata: { kind: "baseline", policyVersion: 0, score: 1, threshold: 0, passed: true, metrics: { taskCount: 1 } } },
+          { kind: "evaluation", metadata: { kind: "candidate", policyVersion: 1, score: 0.8, threshold: 0, passed: true, metrics: { taskCount: 20, targetTaskCount: 20 } } },
+        ],
         receipt: { spendUsd: 1.25, durationSeconds: 90 },
       } as never,
       syncedAt: "2026-09-01T12:00:00.000Z",
@@ -42,6 +45,10 @@ describe("managed training evidence projection", () => {
       },
       resource: { durationSeconds: 90, gpuSeconds: 180 },
       movement: { adapterDeltaNorm: 0.125 },
+      evaluations: [
+        { kind: "baseline", taskCount: 1, targetTaskCount: null },
+        { kind: "candidate", taskCount: 20, targetTaskCount: 20 },
+      ],
     });
   });
 });
