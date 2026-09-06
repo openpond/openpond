@@ -1,6 +1,7 @@
 import type { Taskset } from "@openpond/contracts";
 import type { TasksetRelease } from "@openpond/evals";
 import { materializePortableTasksetRelease } from "@openpond/taskset-sdk";
+import { desktopTasksetRuntimeAdapterId } from "./portable-evals-adapter.js";
 
 /** Publication and run admission must select the same immutable envelope. */
 export async function requireReleasedTaskset(
@@ -11,6 +12,6 @@ export async function requireReleasedTaskset(
   if (release) return release;
   return materializePortableTasksetRelease({
     taskset,
-    adapterId: "openpond-preference-comparisons-v1",
+    adapterId: desktopTasksetRuntimeAdapterId(taskset),
   }).tasksetRelease;
 }

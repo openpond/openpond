@@ -11,6 +11,8 @@ import { sftRecipeFixture, tasksetFixture } from "./helpers/training-fixtures";
 import { createPortableModelRunService } from "../apps/server/src/training/portable-model-run-service";
 import { createTrainingPlanLifecycleService } from "../apps/server/src/training/training-plan-lifecycle-service";
 import { PortablePreparationTrainingDestination } from "../apps/server/src/training/destinations";
+import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release";
+import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter";
 
 // A second window must not overwrite a stale Model, and retrying a lost response
 // must return the committed receipt even if another window has edited it since.
@@ -62,6 +64,8 @@ test("prepares an immutable run without overwriting a concurrent Model edit", as
   const store = new SqliteStore(home);
   try {
     const taskset = await store.upsertTaskset(tasksetFixture({ ready: true }));
+    const publishedRelease = await requireReleasedTaskset({ releaseForTaskset: async () => null }, taskset);
+    expect(compileDesktopHarnessContext({ taskset, tasksetRelease: publishedRelease, model: { providerId: "openpond", modelId: "fixture" } }).tasksetRelease).toEqual(publishedRelease);
     const reference = { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash };
     const recipe = sftRecipeFixture();
     const project = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({
