@@ -21,12 +21,12 @@ import {
   gradeAttempt,
   type ModelJudgeRunner,
 } from "@openpond/taskset-sdk";
-import { loadOpenPondProfileState } from "@openpond/cloud";
+import type { loadOpenPondProfileState } from "@openpond/cloud";
 
 import type { SqliteStore } from "../store/store.js";
 import { artifactSplit, fixtureAttempt } from "./evaluation-helpers.js";
 import { buildTasksetReadiness } from "./readiness.js";
-import { runSandboxedVerifier } from "./sandboxed-verifier.js";
+import { createTasksetEvaluationVerifier } from "./evaluation-custom-verifier.js";
 import { gradeTasksetEvaluationAttempt } from "./task-evaluation-grade-runner.js";
 import { runPostTrainingEvaluationAttempt } from "./task-evaluation-attempt-runner.js";
 import { compileDesktopHarnessContext } from "./portable-evals-adapter.js";
@@ -41,8 +41,7 @@ import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.
 import { hostedModelJudgeCallCost } from "./evaluation-grader-cost.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import { reviewRefMatches, variance } from "./evaluation-service-statistics.js";
-import { createLearningBatchVerifier } from "./learning-batch-verifier.js";
-import { createTasksetBindingVerifier, resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
+import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
 
 type AuditFixtureInput = {
   label:
@@ -248,7 +247,7 @@ export function createTaskEvaluationService(deps: {
     const taskset = await requireTaskset(input.tasksetId);
     const attempt = TaskAttemptResultSchema.parse(input.attempt);
     const task = await findTask(taskset, input.taskId, attempt.split);
-    const customVerifier = await customVerifierFor(taskset);
+    const customVerifier = await createTasksetEvaluationVerifier(deps, taskset);
     const rawUsages: unknown[] = [];
     let explicitCostUsd = 0;
     let modelJudgeCalls = 0;
@@ -334,7 +333,7 @@ export function createTaskEvaluationService(deps: {
     fixtures?: AuditFixtureInput[];
   }) {
     const taskset = await requireTaskset(input.tasksetId);
-    const customVerifier = await customVerifierFor(taskset);
+    const customVerifier = await createTasksetEvaluationVerifier(deps, taskset);
     const fixtures = input.fixtures?.length
       ? input.fixtures.map((fixture, index) => ({
           ...fixture,
@@ -940,51 +939,6 @@ export function createTaskEvaluationService(deps: {
     return deps.resolveTask({ tasksetId: taskset.id, taskId, split });
   }
 
-  async function customVerifierFor(taskset: import("@openpond/contracts").Taskset) {
-    const tasksetId = taskset.id;
-    if (!taskset.graders.some((grader) => grader.kind === "custom_verifier")) {
-      return undefined;
-    }
-    if (taskset.metadata.learning !== undefined) return createLearningBatchVerifier(deps.store, taskset);
-    if (taskset.metadata.rewardBinding !== undefined) return createTasksetBindingVerifier(deps.store, taskset);
-    const profile = deps.storeDir
-      ? null
-      : await (deps.loadProfileState ?? loadOpenPondProfileState)();
-    const tasksetRoot = deps.storeDir
-      ? path.join(deps.storeDir, "training", "tasksets", tasksetId)
-      : profile?.sourcePath
-        ? path.join(profile.sourcePath, "tasksets", tasksetId)
-        : null;
-    const creationSnapshotId =
-      typeof taskset.metadata.creationSnapshotId === "string"
-        ? taskset.metadata.creationSnapshotId
-        : null;
-    const proposal = creationSnapshotId
-      ? await deps.store.getTaskDesignProposal(creationSnapshotId)
-      : null;
-    if (tasksetRoot && taskset.purpose !== "benchmark") {
-      await buildTaskset(taskset, tasksetRoot, {
-        generatedFiles: proposal?.generatedFiles ?? [],
-      });
-    }
-    return tasksetRoot
-      ? ({
-          grader,
-          task,
-          attempt,
-        }: Parameters<
-          NonNullable<
-            Parameters<typeof gradeAttempt>[0]["customVerifier"]
-          >
-        >[0]) =>
-          runSandboxedVerifier({
-            grader,
-            task,
-            attempt,
-            allowedRoot: tasksetRoot,
-          })
-      : undefined;
-  }
 
   return {
     execute,
