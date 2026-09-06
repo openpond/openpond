@@ -48,7 +48,7 @@ import type {
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import { TrainingStateResponseSchema } from "@openpond/contracts";
-import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { checkModelConfiguration, modelConfigurationRequest } from "../lib/model-project-configuration";
 import type { HostedModelProjectCatalog } from "./hosted-model-project-types";
 
 export type PreferenceComparisonReview = {
@@ -337,15 +337,13 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       `/comparison-series-entries/${encodeURIComponent(input.entryId)}/promotion`,
       input,
     ),
+    checkModelProject: (project: ModelProject, expectedRevision = project.revision) =>
+      checkModelConfiguration(connection, project, expectedRevision),
     saveModelProject: async (project: ModelProject, expectedRevision = project.revision) =>
       mutate<ModelProject>(
         "save-model-project",
         "/models",
-        await createModelProjectSaveRequest({
-          id: project.id, profileId: project.profileId, name: project.name,
-          objective: project.objective, defaultBaseModel: project.defaultBaseModel,
-          defaultDestinationId: project.defaultDestinationId, trainingSetup: project.trainingSetup,
-        }, expectedRevision),
+        await modelConfigurationRequest(project, expectedRevision),
         "PUT",
       ),
     listHostedModelProjects: async (options: {

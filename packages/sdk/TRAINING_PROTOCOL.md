@@ -33,6 +33,15 @@ their placement, worker, lease, credential, or storage internals.
 
 ## Required provider routes
 
+`ModelProjectConfigurationCheckSchema` describes a read-only configuration check.
+Its `configurationHash` covers the editable Model and expected revision through
+`modelProjectConfigurationHash`; `canSave` and bounded findings describe the
+server's resource checks at `checkedAt`. Deferred base-model and Taskset choices
+are explicit. This receipt does not certify training readiness, Reward quality,
+or candidate performance and does not authorize compute. Desktop exposes the
+check at `POST /v1/training/models/check` with a `ModelProjectSaveRequest` body.
+Hosted configuration checking is adopted separately from the V2 sync routes.
+
 ```text
 GET  /v1/training/capabilities
 POST /v1/training/artifacts

@@ -52,7 +52,7 @@ import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
 import { SqliteTasksetDraftStore } from "./store-taskset-drafts.js";
 import type { ModelProjectSaveRequest } from "openpond-sdk/model-projects";
-import { commitModelProjectSave } from "./store-model-project-authoring.js";
+import { commitModelProjectSave, findModelProjectSave } from "./store-model-project-authoring.js";
 import { commitModelProjectHosting } from "./store-model-project-hosting.js";
 import {
   appendTrainingChatSearchText,
@@ -671,6 +671,13 @@ export class SqliteTrainingStore extends SqliteTasksetDraftStore {
       [project.id, project.profileId, JSON.stringify(project), project.createdAt, project.updatedAt],
     );
     return project;
+  }
+
+  async findModelProjectConfigurationSave(request: ModelProjectSaveRequest): Promise<ModelProject | null> {
+    await this.ready;
+    await this.writeQueue;
+    if (!this.db) throw new Error("Model check failed because the local store is closed.");
+    return findModelProjectSave(this.db, request);
   }
 
   async saveModelProjectConfiguration(request: ModelProjectSaveRequest): Promise<ModelProject> {

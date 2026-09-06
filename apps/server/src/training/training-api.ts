@@ -107,6 +107,7 @@ import { createLocalLearningRuntime } from "./learning-runtime.js";
 import { parseModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
+import { checkModelProjectConfiguration } from "./model-project-configuration-check.js";
 import {
   boundedInteger,
   optionalComparisonEntryRef,
@@ -670,6 +671,9 @@ export function createTrainingApi(deps: {
     }
     if (action === "save_model_project") {
       return deps.store.saveModelProjectConfiguration(parseModelProjectSaveRequest(input));
+    }
+    if (action === "check_model_project") {
+      return checkModelProjectConfiguration({ store: deps.store, request: input, destinations: deps.training.destinations });
     }
     if (action === "version_model_project_onto_managed_rl_base") {
       const modelProjectId = requiredString(

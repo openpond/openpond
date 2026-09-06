@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Headers": "authorization, content-type, x-openpond-team-id",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 };
 

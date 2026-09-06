@@ -35,8 +35,14 @@ Add tasks later draft option, final-only persistence and Configure reopening.
 The browser verified creation, exact Taskset restoration and unsaved-edit
 retention/discard. Existing configuration edits pin the originally opened Model
 revision rather than adopting background refreshes. The Reward step inspects the
-selected release; embedded Reward authoring, harness selection and server-side
-configuration checks still need their execution-backed integration.
+selected release. Check setup and Save now request a read-only server check of
+the opened Model revision, exact owned Taskset, current base-model availability
+and any selected Harness source. The public receipt identifies the configuration
+hash and separates deferred draft choices from blocking findings. Exact saved
+operation retries remain valid after later edits. Browser checks verified the
+server response and successful save. The SDK's scope header is accepted by local
+CORS preflight, preserving browser access to Reward resources. Embedded Reward
+authoring and harness selection still need their execution-backed integration.
 
 Run preparation now owns a Model snapshot and never rewrites saved configuration.
 Taskset selection survives newer revisions through quoting, bundling and managed
