@@ -28,7 +28,7 @@ def main():
         body = json.dumps(payload, allow_nan=False).encode("utf-8")
         if len(body) > 16_777_216:
             raise ValueError("Request exceeds 16 MiB.")
-        request = urllib.request.Request(endpoint + "/v1/learning/" + route, data=body, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json", "Accept": "application/json"}, method="POST")
+        request = urllib.request.Request(endpoint + "/v1/learning/" + route, data=body, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json", "Accept": "application/json", "X-OpenPond-Team-Id": scope}, method="POST")
         try:
             with opener.open(request, timeout=60) as response:
                 result = response.read(16_777_217)
