@@ -13,7 +13,7 @@ describe("Training Bundle", () => {
       const manifest = await buildTrainingBundle({ taskset, plan: planFixture(taskset), directory });
       expect(manifest).toMatchObject({ containsRawChats: false, containsSecrets: false, containsHiddenGraderAssets: false, excludedSourceIds: [] });
       const rows = (await readFile(path.join(directory, "data/train.jsonl"), "utf8")).trim().split("\n").map(JSON.parse);
-      expect(rows).toEqual([{ id: "task_train", input: { prompt: "Say hello" }, expectedOutput: { text: "Hello friend" }, tags: ["fixture"] }]);
+      expect(rows).toEqual([{ id: "task_train", input: { prompt: "Say hello" }, policyVisibleContext: {}, expectedOutput: { text: "Hello friend" }, tags: ["fixture"] }]);
       expect(JSON.stringify(rows)).not.toContain("Source source_train");
       expect((await validateTrainingBundle(directory)).valid).toBe(true);
       const portable = await createTrainingBundleExport(directory);

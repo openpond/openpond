@@ -38,6 +38,7 @@ import {
 import {
   navigateDesktopRoute,
   navigateModelsRoute,
+  modelsLocation,
 } from "../components/labs/lab-primary-tab-state";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
@@ -804,7 +805,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
         objective: input.objective,
         initialSessionIds: input.sessionId ? [input.sessionId] : [],
       });
-      navigateModelsRoute({ kind: "index" });
+      navigateModelsRoute(modelsLocation());
       setView("labs");
     },
     [setView]

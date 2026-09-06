@@ -32,15 +32,13 @@ type TasksetListItem =
 export type TasksetDetailTab =
   | "overview"
   | "tasks"
-  | "scoring"
-  | "graders"
+  | "reward"
   | "attempts"
   | "releases";
 const TASKSET_DETAIL_TABS: Array<{ id: TasksetDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "tasks", label: "Tasks" },
-  { id: "scoring", label: "Scoring" },
-  { id: "graders", label: "Graders" },
+  { id: "reward", label: "Reward" },
   { id: "attempts", label: "Attempts" },
   { id: "releases", label: "Releases" },
 ];
@@ -256,9 +254,7 @@ export function LabDatasetsPage({
             </button>
           ))}
         </div>
-        {activeDetailTab === "graders" ? (
-          <LabTasksetGraders taskset={selected} training={training} />
-        ) : activeDetailTab === "attempts" ? (
+        {activeDetailTab === "attempts" ? (
           <TasksetAttempts taskset={selected} training={training} />
         ) : activeDetailTab === "releases" ? (
           <TasksetVersions state={state} taskset={selected} />
@@ -270,7 +266,7 @@ export function LabDatasetsPage({
               tab={
                 activeDetailTab === "tasks"
                   ? "tasks"
-                  : activeDetailTab === "scoring"
+                  : activeDetailTab === "reward"
                     ? "scoring"
                     : "overview"
               }
@@ -279,7 +275,8 @@ export function LabDatasetsPage({
               onToast={onToast}
               training={training}
             />
-            {activeDetailTab === "scoring" &&
+            {activeDetailTab === "reward" ? <LabTasksetGraders taskset={selected} training={training} /> : null}
+            {activeDetailTab === "reward" &&
             selected.metadata.flagship === "cross-system-operations" ? (
               <LabExpertBootstrap
                 busyAction={training.busyAction}
@@ -310,7 +307,7 @@ export function LabDatasetsPage({
             New Taskset
           </button>
         ) : undefined}
-        title={modelProjectId ? "Tasksets" : "Taskset Library"}
+        title="Tasksets"
         description={modelProjectId
           ? "Taskset releases attached to this Model Project."
           : "Reusable task releases, environment inputs, scoring rules, and immutable evidence."}

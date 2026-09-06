@@ -1,5 +1,6 @@
 export * from "./canonical-json.js";
 export * from "./drafts.js";
+export * from "./learning-batch.js";
 export * from "./graders.js";
 export * from "./hashing.js";
 export * from "./local-run.js";

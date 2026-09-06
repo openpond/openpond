@@ -1,3 +1,4 @@
+import { TasksetDraftMetricsSection } from "./TasksetDraftMetricsSection";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ChatModelRef,
@@ -17,6 +18,7 @@ import {
 } from "./TasksetDraftEditorPrimitives";
 import { TasksetDraftValidationStatus } from "./TasksetDraftValidationStatus";
 import { TasksetSplitBuilder } from "./TasksetSplitBuilder";
+import { useDraftNavigation } from "../labs/useDraftNavigation";
 import {
   TASKSET_DRAFT_SECTIONS,
   draftValidationIssues,
@@ -52,6 +54,7 @@ export function TasksetDraftEditor({
     training.payload?.tasksetDrafts.find((candidate) => candidate.id === draftId) ?? null
   );
   const [section, setSection] = useState<TasksetDraftSection>("overview");
+  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(training.payload?.tasksetDrafts.find((candidate) => candidate.id === draftId) ?? null));
   const [notice, setNotice] = useState<string | null>(null);
   const [validationOpen, setValidationOpen] = useState(false);
   const [workspace, setWorkspace] = useState<{
@@ -68,6 +71,7 @@ export function TasksetDraftEditor({
       creatingRef.current = false;
       if (!created) return;
       setDraft(created);
+      setSavedSnapshot(JSON.stringify(created));
       setLocalDraftId(created.id);
     });
   }, [draft, localDraftId, training.actions]);
@@ -77,7 +81,7 @@ export function TasksetDraftEditor({
     const persisted = training.payload?.tasksetDrafts.find(
       (candidate) => candidate.id === localDraftId,
     );
-    if (persisted) setDraft(persisted);
+    if (persisted) { setDraft(persisted); setSavedSnapshot(JSON.stringify(persisted)); }
   }, [draft, localDraftId, training.payload?.tasksetDrafts]);
 
   useEffect(() => {
@@ -91,12 +95,14 @@ export function TasksetDraftEditor({
 
   const issues = useMemo(() => draft ? draftValidationIssues(draft) : [], [draft]);
   const busy = training.busyAction?.includes("taskset-draft") ?? false;
+  const draftNavigation = useDraftNavigation({ dirty: draft !== null && draft.status !== "published" && JSON.stringify(draft) !== savedSnapshot, busy, name: "Taskset draft", save: async () => Boolean(await save()) });
 
   async function save(): Promise<TasksetDraft | null> {
     if (!draft || draft.status === "published") return draft;
     const saved = await training.actions.saveTasksetDraft(draft);
     if (!saved) return null;
     setDraft(saved);
+    setSavedSnapshot(JSON.stringify(saved));
     setNotice("Draft saved.");
     const nextWorkspace = await training.actions.tasksetDraftWorkspace(saved.id);
     if (nextWorkspace) setWorkspace(nextWorkspace);
@@ -113,6 +119,7 @@ export function TasksetDraftEditor({
     );
     if (!result) return;
     setDraft(result.draft);
+    setSavedSnapshot(JSON.stringify(result.draft));
     setNotice(
       result.hostedSync.state === "synced"
         ? "Published locally and synced to the hosted Model Project."
@@ -120,6 +127,7 @@ export function TasksetDraftEditor({
           ? "Published locally. Hosted sync failed and can be retried from the Taskset."
           : "Published locally.",
     );
+    draftNavigation.allowNextNavigation();
     onPublished(result.taskset.id);
   }
 
@@ -142,7 +150,7 @@ export function TasksetDraftEditor({
     <main className="taskset-draft-editor" aria-label="Taskset draft editor">
       <header className="taskset-draft-header">
         <div>
-          <button className="training-text-button" type="button" onClick={onBack}>
+          <button className="training-text-button" type="button" onClick={() => { void draftNavigation.requestLeave(() => { draftNavigation.allowNextNavigation(); onBack(); }); }}>
             Back
           </button>
           <input
@@ -169,7 +177,7 @@ export function TasksetDraftEditor({
               className="training-button secondary"
               disabled={busy}
               type="button"
-              onClick={() => onOpenChat(draft)}
+              onClick={async () => { const saved = await save(); if (saved) { draftNavigation.allowNextNavigation(); onOpenChat(saved); } }}
             >
               Continue in Chat
             </button>
@@ -178,7 +186,7 @@ export function TasksetDraftEditor({
             <button
               className="training-button secondary"
               type="button"
-              onClick={onUseExistingTaskset}
+              onClick={async () => { if (await save()) { draftNavigation.allowNextNavigation(); onUseExistingTaskset(); } }}
             >
               Use existing
             </button>
@@ -225,6 +233,7 @@ export function TasksetDraftEditor({
         ))}
       </nav>
 
+      {draftNavigation.dialog}
       <div className="taskset-draft-body">
         {validationOpen ? <TasksetDraftValidationStatus draft={draft} issues={issues} /> : null}
         {section === "overview" ? (
@@ -249,7 +258,7 @@ export function TasksetDraftEditor({
             />
             <details className="taskset-draft-advanced">
               <summary>Advanced metrics</summary>
-              <MetricsSection draft={draft} disabled={readOnly} onChange={update} />
+              <TasksetDraftMetricsSection draft={draft} disabled={readOnly} onChange={update} />
             </details>
           </>
         ) : null}
@@ -931,68 +940,6 @@ function ReviewSection({ draft, disabled, onChange }: SectionProps) {
             Add criterion
           </button>
         </>
-      ) : null}
-    </EditorSection>
-  );
-}
-
-function MetricsSection({ draft, disabled, onChange }: SectionProps) {
-  const metrics = draft.metrics;
-  return (
-    <EditorSection
-      title="Metrics and reward aggregation"
-      description="Built-in aggregation stays declarative. A custom module is created in the workspace and content-hashed automatically when you save."
-    >
-      <div className="taskset-draft-field-grid three">
-        <Field label="Primary metric">
-          <input disabled={disabled} value={metrics.primaryMetric} onChange={(event) => onChange({ ...draft, metrics: { ...metrics, primaryMetric: event.target.value } })} />
-        </Field>
-        <Field label="Aggregation">
-          <select
-            disabled={disabled}
-            value={metrics.aggregation}
-            onChange={(event) => {
-              const aggregation = event.target.value as TasksetDraft["metrics"]["aggregation"];
-              onChange({
-                ...draft,
-                metrics: {
-                  ...metrics,
-                  aggregation,
-                  customAggregator: aggregation === "custom"
-                    ? metrics.customAggregator ?? {
-                        module: "metrics/aggregate.ts",
-                        exportName: "aggregate",
-                        contentHash: "0".repeat(64),
-                        timeoutMs: 30_000,
-                        networkPolicy: "none",
-                      }
-                    : null,
-                },
-              });
-            }}
-          >
-            <option value="mean_score">Mean score</option>
-            <option value="pass_rate">Pass rate</option>
-            <option value="weighted_mean">Weighted mean</option>
-            <option value="custom">Custom module</option>
-          </select>
-        </Field>
-        <Field label="Missing reward">
-          <select disabled={disabled} value={metrics.missingReward} onChange={(event) => onChange({ ...draft, metrics: { ...metrics, missingReward: event.target.value as TasksetDraft["metrics"]["missingReward"] } })}>
-            <option value="zero">Count as zero</option>
-            <option value="exclude">Exclude</option>
-          </select>
-        </Field>
-      </div>
-      {metrics.customAggregator ? (
-        <div className="taskset-draft-field-grid">
-          <Field label="Module">
-            <input disabled={disabled} value={metrics.customAggregator.module} onChange={(event) => onChange({ ...draft, metrics: { ...metrics, customAggregator: { ...metrics.customAggregator!, module: event.target.value } } })} />
-          </Field>
-          <Field label="SHA-256 (managed on save)">
-            <input disabled value={metrics.customAggregator.contentHash} readOnly />
-          </Field>
-        </div>
       ) : null}
     </EditorSection>
   );

@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.0.18",
+  "version": "0.1.0",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -11,9 +11,15 @@
     "fixtures",
     "README.md",
     "TRAINING_PROTOCOL.md",
-    "LICENSE"
+    "LICENSE",
+    "examples",
+    "LEARNING.md"
   ],
   "exports": {
+    "./learning": {
+      "types": "./dist/types/packages/sdk/src/learning.d.ts",
+      "import": "./dist/learning.js"
+    },
     ".": {
       "types": "./dist/types/packages/sdk/src/index.d.ts",
       "import": "./dist/index.js"
@@ -74,11 +80,11 @@
     "@openpond/harness"
   ],
   "scripts": {
-    "prebuild": "pnpm --dir ../cloud run build && pnpm --dir ../harness run build",
+    "prebuild": "pnpm --dir ../cloud run build && pnpm --dir ../harness run build && pnpm --dir ../evals run build",
     "build": "tsx scripts/build.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project sdk",
-    "check": "pnpm run typecheck && pnpm run test && tsx scripts/check-protocol-fixtures.ts && pnpm run build && tsx scripts/check-published-consumer.ts && npm pack --dry-run",
+    "check": "pnpm run typecheck && pnpm run test && tsx scripts/check-protocol-fixtures.ts && pnpm run build && tsx scripts/check-published-consumer.ts --local-evals && npm pack --dry-run",
     "publish:check": "tsx scripts/check-protocol-fixtures.ts && pnpm run build && tsx scripts/check-published-consumer.ts && npm pack --dry-run"
   },
   "devDependencies": {
@@ -91,6 +97,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
+    "@openpond/evals": "^0.7.0",
     "@openpond/harness": "^0.2.5",
     "esbuild": "0.28.1",
     "zod": "^4.1.13"

@@ -52,7 +52,9 @@ import {
 import { useTaskDraftActions } from "../hooks/useTaskDraftActions";
 import {
   navigateDesktopRoute,
+  settingsReturnRoute,
   navigateModelsRoute,
+  modelsLocation,
   useDesktopRoute,
 } from "../components/labs/lab-primary-tab-state";
 
@@ -723,7 +725,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const productArea = productAreaForAppView(view, activeExperience);
   useEffect(() => {
     if (!desktopRoute) return;
-    if (desktopRoute.kind === "models") {
+    if (desktopRoute.kind === "models" || desktopRoute.kind === "models_unavailable") {
       if (view !== "labs") setView("labs");
       return;
     }
@@ -764,7 +766,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       setSelectedProjectId(null);
       setSelectedSessionId(null);
       if (nextProductArea === "models") {
-        navigateModelsRoute({ kind: "index" });
+        navigateModelsRoute(modelsLocation());
         setView("labs");
         return;
       }
@@ -798,7 +800,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       return false;
     }
     setTrainingDetailTasksetId(creation.materializedTasksetId ?? null);
-    navigateModelsRoute({ kind: "index" });
+    navigateModelsRoute(modelsLocation());
     setView("labs");
     return true;
   }, [
@@ -806,6 +808,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     activeProvider,
     codexReasoningEffort,
     navigateModelsRoute,
+  modelsLocation,
     setTrainingDetailTasksetId,
     setView,
     showToast,
@@ -844,8 +847,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             onDiffPanelResizeStart: startDiffPanelResize,
             onDiffPanelExpandedChange: setDiffPanelExpanded,
             onBack: () => {
-              navigateDesktopRoute({ kind: "chat", sessionId: null });
-              setView("chat");
+              const destination = settingsReturnRoute(desktopRoute);
+              void navigateDesktopRoute(destination);
+              setView(destination.kind === "models" ? "labs" : "chat");
               setSidebarOpen(true);
             },
           }}
@@ -1344,19 +1348,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setView,
           onOpenProfileSettings: openProfileSettings,
           onOpenProviderSettings: () => {
-            setSettingsSection("providers");
-            setView("settings");
-            navigateDesktopRoute({ kind: "settings", section: "providers" });
+            void navigateDesktopRoute({ kind: "settings", section: "providers" });
           },
           onOpenTrainingSettings: () => {
-            setSettingsSection("training");
-            setView("settings");
-            navigateDesktopRoute({ kind: "settings", section: "training" });
+            void navigateDesktopRoute({ kind: "settings", section: "training" });
           },
           onOpenDatasetStorageSettings: () => {
-            setSettingsSection("dataset-storage");
-            setView("settings");
-            navigateDesktopRoute({ kind: "settings", section: "dataset-storage" });
+            void navigateDesktopRoute({ kind: "settings", section: "dataset-storage" });
           },
           changeDraftProvider,
           changeProjectTarget,

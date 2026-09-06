@@ -51,6 +51,23 @@ import {
 import { genericToolConformance } from "@openpond/evals/conformance";
 import { workEvidenceConformance, verifyWorkEvidenceReceipt } from "@openpond/evals/evidence";
 import { CORE_METRIC_CATALOG, createRunTelemetryEvent } from "@openpond/evals/telemetry";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import Ajv2020 from "ajv/dist/2020.js";
+import { LearningCommandRequestSchema, LearningSourceSchema, TaskExampleSubmissionSchema, sealLearningContent, validateSourceSubmission } from "@openpond/evals/learning";
+import { RewardReleaseSchema } from "@openpond/evals/rewards";
+const definitionRef = { id: "consumer-definition", revision: 1, contentHash: "a".repeat(64) };
+const source = LearningSourceSchema.parse(sealLearningContent({ schemaVersion: "openpond.learningSource.v1", id: "consumer-source", revision: 1, name: "Consumer source", kind: "direct", taskDefinition: definitionRef, enabled: true, allowedSplits: ["train"], mapping: null, adapterVersion: null }));
+const example = TaskExampleSubmissionSchema.parse({ schemaVersion: "openpond.taskExample.v1", sourceId: source.id, taskDefinition: definitionRef, idempotencyKey: "consumer-example", exampleId: "example", attemptId: "attempt", occurredAt: "2026-09-06T12:00:00.000Z", familyKey: "family", split: "train", input: { question: "Two plus two?" }, observedOutput: { answer: "5" }, expected: { answer: "4" }, evaluatorContext: { private: true }, assets: [], provenance: { sourceRecordRef: null, mappingHash: null } });
+const wire = JSON.parse(JSON.stringify({ scope: "consumer", command: { action: "submit_example", operationId: example.idempotencyKey, example } }));
+LearningCommandRequestSchema.parse(wire);
+validateSourceSubmission(source, wire.command.example);
+const packageRoot = path.dirname(createRequire(import.meta.url).resolve("@openpond/evals/package.json"));
+const wireSchema = JSON.parse(readFileSync(path.join(packageRoot, "schemas/learning/v1/example-submission.schema.json"), "utf8"));
+const validateWire = new Ajv2020({ strict: false }).compile(wireSchema);
+if (!validateWire(example) || validateWire({ ...example, actor: "forged" })) throw new Error("Published structural schema disagrees with producer boundary");
+if (!RewardReleaseSchema || example.observedOutput.answer === example.expected.answer) throw new Error("Public learning exports failed");
 HarnessReleaseSchema.parse(genericToolConformance.harness);
 RunManifestSchema.parse(genericToolConformance.manifest);
 TasksetReleaseSchema.parse(genericToolConformance.taskset);
@@ -195,6 +212,9 @@ import type {
   WorkEvidenceReceipt,
 } from "@openpond/evals";
 import type { MetricObservation, RunTelemetryEvent } from "@openpond/evals/telemetry";
+import type { LearningRepository, LearningCommand, TaskExampleSubmission, TaskGradeExecutor } from "@openpond/evals/learning";
+import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
+void (null as unknown as LearningRepository | LearningCommand | TaskExampleSubmission | TaskGradeExecutor | RewardBinding | RewardRelease);
 void (null as unknown as HarnessRelease | AttemptReceipt | ArtifactManifest | CanonicalRolloutRecord | EnvironmentRelease | EvaluationRunner | GraderEvidence | RewardReceipt | RunManifest | TaskRecord | WorkEvidenceReceipt | MetricObservation | RunTelemetryEvent);
 `);
   execFileSync(process.execPath, [path.join(temporary, "verify.mjs")], {

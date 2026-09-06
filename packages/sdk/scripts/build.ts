@@ -24,6 +24,7 @@ await build({
     refiner: path.join(root, "src/refiner.ts"),
     "model-projects": path.join(root, "src/model-projects.ts"),
     training: path.join(root, "src/training.ts"),
+    learning: path.join(root, "src/learning.ts"),
   },
   outdir: dist,
   bundle: true,
@@ -31,7 +32,7 @@ await build({
   target: "node22.14",
   format: "esm",
   legalComments: "none",
-  external: ["esbuild", "zod"],
+  external: ["esbuild", "zod", "@openpond/evals", "@openpond/evals/*"],
   sourcemap: true,
   logLevel: "info",
 });

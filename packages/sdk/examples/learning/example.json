@@ -1,0 +1,14 @@
+{
+  "idempotencyKey": "arithmetic-example-001-attempt-001",
+  "exampleId": "arithmetic-example-001",
+  "attemptId": "attempt-001",
+  "occurredAt": "2026-09-06T12:00:00.000Z",
+  "familyKey": "arithmetic-two-plus-two",
+  "split": "train",
+  "input": { "question": "What is two plus two?" },
+  "observedOutput": { "answer": "5" },
+  "expected": { "answer": "4" },
+  "evaluatorContext": { "explanation": "Integer addition." },
+  "assets": [],
+  "provenance": { "sourceRecordRef": null, "mappingHash": null }
+}

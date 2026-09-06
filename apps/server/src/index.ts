@@ -756,6 +756,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     modelStream: trainingModelStream,
   });
   const trainingPayload = trainingApi.request;
+  trainingApi.learning.start();
+  onStartupFailure(() => trainingApi.learning.close());
   const teamChatAiExecutions = createTeamChatAiExecutionService({
     loadProviderRuntime: localByokRuntimeState,
     version,
@@ -1811,6 +1813,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     closeEventSubscribers,
     terminalWebSockets,
     runtimeClosers: [
+      trainingApi.learning.close,
       waitForOpenPondRefresh,
       turnRunner.close,
       teamChatAiExecutions.close,

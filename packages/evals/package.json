@@ -1,6 +1,6 @@
 {
   "name": "@openpond/evals",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Portable Tasksets, graders, evaluation runs, receipts, conformance fixtures, and Work evidence for OpenPond Harnesses",
   "license": "MIT",
   "type": "module",
@@ -13,9 +13,18 @@
     "README.md",
     "CONTRACT.md",
     "RELEASING.md",
+    "LEARNING.md",
     "LICENSE"
   ],
   "exports": {
+    "./learning": {
+      "types": "./dist/types/learning/index.d.ts",
+      "import": "./dist/learning/index.js"
+    },
+    "./rewards": {
+      "types": "./dist/types/rewards.d.ts",
+      "import": "./dist/rewards.js"
+    },
     ".": {
       "types": "./dist/types/index.d.ts",
       "import": "./dist/index.js"
@@ -91,7 +100,7 @@
     "node": ">=22.14.0 <25"
   },
   "scripts": {
-    "build": "tsx scripts/generate-telemetry-schemas.ts && tsx scripts/build.ts",
+    "build": "tsx scripts/generate-telemetry-schemas.ts && tsx scripts/generate-learning-schemas.ts && tsx scripts/build.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project evals",
     "check:api": "tsx scripts/check-public-package.ts",
@@ -100,6 +109,7 @@
     "publish:check": "pnpm run build && pnpm run check:api && pnpm run check:consumer && npm pack --dry-run"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
     "zod": "^4.1.13"
   },
   "peerDependencies": {

@@ -1,5 +1,7 @@
 # `@openpond/evals`
 
+See [task evidence and learning](./LEARNING.md) for reusable Rewards, task-format publication, SDK/HTTP intake, grading, review and approved batches.
+
 Portable evaluation and benchmark contracts plus pure helpers for Tasksets,
 graders, run manifests, attempt and evaluation receipts, paired benchmark
 comparisons, execution adapters, conformance fixtures, Work-evidence

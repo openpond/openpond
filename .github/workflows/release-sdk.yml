@@ -149,6 +149,21 @@ jobs:
           package-manager-cache: false
 
       - run: pnpm install --frozen-lockfile --strict-peer-dependencies=false
+      - name: Wait for the required Evals release
+        shell: bash
+        run: |
+          set -euo pipefail
+          evals_range="$(node -p "require('./packages/sdk/package.json').dependencies['@openpond/evals']")"
+          for attempt in {1..90}; do
+            if npm view "@openpond/evals@${evals_range}" dist.integrity >/dev/null 2>&1; then
+              echo "Required Evals dependency is available on npm."
+              exit 0
+            fi
+            echo "Waiting for Evals publication (attempt ${attempt}/90)."
+            sleep 10
+          done
+          echo "Required Evals release did not become available; refusing to publish an uninstallable SDK." >&2
+          exit 1
       - run: pnpm run sdk:publish:check
 
       - name: Publish through npm trusted publishing

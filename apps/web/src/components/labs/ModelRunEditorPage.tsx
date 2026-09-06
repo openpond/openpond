@@ -21,6 +21,7 @@ import type { ModelSetupStepId } from "./ModelSetupSteps";
 import { ModelRunEditorHeader } from "./ModelRunEditorHeader";
 import { ModelRunSetupContent } from "./ModelRunSetupContent";
 import { labModelTasksets } from "./lab-models";
+import { useDraftNavigation } from "./useDraftNavigation";
 import {
   bindTaskset,
   buildPageReason,
@@ -82,8 +83,10 @@ export function ModelRunEditorPage({
     const attachedIds = new Set(
       project.tasksetSyncs.map((sync) => sync.localTasksetId),
     );
+    if (project.trainingSetup.tasksetRef) attachedIds.add(project.trainingSetup.tasksetRef.id);
+    if (initialTasksetId) attachedIds.add(initialTasksetId);
     return tasksets.filter((taskset) => attachedIds.has(taskset.id));
-  }, [initialModelId, state]);
+  }, [initialModelId, initialTasksetId, state]);
   const persistedProject =
     state?.modelProjects.find((candidate) => candidate.id === initialModelId) ??
     null;
@@ -146,6 +149,7 @@ export function ModelRunEditorPage({
       initialProjectRef.current.trainingSetup.preferredRetentionDays,
     region: null,
   });
+  const [savedApproval, setSavedApproval] = useState(() => JSON.stringify(runApproval));
   const selectedTaskset =
     availableTasksets.find(
       (taskset) =>
@@ -157,7 +161,7 @@ export function ModelRunEditorPage({
     () => methodAvailability(selectedTaskset, state?.destinations ?? []),
     [selectedTaskset, state?.destinations]
   );
-  const dirty = comparableEditor(project, setup) !== savedSnapshot;
+  const dirty = comparableEditor(project, setup) !== savedSnapshot || JSON.stringify(runApproval) !== savedApproval;
   const busy = Boolean(training.busyAction);
   const pageReason = buildPageReason(
     project,
@@ -166,6 +170,7 @@ export function ModelRunEditorPage({
     launchState
   );
   const canRun = !busy && pageReason === null;
+  const draftNavigation = useDraftNavigation({ dirty, busy, name: "run setup", save: async () => Boolean(await save(false)) });
 
   useEffect(() => {
     onSectionChange?.(datasetBuilderOpen ? "dataset" : "run");
@@ -174,16 +179,6 @@ export function ModelRunEditorPage({
   useEffect(() => {
     onNameChange?.(project.name);
   }, [onNameChange, project.name]);
-
-  useEffect(() => {
-    if (!dirty) return undefined;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
 
   useEffect(() => {
     if (!setup.method) return;
@@ -263,7 +258,8 @@ export function ModelRunEditorPage({
     const savedSetup = projectEditorState(savedProject);
     setSetup(savedSetup);
     setSavedSnapshot(comparableEditor(savedProject, savedSetup));
-    if (notifySaved) await onSaved?.(savedProject.id);
+    setSavedApproval(JSON.stringify(runApproval));
+    if (notifySaved && onSaved) { draftNavigation.allowNextNavigation(); await onSaved(savedProject.id); }
     return savedProject;
   }
 
@@ -278,6 +274,7 @@ export function ModelRunEditorPage({
       });
       if (!confirmed) return;
     }
+    draftNavigation.allowNextNavigation();
     onCancel();
   }
 
@@ -312,6 +309,7 @@ export function ModelRunEditorPage({
       exportApproved: approvedRun.exportApproved,
     });
     if (!started) return;
+    draftNavigation.allowNextNavigation();
     await onFinished(saved.id, selectedTaskset.id);
   }
 
@@ -370,6 +368,7 @@ export function ModelRunEditorPage({
             }));
           }
         )}
+        {draftNavigation.dialog}
       </main>
     );
   }
@@ -422,6 +421,7 @@ export function ModelRunEditorPage({
         />
       </main>
       <ConfirmDialog state={confirmDialog} onResolve={resolveConfirmDialog} />
+      {draftNavigation.dialog}
     </>
   );
 }

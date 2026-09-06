@@ -137,4 +137,5 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     version: 56,
     run: (store) => store.createChatWorkflowTables(),
   },
+  { version: 57, run: (store) => store.createLearningTables() },
 ];

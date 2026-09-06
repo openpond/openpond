@@ -4,6 +4,9 @@ packages:
 
 strictPeerDependencies: true
 
+# Public SDK dependencies retain registry ranges while development uses matching local packages.
+linkWorkspacePackages: true
+
 # Trusted first-party release required by the SDK publish chain. Keep this
 # exact; do not exempt future Harness versions from the release-age policy.
 minimumReleaseAgeExclude:

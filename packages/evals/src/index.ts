@@ -17,3 +17,6 @@ export * from "./telemetry-catalog.js";
 export * from "./telemetry-analysis.js";
 export * from "./telemetry-bundle.js";
 export * from "./tasksets.js";
+export * from "./task-schema.js";
+export * from "./rewards.js";
+export * from "./learning/index.js";

@@ -408,6 +408,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       "/scorers",
       { grader, tasksetId, modelProjectId: modelProjectId ?? null },
     ),
+    prepareLearningBatch: (batchId: string) => mutate<Taskset>("prepare-learning-batch", "/learning-batches/prepare", { profileId, batchId }),
     createTasksetDraft: (name = "") =>
       mutate<TasksetDraft>(
         "create-taskset-draft",

@@ -20,6 +20,7 @@ export type TrainingLaunchRequest = {
   objective: string | null;
   initialSessionIds?: string[];
   initialTasksetId?: string;
+  initialModelId?: string;
   learnedPreferenceReward?: LearnedPreferenceRewardBinding | null;
 };
 

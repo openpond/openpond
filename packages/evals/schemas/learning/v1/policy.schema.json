@@ -1,0 +1,373 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "openpond.learningPolicy.v1"
+    },
+    "id": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "revision": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "modelProjectId": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "executionOwner": {
+      "type": "string",
+      "enum": [
+        "local",
+        "hosted"
+      ]
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "sources": {
+      "minItems": 1,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema1"
+      }
+    },
+    "taskDefinition": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "rewardBinding": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "admission": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "human",
+            "qualified_automatic"
+          ]
+        },
+        "qualification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema3"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minimumApprovedExamples": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        }
+      },
+      "required": [
+        "mode",
+        "qualification",
+        "minimumApprovedExamples"
+      ],
+      "additionalProperties": false
+    },
+    "trigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "manual"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "approved_count"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "schedule"
+            },
+            "intervalSeconds": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 31536000
+            }
+          },
+          "required": [
+            "kind",
+            "intervalSeconds"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "upstream_accepted"
+            },
+            "modelProjectId": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "kind",
+            "modelProjectId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "trainingParent": {
+      "$ref": "#/$defs/__schema3"
+    },
+    "teacher": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema3"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "training": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "sft",
+            "dpo",
+            "grpo",
+            "ppo",
+            "sdft",
+            "opd",
+            "opsd",
+            "sdpo"
+          ]
+        },
+        "recipe": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "retentionEvaluation": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "replayBatches": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        }
+      },
+      "required": [
+        "method",
+        "recipe",
+        "retentionEvaluation",
+        "replayBatches"
+      ],
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "maxIterationSpendUsd": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "maxDailySpendUsd": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000
+        },
+        "cooldownSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31536000
+        },
+        "maxRetries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "maxBatchExamples": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 10000
+        },
+        "maxBacklogExamples": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "maxIterationSpendUsd",
+        "maxDailySpendUsd",
+        "cooldownSeconds",
+        "maxRetries",
+        "maxBatchExamples",
+        "maxBacklogExamples"
+      ],
+      "additionalProperties": false
+    },
+    "automation": {
+      "type": "object",
+      "properties": {
+        "collect": {
+          "type": "boolean"
+        },
+        "train": {
+          "type": "boolean"
+        },
+        "accept": {
+          "type": "boolean"
+        },
+        "serve": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "collect",
+        "train",
+        "accept",
+        "serve"
+      ],
+      "additionalProperties": false
+    },
+    "acceptance": {
+      "type": "object",
+      "properties": {
+        "minimumScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "maximumRetentionRegression": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "requireImprovement": {
+          "type": "boolean"
+        },
+        "rollbackVersion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema3"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "minimumScore",
+        "maximumRetentionRegression",
+        "requireImprovement",
+        "rollbackVersion"
+      ],
+      "additionalProperties": false
+    },
+    "contentHash": {
+      "$ref": "#/$defs/__schema2"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "revision",
+    "modelProjectId",
+    "executionOwner",
+    "enabled",
+    "sources",
+    "taskDefinition",
+    "rewardBinding",
+    "admission",
+    "trigger",
+    "trainingParent",
+    "teacher",
+    "training",
+    "limits",
+    "automation",
+    "acceptance",
+    "contentHash"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "__schema1": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "contentHash",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "__schema2": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "__schema3": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/__schema2"
+        }
+      },
+      "required": [
+        "id",
+        "contentHash"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "urn:openpond:learning:v1:policy",
+  "$comment": "Generated from @openpond/evals. Cross-resource identity, authorization, idempotency, admission, grading and split constraints are enforced by the shared domain service in addition to this structural schema."
+}
