@@ -113,7 +113,8 @@ it("upgrades an existing local database before reading starter operation receipt
   } finally { await upgraded.close(); }
 }));
 
-// Setup checks must not create resources or report unavailable compute as ready.
+// Setup checks validate authoring without requiring training availability, and
+// must not create resources or silently replace an unavailable training method.
 it("checks an import without persistence and rejects unavailable starting models", async () => withTempDirectory("starter-check-", async home => {
   const store = new SqliteStore(home);
   try {
@@ -128,11 +129,14 @@ it("checks an import without persistence and rejects unavailable starting models
     const report = await service.check(request, "profile", [destination]);
     expect(report.canSave).toBe(true);
     const unsupported = await service.check(request, "profile", [{ ...destination, methods: [] }]);
-    expect(unsupported.canSave).toBe(false);
-    expect(unsupported.findings).toContainEqual(expect.objectContaining({ code: "starter_method_unavailable" }));
+    expect(unsupported.canSave).toBe(true);
+    expect(unsupported.findings).toContainEqual(expect.objectContaining({ code: "starter_method_unavailable", severity: "warning" }));
     expect(await store.getModelProject(request.modelId)).toBeNull();
     expect(await store.findModelStarterCreation(request)).toBeNull();
     await expect(service.check(request, "other", [destination])).rejects.toThrow("authorized Profile");
+    const saved = await service.create(request, "profile");
+    expect(saved.trainingSetup.method).toBe("sft");
+    expect((await store.getTaskset(saved.trainingSetup.tasksetRef!.id))?.readiness).toBeNull();
   } finally { await store.close(); }
 }));
 
