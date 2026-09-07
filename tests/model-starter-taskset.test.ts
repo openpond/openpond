@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TasksetSourceRefSchema, TrainingDestinationCapabilitiesSchema } from "@openpond/contracts";
-import { learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
+import { createLearningTextAsset, learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
 import { ModelStarterSchema, createModelStarterCreationRequest, validateResolvedModelStarter } from "openpond-sdk/model-starters";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { withTempDirectory } from "./helpers/temp-directory.js";
@@ -18,7 +18,8 @@ import { materializePortableTasksetRelease, computeTasksetHash } from "@openpond
 import { buildTasksetTrainingBundle } from "@openpond/training-sdk";
 import { resolveTasksetTrainingReward, resolveManagedTasksetReward } from "../apps/server/src/training/taskset-reward-binding.js";
 import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release.js";
-import { RewardBindingSchema } from "@openpond/evals/rewards";
+import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
+import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
 
 // A valid release reference alone must never admit missing or altered private code.
@@ -112,7 +113,8 @@ it("upgrades an existing local database before reading starter operation receipt
   } finally { await upgraded.close(); }
 }));
 
-// Setup checks must not create resources or report unavailable compute as ready.
+// Setup checks validate authoring without requiring training availability, and
+// must not create resources or silently replace an unavailable training method.
 it("checks an import without persistence and rejects unavailable starting models", async () => withTempDirectory("starter-check-", async home => {
   const store = new SqliteStore(home);
   try {
@@ -127,11 +129,14 @@ it("checks an import without persistence and rejects unavailable starting models
     const report = await service.check(request, "profile", [destination]);
     expect(report.canSave).toBe(true);
     const unsupported = await service.check(request, "profile", [{ ...destination, methods: [] }]);
-    expect(unsupported.canSave).toBe(false);
-    expect(unsupported.findings).toContainEqual(expect.objectContaining({ code: "starter_method_unavailable" }));
+    expect(unsupported.canSave).toBe(true);
+    expect(unsupported.findings).toContainEqual(expect.objectContaining({ code: "starter_method_unavailable", severity: "warning" }));
     expect(await store.getModelProject(request.modelId)).toBeNull();
     expect(await store.findModelStarterCreation(request)).toBeNull();
     await expect(service.check(request, "other", [destination])).rejects.toThrow("authorized Profile");
+    const saved = await service.create(request, "profile");
+    expect(saved.trainingSetup.method).toBe("sft");
+    expect((await store.getTaskset(saved.trainingSetup.tasksetRef!.id))?.readiness).toBeNull();
   } finally { await store.close(); }
 }));
 
@@ -155,6 +160,36 @@ it("publishes a model-owned authored Taskset with only explicitly approved train
   expect(() => prepareModelStarterTaskset({ ...input, approvedTrainingTaskIds: [] })).toThrow("approved demonstrations");
   expect(() => prepareModelStarterTaskset({ ...input, source: { ...source, secretScanStatus: "pending" } })).toThrow("secret scanning");
 });
+
+// Importing a rubric is authoring, not a human approval or training run. Its
+// exact private source and evaluation-only role must survive model creation.
+it("creates a starter with a required human review without fabricating review evidence", async () => withTempDirectory("human-starter-", async home => {
+  const input = await starterInput();
+  const rubric = createLearningTextAsset({ text: "Check meaning and prose clarity against the supplied source. Reject unsupported claims.", path: "review.md", mediaType: "text/markdown", visibility: "verifier" });
+  const human = RewardReleaseSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardRelease.v1", id: "editorial-review", revision: 1, name: "Editorial review", description: "Human assessment", implementation: { kind: "human", rubricRef: rubric.asset, reviewerRole: "editor" }, rawScore: { minimum: 0, maximum: 1 }, assets: [rubric.asset] }));
+  const { contentHash: _bindingHash, ...bindingContent } = input.package.rewardBinding;
+  const binding = RewardBindingSchema.parse(sealLearningContent({ ...bindingContent, sources: [...bindingContent.sources, { graderId: "editorial", reward: learningRef(human), role: "evaluation", normalization: { kind: "identity" }, weight: 1, required: true, hardGate: false, privileged: true, fixtureRefs: [] }] }));
+  const { contentHash: _definitionHash, ...definitionContent } = input.package.taskDefinition;
+  const execution = { ...definitionContent.execution, policy: { ...definitionContent.execution.policy, hiddenGraderRefs: [...definitionContent.execution.policy.hiddenGraderRefs, "editorial"] } };
+  const definition = TaskDefinitionSchema.parse(sealLearningContent({ ...definitionContent, execution, rewardBinding: learningRef(binding) }));
+  const rewards = [...input.package.rewards, human], assets = [...input.package.assets, rubric];
+  const { contentHash: _tasksetHash, ...tasksetContent } = input.package.taskset;
+  const taskset = TasksetReleaseSchema.parse(sealLearningContent({ ...tasksetContent, ...execution, graders: compileBoundGraders(binding, rewards) }));
+  const { contentHash: _starterHash, ...starterContent } = input.package.starter;
+  const starter = ModelStarterSchema.parse(sealLearningContent({ ...starterContent, taskDefinition: learningRef(definition), taskset: learningRef(taskset), rewardBinding: learningRef(binding), rewards: rewards.map(learningRef), assets: assets.map(learningRef) }));
+  const resolved = validateResolvedModelStarter({ starter, taskset, taskDefinition: definition, rewardBinding: binding, rewards, assets });
+  const configured = { ...input, package: resolved, request: { ...input.request, starter: learningRef(starter) }, source: { ...input.source, sourceHash: starter.contentHash } };
+  const store = new SqliteStore(home);
+  try {
+    const saved = await store.saveModelStarterCreation(configured);
+    const reopened = await store.getTaskset(saved.trainingSetup.tasksetRef!.id);
+    expect(reopened?.capabilities.rewardKinds).toEqual(["deterministic", "human"]);
+    expect(reopened?.graders.find(grader => grader.kind === "human")).toMatchObject({ rubric: rubric.text, rewardEligible: false, reviewerRole: "editor" });
+    expect(reopened?.readiness).toBeNull();
+    expect(reopened?.status).toBe("needs_review");
+    expect(await store.findModelStarterCreation(configured.request)).toEqual(saved);
+  } finally { await store.close(); }
+}));
 
 // A GRPO import must execute the pinned Reward and keep held-out tasks out of
 // training signals without treating authored fixtures as execution receipts.

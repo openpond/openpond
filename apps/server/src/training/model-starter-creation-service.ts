@@ -48,7 +48,7 @@ export function createModelStarterCreationService(input: { store: SqliteStore; h
         if (await input.store.getModelProject(request.modelId)) findings.push({ code: "model_identity_exists", severity: "error", field: "modelId", message: "This model identity already exists. Open a new model setup." });
         const candidate = projectBaseModelCandidates({ destinations }).find(entry => canonicalJson(entry.preference) === canonicalJson(request.startingModel));
         if (!candidate?.available) findings.push({ code: "model_base_unavailable", severity: "error", field: "startingModel", message: "The selected starting model is unavailable on this execution owner." });
-        else if (!candidate.executionOptions.some(option => option.available && option.methods.includes(request.method))) findings.push({ code: "starter_method_unavailable", severity: "error", field: "method", message: "No available destination supports this starter's training method for the selected model." });
+        else if (!candidate.executionOptions.some(option => option.available && option.methods.includes(request.method))) findings.push({ code: "starter_method_unavailable", severity: "warning", field: "method", message: "This model can be saved, but no available destination supports its training method. Training remains unavailable until a compatible destination is configured." });
         findings.push({ code: "starter_training_not_checked", severity: "warning", field: null, message: "Training readiness and Reward quality require separate execution checks." });
       }
       return ModelProjectConfigurationCheckSchema.parse({
