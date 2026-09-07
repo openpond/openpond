@@ -63,7 +63,8 @@ async function main(): Promise<void> {
         "--eval",
         [
           'import { ModelProjectSchema } from "openpond-sdk/model-projects";',
-          'import { createModelStarterCreationRequest, parseModelStarterCreationRequest } from "openpond-sdk/model-starters";',
+          'import { createModelStarterCreationRequest, parseModelStarterCreationRequest, deriveModelTaskset, ModelTasksetPackageSchema } from "openpond-sdk/model-starters";',
+          'if (typeof deriveModelTaskset !== "function" || !ModelTasksetPackageSchema) throw new Error("Packed model Taskset compiler exports are missing");',
           'import { OpenPondModelStarterCatalogClient } from "openpond-sdk/model-starter-catalog";',
           'import { OpenPondModelStarterAttemptsClient, ModelStarterAttemptRequestSchema } from "openpond-sdk/model-starter-attempts";',
           'if (!OpenPondModelStarterAttemptsClient || !ModelStarterAttemptRequestSchema) throw new Error("Packed starter attempt exports are missing");',

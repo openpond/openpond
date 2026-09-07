@@ -118,7 +118,7 @@ export function materializePortableTasksetRelease(input: {
   }
   const tasksetContent = TasksetReleaseContentSchema.parse({
     schemaVersion: "openpond.tasksetRelease.v2",
-    id: `taskset-release-${input.taskset.id}-r${input.taskset.revision}`,
+    id: input.taskset.metadata.derivedPortableMetadata === undefined ? `taskset-release-${input.taskset.id}-r${input.taskset.revision}` : input.taskset.id,
     revision: input.taskset.revision,
     policy: {
       policyVisibleFields: input.taskset.policy.policyVisibleFields,
@@ -131,7 +131,7 @@ export function materializePortableTasksetRelease(input: {
     capabilities: portableCapabilities(input.taskset),
     tasks: tasks.map(portableTask),
     graders,
-    metadata: {
+    metadata: input.taskset.metadata.derivedPortableMetadata ?? {
       sourceTasksetId: input.taskset.id,
       sourceTasksetHash: input.taskset.contentHash,
       sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,

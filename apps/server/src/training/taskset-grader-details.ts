@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
+import { ImmutableAssetRefSchema } from "@openpond/harness";
 
 import {
   TasksetGraderDetailsResponseSchema,
@@ -58,7 +59,8 @@ export async function readTasksetGraderDetails(input: {
     if (grader.kind !== "custom_verifier") continue;
     if (sources.some((source) => source.path === grader.module)) continue;
     try {
-      sources.push(await readSource({ root, relativePath: grader.module, graderId: grader.id, declaredSha256: null }));
+      const declared = grader.metadata.portableVerifierRef === undefined ? null : ImmutableAssetRefSchema.parse(grader.metadata.portableVerifierRef);
+      sources.push(await readSource({ root, relativePath: grader.module, graderId: grader.id, declaredSha256: declared?.contentHash ?? null }));
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }

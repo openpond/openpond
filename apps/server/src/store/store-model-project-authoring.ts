@@ -2,15 +2,17 @@ import { createHash } from "node:crypto";
 import {
   ModelProjectSchema,
   parseModelProjectSaveRequest,
+  ModelProjectVersionedRefSchema,
   OpenPondModelProjectApiError,
   type ModelProject,
   type ModelProjectSaveRequest,
 } from "openpond-sdk/model-projects";
 import { canonicalJson } from "openpond-sdk/training";
 import { TasksetSchema } from "@openpond/contracts";
-import { assertLearningContentHash } from "@openpond/evals/learning";
+import { assertLearningContentHash, learningRef, sameLearningRef } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
+import { commitPreparedModelTaskset, type PreparedModelTaskset } from "./store-model-taskset-derivation.js";
 
 type PayloadRow = { payload: string };
 
@@ -27,10 +29,10 @@ export function findModelProjectSave(db: OpenPondSqliteConnection, value: ModelP
 }
 
 /** Called inside the store's write queue; no await can split the SQLite transaction. */
-export function commitModelProjectSave(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest): ModelProject {
+export function commitModelProjectSave(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest, prepared?: PreparedModelTaskset | null): ModelProject {
   db.exec("BEGIN IMMEDIATE");
   try {
-    const saved = saveModelProjectInTransaction(db, value);
+    const saved = saveModelProjectInTransaction(db, value, prepared);
     db.exec("COMMIT");
     return saved;
   } catch (error) {
@@ -40,7 +42,7 @@ export function commitModelProjectSave(db: OpenPondSqliteConnection, value: Mode
 }
 
 /** The caller owns the transaction and write queue. */
-export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest): ModelProject {
+export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest, prepared?: PreparedModelTaskset | null): ModelProject {
   const request = parseModelProjectSaveRequest(value);
   const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
   const { project, operationId, expectedRevision } = request;
@@ -50,12 +52,20 @@ export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, valu
   const existing = row ? ModelProjectSchema.parse(JSON.parse(row.payload)) : null;
   if (existing && existing.profileId !== project.profileId) fail(404, "model_not_found", "Model is not available in this Profile.");
   if ((existing?.revision ?? 0) !== expectedRevision) fail(409, "model_revision_conflict", "Model changed since it was opened. Refresh before saving.");
-  assertTaskset(db, request);
+  const selectedTaskset = assertTaskset(db, request);
   assertReward(db, request);
+  const tasksetBinding = selectedTaskset?.metadata.rewardBinding === undefined ? null : ModelProjectVersionedRefSchema.parse(selectedTaskset.metadata.rewardBinding);
+  if (tasksetBinding && project.trainingSetup.rewardBindingRef && !sameLearningRef(tasksetBinding, project.trainingSetup.rewardBindingRef) && !prepared) fail(409, "model_taskset_preparation_required", "Changing this Reward requires publishing its model-owned Taskset revision.");
+  if (prepared) {
+    if (!project.trainingSetup.tasksetRef || !sameLearningRef(project.trainingSetup.tasksetRef, learningRef(prepared.source)) ||
+        !project.trainingSetup.rewardBindingRef || !sameLearningRef(project.trainingSetup.rewardBindingRef, learningRef(prepared.derived.rewardBinding))) fail(409, "model_taskset_preparation_changed", "The prepared Taskset differs from the selected configuration.");
+    commitPreparedModelTaskset(db, request, prepared);
+  }
   const timestamp = new Date().toISOString();
   const saved = ModelProjectSchema.parse({
     ...existing,
     ...project,
+    trainingSetup: { ...project.trainingSetup, ...(tasksetBinding ? { rewardBindingRef: tasksetBinding } : {}), ...(prepared ? { rewardBindingRef: learningRef(prepared.derived.rewardBinding), tasksetRef: learningRef(prepared.taskset), tasksetRelease: null, recipe: null } : {}) },
     schemaVersion: "openpond.modelProject.v2",
     revision: expectedRevision + 1,
     hosted: existing?.hosted ?? null,
@@ -81,6 +91,7 @@ function assertTaskset(db: OpenPondSqliteConnection, request: ModelProjectSaveRe
   const taskset = row ? TasksetSchema.parse(JSON.parse(row.payload)) : null;
   if (!taskset || taskset.profileId !== request.project.profileId) fail(404, "model_taskset_not_found", "The selected Taskset revision is not available in this Profile.");
   if (taskset.contentHash !== reference.contentHash) fail(409, "model_taskset_changed", "The selected Taskset does not match its immutable content hash.");
+  return taskset;
 }
 
 function assertReward(db: OpenPondSqliteConnection, request: ModelProjectSaveRequest) {

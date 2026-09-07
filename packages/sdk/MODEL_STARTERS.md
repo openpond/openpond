@@ -37,6 +37,53 @@ Evidence references are nullable pointers to actual verifier, baseline, training
 
 The repository's invoice-extraction example authors 80 original synthetic text tasks and executes its verifier fixtures. Its baseline, training, evaluation and full product qualification remain pending. The local server includes preparation, atomic persistence and file-materialization adapters; catalog publication, route wiring and Desktop Get Started integration are separate delivery steps.
 
+## Model-owned Taskset revisions
+
+`deriveModelTaskset` compiles a new immutable Taskset from an exact source package
+and selected Reward binding. `ModelTasksetPackageSchema` and
+`validateModelTasksetPackage` validate task formats, private assets, executable
+graders, definition references and pinned execution resources. A package is
+independent of its catalog listing.
+
+```ts
+import { deriveModelTaskset } from "openpond-sdk/model-starters";
+
+const derived = deriveModelTaskset({
+  owner: { scopeId, modelId },
+  source,
+  rewardBinding: selectedBinding,
+  rewards: selectedRewards,
+  assets: resolvedPrivateAssets,
+});
+```
+
+The host must authorize the owner and source before compilation. The first edit
+creates a distinct model-owned identity; later edits to that owner's Taskset
+retain its identity and advance its revision. Another owner's edit forks a new
+identity. `metadata.modelTasksetDerivation` retains exact root and parent refs.
+The compiler rebuilds the grader snapshot, verifier set and task definition;
+it preserves task rows and the environment. Changed packages have no inherited
+calibration receipts, qualification results or publisher privacy attestation.
+Authored fixtures can be retained for checking again.
+
+The result includes `executionResources` for text and tool packages. Persist
+`createModelTasksetExecutionResourcesAsset(derived.executionResources)` with the
+derived package. On another host, load that private asset using
+`modelTasksetExecutionResourcesAssetId(taskset)` and validate it with
+`resolveModelTasksetExecutionResourcesAsset(taskset, asset)` before another edit.
+This preserves the exact environment and verifier set for text packages too. Tool
+packages also include the updated private JavaScript `execution` closure; persist
+`createModelStarterExecutionAsset(derived.execution)` with the new definition.
+The Taskset's binding and embedded Reward snapshot must agree. A model-level
+selection cannot override the published grader snapshot at execution time.
+
+Compilation changes no model or storage. The host must materialize immutable
+files first, then atomically commit the Taskset, dependencies, intended model
+attachment/configuration, compare-and-set revision and original operation
+receipt. Keep preparation state across uncertain outcomes. A lost model CAS
+may leave unattached package files; it must not retarget a model or overwrite an
+earlier package. Reusing an operation returns its original committed result.
+
 ## Hosted starter attempts
 
 The `openpond-sdk/model-starter-attempts` subpath defines a durable, workspace-scoped attempt API. Create requests select an attached Model Project, exact Taskset release, task, environment seed and explicit policy. They never carry replacement task input, private state, verifier source or evaluator context. Reuse the same `operationId` for a transport retry; use a new identity for a new evaluation.

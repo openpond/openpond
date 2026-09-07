@@ -1,16 +1,24 @@
 import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { buildTaskset } from "@openpond/taskset-sdk";
+import type { GeneratedTaskFile, Taskset } from "@openpond/contracts";
 import type { prepareModelStarterTaskset } from "./model-starter-taskset.js";
 
 /** Build in an unpublished directory, then atomically expose a complete package.
  * Different creation attempts use different derived Taskset identities. */
 export async function materializeModelStarterPackage(home: string, prepared: ReturnType<typeof prepareModelStarterTaskset>) {
-  const root = path.join(home, "training", "tasksets");
   if (!/^starter-[a-f0-9]{40}$/.test(prepared.taskset.id)) throw new Error("Starter Taskset identity is not a safe package identity.");
+  return materializeImmutableTasksetPackage(home, prepared, prepared.taskset.id);
+}
+
+/** The directory identifies immutable package bytes, independently of the
+ * logical Taskset identity shared by its later revisions. */
+export async function materializeImmutableTasksetPackage(home: string, prepared: { taskset: Taskset; generatedFiles: GeneratedTaskFile[] }, directoryId: string) {
+  if (!/^[a-z0-9][a-z0-9-]{1,239}$/.test(directoryId)) throw new Error("Taskset package identity is not a safe directory name.");
+  const root = path.join(home, "training", "tasksets");
   await mkdir(root, { recursive: true });
   const temporary = await mkdtemp(path.join(root, ".starter-"));
-  const target = path.join(root, prepared.taskset.id);
+  const target = path.join(root, directoryId);
   try {
     const built = await buildTaskset(prepared.taskset, temporary, { generatedFiles: prepared.generatedFiles });
     try { await rename(temporary, target); }

@@ -5,7 +5,7 @@ import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 /** The caller owns the transaction and has validated the exact catalog package.
  * Imported history may start at any revision. Ordinary edits still use the
  * learning repository's compare-and-set rather than this publication boundary. */
-export function importStarterReleaseInTransaction<K extends "asset" | "reward" | "binding" | "definition">(
+export function importStarterReleaseInTransaction<K extends "asset" | "reward" | "binding" | "definition" | "package">(
   db: OpenPondSqliteConnection, scope: string, kind: K, value: LearningResourceFor<K>,
 ) {
   const resource = learningResourceSchemas[kind].parse(value);

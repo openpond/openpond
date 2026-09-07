@@ -8,6 +8,9 @@ import { readStarterToolEvidence } from "../apps/server/src/training/starter-too
 import type { TasksetWorkModelStream } from "../apps/server/src/training/taskset-work-attempt-types.js";
 import { starterToolFixture } from "./helpers/starter-tool-fixture.js";
 import { withTempDirectory } from "./helpers/temp-directory.js";
+import { createLearningTextAsset, learningRef, sealLearningContent } from "@openpond/evals/learning";
+import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
+import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
 
 // A model claiming success, a copied receipt, or changed artifact bytes must not
 // earn the same state Reward as an actual scoped write through the tool runtime.
@@ -102,5 +105,38 @@ it("settles provider cancellation and rejects incomplete streamed calls", { time
     expect(malformed.metadata).toMatchObject({ environmentStatus: "policy_failure", environmentCleanupComplete: true });
     const context = await readStarterToolEvidence({ store, storeDir: home, taskset, task, attempt: malformed });
     expect(context).toMatchObject({ environment: { finalState: { accounts: { A: { email: "old@example.test" } } } } });
+  } finally { await store.close(); }
+}));
+
+// Rebinding must replace the actual isolated verifier closure, while old
+// attempts remain attributable to the original Taskset and grading code.
+it("executes the derived verifier revision without retargeting an earlier tool attempt", { timeout: 30_000 }, async () => withTempDirectory("starter-tool-derived-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const fixture = await starterToolFixture();
+    const original = await store.saveModelStarterCreation(fixture);
+    const taskset = (await store.getTaskset(original.trainingSetup.tasksetRef!.id))!;
+    let turns = 0;
+    const service = createTaskEvaluationService({ store, storeDir: home, modelText: async () => { throw new Error("Text adapter must not run."); }, modelStream: async function* () {
+      if (turns++ % 2 === 0) yield { toolCalls: [{ id: "write", type: "function", function: { name: "update_email", arguments: JSON.stringify(taskset.tasks[0]!.input) } }] };
+      else yield { text: '{"updated":true}' };
+    } });
+    const attempt = { taskId: taskset.tasks[0]!.id, model: { providerId: "openpond", modelId: "fixture" }, seed: 2, attempt: 0 };
+    const before = await service.execute({ ...attempt, tasksetId: taskset.id });
+    expect(before.grade).toMatchObject({ score: 1, passed: true });
+    const verifier = createLearningTextAsset({ path: "verifier/revised.mjs", mediaType: "application/javascript", visibility: "verifier", text: "export function verify() { return { score: 0, passed: false, feedback: 'Revised private check' }; }" });
+    const { contentHash: _rewardHash, ...rewardContent } = fixture.package.rewards[0]!;
+    const reward = RewardReleaseSchema.parse(sealLearningContent({ ...rewardContent, revision: 2, implementation: { kind: "custom_verifier", verifierRef: verifier.asset, exportName: "verify", timeoutMs: 2_000, networkPolicy: "none" }, assets: [verifier.asset] }));
+    const { contentHash: _bindingHash, ...bindingContent } = fixture.package.rewardBinding;
+    const binding = RewardBindingSchema.parse(sealLearningContent({ ...bindingContent, revision: 2, sources: bindingContent.sources.map(source => ({ ...source, reward: learningRef(reward) })) }));
+    await store.learningRepository().transaction(original.profileId, async tx => { await tx.put("asset", verifier, 0); await tx.put("reward", reward, 1); await tx.put("binding", binding, 1); });
+    const saved = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: original.id, profileId: original.profileId, name: original.name, objective: original.objective, defaultBaseModel: original.defaultBaseModel, defaultDestinationId: original.defaultDestinationId, trainingSetup: { ...original.trainingSetup, rewardBindingRef: learningRef(binding) } }, original.revision));
+    const after = await service.execute({ ...attempt, tasksetId: saved.trainingSetup.tasksetRef!.id });
+    expect(after.grade).toMatchObject({ score: 0, passed: false });
+    expect(after.portable.environmentRelease).toEqual(before.portable.environmentRelease);
+    expect(after.portable.verifierSetRelease.contentHash).not.toBe(before.portable.verifierSetRelease.contentHash);
+    expect(await store.getTasksetRevision(taskset.id, taskset.revision)).toEqual(taskset);
+    const oldAgain = await service.execute({ ...attempt, tasksetId: taskset.id, attempt: 1 });
+    expect(oldAgain.grade).toMatchObject({ score: 1, passed: true });
   } finally { await store.close(); }
 }));
