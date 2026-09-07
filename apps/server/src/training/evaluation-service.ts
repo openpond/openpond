@@ -22,6 +22,7 @@ import {
   type ModelJudgeRunner,
 } from "@openpond/taskset-sdk";
 import type { loadOpenPondProfileState } from "@openpond/cloud";
+import { requireLocalTasksetRevision, type LocalTasksetRevisionRef } from "./local-taskset-release.js";
 
 import type { SqliteStore } from "../store/store.js";
 import { artifactSplit, fixtureAttempt } from "./evaluation-helpers.js";
@@ -92,6 +93,7 @@ export function createTaskEvaluationService(deps: {
 
   async function execute(input: {
     tasksetId: string;
+    tasksetRef?: LocalTasksetRevisionRef;
     taskId: string;
     model: ChatModelRef;
     reasoningEffort?: import("@openpond/contracts").CodexReasoningEffort | "none" | null;
@@ -121,7 +123,8 @@ export function createTaskEvaluationService(deps: {
     ) {
       throw new Error("Taskset execution is not configured.");
     }
-    const taskset = await requireTaskset(input.tasksetId);
+    const taskset = await requireLocalTasksetRevision(deps.store, input.tasksetId, input.tasksetRef);
+    const tasksetRef = { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash };
     const task = await findTask(taskset, input.taskId);
     const toolEnvironment = taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT;
     if (toolEnvironment && input.releasedHarness) throw new Error("This tool starter executes its Taskset-owned policy; a selected Harness requires a separate execution adapter.");
@@ -183,6 +186,7 @@ export function createTaskEvaluationService(deps: {
       harnessInstructionContext: releasedHarness?.instructionContext,
       attemptInput: {
         tasksetId: taskset.id,
+        tasksetRef,
         task,
         model: input.model,
         reasoningEffort: input.reasoningEffort,
@@ -194,6 +198,7 @@ export function createTaskEvaluationService(deps: {
     });
     const gradeResult = await grade({
       tasksetId: taskset.id,
+      tasksetRef,
       taskId: task.id,
       attempt,
       hostedTokenPricing: input.hostedTokenPricing,
@@ -244,11 +249,12 @@ export function createTaskEvaluationService(deps: {
 
   async function grade(input: {
     tasksetId: string;
+    tasksetRef?: LocalTasksetRevisionRef;
     taskId: string;
     attempt: unknown;
     hostedTokenPricing?: HostedTokenPricing;
   }) {
-    const taskset = await requireTaskset(input.tasksetId);
+    const taskset = await requireLocalTasksetRevision(deps.store, input.tasksetId, input.tasksetRef);
     const attempt = TaskAttemptResultSchema.parse(input.attempt);
     const task = await findTask(taskset, input.taskId, attempt.split);
     const customVerifier = await createTasksetEvaluationVerifier(deps, taskset);
@@ -666,6 +672,7 @@ export function createTaskEvaluationService(deps: {
           if (input.signal?.aborted) throw input.signal.reason;
           const execution = await execute({
             tasksetId: taskset.id,
+            tasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash },
             taskId: task.id,
             model: input.model,
             seed,
@@ -796,6 +803,7 @@ export function createTaskEvaluationService(deps: {
           if (input.signal?.aborted) throw input.signal.reason;
           const execution = await execute({
             tasksetId: taskset.id,
+            tasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash },
             taskId: task.id,
             model: input.model,
             reasoningEffort: input.reasoningEffort ?? null,

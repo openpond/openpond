@@ -4,6 +4,7 @@ import {
   createVerifiedHarnessCompatibilityReceipt,
 } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
+import { computeTasksetHash } from "@openpond/taskset-sdk";
 import { describe, expect, test } from "vitest";
 
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
@@ -21,6 +22,7 @@ describe("portable Evaluation release isolation", () => {
         ...base,
         metadata: { ...base.metadata, harnessEvaluationReview: reviewRef },
       };
+      taskset.contentHash = computeTasksetHash(taskset);
       await store.upsertTaskset(taskset);
       const evaluation = createTaskEvaluationService({
         store,

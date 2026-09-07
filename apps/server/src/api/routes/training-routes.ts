@@ -213,6 +213,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/models\/([^/]+)\/sync$/, method: "POST", action: "sync_model_project", key: "modelId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/managed-base$/, method: "POST", action: "version_model_project_onto_managed_rl_base", key: "modelProjectId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/tasksets\/([^/]+)\/publish$/, method: "POST", action: "publish_model_project_taskset", key: "modelId", assignmentKey: "tasksetId" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/taskset-package\/export$/, method: "POST", action: "export_model_project_taskset", key: "modelId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/, method: "POST", action: "materialize_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/cancel$/, method: "POST", action: "cancel_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/sources\/([^/]+)$/, method: "DELETE", action: "remove_source", key: "sourceId" },

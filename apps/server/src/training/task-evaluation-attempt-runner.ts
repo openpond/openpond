@@ -11,6 +11,7 @@ import {
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
+import { requireLocalTasksetRevision } from "./local-taskset-release.js";
 import { persistJsonTaskAttemptArtifact } from "./task-attempt-artifact-service.js";
 import {
   resolveCrossSystemTask,
@@ -42,6 +43,7 @@ type ModelTextRunner = (input: {
 
 export type TrainingEvaluationAttemptInput = {
   tasksetId: string;
+  tasksetRef?: import("./local-taskset-release.js").LocalTasksetRevisionRef;
   task: TaskDataRecord;
   model: ChatModelRef;
   reasoningEffort?: CodexReasoningEffort | "none" | null;
@@ -79,10 +81,7 @@ export async function runPostTrainingEvaluationAttempt(input: {
   attemptInput: TrainingEvaluationAttemptInput;
 }) {
   const timestamp = input.timestamp ?? (() => new Date().toISOString());
-  const taskset = await input.store.getTaskset(input.attemptInput.tasksetId);
-  if (!taskset) {
-    throw new Error(`Taskset ${input.attemptInput.tasksetId} was not found.`);
-  }
+  const taskset = await requireLocalTasksetRevision(input.store, input.attemptInput.tasksetId, input.attemptInput.tasksetRef);
   if (taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT) {
     return runStarterToolAttempt({ store: input.store, storeDir: input.storeDir, taskset, attemptInput: input.attemptInput, stream: input.crossSystemStream, timestamp, resultId: input.resultId, hostedTokenPricing: input.hostedTokenPricing });
   }
