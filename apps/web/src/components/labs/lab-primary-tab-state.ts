@@ -21,7 +21,9 @@ let cachedDesktop: DesktopRoute | null = null;
 let cachedModels: ModelsRoute | null = null;
 let acceptedPath = "";
 let acceptedIndex = 0;
-let restoring = false;
+let restoring: (() => void) | null = null;
+let popDecisionPending = false;
+let allowedPopIndex: number | null = null;
 let deciding = false;
 
 export function desktopRouteFromLocation(input: { pathname: string; search?: string }): DesktopRoute | null {
@@ -92,23 +94,43 @@ async function permit(path: string): Promise<boolean> {
   finally { deciding = false; }
 }
 function historyState(index: number) { return { ...window.history.state, openpondNavigationIndex: index }; }
-let popGeneration = 0;
 async function onPopState() {
-  if (restoring) { restoring = false; return; }
-  const generation = ++popGeneration;
   const targetPath = locationPath();
   const targetIndex = typeof window.history.state?.openpondNavigationIndex === "number" ? window.history.state.openpondNavigationIndex : acceptedIndex - 1;
-  const allowed = await permit(targetPath);
-  if (generation !== popGeneration) return;
-  if (!allowed) {
-    if (targetIndex !== acceptedIndex) { restoring = true; window.history.go(acceptedIndex - targetIndex); }
-    else window.history.replaceState(historyState(acceptedIndex), "", acceptedPath);
+  if (restoring && targetIndex === acceptedIndex) {
+    const resolve = restoring;
+    restoring = null;
+    resolve();
     return;
   }
-  acceptedPath = targetPath;
-  acceptedIndex = targetIndex;
-  window.history.replaceState(historyState(acceptedIndex), "", targetPath);
-  notify();
+  if (allowedPopIndex === targetIndex || guards.size === 0) {
+    allowedPopIndex = null;
+    acceptedPath = targetPath;
+    acceptedIndex = targetIndex;
+    window.history.replaceState(historyState(acceptedIndex), "", targetPath);
+    notify();
+    return;
+  }
+  if (targetIndex === acceptedIndex) return;
+  if (popDecisionPending || deciding) {
+    restoring ??= () => undefined;
+    window.history.go(acceptedIndex - targetIndex);
+    return;
+  }
+  popDecisionPending = true;
+  const delta = targetIndex - acceptedIndex;
+  try {
+    // Restore the editor's history entry before asking. Additional Back/Forward
+    // presses restore that same entry without replacing the pending destination.
+    await new Promise<void>((resolve) => {
+      restoring = resolve;
+      window.history.go(-delta);
+    });
+    if (await permit(targetPath)) {
+      allowedPopIndex = targetIndex;
+      window.history.go(delta);
+    }
+  } finally { popDecisionPending = false; }
 }
 function startListening() {
   if (listening || typeof window === "undefined") return;
@@ -137,6 +159,7 @@ export function useDesktopRoute(): DesktopRoute | null {
 export async function navigateDesktopRoute(route: DesktopRoute, mode: NavigationMode = "push"): Promise<boolean> {
   if (typeof window === "undefined") return false;
   startListening();
+  if (popDecisionPending) return false;
   if (route.kind === "settings" && !route.returnTo) {
     const current = desktopRouteFromLocation(window.location);
     const returnTo = current?.kind === "models" ? modelsPath(current.route) : current?.kind === "settings" ? current.returnTo : undefined;
