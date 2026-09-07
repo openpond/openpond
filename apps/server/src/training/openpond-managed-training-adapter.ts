@@ -739,7 +739,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     );
     if (
       terminal
-      && snapshot.schemaVersion === "openpond.managedEvidenceSnapshot.v3"
+      && snapshot.schemaVersion === "openpond.managedEvidenceSnapshot.v4"
       && snapshot.syncedJobUpdatedAt === localJob?.updatedAt
     ) {
       return;
@@ -768,7 +768,9 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       client.getJob(ref.runId),
       client.events(ref.runId),
     ]);
-    const outputs = job.state === "succeeded" ? await client.outputs(ref.runId) : null;
+    // Completed baseline evaluations and checkpoints are available while the
+    // overall run is active (and remain useful if a later phase fails).
+    const outputs = await client.outputs(ref.runId);
     const storedById = new Map(storedEvents.map((event) => [event.id, event]));
     const occupiedSequences = new Set(storedEvents.map((event) => event.sequence));
     let nextSequence = Math.max(
@@ -817,7 +819,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           ...(terminal
             ? {
                 managedEvidenceSnapshot: {
-                  schemaVersion: "openpond.managedEvidenceSnapshot.v3",
+            schemaVersion: "openpond.managedEvidenceSnapshot.v4",
                   syncedJobUpdatedAt: refreshedJob.updatedAt,
                   eventCount: events.length,
                   syncedAt,
