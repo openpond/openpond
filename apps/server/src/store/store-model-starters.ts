@@ -5,7 +5,7 @@ import { createModelStarterExecutionAsset, parseModelStarterCreationRequest, val
 import { canonicalJson } from "openpond-sdk/training";
 import { prepareModelStarterTaskset } from "../training/model-starter-taskset.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
-import { putLearningResourceInTransaction } from "./store-learning.js";
+import { importStarterReleaseInTransaction } from "./store-starter-release-import.js";
 import { saveModelProjectInTransaction } from "./store-model-project-authoring.js";
 
 export type ModelStarterCommitInput = Parameters<typeof prepareModelStarterTaskset>[0];
@@ -44,12 +44,7 @@ export async function commitModelStarterCreation(db: OpenPondSqliteConnection, i
       { kind: "definition" as const, resource: resolved.taskDefinition },
     ];
     for (const { kind, resource } of resources) {
-      const existing = db.get<{ payload: string }>("SELECT payload FROM learning_revisions WHERE scope = ? AND kind = ? AND id = ? AND revision = ?", [request.profileId, kind, resource.id, resource.revision]);
-      if (existing) {
-        if (canonicalJson(JSON.parse(existing.payload)) !== canonicalJson(resource)) throw new Error(`Starter dependency conflicts with an existing revision: ${resource.id}.`);
-        continue;
-      }
-      putLearningResourceInTransaction(db, request.profileId, kind, resource, resource.revision - 1);
+      importStarterReleaseInTransaction(db, request.profileId, kind, resource);
     }
     const payload = JSON.stringify(taskset);
     db.run("INSERT INTO tasksets (id, profile_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [taskset.id, taskset.profileId, taskset.status, payload, taskset.createdAt, taskset.updatedAt]);

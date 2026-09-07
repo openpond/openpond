@@ -221,6 +221,49 @@ async function starterInput() {
   return input;
 }
 
+// First-time users may choose a later catalog release. Missing predecessors
+// must not block creation, and an older import must not roll back local edits.
+it("imports later published revisions first and preserves immutable history and edit conflicts", async () => withTempDirectory("starter-revision-import-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const original = await starterInput();
+    const revisionInput = async (revision: number, modelId: string, description = original.package.taskDefinition.description) => {
+      const { contentHash: _definitionHash, ...definitionContent } = original.package.taskDefinition;
+      const definition = TaskDefinitionSchema.parse(sealLearningContent({ ...definitionContent, revision, description }));
+      const { contentHash: _tasksetHash, ...tasksetContent } = original.package.taskset;
+      const taskset = TasksetReleaseSchema.parse(sealLearningContent({ ...tasksetContent, revision, metadata: { ...tasksetContent.metadata, starter: { taskDefinition: learningRef(definition), rewardBinding: learningRef(original.package.rewardBinding) } } }));
+      const { contentHash: _starterHash, ...starterContent } = original.package.starter;
+      const starter = ModelStarterSchema.parse(sealLearningContent({ ...starterContent, revision, taskDefinition: learningRef(definition), taskset: learningRef(taskset) }));
+      const value = validateResolvedModelStarter({ ...original.package, starter, taskset, taskDefinition: definition });
+      const request = await createModelStarterCreationRequest({ profileId: original.request.profileId, modelId, name: "Revision import", starter: learningRef(starter), startingModel: starter.startingModel, method: "sft" });
+      return { ...original, request, package: value, source: { ...original.source, sourceHash: starter.contentHash } };
+    };
+    const latest = await revisionInput(3, "latest-first");
+    const [model, retry] = await Promise.all([store.saveModelStarterCreation(latest), store.saveModelStarterCreation(latest)]);
+    expect(retry).toEqual(model);
+    const id = latest.package.taskDefinition.id;
+    await store.learningRepository().transaction(original.request.profileId, async tx => {
+      expect(await tx.get("definition", id, 1)).toBeNull();
+      expect(await tx.get("definition", id)).toEqual(latest.package.taskDefinition);
+    });
+    await store.saveModelStarterCreation(original);
+    await store.saveModelStarterCreation(await revisionInput(2, "middle-later"));
+    await store.learningRepository().transaction(original.request.profileId, async tx => {
+      expect(await tx.get("definition", id, 1)).toEqual(original.package.taskDefinition);
+      expect(await tx.get("definition", id)).toEqual(latest.package.taskDefinition);
+      const { contentHash: _hash, ...content } = latest.package.taskDefinition;
+      const edited = TaskDefinitionSchema.parse(sealLearningContent({ ...content, revision: 4, name: "My edited definition" }));
+      await expect(tx.put("definition", edited, 2)).rejects.toThrow("Revision conflict");
+      await tx.put("definition", edited, 3);
+    });
+    await store.saveModelStarterCreation(await revisionInput(3, "same-release-again"));
+    expect((await store.learningRepository().transaction(original.request.profileId, tx => tx.get("definition", id)))?.revision).toBe(4);
+    const conflict = await revisionInput(3, "conflicting-release", "Different content at the same revision");
+    await expect(store.saveModelStarterCreation(conflict)).rejects.toThrow("dependency conflicts");
+    expect(await store.getModelProject(conflict.request.modelId)).toBeNull();
+  } finally { await store.close(); }
+}));
+
 // Real SQLite connections exercise concurrency and rollback after dependencies
 // have already been inserted, including retries after a later model edit.
 it("commits one starter across concurrent saves and retains the original retry result after restart", async () => withTempDirectory("starter-commit-", async home => {
