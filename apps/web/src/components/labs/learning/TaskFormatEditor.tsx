@@ -19,7 +19,7 @@ export function TaskFormatEditor(props: { authoringDraft?: AuthoringDraftFor<"de
 
 function TaskFormatEditorForm({ client, definition, binding, authoringDraft, onClose, onSaved }: { authoringDraft?: AuthoringDraftFor<"definition">; client: OpenPondLearningClient | null; definition: TaskDefinition | null; binding: RewardBinding | null; onClose: () => void; onSaved: (definition: TaskDefinition) => void }) {
   const [id] = useState(() => authoringDraft?.targetId ?? definition?.id ?? `format-${crypto.randomUUID()}`);
-  const initial = { name: definition?.name ?? "", description: definition?.description ?? "", instructions: definition?.instructions ?? "Return the answer as JSON.", input: JSON.stringify(definition?.inputSchema ?? INPUT_SCHEMA, null, 2), output: JSON.stringify(definition?.outputSchema ?? OUTPUT_SCHEMA, null, 2), familyNamespace: definition?.familyNamespace ?? id, sources: binding?.sources ?? [] as RewardBindingSource[], recipeRef: binding?.recipeRef };
+  const initial: AuthoringDraftFor<"definition">["fields"] = { name: definition?.name ?? "", description: definition?.description ?? "", instructions: definition?.instructions ?? "Return the answer as JSON.", input: JSON.stringify(definition?.inputSchema ?? INPUT_SCHEMA, null, 2), output: JSON.stringify(definition?.outputSchema ?? OUTPUT_SCHEMA, null, 2), familyNamespace: definition?.familyNamespace ?? id, sources: binding?.sources ?? [] as RewardBindingSource[], ...(binding?.recipeRef ? { recipeRef: binding.recipeRef } : {}) };
   const [draft, setDraft] = useState(authoringDraft?.fields ?? initial);
   const [saved, setSaved] = useState(JSON.stringify(authoringDraft?.fields ?? initial));
   const [revision, setRevision] = useState(definition?.revision ?? 0);
