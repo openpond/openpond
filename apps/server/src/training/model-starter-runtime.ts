@@ -3,7 +3,7 @@ import { GraderFixtureSchema, TasksetSourceRefSchema } from "@openpond/contracts
 import type { TrainingDestinationCapabilities } from "@openpond/contracts";
 import { OpenPondModelStarterCatalogClient } from "openpond-sdk/model-starter-catalog";
 import { ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
-import { parseModelStarterCreationRequest, previewModelStarter } from "openpond-sdk/model-starters";
+import { ModelStarterPrivacyReviewSchema, parseModelStarterCreationRequest, previewModelStarter } from "openpond-sdk/model-starters";
 import type { SqliteStore } from "../store/store.js";
 import { createModelStarterCreationService } from "./model-starter-creation-service.js";
 import { scanAndRedactEvidence } from "./privacy.js";
@@ -16,6 +16,7 @@ const AuthoringSchema = z.object({
   licensingStatus: z.literal("approved"),
   approvedTrainingTaskIds: z.array(z.string().min(1).max(500)).min(1).max(100_000),
   graderFixtures: z.array(GraderFixtureSchema).min(1).max(100_000),
+  privacyReview: ModelStarterPrivacyReviewSchema.optional(),
 }).strict();
 
 export function createModelStarterRuntime(input: {
@@ -35,9 +36,9 @@ export function createModelStarterRuntime(input: {
       const source = TasksetSourceRefSchema.parse({
         schemaVersion: "openpond.generatedDatasetSource.v1", kind: "generated", id: `starter-source-${resolved.starter.contentHash.slice(0, 40)}`,
         profileId, title: resolved.starter.name, sourceHash: resolved.starter.contentHash, occurredAt: authoring.publishedAt,
-        licensingStatus: authoring.licensingStatus, secretScanStatus: scan.secretStatus, piiScanStatus: scan.piiStatus,
+        licensingStatus: authoring.licensingStatus, secretScanStatus: scan.secretStatus, piiScanStatus: authoring.privacyReview ? "passed" : scan.piiStatus,
         generatorId: "openpond-starter-catalog", generatorVersion: "1", generatorHash: resolved.taskset.contentHash, seed: 0,
-        metadata: { provenance: resolved.starter.provenance, reviewedBy: authoring.reviewedBy, privacyScanner: "openpond-evidence-v1", findings: scan.findings },
+        metadata: { provenance: resolved.starter.provenance, reviewedBy: authoring.reviewedBy, privacyScanner: "openpond-evidence-v1", findings: scan.findings, ...(authoring.privacyReview ? { privacyReview: authoring.privacyReview } : {}) },
       });
       return { package: resolved, source, fixtures: authoring.graderFixtures, approvedTrainingTaskIds: authoring.approvedTrainingTaskIds };
     },

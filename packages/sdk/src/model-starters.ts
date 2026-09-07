@@ -57,6 +57,29 @@ export const ResolvedModelStarterSchema = z.object({
 }).strict();
 export type ResolvedModelStarter = z.infer<typeof ResolvedModelStarterSchema>;
 
+/** Publisher attestation for original synthetic contact data, never a caller
+ * override for arbitrary imports or for a failed secret scan. */
+export const ModelStarterPrivacyReviewSchema = z.object({
+  schemaVersion: z.literal("openpond.modelStarterPrivacyReview.v1"),
+  disposition: z.literal("synthetic_only"),
+  reviewedBy: z.string().trim().min(1).max(500), reviewedAt: z.iso.datetime(),
+  reviewedContentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  note: z.string().trim().min(1).max(2_000),
+}).strict();
+export function modelStarterPrivacyContentHash(value: ResolvedModelStarter): string {
+  const { contentHash: _starterHash, ...starter } = value.starter;
+  const { contentHash: _tasksetHash, ...taskset } = value.taskset;
+  const { contentHash: _referenceHash, ...tasksetRef } = starter.taskset;
+  const metadata = { ...taskset.metadata };
+  const authoring = metadata.starterAuthoring;
+  if (authoring && typeof authoring === "object" && !Array.isArray(authoring)) {
+    const { privacyReview: _review, ...content } = authoring as Record<string, unknown>;
+    metadata.starterAuthoring = content;
+  }
+  // Exclude only the attestation and hashes that contain that attestation.
+  return sealLearningContent({ ...value, starter: { ...starter, taskset: tasksetRef }, taskset: { ...taskset, metadata } }).contentHash;
+}
+
 /** Final creation intent. The server resolves package bytes from its catalog;
  * callers cannot supply executable resources or qualification receipts here. */
 export const ModelStarterCreationIntentSchema = z.object({
@@ -138,6 +161,11 @@ export function validateResolvedModelStarter(value: unknown): ResolvedModelStart
   assertBoundedTaskJson(value, 16 * 1024 * 1024);
   const resolved = ResolvedModelStarterSchema.parse(value);
   const { starter, taskset, taskDefinition, rewardBinding, rewards, assets } = resolved;
+  const authoring = taskset.metadata.starterAuthoring;
+  if (authoring && typeof authoring === "object" && !Array.isArray(authoring) && "privacyReview" in authoring) {
+    const review = ModelStarterPrivacyReviewSchema.parse(authoring.privacyReview);
+    if (review.reviewedContentHash !== modelStarterPrivacyContentHash(resolved)) throw new Error("Starter privacy review differs from the published contents.");
+  }
   const resources = [starter, taskset, taskDefinition, rewardBinding, ...rewards, ...assets];
   for (const resource of resources) {
     const { contentHash, ...content } = resource;
