@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
-  createLearningService, createTaskGradeWorker,
+  createLearningService, createTaskGradeWorker, createRewardCheckWorker,
   LearningCommandRequestSchema, LearningReadRequestSchema, type TaskGradeExecutor,
   assertLearningRequestJson,
 } from "@openpond/evals/learning";
 import type { SqliteLearningStore } from "../store/store-learning.js";
 import { createLocalTaskGradeExecutor } from "./learning-grade-executor.js";
+import { createLocalRewardCheckExecutor } from "./learning-reward-check-executor.js";
 import { createLocalLearningCredentials } from "./learning-credentials.js";
 import { LearningDomainError } from "@openpond/evals/learning";
 
@@ -16,6 +17,7 @@ export function createLocalLearningRuntime(store: SqliteLearningStore, options: 
   const repository = store.learningRepository();
   const service = createLearningService(repository);
   const worker = createTaskGradeWorker(repository, options.executor ?? createLocalTaskGradeExecutor(repository), { workerId: `local-${randomUUID()}` });
+  const rewardChecks = createRewardCheckWorker(repository, createLocalRewardCheckExecutor(), { workerId: `local-reward-check-${randomUUID()}` });
   let interval: ReturnType<typeof setInterval> | null = null;
   let draining: Promise<void> | null = null;
   let closed = false;
@@ -29,6 +31,7 @@ export function createLocalLearningRuntime(store: SqliteLearningStore, options: 
       for (const scope of await store.listLearningScopes()) {
         if (closed) break;
         await worker.drain(scope);
+        await rewardChecks.drain(scope);
       }
     })().finally(() => { draining = null; });
     return draining;
@@ -50,6 +53,7 @@ export function createLocalLearningRuntime(store: SqliteLearningStore, options: 
       const request = LearningCommandRequestSchema.parse(raw);
       const result = await service.command(context(request.scope), request.command);
       if (request.command.action === "cancel_grade") worker.requestCancellation(request.scope, request.command.gradeId);
+      if (request.command.action === "cancel_reward_check") rewardChecks.requestCancellation(request.scope, request.command.checkId);
       wake();
       return result;
     },

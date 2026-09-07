@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { learningRef, type AuthoringDraftFor } from "openpond-sdk/learning";
 import { useAuthoringDraft } from "./useAuthoringDraft";
 import {
-  createLearningTextAsset, RewardReleaseContentSchema, RewardReleaseSchema, sealLearningContent,
+  compileRewardAuthoring, compileRewardFixtures, rewardAuthoringFields, RewardCheckRunSchema, RewardReleaseSchema,
   type LearningTextAsset, type OpenPondLearningClient, type RewardRelease,
 } from "openpond-sdk/learning";
 import { ModelProjectPageHeader } from "../ModelProjectPageHeader";
 import { useDraftNavigation } from "../useDraftNavigation";
-import { LearningActions, LearningError, LearningJsonField, parseLearningObject } from "./LearningFields";
+import { LearningActions, LearningError, LearningJsonField } from "./LearningFields";
 import { useLearningMutation, useLearningResource } from "./useLearningResources";
+import { RewardFixturesEditor } from "./RewardFixturesEditor";
+import { RewardCheckHistory } from "./RewardCheckHistory";
 
 type Kind = RewardRelease["implementation"]["kind"];
 const KINDS: Array<{ value: Kind; label: string }> = [
@@ -22,13 +24,6 @@ const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "learned_model", label: "Learned reward model" },
   { value: "human", label: "Human review rubric" },
 ];
-const DEFAULT_CODE = `export function verify({ output, expectedOutput }) {
-  if (!expectedOutput || !Object.hasOwn(expectedOutput, "answer")) {
-    throw new Error("An expected answer is required.");
-  }
-  const passed = output.answer === expectedOutput.answer;
-  return { score: passed ? 1 : 0, passed, feedback: passed ? "Answer matched" : "Answer differed" };
-}`;
 
 export function RewardEditor(props: { authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
   const implementation = props.reward?.implementation;
@@ -36,42 +31,24 @@ export function RewardEditor(props: { authoringDraft?: AuthoringDraftFor<"reward
     : implementation && "rubricRef" in implementation ? implementation.rubricRef.id
     : implementation && "inputContract" in implementation ? implementation.inputContract.id : null;
   const asset = useLearningResource(props.client, "asset", assetId, 1);
-  if (assetId && !asset.resource) return <div className="labs-flat-body labs-resource-page learning-workspace"><LearningError error={asset.error} /><p role="status">{asset.error ? "Reward source is unavailable. Reload its exact release to edit it." : "Loading Reward source…"}</p><button type="button" className="training-button secondary" onClick={props.onClose}>Back</button></div>;
-  return <RewardEditorForm {...props} sourceAsset={asset.resource} />;
+  const fixtures = useLearningResource(props.client, "asset", props.reward?.fixtureSetRef?.id ?? null, 1);
+  if ((assetId && !asset.resource) || (props.reward?.fixtureSetRef && !fixtures.resource)) return <div className="labs-flat-body labs-resource-page learning-workspace"><LearningError error={asset.error ?? fixtures.error} /><p role="status">{asset.error || fixtures.error ? "Reward source is unavailable. Reload its exact release to edit it." : "Loading Reward source…"}</p><button type="button" className="training-button secondary" onClick={props.onClose}>Back</button></div>;
+  return <RewardEditorForm {...props} sourceAsset={asset.resource} fixtureAsset={fixtures.resource} />;
 }
 
-function RewardEditorForm({ client, reward, sourceAsset, authoringDraft, onSaved, onClose }: {
+function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoringDraft, onSaved, onClose }: {
   authoringDraft?: AuthoringDraftFor<"reward">;
-  client: OpenPondLearningClient | null; reward: RewardRelease | null; sourceAsset: LearningTextAsset | null;
+  client: OpenPondLearningClient | null; reward: RewardRelease | null; sourceAsset: LearningTextAsset | null; fixtureAsset: LearningTextAsset | null;
   onSaved: (reward: RewardRelease) => void; onClose: () => void;
 }) {
   const [id] = useState(() => authoringDraft?.targetId ?? reward?.id ?? `reward-${crypto.randomUUID()}`);
-  const implementation = reward?.implementation;
-  const config = implementation && "config" in implementation ? implementation.config : {};
-  const initial = {
-    name: reward?.name ?? "", description: reward?.description ?? "", kind: implementation?.kind ?? "state" as Kind,
-    fields: strings(config.fields).join(", ") || "answer", outputField: text(config.outputField) || "text", expectedField: text(config.expectedField) || "text", expectedValue: text(config.expectedValue),
-    schema: JSON.stringify(config.jsonSchema ?? { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] }, null, 2),
-    reference: text(config.refIncludes), events: strings(config.requiredEvents).join(", "),
-    code: implementation?.kind === "custom_verifier" ? sourceAsset?.text ?? "" : DEFAULT_CODE,
-    exportName: implementation?.kind === "custom_verifier" ? implementation.exportName ?? "verify" : "verify",
-    timeout: String(implementation?.kind === "custom_verifier" ? implementation.timeoutMs : 5_000),
-    rubric: implementation?.kind === "model_judge" || implementation?.kind === "human" ? sourceAsset?.text ?? "" : "",
-    providerId: implementation?.kind === "model_judge" ? implementation.model?.providerId ?? "" : "",
-    modelId: implementation?.kind === "model_judge" ? implementation.model?.modelId ?? "" : "",
-    modelRevision: implementation?.kind === "model_judge" ? implementation.model?.revision ?? "" : "",
-    temperature: String(implementation?.kind === "model_judge" ? implementation.temperature ?? 0 : 0),
-    reviewerRole: implementation?.kind === "human" ? implementation.reviewerRole : "Subject matter reviewer",
-    learnedId: implementation?.kind === "learned_model" ? implementation.modelVersion.id : "",
-    learnedHash: implementation?.kind === "learned_model" ? implementation.modelVersion.contentHash : "",
-    inputContract: implementation?.kind === "learned_model" ? sourceAsset?.text ?? "{}" : "{}",
-    minimum: String(reward?.rawScore.minimum ?? 0), maximum: String(reward?.rawScore.maximum ?? 1),
-  };
+  const [initial] = useState(() => rewardAuthoringFields(reward, sourceAsset, fixtureAsset));
   const [draft, setDraft] = useState(authoringDraft?.fields ?? initial);
   const [saved, setSaved] = useState(JSON.stringify(authoringDraft?.fields ?? initial));
   const [revision, setRevision] = useState(reward?.revision ?? 0);
   const mutation = useLearningMutation(client);
   const persistence = useAuthoringDraft(authoringDraft);
+  const checkRequest = useRef<{ draftHash: string; operationId: string } | null>(null);
   const draftInput = () => ({ targetKind: "reward" as const, targetId: id, baseRelease: reward ? learningRef(reward) : null, fields: draft });
   async function saveDraft() {
     const result = await mutation.run(api => persistence.save(api, draftInput()));
@@ -82,41 +59,34 @@ function RewardEditorForm({ client, reward, sourceAsset, authoringDraft, onSaved
 
   async function save() {
     const result = await mutation.run(async (api) => {
-      let asset: LearningTextAsset | null = null;
-      let grader: RewardRelease["implementation"];
-      if (draft.kind === "custom_verifier") {
-        asset = createLearningTextAsset({ text: draft.code, path: "verifier.mjs", mediaType: "application/javascript", visibility: "verifier" });
-        grader = { kind: draft.kind, verifierRef: asset.asset, exportName: draft.exportName, timeoutMs: Number(draft.timeout), networkPolicy: "none" };
-      } else if (draft.kind === "model_judge" || draft.kind === "human") {
-        if (!draft.rubric.trim()) throw new Error("Write the rubric before publishing this Reward.");
-        asset = createLearningTextAsset({ text: draft.rubric, path: "rubric.md", mediaType: "text/markdown", visibility: "verifier" });
-        if (draft.kind === "human") grader = { kind: draft.kind, rubricRef: asset.asset, reviewerRole: draft.reviewerRole };
-        else {
-          const model = { providerId: draft.providerId, modelId: draft.modelId, revision: draft.modelRevision.trim() || null };
-          const unchanged = implementation?.kind === "model_judge" && implementation.rubricRef.contentHash === asset.asset.contentHash && JSON.stringify(implementation.model) === JSON.stringify(model) && (implementation.temperature ?? 0) === Number(draft.temperature);
-          grader = { kind: draft.kind, rubricRef: asset.asset, model, temperature: Number(draft.temperature), calibrationStatus: unchanged ? implementation.calibrationStatus : "pending" };
-        }
-      } else if (draft.kind === "learned_model") {
-        parseLearningObject(draft.inputContract);
-        asset = createLearningTextAsset({ text: draft.inputContract, path: "input-contract.json", mediaType: "application/json", visibility: "verifier" });
-        grader = { kind: draft.kind, modelVersion: { id: draft.learnedId, contentHash: draft.learnedHash }, inputContract: asset.asset };
-      } else if (draft.kind === "state") grader = { kind: draft.kind, config: { fields: split(draft.fields) } };
-      else if (draft.kind === "content") grader = { kind: draft.kind, config: { outputField: draft.outputField, expectedField: draft.expectedField, ...(draft.expectedValue ? { expectedValue: draft.expectedValue } : {}) } };
-      else if (draft.kind === "schema") grader = { kind: draft.kind, config: { jsonSchema: parseLearningObject(draft.schema) } };
-      else if (draft.kind === "artifact") grader = { kind: draft.kind, config: { refIncludes: draft.reference } };
-      else grader = { kind: draft.kind, config: { requiredEvents: split(draft.events) } };
-      const content = RewardReleaseContentSchema.parse({ schemaVersion: "openpond.rewardRelease.v1", id, revision: revision + 1, name: draft.name, description: draft.description, implementation: grader, rawScore: draft.kind === "learned_model" ? { minimum: Number(draft.minimum), maximum: Number(draft.maximum) } : { minimum: 0, maximum: 1 }, assets: asset ? [asset.asset] : [] });
-      const release = sealLearningContent(content);
+      if (draft.fixtures?.length) compileRewardFixtures(draft.fixtures);
+      const { reward: release, assets } = compileRewardAuthoring({ id, fields: draft, base: reward });
+      const { contentHash: _hash, ...content } = release;
       const storedDraft = await persistence.save(api, draftInput());
       const finalizeDraft = persistence.finalization(storedDraft, release);
       const operationId = `reward:${release.contentHash}`;
-      const response = asset
-        ? await api.command({ action: "publish_resources", operationId, finalizeDraft, resources: [{ kind: "asset", expectedRevision: 0, content: { schemaVersion: asset.schemaVersion, id: asset.id, revision: asset.revision, asset: asset.asset, text: asset.text } }, { kind: "reward", expectedRevision: revision, content }] })
-        : await api.command({ action: "publish", operationId, finalizeDraft, kind: "reward", expectedRevision: revision, content });
+      const response = await api.command({ action: "publish_resources", operationId, finalizeDraft, resources: [
+        ...assets.map(({ contentHash: _assetHash, ...content }) => ({ kind: "asset" as const, expectedRevision: 0, content })),
+        { kind: "reward", expectedRevision: revision, content },
+      ] });
       return RewardReleaseSchema.parse(response.resources.find((resource) => resource.schemaVersion === "openpond.rewardRelease.v1"));
     });
     if (!result) return null;
     setRevision(result.revision); setSaved(JSON.stringify(draft)); return result;
+  }
+  async function checkFixtures() {
+    return mutation.run(async api => {
+      compileRewardFixtures(draft.fixtures ?? []);
+      compileRewardAuthoring({ id, fields: draft, base: reward });
+      const record = await persistence.save(api, draftInput());
+      setSaved(JSON.stringify(draft));
+      const request = checkRequest.current?.draftHash === record.contentHash ? checkRequest.current : { draftHash: record.contentHash, operationId: crypto.randomUUID() };
+      checkRequest.current = request;
+      const response = await api.command({ action: "queue_reward_check", operationId: request.operationId, draft: learningRef(record), timeoutMs: 300_000, maximumSpendUsd: 0 });
+      const result = RewardCheckRunSchema.parse(response.resources[0]);
+      checkRequest.current = null;
+      return result;
+    });
   }
   const guard = useDraftNavigation({ name: "Reward", dirty: JSON.stringify(draft) !== saved, busy: mutation.busy, save: saveDraft });
   return <div className="labs-flat-body labs-resource-page learning-workspace">
@@ -140,10 +110,9 @@ function RewardEditorForm({ client, reward, sourceAsset, authoringDraft, onSaved
     {draft.kind === "model_judge" ? <><label>Model provider<input value={draft.providerId} onChange={(event) => patch({ providerId: event.target.value })} /></label><label>Judge model<input value={draft.modelId} onChange={(event) => patch({ modelId: event.target.value })} /></label><label>Model revision (optional)<input value={draft.modelRevision} onChange={(event) => patch({ modelRevision: event.target.value })} /></label><label>Temperature<input type="number" min={0} max={2} step={0.1} value={draft.temperature} onChange={(event) => patch({ temperature: event.target.value })} /></label><p>Changing the rubric or model requires calibration before this judge can grade examples.</p></> : null}
     {draft.kind === "human" ? <label>Reviewer role<input value={draft.reviewerRole} onChange={(event) => patch({ reviewerRole: event.target.value })} /></label> : null}
     {draft.kind === "learned_model" ? <><label>Model version<input value={draft.learnedId} onChange={(event) => patch({ learnedId: event.target.value })} /></label><label>Model version content hash<input value={draft.learnedHash} onChange={(event) => patch({ learnedHash: event.target.value })} /></label><LearningJsonField label="Model input contract" value={draft.inputContract} onChange={(inputContract) => patch({ inputContract })} /><label>Raw score minimum<input type="number" value={draft.minimum} onChange={(event) => patch({ minimum: event.target.value })} /></label><label>Raw score maximum<input type="number" value={draft.maximum} onChange={(event) => patch({ maximum: event.target.value })} /></label></> : null}
+    <RewardFixturesEditor fixtures={draft.fixtures ?? []} onChange={fixtures => patch({ fixtures })} />
+    <RewardCheckHistory client={client} targetId={id} draft={persistence.record?.targetKind === "reward" ? persistence.record : null} unchanged={JSON.stringify(draft) === JSON.stringify(persistence.record?.fields)} busy={mutation.busy || !draft.fixtures?.length} onCheck={checkFixtures} />
     <LearningActions><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void saveDraft(); }}>Save draft</button><button type="button" className="training-button" disabled={mutation.busy || !draft.name.trim()} onClick={async () => { const result = await save(); if (result) { guard.allowNextNavigation(); onSaved(result); } }}>{mutation.busy ? "Publishing…" : `Publish release ${revision + 1}`}</button></LearningActions>
     {guard.dialog}
   </div>;
 }
-function text(value: unknown): string { return typeof value === "string" ? value : ""; }
-function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
-function split(value: string): string[] { return value.split(",").map((part) => part.trim()).filter(Boolean); }

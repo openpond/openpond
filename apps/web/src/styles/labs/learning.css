@@ -92,3 +92,12 @@
 .learning-editor-dialog > .learning-workspace { width: 100%; padding: 0; gap: 20px; }
 .learning-editor-dialog .learning-workspace label { margin-block: 0; }
 .learning-editor-dialog .model-project-page-header { border-bottom: 0; padding-bottom: 0; }
+
+.learning-list { list-style: none; padding: 0; margin: 12px 0; }
+.learning-list > li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; padding-block: 14px; border-bottom: 1px solid var(--border); }
+.learning-list > li > div { flex: 1 1 240px; min-width: 0; }
+.learning-list strong { font-size: 13px; font-weight: 600; }
+.learning-list p { margin: 4px 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.learning-list details > ul { list-style: none; padding: 0; }
+.learning-list details > ul > li { padding-block: 10px; }
+.learning-list pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }

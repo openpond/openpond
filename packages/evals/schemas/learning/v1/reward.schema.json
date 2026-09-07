@@ -227,6 +227,9 @@
         "$ref": "#/$defs/__schema1"
       }
     },
+    "fixtureSetRef": {
+      "$ref": "#/$defs/__schema1"
+    },
     "contentHash": {
       "$ref": "#/$defs/__schema2"
     }

@@ -211,6 +211,13 @@
             },
             "maximum": {
               "type": "string"
+            },
+            "fixtures": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema12"
+              }
             }
           },
           "required": [
@@ -555,6 +562,95 @@
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "__schema12": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "input": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "expectedOutput": {
+          "type": "string"
+        },
+        "evaluatorContext": {
+          "type": "string"
+        },
+        "artifactRefs": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema13"
+          }
+        },
+        "runtimeEventRefs": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema14"
+          }
+        },
+        "infrastructureError": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "expectedStatus": {
+          "type": "string",
+          "enum": [
+            "scored",
+            "pending",
+            "unavailable",
+            "failed"
+          ]
+        },
+        "minimumScore": {
+          "type": "string"
+        },
+        "maximumScore": {
+          "type": "string"
+        },
+        "expectedPassed": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false",
+            "any"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "input",
+        "output",
+        "expectedOutput",
+        "evaluatorContext",
+        "artifactRefs",
+        "runtimeEventRefs",
+        "infrastructureError",
+        "expectedStatus",
+        "minimumScore",
+        "maximumScore",
+        "expectedPassed"
+      ],
+      "additionalProperties": false
+    },
+    "__schema13": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "__schema14": {
+      "type": "string",
+      "maxLength": 500
     }
   },
   "$id": "urn:openpond:learning:v1:draft",

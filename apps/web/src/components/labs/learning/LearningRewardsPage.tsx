@@ -8,6 +8,7 @@ import { ModelProjectPageHeader } from "../ModelProjectPageHeader";
 import { LearningActions, LearningError, LearningPager, LearningValue } from "./LearningFields";
 import { useLearningResource, useLearningResources } from "./useLearningResources";
 import { RewardEditor } from "./RewardEditor";
+import { RewardCheckHistory } from "./RewardCheckHistory";
 
 export function LearningRewardsPage({ client, selectedId, after, onSelect, onPage }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (after: string | null) => void }) {
   const resources = useLearningResources(client, "reward", { limit: 30, ...(after ? { afterId: after } : {}) });
@@ -23,7 +24,8 @@ export function LearningRewardsPage({ client, selectedId, after, onSelect, onPag
     {entry ? <>
       <LearningActions><button className="training-button secondary" type="button" onClick={() => onSelect(null)}>All Rewards</button><button className="training-button" type="button" onClick={() => setEditing(entry)}>Edit as next release</button></LearningActions>
       <p>{entry.description}</p><p>Release {entry.revision} · {entry.contentHash}</p><LearningValue label="Grader implementation" value={entry.implementation} /><LearningValue label="Raw score contract" value={entry.rawScore} />
-      <p>To try this Reward, bind it to a task format, import a sample, and run its grader in the review queue. Publishing alone records no passing result.</p>
+      <p>Edit this Reward to add fixtures and check its source against example outputs.</p>
+      <RewardCheckHistory key={entry.id} client={client} targetId={entry.id} draft={null} published={entry} unchanged={false} busy={false} />
     </> : selectedId ? <div role="status"><p>{selected.error ? "This Reward is unavailable." : "Loading Reward…"}</p><button type="button" className="training-button secondary" onClick={() => onSelect(null)}>All Rewards</button></div> : <>
       <AuthoringDraftList client={client} targetKind="reward" onResume={setResuming} />
       <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Reward</th><th>Implementation</th><th>Release</th><th>Raw score</th></tr></thead><tbody>{resources.page?.items.map((reward) => <tr key={reward.id}><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(reward.id)}><strong>{reward.name}</strong><small>{reward.description}</small></button></td><td>{reward.implementation.kind}</td><td>{reward.revision}</td><td>{reward.rawScore.minimum}–{reward.rawScore.maximum}</td></tr>)}</tbody></table></div>

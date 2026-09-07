@@ -37,7 +37,9 @@ export const CancelTaskGradeCommandSchema = command.extend({ action: z.literal("
 
 export const SaveAuthoringDraftCommandSchema = command.extend({ action: z.literal("save_draft"), expectedRevision: z.number().int().nonnegative(), draft: AuthoringDraftInputSchema }).strict();
 export const ArchiveAuthoringDraftCommandSchema = command.extend({ action: z.literal("archive_draft"), draft: LearningRevisionRefSchema }).strict();
+export const QueueRewardCheckCommandSchema = command.extend({ action: z.literal("queue_reward_check"), draft: LearningRevisionRefSchema, timeoutMs: z.number().int().min(100).max(300_000).default(30_000), maximumSpendUsd: z.number().nonnegative().max(1_000).default(0) }).strict();
+export const CancelRewardCheckCommandSchema = command.extend({ action: z.literal("cancel_reward_check"), checkId: ReleaseIdSchema, expectedRevision: z.number().int().positive() }).strict();
 
-export const LearningCommandSchema = z.union([SaveAuthoringDraftCommandSchema, ArchiveAuthoringDraftCommandSchema,PublishLearningResourceCommandSchema, PublishLearningResourcesCommandSchema, SubmitTaskExampleCommandSchema, SubmitTaskFeedbackCommandSchema, ApplyTaskCorrectionCommandSchema, ResolveTaskFeedbackCommandSchema, QueueTaskGradeCommandSchema, ReviewTaskEvidenceCommandSchema, SealTaskBatchCommandSchema, CancelTaskGradeCommandSchema]);
+export const LearningCommandSchema = z.union([QueueRewardCheckCommandSchema, CancelRewardCheckCommandSchema, SaveAuthoringDraftCommandSchema, ArchiveAuthoringDraftCommandSchema,PublishLearningResourceCommandSchema, PublishLearningResourcesCommandSchema, SubmitTaskExampleCommandSchema, SubmitTaskFeedbackCommandSchema, ApplyTaskCorrectionCommandSchema, ResolveTaskFeedbackCommandSchema, QueueTaskGradeCommandSchema, ReviewTaskEvidenceCommandSchema, SealTaskBatchCommandSchema, CancelTaskGradeCommandSchema]);
 export type LearningCommand = z.infer<typeof LearningCommandSchema>;
 export type PublishLearningResourceCommand = z.infer<typeof PublishLearningResourceCommandSchema>;

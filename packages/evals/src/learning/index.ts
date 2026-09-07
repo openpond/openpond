@@ -8,3 +8,7 @@ export * from "./grade-worker.js";
 export * from "./transport.js";
 export * from "./errors.js";
 export * from "./authoring.js";
+export * from "./reward-authoring.js";
+export * from "./reward-checks.js";
+export * from "./reward-check-worker.js";
+export * from "./reward-fixture-executor.js";

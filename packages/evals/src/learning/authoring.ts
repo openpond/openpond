@@ -4,6 +4,16 @@ import { RewardBindingSourceSchema, RewardReleaseRefSchema } from "../rewards.js
 import { LearningRevisionRefSchema } from "./contracts.js";
 
 /** Strings intentionally preserve incomplete JSON/code until explicit publication. */
+export const RewardFixtureAuthoringFieldsSchema = z.object({
+  id: ReleaseIdSchema, name: z.string().max(500),
+  input: z.string(), output: z.string(), expectedOutput: z.string(), evaluatorContext: z.string(),
+  artifactRefs: z.array(z.string().max(500)).max(100), runtimeEventRefs: z.array(z.string().max(500)).max(100),
+  infrastructureError: z.string().max(20_000),
+  expectedStatus: z.enum(["scored", "pending", "unavailable", "failed"]),
+  minimumScore: z.string(), maximumScore: z.string(), expectedPassed: z.enum(["true", "false", "any"]),
+}).strict();
+export type RewardFixtureAuthoringFields = z.infer<typeof RewardFixtureAuthoringFieldsSchema>;
+
 export const RewardAuthoringFieldsSchema = z.object({
   name: z.string().max(500), description: z.string().max(10_000),
   kind: z.enum(["custom_verifier", "state", "content", "schema", "artifact", "runtime_event", "model_judge", "learned_model", "human"]),
@@ -11,6 +21,7 @@ export const RewardAuthoringFieldsSchema = z.object({
   schema: z.string(), reference: z.string(), events: z.string(), code: z.string(), exportName: z.string(), timeout: z.string(),
   rubric: z.string(), providerId: z.string(), modelId: z.string(), modelRevision: z.string(), temperature: z.string(),
   reviewerRole: z.string(), learnedId: z.string(), learnedHash: z.string(), inputContract: z.string(), minimum: z.string(), maximum: z.string(),
+  fixtures: z.array(RewardFixtureAuthoringFieldsSchema).max(50).optional(),
 }).strict();
 export const TaskFormatAuthoringFieldsSchema = z.object({
   name: z.string().max(500), description: z.string().max(10_000), instructions: z.string().max(20_000),
