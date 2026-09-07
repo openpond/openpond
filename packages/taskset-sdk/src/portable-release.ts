@@ -10,6 +10,10 @@ import {
   bindTasksetExecutionReleases,
   createEnvironmentRelease,
   createVerifierSetRelease,
+  EnvironmentReleaseSchema,
+  VerifierSetReleaseSchema,
+  verifyEnvironmentRelease,
+  verifyVerifierSetRelease,
   verifyPreferenceComparisonRelease,
   type EnvironmentContract,
   type GraderSpec as PortableGraderSpec,
@@ -72,7 +76,9 @@ export function materializePortableTasksetRelease(input: {
     ? input.selectedTasks
     : input.taskset.tasks;
   if (!tasks.length) throw new Error("A portable Taskset release requires at least one task.");
-  const environmentRelease = createEnvironmentRelease({
+  const pinned = input.taskset.environment.metadata.portableExecutionResources as { environment?: unknown; verifierSet?: unknown } | undefined;
+  if (environment.entrypoint === "openpond.javascript-environment.v1" && !pinned) throw new Error("Tool Taskset publication requires its pinned execution resources.");
+  const environmentRelease = pinned ? EnvironmentReleaseSchema.parse(pinned.environment) : createEnvironmentRelease({
     schemaVersion: "openpond.environmentRelease.v1",
     id: `environment-release-${input.taskset.id}-r${input.taskset.revision}`,
     revision: input.taskset.revision,
@@ -93,7 +99,7 @@ export function materializePortableTasksetRelease(input: {
       resources: input.taskset.environment.resources ?? [],
     },
   });
-  const verifierSetRelease = createVerifierSetRelease({
+  const verifierSetRelease = pinned ? VerifierSetReleaseSchema.parse(pinned.verifierSet) : createVerifierSetRelease({
     schemaVersion: "openpond.verifierSetRelease.v1",
     id: `verifier-set-release-${input.taskset.id}-r${input.taskset.revision}`,
     revision: input.taskset.revision,
@@ -106,6 +112,10 @@ export function materializePortableTasksetRelease(input: {
     calibrationReceiptRefs: [],
     metadata: { sourceTasksetId: input.taskset.id },
   });
+  if (!verifyEnvironmentRelease(environmentRelease) || !verifyVerifierSetRelease(verifierSetRelease) ||
+      contentHash(environmentRelease.contract) !== contentHash(environment) || contentHash(verifierSetRelease.graders) !== contentHash(graders)) {
+    throw new Error("Taskset execution resources differ from its declared environment or graders.");
+  }
   const tasksetContent = TasksetReleaseContentSchema.parse({
     schemaVersion: "openpond.tasksetRelease.v2",
     id: `taskset-release-${input.taskset.id}-r${input.taskset.revision}`,

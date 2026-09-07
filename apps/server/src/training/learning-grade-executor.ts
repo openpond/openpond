@@ -9,6 +9,7 @@ import { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-ve
 export function createLocalTaskGradeExecutor(repository: LearningRepository): TaskGradeExecutor {
   return {
     execute(input) {
+      if (input.definition.execution.environment.entrypoint === "openpond.javascript-environment.v1") throw new Error("Tool Tasksets require grading an owner-recorded environment attempt.");
       return executeRewardBinding({
         binding: input.binding, rewards: input.rewards,
         task: taskRecordFromEvidence(input.evidence, input.definition),

@@ -8,7 +8,7 @@ import { ModelProjectBaseModelSchema, ModelProjectTrainingMethodSchema, ModelPro
 import { canonicalSha256 } from "./protocol.js";
 import { ModelStarterExecutionSchema, validateModelStarterExecution } from "./model-starter-execution.js";
 
-export { ModelStarterExecutionSchema, type ModelStarterExecution } from "./model-starter-execution.js";
+export { ModelStarterExecutionSchema, ModelStarterToolFixtureScriptSchema, createModelStarterExecutionAsset, modelStarterExecutionAssetId, resolveModelStarterExecutionAsset, type ModelStarterExecution, type ModelStarterExecutionContext } from "./model-starter-execution.js";
 
 const IdSchema = z.string().trim().min(1).max(500);
 const RefSchema = ModelProjectVersionedRefSchema;

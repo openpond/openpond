@@ -237,7 +237,8 @@ export function projectDesktopAttemptReceipt(input: {
   artifacts: TaskAttemptArtifact[];
 }): AttemptReceipt {
   const artifacts = input.artifacts.map(portableArtifact);
-  const traceArtifact = input.artifacts.find((artifact) => artifact.kind === "runtime_trace")
+  const traceArtifact = input.artifacts.find((artifact) => artifact.kind === "environment_state")
+    ?? input.artifacts.find((artifact) => artifact.kind === "runtime_trace")
     ?? input.artifacts.find((artifact) => artifact.kind === "raw_model_response");
   const failureClass = attemptFailureClass(input.attempt, input.grade);
   const graderEvidenceRefs: ImmutableArtifactRef[] = input.grade.components.map((component) => ({

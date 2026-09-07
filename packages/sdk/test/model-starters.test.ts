@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { createLearningTextAsset, learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
-import { ModelStarterExecutionSchema } from "../src/model-starter-execution.js";
+import { ModelStarterExecutionSchema, createModelStarterExecutionAsset, modelStarterExecutionAssetId, resolveModelStarterExecutionAsset } from "../src/model-starter-execution.js";
 import { ModelStarterSchema, createModelStarterCreationRequest, parseModelStarterCreationRequest, previewModelStarter, validateModelStarterCreation, validateResolvedModelStarter } from "../src/model-starters.js";
 import { OpenPondModelStarterCatalogClient } from "../src/model-starter-catalog.js";
 
@@ -76,6 +76,10 @@ it("closes tool environment resources and private task state before creation", (
   reseal(original.starter);
   const resolved = { ...original, execution };
   expect(validateResolvedModelStarter(resolved)).toEqual(resolved);
+  const executionAsset = createModelStarterExecutionAsset(execution);
+  expect(executionAsset.id).toBe(modelStarterExecutionAssetId(resolved.taskset));
+  expect(resolveModelStarterExecutionAsset(resolved.taskset, executionAsset, resolved.assets)).toEqual(execution);
+  expect(() => resolveModelStarterExecutionAsset({ ...resolved.taskset, verifierSetRelease: { id: "other", contentHash: "0".repeat(64) } }, executionAsset, resolved.assets)).toThrow("differs from its Taskset references");
   expect(JSON.stringify(previewModelStarter(resolved))).not.toContain("private world");
   expect(() => validateResolvedModelStarter(original)).toThrow("execution resources are missing");
   const changed = structuredClone(resolved);

@@ -42,6 +42,8 @@ import { hostedModelJudgeCallCost } from "./evaluation-grader-cost.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import { reviewRefMatches, variance } from "./evaluation-service-statistics.js";
 import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
+import { STARTER_TOOL_ENVIRONMENT, compileStarterToolHarness, loadStarterToolEnvironment } from "./starter-tool-environment.js";
+import { runStarterToolFixture } from "./starter-tool-fixture.js";
 
 type AuditFixtureInput = {
   label:
@@ -116,17 +118,18 @@ export function createTaskEvaluationService(deps: {
       !deps.storeDir
       || !deps.modelText
       || !deps.modelStream
-      || !deps.workRuntime
     ) {
       throw new Error("Taskset execution is not configured.");
     }
     const taskset = await requireTaskset(input.tasksetId);
     const task = await findTask(taskset, input.taskId);
+    const toolEnvironment = taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT;
+    if (toolEnvironment && input.releasedHarness) throw new Error("This tool starter executes its Taskset-owned policy; a selected Harness requires a separate execution adapter.");
     // Resolve the complete portable graph before the first model or tool step.
     // Profile source may change while an Evaluation is running, but the
     // attempt, grade, and receipt must remain bound to the release selected at
     // admission time.
-    const releasedHarness = input.releasedHarness
+    const releasedHarness = toolEnvironment ? compileStarterToolHarness(await loadStarterToolEnvironment(deps.store, taskset, task)) : input.releasedHarness
       ?? await deps.resolveReleasedHarness?.()
       ?? null;
     const boundTasksetRelease = await deps.resolveTasksetRelease?.(taskset) ?? null;
@@ -147,7 +150,7 @@ export function createTaskEvaluationService(deps: {
       storeDir: deps.storeDir,
       modelText: deps.modelText,
       crossSystemStream: deps.modelStream,
-      work: {
+      work: deps.workRuntime ? {
         stream: deps.modelStream,
         runtime: deps.workRuntime,
         validateRequiredOutput: deps.validateWorkRequiredOutput,
@@ -173,8 +176,9 @@ export function createTaskEvaluationService(deps: {
             }
           : undefined,
         hostedTokenPricing: input.hostedTokenPricing,
-      },
+      } : undefined,
       resultId: input.resultId,
+      hostedTokenPricing: input.hostedTokenPricing,
       parentModelRunId: input.parentModelRunId,
       harnessInstructionContext: releasedHarness?.instructionContext,
       attemptInput: {
@@ -355,7 +359,11 @@ export function createTaskEvaluationService(deps: {
         fixture.taskId,
         artifactSplit(fixture),
       );
-      const attempt = TaskAttemptResultSchema.parse(fixture.attempt);
+      const authored = input.fixtures?.length ? undefined : taskset.graderFixtures.find(candidate => candidate.id === fixture.id);
+      if (taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT && authored && !authored.infrastructureError && !deps.storeDir) throw new Error("Tool fixture execution requires the owner's artifact directory.");
+      const attempt = taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT && authored && !authored.infrastructureError
+        ? await runStarterToolFixture({ store: deps.store, storeDir: deps.storeDir!, taskset, task, fixture: authored })
+        : TaskAttemptResultSchema.parse(fixture.attempt);
       const result = await gradeAttempt({
         task,
         attempt,

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { learningRef } from "@openpond/evals/learning";
 import { ModelProjectSchema, createModelProjectSaveRequest } from "openpond-sdk/model-projects";
-import { parseModelStarterCreationRequest, validateResolvedModelStarter, type ModelStarterCreationRequest } from "openpond-sdk/model-starters";
+import { createModelStarterExecutionAsset, parseModelStarterCreationRequest, validateResolvedModelStarter, type ModelStarterCreationRequest } from "openpond-sdk/model-starters";
 import { canonicalJson } from "openpond-sdk/training";
 import { prepareModelStarterTaskset } from "../training/model-starter-taskset.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
@@ -37,6 +37,7 @@ export async function commitModelStarterCreation(db: OpenPondSqliteConnection, i
     if (prior) { db.exec("COMMIT"); return prior; }
     if (db.get("SELECT id FROM tasksets WHERE id = ?", [taskset.id]) || db.get("SELECT id FROM model_projects WHERE id = ?", [request.modelId])) throw new Error("Starter creation requires a new Model and Taskset identity.");
     const resources = [
+      ...(resolved.execution ? [{ kind: "asset" as const, resource: createModelStarterExecutionAsset(resolved.execution) }] : []),
       ...resolved.assets.map(resource => ({ kind: "asset" as const, resource })),
       ...resolved.rewards.map(resource => ({ kind: "reward" as const, resource })),
       { kind: "binding" as const, resource: resolved.rewardBinding },

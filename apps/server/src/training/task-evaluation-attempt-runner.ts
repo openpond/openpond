@@ -24,6 +24,8 @@ import {
   type TasksetWorkModelStream,
 } from "./taskset-work-attempt-runner.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
+import { STARTER_TOOL_ENVIRONMENT } from "./starter-tool-environment.js";
+import { runStarterToolAttempt } from "./starter-tool-attempt.js";
 
 type ModelTextRunner = (input: {
   model: ChatModelRef;
@@ -38,7 +40,7 @@ type ModelTextRunner = (input: {
   hostedTokenPricing?: HostedTokenPricing;
 }) => Promise<string>;
 
-type TrainingEvaluationAttemptInput = {
+export type TrainingEvaluationAttemptInput = {
   tasksetId: string;
   task: TaskDataRecord;
   model: ChatModelRef;
@@ -71,6 +73,7 @@ export async function runPostTrainingEvaluationAttempt(input: {
   };
   timestamp?: () => string;
   resultId?: string;
+  hostedTokenPricing?: HostedTokenPricing;
   parentModelRunId?: string;
   harnessInstructionContext?: string;
   attemptInput: TrainingEvaluationAttemptInput;
@@ -79,6 +82,9 @@ export async function runPostTrainingEvaluationAttempt(input: {
   const taskset = await input.store.getTaskset(input.attemptInput.tasksetId);
   if (!taskset) {
     throw new Error(`Taskset ${input.attemptInput.tasksetId} was not found.`);
+  }
+  if (taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT) {
+    return runStarterToolAttempt({ store: input.store, storeDir: input.storeDir, taskset, attemptInput: input.attemptInput, stream: input.crossSystemStream, timestamp, resultId: input.resultId, hostedTokenPricing: input.hostedTokenPricing });
   }
   if (taskset.environment.kind === "work") {
     if (!input.work) {
@@ -109,6 +115,9 @@ export async function runPostTrainingEvaluationAttempt(input: {
       harnessCapabilityReceipt: input.work.harnessCapabilityReceipt,
       hostedTokenPricing: input.work.hostedTokenPricing,
     });
+  }
+  if (!isCrossSystemTaskset(taskset) && (taskset.environment.kind !== "chat" || taskset.environment.stateful || taskset.environment.toolNames.length || taskset.capabilities.requiresTools || taskset.capabilities.requiresState)) {
+    throw new Error("The Taskset environment has no registered evaluation adapter.");
   }
   return isCrossSystemTaskset(taskset)
     ? runCrossSystemAttempt({
