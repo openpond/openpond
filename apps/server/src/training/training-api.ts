@@ -104,6 +104,7 @@ import { createModelComparisonRuntime } from "./model-comparison-runtime.js";
 import { handleModelComparisonAction } from "./training-api-model-comparison-actions.js";
 import { handleContinualLearningAction } from "./training-api-continual-learning-actions.js";
 import { readTasksetGraderDetails } from "./taskset-grader-details.js";
+import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
 import { createLocalLearningRuntime } from "./learning-runtime.js";
 import { parseModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
@@ -200,6 +201,12 @@ export function createTrainingApi(deps: {
           ?? "default",
       );
     }
+    if (action === "export_model_project_taskset") return exportLocalModelTasksetPackage({
+      store: deps.store,
+      storeDir: deps.storeDir,
+      profileId: requiredString(input.profileId, "profileId"),
+      modelId: requiredString(input.modelId, "modelId"),
+    });
     if (action === "taskset_grader_details") return readTasksetGraderDetails({
       store: deps.store, storeDir: deps.storeDir, tasksetId: requiredString(input.tasksetId, "tasksetId"),
     });

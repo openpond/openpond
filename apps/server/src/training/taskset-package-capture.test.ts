@@ -6,7 +6,7 @@ import { contentHash, sha256 } from "@openpond/harness";
 import { bindTasksetExecutionReleases, createEnvironmentRelease, createVerifierSetRelease } from "@openpond/evals";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
-import { captureLocalTasksetPackage } from "../apps/server/src/training/taskset-package-capture.js";
+import { captureLocalTasksetPackage } from "./taskset-package-capture.js";
 
 // Publication must carry actual private/binary bytes and must fail before a
 // request if local content is corrupt, incomplete, or points outside its package.
