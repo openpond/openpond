@@ -55,4 +55,9 @@ Hosts persist the returned attempt under their task/model/release identity and g
 
 Server hosts should pass `executeJavaScriptEnvironmentInWorker` as the session or attempt runner. Each worker runs a fresh interpreter. A promise settles only after the worker is terminated, including timeout and cancellation. The session rejects overlapping operations and waits for an active operation to stop before cleanup. Call `destroy` in `finally` when using the session API directly; the attempt runner does this automatically.
 
+Cleanup receives the definition's `operationTimeoutMs`, including interpreter and
+worker startup, with no shorter implicit deadline. It still runs after the episode
+is cancelled, waits for worker termination, and fails explicitly when that bounded
+operation deadline is exceeded.
+
 The policy adapter must honor its supplied abort signal and settle after cancelling its own request. `environmentCleanupComplete` describes environment cleanup only; it is not a provider billing or infrastructure-cleanup receipt. Failed creation, collection, cancellation and cleanup remain explicit states, without fabricated scores.
