@@ -55,7 +55,7 @@ export function LabsRoute(props: LabsRouteProps) {
   const [importSource, setImportSource] = useState<"source" | DatasetCreateSource | null>(null);
   const [runTarget, setRunTarget] = useState<{ tasksetId?: string; reward?: LearnedPreferenceRewardBinding | null } | null>(null);
   const [selectedRunTarget, setSelectedRunTarget] = useState("");
-  const workspaceKey = `${profileView.connection?.serverUrl ?? "disconnected"}:${profileId}:${training.settingsPreferences.defaultTeamId ?? "local"}:${props.account?.activeProfile?.handle ?? "local"}`;
+  const workspaceKey = JSON.stringify([profileView.connection?.serverUrl ?? null, profileId, training.settingsPreferences.defaultTeamId ?? null, props.account?.apiBaseUrl ?? null, props.account?.activeProfile?.handle ?? null]);
   const priorWorkspace = useRef(workspaceKey);
   const workspaceChanged = priorWorkspace.current !== workspaceKey;
   useErrorToast(createImprove.error);
@@ -158,7 +158,7 @@ export function LabsRoute(props: LabsRouteProps) {
   else if (route.modelId && !state) page = <p role="status">Loading model…</p>;
   else if (route.modelId && !selected) page = unavailable("This model is not available in the active profile and team.");
   else if (route.page === "get-started") {
-    page = <div className="labs-flat-body"><ModelStarterCatalog key={workspaceKey} actions={training.training.actions} onSelect={(preview) => { setStarterPreview(preview); setEditingModelId(null); setModelCreateOpen(true); }} /></div>;
+    page = <div className="labs-flat-body"><ModelStarterCatalog key={workspaceKey} cacheScope={workspaceKey} actions={training.training.actions} onSelect={(preview) => { setStarterPreview(preview); setEditingModelId(null); setModelCreateOpen(true); }} /></div>;
   } else if (route.page === "runs" && route.collection === "new") {
     const target = models.find((model) => model.id === route.resourceId);
     page = !target ? unavailable("The target model for this run setup is unavailable.") : <ModelRunEditorPage

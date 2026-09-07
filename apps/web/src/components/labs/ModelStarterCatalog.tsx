@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ModelStarter } from "openpond-sdk/model-starters";
 import type { ModelStarterPage, ModelStarterPreview, useTraining } from "../../hooks/useTraining";
+import { readModelStarterCache, writeModelStarterCache } from "./model-starter-cache";
 
 const CATEGORY_LABELS: Record<ModelStarter["category"], string> = { extraction: "Extract structured data", support: "Customer support", operations: "Operations", knowledge: "Knowledge", coding: "Code", writing: "Writing", classification: "Classification" };
 
-export function ModelStarterCatalog({ actions, onSelect }: { actions: ReturnType<typeof useTraining>["actions"]; onSelect: (preview: ModelStarterPreview) => void }) {
+export function ModelStarterCatalog({ actions, cacheScope, onSelect }: { actions: ReturnType<typeof useTraining>["actions"]; cacheScope: string; onSelect: (preview: ModelStarterPreview) => void }) {
   const [afterId, setAfterId] = useState<string | undefined>();
-  const [page, setPage] = useState<ModelStarterPage | null>(null);
+  const [loaded, setLoaded] = useState<{ scope: string; afterId: string | undefined; page: ModelStarterPage } | null>(null);
+  const cached = useMemo(() => {
+    try { return readModelStarterCache(window.localStorage, cacheScope, afterId); }
+    catch { return null; }
+  }, [cacheScope, afterId]);
+  const page = loaded?.scope === cacheScope && loaded.afterId === afterId ? loaded.page : cached;
+  const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -14,11 +21,16 @@ export function ModelStarterCatalog({ actions, onSelect }: { actions: ReturnType
   const { listModelStarters, previewModelStarter } = actions;
   useEffect(() => {
     let cancelled = false;
-    setPage(null);
+    setRefreshing(true);
     setError(null);
-    void listModelStarters(afterId).then(result => { if (!cancelled) setPage(result); }).catch((caught: unknown) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "Unable to load starters."); });
+    void listModelStarters(afterId).then(result => {
+      if (cancelled) return;
+      try { writeModelStarterCache(window.localStorage, cacheScope, afterId, result); } catch { /* Browser storage may be disabled. */ }
+      setLoaded({ scope: cacheScope, afterId, page: result });
+    }).catch((caught: unknown) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "Unable to load starters."); })
+      .finally(() => { if (!cancelled) setRefreshing(false); });
     return () => { cancelled = true; selection.current += 1; };
-  }, [afterId, listModelStarters, refresh]);
+  }, [cacheScope, afterId, listModelStarters, refresh]);
   async function select(starter: ModelStarter) {
     const current = ++selection.current;
     setSelectedId(starter.id);
@@ -33,7 +45,7 @@ export function ModelStarterCatalog({ actions, onSelect }: { actions: ReturnType
   const categories = [...new Set(page?.items.map(starter => starter.category) ?? [])];
   return <section className="model-starter-catalog" aria-label="Get started">
     <header><h2>Get started</h2><p>Start with published tasks and quality checks, then make the model your own.</p></header>
-    {error ? <div role="alert"><p>{error}</p><button type="button" onClick={() => setRefresh(value => value + 1)}>Retry</button></div> : !page ? <p role="status">Loading starters…</p> : null}
+    {error ? <div role="alert"><p>{page ? `Showing saved starters. ${error}` : error}</p><button type="button" onClick={() => setRefresh(value => value + 1)}>Retry</button></div> : !page ? <p role="status">Loading starters…</p> : refreshing ? <p role="status">Refreshing starters…</p> : null}
     {categories.map(category => <section className="model-starter-category" key={category} aria-label={CATEGORY_LABELS[category]}>
       <h3>{CATEGORY_LABELS[category]}</h3>
       <div className="model-starter-cards">{page?.items.filter(starter => starter.category === category).map(starter => <article key={`${starter.id}:${starter.contentHash}`}>

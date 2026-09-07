@@ -55,7 +55,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const query = new URLSearchParams(input.search ?? "");
   if ([...query.keys()].some((key) => !["model", "q", "after"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
   const modelId = query.get("model");
-  if (page === "get-started" && modelId !== null) return null;
+  if (page === "get-started" && query.size !== 0) return null;
   const search = query.get("q") ?? "";
   const after = query.get("after");
   if ((modelId !== null && (!modelId.trim() || modelId.length > 500)) || search.length > 1_000 || (after !== null && (!after.trim() || after.length > 2_000))) return null;
