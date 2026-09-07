@@ -3,6 +3,7 @@
   "productName": "openpond",
   "artifactName": "openpond-${version}-${os}-${arch}.${ext}",
   "asar": true,
+  "compression": "maximum",
   "directories": {
     "app": "apps/desktop/stage/app",
     "output": "release",

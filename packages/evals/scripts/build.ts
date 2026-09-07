@@ -30,14 +30,14 @@ try {
     bundle: true, platform: "node", target: "node22.14", format: "cjs",
     write: false, minify: true, legalComments: "none",
   });
-  await writeFile(path.join(staging, "javascript-verifier-worker-source.js"), `export const javascriptVerifierWorkerSource = ${JSON.stringify(worker.outputFiles[0]!.text)};\n`);
+  await writeProcessSource("javascript-verifier-worker-source", "javascriptVerifierWorkerSource", worker.outputFiles[0]!.text);
   await copyFile(path.join(root, "src/javascript-verifier-worker-source.d.ts"), path.join(staging, "types/javascript-verifier-worker-source.d.ts"));
   const processHost = await build({
     entryPoints: [path.join(root, "src/javascript-isolate-process-entry.ts")],
     bundle: true, platform: "node", target: "node22.14", format: "cjs",
     write: false, minify: true, legalComments: "none",
   });
-  await writeFile(path.join(staging, "javascript-isolate-process-source.js"), `export const javascriptIsolateProcessSource = ${JSON.stringify(processHost.outputFiles[0]!.text)};\n`);
+  await writeProcessSource("javascript-isolate-process-source", "javascriptIsolateProcessSource", processHost.outputFiles[0]!.text);
   await copyFile(path.join(root, "src/javascript-isolate-process-source.d.ts"), path.join(staging, "types/javascript-isolate-process-source.d.ts"));
   const sqliteBinary = await readFile(createRequire(import.meta.url).resolve("@sqlite.org/sqlite-wasm/sqlite3.wasm"));
   const compressedSqlite = brotliCompressSync(sqliteBinary, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } });
@@ -51,7 +51,7 @@ try {
       builder.onLoad({ filter: /.*/, namespace: "sqlite-binary" }, () => ({ contents: binarySource, loader: "js" }));
     } }],
   });
-  await writeFile(path.join(staging, "sql-execution-process-source.js"), `export const sqlExecutionProcessSource = ${JSON.stringify(sqlProcess.outputFiles[0]!.text)};\n`);
+  await writeProcessSource("sql-execution-process-source", "sqlExecutionProcessSource", sqlProcess.outputFiles[0]!.text);
   await writeFile(path.join(staging, "sql-wasm-binary.js"), binarySource);
   for (const name of ["sql-execution-process-source", "sql-wasm-binary"]) await copyFile(path.join(root, `src/${name}.d.ts`), path.join(staging, `types/${name}.d.ts`));
   await copyFile(path.join(root, "src/task-schema-meta-validator.js"), path.join(staging, "task-schema-meta-validator.js"));
@@ -59,6 +59,11 @@ try {
   await publishBuild(staging, dist);
 } finally {
   await rm(staging, { force: true, recursive: true });
+}
+
+async function writeProcessSource(file: string, exportName: string, source: string): Promise<void> {
+  const compressed = brotliCompressSync(Buffer.from(source), { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } });
+  await writeFile(path.join(staging, `${file}.js`), `import { brotliDecompressSync } from "node:zlib"; export const ${exportName} = brotliDecompressSync(Buffer.from(${JSON.stringify(compressed.toString("base64"))}, "base64")).toString("utf8");\n`);
 }
 
 async function publishBuild(source: string, target: string): Promise<void> {
