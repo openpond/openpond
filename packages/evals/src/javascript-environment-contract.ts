@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { ImmutableAssetRefSchema, ToolDeclarationSchema, contentHash } from "@openpond/harness";
 import { assertBoundedTaskJson, validateTaskSchema } from "./task-schema-validation.js";
+import { EnvironmentExecutionServiceSchema } from "./environment-execution-services-contract.js";
+export * from "./environment-execution-services-contract.js";
 
 export const JavaScriptEnvironmentDefinitionContentSchema = z.object({
   schemaVersion: z.literal("openpond.javascriptEnvironment.v1"),
@@ -12,11 +14,19 @@ export const JavaScriptEnvironmentDefinitionContentSchema = z.object({
   maxStateBytes: z.number().int().min(1).max(1_048_576),
   maxObservationBytes: z.number().int().min(1).max(262_144),
   operationTimeoutMs: z.number().int().min(1).max(30_000),
+  executionServices: z.array(EnvironmentExecutionServiceSchema).min(1).max(16).optional(),
 }).strict().superRefine((value, context) => {
   if (new Set(value.tools.map(tool => tool.name)).size !== value.tools.length) context.addIssue({ code: "custom", path: ["tools"], message: "Environment tool names must be unique." });
   value.tools.forEach((tool, index) => {
     if (!validateTaskSchema(tool.inputSchema).valid) context.addIssue({ code: "custom", path: ["tools", index, "inputSchema"], message: "Environment tools require a supported JSON schema." });
     if (tool.inputSchemaHash !== contentHash(tool.inputSchema)) context.addIssue({ code: "custom", path: ["tools", index, "inputSchemaHash"], message: "Tool schema identity differs from its declared schema." });
+  });
+  const services = value.executionServices ?? [];
+  if (new Set(services.map(service => service.id)).size !== services.length) context.addIssue({ code: "custom", path: ["executionServices"], message: "Execution service identities must be unique." });
+  services.forEach((service, index) => {
+    const tool = value.tools.find(tool => tool.name === service.toolName);
+    if (service.operation === "step" && !tool) context.addIssue({ code: "custom", path: ["executionServices", index, "toolName"], message: "Execution services must target a declared tool." });
+    if (service.timeoutMs >= Math.min(value.operationTimeoutMs, tool?.timeoutMs ?? value.operationTimeoutMs)) context.addIssue({ code: "custom", path: ["executionServices", index, "timeoutMs"], message: "Service budgets must leave time for the authored controller." });
   });
 });
 export const JavaScriptEnvironmentDefinitionSchema = JavaScriptEnvironmentDefinitionContentSchema.safeExtend({ contentHash: z.string().regex(/^[a-f0-9]{64}$/) });

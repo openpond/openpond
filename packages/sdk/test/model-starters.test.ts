@@ -69,7 +69,7 @@ it("closes tool environment resources and private task state before creation", (
   const state = createLearningTextAsset({ text: JSON.stringify({ secret: "private world" }), path: "state.json", mediaType: "application/json", visibility: "host_private" });
   const inputSchema = { type: "object", properties: {}, additionalProperties: false };
   const tools = [{ name: "inspect", description: "Read public state", inputSchema, inputSchemaHash: sealLearningContent(inputSchema).contentHash, sideEffect: "read", timeoutMs: 1_000 }];
-  const javascript = sealLearningContent({ schemaVersion: "openpond.javascriptEnvironment.v1", id: "world", revision: 1, module: module.asset, tools, maxSteps: 4, maxStateBytes: 4_096, maxObservationBytes: 4_096, operationTimeoutMs: 1_000 });
+  const javascript = sealLearningContent({ schemaVersion: "openpond.javascriptEnvironment.v1", id: "world", revision: 1, module: module.asset, tools, maxSteps: 4, maxStateBytes: 4_096, maxObservationBytes: 4_096, operationTimeoutMs: 1_000, executionServices: [{ id: "candidate", kind: "javascript.v1", operation: "collect", timeoutMs: 500, source: { scope: "state", path: ["source"] }, cases: { scope: "initialState", path: ["cases"] }, exportName: "solve", maxCases: 2, maxResultBytes: 1_024 }] });
   const contract = { ...original.taskset.environment, kind: "agent", stateful: true, entrypoint: "openpond.javascript-environment.v1" };
   const execution = ModelStarterExecutionSchema.parse({
     javascript,

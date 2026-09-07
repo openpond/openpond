@@ -25,8 +25,9 @@
     "lint": "pnpm run typecheck",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run test",
-    "build": "pnpm run clean && pnpm run docs:commands && pnpm run build:cli && pnpm run build:package && pnpm run build:local-assets && pnpm run build:types",
-    "prepublishOnly": "pnpm run build"
+    "build": "pnpm run clean && pnpm run docs:commands && pnpm run build:bundles && pnpm run build:local-assets && pnpm run build:types",
+    "prepublishOnly": "pnpm run build",
+    "build:bundles": "tsx ../../scripts/build/bundle-cli.ts all"
   },
   "files": [
     "dist/**/*",

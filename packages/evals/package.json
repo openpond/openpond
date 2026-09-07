@@ -1,6 +1,6 @@
 {
   "name": "@openpond/evals",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "Portable Tasksets, graders, evaluation runs, receipts, conformance fixtures, and Work evidence for OpenPond Harnesses",
   "license": "MIT",
   "type": "module",
@@ -19,6 +19,14 @@
     "LICENSE"
   ],
   "exports": {
+    "./sql-execution/node": {
+      "types": "./dist/types/sql-execution-node.d.ts",
+      "import": "./dist/sql-execution-node.js"
+    },
+    "./sql-execution": {
+      "types": "./dist/types/sql-execution-contract.d.ts",
+      "import": "./dist/sql-execution-contract.js"
+    },
     "./javascript-environment/attempt": {
       "types": "./dist/types/javascript-environment-attempt.d.ts",
       "import": "./dist/javascript-environment-attempt.js"
@@ -136,6 +144,7 @@
   },
   "dependencies": {
     "@jitl/quickjs-singlefile-cjs-release-sync": "0.32.0",
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "ajv": "^8.20.0",
     "quickjs-emscripten-core": "0.32.0",
     "zod": "^4.1.13"
