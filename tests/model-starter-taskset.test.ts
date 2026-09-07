@@ -21,6 +21,8 @@ import { requireReleasedTaskset } from "../apps/server/src/training/local-taskse
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
+import { createModelProjectSaveRequest, type ModelProject } from "openpond-sdk/model-projects";
+import { readTasksetGraderDetails } from "../apps/server/src/training/taskset-grader-details.js";
 
 // A valid release reference alone must never admit missing or altered private code.
 it("exports verified private Reward assets separately from policy task assets", async () => withTempDirectory("starter-private-export-", async home => {
@@ -303,12 +305,91 @@ it("persists starter Reward selection and rejects missing replacement bindings",
     const saved = await store.saveModelStarterCreation(chosen);
     expect(saved.trainingSetup.rewardBindingRef).toEqual(learningRef(replacement));
     expect((await store.getModelProject(saved.id))?.trainingSetup.rewardBindingRef).toEqual(learningRef(replacement));
+    const taskset = (await store.getTasksetRevision(saved.trainingSetup.tasksetRef!.id, saved.trainingSetup.tasksetRef!.revision))!;
+    expect(taskset.metadata.rewardBinding).toEqual(learningRef(replacement));
+    expect(taskset.graders.every(grader => JSON.stringify(grader.metadata.rewardBinding) === JSON.stringify(learningRef(replacement)))).toBe(true);
+    expect(materializePortableTasksetRelease({ taskset, adapterId: "starter-selection" }).tasksetRelease.metadata.rewardExecution).toEqual({ binding: replacement, rewards: input.package.rewards });
     await expect(store.saveModelStarterCreation({ ...chosen, request: { ...chosen.request, rewardBindingRef: null } })).rejects.toThrow("different configuration");
     const missing = { ...input, request: { ...input.request, modelId: "missing-reward-model", operationId: "missing-reward-operation", rewardBindingRef: { ...learningRef(replacement), id: "missing-binding" } } };
     await expect(store.saveModelStarterCreation(missing)).rejects.toThrow("unavailable");
     expect(await store.getModelProject(missing.request.modelId)).toBeNull();
     expect(await store.findModelStarterCreation(missing.request)).toBeNull();
   } finally { await store.close(); }
+}));
+
+// Two Models may share an immutable source. A Reward edit must publish and
+// attach only the intended Model's revision, including retries after reopening.
+it("atomically derives model-owned Tasksets while preserving shared sources and prior revisions", async () => withTempDirectory("model-taskset-derive-", async home => {
+  let store = new SqliteStore(home);
+  const otherStore = new SqliteStore(home);
+  let retry: Awaited<ReturnType<typeof createModelProjectSaveRequest>>;
+  let firstSaved: ModelProject;
+  try {
+    const input = await starterInput();
+    const model = await store.saveModelStarterCreation(input);
+    // An installed v60 store has no preparation table; opening the new server
+    // must migrate it without changing the existing model or source release.
+    const storePath = store.storePath;
+    await store.close();
+    const previousVersion = openStorageDatabase(storePath);
+    try { previousVersion.exec("DROP TABLE model_project_taskset_preparations; PRAGMA user_version = 60;"); }
+    finally { previousVersion.close(); }
+    store = new SqliteStore(home);
+    expect(await store.getModelProject(model.id)).toEqual(model);
+    const sourceRef = model.trainingSetup.tasksetRef!;
+    const source = (await store.getTasksetRevision(sourceRef.id, sourceRef.revision))!;
+    const editable = (value: ModelProject) => ({ id: value.id, profileId: value.profileId, name: value.name, objective: value.objective, defaultBaseModel: value.defaultBaseModel, defaultDestinationId: value.defaultDestinationId, trainingSetup: value.trainingSetup });
+    const other = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(model), id: "other-consumer" }, 0));
+    const { contentHash: _oldHash, ...binding } = input.package.rewardBinding;
+    const replacement = RewardBindingSchema.parse(sealLearningContent({ ...binding, revision: 2, sources: binding.sources.map(source => ({ ...source, weight: 2 })) }));
+    await store.learningRepository().transaction(model.profileId, async tx => { await tx.put("binding", replacement, 1); });
+    retry = await createModelProjectSaveRequest({ ...editable(model), trainingSetup: { ...model.trainingSetup, recipe: sftRecipeFixture(), rewardBindingRef: learningRef(replacement) } }, model.revision);
+    // Fail after package materialization but before the Model/Taskset commit.
+    // Reopening must reuse that preparation rather than publish twice.
+    const database = openStorageDatabase(store.storePath);
+    try {
+      database.exec("CREATE TRIGGER interrupt_derived_save BEFORE UPDATE ON model_projects BEGIN SELECT RAISE(ABORT, 'Interrupted derived save'); END;");
+      await expect(store.saveModelProjectConfiguration(retry)).rejects.toThrow("Interrupted derived save");
+      expect(await store.getModelProject(model.id)).toEqual(model);
+      expect(await store.listTasksets(model.profileId)).toHaveLength(1);
+      database.exec("DROP TRIGGER interrupt_derived_save;");
+    } finally { database.close(); }
+    await store.close();
+    store = new SqliteStore(home);
+    firstSaved = await store.saveModelProjectConfiguration(retry);
+    expect(firstSaved.trainingSetup.tasksetRef!.id).not.toBe(source.id);
+    expect(firstSaved.trainingSetup.recipe).toBeNull();
+    expect(firstSaved.trainingSetup.tasksetRelease).toBeNull();
+    const derived = (await store.getTasksetRevision(firstSaved.trainingSetup.tasksetRef!.id, 1))!;
+    expect(derived.readiness).toBeNull();
+    expect(derived.metadata.rewardBinding).toEqual(learningRef(replacement));
+    expect(derived.graders[0]!.weight).toBe(2);
+    const portable = materializePortableTasksetRelease({ taskset: derived, adapterId: "derived-boundary" }).tasksetRelease;
+    expect(await store.learningRepository().transaction(model.profileId, tx => tx.get("package", portable.id, portable.revision))).toEqual(portable);
+    expect(await store.getTasksetRevision(source.id, source.revision)).toEqual(source);
+    expect((await store.getModelProject(other.id))!.trainingSetup.tasksetRef).toEqual(sourceRef);
+    const firstPackage = path.join(home, "training", "tasksets", String(derived.environment.metadata.runtimeSourceTasksetId), "taskset.json");
+    const firstBytes = await readFile(firstPackage, "utf8");
+    expect(JSON.parse(firstBytes).contentHash).toBe(derived.contentHash);
+    const details = await readTasksetGraderDetails({ store, storeDir: home, tasksetId: derived.id });
+    expect(details.sources).toHaveLength(1);
+    expect(details.sources[0]!.integrity).toBe("verified");
+    const edit = await createModelProjectSaveRequest({ ...editable(firstSaved), trainingSetup: { ...firstSaved.trainingSetup, rewardBindingRef: learningRef(input.package.rewardBinding) } }, firstSaved.revision);
+    const competing = await createModelProjectSaveRequest({ ...editable(firstSaved), name: "Concurrent rename" }, firstSaved.revision);
+    const results = await Promise.allSettled([store.saveModelProjectConfiguration(edit), otherStore.saveModelProjectConfiguration(competing)]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.find(result => result.status === "rejected")).toMatchObject({ reason: { code: "model_revision_conflict" } });
+    let latest = (await store.getModelProject(model.id))!;
+    if (latest.trainingSetup.tasksetRef!.revision === 1) latest = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(latest), trainingSetup: { ...latest.trainingSetup, rewardBindingRef: learningRef(input.package.rewardBinding) } }, latest.revision));
+    expect(latest.trainingSetup.tasksetRef).toMatchObject({ id: derived.id, revision: 2 });
+    expect((await store.getTasksetRevision(derived.id, 2))!.metadata.rewardBinding).toEqual(learningRef(input.package.rewardBinding));
+    expect(await readFile(firstPackage, "utf8")).toBe(firstBytes);
+    expect(await store.getTasksetRevision(derived.id, 1)).toEqual(derived);
+    expect(await otherStore.saveModelProjectConfiguration(retry)).toEqual(firstSaved);
+  } finally { await otherStore.close(); await store.close(); }
+  const reopened = new SqliteStore(home);
+  try { expect(await reopened.saveModelProjectConfiguration(retry!)).toEqual(firstSaved!); }
+  finally { await reopened.close(); }
 }));
 
 it("rolls back imported resources when a later immutable dependency conflicts", async () => withTempDirectory("starter-rollback-", async home => {

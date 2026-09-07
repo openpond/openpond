@@ -66,7 +66,10 @@ export async function checkModelProjectConfiguration(input: {
     if (!taskset || taskset.profileId !== project.profileId) error("model_taskset_not_found", "The selected Taskset revision is not available in this Profile.", "trainingSetup.tasksetRef");
     else if (taskset.contentHash !== ref.contentHash) error("model_taskset_changed", "The selected Taskset does not match its immutable content hash.", "trainingSetup.tasksetRef");
     else {
-      findings.push(...validateTaskset(taskset).issues.map((finding) => ({
+      let selected = taskset;
+      try { selected = await input.store.previewModelProjectTasksetSave(request) ?? taskset; }
+      catch (caught) { error("model_taskset_derivation_unavailable", caught instanceof Error ? caught.message : "The selected Reward cannot be prepared for this Taskset.", "trainingSetup.rewardBindingRef"); }
+      findings.push(...validateTaskset(selected).issues.map((finding) => ({
         code: finding.code, severity: finding.severity, message: finding.message,
         field: finding.path ? `taskset.${finding.path}` : "taskset",
       })));

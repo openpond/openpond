@@ -7,8 +7,6 @@ import { canonicalJson } from "openpond-sdk/training";
 import { createModelStarterExecutionAsset, parseModelStarterCreationRequest, previewModelStarter, validateResolvedModelStarter } from "openpond-sdk/model-starters";
 import type { ModelStarterCommitInput } from "../store/store-model-starters.js";
 import type { SqliteStore } from "../store/store.js";
-import { materializeModelStarterPackage } from "./model-starter-package-files.js";
-import { prepareModelStarterTaskset } from "./model-starter-taskset.js";
 import { projectBaseModelCandidates } from "./base-model-candidates.js";
 import { requireLearningRelease } from "@openpond/evals/learning";
 
@@ -27,7 +25,10 @@ export function createModelStarterCreationService(input: { store: SqliteStore; h
       const previous = await input.store.findModelStarterCreation(request);
       if (!previous) {
         const publication = await input.catalog.resolve(request.starter, authorizedProfileId);
-        const prepared = prepareModelStarterTaskset({ ...publication, request, createdAt: checkedAt });
+        const prepared = await input.store.prepareModelStarterCreation({ ...publication, request, createdAt: checkedAt }).catch(error => {
+          findings.push({ code: "starter_preparation_unavailable", severity: "error", field: "rewardBindingRef", message: error instanceof Error ? error.message : "The selected starter configuration cannot be prepared." });
+          return null;
+        });
         const resolved = validateResolvedModelStarter(publication.package);
         await input.store.learningRepository().transaction(request.profileId, async tx => {
           const resources = [...(resolved.execution ? [{ kind: "asset" as const, resource: createModelStarterExecutionAsset(resolved.execution) }] : []), ...resolved.assets.map(resource => ({ kind: "asset" as const, resource })), ...resolved.rewards.map(resource => ({ kind: "reward" as const, resource })), { kind: "binding" as const, resource: resolved.rewardBinding }, { kind: "definition" as const, resource: resolved.taskDefinition }];
@@ -44,7 +45,7 @@ export function createModelStarterCreationService(input: { store: SqliteStore; h
             }
           }
         });
-        findings.push(...validateTaskset(prepared.taskset).issues.map(issue => ({ code: issue.code, severity: issue.severity, message: issue.message, field: issue.path ?? "taskset" })));
+        if (prepared) findings.push(...validateTaskset(prepared.taskset).issues.map(issue => ({ code: issue.code, severity: issue.severity, message: issue.message, field: issue.path ?? "taskset" })));
         if (await input.store.getModelProject(request.modelId)) findings.push({ code: "model_identity_exists", severity: "error", field: "modelId", message: "This model identity already exists. Open a new model setup." });
         const candidate = projectBaseModelCandidates({ destinations }).find(entry => canonicalJson(entry.preference) === canonicalJson(request.startingModel));
         if (!candidate?.available) findings.push({ code: "model_base_unavailable", severity: "error", field: "startingModel", message: "The selected starting model is unavailable on this execution owner." });
@@ -70,8 +71,6 @@ export function createModelStarterCreationService(input: { store: SqliteStore; h
       if (previous) return previous;
       const publication = await input.catalog.resolve(request.starter, authorizedProfileId);
       const commit = { ...publication, request, createdAt: input.now?.() ?? new Date().toISOString() };
-      const prepared = prepareModelStarterTaskset(commit);
-      await materializeModelStarterPackage(input.home, prepared);
       return input.store.saveModelStarterCreation(commit);
     },
   };

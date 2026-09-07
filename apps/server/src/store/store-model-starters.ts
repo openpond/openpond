@@ -24,12 +24,12 @@ export async function commitModelStarterCreation(db: OpenPondSqliteConnection, i
   const request = parseModelStarterCreationRequest(input.request);
   const previous = findModelStarterCreation(db, request);
   if (previous) return previous;
-  const { taskset } = prepareModelStarterTaskset(input);
+  const { taskset, resources: effective } = prepareModelStarterTaskset(input);
   const resolved = validateResolvedModelStarter(input.package);
   const modelRequest = await createModelProjectSaveRequest({
     id: request.modelId, profileId: request.profileId, name: request.name, objective: resolved.taskDefinition.instructions,
     defaultBaseModel: request.startingModel, defaultDestinationId: null,
-    trainingSetup: { tasksetRef: learningRef(taskset), rewardBindingRef: request.rewardBindingRef === undefined ? learningRef(resolved.rewardBinding) : request.rewardBindingRef, baseModel: request.startingModel, method: request.method, managedRolloutPlacement: "remote" },
+    trainingSetup: { tasksetRef: learningRef(taskset), rewardBindingRef: learningRef(effective.rewardBinding), baseModel: request.startingModel, method: request.method, managedRolloutPlacement: "remote" },
   }, 0);
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -42,6 +42,12 @@ export async function commitModelStarterCreation(db: OpenPondSqliteConnection, i
       ...resolved.rewards.map(resource => ({ kind: "reward" as const, resource })),
       { kind: "binding" as const, resource: resolved.rewardBinding },
       { kind: "definition" as const, resource: resolved.taskDefinition },
+      { kind: "package" as const, resource: resolved.taskset },
+      ...(effective.taskset.contentHash === resolved.taskset.contentHash ? [] : [
+        { kind: "definition" as const, resource: effective.taskDefinition },
+        { kind: "package" as const, resource: effective.taskset },
+        ...(effective.execution ? [{ kind: "asset" as const, resource: createModelStarterExecutionAsset(effective.execution) }] : []),
+      ]),
     ];
     for (const { kind, resource } of resources) {
       importStarterReleaseInTransaction(db, request.profileId, kind, resource);

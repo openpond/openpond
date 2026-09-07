@@ -13,4 +13,12 @@ CREATE TABLE IF NOT EXISTS model_starter_creation_operations (
   payload TEXT NOT NULL,
   PRIMARY KEY (profile_id, operation_id)
 );
+CREATE TABLE IF NOT EXISTS model_project_taskset_preparations (
+  profile_id TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('preparing', 'materialized', 'committed')),
+  PRIMARY KEY (profile_id, operation_id)
+);
 `;

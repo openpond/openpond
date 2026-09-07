@@ -5,6 +5,7 @@ import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { ModelStarterExecutionSchema, createModelStarterExecutionAsset, modelStarterExecutionAssetId, resolveModelStarterExecutionAsset } from "../src/model-starter-execution.js";
 import { ModelStarterSchema, createModelStarterCreationRequest, modelStarterPrivacyContentHash, parseModelStarterCreationRequest, previewModelStarter, validateModelStarterCreation, validateResolvedModelStarter } from "../src/model-starters.js";
 import { OpenPondModelStarterCatalogClient } from "../src/model-starter-catalog.js";
+import { deriveModelTaskset } from "../src/model-taskset-derivation.js";
 
 function fixture(visibility: "verifier" | "policy" = "verifier") {
   const asset = createLearningTextAsset({ text: "export function verify({ output, expectedOutput }) { const passed = output.answer === expectedOutput.answer; return { score: Number(passed), passed, feedback: 'Exact answer' }; }", path: "verifier.mjs", mediaType: "application/javascript", visibility });
@@ -50,6 +51,36 @@ function reseal(value: Record<string, unknown> & { contentHash: string }) {
   value.contentHash = sealLearningContent(content).contentHash;
 }
 
+// A Reward edit must fork a shared package once, retain the model's identity
+// for later revisions, and never mutate another model's pinned source bytes.
+it("derives deterministic model-owned Tasksets with exact executable bindings", () => {
+  const { starter: _starter, ...source } = fixture();
+  const original = structuredClone(source);
+  const rewardBinding = { ...source.rewardBinding, revision: 2, sources: source.rewardBinding.sources.map(check => ({ ...check, weight: 2 })) };
+  reseal(rewardBinding);
+  const intent = { owner: { scopeId: "team-a", modelId: "model-a" }, source, rewardBinding, rewards: source.rewards, assets: source.assets };
+  const first = deriveModelTaskset(intent);
+  expect(first).toEqual(deriveModelTaskset(intent));
+  expect(source).toEqual(original);
+  expect(first.taskset.id).not.toBe(source.taskset.id);
+  expect(first.taskset.revision).toBe(1);
+  expect(first.taskset.graders).toEqual(compileBoundGraders(rewardBinding, source.rewards));
+  expect(first.taskDefinition.rewardBinding).toEqual(learningRef(rewardBinding));
+  expect(first.taskset.tasks).toEqual(source.taskset.tasks);
+  const second = deriveModelTaskset({ ...intent, source: first });
+  expect(second.taskset.id).toBe(first.taskset.id);
+  expect(second.taskset.revision).toBe(2);
+  expect(second.taskset.metadata.modelTasksetDerivation).toMatchObject({ root: learningRef(source.taskset), parent: learningRef(first.taskset) });
+  const other = deriveModelTaskset({ ...intent, owner: { ...intent.owner, modelId: "model-b" }, source: first });
+  expect(other.taskset.id).not.toBe(first.taskset.id);
+  expect(other.taskset.revision).toBe(1);
+  expect(() => deriveModelTaskset({ ...intent, assets: [] })).toThrow("private asset");
+  const corrupt = structuredClone(source);
+  corrupt.taskset.graders[0]!.weight = 50;
+  reseal(corrupt.taskset);
+  expect(() => deriveModelTaskset({ ...intent, source: corrupt })).toThrow("graders differ");
+});
+
 it("binds publisher privacy review to the complete package contents", () => {
   const value = fixture();
   value.taskset.metadata.starterAuthoring = {};
@@ -90,6 +121,14 @@ it("closes tool environment resources and private task state before creation", (
   const executionAsset = createModelStarterExecutionAsset(execution);
   expect(executionAsset.id).toBe(modelStarterExecutionAssetId(resolved.taskset));
   expect(resolveModelStarterExecutionAsset(resolved.taskset, executionAsset, resolved.assets)).toEqual(execution);
+  const { starter: _catalog, ...source } = resolved;
+  const derived = deriveModelTaskset({ owner: { scopeId: "team", modelId: "model" }, source, rewardBinding: source.rewardBinding, rewards: source.rewards, assets: source.assets });
+  expect(derived.execution!.environment).toEqual(source.execution.environment);
+  expect(derived.execution!.javascript).toEqual(source.execution.javascript);
+  expect(derived.execution!.verifierSet.id).not.toBe(source.execution.verifierSet.id);
+  expect(derived.execution!.verifierSet.calibrationReceiptRefs).toEqual([]);
+  const derivedAsset = createModelStarterExecutionAsset(derived.execution!);
+  expect(resolveModelStarterExecutionAsset(derived.taskset, derivedAsset, derived.assets)).toEqual(derived.execution);
   expect(() => resolveModelStarterExecutionAsset({ ...resolved.taskset, verifierSetRelease: { id: "other", contentHash: "0".repeat(64) } }, executionAsset, resolved.assets)).toThrow("differs from its Taskset references");
   expect(JSON.stringify(previewModelStarter(resolved))).not.toContain("private world");
   expect(() => validateResolvedModelStarter(original)).toThrow("execution resources are missing");
