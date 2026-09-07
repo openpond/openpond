@@ -133,7 +133,7 @@ export function SidebarNavigation({
             />
           </div>
           {MODELS_PAGES.map((page) => {
-            const Icon = { models: Activity, tasksets: Boxes, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
+            const Icon = { "get-started": Boxes, models: Activity, tasksets: Boxes, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
             return (
               <button
                 className={`nav-command ${view === "labs" && activePage === page ? "active" : ""}`}

@@ -1,4 +1,4 @@
-export const MODELS_PAGES = ["models", "tasksets", "rewards", "evaluations", "runs", "versions", "serving"] as const;
+export const MODELS_PAGES = ["get-started", "models", "tasksets", "rewards", "evaluations", "runs", "versions", "serving"] as const;
 export type ModelsPage = (typeof MODELS_PAGES)[number];
 export type ModelsCollection = "default" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers" | "combined";
 export interface ModelsRoute {
@@ -12,7 +12,7 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  models: "Models", tasksets: "Tasksets", rewards: "Rewards", evaluations: "Evaluations", runs: "Runs", versions: "Versions", serving: "Serving",
+  "get-started": "Get started", models: "Models", tasksets: "Tasksets", rewards: "Rewards", evaluations: "Evaluations", runs: "Runs", versions: "Versions", serving: "Serving",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
   tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
@@ -26,7 +26,7 @@ const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
 };
 
 export function modelsLocation(page: ModelsPage = "models", modelId: string | null = null, detail: Partial<Omit<ModelsRoute, "page" | "modelId">> = {}): ModelsRoute {
-  return { page, modelId, collection: page === "evaluations" ? "results" : "default", resourceId: null, detailTab: null, query: "", after: null, ...detail };
+  return { page, modelId: page === "get-started" ? null : modelId, collection: page === "evaluations" ? "results" : "default", resourceId: null, detailTab: null, query: "", after: null, ...detail };
 }
 
 export function modelsRouteFromLocation(input: { pathname: string; search?: string }): ModelsRoute | null {
@@ -43,7 +43,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const resourceId = parts.shift() ?? null;
   const detailTab = parts.shift() ?? null;
   if (parts.length || (detailTab && !resourceId)) return null;
-  if (page === "models" && resourceId) return null;
+  if ((page === "models" || page === "get-started") && resourceId) return null;
   if (collection === "drafts" || collection === "new") {
     if (!resourceId || detailTab) return null;
   } else if (collection === "series") {
@@ -55,6 +55,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const query = new URLSearchParams(input.search ?? "");
   if ([...query.keys()].some((key) => !["model", "q", "after"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
   const modelId = query.get("model");
+  if (page === "get-started" && query.size !== 0) return null;
   const search = query.get("q") ?? "";
   const after = query.get("after");
   if ((modelId !== null && (!modelId.trim() || modelId.length > 500)) || search.length > 1_000 || (after !== null && (!after.trim() || after.length > 2_000))) return null;

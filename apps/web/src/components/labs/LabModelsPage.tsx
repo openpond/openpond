@@ -15,8 +15,6 @@ import {
   type ModelTableRow,
 } from "./LabsRouteSections";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
-import { ModelStarterCatalog } from "./ModelStarterCatalog";
-import type { ModelStarterPreview } from "../../hooks/useTraining";
 
 const PAGE_SIZE = 10;
 
@@ -33,7 +31,6 @@ export function LabModelsPage({
   onSelect,
   onUseModel,
   onConfigure,
-  onSelectStarter,
 }: {
   activeProfileId: string;
   hostedScope: string | null;
@@ -52,7 +49,6 @@ export function LabModelsPage({
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
   onConfigure: (modelId: string) => void;
-  onSelectStarter: (preview: ModelStarterPreview) => void;
 }) {
   const listHostedModelProjects = training.actions.listHostedModelProjects;
   const [profileId, setProfileId] = useState("all");
@@ -186,7 +182,6 @@ export function LabModelsPage({
           { label: "Profiles", value: profileIds.length },
         ]}
       />
-      {hostedScope ? <ModelStarterCatalog key={hostedScope} actions={training.actions} onSelect={onSelectStarter} /> : null}
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">
           <Search size={14} />

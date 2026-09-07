@@ -15,6 +15,7 @@ import { LabHumanReviewsPage } from "./LabHumanReviewsPage";
 import { LabScoringPage } from "./LabScoringPage";
 import type { LabScorerCreateInput } from "./LabScorerCreateDialog";
 import { LabModelCreateDialog, type LabModelCreateInput } from "./LabModelCreateDialog";
+import { ModelStarterCatalog } from "./ModelStarterCatalog";
 import { LabModelsPage } from "./LabModelsPage";
 import { LabModelComparisonsPage } from "./LabModelComparisonsPage";
 import { LabServingPage } from "./LabServingPage";
@@ -54,7 +55,7 @@ export function LabsRoute(props: LabsRouteProps) {
   const [importSource, setImportSource] = useState<"source" | DatasetCreateSource | null>(null);
   const [runTarget, setRunTarget] = useState<{ tasksetId?: string; reward?: LearnedPreferenceRewardBinding | null } | null>(null);
   const [selectedRunTarget, setSelectedRunTarget] = useState("");
-  const workspaceKey = `${profileView.connection?.serverUrl ?? "disconnected"}:${profileId}:${training.settingsPreferences.defaultTeamId ?? "local"}:${props.account?.activeProfile?.handle ?? "local"}`;
+  const workspaceKey = JSON.stringify([profileView.connection?.serverUrl ?? null, profileId, training.settingsPreferences.defaultTeamId ?? null, props.account?.apiBaseUrl ?? null, props.account?.activeProfile?.handle ?? null]);
   const priorWorkspace = useRef(workspaceKey);
   const workspaceChanged = priorWorkspace.current !== workspaceKey;
   useErrorToast(createImprove.error);
@@ -156,7 +157,9 @@ export function LabsRoute(props: LabsRouteProps) {
   else if (!route) page = unavailable("This Models location is unavailable.");
   else if (route.modelId && !state) page = <p role="status">Loading model…</p>;
   else if (route.modelId && !selected) page = unavailable("This model is not available in the active profile and team.");
-  else if (route.page === "runs" && route.collection === "new") {
+  else if (route.page === "get-started") {
+    page = <div className="labs-flat-body"><ModelStarterCatalog key={workspaceKey} cacheScope={workspaceKey} actions={training.training.actions} onSelect={(preview) => { setStarterPreview(preview); setEditingModelId(null); setModelCreateOpen(true); }} /></div>;
+  } else if (route.page === "runs" && route.collection === "new") {
     const target = models.find((model) => model.id === route.resourceId);
     page = !target ? unavailable("The target model for this run setup is unavailable.") : <ModelRunEditorPage
       key={`${workspaceKey}:${target.id}`} connection={profileView.connection} initialModelId={target.id} initialName={target.name}
@@ -204,7 +207,6 @@ export function LabsRoute(props: LabsRouteProps) {
   } else if (route.page === "models" && !route.modelId) {
     page = <LabModelsPage activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
       onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
-      onSelectStarter={(preview) => { setStarterPreview(preview); setEditingModelId(null); setModelCreateOpen(true); }}
       onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}
     />;
   } else if ((route.page === "runs" || (route.page === "versions" && !route.modelId)) && !route.resourceId) {
@@ -221,7 +223,7 @@ export function LabsRoute(props: LabsRouteProps) {
       <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }
-  const tab: LabPrimaryTab = route?.page === "models" ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" ? "evals" : route?.page ?? "overview";
+  const tab: LabPrimaryTab = (route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" ? "evals" : route?.page ?? "overview";
   return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
     {page}
     {comparisonCreateOpen && scopedState ? <LabComparisonSeriesCreateDialog busy={Boolean(training.training.busyAction)} profileId={scopedState.profileId} state={scopedState} onClose={() => setComparisonCreateOpen(false)} onCreate={async (series) => { const saved = await training.training.actions.saveComparisonSeries(series); if (!saved) return false; setComparisonCreateOpen(false); open(modelsLocation("runs", route?.modelId ?? null, { collection: "series", resourceId: saved.id })); return true; }} /> : null}
