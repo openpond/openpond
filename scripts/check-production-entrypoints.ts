@@ -36,6 +36,7 @@ for (const relativePath of [
   // Compiled into public Evals execution-source exports by its package build.
   "packages/evals/src/javascript-verifier-worker.ts",
   "packages/evals/src/javascript-isolate-process-entry.ts",
+  "packages/evals/src/sql-execution-process-entry.ts",
 ]) {
   addEntrypoint(path.join(root, relativePath));
 }
