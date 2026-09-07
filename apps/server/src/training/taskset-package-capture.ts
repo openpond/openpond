@@ -15,6 +15,7 @@ export async function captureLocalTasksetPackage(input: {
   root: string;
   content: Omit<TasksetPackage, "files" | "contentHash">;
   sources: ReadonlyArray<{ asset: ImmutableAssetRef; sourcePath: string }>;
+  fileOrder?: readonly string[];
 }): Promise<TasksetPackage> {
   const root = await realpath(input.root);
   const files: TasksetPackage["files"] = [];
@@ -56,7 +57,13 @@ export async function captureLocalTasksetPackage(input: {
     }
   }
   for (const resource of input.content.modelResources?.assets ?? []) {
+    if (identities.has(resource.asset.id)) continue;
     append(resource.asset, Buffer.from(verifyLearningTextAsset(resource, resource.asset), "utf8"));
+  }
+  if (input.fileOrder) {
+    if (new Set(input.fileOrder).size !== files.length || input.fileOrder.length !== files.length || input.fileOrder.some(id => !identities.has(id))) throw new Error("Saved package file order differs from its inventory.");
+    const positions = new Map(input.fileOrder.map((id, index) => [id, index]));
+    files.sort((left, right) => positions.get(left.asset.id)! - positions.get(right.asset.id)!);
   }
   return createTasksetPackage({ ...input.content, files });
 }

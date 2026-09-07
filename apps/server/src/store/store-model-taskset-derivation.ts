@@ -5,7 +5,9 @@ import { compileBoundGraders } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { computeTasksetHash, learningVerifierModule, projectLearningBatchGraders, projectPortableTaskRecord, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
 import { ModelProjectSchema, ModelProjectVersionedRefSchema, OpenPondModelProjectApiError, parseModelProjectSaveRequest, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
-import { createModelStarterExecutionAsset, deriveModelTaskset, ModelStarterExecutionSchema, ModelTasksetPackageSchema, modelStarterExecutionAssetId, type ModelTasksetPackage } from "openpond-sdk/model-starters";
+import { createModelStarterExecutionAsset, deriveModelTaskset, ModelStarterExecutionSchema, ModelTasksetPackageSchema, ModelTasksetDerivationSchema, modelStarterExecutionAssetId, type ModelTasksetPackage } from "openpond-sdk/model-starters";
+import { createTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
+import { prepareImportedTasksetPackage, type PreparedImportedTasksetPackage } from "../training/taskset-package-import.js";
 import { canonicalJson } from "openpond-sdk/training";
 import { createModelTasksetExecutionResourcesAsset } from "openpond-sdk/model-starters";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
@@ -18,11 +20,12 @@ export interface PreparedModelTaskset {
   source: Taskset;
   sourcePackage: ModelTasksetPackage;
   derived: ModelTasksetPackage;
+  imported?: PreparedImportedTasksetPackage;
 }
 
 /** Runs inside the serialized write queue, before filesystem materialization.
  * The preparation timestamp survives failures without exposing a Model change. */
-export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: ModelProjectSaveRequest, persistPreparation = true): PreparedModelTaskset | null {
+export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: ModelProjectSaveRequest, persistPreparation = true, completeSource?: TasksetPackage): PreparedModelTaskset | null {
   const request = parseModelProjectSaveRequest(raw);
   const { project } = request;
   const modelRow = db.get<{ payload: string }>("SELECT payload FROM model_projects WHERE id = ?", [project.id]);
@@ -82,12 +85,33 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
     }),
     metadata: source.metadata.derivedPortableMetadata ?? { localSource: learningRef(source), starter: { taskDefinition: learningRef(taskDefinition), rewardBinding: bindingRef } },
   }));
-  const sourcePackage = { taskset, taskDefinition, rewardBinding, rewards, assets: [...assets.values()], ...(executionResources ? { executionResources } : {}), ...(execution ? { execution } : {}) };
-  const derived = deriveModelTaskset({ owner: { scopeId: project.profileId, modelId: project.id }, source: sourcePackage, rewardBinding: selectedBinding, rewards: selectedRewards, assets: [...assets.values()] });
+  const sourcePackage = completeSource ? { ...completeSource.modelResources!, taskset: completeSource.taskset, executionResources: { environment: completeSource.environment, verifierSet: completeSource.verifierSet } } : { taskset, taskDefinition, rewardBinding, rewards, assets: [...assets.values()], ...(executionResources ? { executionResources } : {}), ...(execution ? { execution } : {}) };
+  const lineage = ModelTasksetDerivationSchema.safeParse(sourcePackage.taskset.metadata.modelTasksetDerivation);
+  const linked = model?.hosted?.apiOrigin && model.hosted.tasksets.some(link => {
+    if (!lineage.success || link.localTasksetId !== source.id || !link.packageHash || !link.localTasksetHash) return false;
+    const localRow = db.get<{ payload: string }>("SELECT payload FROM taskset_revisions WHERE taskset_id = ? AND content_hash = ? AND profile_id = ?", [source.id, link.localTasksetHash, project.profileId]);
+    const pinnedLocal = localRow ? TasksetSchema.parse(JSON.parse(localRow.payload)) : null;
+    if (!pinnedLocal || pinnedLocal.contentHash !== link.localTasksetHash) return false;
+    const row = db.get<{ payload: string }>("SELECT payload FROM learning_revisions WHERE scope = ? AND kind = 'package' AND id = ? AND revision = ?", [project.profileId, link.releaseId, link.releaseRevision]);
+    const pinned = row ? TasksetReleaseSchema.parse(JSON.parse(row.payload)) : null;
+    const declared = ModelTasksetDerivationSchema.safeParse(pinned?.metadata.modelTasksetDerivation);
+    return pinned?.contentHash === link.releaseHash && declared.success && canonicalJson(declared.data.owner) === canonicalJson(lineage.data.owner) && sameLearningRef(declared.data.root, lineage.data.root);
+  });
+  const owner = linked && lineage.success && lineage.data.owner.modelId === project.id ? lineage.data.owner : { scopeId: project.profileId, modelId: project.id };
+  const derived = deriveModelTaskset({ owner, source: sourcePackage, rewardBinding: selectedBinding, rewards: selectedRewards, assets: [...assets.values()] });
   const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
   if (persistPreparation) db.run("INSERT OR IGNORE INTO model_project_taskset_preparations (profile_id, operation_id, request_hash, created_at, state) VALUES (?, ?, ?, ?, 'preparing')", [project.profileId, request.operationId, hash, new Date().toISOString()]);
   const preparation = db.get<{ request_hash: string; created_at: string }>("SELECT request_hash, created_at FROM model_project_taskset_preparations WHERE profile_id = ? AND operation_id = ?", [project.profileId, request.operationId]) ?? { request_hash: hash, created_at: new Date().toISOString() };
   if (preparation.request_hash !== hash) fail(409, "model_operation_conflict", "This save operation was already used with different Model configuration.");
+  if (completeSource) {
+    const files = new Map(completeSource.files.map(file => [file.asset.id, file]));
+    for (const asset of derived.assets) files.set(asset.id, { asset: asset.asset, base64: Buffer.from(asset.text).toString("base64") });
+    const { taskset: derivedRelease, executionResources: resources, ...modelResources } = derived;
+    if (!resources) throw new Error("Derived imported package is missing execution resources.");
+    const value = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset: derivedRelease, ...resources, modelResources, files: [...files.values()] });
+    const imported = prepareImportedTasksetPackage({ package: value, profileId: project.profileId, name: source.name, createdAt: preparation.created_at });
+    return { taskset: imported.taskset, generatedFiles: imported.generatedFiles, directoryId: String(imported.taskset.environment.metadata.runtimeSourceTasksetId), source, sourcePackage, derived, imported };
+  }
   const directoryId = `${derived.taskset.id}-r${derived.taskset.revision}-${sealLearningContent({ packageHash: derived.taskset.contentHash, preparedAt: preparation.created_at }).contentHash}`;
   const draft = tasksetDraftFromTaskset(source, preparation.created_at);
   const portableTasks = new Map(derived.taskset.tasks.map(task => [task.id, task]));

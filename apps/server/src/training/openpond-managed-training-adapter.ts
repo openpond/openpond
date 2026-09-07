@@ -31,7 +31,7 @@ import {
 import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
 import { ensureManagedRlLocalExecutor } from "./managed-rl-local-executor-manager.js";
 import { supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
-import { syncHostedModelProjectForSubmission } from "./model-project-hosted-projection.js";
+import { createModelProjectHostingService } from "./model-project-hosting.js";
 import {
   dateString,
   learnedRewardSource,
@@ -956,13 +956,11 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     project: import("@openpond/contracts").ModelProject,
     access: Access,
   ) {
-    return syncHostedModelProjectForSubmission({
-      project,
-      access,
-      fetchImpl: this.fetchImpl,
-      saveModelProject: (saved) =>
-        this.dependencies.store.saveModelProjectHosting(project, saved),
-    });
+    const saved = await createModelProjectHostingService({
+      store: this.dependencies.store, resolveAccess: async () => access, fetch: this.fetchImpl,
+    }).syncProject(project.id);
+    if (saved.revision !== project.revision) throw new Error("Model changed before submission. Refresh the training plan before launching.");
+    return saved;
   }
 
   private async ensureLocalExecutor(

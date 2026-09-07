@@ -11,7 +11,11 @@ import { prepareModelStarterTaskset } from "../apps/server/src/training/model-st
 import { createModelStarterCreationService } from "../apps/server/src/training/model-starter-creation-service.js";
 import { createModelStarterRuntime } from "../apps/server/src/training/model-starter-runtime.js";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export.js";
-import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
+import { createTasksetPackage, decodeTasksetPackageFile, TasksetPackagePublicationSchema, type TasksetPackageReceipt } from "openpond-sdk/taskset-packages";
+import { createModelProjectHostingService } from "../apps/server/src/training/model-project-hosting.js";
+import { tasksetPackageDirectoryId } from "../apps/server/src/training/taskset-package-path.js";
+import { hostedModelProjectTrainingSetup } from "../apps/server/src/training/model-project-hosted-projection.js";
+import { validateTaskset } from "@openpond/taskset-sdk";
 import { projectBaseModelCandidates } from "../apps/server/src/training/base-model-candidates.js";
 import { openStorageDatabase } from "@openpond/persistence";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
@@ -23,9 +27,200 @@ import { requireReleasedTaskset } from "../apps/server/src/training/local-taskse
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
-import { createModelProjectSaveRequest, type ModelProject } from "openpond-sdk/model-projects";
+import { createModelProjectSaveRequest, ModelProjectSchema, HostedModelProjectSummarySchema, type HostedModelProjectSummary, type ModelProject } from "openpond-sdk/model-projects";
 import { readTasksetGraderDetails } from "../apps/server/src/training/taskset-grader-details.js";
 import { materializeImmutableTasksetPackage } from "../apps/server/src/training/model-starter-package-files.js";
+
+// A lost successful response followed by offline edits must replay the durable
+// original operation first, then publish the newer configuration without loss.
+it("recovers atomic package pushes after restart and attaches history without retargeting", async () => withTempDirectory("package-push-", async home => {
+  let store = new SqliteStore(home);
+  try {
+    const input = await starterInput();
+    const original = await store.saveModelStarterCreation(input);
+    const receipts = new Map<string, TasksetPackageReceipt>();
+    let remote: HostedModelProjectSummary | null = null;
+    let loseResponse = true;
+    let rejectNext = false;
+    const calls: string[] = [];
+    const service = (teamId = "team") => createModelProjectHostingService({ store,
+      resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test-key", teamId }),
+      fetch: async (url, init) => {
+        expect(new URL(String(url)).pathname).toBe("/v1/taskset-packages");
+        expect(init?.method).toBe("POST");
+        const request = TasksetPackagePublicationSchema.parse(JSON.parse(String(init?.body)));
+        calls.push(request.operationId);
+        if (receipts.has(request.operationId)) return Response.json(receipts.get(request.operationId));
+        if (rejectNext) { rejectNext = false; return Response.json({ code: "publication_rejected", message: "Fixture rejects this attempt before commit" }, { status: 422 }); }
+        expect(request.expectedProjectEtag).toBe(remote?.etag ?? null);
+        expect(request.package.files.length).toBeGreaterThan(0);
+        if (request.selection === "select") {
+          const configuration = request.modelConfiguration!;
+          remote = HostedModelProjectSummarySchema.parse({ ...configuration, id: "remote-model", teamId: "team",
+            revision: (remote?.revision ?? 0) + 1, etag: sha256(request.operationId), createdAt: original.createdAt, updatedAt: configuration.sourceUpdatedAt,
+            trainingSetup: { ...configuration.trainingSetup, tasksetRef: learningRef(request.package.taskset),
+              rewardBindingRef: learningRef(request.package.modelResources!.rewardBinding), tasksetRelease: null, recipe: null } });
+        } else expect(request.modelConfiguration).toBeUndefined();
+        const receipt: TasksetPackageReceipt = { schemaVersion: "openpond.tasksetPackageReceipt.v1", teamId: "team",
+          modelProjectId: request.modelProjectId, operationId: request.operationId, selection: request.selection,
+          taskset: learningRef(request.package.taskset), packageHash: request.package.contentHash,
+          hostedTasksetId: `hosted-${request.package.taskset.id}`, projectEtag: remote!.etag,
+          ...(request.selection === "select" ? { project: remote! } : {}) };
+        receipts.set(request.operationId, receipt);
+        if (loseResponse) { loseResponse = false; throw new TypeError("Response lost after commit"); }
+        return Response.json(receipt);
+      },
+    });
+    await expect(service().syncProject(original.id)).rejects.toThrow("Response lost");
+    expect((await store.getModelProject(original.id))!.hosted).toBeNull();
+    await expect(service("other-workspace").syncProject(original.id)).rejects.toThrow("original API and workspace");
+    expect(calls).toHaveLength(1);
+    const edited = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: original.id, profileId: original.profileId,
+      name: "Edited while offline", objective: original.objective, defaultBaseModel: original.defaultBaseModel,
+      defaultDestinationId: original.defaultDestinationId, trainingSetup: original.trainingSetup }, original.revision));
+    await store.close();
+    store = new SqliteStore(home);
+    const pushed = await service().syncProject(original.id);
+    expect(pushed.name).toBe(edited.name);
+    expect(pushed.revision).toBe(edited.revision);
+    expect(pushed.hosted!.syncedSourceRevision).toBe(edited.revision);
+    expect(calls).toHaveLength(3);
+    expect(calls[0]).toBe(calls[1]);
+    expect(receipts.size).toBe(2);
+    expect(remote!.name).toBe(edited.name);
+    const third = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: pushed.id, profileId: pushed.profileId,
+      name: "Third configuration", objective: pushed.objective, defaultBaseModel: pushed.defaultBaseModel,
+      defaultDestinationId: pushed.defaultDestinationId, trainingSetup: pushed.trainingSetup }, pushed.revision));
+    const selectedTaskset = (await store.getTaskset(third.trainingSetup.tasksetRef!.id))!;
+    const selectedPackage = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: third.profileId, modelId: third.id });
+    rejectNext = true;
+    await expect(service().publishTaskset({ projectId: third.id, taskset: selectedTaskset, release: selectedPackage.taskset })).rejects.toThrow("Fixture rejects");
+    expect(await store.pendingModelPackagePush({ profileId: third.profileId, modelId: third.id, apiOrigin: "https://staging-api.openpond.ai", teamId: "team" })).toBeNull();
+    await service().publishTaskset({ projectId: third.id, taskset: selectedTaskset, release: selectedPackage.taskset });
+    expect(calls[calls.length - 2]).toBe(calls[calls.length - 1]);
+    expect(remote!.name).toBe(third.name);
+    const otherRequest = await createModelStarterCreationRequest({ profileId: input.request.profileId, modelId: "other-model", name: "Other tasks",
+      starter: input.request.starter, startingModel: input.request.startingModel, method: "sft" });
+    const other = await store.saveModelStarterCreation({ ...input, request: otherRequest });
+    const otherTaskset = (await store.getTaskset(other.trainingSetup.tasksetRef!.id))!;
+    const otherPackage = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: other.profileId, modelId: other.id });
+    const selectedBefore = pushed.trainingSetup.tasksetRef;
+    const etagBefore = remote!.etag;
+    const attached = await service().publishTaskset({ projectId: original.id, taskset: otherTaskset, release: otherPackage.taskset });
+    expect(attached.trainingSetup.tasksetRef).toEqual(selectedBefore);
+    expect(remote!.etag).toBe(etagBefore);
+    expect(attached.hosted!.tasksets).toHaveLength(2);
+    expect(receipts.size).toBe(4);
+    expect(await store.pendingModelPackagePush({ profileId: original.profileId, modelId: original.id, apiOrigin: "https://staging-api.openpond.ai", teamId: "team" })).toBeNull();
+  } finally { await store.close(); }
+}));
+
+// A metadata-only pull loses private inputs. Exercise the real SQLite/file
+// boundary and show that corrupt bytes or a concurrent edit cannot replace it.
+it("pulls complete private packages atomically and exports their exact bytes after reopen", async () => withTempDirectory("package-pull-", async home => {
+  const source = new SqliteStore(path.join(home, "source"));
+  let target = new SqliteStore(path.join(home, "target"));
+  try {
+    const input = await starterInput();
+    const original = await source.saveModelStarterCreation(input);
+    const exported = await exportLocalModelTasksetPackage({ store: source, storeDir: source.home, profileId: original.profileId, modelId: original.id });
+    const bytes = Buffer.from([255, 0, 128, 11, 10]);
+    const asset = { id: "private-extra", path: "private/extra.bin", mediaType: "application/octet-stream", visibility: "host_private" as const, sizeBytes: bytes.length, contentHash: sha256(bytes) };
+    const { contentHash: _hash, ...content } = exported;
+    const value = createTasksetPackage({ ...content, files: [{ asset, base64: bytes.toString("base64") }, ...exported.files] });
+    const hosted = { id: "remote-model", teamId: "team", portableProjectId: original.id, name: original.name,
+      objective: original.objective, defaultBaseModel: original.defaultBaseModel, defaultDestinationId: original.defaultDestinationId,
+      trainingSetup: { ...hostedModelProjectTrainingSetup(original.trainingSetup), tasksetRef: learningRef(value.taskset) }, sourceRevision: 1, revision: 1,
+      etag: "a".repeat(64), sourceUpdatedAt: original.updatedAt, createdAt: original.createdAt, updatedAt: original.updatedAt };
+    let corrupt = true;
+    let servedPackage = value;
+    let duringDownload: (() => Promise<void>) | null = null;
+    const service = (store = target) => createModelProjectHostingService({ store,
+      resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test-key", teamId: "team" }),
+      fetch: async url => {
+        const pathname = new URL(String(url)).pathname;
+        if (pathname.startsWith("/v1/taskset-packages/")) {
+          await duringDownload?.();
+          return Response.json({ schemaVersion: "openpond.tasksetPackageReadback.v1", teamId: "team", modelProjectId: hosted.id,
+            package: corrupt ? { ...servedPackage, files: [] } : servedPackage });
+        }
+        if (pathname.startsWith("/v1/taskset-catalog/")) return Response.json({ schemaVersion: "openpond.hostedTasksetSummary.v1",
+          id: "remote-taskset", teamId: "team", release: learningRef(servedPackage.taskset), name: "Imported invoices", description: "Private test package",
+          taskCount: value.taskset.tasks.length, buildIntent: "verifiable_reward", methodHint: "sft", packageBytes: null, storedBytes: null, createdAt: original.createdAt });
+        if (pathname === "/v1/managed-rl/jobs") return Response.json({ jobs: [] });
+        return Response.json({ project: { ...hosted, trainingSetup: { ...hosted.trainingSetup, tasksetRef: learningRef(servedPackage.taskset),
+          rewardBindingRef: servedPackage.modelResources ? learningRef(servedPackage.modelResources.rewardBinding) : null } }, resources: [], jobCount: 0, latestJobIds: [] });
+      },
+    });
+    const pull = () => service().pullProject({ hostedProjectId: hosted.id, profileId: "import-profile" });
+    await expect(pull()).rejects.toThrow();
+    expect(await target.getModelProject(original.id)).toBeNull();
+    expect(await target.getTaskset(value.taskset.id)).toBeNull();
+    corrupt = false;
+    const pulled = (await pull()).project;
+    const local = (await target.getTaskset(value.taskset.id))!;
+    expect(pulled.trainingSetup.tasksetRef).toEqual(learningRef(local));
+    expect(local.contentHash).not.toBe(value.taskset.contentHash);
+    expect(local.sourceRefs[0]).toMatchObject({ licensingStatus: "pending", secretScanStatus: "pending", piiScanStatus: "pending" });
+    expect(validateTaskset(local).valid).toBe(false);
+    expect(await readFile(path.join(target.home, "training", "tasksets", tasksetPackageDirectoryId(local), asset.path))).toEqual(bytes);
+    await target.close();
+    target = new SqliteStore(path.join(home, "target"));
+    expect(await exportLocalModelTasksetPackage({ store: target, storeDir: target.home, profileId: pulled.profileId, modelId: pulled.id })).toEqual(value);
+    expect((await pull()).project.trainingSetup.tasksetRef).toEqual(learningRef(local));
+    duringDownload = async () => {
+      const current = (await target.getModelProject(pulled.id))!;
+      await target.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: current.id, profileId: current.profileId,
+        name: "Local concurrent edit", objective: current.objective, defaultBaseModel: current.defaultBaseModel,
+        defaultDestinationId: current.defaultDestinationId, trainingSetup: current.trainingSetup }, current.revision));
+    };
+    await expect(pull()).rejects.toThrow("Model changed");
+    expect((await target.getModelProject(pulled.id))!.name).toBe("Local concurrent edit");
+    for (const weight of [2, 3]) {
+      const current = (await target.getModelProject(pulled.id))!;
+      const { contentHash: _bindingHash, ...bindingContent } = value.modelResources!.rewardBinding;
+      const binding = RewardBindingSchema.parse(sealLearningContent({ ...bindingContent, id: `imported-binding-${weight}`, sources: bindingContent.sources.map(item => ({ ...item, weight })) }));
+      await target.learningRepository().transaction(current.profileId, async tx => { await tx.put("binding", binding, 0); });
+      const request = await createModelProjectSaveRequest({ id: current.id, profileId: current.profileId, name: current.name,
+        objective: current.objective, defaultBaseModel: current.defaultBaseModel, defaultDestinationId: current.defaultDestinationId,
+        trainingSetup: { ...current.trainingSetup, rewardBindingRef: learningRef(binding) } }, current.revision);
+      const edited = await target.saveModelProjectConfiguration(request);
+      expect(edited.trainingSetup.tasksetRef!.id).toBe(local.id);
+      expect(edited.trainingSetup.tasksetRef!.revision).toBe(local.revision + weight - 1);
+      expect(await target.saveModelProjectConfiguration(request)).toEqual(edited);
+      const updated = await exportLocalModelTasksetPackage({ store: target, storeDir: target.home, profileId: current.profileId, modelId: current.id });
+      expect(updated.files.find(file => file.asset.id === asset.id)).toEqual(value.files[0]);
+      expect(updated.modelResources!.rewardBinding).toEqual(binding);
+      expect((await target.getTasksetRevision(local.id, local.revision))!.contentHash).toBe(local.contentHash);
+    }
+    // Recover an older link without changing its already authored immutable
+    // local Taskset or inferring the API origin from a matching team ID alone.
+    duringDownload = null;
+    servedPackage = exported;
+    const originalTaskset = await source.getTaskset(value.taskset.id);
+    await source.saveModelProjectHosting(original, ModelProjectSchema.parse({ ...original, hosted: {
+      schemaVersion: "openpond.hostedModelProjectLink.v1", apiOrigin: null, teamId: hosted.teamId,
+      projectId: hosted.id, portableProjectId: original.id, revision: hosted.revision, etag: hosted.etag,
+      syncedSourceRevision: original.revision, syncedAt: original.updatedAt, tasksets: [],
+    } }));
+    const recovered = await service(source).pullProject({ hostedProjectId: hosted.id, profileId: original.profileId });
+    expect(recovered.project.hosted!.apiOrigin).toBe("https://staging-api.openpond.ai");
+    expect(await source.getTaskset(value.taskset.id)).toEqual(originalTaskset);
+    expect(await exportLocalModelTasksetPackage({ store: source, storeDir: source.home, profileId: original.profileId, modelId: original.id })).toEqual(exported);
+    const generic = new SqliteStore(path.join(home, "generic"));
+    try {
+      const { contentHash: _genericHash, modelResources: _genericResources, ...unboundContent } = exported;
+      const { contentHash: _boundHash, ...unboundRelease } = exported.taskset;
+      servedPackage = createTasksetPackage({ ...unboundContent, taskset: TasksetReleaseSchema.parse(sealLearningContent({ ...unboundRelease, metadata: {} })) });
+      const ordinary = await service(generic).pullProject({ hostedProjectId: hosted.id, profileId: "ordinary-profile" });
+      expect(ordinary.project.trainingSetup.rewardBindingRef).toBeNull();
+      const ordinaryTaskset = (await generic.getTaskset(ordinary.project.trainingSetup.tasksetRef!.id))!;
+      expect(ordinaryTaskset.metadata.taskDefinition).toBeUndefined();
+      expect(ordinaryTaskset.graders[0]!.kind).toBe(exported.taskset.graders[0]!.kind);
+      expect(await exportLocalModelTasksetPackage({ store: generic, storeDir: generic.home, profileId: ordinary.project.profileId, modelId: ordinary.project.id })).toEqual(servedPackage);
+    } finally { await generic.close(); }
+  } finally { await source.close(); await target.close(); }
+}));
 
 // A valid release reference alone must never admit missing or altered private code.
 it("exports verified private Reward assets separately from policy task assets", async () => withTempDirectory("starter-private-export-", async home => {

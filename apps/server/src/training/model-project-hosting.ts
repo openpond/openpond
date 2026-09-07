@@ -15,7 +15,12 @@ import {
   type HostedModelProjectDetail,
 } from "openpond-sdk/model-projects";
 import { z } from "zod";
-import { gzipSync } from "node:zlib";
+import { OpenPondTasksetPackageClient } from "openpond-sdk/taskset-packages";
+import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
+import { prepareImportedTasksetPackage, type PreparedImportedTasksetPackage } from "./taskset-package-import.js";
+import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
+import { pushModelTasksetPackage } from "./model-taskset-package-hosting.js";
+import { learningRef, sameLearningRef } from "@openpond/evals/learning";
 
 import type { SqliteStore } from "../store/store.js";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
@@ -25,7 +30,6 @@ import {
 } from "./hosted-model-project-catalog.js";
 import { hostedModelProjectTrainingSetup } from "./model-project-hosted-projection.js";
 import {
-  buildIntent,
   canReplaceFromHosted,
   errorMessage,
   requireProject,
@@ -50,15 +54,6 @@ const HostedProjectSchema = z.object({
   etag: z.string().regex(/^[a-f0-9]{64}$/),
 }).passthrough();
 
-const HostedTasksetSchema = z.object({
-  id: z.string().min(1),
-  portableTasksetId: z.string().min(1).nullable(),
-  revision: z.number().int().positive(),
-  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
-}).passthrough();
-
-const PORTABLE_TASKSET_PUBLICATION_CONTENT_TYPE =
-  "application/vnd.openpond.taskset-publication+json+gzip";
 const HostedManagedJobSchema = z.object({
   id: z.string().min(1),
   teamId: z.string().min(1),
@@ -197,31 +192,47 @@ export function createModelProjectHostingService(input: {
     ]);
     const summary = hosted.project;
     const existing = await input.store.getModelProject(summary.portableProjectId);
-    if (existing && !canReplaceFromHosted(existing, summary, access.teamId)) {
+    if (existing && !canReplaceFromHosted(existing, summary, access.teamId, access.apiBaseUrl)) {
       throw new Error(
         `Model Project ${summary.portableProjectId} has local changes or belongs to a different hosted workspace. Pulling would overwrite local work.`,
       );
     }
-    if (
-      existing?.hosted?.teamId === access.teamId &&
-      existing.hosted.projectId === summary.id &&
-      existing.hosted.etag === summary.etag &&
-      existing.revision === summary.sourceRevision
-    ) {
-      const importedMetricCount = await importHostedJobs(
-        existing,
-        hostedJobs,
-        access,
-      );
-      return {
-        project: existing,
-        hosted,
-        importedJobCount: hostedJobs.length,
-        importedMetricCount,
-      };
-    }
-
     const syncedAt = new Date().toISOString();
+    const imported: PreparedImportedTasksetPackage[] = [];
+    const selected = summary.trainingSetup.tasksetRef;
+    let localTasksetRef = selected;
+    let selectedLink: NonNullable<ModelProject["hosted"]>["tasksets"][number] | null = null;
+    if (selected) {
+      const options = { baseUrl: access.apiBaseUrl, apiKey: access.token, teamId: access.teamId, fetch: fetchImpl };
+      const [value, metadata] = await Promise.all([
+        new OpenPondTasksetPackageClient(options).get(summary.id, selected),
+        new OpenPondTasksetCatalogClient(options).resolve(selected),
+      ]);
+      const selectedBinding = summary.trainingSetup.rewardBindingRef ?? null;
+      const packageBinding = value.modelResources ? learningRef(value.modelResources.rewardBinding) : null;
+      if (Boolean(selectedBinding) !== Boolean(packageBinding) || (selectedBinding && packageBinding && !sameLearningRef(selectedBinding, packageBinding))) throw new Error("Hosted Model Reward selection differs from its immutable Taskset package.");
+      const prepared: PreparedImportedTasksetPackage = prepareImportedTasksetPackage({ package: value,
+        profileId: existing?.profileId ?? inputValue.profileId, name: metadata.name, createdAt: metadata.createdAt });
+      const priorLink = existing?.hosted?.tasksets.find(link => link.releaseId === selected.id && link.releaseRevision === selected.revision && link.releaseHash === selected.contentHash);
+      const previousTaskset = priorLink?.localTasksetHash
+        ? await input.store.getTasksetByHash(priorLink.localTasksetId, priorLink.localTasksetHash)
+        : await input.store.getTasksetRevision(priorLink?.localTasksetId ?? selected.id, selected.revision);
+      if (previousTaskset) {
+        if (previousTaskset.profileId !== prepared.taskset.profileId) throw new Error("The downloaded Taskset belongs to another Profile. Local work was retained.");
+        if (previousTaskset.metadata.importedPackageHash !== value.contentHash) {
+          if (!existing || existing.trainingSetup.tasksetRef?.id !== previousTaskset.id || existing.trainingSetup.tasksetRef.revision !== previousTaskset.revision) throw new Error("The downloaded Taskset conflicts with an existing local revision. Local work was retained.");
+          const captured = await exportLocalModelTasksetPackage({ store: input.store, storeDir: input.store.home, profileId: existing.profileId, modelId: existing.id });
+          if (captured.contentHash !== value.contentHash) throw new Error("The downloaded package differs from the existing local files. Local work was retained.");
+          prepared.reuseExisting = true;
+        }
+        prepared.taskset = previousTaskset;
+      }
+      imported.push(prepared);
+      localTasksetRef = { id: prepared.taskset.id, revision: prepared.taskset.revision, contentHash: prepared.taskset.contentHash };
+      selectedLink = { localTasksetId: prepared.taskset.id, localTasksetHash: prepared.taskset.contentHash,
+        releaseId: selected.id, releaseRevision: selected.revision, releaseHash: selected.contentHash,
+        packageHash: value.contentHash, hostedTasksetId: metadata.id, syncedAt };
+    }
     const preserveHostedTasksets =
       existing?.hosted?.teamId === access.teamId &&
       existing.hosted.projectId === summary.id;
@@ -234,9 +245,10 @@ export function createModelProjectHostingService(input: {
       objective: summary.objective,
       defaultBaseModel: summary.defaultBaseModel,
       defaultDestinationId: summary.defaultDestinationId,
-      trainingSetup: summary.trainingSetup,
+      trainingSetup: { ...summary.trainingSetup, tasksetRef: localTasksetRef },
       hosted: {
         schemaVersion: "openpond.hostedModelProjectLink.v1",
+        apiOrigin: new URL(access.apiBaseUrl).origin,
         teamId: access.teamId,
         projectId: summary.id,
         portableProjectId: summary.portableProjectId,
@@ -244,13 +256,16 @@ export function createModelProjectHostingService(input: {
         etag: summary.etag,
         syncedSourceRevision: summary.sourceRevision,
         syncedAt,
-        tasksets: preserveHostedTasksets ? existing.hosted!.tasksets : [],
+        tasksets: [
+          ...(preserveHostedTasksets ? existing.hosted!.tasksets.filter(entry => !selectedLink || entry.releaseHash !== selectedLink.releaseHash) : []),
+          ...(selectedLink ? [selectedLink] : []),
+        ],
       },
       tasksetSyncs: preserveHostedTasksets ? existing.tasksetSyncs : [],
       createdAt: existing?.createdAt ?? summary.createdAt,
       updatedAt: summary.sourceUpdatedAt,
     });
-    const saved = await input.store.saveModelProjectHosting(existing, project, true);
+    const saved = await input.store.saveModelProjectHosting(existing, project, true, imported);
     const importedMetricCount = await importHostedJobs(
       saved,
       hostedJobs,
@@ -378,6 +393,8 @@ export function createModelProjectHostingService(input: {
   async function syncProject(projectId: string): Promise<ModelProject> {
     const project = await requireProject(input.store, projectId);
     const access = await input.resolveAccess();
+    if (project.hosted && (project.hosted.apiOrigin !== new URL(access.apiBaseUrl).origin || project.hosted.teamId !== access.teamId)) throw new Error("Pull this Model from its linked API and workspace before pushing local changes.");
+    if (project.trainingSetup.tasksetRef) return pushModelTasksetPackage({ store: input.store, projectId, access, fetch: fetchImpl });
     const syncBody = {
       schemaVersion: "openpond.hostedModelProjectSync.v2" as const,
       portableProjectId: project.id,
@@ -404,6 +421,7 @@ export function createModelProjectHostingService(input: {
       ...project,
       hosted: {
         schemaVersion: "openpond.hostedModelProjectLink.v1",
+        apiOrigin: new URL(access.apiBaseUrl).origin,
         teamId: access.teamId,
         projectId: hostedProject.id,
         portableProjectId: hostedProject.portableProjectId,
@@ -425,115 +443,15 @@ export function createModelProjectHostingService(input: {
     release: TasksetRelease;
   }): Promise<ModelProject> {
     const release = TasksetReleaseSchema.parse(inputValue.release);
-    const existingProject = await requireProject(input.store, inputValue.projectId);
     const access = await input.resolveAccess();
-    const matchingRelease = existingProject.hosted?.teamId === access.teamId
-      && existingProject.hosted.tasksets.some(
-        (entry) =>
-          entry.localTasksetId === inputValue.taskset.id
-          && entry.releaseId === release.id
-          && entry.releaseRevision === release.revision
-          && entry.releaseHash === release.contentHash,
-      );
-    // A managed Run references an already published immutable release. Avoid
-    // rewriting the project container on every launch: doing so turns a
-    // harmless stale container ETag into a launch-blocking sync conflict.
-    if (matchingRelease) return existingProject;
-    await recordTasksetSync({
-      projectId: inputValue.projectId,
-      taskset: inputValue.taskset,
-      release,
-      state: "syncing",
-      hostedTasksetId: null,
-      error: null,
-    });
-    let project: ModelProject;
     try {
-      project = await syncProject(inputValue.projectId);
+      return await pushModelTasksetPackage({ store: input.store, projectId: inputValue.projectId, access, fetch: fetchImpl,
+        attachment: { taskset: inputValue.taskset, release } });
     } catch (caught) {
-      await recordTasksetSync({
-        projectId: inputValue.projectId,
-        taskset: inputValue.taskset,
-        release,
-        state: "sync_failed",
-        hostedTasksetId: null,
-        error: errorMessage(caught),
-      });
+      await recordTasksetSync({ projectId: inputValue.projectId, taskset: inputValue.taskset, release,
+        state: "sync_failed", hostedTasksetId: null, error: errorMessage(caught) });
       throw caught;
     }
-    if (!project.hosted) throw new Error("Hosted Model Project link was not persisted.");
-    if (project.hosted.teamId !== access.teamId) {
-      throw new Error("Model Project is linked to a different hosted workspace.");
-    }
-    let response: { project: unknown; taskset: unknown };
-    try {
-      response = await requestJson<{ project: unknown; taskset: unknown }>({
-        access,
-        pathname: "/v1/taskset-releases",
-        method: "POST",
-        body: {
-          schemaVersion: "openpond.portableTasksetPublication.v1",
-          modelProjectId: project.hosted.projectId,
-          name: inputValue.taskset.name,
-          description: inputValue.taskset.objective,
-          buildIntent: buildIntent(inputValue.taskset),
-          methodHint: null,
-          release,
-        },
-        gzip: true,
-      });
-    } catch (caught) {
-      await recordTasksetSync({
-        projectId: inputValue.projectId,
-        taskset: inputValue.taskset,
-        release,
-        state: "sync_failed",
-        hostedTasksetId: null,
-        error: errorMessage(caught),
-      });
-      throw caught;
-    }
-    const hostedProject = HostedProjectSchema.parse(response.project);
-    const hostedTaskset = HostedTasksetSchema.parse(response.taskset);
-    const syncedAt = new Date().toISOString();
-    const tasksets = [
-      ...project.hosted.tasksets.filter(
-        (entry) =>
-          entry.localTasksetId !== inputValue.taskset.id ||
-          entry.releaseHash !== release.contentHash,
-      ),
-      {
-        localTasksetId: inputValue.taskset.id,
-        releaseId: release.id,
-        releaseRevision: release.revision,
-        releaseHash: release.contentHash,
-        hostedTasksetId: hostedTaskset.id,
-        syncedAt,
-      },
-    ];
-    const saved = ModelProjectSchema.parse({
-      ...project,
-      hosted: {
-        ...project.hosted,
-        projectId: hostedProject.id,
-        revision: hostedProject.revision,
-        etag: hostedProject.etag,
-        syncedAt,
-        tasksets,
-      },
-      tasksetSyncs: upsertTasksetSync(project.tasksetSyncs ?? [], {
-        localTasksetId: inputValue.taskset.id,
-        releaseId: release.id,
-        releaseRevision: release.revision,
-        releaseHash: release.contentHash,
-        state: "synced",
-        hostedTasksetId: hostedTaskset.id,
-        lastAttemptAt: syncedAt,
-        syncedAt,
-        lastError: null,
-      }),
-    });
-    return input.store.saveModelProjectHosting(project, saved);
   }
 
   async function requestJson<T>(request: {
@@ -541,7 +459,6 @@ export function createModelProjectHostingService(input: {
     pathname: string;
     method: "POST" | "PUT";
     body: unknown;
-    gzip?: boolean;
   }): Promise<T> {
     const url = `${request.access.apiBaseUrl}${request.pathname}`;
     const headers = hostedApiAuthHeaders(request.access.token);
@@ -552,19 +469,13 @@ export function createModelProjectHostingService(input: {
     );
     headers.set(
       "content-type",
-      request.gzip
-        ? PORTABLE_TASKSET_PUBLICATION_CONTENT_TYPE
-        : isModelProjectRequest
-          ? OPENPOND_MODEL_PROJECT_MEDIA_TYPE
-          : "application/json",
+      isModelProjectRequest ? OPENPOND_MODEL_PROJECT_MEDIA_TYPE : "application/json",
     );
     headers.set("x-openpond-team-id", request.access.teamId);
     const response = await fetchImpl(url, {
       method: request.method,
       headers,
-      body: request.gzip
-        ? gzipSync(Buffer.from(JSON.stringify(request.body)))
-        : JSON.stringify(request.body),
+      body: JSON.stringify(request.body),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<
       string,

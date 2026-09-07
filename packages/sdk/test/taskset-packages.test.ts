@@ -2,7 +2,8 @@ import { expect, it } from "vitest";
 import { contentHash, sha256 } from "@openpond/harness";
 import { bindTasksetExecutionReleases, createEnvironmentRelease, createVerifierSetRelease } from "@openpond/evals";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
-import { createTasksetPackage, decodeTasksetPackageFile, validateTasksetPackage, OpenPondTasksetPackageClient, type TasksetPackagePublication } from "../src/taskset-packages.js";
+import { createTasksetPackage, decodeTasksetPackageFile, validateTasksetPackage, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "../src/taskset-packages.js";
+import { HostedModelProjectTrainingSetupSchema } from "../src/model-projects.js";
 
 function fixture() {
   const file = (id: string, bytes: Uint8Array, visibility: "policy" | "host_private" | "verifier") => ({
@@ -78,4 +79,22 @@ it("binds upload receipts and downloaded packages to the requested owner and rel
   const count = requests.length;
   await expect(client.get("model-a", ref, { expectedPackageHash: "invalid" })).rejects.toThrow();
   expect(requests).toHaveLength(count);
+});
+
+// A successful package upload must not mask a lost Model rename/configuration
+// or accept a receipt for another Model when both are saved atomically.
+it("requires the exact Model configuration in an atomic publication receipt", async () => {
+  const packageValue = fixture();
+  const taskset = { id: packageValue.taskset.id, revision: packageValue.taskset.revision, contentHash: packageValue.taskset.contentHash };
+  const modelConfiguration = TasksetPackageModelConfigurationSchema.parse({ portableProjectId: "portable-model", name: "Updated Model", objective: "Preserve my setup", defaultBaseModel: null, defaultDestinationId: null, trainingSetup: {}, sourceRevision: 1, sourceUpdatedAt: "2026-09-07T00:00:00Z" });
+  const project = { ...modelConfiguration, id: "hosted-model", teamId: "team-a", revision: 1, sourceRevision: 1, etag: "a".repeat(64), createdAt: "2026-09-07T00:00:00Z", updatedAt: "2026-09-07T00:00:00Z", sourceUpdatedAt: "2026-09-07T00:00:00Z",
+    trainingSetup: HostedModelProjectTrainingSetupSchema.parse({ ...modelConfiguration.trainingSetup, tasksetRef: taskset, rewardBindingRef: null, tasksetRelease: null, recipe: null }) };
+  let result: unknown = project;
+  const client = new OpenPondTasksetPackageClient({ baseUrl: "https://api.example.test", apiKey: "key", teamId: "team-a", fetch: async () => Response.json({ schemaVersion: "openpond.tasksetPackageReceipt.v1", teamId: "team-a", modelProjectId: "portable-model", operationId: "atomic-create", taskset, packageHash: packageValue.contentHash, hostedTasksetId: "hosted-taskset", projectEtag: project.etag, ...(result ? { project: result } : {}) }) });
+  const publication: TasksetPackagePublication = { schemaVersion: "openpond.tasksetPackagePublication.v1", modelProjectId: "portable-model", operationId: "atomic-create", expectedProjectEtag: null, name: "Work", description: "", buildIntent: "discovery", methodHint: null, package: packageValue, modelConfiguration };
+  expect((await client.publish(publication)).project?.name).toBe("Updated Model");
+  for (const invalid of [undefined, { ...project, name: "Lost rename" }, { ...project, portableProjectId: "other-model" }, { ...project, trainingSetup: HostedModelProjectTrainingSetupSchema.parse({}) }]) {
+    result = invalid;
+    await expect(client.publish(publication)).rejects.toMatchObject({ code: "package_receipt_mismatch" });
+  }
 });

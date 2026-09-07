@@ -108,6 +108,7 @@ export const HostedModelProjectTrainingSetupSchema =
 export const HostedModelProjectLinkSchema = z
   .object({
     schemaVersion: z.literal("openpond.hostedModelProjectLink.v1"),
+    apiOrigin: z.string().url().refine(value => new URL(value).origin === value, "Use a canonical API origin.").nullable().default(null),
     teamId: IdSchema,
     projectId: IdSchema,
     portableProjectId: IdSchema,
@@ -120,9 +121,11 @@ export const HostedModelProjectLinkSchema = z
         z
           .object({
             localTasksetId: IdSchema,
+            localTasksetHash: HashSchema.nullable().default(null),
             releaseId: IdSchema,
             releaseRevision: z.number().int().positive(),
             releaseHash: HashSchema,
+            packageHash: HashSchema.nullable().default(null),
             hostedTasksetId: IdSchema,
             syncedAt: TimestampSchema,
           })
