@@ -21,12 +21,26 @@ function TasksetRewardPreview({ client, taskset }: { client: OpenPondLearningCli
   </section>;
 }
 
-export function ModelCreationReward({ client, taskset, bindingRef, onChange, starter }: { client: OpenPondLearningClient | null; taskset: Taskset | null; bindingRef: ModelProject["trainingSetup"]["rewardBindingRef"]; onChange: (value: ModelProject["trainingSetup"]["rewardBindingRef"]) => void; starter?: ModelStarterPreview }) {
+export function ModelCreationReward(props: Parameters<typeof EditableModelCreationReward>[0]) {
+  return props.starter ? <StarterReward starter={props.starter} /> : <EditableModelCreationReward {...props} />;
+}
+
+function StarterReward({ starter }: { starter: ModelStarterPreview }) {
+  const kinds = [...new Set(starter.reward.checks.map(check => check.kind === "model_judge" ? "LLM judge" : check.kind === "human" ? "Human review" : check.kind === "learned_model" ? "Learned reward model" : "Code verifier"))];
+  const type = kinds.length > 1 ? "Combined reward" : kinds[0] ?? "Code verifier";
+  return <section className="learning-workspace model-creation-reward">
+    <label>Reward type<select aria-label="Reward type" disabled value={type}><option value={type}>{type}</option></select></label>
+    <label>Reward<select aria-label="Reward" disabled value={starter.reward.name}><option value={starter.reward.name}>{starter.reward.name}</option></select></label>
+    <p>{starter.reward.description}</p>
+    {kinds.length > 1 ? <p>{kinds.join(" + ")}</p> : null}
+  </section>;
+}
+
+function EditableModelCreationReward({ client, taskset, bindingRef, onChange }: { client: OpenPondLearningClient | null; taskset: Taskset | null; bindingRef: ModelProject["trainingSetup"]["rewardBindingRef"]; onChange: (value: ModelProject["trainingSetup"]["rewardBindingRef"]) => void; starter?: ModelStarterPreview }) {
   const [after, setAfter] = useState<string | null>(null);
   const [editor, setEditor] = useState<"reward" | "combined" | null>(null);
   const bindings = useLearningResources(client, "binding", { limit: 30, ...(after ? { afterId: after } : {}) });
-  const starterSelected = Boolean(starter && bindingRef?.id === starter.starter.rewardBinding.id && bindingRef?.revision === starter.starter.rewardBinding.revision && bindingRef?.contentHash === starter.starter.rewardBinding.contentHash);
-  const selected = useLearningResource(client, "binding", starterSelected ? null : bindingRef?.id ?? null, bindingRef?.revision);
+  const selected = useLearningResource(client, "binding", bindingRef?.id ?? null, bindingRef?.revision);
   const mutation = useLearningMutation(client);
   async function useReward(reward: RewardRelease) {
     const binding = await mutation.run(async (api) => {
@@ -40,16 +54,14 @@ export function ModelCreationReward({ client, taskset, bindingRef, onChange, sta
   return <section className="learning-workspace model-creation-reward">
     <h3>Reward</h3><p>Choose or create quality checks now. You can import tasks later; their format must support the selected checks.</p>
     <LearningError error={bindings.error ?? selected.error ?? mutation.error} />
-    <div className="labs-model-create-select-row"><select aria-label="Reward" value={bindingRef ? `${bindingRef.id}:${bindingRef.revision}` : ""} onChange={(event) => { if (starter && event.target.value === `${starter.starter.rewardBinding.id}:${starter.starter.rewardBinding.revision}`) { onChange(starter.starter.rewardBinding); return; } const binding = bindings.page?.items.find((item) => `${item.id}:${item.revision}` === event.target.value); onChange(binding ? learningRef(binding) : null); }}>
-      <option value="">{taskset || starter ? "Use Taskset Reward" : "Choose later"}</option>
-      {starter ? <option value={`${starter.starter.rewardBinding.id}:${starter.starter.rewardBinding.revision}`}>{starter.reward.name} · {starter.reward.checks.map(check => check.kind === "custom_verifier" ? "Code verifier" : check.kind === "model_judge" ? "LLM judge" : check.kind === "human" ? "Human review" : "Deterministic check").filter((kind, index, kinds) => kinds.indexOf(kind) === index).join(" + ")}</option> : null}
-      {bindingRef && !starterSelected && !bindings.page?.items.some((item) => item.id === bindingRef.id && item.revision === bindingRef.revision) ? <option value={`${bindingRef.id}:${bindingRef.revision}`}>{selected.resource?.name || bindingRef.id} · release {bindingRef.revision}</option> : null}
-      {bindings.page?.items.filter(binding => !starter || binding.id !== starter.starter.rewardBinding.id || binding.revision !== starter.starter.rewardBinding.revision).map((binding) => <option key={binding.id} value={`${binding.id}:${binding.revision}`}>{binding.name || binding.id} · release {binding.revision}</option>)}
+    <div className="labs-model-create-select-row"><select aria-label="Reward" value={bindingRef ? `${bindingRef.id}:${bindingRef.revision}` : ""} onChange={(event) => { const binding = bindings.page?.items.find((item) => `${item.id}:${item.revision}` === event.target.value); onChange(binding ? learningRef(binding) : null); }}>
+      <option value="">{taskset ? "Use Taskset Reward" : "Choose later"}</option>
+      {bindingRef && !bindings.page?.items.some((item) => item.id === bindingRef.id && item.revision === bindingRef.revision) ? <option value={`${bindingRef.id}:${bindingRef.revision}`}>{selected.resource?.name || bindingRef.id} · release {bindingRef.revision}</option> : null}
+      {bindings.page?.items.map((binding) => <option key={binding.id} value={`${binding.id}:${binding.revision}`}>{binding.name || binding.id} · release {binding.revision}</option>)}
     </select><button type="button" className="labs-model-create-add" aria-label="Create Reward" onClick={() => setEditor("reward")}>+</button></div>
     <LearningPager after={after} next={bindings.page?.nextCursor} onPage={setAfter} />
     <button type="button" className="training-button secondary" onClick={() => setEditor("combined")}>Combine Rewards</button>
     {selected.resource ? <RewardBindingSummary client={client} binding={selected.resource} /> : null}
-    {starterSelected && starter ? <p>{starter.reward.description}</p> : null}
     {!bindingRef && taskset ? <TasksetRewardPreview client={client} taskset={taskset} /> : null}
     {editor ? <AppDialog ariaLabel={editor === "reward" ? "Create Reward" : "Combine Rewards"} className="labs-rename-dialog labs-model-taskset-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled onClose={() => undefined}>
       {editor === "reward" ? <RewardEditor client={client} reward={null} onClose={() => setEditor(null)} onSaved={(reward) => { void useReward(reward); }} /> : <CombinedRewardEditor client={client} binding={null} onClose={() => setEditor(null)} onSaved={(binding) => { onChange(learningRef(binding)); setEditor(null); bindings.refresh(); }} />}

@@ -33,7 +33,7 @@ export function LabModelCreateDialog({ baseModelCandidates, tasksets, busy: savi
   const listedCandidates = useMemo(() => labModelCreateCandidates(baseModelCandidates), [baseModelCandidates]);
   const [id] = useState(() => project?.id ?? `model_${crypto.randomUUID()}`);
   const [expectedRevision] = useState(project?.revision ?? 0);
-  const [activeStarter, setActiveStarter] = useState(starter);
+  const activeStarter = starter;
   const [operationId] = useState(() => `starter-create:${crypto.randomUUID()}`);
   const [pendingRequest, setPendingRequest] = useState<ModelStarterCreationRequest | null>(null);
   const initial = { name: project?.name ?? starter?.preview.starter.name ?? initialName, description: project?.objective ?? starter?.preview.starter.description ?? "", baseModel: project?.trainingSetup.baseModel ?? project?.defaultBaseModel ?? starter?.preview.starter.startingModel ?? null, tasksetRef: project?.trainingSetup.tasksetRef ?? null, rewardBindingRef: project?.trainingSetup.rewardBindingRef ?? starter?.preview.starter.rewardBinding ?? null };
@@ -63,7 +63,7 @@ export function LabModelCreateDialog({ baseModelCandidates, tasksets, busy: savi
     return null;
   }
   function configuration(): LabModelCreateInput {
-    const starterRequest = pendingRequest ?? (activeStarter && draft.baseModel ? { schemaVersion: "openpond.modelStarterCreation.v1" as const, operationId, profileId: activeStarter.profileId, modelId: id, name: normalizedName, starter: { id: activeStarter.preview.starter.id, revision: activeStarter.preview.starter.revision, contentHash: activeStarter.preview.starter.contentHash }, startingModel: draft.baseModel, method: activeStarter.preview.starter.defaultMethod, rewardBindingRef: draft.rewardBindingRef } : undefined);
+    const starterRequest = pendingRequest ?? (activeStarter && draft.baseModel ? { schemaVersion: "openpond.modelStarterCreation.v1" as const, operationId, profileId: activeStarter.profileId, modelId: id, name: normalizedName, starter: { id: activeStarter.preview.starter.id, revision: activeStarter.preview.starter.revision, contentHash: activeStarter.preview.starter.contentHash }, startingModel: draft.baseModel, method: activeStarter.preview.starter.defaultMethod, rewardBindingRef: activeStarter.preview.starter.rewardBinding } : undefined);
     return { starterRequest, id, name: normalizedName, description: draft.description.trim() || null, defaultBaseModel: draft.baseModel, tasksetRef: selectedTaskset ? { id: selectedTaskset.id, revision: selectedTaskset.revision, contentHash: selectedTaskset.contentHash } : draft.tasksetRef, rewardBindingRef: draft.rewardBindingRef, expectedRevision };
   }
   async function checkConfiguration(): Promise<boolean> {
@@ -96,7 +96,7 @@ export function LabModelCreateDialog({ baseModelCandidates, tasksets, busy: savi
   }
   return <>
     <AppDialog ariaLabel={project ? "Edit model" : "New model"} backdropClassName="labs-rename-backdrop" className="labs-rename-dialog labs-model-create-dialog" dismissDisabled={busy} initialFocusKey={id} onClose={() => { void guard.requestLeave(onClose); }}>
-      <header><div><h2>{project ? "Edit model" : "New model"}</h2><p>Choose a starting model, tasks and Reward. You can skip tasks and import them later.</p></div><button aria-label="Close model setup" disabled={busy} type="button" onClick={() => { void guard.requestLeave(onClose); }}><X size={16} /></button></header>
+      <header><div><h2>{project ? "Edit model" : "New model"}</h2><p>{activeStarter ? "Choose a starting model and review the example’s Taskset and Reward." : "Choose a starting model, tasks and Reward. You can skip tasks and import them later."}</p></div><button aria-label="Close model setup" disabled={busy} type="button" onClick={() => { void guard.requestLeave(onClose); }}><X size={16} /></button></header>
       <nav className="model-create-steps" aria-label="Model setup steps">{STEPS.map((label, index) => <button type="button" key={label} disabled={fieldsLocked || (!project && index > step)} aria-current={step === index ? "step" : undefined} onClick={() => { setStep(index); setError(null); }}>{label}</button>)}</nav>
       <form onSubmit={(event) => { void submit(event); }}>
         <fieldset disabled={fieldsLocked} className="model-create-fields">
@@ -104,11 +104,10 @@ export function LabModelCreateDialog({ baseModelCandidates, tasksets, busy: savi
             <label><span>Name</span><input data-autofocus maxLength={200} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
             <div className="labs-model-create-field"><span>Starting model</span><div className="labs-model-create-select-row"><DropdownSelect floating label="Starting model" value={selectedBase?.selectionKey ?? ""} options={[{ value: "", label: draft.baseModel && !selectedBase ? `${draft.baseModel.modelId} · unavailable` : "Choose later" }, ...listedCandidates.map((candidate) => ({ value: candidate.selectionKey, label: `${candidate.label} · ${candidate.sourceLabel}${candidate.available ? "" : " · Unavailable"}`, disabled: !candidate.available }))]} onChange={(key) => patch({ baseModel: listedCandidates.find((candidate) => candidate.selectionKey === key)?.preference ?? null })} /><button aria-label="Manage starting models" className="labs-model-create-add" title="Manage models in Compute settings" type="button" onClick={() => { void guard.requestLeave(onManageModels); }}>+</button></div></div>
           </> : step === 1 && activeStarter ? <>
-            <h3>{activeStarter.preview.starter.name}</h3>
+            <div className="labs-model-create-field"><span>Taskset</span><div className="labs-model-create-select-row"><select aria-label="Taskset" disabled value={activeStarter.preview.starter.taskset.id}><option value={activeStarter.preview.starter.taskset.id}>{activeStarter.preview.starter.name}</option></select></div></div>
             <p>{activeStarter.preview.counts.train} training tasks · {activeStarter.preview.counts.validation} validation tasks · {activeStarter.preview.counts.frozenEvaluation} held-out evaluation tasks</p>
             {activeStarter.preview.tasks.map(task => <details key={task.id}><summary>Example task</summary><pre>{JSON.stringify(task.input, null, 2)}</pre></details>)}
             <details><summary>Expected output format</summary><pre>{JSON.stringify(activeStarter.preview.outputSchema, null, 2)}</pre></details>
-            <button type="button" onClick={() => { setActiveStarter(null); patch({ tasksetRef: null, rewardBindingRef: null }); }}>Choose my own tasks instead</button>
           </> : step === 1 ? <>
             <div className="labs-model-create-field"><span>Taskset</span><div className="labs-model-create-select-row"><select aria-label="Taskset" value={selectedTaskset ? tasksetKey(selectedTaskset) : ""} onChange={(event) => { setPublishedTasksetId(null); const taskset = tasksets.find((taskset) => tasksetKey(taskset) === event.target.value); patch({ tasksetRef: taskset ? { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash } : null }); }}><option value="">Choose a Taskset</option>{tasksets.map((taskset) => <option key={tasksetKey(taskset)} value={tasksetKey(taskset)}>{taskset.name} · release {taskset.revision}</option>)}</select><button type="button" aria-label="Create or import Taskset" className="labs-model-create-add" onClick={() => setAddingTasks(true)}>+</button></div></div>
             {selectedTaskset ? <><p>{selectedTaskset.tasks.length || selectedTaskset.datasetArtifact?.rowCount || 0} tasks · {selectedTaskset.objective}</p>{selectedTaskset.tasks[0] ? <details><summary>Example task</summary><pre>{JSON.stringify({ input: selectedTaskset.tasks[0].input, expectedOutput: selectedTaskset.tasks[0].expectedOutput }, null, 2)}</pre></details> : null}</> : !tasksets.length ? <p>Create or import a Taskset from Tasksets, then select its published release here.</p> : null}
