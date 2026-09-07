@@ -5,11 +5,11 @@ import { readModelStarterCache, writeModelStarterCache } from "./model-starter-c
 
 const CATEGORY_LABELS: Record<ModelStarter["category"], string> = { extraction: "Extract structured data", support: "Customer support", operations: "Operations", knowledge: "Knowledge", coding: "Code", writing: "Writing", classification: "Classification" };
 
-export function ModelStarterCatalog({ actions, cacheScope, onSelect }: { actions: ReturnType<typeof useTraining>["actions"]; cacheScope: string; onSelect: (preview: ModelStarterPreview) => void }) {
+export function ModelStarterCatalog({ actions, cacheScope, onSelect }: { actions: ReturnType<typeof useTraining>["actions"]; cacheScope: string | null; onSelect: (preview: ModelStarterPreview) => void }) {
   const [afterId, setAfterId] = useState<string | undefined>();
-  const [loaded, setLoaded] = useState<{ scope: string; afterId: string | undefined; page: ModelStarterPage } | null>(null);
+  const [loaded, setLoaded] = useState<{ scope: string | null; afterId: string | undefined; page: ModelStarterPage } | null>(null);
   const cached = useMemo(() => {
-    try { return readModelStarterCache(window.localStorage, cacheScope, afterId); }
+    try { return cacheScope ? readModelStarterCache(window.localStorage, cacheScope, afterId) : null; }
     catch { return null; }
   }, [cacheScope, afterId]);
   const page = loaded?.scope === cacheScope && loaded.afterId === afterId ? loaded.page : cached;
@@ -21,13 +21,19 @@ export function ModelStarterCatalog({ actions, cacheScope, onSelect }: { actions
   const { listModelStarters, previewModelStarter } = actions;
   useEffect(() => {
     let cancelled = false;
+    let freshReceived = false;
     setRefreshing(true);
     setError(null);
-    void listModelStarters(afterId).then(result => {
+    function receive(result: ModelStarterPage) {
       if (cancelled) return;
-      try { writeModelStarterCache(window.localStorage, cacheScope, afterId, result); } catch { /* Browser storage may be disabled. */ }
+      try { if (cacheScope) writeModelStarterCache(window.localStorage, cacheScope, afterId, result); } catch { /* Browser storage may be disabled. */ }
       setLoaded({ scope: cacheScope, afterId, page: result });
-    }).catch((caught: unknown) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "Unable to load starters."); })
+    }
+    // The local runtime's durable cache survives a new packaged renderer origin.
+    // A late cached response must never overwrite the background refresh.
+    void listModelStarters(afterId).then(result => { if (!freshReceived) receive(result); }).catch(() => { /* The fresh request reports the current error below. */ });
+    void listModelStarters(afterId, true).then(result => { freshReceived = true; receive(result); })
+      .catch((caught: unknown) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "Unable to load starters."); })
       .finally(() => { if (!cancelled) setRefreshing(false); });
     return () => { cancelled = true; selection.current += 1; };
   }, [cacheScope, afterId, listModelStarters, refresh]);

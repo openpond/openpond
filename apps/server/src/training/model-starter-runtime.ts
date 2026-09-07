@@ -7,6 +7,7 @@ import { parseModelStarterCreationRequest, previewModelStarter } from "openpond-
 import type { SqliteStore } from "../store/store.js";
 import { createModelStarterCreationService } from "./model-starter-creation-service.js";
 import { scanAndRedactEvidence } from "./privacy.js";
+import { createModelStarterCatalogCache } from "./model-starter-catalog-cache.js";
 
 const AuthoringSchema = z.object({
   schemaVersion: z.literal("openpond.starterAuthoring.v1"),
@@ -21,6 +22,7 @@ export function createModelStarterRuntime(input: {
   store: SqliteStore; home: string;
   resolveAccess: () => Promise<{ apiBaseUrl: string; token: string; teamId: string }>;
 }) {
+  const cache = createModelStarterCatalogCache(input.home);
   async function client() {
     const access = await input.resolveAccess();
     return new OpenPondModelStarterCatalogClient({ baseUrl: access.apiBaseUrl, apiKey: access.token, teamId: access.teamId });
@@ -41,7 +43,12 @@ export function createModelStarterRuntime(input: {
     },
   } });
   return {
-    async list(query: unknown) { return (await client()).list(z.object({ limit: z.number().optional(), afterId: z.string().optional() }).strict().parse(query)); },
+    async list(value: unknown) {
+      const { fresh, ...query } = z.object({ limit: z.number().int().min(1).max(100).optional(), afterId: z.string().min(1).max(500).optional(), fresh: z.literal("true").optional() }).strict().parse(value);
+      const access = await input.resolveAccess();
+      const catalog = new OpenPondModelStarterCatalogClient({ baseUrl: access.apiBaseUrl, apiKey: access.token, teamId: access.teamId });
+      return cache.list({ apiBaseUrl: access.apiBaseUrl, teamId: access.teamId, query, fresh: fresh === "true", fetch: () => catalog.list(query) });
+    },
     async preview(reference: unknown) { return previewModelStarter(await (await client()).resolve(ModelProjectVersionedRefSchema.parse(reference))); },
     async check(value: unknown, destinations: TrainingDestinationCapabilities[]) {
       const request = parseModelStarterCreationRequest(value);
