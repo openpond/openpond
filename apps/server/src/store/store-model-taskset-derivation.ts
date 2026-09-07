@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/contracts";
 import { assertLearningContentHash, learningRef, learningResourceSchemas, sameLearningRef, sealLearningContent, verifyLearningTextAsset, type LearningResourceFor, type LearningTextAsset } from "@openpond/evals/learning";
 import { compileBoundGraders } from "@openpond/evals/rewards";
-import { TaskRecordSchema, TasksetReleaseSchema } from "@openpond/evals/tasksets";
-import { computeTasksetHash, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
+import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
+import { computeTasksetHash, learningVerifierModule, projectLearningBatchGraders, projectPortableTaskRecord, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
 import { ModelProjectSchema, ModelProjectVersionedRefSchema, OpenPondModelProjectApiError, parseModelProjectSaveRequest, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { createModelStarterExecutionAsset, deriveModelTaskset, ModelStarterExecutionSchema, ModelTasksetPackageSchema, modelStarterExecutionAssetId, type ModelTasksetPackage } from "openpond-sdk/model-starters";
 import { canonicalJson } from "openpond-sdk/training";
@@ -73,7 +73,13 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
   const taskset = TasksetReleaseSchema.parse(sealLearningContent({
     schemaVersion: "openpond.tasksetRelease.v2", id: source.id, revision: source.revision,
     ...taskDefinition.execution, graders: compileBoundGraders(rewardBinding, rewards),
-    tasks: source.tasks.map(task => TaskRecordSchema.parse({ id: task.id, clusterKey: task.clusterKey, split: task.split, input: task.input, expectedOutput: task.expectedOutput, policyVisibleContext: task.policyVisibleContext, privilegedContextRef: task.privilegedContextRef, artifactRefs: [], tags: task.tags })),
+    tasks: source.tasks.map(task => {
+      const projected = projectPortableTaskRecord(task);
+      // Existing source revisions omit undeclared output contracts. Preserve
+      // those exact bytes while retaining explicit or pinned output schemas.
+      if (task.requiredOutputs === undefined && task.metadata.portableTaskRecord === undefined) delete projected.requiredOutputs;
+      return projected;
+    }),
     metadata: source.metadata.derivedPortableMetadata ?? { localSource: learningRef(source), starter: { taskDefinition: learningRef(taskDefinition), rewardBinding: bindingRef } },
   }));
   const sourcePackage = { taskset, taskDefinition, rewardBinding, rewards, assets: [...assets.values()], ...(executionResources ? { executionResources } : {}), ...(execution ? { execution } : {}) };

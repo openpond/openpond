@@ -129,7 +129,7 @@ export function materializePortableTasksetRelease(input: {
     environment,
     tools,
     capabilities: portableCapabilities(input.taskset),
-    tasks: tasks.map(portableTask),
+    tasks: tasks.map(projectPortableTaskRecord),
     graders,
     metadata: input.taskset.metadata.derivedPortableMetadata ?? {
       sourceTasksetId: input.taskset.id,
@@ -186,11 +186,12 @@ export function portableTasksetTools(taskset: Taskset): ToolDeclaration[] {
   return portableTools(taskset);
 }
 
-function portableTask(task: TaskDataRecord) {
+/** Preserve immutable file/schema references while overlaying current edits. */
+export function projectPortableTaskRecord(task: TaskDataRecord) {
   const admitted = task.metadata.portableTaskRecord;
   if (admitted !== undefined) {
     const original = TaskRecordSchema.parse(admitted);
-    return TaskRecordSchema.parse({
+    const projected = TaskRecordSchema.parse({
       ...original,
       id: task.id,
       clusterKey: task.clusterKey,
@@ -227,6 +228,8 @@ function portableTask(task: TaskDataRecord) {
         };
       }),
     });
+    if (projected.requiredOutputs === undefined) delete projected.requiredOutputs;
+    return projected;
   }
   return {
     id: task.id,
