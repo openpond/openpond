@@ -28,7 +28,8 @@ describe("Models page, scope and resource route boundary", () => {
     }
     expect(modelsRouteFromLocation({ pathname: "/models/runs/new/model-a", search: "?model=model-a" })).toEqual(modelsLocation("runs", "model-a", { collection: "new", resourceId: "model-a" }));
     expect(modelsRouteFromLocation({ pathname: "/models/tasksets/drafts/draft-a" })).toEqual(modelsLocation("tasksets", null, { collection: "drafts", resourceId: "draft-a" }));
-    for (const pathname of ["/models/project-a/tasksets", "/models/projects/project-a", "/models/scorers", "/models/runs/new", "/models/versions/version-a/lineage", "/models/evaluations/not-a-view/anything", "/models/tasksets/t/graders", "/models/tasksets/%ZZ"]) expect(modelsRouteFromLocation({ pathname })).toBeNull();
+    for (const pathname of ["/models/get-started/private-model", "/models/project-a/tasksets", "/models/projects/project-a", "/models/scorers", "/models/runs/new", "/models/versions/version-a/lineage", "/models/evaluations/not-a-view/anything", "/models/tasksets/t/graders", "/models/tasksets/%ZZ"]) expect(modelsRouteFromLocation({ pathname })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models/get-started", search: "?model=a" })).toBeNull();
     expect(modelsRouteFromLocation({ pathname: "/models", search: "?model=a&model=b" })).toBeNull();
     expect(modelsRouteFromLocation({ pathname: "/models", search: "?modelProjectId=old&modelsTab=training" })).toBeNull();
   });
