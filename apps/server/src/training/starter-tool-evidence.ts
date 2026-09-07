@@ -5,25 +5,19 @@ import { z } from "zod";
 import type { TaskAttemptResult, TaskDataRecord, Taskset } from "@openpond/contracts";
 import { learningRef } from "@openpond/evals/learning";
 import { ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
+import { ModelStarterEnvironmentAttemptSchema } from "openpond-sdk/model-starters";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import { loadStarterToolEnvironment } from "./starter-tool-environment.js";
 
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
-const ResultSchema = z.object({
-  schemaVersion: z.literal("openpond.javascriptEnvironmentAttempt.v1"), taskId: z.string(),
-  status: z.enum(["completed", "budget_exhausted", "cancelled", "timed_out", "policy_failure", "environment_failure"]),
-  output: z.string().nullable(), collected: z.boolean(), environmentCleanupComplete: z.boolean(),
-  snapshot: z.object({ definition: ModelProjectVersionedRefSchema, inputHash: HashSchema, seed: z.number().int(), initialStateHash: HashSchema, finalStateHash: HashSchema, state: z.record(z.string(), z.unknown()), events: z.array(z.record(z.string(), z.unknown())) }).nullable(),
-  messages: z.array(z.unknown()), error: z.string().nullable(), contentHash: HashSchema,
-}).strict();
 const EnvelopeSchema = z.object({
   schemaVersion: z.literal("openpond.starterToolAttempt.v1"), requestId: z.string(),
   taskset: ModelProjectVersionedRefSchema, taskHash: HashSchema, model: z.unknown(),
   seed: z.number().int(), attempt: z.number().int(), definition: ModelProjectVersionedRefSchema,
   policySource: z.enum(["model", "fixture"]),
   environment: ModelProjectVersionedRefSchema, verifierSet: ModelProjectVersionedRefSchema,
-  result: ResultSchema,
+  result: ModelStarterEnvironmentAttemptSchema,
 }).strict();
 
 /** Manual output/evaluatorContext cannot manufacture this store-owned evidence. */

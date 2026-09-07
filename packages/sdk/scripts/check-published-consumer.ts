@@ -65,6 +65,8 @@ async function main(): Promise<void> {
           'import { ModelProjectSchema } from "openpond-sdk/model-projects";',
           'import { createModelStarterCreationRequest, parseModelStarterCreationRequest } from "openpond-sdk/model-starters";',
           'import { OpenPondModelStarterCatalogClient } from "openpond-sdk/model-starter-catalog";',
+          'import { OpenPondModelStarterAttemptsClient, ModelStarterAttemptRequestSchema } from "openpond-sdk/model-starter-attempts";',
+          'if (!OpenPondModelStarterAttemptsClient || !ModelStarterAttemptRequestSchema) throw new Error("Packed starter attempt exports are missing");',
           'import { OpenPondTasksetCatalogClient, HostedTasksetSummarySchema } from "openpond-sdk/taskset-catalog";',
           'import { TrainingJobSubmissionSchema } from "openpond-sdk/training";',
           'import { OpenPondLearningClient, OpenPondLearningError, LearningSourceSchema, TaskExampleSubmissionSchema, TaskEvidenceSchema, sealLearningContent, createSourceCredentialRequest, LearningSourceCredentialRequestSchema, LearningSourceConfigurationSchema, AuthoringDraftInputSchema, LearningCommandSchema } from "openpond-sdk/learning";',

@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -18,6 +18,10 @@
     "MODEL_STARTERS.md"
   ],
   "exports": {
+    "./model-starter-attempts": {
+      "types": "./dist/types/packages/sdk/src/model-starter-attempts.d.ts",
+      "import": "./dist/model-starter-attempts.js"
+    },
     "./taskset-catalog": {
       "types": "./dist/types/packages/sdk/src/taskset-catalog.d.ts",
       "import": "./dist/taskset-catalog.js"
