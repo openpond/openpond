@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { createLearningTextAsset, learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
+import { ModelStarterExecutionSchema } from "../src/model-starter-execution.js";
 import { ModelStarterSchema, createModelStarterCreationRequest, parseModelStarterCreationRequest, previewModelStarter, validateModelStarterCreation, validateResolvedModelStarter } from "../src/model-starters.js";
 import { OpenPondModelStarterCatalogClient } from "../src/model-starter-catalog.js";
 
@@ -48,6 +49,43 @@ function reseal(value: Record<string, unknown> & { contentHash: string }) {
   const { contentHash: _old, ...content } = value;
   value.contentHash = sealLearningContent(content).contentHash;
 }
+
+// An outer package hash cannot authorize replacing the tool world or removing
+// the private state on which a state-based Reward depends.
+it("closes tool environment resources and private task state before creation", () => {
+  const original = fixture();
+  const module = createLearningTextAsset({ text: "export function create({ initialState }) { return { state: initialState, observation: {} }; }", path: "world.mjs", mediaType: "application/javascript", visibility: "host_private" });
+  const state = createLearningTextAsset({ text: JSON.stringify({ secret: "private world" }), path: "state.json", mediaType: "application/json", visibility: "host_private" });
+  const inputSchema = { type: "object", properties: {}, additionalProperties: false };
+  const tools = [{ name: "inspect", description: "Read public state", inputSchema, inputSchemaHash: sealLearningContent(inputSchema).contentHash, sideEffect: "read", timeoutMs: 1_000 }];
+  const javascript = sealLearningContent({ schemaVersion: "openpond.javascriptEnvironment.v1", id: "world", revision: 1, module: module.asset, tools, maxSteps: 4, maxStateBytes: 4_096, maxObservationBytes: 4_096, operationTimeoutMs: 1_000 });
+  const contract = { ...original.taskset.environment, kind: "agent", stateful: true, entrypoint: "openpond.javascript-environment.v1" };
+  const execution = ModelStarterExecutionSchema.parse({
+    javascript,
+    environment: sealLearningContent({ schemaVersion: "openpond.environmentRelease.v1", id: "environment", revision: 1, contract, actionSchemaRef: null, observationSchemaRef: null, stateSchemaRef: null, artifactCollection: { maxArtifacts: 1, maxTotalBytes: 100_000 }, adapterConformanceHashes: {}, metadata: { javascriptEnvironment: learningRef(javascript) } }),
+    verifierSet: sealLearningContent({ schemaVersion: "openpond.verifierSetRelease.v1", id: "verifiers", revision: 1, graders: original.taskset.graders, isolation: { processBoundary: "isolated_process", networkPolicy: "none", defaultTimeoutMs: 1_000 }, calibrationReceiptRefs: [], metadata: {} }),
+  });
+  const taskExecution = { ...original.taskDefinition.execution, environment: execution.environment.contract, tools: execution.javascript.tools, environmentRelease: { id: execution.environment.id, contentHash: execution.environment.contentHash }, verifierSetRelease: { id: execution.verifierSet.id, contentHash: execution.verifierSet.contentHash } };
+  original.taskDefinition.execution = taskExecution;
+  reseal(original.taskDefinition);
+  Object.assign(original.taskset, taskExecution);
+  original.taskset.tasks.forEach(task => { task.privilegedContextRef = state.id; });
+  reseal(original.taskset);
+  original.assets.push(module, state);
+  Object.assign(original.starter, { taskset: learningRef(original.taskset), taskDefinition: learningRef(original.taskDefinition), assets: original.assets.map(learningRef) });
+  reseal(original.starter);
+  const resolved = { ...original, execution };
+  expect(validateResolvedModelStarter(resolved)).toEqual(resolved);
+  expect(JSON.stringify(previewModelStarter(resolved))).not.toContain("private world");
+  expect(() => validateResolvedModelStarter(original)).toThrow("execution resources are missing");
+  const changed = structuredClone(resolved);
+  changed.execution.javascript.maxSteps++;
+  reseal(changed.execution.javascript);
+  expect(() => validateResolvedModelStarter(changed)).toThrow("differ from its declared");
+  const missing = structuredClone(resolved);
+  missing.assets = missing.assets.filter(asset => asset.id !== state.id);
+  expect(() => validateResolvedModelStarter(missing)).toThrow("private initial state is missing");
+});
 
 // Package discovery must not silently follow credentialed redirects or accept
 // a different immutable package than the user's final selection.
