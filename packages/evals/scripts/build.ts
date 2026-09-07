@@ -6,6 +6,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:
 import { build } from "esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { brotliCompressSync, constants } from "node:zlib";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
@@ -39,7 +40,8 @@ try {
   await writeFile(path.join(staging, "javascript-isolate-process-source.js"), `export const javascriptIsolateProcessSource = ${JSON.stringify(processHost.outputFiles[0]!.text)};\n`);
   await copyFile(path.join(root, "src/javascript-isolate-process-source.d.ts"), path.join(staging, "types/javascript-isolate-process-source.d.ts"));
   const sqliteBinary = await readFile(createRequire(import.meta.url).resolve("@sqlite.org/sqlite-wasm/sqlite3.wasm"));
-  const binarySource = `export const sqlWasmBinary = Uint8Array.from(Buffer.from(${JSON.stringify(sqliteBinary.toString("base64"))}, "base64"));\n`;
+  const compressedSqlite = brotliCompressSync(sqliteBinary, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } });
+  const binarySource = `import { brotliDecompressSync } from "node:zlib"; export const sqlWasmBinary = new Uint8Array(brotliDecompressSync(Buffer.from(${JSON.stringify(compressedSqlite.toString("base64"))}, "base64")));\n`;
   const sqlProcess = await build({
     entryPoints: [path.join(root, "src/sql-execution-process-entry.ts")],
     bundle: true, platform: "node", target: "node22.14", format: "esm",
