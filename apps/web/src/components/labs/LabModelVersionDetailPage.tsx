@@ -563,8 +563,8 @@ export function LabModelVersionDetailPage({
                         value={evaluation.taskCount == null
                           ? "Not reported"
                           : evaluation.targetTaskCount == null
-                            ? `${evaluation.taskCount} tasks scored`
-                            : `${evaluation.taskCount} of ${evaluation.targetTaskCount} tasks scored`}
+                            ? `${evaluation.taskCount} ${evaluation.taskCount === 1 ? "task" : "tasks"} scored`
+                            : `${evaluation.taskCount} of ${evaluation.targetTaskCount} ${evaluation.targetTaskCount === 1 ? "task" : "tasks"} scored`}
                       />
                     </Fragment>
                   ))}

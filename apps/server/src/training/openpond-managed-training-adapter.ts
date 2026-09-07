@@ -739,7 +739,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     );
     if (
       terminal
-      && snapshot.schemaVersion === "openpond.managedEvidenceSnapshot.v2"
+      && snapshot.schemaVersion === "openpond.managedEvidenceSnapshot.v3"
       && snapshot.syncedJobUpdatedAt === localJob?.updatedAt
     ) {
       return;
@@ -817,7 +817,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           ...(terminal
             ? {
                 managedEvidenceSnapshot: {
-                  schemaVersion: "openpond.managedEvidenceSnapshot.v2",
+                  schemaVersion: "openpond.managedEvidenceSnapshot.v3",
                   syncedJobUpdatedAt: refreshedJob.updatedAt,
                   eventCount: events.length,
                   syncedAt,
