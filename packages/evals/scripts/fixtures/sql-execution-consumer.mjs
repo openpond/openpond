@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { executeSqlInProcess } from "@openpond/evals/sql-execution/node";
+// Protect the packed runtime boundary: real SQL, exact data, read-only authorization,
+// finite memory/output and child ownership must survive installation outside the repo.
+const snapshot = { tables: [{ name: 'items', columns: [{ name: 'n', type: 'INTEGER' }, { name: 'value', type: 'TEXT' }], rows: [[1, 'é'], [2, 'b'], [2, 'b']] }] };
+const request = { schemaVersion: 'openpond.sqlExecution.v1', snapshot, sql: '', maxRows: 128, maxResultBytes: 65536 };
+const run = (sql, overrides = {}) => executeSqlInProcess({ request: { ...request, sql, ...overrides }, timeoutMs: 5000 });
+assert.deepEqual(await run('SELECT value AS duplicate,n AS duplicate FROM items ORDER BY n'), { status: 'completed', columns: ['duplicate', 'duplicate'], rows: [['é', 1], ['b', 2], ['b', 2]] });
+assert.deepEqual(await run('SELECT count(*) AS total FROM items'), { status: 'completed', columns: ['total'], rows: [[3]] });
+assert.deepEqual(await run('SELECT sum(n) AS total FROM items'), await run('SELECT (SELECT n FROM items WHERE n=1) + 2*2 AS total'));
+assert.deepEqual(await run('SELECT 1 AS v WHERE 0'), { status: 'completed', columns: ['v'], rows: [] });
+assert.deepEqual(await run('SELECT 1; -- harmless trailing comment'), { status: 'completed', columns: ['1'], rows: [[1]] });
+assert.deepEqual(await run('SELECT 1; SELECT 2'), { status: 'rejected', code: 'multiple_statements' });
+assert.deepEqual(await run("SELECT 9223372036854775807 AS n, x'00ff' AS b, NULL AS empty"), { status: 'completed', columns: ['n', 'b', 'empty'], rows: [[{ integer: '9223372036854775807' }, { blobBase64: 'AP8=' }, null]] });
+for (const sql of ['UPDATE items SET n=0', "ATTACH DATABASE 'outside' AS other", 'PRAGMA query_only=OFF', "SELECT load_extension('outside')", 'SELECT random()', "SELECT datetime('now')", 'SELECT * FROM sqlite_schema', 'SELECT ? AS value']) assert.equal((await run(sql)).status, 'rejected', sql);
+assert.deepEqual(await run('SELECT n FROM items', { maxRows: 2 }), { status: 'rejected', code: 'result_too_large' });
+assert.deepEqual(await run('SELECT hex(zeroblob(10000))', { maxResultBytes: 256 }), { status: 'rejected', code: 'result_too_large' });
+assert.deepEqual(await run('WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000) SELECT x, hex(zeroblob(5000)) AS payload FROM n ORDER BY payload,x DESC'), { status: 'rejected', code: 'memory_limit' });
+const childrenFile = `/proc/${process.pid}/task/${process.pid}/children`;
+const children = () => existsSync(childrenFile) ? readFileSync(childrenFile, 'utf8').trim() : null;
+const before = children();
+const endless = { ...request, sql: 'WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n) SELECT sum(x) FROM n' };
+await assert.rejects(executeSqlInProcess({ request: endless, timeoutMs: 200 }), /sql_timeout/);
+assert.equal(children(), before, 'Timed-out SQL child remains alive');
+const controller = new AbortController();
+const pending = executeSqlInProcess({ request: endless, timeoutMs: 5000, signal: controller.signal });
+controller.abort(new Error('cancelled_by_owner'));
+await assert.rejects(pending, /cancelled_by_owner/);
+assert.equal(children(), before, 'Cancelled SQL child remains alive');
+assert.deepEqual(await run('SELECT count(*) AS total FROM items'), { status: 'completed', columns: ['total'], rows: [[3]] });
+process.stdout.write('Packed SQL execution boundary verified\n');

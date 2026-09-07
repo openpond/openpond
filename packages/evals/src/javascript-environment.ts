@@ -2,6 +2,8 @@ import { contentHash } from "@openpond/harness";
 import { verifyLearningTextAsset, type LearningTextAsset } from "./learning/assets.js";
 import { assertBoundedTaskJson, validateTaskValue } from "./task-schema.js";
 import { executeJavaScriptIsolate } from "./javascript-isolate.js";
+import { executeEnvironmentWithServices } from "./environment-execution-services.js";
+import type { EnvironmentExecutionService } from "./environment-execution-services-contract.js";
 import { assertJavaScriptEnvironmentDefinition, JavaScriptEnvironmentOperationSchema, JavaScriptEnvironmentResultSchema, type JavaScriptEnvironmentDefinition, type JavaScriptEnvironmentOperation, type JavaScriptEnvironmentResult } from "./javascript-environment-contract.js";
 export * from "./javascript-environment-contract.js";
 
@@ -11,12 +13,13 @@ export interface JavaScriptEnvironmentExecutionInput {
   value: Record<string, unknown>;
   timeoutMs: number;
   signal?: AbortSignal;
+  executionServices?: EnvironmentExecutionService[];
 }
 
 /** Pure, bounded module execution. Server hosts should provide the worker runner. */
 export async function executeJavaScriptEnvironment(input: JavaScriptEnvironmentExecutionInput): Promise<JavaScriptEnvironmentResult> {
   const operation = JavaScriptEnvironmentOperationSchema.parse(input.operation);
-  return JavaScriptEnvironmentResultSchema.parse(await executeJavaScriptIsolate({ ...input, exportName: operation, maxResultBytes: 1_572_864, deterministic: true, errorPrefix: "environment" }));
+  return executeEnvironmentWithServices(input, { candidate: executeJavaScriptIsolate, controller: async prepared => JavaScriptEnvironmentResultSchema.parse(await executeJavaScriptIsolate({ ...prepared, exportName: operation, maxResultBytes: 1_572_864, deterministic: true, errorPrefix: "environment" })) });
 }
 
 export interface JavaScriptEnvironmentEvent {
@@ -91,7 +94,8 @@ export async function createJavaScriptEnvironmentSession(input: {
     try {
       if (action && !tool) throw new JavaScriptEnvironmentActionError("unknown_tool");
       if (action && tool && !validateTaskValue(tool.inputSchema, action.arguments).valid) throw new JavaScriptEnvironmentActionError("invalid_arguments");
-      const promise = execute({ source, operation, value: { input: taskInput, initialState, seed, state: structuredClone(state), sequence: steps, action: action ? structuredClone(action) : null }, timeoutMs: Math.min(definition.operationTimeoutMs, tool?.timeoutMs ?? definition.operationTimeoutMs), signal });
+      const executionServices = definition.executionServices?.filter(service => service.operation === operation && (operation !== "step" || service.toolName === action?.name));
+      const promise = execute({ source, operation, value: { input: taskInput, initialState, seed, state: structuredClone(state), sequence: steps, action: action ? structuredClone(action) : null }, timeoutMs: Math.min(definition.operationTimeoutMs, tool?.timeoutMs ?? definition.operationTimeoutMs), signal, ...(executionServices?.length ? { executionServices } : {}) });
       active = promise;
       const result = JavaScriptEnvironmentResultSchema.parse(await promise);
       signal.throwIfAborted();

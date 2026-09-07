@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const harnessRoot = path.resolve(root, "../harness");
@@ -230,6 +231,12 @@ const telemetry = createRunTelemetryEvent({
 if (telemetry.sequence !== 0 || CORE_METRIC_CATALOG.length < 10) throw new Error("packed telemetry failed");
 process.stdout.write("clean Evals consumer verified\\n");
 `);
+  await copyFile(path.join(root, "scripts/fixtures/sql-execution-consumer.mjs"), path.join(temporary, "verify-sql.mjs"));
+  execFileSync(process.execPath, [path.join(temporary, "verify-sql.mjs")], { cwd: temporary, stdio: "inherit", timeout: 60_000 });
+  await copyFile(path.join(root, "scripts/fixtures/environment-services-consumer.mjs"), path.join(temporary, "verify-services.mjs"));
+  execFileSync(process.execPath, [path.join(temporary, "verify-services.mjs")], { cwd: temporary, stdio: "inherit", timeout: 60_000 });
+  await build({ entryPoints: [path.join(temporary, "verify-services.mjs")], outfile: path.join(temporary, "verify-services-bundled.mjs"), bundle: true, platform: "node", format: "esm", target: "node22.14", banner: { js: "import { createRequire as __openpondCreateRequire } from 'node:module'; const require = __openpondCreateRequire(import.meta.url);" } });
+  execFileSync(process.execPath, [path.join(temporary, "verify-services-bundled.mjs")], { cwd: temporary, stdio: "inherit", timeout: 60_000 });
   await writeFile(path.join(temporary, "verify-types.mts"), `
 import type { HarnessRelease } from "@openpond/harness";
 import type {

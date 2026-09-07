@@ -10,7 +10,11 @@ export interface JavaScriptIsolateInput {
   signal?: AbortSignal;
   maxResultBytes: number;
   deterministic?: boolean;
-  errorPrefix: "verifier" | "environment";
+  errorPrefix: "verifier" | "environment" | "candidate";
+}
+
+export class JavaScriptIsolateExecutionError extends Error {
+  constructor(message: string) { super(message); this.name = "JavaScriptIsolateExecutionError"; }
 }
 
 /** Authored code is interpreter data, with no host functions or module loader. */
@@ -21,7 +25,7 @@ export async function executeJavaScriptIsolate(input: JavaScriptIsolateInput): P
   const deadline = Date.now() + input.timeoutMs;
   const module = await newQuickJSWASMModuleFromVariant(variant);
   input.signal?.throwIfAborted();
-  return Scope.withScope((scope) => {
+  try { return Scope.withScope((scope) => {
     const runtime = scope.manage(module.newRuntime());
     runtime.setMemoryLimit(33_554_432);
     runtime.setMaxStackSize(262_144);
@@ -47,7 +51,10 @@ export async function executeJavaScriptIsolate(input: JavaScriptIsolateInput): P
     const value: unknown = JSON.parse(json);
     assertBoundedTaskJson(value, input.maxResultBytes);
     return value;
-  });
+  }); } catch (cause) {
+    input.signal?.throwIfAborted();
+    throw new JavaScriptIsolateExecutionError(cause instanceof Error ? cause.message : "JavaScript execution failed.");
+  }
 }
 
 export function validateJavaScriptIsolateInput(input: JavaScriptIsolateInput): void {

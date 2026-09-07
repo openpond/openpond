@@ -63,3 +63,50 @@ is cancelled, waits for worker termination, and fails explicitly when that bound
 operation deadline is exceeded.
 
 The policy adapter must honor its supplied abort signal and settle after cancelling its own request. `environmentCleanupComplete` describes environment cleanup only; it is not a provider billing or infrastructure-cleanup receipt. Failed creation, collection, cancellation and cleanup remain explicit states, without fabricated scores.
+
+## Submitted SQL and JavaScript
+
+An optional `executionServices` array on the immutable environment definition binds
+an owner-controlled service to a named `step` tool or to `collect`. Omission preserves
+existing definition hashes. Each service declares an identity, deadline and explicit
+value references: `{ scope: "input" | "initialState" | "state" | "arguments", path: [...] }`.
+References traverse own JSON properties only. The controller receives service results
+as `services[id]`; candidates cannot supply that field.
+
+A `sqlite.v1` binding declares `sql`, `snapshot`, `maxRows` and `maxResultBytes`.
+Snapshots contain named tables, typed columns (`INTEGER`, `REAL`, `TEXT`, `BLOB`) and
+array rows. SQLite executes exactly one statement in a fresh in-memory database.
+The Node adapter enforces read-only authorization, a deterministic function allowlist,
+a 32 MiB WASM memory maximum, value/SQL/result limits and a parent-owned deadline.
+Writes, attachment, pragma changes, extensions and nondeterministic functions are
+rejected. Results retain ordered column names and array rows, including duplicates.
+SQL null is JSON null; exact large integers use `{ integer: "9223372036854775807" }`
+and blobs use `{ blobBase64: "AP8=" }`. JSON numbers retain their ordinary IEEE-754
+semantics. Use tagged integers when exact 64-bit storage is required.
+
+A `javascript.v1` binding declares `source`, `cases`, `exportName`, `maxCases` and
+`maxResultBytes`. Cases are owner-held objects with an `input` property. Each case
+runs in a fresh QuickJS interpreter, and only its `input` crosses into the candidate.
+Other properties, including expected results, remain with the owner. Put hidden cases
+and expectations in private `initialState`, not task `input`: task input is part of
+the policy transcript. The authored controller grades returned case values against
+its own expectations. No host functions, module loader, filesystem or network are
+exposed to candidate JavaScript.
+
+Service outcomes are either completed results or explicit rejected submissions.
+Syntax, authorization, output and engine-memory failures cannot manufacture a passing
+answer. A service timeout produces a rejected outcome only after child termination;
+owner cancellation and infrastructure setup failures still fail the operation.
+Service preparation and the authored controller share the operation's overall budget
+and its tracked promise. Collection remains unable to mutate session state, and
+`destroy()` aborts and awaits all active work before running authored cleanup.
+
+`executeJavaScriptEnvironmentInProcess` and `executeJavaScriptEnvironmentInWorker`
+provide these services on Node hosts; service children always use Node processes.
+The portable in-process interpreter supports candidate JavaScript and rejects a SQL
+binding without a Node SQL executor. The standalone Node API is
+`executeSqlInProcess({ request, timeoutMs, signal })` from
+`@openpond/evals/sql-execution/node`; request/result schemas are available from
+`@openpond/evals/sql-execution`. The SQLite WASM bytes are embedded in the trusted
+child program, so execution survives installation and host bundling without resolving
+an application-relative WASM file or loading submitted code as host JavaScript.

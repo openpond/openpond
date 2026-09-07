@@ -58,3 +58,17 @@ Taskset and starter. Validation rejects stale reviews after content changes.
 Desktop uses this authenticated catalog attestation to resolve synthetic contact
 data findings, retains it in source provenance, and still blocks secret findings.
 This is not an approval field accepted in a model creation request or arbitrary import.
+
+### Execution services
+
+SDK 0.1.14 requires Evals 0.7.6 or later. A starter's immutable JavaScript environment
+may declare `executionServices` for bounded SQLite queries or separately isolated
+candidate JavaScript. Creation preserves those declarations in the private execution
+asset and verifies their environment hash. Changing a binding requires a new sealed
+execution release; dropping or rewriting it cannot preserve the admitted identity.
+Existing environments without services retain their original content hashes.
+
+Keep hidden case inputs and expected results in the private initial-state asset.
+Ordinary task input is policy-visible. The service passes only each hidden case's
+explicit `input` to candidate code; expected results stay with the authored grader.
+See the Evals JavaScript environment contract for service fields and Node execution.

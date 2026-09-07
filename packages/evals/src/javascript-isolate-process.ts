@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { javascriptIsolateProcessSource } from "./javascript-isolate-process-source.js";
-import { validateJavaScriptIsolateInput, type JavaScriptIsolateInput } from "./javascript-isolate.js";
+import { JavaScriptIsolateExecutionError, validateJavaScriptIsolateInput, type JavaScriptIsolateInput } from "./javascript-isolate.js";
 import { assertBoundedTaskJson } from "./task-schema.js";
 
 /** A Node subprocess owns the interpreter; completion always waits for its exit. */
@@ -26,7 +26,7 @@ export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolate
       child.kill("SIGKILL");
     };
     const cancel = () => stop(signal?.reason instanceof Error ? signal.reason : error("cancelled"));
-    const timer = setTimeout(() => stop(error("timeout")), input.timeoutMs);
+    const timer = setTimeout(() => stop(input.errorPrefix === "candidate" ? new JavaScriptIsolateExecutionError("candidate_timeout") : error("timeout")), input.timeoutMs);
     signal?.addEventListener("abort", cancel, { once: true });
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -48,7 +48,10 @@ export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolate
         if (code !== 0) throw error("process_exited_without_result");
         const message: unknown = JSON.parse(response);
         if (!message || typeof message !== "object" || !("ok" in message)) throw error("process_invalid_response");
-        if (message.ok !== true) throw new Error("error" in message && typeof message.error === "string" ? message.error : `${input.errorPrefix}_execution_failed`);
+        if (message.ok !== true) {
+          const detail = "error" in message && typeof message.error === "string" ? message.error : `${input.errorPrefix}_execution_failed`;
+          throw "executionError" in message && message.executionError === true ? new JavaScriptIsolateExecutionError(detail) : new Error(detail);
+        }
         if (!("result" in message)) throw error("process_invalid_response");
         assertBoundedTaskJson(message.result, input.maxResultBytes);
         resolve(message.result);
