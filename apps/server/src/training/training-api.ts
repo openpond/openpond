@@ -834,13 +834,13 @@ export function createTrainingApi(deps: {
       }
       const workspace = await deps.store.getTasksetDraftWorkspace(draft.id);
       if (!workspace) throw new Error("Taskset draft workspace was not found.");
-      const materializedTaskset = publishTasksetDraft({
+      const authoredTaskset = publishTasksetDraft({
         draft,
         sourcePackageHash: workspace.packageHash,
       });
-      await deps.store.materializePublishedTasksetPackage({
+      const { taskset: materializedTaskset } = await deps.store.materializePublishedTasksetPackage({
         draftId: draft.id,
-        taskset: materializedTaskset,
+        taskset: authoredTaskset,
       });
       await deps.store.upsertTaskset(materializedTaskset);
       await deps.evaluation.readiness(materializedTaskset.id);

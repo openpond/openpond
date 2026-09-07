@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -39,6 +39,14 @@ describe("Taskset Work assets", () => {
       }),
     ]);
     expect(resolved[0]?.bytes.equals(fixture.bytes)).toBe(true);
+    // Published revisions keep their file directory even when a logical
+    // Taskset's former location has newer or unrelated bytes.
+    const root = path.join(fixture.storeDir, "training", "tasksets");
+    await rename(path.join(root, fixture.taskset.id), path.join(root, "pinned-revision"));
+    fixture.taskset.environment.metadata.runtimeSourceTasksetId = "pinned-revision";
+    expect((await resolveTasksetWorkAssets(fixture))[0]?.bytes).toEqual(fixture.bytes);
+    fixture.taskset.environment.metadata.runtimeSourceTasksetId = "../outside";
+    await expect(resolveTasksetWorkAssets(fixture)).rejects.toThrow("invalid package directory identity");
   });
 
   test("rejects changed bytes before they can be staged", async () => {

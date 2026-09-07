@@ -1,6 +1,6 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import { buildTaskset } from "@openpond/taskset-sdk";
+import { buildTaskset, hashTasksetDraftPackage } from "@openpond/taskset-sdk";
 import type { GeneratedTaskFile, Taskset } from "@openpond/contracts";
 import type { prepareModelStarterTaskset } from "./model-starter-taskset.js";
 
@@ -13,26 +13,40 @@ export async function materializeModelStarterPackage(home: string, prepared: Ret
 
 /** The directory identifies immutable package bytes, independently of the
  * logical Taskset identity shared by its later revisions. */
-export async function materializeImmutableTasksetPackage(home: string, prepared: { taskset: Taskset; generatedFiles: GeneratedTaskFile[] }, directoryId: string) {
+export async function materializeImmutableTasksetPackage(home: string, prepared: { taskset: Taskset; generatedFiles: GeneratedTaskFile[] }, directoryId: string, options: {
+  source?: { directory: string; packageHash: string };
+  verify?: (directory: string) => Promise<void>;
+} = {}) {
   if (!/^[a-z0-9][a-z0-9-]{1,239}$/.test(directoryId)) throw new Error("Taskset package identity is not a safe directory name.");
   const root = path.join(home, "training", "tasksets");
   await mkdir(root, { recursive: true });
   const temporary = await mkdtemp(path.join(root, ".starter-"));
   const target = path.join(root, directoryId);
   try {
-    const built = await buildTaskset(prepared.taskset, temporary, { generatedFiles: prepared.generatedFiles });
+    if (options.source) {
+      const source = await lstat(options.source.directory);
+      if (!source.isDirectory() || source.isSymbolicLink()) throw new Error("Taskset source must be a regular directory.");
+      await regularFiles(options.source.directory);
+      for (const entry of await readdir(options.source.directory)) {
+        await cp(path.join(options.source.directory, entry), path.join(temporary, entry), { recursive: true, force: false, errorOnExist: true });
+      }
+      await regularFiles(temporary);
+      if (await hashTasksetDraftPackage(temporary) !== options.source.packageHash) throw new Error("Taskset draft files changed during publication. Refresh before publishing.");
+    }
+    await buildTaskset(prepared.taskset, temporary, { generatedFiles: prepared.generatedFiles });
+    await options.verify?.(temporary);
+    const expectedFiles = (await regularFiles(temporary)).sort();
     try { await rename(temporary, target); }
     catch (error) {
       if (!["EEXIST", "ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
       const directory = await lstat(target);
       if (!directory.isDirectory() || directory.isSymbolicLink()) throw new Error("Starter package destination is not a regular directory.");
       const existingFiles = await regularFiles(target);
-      const expectedFiles = built.files.map(file => path.relative(temporary, file)).sort();
       if (JSON.stringify(existingFiles.sort()) !== JSON.stringify(expectedFiles)) throw new Error("Existing starter package has a different file inventory.");
-      for (const file of built.files) {
-        const destination = path.join(target, path.relative(temporary, file));
+      for (const file of expectedFiles) {
+        const destination = path.join(target, file);
         const status = await lstat(destination);
-        if (!status.isFile() || status.isSymbolicLink() || !(await readFile(destination)).equals(await readFile(file))) throw new Error("Existing starter package differs from the pinned creation attempt.");
+        if (!status.isFile() || status.isSymbolicLink() || !(await readFile(destination)).equals(await readFile(path.join(temporary, file)))) throw new Error("Existing starter package differs from the pinned creation attempt.");
       }
     }
     return target;

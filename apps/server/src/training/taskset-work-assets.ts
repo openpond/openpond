@@ -7,6 +7,7 @@ import {
   type Taskset,
 } from "@openpond/contracts";
 import type { WorkRuntimeInput } from "../openpond/work-runtime-service.js";
+import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
 
 const DEFAULT_MAX_WORK_INPUT_BYTES = 250_000_000;
 const MAX_WORK_INPUT_BYTES = 1_000_000_000;
@@ -37,7 +38,7 @@ export async function resolveTasksetWorkAssets(input: {
     input.storeDir,
     "training",
     "tasksets",
-    input.taskset.id,
+    tasksetPackageDirectoryId(input.taskset),
   );
   const assetRoot = path.resolve(tasksetRoot, "assets");
   const resolved: ResolvedTasksetWorkAsset[] = [];

@@ -4,6 +4,7 @@ import path from "node:path";
 
 import {
   TasksetDraftSchema,
+  TasksetSchema,
   type Taskset,
   type TasksetDraft,
 } from "@openpond/contracts";
@@ -11,7 +12,7 @@ import { contentHash } from "@openpond/harness";
 import {
   hashTasksetDraftPackage,
   readTasksetDraftPackage,
-  buildTaskset,
+  computeTasksetHash,
   sha256,
   writeTasksetDraftPackage,
 } from "@openpond/taskset-sdk";
@@ -19,6 +20,7 @@ import { z } from "zod";
 
 import type { PayloadRow } from "../types.js";
 import { SqlitePreferenceComparisonStore } from "./store-preference-comparison.js";
+import { materializeImmutableTasksetPackage } from "../training/model-starter-package-files.js";
 
 const TasksetDraftPointerSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftPointer.v1"),
@@ -145,27 +147,26 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
   async materializePublishedTasksetPackage(input: {
     draftId: string;
     taskset: Taskset;
-  }): Promise<string> {
+  }): Promise<{ directory: string; taskset: Taskset }> {
     const workspace = await this.getTasksetDraftWorkspace(input.draftId);
     if (!workspace) {
       throw new Error(`Taskset draft ${input.draftId} workspace was not found.`);
     }
-    await assertRegularPackageTree(workspace.workspacePath);
-    const tasksetRoot = path.join(
-      this.home,
-      "training",
-      "tasksets",
-      input.taskset.id,
-    );
-    await mkdir(tasksetRoot, { recursive: true });
-    await cp(workspace.workspacePath, tasksetRoot, {
-      recursive: true,
-      force: true,
-      preserveTimestamps: true,
+    if (input.taskset.metadata.sourcePackageHash !== undefined && input.taskset.metadata.sourcePackageHash !== workspace.packageHash) {
+      throw new Error("Taskset draft files changed before publication. Refresh before publishing.");
+    }
+    const directoryId = `draft-${contentHash({ taskset: input.taskset, packageHash: workspace.packageHash })}`;
+    const prepared = TasksetSchema.parse({
+      ...input.taskset,
+      metadata: { ...input.taskset.metadata, sourcePackageHash: workspace.packageHash },
+      environment: { ...input.taskset.environment, metadata: { ...input.taskset.environment.metadata, runtimeSourceTasksetId: directoryId } },
     });
-    await buildTaskset(input.taskset, tasksetRoot);
-    await verifyPublishedTasksetAssets(tasksetRoot, input.taskset);
-    return tasksetRoot;
+    const taskset = TasksetSchema.parse({ ...prepared, contentHash: computeTasksetHash(prepared) });
+    const directory = await materializeImmutableTasksetPackage(this.home, { taskset, generatedFiles: [] }, directoryId, {
+      source: { directory: workspace.workspacePath, packageHash: workspace.packageHash },
+      verify: root => verifyPublishedTasksetAssets(root, taskset),
+    });
+    return { directory, taskset };
   }
 
   async getTasksetDraft(id: string): Promise<TasksetDraft | null> {
