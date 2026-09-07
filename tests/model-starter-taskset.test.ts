@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TasksetSourceRefSchema, TrainingDestinationCapabilitiesSchema } from "@openpond/contracts";
 import { createLearningTextAsset, learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
@@ -14,7 +14,7 @@ import { projectBaseModelCandidates } from "../apps/server/src/training/base-mod
 import { openStorageDatabase } from "@openpond/persistence";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
 import { attemptFixture, sftRecipeFixture } from "./helpers/training-fixtures.js";
-import { materializePortableTasksetRelease, computeTasksetHash } from "@openpond/taskset-sdk";
+import { materializePortableTasksetRelease, computeTasksetHash, hashTasksetDraftPackage, publishTasksetDraft, tasksetDraftFromTaskset, sha256 } from "@openpond/taskset-sdk";
 import { buildTasksetTrainingBundle } from "@openpond/training-sdk";
 import { resolveTasksetTrainingReward, resolveManagedTasksetReward } from "../apps/server/src/training/taskset-reward-binding.js";
 import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release.js";
@@ -23,6 +23,7 @@ import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
 import { createModelProjectSaveRequest, type ModelProject } from "openpond-sdk/model-projects";
 import { readTasksetGraderDetails } from "../apps/server/src/training/taskset-grader-details.js";
+import { materializeImmutableTasksetPackage } from "../apps/server/src/training/model-starter-package-files.js";
 
 // A valid release reference alone must never admit missing or altered private code.
 it("exports verified private Reward assets separately from policy task assets", async () => withTempDirectory("starter-private-export-", async home => {
@@ -450,6 +451,58 @@ it("materializes exact files before creation and retries without reopening the c
     const beforeRetry = resolutions;
     expect(await service.create(fixture.request, "profile")).toEqual(saved);
     expect(resolutions).toBe(beforeRetry);
+  } finally { await store.close(); }
+}));
+
+// A Reward edit must retain binary/input dependencies and output schemas. A
+// corrupted input must fail publication before the visible Model changes.
+it("preserves task files and schema references through a model-owned Reward edit", async () => withTempDirectory("derived-task-files-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const input = await starterInput();
+    let model = await store.saveModelStarterCreation(input);
+    const source = (await store.getTasksetRevision(model.trainingSetup.tasksetRef!.id, 1))!;
+    const sourceDirectory = path.join(home, "training", "tasksets", source.id);
+    const sourceManifest = await readFile(path.join(sourceDirectory, "taskset.json"), "utf8");
+    const text = "Invoice input retained through a Reward edit.\n";
+    const asset = { id: "invoice-input", path: "assets/invoice.txt", contentHash: sha256(text), sizeBytes: Buffer.byteLength(text), mediaType: "text/plain", visibility: "policy" as const };
+    const schema = createLearningTextAsset({ text: "{}", path: "assets/output-schema.json", mediaType: "application/json", visibility: "verifier" });
+    const originalTask = materializePortableTasksetRelease({ taskset: source, adapterId: "asset-source" }).tasksetRelease.tasks[0]!;
+    const output = { path: "answer.json", mediaType: "application/json", schemaRef: schema.asset, maxBytes: 10_000, metadata: {} };
+    const draft = tasksetDraftFromTaskset(source);
+    const withFiles = publishTasksetDraft({ now: input.createdAt, draft: { ...draft,
+      environment: { ...draft.environment, metadata: { ...draft.environment.metadata, runtimeSourceTasksetId: "invoice-source-files" } },
+      tasks: draft.tasks.map((task, index) => index === 0 ? { ...task,
+        assets: [{ id: asset.id, sourceRefId: input.source.id, artifactRef: asset.path, fileName: "invoice.txt", mediaType: asset.mediaType, sha256: asset.contentHash, sizeBytes: asset.sizeBytes, split: task.split, metadata: {} }],
+        requiredOutputs: [{ ...output, schemaRef: schema.id }],
+        metadata: { ...task.metadata, portableTaskRecord: { ...originalTask, artifactRefs: [asset], requiredOutputs: [output] } },
+      } : task),
+    } });
+    const sourceDraftDirectory = path.join(home, "source-draft");
+    await cp(sourceDirectory, sourceDraftDirectory, { recursive: true });
+    await mkdir(path.join(sourceDraftDirectory, "assets"), { recursive: true });
+    await writeFile(path.join(sourceDraftDirectory, asset.path), text);
+    await writeFile(path.join(sourceDraftDirectory, schema.asset.path), schema.text);
+    await materializeImmutableTasksetPackage(home, { taskset: withFiles, generatedFiles: [] }, "invoice-source-files", { source: { directory: sourceDraftDirectory, packageHash: await hashTasksetDraftPackage(sourceDraftDirectory) } });
+    await store.upsertTaskset(withFiles);
+    const editable = (value: ModelProject) => ({ id: value.id, profileId: value.profileId, name: value.name, objective: value.objective, defaultBaseModel: value.defaultBaseModel, defaultDestinationId: value.defaultDestinationId, trainingSetup: value.trainingSetup });
+    model = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(model), trainingSetup: { ...model.trainingSetup, tasksetRef: learningRef(withFiles) } }, model.revision));
+    const { contentHash: _hash, ...binding } = input.package.rewardBinding;
+    const replacement = RewardBindingSchema.parse(sealLearningContent({ ...binding, revision: 2, sources: binding.sources.map(source => ({ ...source, weight: 2 })) }));
+    await store.learningRepository().transaction(model.profileId, async tx => { await tx.put("asset", schema, 0); await tx.put("binding", replacement, 1); });
+    const saved = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(model), trainingSetup: { ...model.trainingSetup, rewardBindingRef: learningRef(replacement) } }, model.revision));
+    const derived = (await store.getTasksetRevision(saved.trainingSetup.tasksetRef!.id, saved.trainingSetup.tasksetRef!.revision))!;
+    const portable = materializePortableTasksetRelease({ taskset: derived, adapterId: "asset-derived" }).tasksetRelease;
+    expect(portable.tasks[0]!.artifactRefs).toEqual([asset]);
+    expect(portable.tasks[0]!.requiredOutputs).toEqual([output]);
+    expect(await store.learningRepository().transaction(model.profileId, tx => tx.get("package", portable.id, portable.revision))).toEqual(portable);
+    const directory = path.join(home, "training", "tasksets", String(derived.environment.metadata.runtimeSourceTasksetId));
+    expect(await readFile(path.join(directory, asset.path), "utf8")).toBe(text);
+    expect(await readFile(path.join(directory, schema.asset.path), "utf8")).toBe(schema.text);
+    expect(await readFile(path.join(sourceDirectory, "taskset.json"), "utf8")).toBe(sourceManifest);
+    await writeFile(path.join(directory, asset.path), "corrupted input");
+    await expect(store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(saved), trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(input.package.rewardBinding) } }, saved.revision))).rejects.toThrow("immutable manifest");
+    expect(await store.getModelProject(saved.id)).toEqual(saved);
   } finally { await store.close(); }
 }));
 

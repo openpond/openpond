@@ -1,4 +1,6 @@
+import path from "node:path";
 import type { ModelProject, Taskset } from "@openpond/contracts";
+import { hashTasksetDraftPackage } from "@openpond/taskset-sdk";
 import { SqliteTasksetDraftStore } from "./store-taskset-drafts.js";
 import type { ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { commitModelProjectSave, findModelProjectSave } from "./store-model-project-authoring.js";
@@ -8,6 +10,8 @@ import { prepareModelTasksetSave } from "./store-model-taskset-derivation.js";
 import { materializeImmutableTasksetPackage } from "../training/model-starter-package-files.js";
 import { prepareModelStarterTaskset } from "../training/model-starter-taskset.js";
 import { resolveModelStarterSelection } from "./store-model-starter-selection.js";
+import { tasksetPackageDirectoryId } from "../training/taskset-package-path.js";
+import { verifyPublishedTasksetAssets } from "../training/taskset-package-assets.js";
 
 /** Model configuration, starter publication and hosting share the store write queue. */
 export class SqliteModelConfigurationStore extends SqliteTasksetDraftStore {
@@ -26,7 +30,11 @@ export class SqliteModelConfigurationStore extends SqliteTasksetDraftStore {
       if (previous) return previous;
       const prepared = prepareModelTasksetSave(this.db, request);
       if (prepared) {
-        await materializeImmutableTasksetPackage(this.home, prepared, prepared.directoryId);
+        const sourceDirectory = path.join(this.home, "training", "tasksets", tasksetPackageDirectoryId(prepared.source));
+        await materializeImmutableTasksetPackage(this.home, prepared, prepared.directoryId, {
+          source: { directory: sourceDirectory, packageHash: await hashTasksetDraftPackage(sourceDirectory) },
+          verify: directory => verifyPublishedTasksetAssets(directory, prepared.taskset),
+        });
         this.db.run("UPDATE model_project_taskset_preparations SET state = 'materialized' WHERE profile_id = ? AND operation_id = ?", [request.project.profileId, request.operationId]);
       }
       return commitModelProjectSave(this.db, request, prepared);
