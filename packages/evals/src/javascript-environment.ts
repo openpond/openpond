@@ -116,7 +116,9 @@ export async function createJavaScriptEnvironmentSession(input: {
       try {
         // A worker runner settles only after termination; cleanup cannot race it.
         try { await active; } catch { /* The operation failure is retained by its caller. */ }
-        await execute({ source, operation: "destroy", value: { input: taskInput, initialState, seed, state: structuredClone(state), sequence: steps, action: null }, timeoutMs: Math.min(definition.operationTimeoutMs, 1_000) });
+        // Cleanup owns the declared operation budget, including worker startup.
+        // A shorter implicit cap can invalidate an otherwise collected attempt.
+        await execute({ source, operation: "destroy", value: { input: taskInput, initialState, seed, state: structuredClone(state), sequence: steps, action: null }, timeoutMs: definition.operationTimeoutMs });
       } finally { state = {}; closed = true; }
     })();
     return closePromise;

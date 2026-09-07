@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { contentHash } from "@openpond/harness";
 import { createLearningTextAsset } from "../src/learning/assets.js";
 import { sealLearningContent } from "../src/learning/contracts.js";
@@ -25,6 +25,34 @@ function fixture(module = source) {
     tools: [{ name: "read", description: "Read one record", inputSchema: readSchema, inputSchemaHash: contentHash(readSchema), sideEffect: "read", timeoutMs: 1_000 }, { name: "update", description: "Update an allowed record", inputSchema: writeSchema, inputSchemaHash: contentHash(writeSchema), sideEffect: "write", timeoutMs: 1_000 }], maxSteps: 4, maxStateBytes: 4_096, maxObservationBytes: 1_024, operationTimeoutMs: 1_000 }));
   return { definition, asset, input: { allowedId: "a" }, initialState: { a: 1, b: 2 }, seed: 7 };
 }
+
+// Worker startup/cleanup can take longer than one second while remaining inside
+// the package's declared operation budget. An implicit shorter cap previously
+// turned collected hosted attempts into cleanup failures.
+test("cleanup honors the declared operation budget and still expires at its limit", async () => {
+  for (const budget of [2_000, 1_000]) {
+    const input = fixture();
+    const { contentHash: _hash, ...content } = input.definition;
+    const definition = JavaScriptEnvironmentDefinitionSchema.parse(sealLearningContent({ ...content, operationTimeoutMs: budget }));
+    const session = await createJavaScriptEnvironmentSession({ ...input, definition, execute: async operation => {
+      if (operation.operation === "destroy") {
+        await new Promise<void>((resolve, reject) => {
+          const complete = setTimeout(() => { clearTimeout(deadline); resolve(); }, 1_500);
+          const deadline = setTimeout(() => { clearTimeout(complete); reject(new Error("environment_timeout")); }, operation.timeoutMs);
+        });
+      }
+      return executeJavaScriptEnvironment(operation);
+    } });
+    await session.collect();
+    vi.useFakeTimers();
+    try {
+      const outcome = session.destroy().then(() => "cleaned", error => error.message);
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(await outcome).toBe(budget === 2_000 ? "cleaned" : "environment_timeout");
+      await expect(session.collect()).rejects.toThrow("environment_closed");
+    } finally { vi.useRealTimers(); }
+  }
+});
 
 // Model arguments must drive actual isolated transitions. Caller mutation,
 // invalid arguments, scope errors and step exhaustion must not forge final state.
