@@ -121,7 +121,7 @@ export class ManagedRlLocalRolloutExecutor {
     for (let attempt = 1; attempt <= EXECUTION_ATTEMPTS; attempt += 1) {
       try {
         const result = await this.executeOnce(claim);
-        await this.completeWithRetry(claim, managedRlSandboxCompletion(result));
+        await this.completeWithRetry(claim, result);
         return;
       } catch (error) {
         lastError = error;
@@ -223,7 +223,7 @@ export class ManagedRlLocalRolloutExecutor {
             `/local-rollouts/${encodeURIComponent(claim.executionId)}/complete`,
           {
             method: "POST",
-            body: JSON.stringify(result),
+            body: JSON.stringify(managedRlSandboxCompletion(result, claim.deliveryId)),
           },
         );
       } catch (error) {
@@ -304,8 +304,14 @@ export function resolveManagedRlExecutionTask(input: {
 
 export function managedRlSandboxCompletion(
   result: Record<string, unknown>,
+  deliveryId: string,
 ): Record<string, unknown> {
+  if (!deliveryId.trim()) throw new Error("managed_rl_local_completion_delivery_missing");
+  if (result.status === "failed") return {
+    status: "failed", executorId: result.executorId, deliveryId, errorCode: result.errorCode,
+  };
   return {
+    deliveryId,
     status: result.status,
     executorId: result.executorId,
     environmentSha256: result.environmentSha256,

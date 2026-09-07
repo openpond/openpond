@@ -784,6 +784,8 @@ export const ManagedTrainingRunEvidenceSchema = z.object({
     z.object({
       kind: z.enum(["baseline", "candidate"]),
       policyVersion: z.number().int().nonnegative(),
+      taskCount: z.number().int().nonnegative().nullable().optional(),
+      targetTaskCount: z.number().int().nonnegative().nullable().optional(),
       score: z.number().nullable(),
       threshold: z.number().nullable(),
       passed: z.boolean().nullable(),
