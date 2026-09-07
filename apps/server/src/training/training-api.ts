@@ -104,8 +104,9 @@ import { createModelComparisonRuntime } from "./model-comparison-runtime.js";
 import { handleModelComparisonAction } from "./training-api-model-comparison-actions.js";
 import { handleContinualLearningAction } from "./training-api-continual-learning-actions.js";
 import { readTasksetGraderDetails } from "./taskset-grader-details.js";
+import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
 import { createLocalLearningRuntime } from "./learning-runtime.js";
-import { parseModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { parseModelProjectSaveRequest, ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
 import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
 import { checkModelProjectConfiguration } from "./model-project-configuration-check.js";
@@ -200,6 +201,12 @@ export function createTrainingApi(deps: {
           ?? "default",
       );
     }
+    if (action === "export_model_project_taskset") return exportLocalModelTasksetPackage({
+      store: deps.store,
+      storeDir: deps.storeDir,
+      profileId: requiredString(input.profileId, "profileId"),
+      modelId: requiredString(input.modelId, "modelId"),
+    });
     if (action === "taskset_grader_details") return readTasksetGraderDetails({
       store: deps.store, storeDir: deps.storeDir, tasksetId: requiredString(input.tasksetId, "tasksetId"),
     });
@@ -963,7 +970,7 @@ export function createTrainingApi(deps: {
       await deps.taskMiner.patch(candidate.id, { status: "creating" });
       return startModelCreation({ profileId: candidate.profileId, sourceIds, surface: "task_candidate", mode: input.mode === "customize" ? "customize" : "defaults", entryMode: "automated", objective: string(input.objective) ?? candidate.summary, candidateId: candidate.id, analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null, analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null });
     }
-    if (action === "grade") return deps.evaluation.grade({ tasksetId: requiredString(input.tasksetId, "tasksetId"), taskId: requiredString(input.taskId, "taskId"), attempt: input.attempt });
+    if (action === "grade") return deps.evaluation.grade({ tasksetId: requiredString(input.tasksetId, "tasksetId"), tasksetRef: input.tasksetRef === undefined ? undefined : ModelProjectVersionedRefSchema.parse(input.tasksetRef), taskId: requiredString(input.taskId, "taskId"), attempt: input.attempt });
     if (action === "materialize_synthetic_collection") {
       const collection = SyntheticCollectionRunRequestSchema.parse({
         ...record(input.collection),
@@ -1120,6 +1127,7 @@ export function createTrainingApi(deps: {
       const sampling = record(input.sampling);
       return deps.evaluation.execute({
         tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        tasksetRef: input.tasksetRef === undefined ? undefined : ModelProjectVersionedRefSchema.parse(input.tasksetRef),
         taskId: requiredString(input.taskId, "taskId"),
         model: ChatModelRefSchema.parse(input.model),
         seed: boundedInteger(input.seed, "seed", -2_147_483_648, 2_147_483_647, 17),

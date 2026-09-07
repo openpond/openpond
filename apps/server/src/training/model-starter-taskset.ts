@@ -1,6 +1,6 @@
 import { TasksetDraftSchema, type GraderFixture, type GeneratedTaskFile, type TasksetSourceRef } from "@openpond/contracts";
 import { learningRef, sameLearningRef, verifyLearningTextAsset } from "@openpond/evals/learning";
-import { contentHash, createTasksetDraft, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft } from "@openpond/taskset-sdk";
+import { createTasksetDraft, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft } from "@openpond/taskset-sdk";
 import { deriveModelTaskset, ModelStarterToolFixtureScriptSchema, validateModelStarterCreation, type ModelStarterCreationRequest, type ModelTasksetPackage } from "openpond-sdk/model-starters";
 
 /** Trusted catalog publication supplies authored fixtures and reviewed training
@@ -19,7 +19,7 @@ export function prepareModelStarterTaskset(input: {
   const { starter, ...sourcePackage } = resolved;
   const selected = request.rewardBindingRef && !sameLearningRef(request.rewardBindingRef, learningRef(resolved.rewardBinding));
   if (selected && (!input.rewardSelection || !sameLearningRef(request.rewardBindingRef!, learningRef(input.rewardSelection.rewardBinding)))) throw new Error("The selected starter Reward is unavailable for package preparation.");
-  const resources: ModelTasksetPackage = selected ? deriveModelTaskset({ owner: { scopeId: request.profileId, modelId: request.modelId }, source: sourcePackage, ...input.rewardSelection! }) : sourcePackage;
+  const resources: ModelTasksetPackage = deriveModelTaskset({ owner: { scopeId: request.profileId, modelId: request.modelId }, source: sourcePackage, ...(selected ? input.rewardSelection! : { rewardBinding: sourcePackage.rewardBinding, rewards: sourcePackage.rewards, assets: sourcePackage.assets }) });
   const { taskset: release, taskDefinition, rewardBinding, rewards, assets } = resources;
   if (input.source.profileId !== request.profileId || input.source.sourceHash !== starter.contentHash) throw new Error("Starter source must belong to this Profile and pin the catalog package.");
   const toolEnvironment = resources.execution !== undefined;
@@ -36,7 +36,7 @@ export function prepareModelStarterTaskset(input: {
     if (!release.tasks.some(task => task.id === fixture.taskId)) throw new Error(`Starter fixture references an unknown task: ${fixture.taskId}.`);
     if (toolEnvironment && !fixture.infrastructureError) ModelStarterToolFixtureScriptSchema.parse(fixture.metadata.toolScript);
   }
-  const tasksetId = selected ? release.id : `starter-${contentHash({ request, createdAt: input.createdAt }).slice(0, 40)}`;
+  const tasksetId = release.id;
   const draft = createTasksetDraft({ profileId: request.profileId, id: `${tasksetId}-draft`, name: starter.name, now: input.createdAt });
   const files: GeneratedTaskFile[] = [];
   for (const grader of release.graders) {
@@ -54,7 +54,7 @@ export function prepareModelStarterTaskset(input: {
     environment: { ...draft.environment, kind: toolEnvironment ? "agent" : "chat", entrypoint: release.environment.entrypoint, stateful: release.environment.stateful, toolNames: release.tools.map(tool => tool.name), deterministicSeeds: release.environment.deterministicSeeds, defaultTimeoutMs: release.environment.defaultTimeoutMs, networkPolicy: release.environment.networkPolicy, metadata: { portableEnvironment: release.environment, portableTools: release.tools, ...(resources.executionResources ? { portableExecutionResources: resources.executionResources } : resources.execution ? { portableExecutionResources: { environment: resources.execution.environment, verifierSet: resources.execution.verifierSet } } : {}) } },
     output: { mode: "structured_json", jsonSchema: taskDefinition.outputSchema, renderer: null },
     capabilities: { ...draft.capabilities, taskKind: toolEnvironment ? "single_agent" : "chat", requiresTools: toolEnvironment, requiresState: toolEnvironment, supportedSignals: request.method === "grpo" ? ["demonstration", "reward"] : ["demonstration"], compatibleMethods: [request.method], rewardKinds: [...new Set(release.graders.map(grader => grader.kind === "human" ? "human" : "deterministic"))], requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"] },
-    tasks: release.tasks.map(({ artifactRefs: _artifacts, ...task }) => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [input.source.id], metadata: { exampleOrigin: "curated_starter", starter: learningRef(starter), ...(selected ? { portableTaskRecord: { ...task, artifactRefs: [] } } : {}) } })),
+    tasks: release.tasks.map(({ artifactRefs: _artifacts, ...task }) => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [input.source.id], metadata: { exampleOrigin: "curated_starter", starter: learningRef(starter), portableTaskRecord: { ...task, artifactRefs: [] } } })),
     graders: projectLearningBatchGraders(rewardBinding, rewards, assets),
     graderFixtures: input.fixtures,
     learningSignals: { ...draft.learningSignals, rewards: request.method === "grpo" ? release.tasks.filter(task => approved.has(task.id)).map(task => ({
@@ -66,7 +66,7 @@ export function prepareModelStarterTaskset(input: {
       kind: "demonstration", id: `starter-target-${task.id}`, taskId: task.id, sourceRefs: [input.source.id], artifactRef: release.id,
       approved: true, confidence: 1, prompt: null, response: JSON.stringify(task.expectedOutput), metadata: { starter: learningRef(starter), approvalOrigin: "catalog_publication" },
     })) },
-    metadata: { starter: learningRef(starter), starterTasksetRelease: learningRef(release), taskDefinition: learningRef(taskDefinition), rewardBinding: learningRef(rewardBinding), rewardExecution: { binding: rewardBinding, rewards }, ...(selected ? { portableCapabilities: release.capabilities, derivedPortableMetadata: release.metadata, modelTasksetDerivation: release.metadata.modelTasksetDerivation } : {}) },
+    metadata: { starter: learningRef(starter), starterTasksetRelease: learningRef(release), taskDefinition: learningRef(taskDefinition), rewardBinding: learningRef(rewardBinding), rewardExecution: { binding: rewardBinding, rewards }, portableCapabilities: release.capabilities, derivedPortableMetadata: release.metadata, modelTasksetDerivation: release.metadata.modelTasksetDerivation },
   });
-  return { draft: authored, taskset: publishTasksetDraft({ draft: authored, now: input.createdAt, tasksetId, sourcePackageHash: selected ? release.contentHash : starter.contentHash }), generatedFiles: files, resources };
+  return { draft: authored, taskset: publishTasksetDraft({ draft: authored, now: input.createdAt, tasksetId, sourcePackageHash: release.contentHash }), generatedFiles: files, resources };
 }

@@ -10,6 +10,8 @@ import starterImportFixture from "./fixtures/model-starter-import.json";
 import { prepareModelStarterTaskset } from "../apps/server/src/training/model-starter-taskset.js";
 import { createModelStarterCreationService } from "../apps/server/src/training/model-starter-creation-service.js";
 import { createModelStarterRuntime } from "../apps/server/src/training/model-starter-runtime.js";
+import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export.js";
+import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
 import { projectBaseModelCandidates } from "../apps/server/src/training/base-model-candidates.js";
 import { openStorageDatabase } from "@openpond/persistence";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
@@ -177,7 +179,7 @@ it("creates a starter with a required human review without fabricating review ev
   const definition = TaskDefinitionSchema.parse(sealLearningContent({ ...definitionContent, execution, rewardBinding: learningRef(binding) }));
   const rewards = [...input.package.rewards, human], assets = [...input.package.assets, rubric];
   const { contentHash: _tasksetHash, ...tasksetContent } = input.package.taskset;
-  const taskset = TasksetReleaseSchema.parse(sealLearningContent({ ...tasksetContent, ...execution, graders: compileBoundGraders(binding, rewards) }));
+  const taskset = TasksetReleaseSchema.parse(sealLearningContent({ ...tasksetContent, ...execution, graders: compileBoundGraders(binding, rewards), metadata: { ...tasksetContent.metadata, starter: { taskDefinition: learningRef(definition), rewardBinding: learningRef(binding) } } }));
   const { contentHash: _starterHash, ...starterContent } = input.package.starter;
   const starter = ModelStarterSchema.parse(sealLearningContent({ ...starterContent, taskDefinition: learningRef(definition), taskset: learningRef(taskset), rewardBinding: learningRef(binding), rewards: rewards.map(learningRef), assets: assets.map(learningRef) }));
   const resolved = validateResolvedModelStarter({ starter, taskset, taskDefinition: definition, rewardBinding: binding, rewards, assets });
@@ -358,10 +360,10 @@ it("atomically derives model-owned Tasksets while preserving shared sources and 
     await store.close();
     store = new SqliteStore(home);
     firstSaved = await store.saveModelProjectConfiguration(retry);
-    expect(firstSaved.trainingSetup.tasksetRef!.id).not.toBe(source.id);
+    expect(firstSaved.trainingSetup.tasksetRef).toMatchObject({ id: source.id, revision: source.revision + 1 });
     expect(firstSaved.trainingSetup.recipe).toBeNull();
     expect(firstSaved.trainingSetup.tasksetRelease).toBeNull();
-    const derived = (await store.getTasksetRevision(firstSaved.trainingSetup.tasksetRef!.id, 1))!;
+    const derived = (await store.getTasksetRevision(firstSaved.trainingSetup.tasksetRef!.id, firstSaved.trainingSetup.tasksetRef!.revision))!;
     expect(derived.readiness).toBeNull();
     expect(derived.metadata.rewardBinding).toEqual(learningRef(replacement));
     expect(derived.graders[0]!.weight).toBe(2);
@@ -383,11 +385,11 @@ it("atomically derives model-owned Tasksets while preserving shared sources and 
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
     expect(results.find(result => result.status === "rejected")).toMatchObject({ reason: { code: "model_revision_conflict" } });
     let latest = (await store.getModelProject(model.id))!;
-    if (latest.trainingSetup.tasksetRef!.revision === 1) latest = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(latest), trainingSetup: { ...latest.trainingSetup, rewardBindingRef: learningRef(input.package.rewardBinding) } }, latest.revision));
-    expect(latest.trainingSetup.tasksetRef).toMatchObject({ id: derived.id, revision: 2 });
-    expect((await store.getTasksetRevision(derived.id, 2))!.metadata.rewardBinding).toEqual(learningRef(input.package.rewardBinding));
+    if (latest.trainingSetup.tasksetRef!.revision === derived.revision) latest = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(latest), trainingSetup: { ...latest.trainingSetup, rewardBindingRef: learningRef(input.package.rewardBinding) } }, latest.revision));
+    expect(latest.trainingSetup.tasksetRef).toMatchObject({ id: derived.id, revision: derived.revision + 1 });
+    expect((await store.getTasksetRevision(derived.id, derived.revision + 1))!.metadata.rewardBinding).toEqual(learningRef(input.package.rewardBinding));
     expect(await readFile(firstPackage, "utf8")).toBe(firstBytes);
-    expect(await store.getTasksetRevision(derived.id, 1)).toEqual(derived);
+    expect(await store.getTasksetRevision(derived.id, derived.revision)).toEqual(derived);
     expect(await otherStore.saveModelProjectConfiguration(retry)).toEqual(firstSaved);
   } finally { await otherStore.close(); await store.close(); }
   const reopened = new SqliteStore(home);
@@ -461,6 +463,8 @@ it("preserves task files and schema references through a model-owned Reward edit
   try {
     const input = await starterInput();
     let model = await store.saveModelStarterCreation(input);
+    const initialPackage = await exportLocalModelTasksetPackage({ store, storeDir: home, modelId: model.id, profileId: model.profileId });
+    expect(initialPackage.modelResources?.rewardBinding).toEqual(input.package.rewardBinding);
     const source = (await store.getTasksetRevision(model.trainingSetup.tasksetRef!.id, 1))!;
     const sourceDirectory = path.join(home, "training", "tasksets", source.id);
     const sourceManifest = await readFile(path.join(sourceDirectory, "taskset.json"), "utf8");
@@ -500,6 +504,17 @@ it("preserves task files and schema references through a model-owned Reward edit
     expect(await readFile(path.join(directory, asset.path), "utf8")).toBe(text);
     expect(await readFile(path.join(directory, schema.asset.path), "utf8")).toBe(schema.text);
     expect(await readFile(path.join(sourceDirectory, "taskset.json"), "utf8")).toBe(sourceManifest);
+    const captured = await exportLocalModelTasksetPackage({ store, storeDir: home, modelId: saved.id, profileId: saved.profileId });
+    expect(captured.modelResources?.rewardBinding).toEqual(replacement);
+    expect(Buffer.from(decodeTasksetPackageFile(captured.files.find(file => file.asset.id === asset.id)!)).toString("utf8")).toBe(text);
+    expect(captured.files.some(file => file.asset.visibility !== "policy")).toBe(true);
+    const changedDuringExport = vi.spyOn(store, "getModelProject")
+      .mockResolvedValueOnce(saved)
+      .mockResolvedValueOnce({ ...saved, revision: saved.revision + 1 });
+    try {
+      await expect(exportLocalModelTasksetPackage({ store, storeDir: home, modelId: saved.id, profileId: saved.profileId })).rejects.toThrow("changed during package export");
+    } finally { changedDuringExport.mockRestore(); }
+    await expect(exportLocalModelTasksetPackage({ store, storeDir: home, modelId: saved.id, profileId: "other-profile" })).rejects.toThrow("unavailable");
     await writeFile(path.join(directory, asset.path), "corrupted input");
     await expect(store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(saved), trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(input.package.rewardBinding) } }, saved.revision))).rejects.toThrow("immutable manifest");
     expect(await store.getModelProject(saved.id)).toEqual(saved);

@@ -10,6 +10,7 @@ import { starterToolFixture } from "./helpers/starter-tool-fixture.js";
 import { withTempDirectory } from "./helpers/temp-directory.js";
 import { createLearningTextAsset, learningRef, sealLearningContent } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
+import { ModelTasksetExecutionResourcesSchema } from "openpond-sdk/model-starters";
 import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
 
 // A model claiming success, a copied receipt, or changed artifact bytes must not
@@ -57,7 +58,7 @@ it("creates, reopens, executes and grades only owner-recorded tool state", { tim
     const canonical = await canonicalService.execute({ tasksetId: taskset.id, taskId: task.id, model: { providerId: "openpond", modelId: "fixture" }, seed: 2, attempt: 0 });
     expect(canonical.grade).toMatchObject({ score: 1, passed: true });
     expect(canonical.portable.environmentRelease.contentHash).toBe(fixture.package.execution!.environment.contentHash);
-    expect(canonical.portable.verifierSetRelease.contentHash).toBe(fixture.package.execution!.verifierSet.contentHash);
+    expect(canonical.portable.verifierSetRelease.contentHash).toBe(ModelTasksetExecutionResourcesSchema.parse(taskset.environment.metadata.portableExecutionResources).verifierSet.contentHash);
     expect(canonical.portable.harnessRelease.program).toEqual(fixture.package.execution!.javascript.module);
     expect(await evaluation.grade({ tasksetId: taskset.id, taskId: task.id, attempt: actual })).toMatchObject({ score: 1, passed: true, rewardEligible: true });
     const claim = await run("false_claim_attempt", async function* () { yield { text: '{"updated":true}' }; });
@@ -136,7 +137,11 @@ it("executes the derived verifier revision without retargeting an earlier tool a
     expect(after.portable.environmentRelease).toEqual(before.portable.environmentRelease);
     expect(after.portable.verifierSetRelease.contentHash).not.toBe(before.portable.verifierSetRelease.contentHash);
     expect(await store.getTasksetRevision(taskset.id, taskset.revision)).toEqual(taskset);
-    const oldAgain = await service.execute({ ...attempt, tasksetId: taskset.id, attempt: 1 });
+    const oldAgain = await service.execute({ ...attempt, tasksetId: taskset.id, tasksetRef: learningRef(taskset), attempt: 1 });
     expect(oldAgain.grade).toMatchObject({ score: 1, passed: true });
+    expect(oldAgain.portable.verifierSetRelease).toEqual(before.portable.verifierSetRelease);
+    const beforeInvalidReference = turns;
+    await expect(service.execute({ ...attempt, tasksetId: taskset.id, tasksetRef: { ...learningRef(taskset), contentHash: "0".repeat(64) } })).rejects.toThrow("immutable hash");
+    expect(turns).toBe(beforeInvalidReference);
   } finally { await store.close(); }
 }));
