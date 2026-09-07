@@ -6,6 +6,8 @@ import { ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
 import { contentHash, type CustomVerifierRunner } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import { executeLocalLearningVerifier } from "./learning-grade-executor.js";
+import { STARTER_TOOL_ENVIRONMENT } from "./starter-tool-environment.js";
+import { readStarterToolEvidence } from "./starter-tool-evidence.js";
 
 /** Authored Tasksets resolve published Rewards without inventing learning-batch admissions. */
 export async function resolveTasksetRewardBinding(store: SqliteStore, taskset: Taskset) {
@@ -55,18 +57,22 @@ export async function resolveManagedTasksetReward(store: SqliteStore, taskset: T
   return resolved;
 }
 
-export async function createTasksetBindingVerifier(store: SqliteStore, taskset: Taskset): Promise<CustomVerifierRunner> {
+export async function createTasksetBindingVerifier(store: SqliteStore, taskset: Taskset, storeDir?: string): Promise<CustomVerifierRunner> {
   const resources = await resolveTasksetRewardBinding(store, taskset);
   if (!resources) throw new Error("The Taskset has no published Reward binding.");
   const graders = compileBoundGraders(resources.binding, resources.rewards);
   return async ({ grader, task, attempt, signal }) => {
     const saved = taskset.tasks.find(candidate => candidate.id === task.id);
     if (!saved || contentHash(saved) !== contentHash(task)) throw new Error("Task differs from the selected immutable Taskset.");
-    if (task.privilegedContextRef !== null) throw new Error("This authored Taskset requires a private evaluator-context resolver.");
+    let evaluatorContext: Record<string, unknown> | null = null;
+    if (taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT) {
+      if (!storeDir) throw new Error("Tool grading requires the execution owner's artifact directory.");
+      evaluatorContext = await readStarterToolEvidence({ store, storeDir, taskset, task, attempt });
+    } else if (task.privilegedContextRef !== null) throw new Error("This authored Taskset requires a private evaluator-context resolver.");
     const bound = graders.find(candidate => candidate.id === grader.id);
     if (bound?.kind !== "custom_verifier") throw new Error("The verifier is absent from the published Reward binding.");
-    const released = TaskRecordSchema.parse({ id: task.id, clusterKey: task.clusterKey, split: task.split, input: task.input, expectedOutput: task.expectedOutput, policyVisibleContext: task.policyVisibleContext, privilegedContextRef: null, artifactRefs: [], tags: task.tags });
+    const released = TaskRecordSchema.parse({ id: task.id, clusterKey: task.clusterKey, split: task.split, input: task.input, expectedOutput: task.expectedOutput, policyVisibleContext: task.policyVisibleContext, privilegedContextRef: task.privilegedContextRef, artifactRefs: [], tags: task.tags });
     return executeLocalLearningVerifier({ repository: store.learningRepository(), scope: taskset.profileId, grader: bound, task: released,
-      evidence: { output: attempt.output, artifactRefs: attempt.artifactRefs, runtimeEventRefs: attempt.runtimeEventRefs, infrastructureError: attempt.infrastructureError }, evaluatorContext: null, signal });
+      evidence: { output: attempt.output, artifactRefs: attempt.artifactRefs, runtimeEventRefs: attempt.runtimeEventRefs, infrastructureError: attempt.infrastructureError }, evaluatorContext, signal });
   };
 }

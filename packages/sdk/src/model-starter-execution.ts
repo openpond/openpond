@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { EnvironmentReleaseSchema, VerifierSetReleaseSchema } from "@openpond/evals";
 import { JavaScriptEnvironmentDefinitionSchema, assertJavaScriptEnvironmentDefinition } from "@openpond/evals/javascript-environment";
-import { learningRef, sealLearningContent, verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
+import { createLearningTextAsset, learningRef, sealLearningContent, verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import type { TasksetRelease } from "@openpond/evals/tasksets";
+import { canonicalJson } from "./protocol.js";
 
 export const ModelStarterExecutionSchema = z.object({
   environment: EnvironmentReleaseSchema,
@@ -11,15 +12,54 @@ export const ModelStarterExecutionSchema = z.object({
   javascript: JavaScriptEnvironmentDefinitionSchema,
 }).strict();
 export type ModelStarterExecution = z.infer<typeof ModelStarterExecutionSchema>;
+export const ModelStarterToolFixtureScriptSchema = z.object({
+  actions: z.array(z.object({ name: z.string().min(1).max(64), arguments: z.record(z.string(), z.unknown()) }).strict()).max(1_000),
+}).strict();
+export type ModelStarterExecutionContext = Pick<TasksetRelease, "environment" | "environmentRelease" | "verifierSetRelease" | "tools" | "capabilities" | "policy" | "graders" | "tasks">;
+
+/** Derivable from immutable Taskset refs, without putting private code in its metadata. */
+export function modelStarterExecutionAssetId(context: Pick<ModelStarterExecutionContext, "environmentRelease" | "verifierSetRelease">): string {
+  if (!context.environmentRelease || !context.verifierSetRelease) throw new Error("Starter execution release references are missing.");
+  return `starter-execution-${sealLearningContent({ environment: context.environmentRelease, verifiers: context.verifierSetRelease }).contentHash}`;
+}
+
+/** Persist alongside the package's private assets in the same creation transaction.
+ * The existing authored-text resource bound also applies to this small closure. */
+export function createModelStarterExecutionAsset(value: ModelStarterExecution): LearningTextAsset {
+  const execution = ModelStarterExecutionSchema.parse(value);
+  assertExecutionIntegrity(execution);
+  const id = modelStarterExecutionAssetId({ environmentRelease: { id: execution.environment.id, contentHash: execution.environment.contentHash }, verifierSetRelease: { id: execution.verifierSet.id, contentHash: execution.verifierSet.contentHash } });
+  const generated = createLearningTextAsset({ text: canonicalJson(execution), path: "environment/execution.json", mediaType: "application/json", visibility: "host_private" });
+  const { contentHash: _hash, ...content } = generated;
+  return sealLearningContent({ ...content, id, asset: { ...content.asset, id } });
+}
+
+/** The caller owns and verifies the Taskset manifest; this verifies its private
+ * resource graph. Passing selected immutable task rows permits bounded hydration. */
+export function resolveModelStarterExecutionAsset(context: ModelStarterExecutionContext, asset: LearningTextAsset, assets: LearningTextAsset[]): ModelStarterExecution {
+  if (asset.id !== modelStarterExecutionAssetId(context) || asset.asset.visibility !== "host_private" || asset.asset.mediaType !== "application/json") throw new Error("Starter execution asset differs from its Taskset references.");
+  const execution = ModelStarterExecutionSchema.parse(JSON.parse(verifyLearningTextAsset(asset, asset.asset)));
+  validateModelStarterExecution(execution, context, assets);
+  return execution;
+}
 
 function equal(left: unknown, right: unknown): boolean {
   return sealLearningContent({ value: left }).contentHash === sealLearningContent({ value: right }).contentHash;
 }
 
+function assertExecutionIntegrity(execution: ModelStarterExecution): void {
+  assertJavaScriptEnvironmentDefinition(execution.javascript);
+  for (const resource of [execution.environment, execution.verifierSet]) {
+    const { contentHash, ...content } = resource;
+    if (sealLearningContent(content).contentHash !== contentHash) throw new Error(`Starter execution resource integrity failed: ${resource.id}.`);
+  }
+  if (!equal(execution.environment.metadata.javascriptEnvironment, learningRef(execution.javascript))) throw new Error("Starter execution resources differ from its declared task context.");
+}
+
 /** Close executable dependencies before a host persists or runs a package. */
 export function validateModelStarterExecution(
   execution: ModelStarterExecution | undefined,
-  taskset: TasksetRelease,
+  taskset: ModelStarterExecutionContext,
   assets: LearningTextAsset[],
 ): void {
   if (!execution) {
@@ -27,11 +67,7 @@ export function validateModelStarterExecution(
     return;
   }
   const { environment, verifierSet, javascript } = execution;
-  assertJavaScriptEnvironmentDefinition(javascript);
-  for (const resource of [environment, verifierSet]) {
-    const { contentHash, ...content } = resource;
-    if (sealLearningContent(content).contentHash !== contentHash) throw new Error(`Starter execution resource integrity failed: ${resource.id}.`);
-  }
+  assertExecutionIntegrity(execution);
   if (!equal(taskset.environmentRelease, { id: environment.id, contentHash: environment.contentHash }) ||
       !equal(taskset.verifierSetRelease, { id: verifierSet.id, contentHash: verifierSet.contentHash }) ||
       !equal(environment.contract, taskset.environment) || !equal(verifierSet.graders, taskset.graders) ||

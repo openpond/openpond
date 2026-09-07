@@ -55,7 +55,10 @@ export class NativeToolCallAccumulator {
     });
   }
 
-  completed(): NativeModelToolCall[] {
+  completed(options: { strict?: boolean } = {}): NativeModelToolCall[] {
+    if (options.strict && [...this.calls.values()].some(call => !call.id || !call.name || call.type !== "function" || !call.argumentsJson.trim())) {
+      throw new Error("Model returned an incomplete function call.");
+    }
     return [...this.calls.values()]
       .sort((left, right) => (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER))
       .map((call, sequence) => completedToolCall(call, sequence))
