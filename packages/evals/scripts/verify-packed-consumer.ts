@@ -75,7 +75,7 @@ await session.destroy();
 await executeJavaScriptEnvironmentInWorker({ source: "export function step() { for (;;) {} }", operation: "step", value: {}, timeoutMs: 100 }).then(() => { throw new Error("Unbounded environment step succeeded"); }, error => { if (error.message !== "environment_timeout") throw error; });
 const afterCleanup = await executeJavaScriptEnvironmentInWorker({ source: "export function collect() { return { state: {}, observation: { stopped: true } }; }", operation: "collect", value: {}, timeoutMs: 5000 });
 if (afterCleanup.observation.stopped !== true) throw new Error("Packed environment worker did not execute after cleanup");
-// Protect the Node subprocess boundary used by Bun hosts: no host capabilities,
+// Protect the Node subprocess boundary used by hosted execution owners: no host capabilities,
 // bounded runaway work, cancellation, fresh contexts, and valid subsequent work.
 const processVerifier = await executeJavaScriptVerifierInProcess({ source: "export function verify() { const host = Function('return this')(); const passed = ['process','fetch','require','WebSocket','setTimeout'].every(key => !(key in host)); return { score: Number(passed), passed, feedback: 'No host APIs' }; }", value: {}, timeoutMs: 5000 });
 if (!processVerifier.passed) throw new Error("Process verifier exposed host capabilities");

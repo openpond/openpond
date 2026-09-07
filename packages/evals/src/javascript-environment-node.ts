@@ -9,7 +9,7 @@ export async function executeJavaScriptEnvironmentInWorker(input: JavaScriptEnvi
   return JavaScriptEnvironmentResultSchema.parse(await executeJavaScriptIsolateInWorker({ ...input, exportName: operation, maxResultBytes: 1_572_864, deterministic: true, errorPrefix: "environment" }));
 }
 
-/** Uses a Node child process, including when the execution owner runs in Bun. */
+/** Uses a Node child process independently of the execution owner's runtime. */
 export async function executeJavaScriptEnvironmentInProcess(input: JavaScriptEnvironmentExecutionInput): Promise<JavaScriptEnvironmentResult> {
   const operation = JavaScriptEnvironmentOperationSchema.parse(input.operation);
   return JavaScriptEnvironmentResultSchema.parse(await executeJavaScriptIsolateInProcess({ ...input, exportName: operation, maxResultBytes: 1_572_864, deterministic: true, errorPrefix: "environment" }));
