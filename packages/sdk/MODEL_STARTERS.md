@@ -36,3 +36,15 @@ Prepare the request on final confirmation and retain it for transport retries. T
 Evidence references are nullable pointers to actual verifier, baseline, training and evaluation results. Publication and package integrity do not qualify a starter or imply improvement. Continuous learning is a separate model workflow mode; it is not a starter category or comparison-run type.
 
 The repository's invoice-extraction example authors 80 original synthetic text tasks and executes its verifier fixtures. Its baseline, training, evaluation and full product qualification remain pending. The local server includes preparation, atomic persistence and file-materialization adapters; catalog publication, route wiring and Desktop Get Started integration are separate delivery steps.
+
+## Hosted starter attempts
+
+The `openpond-sdk/model-starter-attempts` subpath defines a durable, workspace-scoped attempt API. Create requests select an attached Model Project, exact Taskset release, task, environment seed and explicit policy. They never carry replacement task input, private state, verifier source or evaluator context. Reuse the same `operationId` for a transport retry; use a new identity for a new evaluation.
+
+A `hosted_chat` policy selects a registered hosted chat model explicitly. Its snapshot records the provider configuration used for the attempt; it does not claim that a mutable provider alias identifies immutable weights or that the model is the project's starting model. A `fixture` policy selects an immutable authored script and has no model identity or provider requests. These are separate result kinds, and fixture success is not model qualification.
+
+`OpenPondModelStarterAttemptsClient` exposes `create`, `list`, `get`, `cancel` and `result` at `/v1/model-starter-attempts`. Cancellation is a request: poll until the owner reports terminal status and cleanup. Inventory is a summary; result reads contain only policy-facing messages, output, Reward composition and execution hashes. Private world snapshots remain with the execution owner. The client checks workspace/request identities and the returned result hash.
+
+`verifyModelStarterEnvironmentAttempt` validates the bounded runtime artifact hash, task input, seed and JavaScript release. The host must separately establish who recorded those bytes and bind them to its admitted attempt before using private state for grading. The shared schema also replaces Desktop's private copy of the environment-attempt envelope.
+
+`choices` reads a paginated list of task IDs, input previews and authored fixture IDs for one exact attached Taskset, plus available hosted model choices. It does not return private state or expected outputs. Unsupported execution contracts remain explicit in this read response. Execution admission revalidates every selection; a choices response does not itself authorize a model call.

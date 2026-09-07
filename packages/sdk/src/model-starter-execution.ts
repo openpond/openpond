@@ -5,6 +5,28 @@ import { createLearningTextAsset, learningRef, sealLearningContent, verifyLearni
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import type { TasksetRelease } from "@openpond/evals/tasksets";
 import { canonicalJson } from "./protocol.js";
+import { ModelProjectVersionedRefSchema } from "./model-projects.js";
+
+const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
+export const ModelStarterEnvironmentAttemptSchema = z.object({
+  schemaVersion: z.literal("openpond.javascriptEnvironmentAttempt.v1"), taskId: z.string(),
+  status: z.enum(["completed", "budget_exhausted", "cancelled", "timed_out", "policy_failure", "environment_failure"]),
+  output: z.string().nullable(), collected: z.boolean(), environmentCleanupComplete: z.boolean(),
+  snapshot: z.object({ definition: ModelProjectVersionedRefSchema, inputHash: HashSchema, seed: z.number().int(), initialStateHash: HashSchema, finalStateHash: HashSchema, state: z.record(z.string(), z.unknown()), events: z.array(z.record(z.string(), z.unknown())) }).strict().nullable(),
+  messages: z.array(z.unknown()), error: z.string().nullable(), contentHash: HashSchema,
+}).strict();
+
+/** Validate an owner-recorded runtime artifact against the admitted task.
+ * Provenance/ownership of the artifact remains the execution host's concern. */
+export function verifyModelStarterEnvironmentAttempt(value: unknown, context: { taskId: string; input: Record<string, unknown>; seed: number; javascript: z.infer<typeof ModelProjectVersionedRefSchema> }) {
+  assertBoundedTaskJson(value, 16_777_216);
+  const result = ModelStarterEnvironmentAttemptSchema.parse(value);
+  const { contentHash, ...content } = result;
+  if (sealLearningContent(content).contentHash !== contentHash || result.taskId !== context.taskId || (result.snapshot && (
+    !equal(result.snapshot.definition, context.javascript) || result.snapshot.inputHash !== sealLearningContent(context.input).contentHash || result.snapshot.seed !== context.seed || result.snapshot.finalStateHash !== sealLearningContent(result.snapshot.state).contentHash
+  ))) throw new Error("Starter environment attempt differs from its admitted task or recorded bytes.");
+  return result;
+}
 
 export const ModelStarterExecutionSchema = z.object({
   environment: EnvironmentReleaseSchema,
