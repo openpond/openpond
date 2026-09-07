@@ -6,6 +6,9 @@ import { assertBoundedTaskJson, validateTaskValue } from "@openpond/evals/task-s
 
 import { ModelProjectBaseModelSchema, ModelProjectTrainingMethodSchema, ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { canonicalSha256 } from "./protocol.js";
+import { ModelStarterExecutionSchema, validateModelStarterExecution } from "./model-starter-execution.js";
+
+export { ModelStarterExecutionSchema, type ModelStarterExecution } from "./model-starter-execution.js";
 
 const IdSchema = z.string().trim().min(1).max(500);
 const RefSchema = ModelProjectVersionedRefSchema;
@@ -50,6 +53,7 @@ export const ResolvedModelStarterSchema = z.object({
   rewardBinding: RewardBindingSchema,
   rewards: z.array(RewardReleaseSchema).min(1).max(100),
   assets: z.array(LearningTextAssetSchema).max(1_000),
+  execution: ModelStarterExecutionSchema.optional(),
 }).strict();
 export type ResolvedModelStarter = z.infer<typeof ResolvedModelStarterSchema>;
 
@@ -140,6 +144,7 @@ export function validateResolvedModelStarter(value: unknown): ResolvedModelStart
     if (sealLearningContent(content).contentHash !== contentHash) throw new Error(`Starter resource integrity failed: ${resource.id}.`);
   }
   assertTasksetRelease(taskset);
+  validateModelStarterExecution(resolved.execution, taskset, assets);
   function exact(expected: z.infer<typeof RefSchema>, resource: { id: string; revision: number; contentHash: string }) {
     if (!sameLearningRef(expected, learningRef(resource))) throw new Error(`Starter dependency mismatch: ${expected.id}.`);
   }
