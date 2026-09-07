@@ -3,7 +3,7 @@ import { createLearningTextAsset, learningRef, sealLearningContent, TaskDefiniti
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { ModelStarterExecutionSchema, createModelStarterExecutionAsset, modelStarterExecutionAssetId, resolveModelStarterExecutionAsset } from "../src/model-starter-execution.js";
-import { ModelStarterSchema, createModelStarterCreationRequest, parseModelStarterCreationRequest, previewModelStarter, validateModelStarterCreation, validateResolvedModelStarter } from "../src/model-starters.js";
+import { ModelStarterSchema, createModelStarterCreationRequest, modelStarterPrivacyContentHash, parseModelStarterCreationRequest, previewModelStarter, validateModelStarterCreation, validateResolvedModelStarter } from "../src/model-starters.js";
 import { OpenPondModelStarterCatalogClient } from "../src/model-starter-catalog.js";
 
 function fixture(visibility: "verifier" | "policy" = "verifier") {
@@ -49,6 +49,17 @@ function reseal(value: Record<string, unknown> & { contentHash: string }) {
   const { contentHash: _old, ...content } = value;
   value.contentHash = sealLearningContent(content).contentHash;
 }
+
+it("binds publisher privacy review to the complete package contents", () => {
+  const value = fixture();
+  value.taskset.metadata.starterAuthoring = {};
+  value.taskset.metadata.starterAuthoring = { privacyReview: { schemaVersion: "openpond.modelStarterPrivacyReview.v1", disposition: "synthetic_only", reviewedBy: "Fixture publisher", reviewedAt: "2026-09-07T06:00:00.000Z", reviewedContentHash: modelStarterPrivacyContentHash(value), note: "Original synthetic examples." } };
+  reseal(value.taskset); value.starter.taskset = learningRef(value.taskset); reseal(value.starter);
+  expect(validateResolvedModelStarter(value)).toEqual(value);
+  value.taskset.metadata.unreviewed = "additional contact@example.test";
+  reseal(value.taskset); value.starter.taskset = learningRef(value.taskset); reseal(value.starter);
+  expect(() => validateResolvedModelStarter(value)).toThrow("privacy review differs");
+});
 
 // An outer package hash cannot authorize replacing the tool world or removing
 // the private state on which a state-based Reward depends.

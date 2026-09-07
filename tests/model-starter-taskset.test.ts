@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TasksetSourceRefSchema, TrainingDestinationCapabilitiesSchema } from "@openpond/contracts";
 import { createLearningTextAsset, learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
-import { ModelStarterSchema, createModelStarterCreationRequest, validateResolvedModelStarter } from "openpond-sdk/model-starters";
+import { ModelStarterSchema, createModelStarterCreationRequest, modelStarterPrivacyContentHash, validateResolvedModelStarter } from "openpond-sdk/model-starters";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { withTempDirectory } from "./helpers/temp-directory.js";
 import starterImportFixture from "./fixtures/model-starter-import.json";
@@ -345,5 +345,38 @@ it("creates through the runtime using only the hosted package's authored targets
     expect(taskset!.learningSignals.demonstrations).toHaveLength(40);
     expect(taskset!.learningSignals.demonstrations.every(signal => taskset!.tasks.find(task => task.id === signal.taskId)?.split === "train")).toBe(true);
     expect(taskset!.graderFixtures).toHaveLength(80);
+  } finally { fetchMock.mockRestore(); await store.close(); }
+}));
+
+// Synthetic contact data needs an exact publisher review; neither arbitrary
+// caller approval nor a publisher privacy review can override a secret finding.
+it("requires bound publisher privacy review and preserves secret blocking", async () => withTempDirectory("starter-privacy-", async home => {
+  const store = new SqliteStore(home);
+  const value = (await starterInput()).package;
+  value.taskset.metadata.testContact = "synthetic@example.test";
+  const reseal = () => {
+    const { contentHash: _taskHash, ...taskset } = value.taskset;
+    value.taskset.contentHash = sealLearningContent(taskset).contentHash;
+    value.starter.taskset = learningRef(value.taskset);
+    const { contentHash: _starterHash, ...starter } = value.starter;
+    value.starter.contentHash = sealLearningContent(starter).contentHash;
+  };
+  const request = (modelId: string) => createModelStarterCreationRequest({ profileId: "profile", modelId, name: "Reviewed fixture", starter: learningRef(value.starter), startingModel: value.starter.startingModel, method: "sft" });
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(value));
+  try {
+    const runtime = createModelStarterRuntime({ store, home, resolveAccess: async () => ({ apiBaseUrl: "https://catalog.invalid", token: "test", teamId: "team" }) });
+    reseal();
+    await expect(runtime.create(await request("unreviewed"))).rejects.toThrow("unresolved PII policy");
+    const authoring = value.taskset.metadata.starterAuthoring as Record<string, unknown>;
+    authoring.privacyReview = { schemaVersion: "openpond.modelStarterPrivacyReview.v1", disposition: "synthetic_only", reviewedBy: "Fixture publisher", reviewedAt: "2026-09-07T06:00:00.000Z", reviewedContentHash: modelStarterPrivacyContentHash(value), note: "Original synthetic contact data." };
+    reseal();
+    const saved = await runtime.create(await request("reviewed"));
+    const taskset = (await store.getTaskset(saved.trainingSetup.tasksetRef!.id))!;
+    expect(taskset.sourceRefs[0]!.piiScanStatus).toBe("passed");
+    expect(taskset.sourceRefs[0]!.metadata.privacyReview).toEqual(authoring.privacyReview);
+    value.taskset.metadata.testCredential = "password=synthetic-secret-fixture";
+    (authoring.privacyReview as { reviewedContentHash: string }).reviewedContentHash = modelStarterPrivacyContentHash(value);
+    reseal();
+    await expect(runtime.create(await request("secret-blocked"))).rejects.toThrow("secret");
   } finally { fetchMock.mockRestore(); await store.close(); }
 }));

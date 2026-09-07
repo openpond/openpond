@@ -48,3 +48,13 @@ A `hosted_chat` policy selects a registered hosted chat model explicitly. Its sn
 `verifyModelStarterEnvironmentAttempt` validates the bounded runtime artifact hash, task input, seed and JavaScript release. The host must separately establish who recorded those bytes and bind them to its admitted attempt before using private state for grading. The shared schema also replaces Desktop's private copy of the environment-attempt envelope.
 
 `choices` reads a paginated list of task IDs, input previews and authored fixture IDs for one exact attached Taskset, plus available hosted model choices. It does not return private state or expected outputs. Unsupported execution contracts remain explicit in this read response. Execution admission revalidates every selection; a choices response does not itself authorize a model call.
+# Publisher privacy review
+
+`ModelStarterPrivacyReviewSchema` describes a catalog publisher's review of an
+original synthetic package. Put it in `taskset.metadata.starterAuthoring.privacyReview`.
+`modelStarterPrivacyContentHash` binds the review to the complete package, excluding
+the review and the outer hashes containing it. Set the review, then reseal the
+Taskset and starter. Validation rejects stale reviews after content changes.
+Desktop uses this authenticated catalog attestation to resolve synthetic contact
+data findings, retains it in source provenance, and still blocks secret findings.
+This is not an approval field accepted in a model creation request or arbitrary import.
