@@ -3,7 +3,7 @@
 These entrypoints execute authored tool modules over owner-held JSON state:
 
 - `@openpond/evals/javascript-environment` validates immutable definitions and creates an episode with `step`, `collect`, `snapshot` and `destroy`.
-- `@openpond/evals/javascript-environment/node` executes each operation in a terminable worker around the isolated interpreter.
+- `@openpond/evals/javascript-environment/node` exposes worker and Node subprocess owners around the isolated interpreter.
 - `@openpond/evals/javascript-environment/attempt` runs a policy adapter through the declared tools and returns its messages, output and independently recorded state.
 
 The interpreter exposes no host functions, filesystem, network, timers or module loader. Environment code receives an explicit seed and supplied inputs; ambient `Date` and `Math.random` are unavailable. A module cannot call a production connector or launch a process. Tools that require those capabilities need a separate host adapter and its permissions.
@@ -53,7 +53,9 @@ Hosts persist the returned attempt under their task/model/release identity and g
 
 ## Lifecycle ownership
 
-Server hosts should pass `executeJavaScriptEnvironmentInWorker` as the session or attempt runner. Each worker runs a fresh interpreter. A promise settles only after the worker is terminated, including timeout and cancellation. The session rejects overlapping operations and waits for an active operation to stop before cleanup. Call `destroy` in `finally` when using the session API directly; the attempt runner does this automatically.
+Server hosts running Bun should pass `executeJavaScriptEnvironmentInProcess` as the session or attempt runner. It requires Node 22.14–24 on `PATH` and gives each operation a fresh Node child and QuickJS interpreter. The child inherits only `PATH`, uses a bounded heap and response stream, and is killed on timeout or cancellation. Authored source travels as JSON interpreter data. A promise settles only after the child exits. This avoids Bun's worker-thread lifecycle for repeated execution. `executeJavaScriptVerifierInProcess` provides the same ownership for graders from `@openpond/evals/javascript-verifier/node`.
+
+Node hosts can also use `executeJavaScriptEnvironmentInWorker`. Each worker runs a fresh interpreter and settles only after termination. Both owners include startup in the declared deadline; neither retries failed operations. The session rejects overlapping operations and waits for active execution to stop before cleanup. Call `destroy` in `finally` when using the session API directly; the attempt runner does this automatically.
 
 Cleanup receives the definition's `operationTimeoutMs`, including interpreter and
 worker startup, with no shorter implicit deadline. It still runs after the episode
