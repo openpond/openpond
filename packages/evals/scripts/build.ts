@@ -31,6 +31,13 @@ try {
   });
   await writeFile(path.join(staging, "javascript-verifier-worker-source.js"), `export const javascriptVerifierWorkerSource = ${JSON.stringify(worker.outputFiles[0]!.text)};\n`);
   await copyFile(path.join(root, "src/javascript-verifier-worker-source.d.ts"), path.join(staging, "types/javascript-verifier-worker-source.d.ts"));
+  const processHost = await build({
+    entryPoints: [path.join(root, "src/javascript-isolate-process-entry.ts")],
+    bundle: true, platform: "node", target: "node22.14", format: "cjs",
+    write: false, minify: true, legalComments: "none",
+  });
+  await writeFile(path.join(staging, "javascript-isolate-process-source.js"), `export const javascriptIsolateProcessSource = ${JSON.stringify(processHost.outputFiles[0]!.text)};\n`);
+  await copyFile(path.join(root, "src/javascript-isolate-process-source.d.ts"), path.join(staging, "types/javascript-isolate-process-source.d.ts"));
   await copyFile(path.join(root, "src/task-schema-meta-validator.js"), path.join(staging, "task-schema-meta-validator.js"));
   await copyFile(path.join(root, "src/task-schema-meta-validator.d.ts"), path.join(staging, "types/task-schema-meta-validator.d.ts"));
   await publishBuild(staging, dist);

@@ -57,8 +57,8 @@ import path from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { LearningCommandRequestSchema, LearningSourceSchema, TaskExampleSubmissionSchema, sealLearningContent, validateSourceSubmission } from "@openpond/evals/learning";
 import { RewardReleaseSchema } from "@openpond/evals/rewards";
-import { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-verifier/node";
-import { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript-environment/node";
+import { executeJavaScriptVerifierInWorker, executeJavaScriptVerifierInProcess } from "@openpond/evals/javascript-verifier/node";
+import { executeJavaScriptEnvironmentInWorker, executeJavaScriptEnvironmentInProcess } from "@openpond/evals/javascript-environment/node";
 import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
 import { createLearningTextAsset } from "@openpond/evals/learning";
 import { contentHash } from "@openpond/harness";
@@ -75,6 +75,21 @@ await session.destroy();
 await executeJavaScriptEnvironmentInWorker({ source: "export function step() { for (;;) {} }", operation: "step", value: {}, timeoutMs: 100 }).then(() => { throw new Error("Unbounded environment step succeeded"); }, error => { if (error.message !== "environment_timeout") throw error; });
 const afterCleanup = await executeJavaScriptEnvironmentInWorker({ source: "export function collect() { return { state: {}, observation: { stopped: true } }; }", operation: "collect", value: {}, timeoutMs: 5000 });
 if (afterCleanup.observation.stopped !== true) throw new Error("Packed environment worker did not execute after cleanup");
+// Protect the Node subprocess boundary used by hosted execution owners: no host capabilities,
+// bounded runaway work, cancellation, fresh contexts, and valid subsequent work.
+const processVerifier = await executeJavaScriptVerifierInProcess({ source: "export function verify() { const host = Function('return this')(); const passed = ['process','fetch','require','WebSocket','setTimeout'].every(key => !(key in host)); return { score: Number(passed), passed, feedback: 'No host APIs' }; }", value: {}, timeoutMs: 5000 });
+if (!processVerifier.passed) throw new Error("Process verifier exposed host capabilities");
+await executeJavaScriptVerifierInProcess({ source: "export function verify() { return { score: 1, passed: true, feedback: 'x'.repeat(70000) }; }", value: {}, timeoutMs: 5000 }).then(() => { throw new Error("Oversized process result succeeded"); }, error => { if (error.message !== "verifier_result_too_large") throw error; });
+await executeJavaScriptEnvironmentInProcess({ source: "import fs from 'node:fs'; export function step() { return fs.readFileSync('/etc/passwd'); }", operation: "step", value: {}, timeoutMs: 5000 }).then(() => { throw new Error("Process exposed host modules"); }, () => {});
+await executeJavaScriptEnvironmentInProcess({ source: "export function step() { for (;;) {} }", operation: "step", value: {}, timeoutMs: 100 }).then(() => { throw new Error("Unbounded process succeeded"); }, error => { if (error.message !== "environment_timeout") throw error; });
+const processController = new AbortController();
+const processCancelled = executeJavaScriptEnvironmentInProcess({ source: "export function step() { for (;;) {} }", operation: "step", value: {}, timeoutMs: 5000, signal: processController.signal }).then(() => { throw new Error("Cancelled process succeeded"); }, error => { if (error.message !== "owner_cancelled") throw error; });
+setTimeout(() => processController.abort(new Error("owner_cancelled")), 50);
+await processCancelled;
+for (let index = 0; index < 3; index += 1) {
+  const fresh = await executeJavaScriptEnvironmentInProcess({ source: "export function collect() { const previous = globalThis.previous; globalThis.previous = 1; return { state: {}, observation: { fresh: previous === undefined, deterministic: typeof Date === 'undefined' } }; }", operation: "collect", value: {}, timeoutMs: 5000 });
+  if (!fresh.observation.fresh || !fresh.observation.deterministic) throw new Error("Process interpreter leaked state or nondeterminism");
+}
 const definitionRef = { id: "consumer-definition", revision: 1, contentHash: "a".repeat(64) };
 const source = LearningSourceSchema.parse(sealLearningContent({ schemaVersion: "openpond.learningSource.v1", id: "consumer-source", revision: 1, name: "Consumer source", kind: "direct", taskDefinition: definitionRef, enabled: true, allowedSplits: ["train"], mapping: null, adapterVersion: null }));
 const example = TaskExampleSubmissionSchema.parse({ schemaVersion: "openpond.taskExample.v1", sourceId: source.id, taskDefinition: definitionRef, idempotencyKey: "consumer-example", exampleId: "example", attemptId: "attempt", occurredAt: "2026-09-06T12:00:00.000Z", familyKey: "family", split: "train", input: { question: "Two plus two?" }, observedOutput: { answer: "5" }, expected: { answer: "4" }, evaluatorContext: { private: true }, assets: [], provenance: { sourceRecordRef: null, mappingHash: null } });
@@ -232,13 +247,14 @@ import type {
 import type { MetricObservation, RunTelemetryEvent } from "@openpond/evals/telemetry";
 import type { LearningRepository, LearningCommand, TaskExampleSubmission, TaskGradeExecutor } from "@openpond/evals/learning";
 import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
-import type { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-verifier/node";
+import type { executeJavaScriptVerifierInWorker, executeJavaScriptVerifierInProcess } from "@openpond/evals/javascript-verifier/node";
 import type { JavaScriptEnvironmentDefinition, JavaScriptEnvironmentSnapshot } from "@openpond/evals/javascript-environment";
 import type { JavaScriptEnvironmentAttempt, runJavaScriptEnvironmentAttempt } from "@openpond/evals/javascript-environment/attempt";
-import type { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript-environment/node";
+import type { executeJavaScriptEnvironmentInWorker, executeJavaScriptEnvironmentInProcess } from "@openpond/evals/javascript-environment/node";
 void (null as unknown as JavaScriptEnvironmentDefinition | JavaScriptEnvironmentSnapshot | JavaScriptEnvironmentAttempt);
 void (null as unknown as Parameters<typeof runJavaScriptEnvironmentAttempt>[0] | Parameters<typeof executeJavaScriptEnvironmentInWorker>[0]);
 void (null as unknown as Parameters<typeof executeJavaScriptVerifierInWorker>[0]);
+void (null as unknown as Parameters<typeof executeJavaScriptVerifierInProcess>[0] | Parameters<typeof executeJavaScriptEnvironmentInProcess>[0]);
 void (null as unknown as LearningRepository | LearningCommand | TaskExampleSubmission | TaskGradeExecutor | RewardBinding | RewardRelease);
 void (null as unknown as HarnessRelease | AttemptReceipt | ArtifactManifest | CanonicalRolloutRecord | EnvironmentRelease | EvaluationRunner | GraderEvidence | RewardReceipt | RunManifest | TaskRecord | WorkEvidenceReceipt | MetricObservation | RunTelemetryEvent);
 `);
