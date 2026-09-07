@@ -47,18 +47,25 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
   const [saved, setSaved] = useState(JSON.stringify(authoringDraft?.fields ?? initial));
   const [revision, setRevision] = useState(reward?.revision ?? 0);
   const mutation = useLearningMutation(client);
+  const [pendingAction, setPendingAction] = useState<"save" | "check" | "publish" | null>(null);
+  function runAction<T>(action: "save" | "check" | "publish", execute: (api: OpenPondLearningClient) => Promise<T>) {
+    return mutation.run(async api => {
+      setPendingAction(action);
+      try { return await execute(api); } finally { setPendingAction(null); }
+    });
+  }
   const persistence = useAuthoringDraft(authoringDraft);
   const checkRequest = useRef<{ draftHash: string; operationId: string } | null>(null);
   const draftInput = () => ({ targetKind: "reward" as const, targetId: id, baseRelease: reward ? learningRef(reward) : null, fields: draft });
   async function saveDraft() {
-    const result = await mutation.run(api => persistence.save(api, draftInput()));
+    const result = await runAction("save", api => persistence.save(api, draftInput()));
     if (result) setSaved(JSON.stringify(draft));
     return Boolean(result);
   }
   const patch = (update: Partial<typeof draft>) => setDraft((value) => ({ ...value, ...update }));
 
   async function save() {
-    const result = await mutation.run(async (api) => {
+    const result = await runAction("publish", async (api) => {
       if (draft.fixtures?.length) compileRewardFixtures(draft.fixtures);
       const { reward: release, assets } = compileRewardAuthoring({ id, fields: draft, base: reward });
       const { contentHash: _hash, ...content } = release;
@@ -75,7 +82,7 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
     setRevision(result.revision); setSaved(JSON.stringify(draft)); return result;
   }
   async function checkFixtures() {
-    return mutation.run(async api => {
+    return runAction("check", async api => {
       compileRewardFixtures(draft.fixtures ?? []);
       compileRewardAuthoring({ id, fields: draft, base: reward });
       const record = await persistence.save(api, draftInput());
@@ -111,8 +118,8 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
     {draft.kind === "human" ? <label>Reviewer role<input value={draft.reviewerRole} onChange={(event) => patch({ reviewerRole: event.target.value })} /></label> : null}
     {draft.kind === "learned_model" ? <><label>Model version<input value={draft.learnedId} onChange={(event) => patch({ learnedId: event.target.value })} /></label><label>Model version content hash<input value={draft.learnedHash} onChange={(event) => patch({ learnedHash: event.target.value })} /></label><LearningJsonField label="Model input contract" value={draft.inputContract} onChange={(inputContract) => patch({ inputContract })} /><label>Raw score minimum<input type="number" value={draft.minimum} onChange={(event) => patch({ minimum: event.target.value })} /></label><label>Raw score maximum<input type="number" value={draft.maximum} onChange={(event) => patch({ maximum: event.target.value })} /></label></> : null}
     <RewardFixturesEditor fixtures={draft.fixtures ?? []} onChange={fixtures => patch({ fixtures })} />
-    <RewardCheckHistory client={client} targetId={id} draft={persistence.record?.targetKind === "reward" ? persistence.record : null} unchanged={JSON.stringify(draft) === JSON.stringify(persistence.record?.fields)} busy={mutation.busy || !draft.fixtures?.length} onCheck={checkFixtures} />
-    <LearningActions><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void saveDraft(); }}>Save draft</button><button type="button" className="training-button" disabled={mutation.busy || !draft.name.trim()} onClick={async () => { const result = await save(); if (result) { guard.allowNextNavigation(); onSaved(result); } }}>{mutation.busy ? "Publishing…" : `Publish release ${revision + 1}`}</button></LearningActions>
+    <RewardCheckHistory client={client} targetId={id} draft={persistence.record?.targetKind === "reward" ? persistence.record : null} unchanged={JSON.stringify(draft) === JSON.stringify(persistence.record?.fields)} busy={mutation.busy || !draft.fixtures?.length} onCheck={checkFixtures} checking={pendingAction === "check"} />
+    <LearningActions><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void saveDraft(); }}>{pendingAction === "save" ? "Saving draft…" : "Save draft"}</button><button type="button" className="training-button" disabled={mutation.busy || !draft.name.trim()} onClick={async () => { const result = await save(); if (result) { guard.allowNextNavigation(); onSaved(result); } }}>{pendingAction === "publish" ? "Publishing…" : `Publish release ${revision + 1}`}</button></LearningActions>
     {guard.dialog}
   </div>;
 }
