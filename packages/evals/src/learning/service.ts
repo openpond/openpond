@@ -1,4 +1,5 @@
 import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft } from "./authoring-service.js";
+import { queueRewardCheck, cancelRewardCheck } from "./reward-check-service.js";
 import { LearningDomainError } from "./errors.js";
 import { contentHash } from "@openpond/harness";
 
@@ -34,6 +35,8 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       let pointers: LearningResourcePointer[];
       switch (input.action) {
+        case "queue_reward_check": pointers = [await queueRewardCheck(transaction, input, operationId, now())]; break;
+        case "cancel_reward_check": pointers = [await cancelRewardCheck(transaction, input, now())]; break;
         case "save_draft": pointers = [await saveAuthoringDraft(transaction, input, now())]; break;
         case "archive_draft": pointers = [await archiveAuthoringDraft(transaction, input.draft, now())]; break;
         case "publish": pointers = [await publish(transaction, input)]; break;

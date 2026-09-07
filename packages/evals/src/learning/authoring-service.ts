@@ -39,7 +39,7 @@ export async function finalizeAuthoringDraft(tx: LearningTransaction, input: Ext
   return { kind: "draft" as const, id: completed.id, revision: completed.revision };
 }
 
-async function currentDraft(tx: LearningTransaction, ref: LearningRevisionRef) {
+export async function currentDraft(tx: LearningTransaction, ref: LearningRevisionRef) {
   const draft = await requireLearningRelease(tx, "draft", ref);
   const current = await tx.get("draft", ref.id);
   if (!current || !sameLearningRef(learningRef(current), ref)) throw new LearningDomainError("authoring_draft_revision_stale", 409);

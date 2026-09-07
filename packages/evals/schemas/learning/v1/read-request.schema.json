@@ -122,6 +122,7 @@
       "type": "string",
       "enum": [
         "draft",
+        "reward_check",
         "asset",
         "definition",
         "reward",

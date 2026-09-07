@@ -79,6 +79,36 @@ for untrusted schemas and deliberately rejects unsupported capabilities.
 
 ## Host responsibilities
 
+### Reward fixture checks
+
+Reward drafts may contain up to 50 named fixtures. JSON and numeric editor fields
+remain strings while a draft is unfinished. `compileRewardAuthoring` is the shared
+source/rubric compiler; `compileRewardFixtures` validates executable fixture input.
+Published fixtures are an immutable evaluator-private `fixtureSetRef` asset included
+in the Reward's `assets`, so editing the next release restores the same examples.
+
+`queue_reward_check` takes an exact current Reward draft reference, timeout and
+explicit spend ceiling. It stores a `reward_check` resource without publishing a
+Reward, Task format, source or task evidence. The job binds the compiled Reward and
+fixture hashes. Its worker resolves historical draft bytes even if another editor
+saves or publishes a newer revision. Retry uses the same operation receipt; a
+different request under that operation ID conflicts.
+
+Hosts run `createRewardCheckWorker` with an execution adapter that records its
+runtime/package identity and settles only after cleanup. The isolated adapter runs
+portable deterministic checks and authored JavaScript with the supplied interpreter.
+Human review remains pending; missing judge/learned-model adapters remain unavailable.
+No fixture result implicitly calibrates a judge or qualifies a training runtime.
+Per-fixture results distinguish a scored rejection, unavailable grading and grader
+failure, and record whether each outcome matched its authored expectation.
+
+Checks are indexed by Reward ID, retain their original draft reference and remain
+readable after publication. Editing source or fixtures must mark prior checks as
+historical. `cancel_reward_check` requests cancellation with revision concurrency;
+the worker publishes terminal cancellation only after execution-owner cleanup.
+
+### Source and execution ownership
+
 Authored verifier code and rubrics use immutable `asset` resources. Publish source
 and its Reward with `publish_resources`; the service checks UTF-8 size, SHA-256,
 full reference identity, scope and evaluator visibility in the same transaction.

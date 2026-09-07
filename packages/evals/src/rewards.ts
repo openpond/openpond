@@ -24,7 +24,9 @@ export const RewardReleaseContentSchema = z.object({
   implementation: RewardImplementationSchema,
   rawScore: z.object({ minimum: z.number().finite(), maximum: z.number().finite() }).strict(),
   assets: z.array(ImmutableAssetRefSchema).max(1_000),
+  fixtureSetRef: ImmutableAssetRefSchema.optional(),
 }).strict().superRefine((reward, context) => {
+  if (reward.fixtureSetRef && (reward.fixtureSetRef.visibility !== "verifier" || !reward.assets.some(asset => contentHash(asset) === contentHash(reward.fixtureSetRef)))) context.addIssue({ code: "custom", path: ["fixtureSetRef"], message: "Reward fixtures must be included as a private verifier asset." });
   if (reward.rawScore.minimum >= reward.rawScore.maximum) context.addIssue({ code: "custom", path: ["rawScore"], message: "A raw score contract requires minimum < maximum." });
   if (reward.implementation.kind !== "learned_model" && (reward.rawScore.minimum !== 0 || reward.rawScore.maximum !== 1)) context.addIssue({ code: "custom", path: ["rawScore"], message: "Portable graders currently return scores in [0, 1]." });
   if (reward.implementation.kind === "schema") {

@@ -7,9 +7,11 @@ import { TasksetReleaseSchema } from "../tasksets.js";
 import { LearningDomainError } from "./errors.js";
 import { AuthoringDraftSchema } from "./authoring.js";
 import { LearningTextAssetSchema } from "./assets.js";
+import { RewardCheckRunSchema } from "./reward-checks.js";
 
 export const learningResourceSchemas = {
   draft: AuthoringDraftSchema,
+  reward_check: RewardCheckRunSchema,
   asset: LearningTextAssetSchema,
   definition: TaskDefinitionSchema, reward: RewardReleaseSchema, binding: RewardBindingSchema,
   source: LearningSourceSchema, evidence: TaskEvidenceSchema, feedback: TaskFeedbackSchema,
