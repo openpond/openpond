@@ -6,6 +6,7 @@ import type { SqliteStore } from "../store/store.js";
 import { createLearningBatchVerifier } from "./learning-batch-verifier.js";
 import { runSandboxedVerifier } from "./sandboxed-verifier.js";
 import { createTasksetBindingVerifier } from "./taskset-reward-binding.js";
+import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
 
 export async function createTasksetEvaluationVerifier(deps: {
   store: SqliteStore;
@@ -19,7 +20,7 @@ export async function createTasksetEvaluationVerifier(deps: {
     ? null
     : await (deps.loadProfileState ?? loadOpenPondProfileState)();
   const tasksetRoot = deps.storeDir
-    ? path.join(deps.storeDir, "training", "tasksets", taskset.id)
+    ? path.join(deps.storeDir, "training", "tasksets", tasksetPackageDirectoryId(taskset))
     : profile?.sourcePath
       ? path.join(profile.sourcePath, "tasksets", taskset.id)
       : null;
@@ -29,7 +30,7 @@ export async function createTasksetEvaluationVerifier(deps: {
   const proposal = creationSnapshotId
     ? await deps.store.getTaskDesignProposal(creationSnapshotId)
     : null;
-  if (tasksetRoot && taskset.purpose !== "benchmark") {
+  if (tasksetRoot && taskset.purpose !== "benchmark" && taskset.environment.metadata.runtimeSourceTasksetId === undefined) {
     await buildTaskset(taskset, tasksetRoot, { generatedFiles: proposal?.generatedFiles ?? [] });
   }
   return tasksetRoot

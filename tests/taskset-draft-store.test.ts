@@ -8,7 +8,8 @@ import {
   tasksetDraftFromTaskset,
   writeTasksetDraftPackage,
 } from "../packages/taskset-sdk/src/index.js";
-import { tasksetFixture, withTrainingStore } from "./helpers/training-fixtures.js";
+import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures.js";
+import { createTasksetEvaluationVerifier } from "../apps/server/src/training/evaluation-custom-verifier.js";
 import {
   closeTestDatabase,
   getTestSql,
@@ -64,11 +65,14 @@ describe("Taskset draft persistence", () => {
   test("imports portable packages with assets without bypassing the draft store", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const packageDirectory = path.join(directory, "portable-taskset");
+      const grader = { id: "expected_output", version: "1", label: "Private verifier", kind: "custom_verifier" as const, weight: 1, hardGate: true, rewardEligible: true, privileged: true, module: "graders/verify.js", exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" as const, metadata: {} };
       const draft = tasksetDraftFromTaskset(
-        tasksetFixture({ profileId: "source-profile" }),
+        tasksetFixture({ profileId: "source-profile", graders: [grader] }),
         "2026-08-30T12:00:00.000Z",
       );
       await writeTasksetDraftPackage(draft, packageDirectory);
+      await mkdir(path.join(packageDirectory, "graders"), { recursive: true });
+      await writeFile(path.join(packageDirectory, grader.module), "export function verify() { return { score: 1, passed: true, feedback: 'original' }; }");
       await mkdir(path.join(packageDirectory, "assets", "matter"), { recursive: true });
       await writeFile(
         path.join(packageDirectory, "assets", "matter", "input.docx"),
@@ -90,7 +94,7 @@ describe("Taskset draft persistence", () => {
         await readFile(path.join(workspace!.workspacePath, "assets", "matter", "input.docx")),
       ).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
       const taskset = publishTasksetDraft({ draft: imported });
-      const tasksetRoot = await store.materializePublishedTasksetPackage({
+      const { directory: tasksetRoot, taskset: firstPublished } = await store.materializePublishedTasksetPackage({
         draftId: imported.id,
         taskset,
       });
@@ -99,6 +103,29 @@ describe("Taskset draft persistence", () => {
       ).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
       expect(JSON.parse(await readFile(path.join(tasksetRoot, "taskset.json"), "utf8")))
         .toMatchObject({ schemaVersion: "openpond.taskset.v1", id: taskset.id });
+
+      // A later revision must not replace private files needed by an earlier
+      // execution, and retrying publication must verify existing bytes.
+      const firstManifest = await readFile(path.join(tasksetRoot, "taskset.json"), "utf8");
+      await writeFile(path.join(workspace!.workspacePath, "assets", "matter", "input.docx"), Buffer.from("revised bytes"));
+      await writeFile(path.join(workspace!.workspacePath, grader.module), "export function verify() { return { score: 0, passed: false, feedback: 'revised' }; }");
+      await expect(store.materializePublishedTasksetPackage({ draftId: imported.id, taskset: firstPublished })).rejects.toThrow("changed before publication");
+      const revised = publishTasksetDraft({ draft: { ...imported, publishedTasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash } }, now: "2026-09-07T20:00:00.000Z" });
+      const second = await store.materializePublishedTasksetPackage({ draftId: imported.id, taskset: revised });
+      expect(second.directory).not.toBe(tasksetRoot);
+      expect(second.taskset.environment.metadata.runtimeSourceTasksetId).toBe(path.basename(second.directory));
+      expect(await readFile(path.join(tasksetRoot, "taskset.json"), "utf8")).toBe(firstManifest);
+      expect(await readFile(path.join(tasksetRoot, "assets", "matter", "input.docx"))).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      expect(await readFile(path.join(second.directory, "assets", "matter", "input.docx"), "utf8")).toBe("revised bytes");
+      const oldVerifier = await createTasksetEvaluationVerifier({ store, storeDir: directory }, firstPublished);
+      const newVerifier = await createTasksetEvaluationVerifier({ store, storeDir: directory }, second.taskset);
+      const verification = { grader, task: firstPublished.tasks[1]!, attempt: attemptFixture() };
+      await expect(oldVerifier!(verification)).resolves.toMatchObject({ score: 1, feedback: "original" });
+      await expect(newVerifier!(verification)).resolves.toMatchObject({ score: 0, feedback: "revised" });
+      expect(await readFile(path.join(tasksetRoot, "taskset.json"), "utf8")).toBe(firstManifest);
+      await expect(store.materializePublishedTasksetPackage({ draftId: imported.id, taskset: revised })).resolves.toEqual(second);
+      await writeFile(path.join(second.directory, "assets", "matter", "input.docx"), "tampered");
+      await expect(store.materializePublishedTasksetPackage({ draftId: imported.id, taskset: revised })).rejects.toThrow("differs from the pinned creation attempt");
 
       await expect(store.importTasksetDraftPackage({
         packagePath: packageDirectory,
