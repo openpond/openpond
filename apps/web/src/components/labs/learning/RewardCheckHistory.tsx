@@ -3,9 +3,9 @@ import { learningRef, sameLearningRef, type AuthoringDraftFor, type LearningRevi
 import { LearningActions, LearningError } from "./LearningFields";
 import { useLearningMutation, useLearningResource, useLearningResources } from "./useLearningResources";
 
-export function RewardCheckHistory({ client, targetId, draft, published, unchanged, busy, onCheck, readOnly = false }: {
+export function RewardCheckHistory({ client, targetId, draft, published, unchanged, busy, onCheck, checking = false, readOnly = false }: {
   client: OpenPondLearningClient | null; targetId: string; draft: AuthoringDraftFor<"reward"> | null; unchanged: boolean; busy: boolean;
-  onCheck?: () => Promise<RewardCheckRun | null>; published?: LearningRevisionRef; readOnly?: boolean;
+  onCheck?: () => Promise<RewardCheckRun | null>; published?: LearningRevisionRef; checking?: boolean; readOnly?: boolean;
 }) {
   const [cursor, setCursor] = useState<string | undefined>();
   const [startedId, setStartedId] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export function RewardCheckHistory({ client, targetId, draft, published, unchang
     <h3>Fixture checks</h3>
     <p>Results apply to the saved source and examples they checked. Publishing remains a separate action.</p>
     <LearningError error={history.error ?? started.error ?? mutation.error} />
-    {onCheck ? <LearningActions><button type="button" className="training-button secondary" disabled={busy || mutation.busy || Boolean(currentCheckRunning)} onClick={() => { void run(); }}>Check fixtures</button></LearningActions> : null}
+    {onCheck ? <LearningActions><button type="button" className="training-button secondary" disabled={busy || mutation.busy || Boolean(currentCheckRunning)} onClick={() => { void run(); }}>{checking ? "Queuing check…" : currentCheckRunning ? "Checking fixtures…" : "Check fixtures"}</button></LearningActions> : null}
     {history.loading && !history.page ? <p role="status">Loading checks…</p> : null}
     {!rows.length && !history.loading ? <p>No checks recorded for this Reward.</p> : null}
     <ul className="learning-list">{rows.map(check => {
