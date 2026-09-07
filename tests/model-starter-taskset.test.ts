@@ -10,6 +10,9 @@ import starterImportFixture from "./fixtures/model-starter-import.json";
 import { prepareModelStarterTaskset } from "../apps/server/src/training/model-starter-taskset.js";
 import { createModelStarterCreationService } from "../apps/server/src/training/model-starter-creation-service.js";
 import { createModelStarterRuntime } from "../apps/server/src/training/model-starter-runtime.js";
+import { captureLocalTasksetPackage } from "../apps/server/src/training/taskset-package-capture.js";
+import { resolveLocalTasksetModelResources } from "../apps/server/src/training/taskset-package-resources.js";
+import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
 import { projectBaseModelCandidates } from "../apps/server/src/training/base-model-candidates.js";
 import { openStorageDatabase } from "@openpond/persistence";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
@@ -500,6 +503,18 @@ it("preserves task files and schema references through a model-owned Reward edit
     expect(await readFile(path.join(directory, asset.path), "utf8")).toBe(text);
     expect(await readFile(path.join(directory, schema.asset.path), "utf8")).toBe(schema.text);
     expect(await readFile(path.join(sourceDirectory, "taskset.json"), "utf8")).toBe(sourceManifest);
+    const releases = materializePortableTasksetRelease({ taskset: derived, adapterId: "asset-derived" });
+    const resources = await resolveLocalTasksetModelResources({ store, taskset: derived, release: portable, executionResources: { environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease } });
+    const { taskset: _taskset, executionResources: _executionResources, ...modelResources } = resources;
+    const captured = await captureLocalTasksetPackage({
+      root: directory,
+      content: { schemaVersion: "openpond.tasksetPackage.v1", taskset: portable, environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease, modelResources },
+      sources: [{ asset, sourcePath: asset.path }, { asset: schema.asset, sourcePath: schema.asset.path }],
+    });
+    expect(captured.modelResources?.rewardBinding).toEqual(replacement);
+    expect(Buffer.from(decodeTasksetPackageFile(captured.files.find(file => file.asset.id === asset.id)!)).toString("utf8")).toBe(text);
+    expect(captured.files.some(file => file.asset.visibility !== "policy")).toBe(true);
+    await expect(resolveLocalTasksetModelResources({ store, taskset: { ...derived, profileId: "other-profile" }, release: portable, executionResources: { environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease } })).rejects.toThrow();
     await writeFile(path.join(directory, asset.path), "corrupted input");
     await expect(store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(saved), trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(input.package.rewardBinding) } }, saved.revision))).rejects.toThrow("immutable manifest");
     expect(await store.getModelProject(saved.id)).toEqual(saved);
