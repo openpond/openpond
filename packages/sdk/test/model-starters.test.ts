@@ -79,6 +79,10 @@ it("pins creation intent and projects previews without private task fields", asy
   const request = await createModelStarterCreationRequest(intent);
   expect(await createModelStarterCreationRequest(structuredClone(intent))).toEqual(request);
   expect((await createModelStarterCreationRequest({ ...intent, name: "Other answers" })).operationId).not.toBe(request.operationId);
+  const selected = await createModelStarterCreationRequest({ ...intent, rewardBindingRef: learningRef(resolved.rewardBinding) });
+  expect(selected.rewardBindingRef).toEqual(learningRef(resolved.rewardBinding));
+  expect(selected.operationId).not.toBe(request.operationId);
+  expect((await createModelStarterCreationRequest({ ...intent, rewardBindingRef: null })).operationId).not.toBe(selected.operationId);
   expect(validateModelStarterCreation(request, resolved).request).toEqual(request);
   expect(() => validateModelStarterCreation({ ...request, method: "grpo" }, resolved)).toThrow("not supported");
   expect(() => validateModelStarterCreation({ ...request, starter: { ...request.starter, revision: 2 } }, resolved)).toThrow("different package revision");

@@ -2,9 +2,10 @@ import type { ModelProject } from "@openpond/contracts";
 import { ModelProjectConfigurationCheckSchema } from "openpond-sdk/model-projects";
 import type { ModelStarter, ModelStarterCreationRequest, previewModelStarter } from "openpond-sdk/model-starters";
 import { api, type ClientConnection } from "../api";
+import type { ModelStarterCatalogItem } from "openpond-sdk/model-starter-catalog";
 
 export type ModelStarterPreview = ReturnType<typeof previewModelStarter>;
-export type ModelStarterPage = { items: ModelStarter[]; nextCursor: string | null };
+export type ModelStarterPage = { items: ModelStarterCatalogItem[]; nextCursor: string | null };
 
 export function createModelStarterActions(connection: ClientConnection | null, mutate: <T>(key: string, path: string, body: unknown) => Promise<T | null>) {
   return {

@@ -55,9 +55,8 @@ export function ModelStarterCatalog({ actions, cacheScope, onSelect }: { actions
     {categories.map(category => <section className="model-starter-category" key={category} aria-label={CATEGORY_LABELS[category]}>
       <h3>{CATEGORY_LABELS[category]}</h3>
       <div className="model-starter-cards">{page?.items.filter(starter => starter.category === category).map(starter => <article key={`${starter.id}:${starter.contentHash}`}>
-        <div className="model-starter-title"><h4>{starter.name}</h4><span className="model-starter-reward-badge">{starter.rewards.length} {starter.rewards.length === 1 ? "Reward" : "Rewards"}</span></div>
+        <div className="model-starter-title"><h4>{starter.name}</h4>{starter.rewardSummary?.length ? <span className="model-starter-reward-badge" title={starter.rewardSummary.map(reward => reward.name).join(", ")}>{[...new Set(starter.rewardSummary.map(reward => reward.kind === "custom_verifier" ? "Code verifier" : reward.kind === "model_judge" ? "LLM judge" : reward.kind === "human" ? "Human review" : reward.kind === "learned_model" ? "Reward model" : "Deterministic check"))].join(" · ")}</span> : null}</div>
         <div className="model-starter-description"><p>{starter.description}</p><button className="training-button secondary" type="button" aria-label={`Create ${starter.name}`} disabled={selectedId !== null} onClick={() => { void select(starter); }}>{selectedId === starter.id ? "Loading…" : "Create"}</button></div>
-        <p>{starter.evidence.evaluation ? "Evaluation results available" : "Learning qualification pending"}</p>
       </article>)}</div>
     </section>)}
     {page && !page.items.length ? <p>No starters have been published yet.</p> : null}

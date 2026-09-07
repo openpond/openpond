@@ -62,6 +62,7 @@ export const ModelStarterCreationIntentSchema = z.object({
   starter: RefSchema,
   startingModel: ModelProjectBaseModelSchema,
   method: ModelProjectTrainingMethodSchema,
+  rewardBindingRef: RefSchema.nullable().optional(),
 }).strict();
 export const ModelStarterCreationRequestSchema = ModelStarterCreationIntentSchema.extend({
   schemaVersion: z.literal("openpond.modelStarterCreation.v1"),

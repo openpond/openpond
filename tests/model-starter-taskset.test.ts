@@ -18,6 +18,7 @@ import { materializePortableTasksetRelease, computeTasksetHash } from "@openpond
 import { buildTasksetTrainingBundle } from "@openpond/training-sdk";
 import { resolveTasksetTrainingReward, resolveManagedTasksetReward } from "../apps/server/src/training/taskset-reward-binding.js";
 import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release.js";
+import { RewardBindingSchema } from "@openpond/evals/rewards";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
 
 // A valid release reference alone must never admit missing or altered private code.
@@ -206,6 +207,30 @@ it("commits one starter across concurrent saves and retains the original retry r
     try { expect(await reopened.findModelStarterCreation(input.request)).toEqual(saved); expect(await reopened.saveModelStarterCreation({ ...input, createdAt: "2026-09-07T00:00:00.000Z" })).toEqual(saved); }
     finally { await reopened.close(); }
   } finally { await first.close(); await second.close(); }
+}));
+
+// The starter picker must persist the user's exact selection and reject an
+// unavailable replacement atomically instead of silently using the default.
+it("persists starter Reward selection and rejects missing replacement bindings", async () => withTempDirectory("starter-reward-choice-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const input = await starterInput();
+    const { contentHash: _hash, ...content } = input.package.rewardBinding;
+    const replacement = RewardBindingSchema.parse(sealLearningContent({ ...content, id: "chosen-binding", name: "My chosen checks" }));
+    await store.learningRepository().transaction(input.request.profileId, async tx => {
+      await tx.put("reward", input.package.rewards[0]!, 0);
+      await tx.put("binding", replacement, 0);
+    });
+    const chosen = { ...input, request: { ...input.request, rewardBindingRef: learningRef(replacement) } };
+    const saved = await store.saveModelStarterCreation(chosen);
+    expect(saved.trainingSetup.rewardBindingRef).toEqual(learningRef(replacement));
+    expect((await store.getModelProject(saved.id))?.trainingSetup.rewardBindingRef).toEqual(learningRef(replacement));
+    await expect(store.saveModelStarterCreation({ ...chosen, request: { ...chosen.request, rewardBindingRef: null } })).rejects.toThrow("different configuration");
+    const missing = { ...input, request: { ...input.request, modelId: "missing-reward-model", operationId: "missing-reward-operation", rewardBindingRef: { ...learningRef(replacement), id: "missing-binding" } } };
+    await expect(store.saveModelStarterCreation(missing)).rejects.toThrow("unavailable");
+    expect(await store.getModelProject(missing.request.modelId)).toBeNull();
+    expect(await store.findModelStarterCreation(missing.request)).toBeNull();
+  } finally { await store.close(); }
 }));
 
 it("rolls back imported resources when a later immutable dependency conflicts", async () => withTempDirectory("starter-rollback-", async home => {
