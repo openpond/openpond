@@ -8,6 +8,7 @@ import {
   TasksetDraftPublishError,
   createTasksetDraft,
   publishTasksetDraft,
+  tasksetDraftFromTaskset,
   hashTasksetDraftPackage,
   materializePortableTasksetRelease,
   readTasksetDraftPackage,
@@ -164,6 +165,41 @@ describe("Taskset draft authoring", () => {
       taskset: legacy as typeof taskset,
       adapterId: "test-adapter",
     })).toThrow("embeds an artifact renderer");
+  });
+
+  // An imported task keeps portable references, but a later authored correction
+  // must reach the published bytes instead of exporting the cached original.
+  it("exports edited imported tasks and retains their package ownership", () => {
+    const original = publishTasksetDraft({ draft: completeDraft(), now: NOW });
+    const portable = materializePortableTasksetRelease({ taskset: original, adapterId: "draft-round-trip" }).tasksetRelease;
+    const imported = {
+      ...original,
+      tasks: original.tasks.map((task, index) => ({ ...task, metadata: { ...task.metadata, portableTaskRecord: portable.tasks[index] } })),
+      metadata: { ...original.metadata, modelTasksetDerivation: { owner: { scopeId: "default", modelId: "draft-model" } } },
+    };
+    const draft = tasksetDraftFromTaskset(imported, NOW);
+    expect(draft.metadata.modelTasksetDerivation).toEqual(imported.metadata.modelTasksetDerivation);
+    draft.tasks[0]!.input = { prompt: "Corrected task input" };
+    draft.tasks[0]!.expectedOutput = { answer: "Corrected expected output" };
+    const revised = publishTasksetDraft({ draft, now: NOW });
+    const exported = materializePortableTasksetRelease({ taskset: revised, adapterId: "draft-round-trip" }).tasksetRelease;
+    expect(exported.tasks[0]!.input).toEqual(draft.tasks[0]!.input);
+    expect(exported.tasks[0]!.expectedOutput).toEqual(draft.tasks[0]!.expectedOutput);
+    expect(portable.tasks[0]!.input).toEqual(original.tasks[0]!.input);
+    const asset = { id: "input-file", path: "original/input.csv", contentHash: "a".repeat(64), sizeBytes: 12, mediaType: "text/csv", visibility: "policy" as const };
+    const schema = { ...asset, id: "output-schema", path: "schemas/output.json", mediaType: "application/json", visibility: "verifier" as const };
+    const pinned = { ...portable.tasks[0]!, artifactRefs: [asset], requiredOutputs: [{ path: "result.json", mediaType: "application/json", schemaRef: schema, maxBytes: 1000, metadata: {} }] };
+    const task = {
+      ...revised.tasks[0]!,
+      assets: [{ id: asset.id, sourceRefId: revised.sourceRefs[0]!.id, artifactRef: "managed/input.csv", fileName: "input.csv", mediaType: asset.mediaType, sha256: asset.contentHash, sizeBytes: asset.sizeBytes, split: revised.tasks[0]!.split, metadata: {} }],
+      requiredOutputs: [{ path: "result.json", mediaType: "application/json", schemaRef: schema.id, maxBytes: 1000, metadata: {} }],
+      metadata: { ...revised.tasks[0]!.metadata, portableTaskRecord: pinned },
+    };
+    const exportTask = (value: typeof task) => materializePortableTasksetRelease({ taskset: { ...revised, tasks: [value] }, adapterId: "draft-round-trip" }).tasksetRelease.tasks[0]!;
+    expect(exportTask(task).artifactRefs).toEqual([asset]);
+    expect(exportTask(task).requiredOutputs).toEqual(pinned.requiredOutputs);
+    expect(exportTask({ ...task, assets: [], requiredOutputs: [] })).toMatchObject({ artifactRefs: [], requiredOutputs: [] });
+    expect(exportTask({ ...task, assets: task.assets.map(value => ({ ...value, sha256: "b".repeat(64) })) }).artifactRefs[0]).toEqual({ ...asset, contentHash: "b".repeat(64) });
   });
 
   it("round-trips the editable package layout", async () => {

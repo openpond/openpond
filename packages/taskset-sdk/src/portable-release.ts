@@ -188,7 +188,46 @@ export function portableTasksetTools(taskset: Taskset): ToolDeclaration[] {
 
 function portableTask(task: TaskDataRecord) {
   const admitted = task.metadata.portableTaskRecord;
-  if (admitted !== undefined) return TaskRecordSchema.parse(admitted);
+  if (admitted !== undefined) {
+    const original = TaskRecordSchema.parse(admitted);
+    return TaskRecordSchema.parse({
+      ...original,
+      id: task.id,
+      clusterKey: task.clusterKey,
+      split: task.split,
+      input: task.input,
+      expectedOutput: portableExpectedOutput(task),
+      policyVisibleContext: task.policyVisibleContext,
+      privilegedContextRef: task.privilegedContextRef,
+      tags: task.tags,
+      artifactRefs: task.assets === undefined ? original.artifactRefs : task.assets.map((asset) => {
+        const previous = original.artifactRefs.find(item => item.id === asset.id);
+        return {
+          id: asset.id,
+          path: previous?.path ?? `tasks/${segment(task.id)}/${segment(asset.fileName)}`,
+          contentHash: hash(asset.sha256),
+          sizeBytes: asset.sizeBytes,
+          mediaType: asset.mediaType,
+          visibility: previous?.visibility ?? "policy",
+        };
+      }),
+      requiredOutputs: task.requiredOutputs === undefined ? original.requiredOutputs : task.requiredOutputs.map((output) => {
+        const previous = original.requiredOutputs?.find(item => item.path === output.path);
+        return {
+          path: output.path,
+          mediaType: output.mediaType,
+          schemaRef: previous?.schemaRef && previous.schemaRef.id === output.schemaRef ? previous.schemaRef : null,
+          maxBytes: output.maxBytes ?? null,
+          metadata: {
+            ...output.metadata,
+            ...(output.schemaRef && previous?.schemaRef?.id !== output.schemaRef
+              ? { legacySchemaRef: output.schemaRef }
+              : {}),
+          },
+        };
+      }),
+    });
+  }
   return {
     id: task.id,
     clusterKey: task.clusterKey,

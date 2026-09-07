@@ -181,6 +181,7 @@ export function tasksetDraftFromTaskset(
     createdAt: now,
     updatedAt: now,
     metadata: {
+      ...taskset.metadata,
       importedFromTaskset: {
         id: taskset.id,
         revision: taskset.revision,
