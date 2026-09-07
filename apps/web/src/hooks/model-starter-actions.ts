@@ -8,9 +8,9 @@ export type ModelStarterPage = { items: ModelStarter[]; nextCursor: string | nul
 
 export function createModelStarterActions(connection: ClientConnection | null, mutate: <T>(key: string, path: string, body: unknown) => Promise<T | null>) {
   return {
-    listModelStarters: async (afterId?: string) => {
+    listModelStarters: async (afterId?: string, fresh = false) => {
       if (!connection) throw new Error("Connect to OpenPond to browse model starters.");
-      return api.trainingRequest<ModelStarterPage>(connection, `/model-starters?limit=30${afterId ? `&afterId=${encodeURIComponent(afterId)}` : ""}`, {}, "GET");
+      return api.trainingRequest<ModelStarterPage>(connection, `/model-starters?limit=30${afterId ? `&afterId=${encodeURIComponent(afterId)}` : ""}${fresh ? "&fresh=true" : ""}`, {}, "GET");
     },
     previewModelStarter: async (starter: ModelStarter) => {
       if (!connection) throw new Error("Connect to OpenPond to preview a starter.");
