@@ -19,6 +19,13 @@ export const ModelStarterAttemptRequestSchema = z.object({
   policy: ModelStarterAttemptPolicySchema,
 }).strict();
 export type ModelStarterAttemptRequest = z.infer<typeof ModelStarterAttemptRequestSchema>;
+export const ModelStarterAttemptChoicesQuerySchema = z.object({ modelProjectId: IdSchema, taskset: ModelProjectVersionedRefSchema, afterTaskId: IdSchema.optional(), limit: z.number().int().min(1).max(100).default(25) }).strict();
+export const ModelStarterAttemptChoicesSchema = z.object({
+  modelProjectId: IdSchema, taskset: ModelProjectVersionedRefSchema, available: z.boolean(), unavailableReason: z.string().max(1_000).nullable(),
+  models: z.array(z.object({ id: IdSchema, name: z.string().max(500) }).strict()).max(200),
+  tasks: z.array(z.object({ id: IdSchema, split: z.enum(["train", "validation", "frozen_eval"]), inputPreview: z.string().max(500), fixtures: z.array(z.object({ id: IdSchema, label: z.string().max(200) }).strict()).max(1_000) }).strict()).max(100),
+  nextCursor: IdSchema.nullable(),
+}).strict();
 export const ModelStarterAttemptSummarySchema = z.object({
   schemaVersion: z.literal("openpond.modelStarterAttemptSummary.v1"),
   id: IdSchema, revision: z.number().int().positive(), request: ModelStarterAttemptRequestSchema,
@@ -68,6 +75,14 @@ export class OpenPondModelStarterAttemptsClient {
     return result;
   }
   async get(id: string, options: { signal?: AbortSignal } = {}) { return this.#summary(await this.#request(`/${encodeURIComponent(IdSchema.parse(id))}`, "GET", undefined, options.signal), id); }
+  async choices(value: z.input<typeof ModelStarterAttemptChoicesQuerySchema>, options: { signal?: AbortSignal } = {}) {
+    const query = ModelStarterAttemptChoicesQuerySchema.parse(value);
+    const params = new URLSearchParams({ modelProjectId: query.modelProjectId, tasksetId: query.taskset.id, revision: String(query.taskset.revision), contentHash: query.taskset.contentHash, limit: String(query.limit) });
+    if (query.afterTaskId) params.set("afterTaskId", query.afterTaskId);
+    const result = ModelStarterAttemptChoicesSchema.parse(await this.#request(`/choices?${params}`, "GET", undefined, options.signal));
+    if (result.modelProjectId !== query.modelProjectId || canonicalJson(result.taskset) !== canonicalJson(query.taskset) || result.tasks.length > query.limit || new Set(result.tasks.map(task => task.id)).size !== result.tasks.length) throw new OpenPondModelStarterAttemptError(502, "attempt_choices_mismatch", "Attempt choices differ from the selected model or Taskset.");
+    return result;
+  }
   async cancel(id: string, options: { signal?: AbortSignal } = {}) { return this.#summary(await this.#request(`/${encodeURIComponent(IdSchema.parse(id))}/cancel`, "POST", undefined, options.signal), id); }
   async result(id: string, options: { signal?: AbortSignal } = {}) {
     const value = ModelStarterAttemptResultSchema.parse(await this.#request(`/${encodeURIComponent(IdSchema.parse(id))}/result`, "GET", undefined, options.signal));

@@ -32,6 +32,10 @@ it("retains request identity, isolates fixture attribution and verifies returned
   returned = { ...returned as object, output: "forged" };
   await expect(client.result("attempt")).rejects.toThrow("integrity failed");
   expect(requests[0]).toBe("https://host.invalid/v1/model-starter-attempts");
+  returned = { modelProjectId: request.modelProjectId, taskset: request.taskset, available: true, unavailableReason: null, tasks: [{ id: "task", split: "train", inputPreview: "Example", fixtures: [{ id: "positive", label: "positive" }] }], models: [], nextCursor: null };
+  expect((await client.choices({ modelProjectId: request.modelProjectId, taskset: request.taskset })).tasks).toHaveLength(1);
+  returned = { ...returned as object, modelProjectId: "other" };
+  await expect(client.choices({ modelProjectId: request.modelProjectId, taskset: request.taskset })).rejects.toThrow("choices differ");
   const input = { id: "A" }; const state = { count: 1 };
   const environment = sealLearningContent({ schemaVersion: "openpond.javascriptEnvironmentAttempt.v1", taskId: "task", status: "completed", output: "done", collected: true, environmentCleanupComplete: true, messages: [], error: null, snapshot: { definition: request.taskset, inputHash: sealLearningContent(input).contentHash, seed: 0, initialStateHash: "b".repeat(64), finalStateHash: sealLearningContent(state).contentHash, state, events: [] } });
   const admitted = { taskId: "task", input, seed: 0, javascript: request.taskset };
