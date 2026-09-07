@@ -10,6 +10,7 @@ import type { SqliteStore } from "../store/store.js";
 import { materializeModelStarterPackage } from "./model-starter-package-files.js";
 import { prepareModelStarterTaskset } from "./model-starter-taskset.js";
 import { projectBaseModelCandidates } from "./base-model-candidates.js";
+import { requireLearningRelease } from "@openpond/evals/learning";
 
 export interface LocalModelStarterCatalog {
   /** Resolve only trusted, pinned catalog publications. Never caller uploads. */
@@ -33,6 +34,14 @@ export function createModelStarterCreationService(input: { store: SqliteStore; h
           for (const { kind, resource } of resources) {
             const existing = await tx.get(kind, resource.id, resource.revision);
             if (existing && canonicalJson(existing) !== canonicalJson(resource)) findings.push({ code: "starter_dependency_conflict", severity: "error", field: kind, message: `A different ${kind} already occupies this starter dependency revision: ${resource.id}.` });
+          }
+          if (request.rewardBindingRef && canonicalJson(request.rewardBindingRef) !== canonicalJson({ id: resolved.rewardBinding.id, revision: resolved.rewardBinding.revision, contentHash: resolved.rewardBinding.contentHash })) {
+            try {
+              const binding = await requireLearningRelease(tx, "binding", request.rewardBindingRef);
+              for (const source of binding.sources) await requireLearningRelease(tx, "reward", source.reward);
+            } catch {
+              findings.push({ code: "model_reward_unavailable", severity: "error", field: "rewardBindingRef", message: "The selected Reward is unavailable in this Profile." });
+            }
           }
         });
         findings.push(...validateTaskset(prepared.taskset).issues.map(issue => ({ code: issue.code, severity: issue.severity, message: issue.message, field: issue.path ?? "taskset" })));

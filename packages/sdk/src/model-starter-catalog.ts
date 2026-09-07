@@ -6,8 +6,12 @@ export const ModelStarterCatalogQuerySchema = z.object({
   afterId: z.string().trim().min(1).max(500).optional(),
   limit: z.number().int().min(1).max(100).default(30),
 }).strict();
+export const ModelStarterCatalogItemSchema = ModelStarterSchema.extend({
+  rewardSummary: z.array(z.object({ name: z.string().min(1).max(500), kind: z.enum(["custom_verifier", "model_judge", "human", "learned_model", "content", "schema", "artifact", "runtime_event", "state"]) }).strict()).max(100).optional(),
+});
+export type ModelStarterCatalogItem = z.infer<typeof ModelStarterCatalogItemSchema>;
 export const ModelStarterCatalogPageSchema = z.object({
-  items: z.array(ModelStarterSchema).max(100),
+  items: z.array(ModelStarterCatalogItemSchema).max(100),
   nextCursor: z.string().min(1).max(500).nullable(),
 }).strict();
 export const ModelStarterCatalogErrorSchema = z.object({ code: z.string().min(1).max(200), message: z.string().min(1).max(5_000) }).strict();
