@@ -7,6 +7,7 @@ import { ModelStarterSchema, createModelStarterCreationRequest, modelStarterPriv
 import { OpenPondModelStarterCatalogClient } from "../src/model-starter-catalog.js";
 import { deriveModelTaskset } from "../src/model-taskset-derivation.js";
 import { createModelTasksetExecutionResourcesAsset, resolveModelTasksetExecutionResourcesAsset } from "../src/model-taskset-resources.js";
+import { createTasksetPackage } from "../src/taskset-packages.js";
 
 function fixture(visibility: "verifier" | "policy" = "verifier") {
   const asset = createLearningTextAsset({ text: "export function verify({ output, expectedOutput }) { const passed = output.answer === expectedOutput.answer; return { score: Number(passed), passed, feedback: 'Exact answer' }; }", path: "verifier.mjs", mediaType: "application/javascript", visibility });
@@ -68,6 +69,12 @@ it("derives deterministic model-owned Tasksets with exact executable bindings", 
   expect(first.taskset.graders).toEqual(compileBoundGraders(rewardBinding, source.rewards));
   expect(first.taskDefinition.rewardBinding).toEqual(learningRef(rewardBinding));
   expect(first.taskset.tasks).toEqual(source.taskset.tasks);
+  const { taskset, executionResources, ...modelResources } = first;
+  const packageInput = { schemaVersion: "openpond.tasksetPackage.v1" as const, taskset, ...executionResources!, files: first.assets.map(asset => ({ asset: asset.asset, base64: Buffer.from(asset.text, "utf8").toString("base64") })), modelResources };
+  expect(createTasksetPackage(packageInput).modelResources?.rewardBinding).toEqual(first.rewardBinding);
+  const { modelResources: _modelResources, ...missingModelResources } = packageInput;
+  expect(() => createTasksetPackage(missingModelResources)).toThrow("complete model resources");
+  expect(() => createTasksetPackage({ ...packageInput, modelResources: { ...modelResources, rewardBinding: source.rewardBinding } })).toThrow("Reward binding");
   // Transferred private resources must retain exact execution, and reject a
   // correctly rehashed asset that substitutes a different verifier revision.
   const closure = createModelTasksetExecutionResourcesAsset(first.executionResources!);
