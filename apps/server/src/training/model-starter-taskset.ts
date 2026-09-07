@@ -17,7 +17,7 @@ export function prepareModelStarterTaskset(input: {
   const { request, resolved } = validateModelStarterCreation(input.request, input.package);
   const { starter, taskset: release, taskDefinition, rewardBinding, rewards, assets } = resolved;
   if (input.source.profileId !== request.profileId || input.source.sourceHash !== starter.contentHash) throw new Error("Starter source must belong to this Profile and pin the catalog package.");
-  if (!["sft", "grpo"].includes(request.method) || taskDefinition.harness || release.environment.kind !== "text" || release.environment.entrypoint !== "openpond.text.v1" || release.environment.stateful || release.environmentRelease || release.verifierSetRelease || release.capabilities.length || release.tools.length || release.tasks.some(task => task.artifactRefs.length) || release.graders.some(grader => grader.kind === "human" || grader.kind === "model_judge")) throw new Error("This starter requires an additional training or environment adapter before preparation.");
+  if (!["sft", "grpo"].includes(request.method) || taskDefinition.harness || release.environment.kind !== "text" || release.environment.entrypoint !== "openpond.text.v1" || release.environment.stateful || release.environmentRelease || release.verifierSetRelease || release.capabilities.length || release.tools.length || release.tasks.some(task => task.artifactRefs.length) || release.graders.some(grader => grader.kind === "model_judge")) throw new Error("This starter requires an additional training or environment adapter before preparation.");
   const approved = new Set(input.approvedTrainingTaskIds);
   if (approved.size !== input.approvedTrainingTaskIds.length) throw new Error("Starter training approvals must be unique.");
   for (const id of approved) {
@@ -45,7 +45,7 @@ export function prepareModelStarterTaskset(input: {
     policy: release.policy,
     environment: { ...draft.environment, entrypoint: "openpond.text.v1", deterministicSeeds: release.environment.deterministicSeeds, defaultTimeoutMs: release.environment.defaultTimeoutMs, networkPolicy: release.environment.networkPolicy, metadata: { portableEnvironment: release.environment } },
     output: { mode: "structured_json", jsonSchema: taskDefinition.outputSchema, renderer: null },
-    capabilities: { ...draft.capabilities, supportedSignals: request.method === "grpo" ? ["demonstration", "reward"] : ["demonstration"], compatibleMethods: [request.method], rewardKinds: ["deterministic"], requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"] },
+    capabilities: { ...draft.capabilities, supportedSignals: request.method === "grpo" ? ["demonstration", "reward"] : ["demonstration"], compatibleMethods: [request.method], rewardKinds: [...new Set(release.graders.map(grader => grader.kind === "human" ? "human" : "deterministic"))], requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"] },
     tasks: release.tasks.map(({ artifactRefs: _artifacts, ...task }) => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [input.source.id], metadata: { exampleOrigin: "curated_starter", starter: learningRef(starter) } })),
     graders: projectLearningBatchGraders(rewardBinding, rewards, assets),
     graderFixtures: input.fixtures,
