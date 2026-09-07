@@ -7,6 +7,7 @@ import { computeTasksetHash, learningVerifierModule, projectLearningBatchGraders
 import { ModelProjectSchema, ModelProjectVersionedRefSchema, OpenPondModelProjectApiError, parseModelProjectSaveRequest, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { createModelStarterExecutionAsset, deriveModelTaskset, ModelStarterExecutionSchema, ModelTasksetPackageSchema, modelStarterExecutionAssetId, type ModelTasksetPackage } from "openpond-sdk/model-starters";
 import { canonicalJson } from "openpond-sdk/training";
+import { createModelTasksetExecutionResourcesAsset } from "openpond-sdk/model-starters";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { importStarterReleaseInTransaction } from "./store-starter-release-import.js";
 
@@ -107,6 +108,8 @@ export function commitPreparedModelTaskset(db: OpenPondSqliteConnection, request
   for (const packageValue of [prepared.sourcePackage, prepared.derived]) {
     importStarterReleaseInTransaction(db, scope, "package", packageValue.taskset);
     importStarterReleaseInTransaction(db, scope, "definition", packageValue.taskDefinition);
+    const resources = packageValue.executionResources ?? packageValue.execution;
+    if (resources) importStarterReleaseInTransaction(db, scope, "asset", createModelTasksetExecutionResourcesAsset(resources));
     if (packageValue.execution) importStarterReleaseInTransaction(db, scope, "asset", createModelStarterExecutionAsset(packageValue.execution));
   }
   const taskset = prepared.taskset;

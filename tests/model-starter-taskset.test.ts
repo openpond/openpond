@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TasksetSourceRefSchema, TrainingDestinationCapabilitiesSchema } from "@openpond/contracts";
 import { createLearningTextAsset, learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
-import { ModelStarterSchema, createModelStarterCreationRequest, modelStarterPrivacyContentHash, validateResolvedModelStarter } from "openpond-sdk/model-starters";
+import { ModelStarterSchema, createModelStarterCreationRequest, modelStarterPrivacyContentHash, validateResolvedModelStarter, modelTasksetExecutionResourcesAssetId, resolveModelTasksetExecutionResourcesAsset } from "openpond-sdk/model-starters";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { withTempDirectory } from "./helpers/temp-directory.js";
 import starterImportFixture from "./fixtures/model-starter-import.json";
@@ -366,6 +366,8 @@ it("atomically derives model-owned Tasksets while preserving shared sources and 
     expect(derived.graders[0]!.weight).toBe(2);
     const portable = materializePortableTasksetRelease({ taskset: derived, adapterId: "derived-boundary" }).tasksetRelease;
     expect(await store.learningRepository().transaction(model.profileId, tx => tx.get("package", portable.id, portable.revision))).toEqual(portable);
+    const resourcesAsset = await store.learningRepository().transaction(model.profileId, tx => tx.get("asset", modelTasksetExecutionResourcesAssetId(portable), 1));
+    expect(resolveModelTasksetExecutionResourcesAsset(portable, resourcesAsset!)).toEqual(derived.environment.metadata.portableExecutionResources);
     expect(await store.getTasksetRevision(source.id, source.revision)).toEqual(source);
     expect((await store.getModelProject(other.id))!.trainingSetup.tasksetRef).toEqual(sourceRef);
     const firstPackage = path.join(home, "training", "tasksets", String(derived.environment.metadata.runtimeSourceTasksetId), "taskset.json");

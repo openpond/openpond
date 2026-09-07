@@ -6,6 +6,7 @@ import { ModelStarterExecutionSchema, createModelStarterExecutionAsset, modelSta
 import { ModelStarterSchema, createModelStarterCreationRequest, modelStarterPrivacyContentHash, parseModelStarterCreationRequest, previewModelStarter, validateModelStarterCreation, validateResolvedModelStarter } from "../src/model-starters.js";
 import { OpenPondModelStarterCatalogClient } from "../src/model-starter-catalog.js";
 import { deriveModelTaskset } from "../src/model-taskset-derivation.js";
+import { createModelTasksetExecutionResourcesAsset, resolveModelTasksetExecutionResourcesAsset } from "../src/model-taskset-resources.js";
 
 function fixture(visibility: "verifier" | "policy" = "verifier") {
   const asset = createLearningTextAsset({ text: "export function verify({ output, expectedOutput }) { const passed = output.answer === expectedOutput.answer; return { score: Number(passed), passed, feedback: 'Exact answer' }; }", path: "verifier.mjs", mediaType: "application/javascript", visibility });
@@ -67,7 +68,17 @@ it("derives deterministic model-owned Tasksets with exact executable bindings", 
   expect(first.taskset.graders).toEqual(compileBoundGraders(rewardBinding, source.rewards));
   expect(first.taskDefinition.rewardBinding).toEqual(learningRef(rewardBinding));
   expect(first.taskset.tasks).toEqual(source.taskset.tasks);
+  // Transferred private resources must retain exact execution, and reject a
+  // correctly rehashed asset that substitutes a different verifier revision.
+  const closure = createModelTasksetExecutionResourcesAsset(first.executionResources!);
+  expect(resolveModelTasksetExecutionResourcesAsset(first.taskset, closure)).toEqual(first.executionResources);
+  expect(() => resolveModelTasksetExecutionResourcesAsset(first.taskset, { ...closure, text: closure.text + " " })).toThrow();
   const second = deriveModelTaskset({ ...intent, source: first });
+  const replacement = createModelTasksetExecutionResourcesAsset(second.executionResources!);
+  expect(() => resolveModelTasksetExecutionResourcesAsset(first.taskset, replacement)).toThrow();
+  const forged = { ...replacement, id: closure.id, asset: { ...replacement.asset, id: closure.id } };
+  reseal(forged);
+  expect(() => resolveModelTasksetExecutionResourcesAsset(first.taskset, forged)).toThrow("differs from its execution resources");
   expect(second.taskset.id).toBe(first.taskset.id);
   expect(second.taskset.revision).toBe(2);
   expect(second.taskset.metadata.modelTasksetDerivation).toMatchObject({ root: learningRef(source.taskset), parent: learningRef(first.taskset) });

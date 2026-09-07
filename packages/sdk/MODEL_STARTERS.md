@@ -66,7 +66,12 @@ it preserves task rows and the environment. Changed packages have no inherited
 calibration receipts, qualification results or publisher privacy attestation.
 Authored fixtures can be retained for checking again.
 
-The result includes `executionResources` for text and tool packages. Tool
+The result includes `executionResources` for text and tool packages. Persist
+`createModelTasksetExecutionResourcesAsset(derived.executionResources)` with the
+derived package. On another host, load that private asset using
+`modelTasksetExecutionResourcesAssetId(taskset)` and validate it with
+`resolveModelTasksetExecutionResourcesAsset(taskset, asset)` before another edit.
+This preserves the exact environment and verifier set for text packages too. Tool
 packages also include the updated private JavaScript `execution` closure; persist
 `createModelStarterExecutionAsset(derived.execution)` with the new definition.
 The Taskset's binding and embedded Reward snapshot must agree. A model-level

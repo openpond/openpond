@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createEnvironmentRelease, createVerifierSetRelease, EnvironmentReleaseSchema, VerifierSetReleaseSchema, verifyEnvironmentRelease, verifyVerifierSetRelease } from "@openpond/evals";
+import { createEnvironmentRelease, createVerifierSetRelease, verifyEnvironmentRelease, verifyVerifierSetRelease } from "@openpond/evals";
 import { LearningTextAssetSchema, TaskDefinitionSchema, assertLearningContentHash, learningRef, sameLearningRef, sealLearningContent, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema, assertTasksetRelease } from "@openpond/evals/tasksets";
@@ -7,6 +7,7 @@ import { validateTaskValue } from "@openpond/evals/task-schema";
 
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { ModelStarterExecutionSchema, validateModelStarterExecution } from "./model-starter-execution.js";
+import { ModelTasksetExecutionResourcesSchema } from "./model-taskset-resources.js";
 
 const OwnerSchema = z.object({ scopeId: z.string().trim().min(1).max(500), modelId: z.string().trim().min(1).max(500) }).strict();
 export const ModelTasksetDerivationSchema = z.object({
@@ -23,7 +24,7 @@ export const ModelTasksetPackageSchema = z.object({
   rewardBinding: RewardBindingSchema,
   rewards: z.array(RewardReleaseSchema).min(1).max(100),
   assets: z.array(LearningTextAssetSchema).max(1_000),
-  executionResources: z.object({ environment: EnvironmentReleaseSchema, verifierSet: VerifierSetReleaseSchema }).strict().optional(),
+  executionResources: ModelTasksetExecutionResourcesSchema.optional(),
   execution: ModelStarterExecutionSchema.optional(),
 }).strict();
 export type ModelTasksetPackage = z.infer<typeof ModelTasksetPackageSchema>;
