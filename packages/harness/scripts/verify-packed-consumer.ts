@@ -43,6 +43,10 @@ import {
   HarnessRunOverlaySchema,
   ImprovementObservationSchema,
   ToolDeclarationSchema,
+  createHarnessSourcePackage,
+  validateHarnessSourcePackage,
+  harnessSourcePackageFiles,
+  resolveHarnessSourceSelection,
   contentHash,
   admitLocalHarnessRefinerDecision,
 } from "@openpond/harness";
@@ -64,7 +68,11 @@ if (
   !HarnessCrossRunRefinementRequestSchema ||
   !HarnessRefinementCandidateSchema ||
   !HarnessRefinerActivityReceiptSchema ||
-  typeof admitLocalHarnessRefinerDecision !== "function"
+  typeof admitLocalHarnessRefinerDecision !== "function" ||
+  typeof createHarnessSourcePackage !== "function" ||
+  typeof validateHarnessSourcePackage !== "function" ||
+  typeof harnessSourcePackageFiles !== "function" ||
+  typeof resolveHarnessSourceSelection !== "function"
 ) {
   throw new Error("packed Harness exports unavailable");
 }
@@ -78,6 +86,8 @@ import type {
   AgentSnapshot,
   HarnessRefinerEvidenceBasis,
   HarnessRelease,
+  HarnessSourcePackage,
+  HarnessSourceSelection,
   HarnessRunOverlay,
   ImprovementObservation,
   LocalHarnessRefinerDecisionV2,
@@ -95,6 +105,8 @@ void (null as unknown as
   | AgentSnapshot
   | HarnessRefinerEvidenceBasis
   | HarnessRelease
+  | HarnessSourcePackage
+  | HarnessSourceSelection
   | HarnessRunOverlay
   | ImprovementObservation
   | LocalHarnessRefinerDecisionV2

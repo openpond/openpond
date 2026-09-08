@@ -51,3 +51,19 @@ unselected evidence remains available to a later host watermark.
 Evaluation execution and model-improvement qualification contracts that bind a
 Harness to a Taskset, scored baseline, Model, verifier, and training signal
 belong to `@openpond/evals`.
+
+## Released source transport
+
+`openpond.harnessSourcePackage.v1` carries the complete immutable Agent
+snapshot, Harness release and their released file bytes. Creation and readback
+verify both release hashes, dependency references, the exact file population,
+canonical base64, individual file hashes and a 25 MiB total byte limit.
+Rehashing a transport envelope does not authorize different source bytes.
+Instruction and Skill entry files must be policy-visible; verifier and
+host-private assets retain their declared visibility and must never be exposed
+to a policy by iterating the complete source map.
+
+This is source transport, not runtime conformance. Hosts authorize export and
+select an execution adapter that consumes the captured source, verifies its
+capabilities and records effective context. A matching Harness release hash
+alone does not prove that instructions, Skills or executable dependencies ran.

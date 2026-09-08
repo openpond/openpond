@@ -39,6 +39,7 @@ import {
 } from "@openpond/taskset-sdk";
 import { compileBoundGraders } from "@openpond/evals/rewards";
 import { verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
+import { HarnessSourceSelectionSchema, validateHarnessSourcePackage, type HarnessSourcePackage } from "@openpond/harness";
 
 export type TasksetTrainingBundle = {
   manifest: HarnessRunManifest;
@@ -73,6 +74,7 @@ export function buildTasksetTrainingBundle(input: {
   workerProtocol: string;
   harnessRelease: ImmutableReleaseRef;
   tasksetRelease: ImmutableReleaseRef;
+  harnessSource?: HarnessSourcePackage | null;
   tasksetAssetBytes?: ReadonlyMap<string, Uint8Array>;
   rewardExecution?: TasksetRewardExecution;
   verifierAssets?: LearningTextAsset[];
@@ -116,6 +118,31 @@ export function buildTasksetTrainingBundle(input: {
     }),
   };
   const assets = new Map<string, Uint8Array>();
+  const harnessSource = input.harnessSource
+    ? validateHarnessSourcePackage(input.harnessSource, releasedHarness)
+    : null;
+  if (setup.harnessRelease && !harnessSource) {
+    throw new Error("A selected Harness requires its complete immutable source package.");
+  }
+  if (harnessSource && (!setup.harnessRelease
+    || setup.harnessRelease.id !== releasedHarness.id
+    || setup.harnessRelease.contentHash !== releasedHarness.contentHash)) {
+    throw new Error("Harness source differs from the Model's explicit selection.");
+  }
+  if (harnessSource) {
+    const leavesLocalHost = input.runtime.placement !== "local" || input.compute.kind !== "local";
+    if (leavesLocalHost && (!harnessSource.agentSnapshot.portability.portable
+      || harnessSource.harnessRelease.files.some(file => file.visibility === "host_private"))) {
+      throw new Error("The selected Harness contains source that cannot leave its local host.");
+    }
+    addJsonAsset(assets, "harness/source-package.json", harnessSource);
+  }
+  addJsonAsset(assets, "harness/execution.json", HarnessSourceSelectionSchema.parse({
+    schemaVersion: "openpond.harnessSourceSelection.v1",
+    mode: harnessSource ? "selected_release" : "taskset_owned",
+    harnessRelease: releasedHarness,
+    sourcePackageHash: harnessSource?.contentHash ?? null,
+  }));
   const rewardExecution = resolvePortableTasksetRewardExecution(taskset, input.rewardExecution);
   if (rewardExecution) {
     const verifierAssets = input.verifierAssets ?? [];

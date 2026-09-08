@@ -40,10 +40,7 @@ describe("portable Model Run lifecycle", () => {
             revision: taskset.revision,
             contentHash: taskset.contentHash,
           },
-          harnessRelease: {
-            id: "harness-release-fixture",
-            contentHash: sha256("harness-release-fixture"),
-          },
+          harnessRelease: null,
           tasksetRelease: {
             id: "taskset-release-fixture",
             contentHash: sha256(taskset.contentHash),

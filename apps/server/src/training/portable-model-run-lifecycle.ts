@@ -71,6 +71,10 @@ export async function preparePortableModelRunLifecycle(input: {
       "Portable Model Run lifecycle requires an exact saved run.",
     );
   }
+  if (setup.harnessRelease && (setup.harnessRelease.id !== input.releaseGraph.harnessRelease.id
+    || setup.harnessRelease.contentHash !== input.releaseGraph.harnessRelease.contentHash)) {
+    throw new Error("The prepared Harness differs from the Model's explicit selection.");
+  }
   const existingRun = await input.store.getModelRun(input.modelRunId);
   if (existingRun) {
     throw new Error(
@@ -172,7 +176,7 @@ export async function preparePortableModelRunLifecycle(input: {
     profileId: input.modelProject.profileId,
     taskset: setup.tasksetRef,
     tasksetRelease: setup.tasksetRelease,
-    harnessRelease: setup.harnessRelease,
+    harnessRelease: input.releaseGraph.harnessRelease,
     baseModel,
     method,
   });
