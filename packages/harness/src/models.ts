@@ -12,3 +12,30 @@ export const ModelRefSchema = z.object({
 }).strict();
 
 export type ModelRef = z.infer<typeof ModelRefSchema>;
+
+export const PROVIDER_IDS = [
+  "openpond",
+  "codex",
+  "anthropic",
+  "openai",
+  "xai",
+  "google",
+  "openrouter",
+  "deepseek",
+  "zai",
+  "moonshot",
+  "together",
+  "groq",
+  "custom-openai-compatible",
+] as const;
+
+export const ProviderIdSchema = z.enum(PROVIDER_IDS);
+
+export type ProviderId = z.infer<typeof ProviderIdSchema>;
+
+export const ChatModelRefSchema = z.object({
+  providerId: ProviderIdSchema,
+  modelId: z.string().trim().min(1).max(300),
+});
+
+export type ChatModelRef = z.infer<typeof ChatModelRefSchema>;

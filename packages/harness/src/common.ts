@@ -14,6 +14,11 @@ export const ImmutableReleaseRefSchema = z.object({
   contentHash: ReleaseHashSchema,
 }).strict();
 
+export const VersionedReleaseRefSchema = ImmutableReleaseRefSchema.extend({
+  revision: z.number().int().positive(),
+}).strict();
+export type VersionedReleaseRef = z.infer<typeof VersionedReleaseRefSchema>;
+
 export const ImmutableAssetRefSchema = z.object({
   id: ReleaseIdSchema,
   path: z.string().trim().min(1).max(MAX_PORTABLE_PATH_BYTES).refine(safeRelativePath),

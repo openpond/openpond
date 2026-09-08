@@ -29,12 +29,16 @@ await build({
     learning: path.join(root, "src/learning.ts"),
     "taskset-catalog": path.join(root, "src/taskset-catalog.ts"),
     "taskset-packages": path.join(root, "src/taskset-packages.ts"),
+    "taskset-drafts": path.join(root, "src/taskset-drafts.ts"),
     "model-starters": path.join(root, "src/model-starters.ts"),
     "model-starter-catalog": path.join(root, "src/model-starter-catalog.ts"),
     "model-starter-attempts": path.join(root, "src/model-starter-attempts.ts"),
   },
   outdir: dist,
   bundle: true,
+  // Keep shared schemas/authoring helpers single-instance across public entry
+  // points when consumers import several SDK protocols in the same renderer.
+  splitting: true,
   platform: "node",
   target: "node22.14",
   format: "esm",

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { TasksetDraftSchema, TasksetSchema } from "@openpond/contracts";
+import { TasksetSchema } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import { learningRef, sameLearningRef } from "@openpond/evals/learning";
 import { hashTasksetDraftPackage, materializePortableTasksetRelease, tasksetDraftFromTaskset, writeTasksetDraftPackage } from "@openpond/taskset-sdk";
@@ -11,16 +11,12 @@ import { ModelTasksetAuthoringSchema, ModelTasksetDraftRequestSchema, decodeTask
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { desktopTasksetRuntimeAdapterId } from "../training/portable-evals-adapter.js";
 import { cacheTasksetPackage, readCachedTasksetPackage } from "../training/taskset-package-files.js";
-import { AuthoredTasksetFileInventorySchema } from "../training/authored-taskset-files.js";
+import { TasksetDraftSourceInitializationSchema, prepareTasksetDraftSource } from "openpond-sdk/taskset-packages";
 
-export const ModelDraftInitializationSchema = z.object({
-  draft: TasksetDraftSchema,
-  filePaths: z.array(z.object({ assetId: z.string().min(1), paths: z.array(z.string().min(1)).min(1).max(10_000) }).strict()).max(10_000),
+export const ModelDraftInitializationSchema = TasksetDraftSourceInitializationSchema.extend({
   workspaceHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
 }).strict();
 export type ModelDraftInitialization = z.infer<typeof ModelDraftInitializationSchema>;
-
-const AUTHORING_FILES = new Set(["taskset.json", "tasks/tasks.jsonl", "graders/graders.json", "fixtures/grader-fixtures.json", "metrics/policy.json", "assets/manifest.json", "environment/contract.json", "rubrics/preference-review.md", "comparisons/policy.json"]);
 
 /** Persist the source snapshot before filesystem work. Retries resolve the
  * original operation before checking the Model's possibly newer revision. */
@@ -56,39 +52,11 @@ export async function prepareDraftInitialization(input: { db: OpenPondSqliteConn
   const previous = ModelTasksetAuthoringSchema.safeParse(sourcePackage.taskset.metadata.modelTasksetAuthoring);
   const owner = linked && previous.success && previous.data.owner.modelId === model.id ? previous.data.owner : { scopeId: profileId, modelId: model.id };
   const preparation = prepareModelTasksetDraft({ request, owner, source: sourcePackage });
-  const inventory = AuthoredTasksetFileInventorySchema.parse(source.metadata.portableFileInventory ?? []);
-  // Prior authoring manifests are retained as private source artifacts. The
-  // editor owns these paths and regenerates their current structured contents.
-  const sourcePath = (relative: string) => AUTHORING_FILES.has(relative) ? `source-artifacts/${sourcePackage.contentHash}/${contentHash(relative)}/${path.posix.basename(relative)}` : relative;
-  const references = [...source.tasks.flatMap(task => (task.assets ?? []).map(asset => asset.artifactRef)),
-    ...(source.environment.resources ?? []).map(resource => resource.path),
-    ...sourcePackage.taskset.tasks.flatMap(task => (task.requiredOutputs ?? []).flatMap(output => output.schemaRef ? [output.schemaRef.path] : [])),
-    ...(source.metrics?.customAggregator ? [source.metrics.customAggregator.module] : []),
-    ...source.graders.flatMap(grader => grader.kind === "custom_verifier" ? [grader.module] : [])];
-  if (references.some(relative => AUTHORING_FILES.has(relative))) throw new Error("A referenced source asset occupies a reserved Taskset authoring path.");
-  const filePaths = sourcePackage.files.map(file => {
-    const paths = new Set([file.asset.path]);
-    for (const entry of inventory) if (entry.asset.id === file.asset.id) paths.add(entry.sourcePath);
-    for (const task of source.tasks) for (const asset of task.assets ?? []) if (asset.id === file.asset.id) paths.add(asset.artifactRef);
-    for (const grader of sourcePackage.taskset.graders) if (grader.kind === "custom_verifier" && grader.verifierRef.id === file.asset.id) {
-      const local = source.graders.find(candidate => candidate.id === grader.id);
-      if (local?.kind === "custom_verifier") paths.add(local.module);
-    }
-    return { assetId: file.asset.id, paths: [...paths].map(sourcePath) };
-  });
-  // The immutable package is the source of draft bytes. Capturing it precedes
-  // the Model CAS; resuming never reads a newer mutable source directory.
+  const prepared = prepareTasksetDraftSource({ sourceDraft: tasksetDraftFromTaskset(source), source: sourcePackage, preparation, expectedModelRevision: request.expectedModelRevision });
+  // Capture immutable bytes before retaining the initialization operation.
   await cacheTasksetPackage(input.home, sourcePackage);
-  const draft = TasksetDraftSchema.parse({ ...tasksetDraftFromTaskset(source), id: preparation.draftId,
-    environment: { ...source.environment, metadata: { ...source.environment.metadata, portableExecutionResources: { environment: sourcePackage.environment } } },
-    modelScope: { modelId: model.id, expectedModelRevision: request.expectedModelRevision, source: preparation },
-    publishedTasksetRef: preparation.tasksetRevision > 1 ? preparation.sourceTasksetRef : null,
-    metadata: { ...source.metadata, modelTasksetAuthoring: preparation.lineage,
-      portableFileInventory: inventory.map(entry => ({ ...entry, sourcePath: sourcePath(entry.sourcePath), asset: { ...entry.asset,
-        id: AUTHORING_FILES.has(entry.sourcePath) ? `source-artifact-${contentHash({ packageHash: sourcePackage.contentHash, assetId: entry.asset.id })}` : entry.asset.id,
-        path: sourcePath(entry.asset.path) } })) },
-  });
-  const initialized = ModelDraftInitializationSchema.parse({ draft, filePaths, workspaceHash: null });
+  const initialized = ModelDraftInitializationSchema.parse({ ...prepared, workspaceHash: null });
+  const draft = initialized.draft;
   db.exec("BEGIN IMMEDIATE");
   try {
     const concurrent = db.get<{ request_hash: string }>("SELECT request_hash FROM model_taskset_draft_operations WHERE profile_id = ? AND operation_id = ?", [profileId, request.operationId]);

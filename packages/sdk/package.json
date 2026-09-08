@@ -86,6 +86,10 @@
     "./model-starter-catalog": {
       "types": "./dist/types/packages/sdk/src/model-starter-catalog.d.ts",
       "import": "./dist/model-starter-catalog.js"
+    },
+    "./taskset-drafts": {
+      "types": "./dist/types/packages/sdk/src/taskset-drafts.d.ts",
+      "import": "./dist/taskset-drafts.js"
     }
   },
   "publishConfig": {

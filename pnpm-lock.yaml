@@ -530,6 +530,9 @@ importers:
 
   packages/persistence:
     dependencies:
+      '@openpond/harness':
+        specifier: workspace:*
+        version: link:../harness
       toml-eslint-parser:
         specifier: 1.0.3
         version: 1.0.3
@@ -594,6 +597,9 @@ importers:
       '@openpond/harness':
         specifier: workspace:*
         version: link:../harness
+      openpond-sdk:
+        specifier: workspace:*
+        version: link:../sdk
     devDependencies:
       '@types/node':
         specifier: ^24.10.1

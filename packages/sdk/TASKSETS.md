@@ -190,3 +190,58 @@ Model selection and retry receipts atomically. Bound Reward packages and reviewe
 batches use their respective authoring graphs and are rejected by this ordinary
 package compiler. Draft persistence, HTTP operations and editor controls are host
 integration work.
+
+## Shared draft documents and compilation
+
+`openpond-sdk/taskset-drafts` exports the complete `TasksetDraftSchema`, the
+authoring validator and the immutable `TasksetDraftWorkspaceSchema`. Desktop
+imports these same contracts and authoring functions. A workspace contains one
+draft document and hashed source files; managed form manifests are synthesized
+from the document instead of stored as a second editable copy.
+
+Use `saveTasksetDraftWorkspaceDocument` for form edits and
+`saveTasksetDraftWorkspaceFile` for file edits. Both require the expected draft
+revision and return a new workspace. File edits also compare the previous file
+hash, preserve exact UTF-8/base64 bytes and reject managed manifests or retained
+source archives. Published workspaces cannot be edited. The JSON workspace is
+limited to 64 MiB; editable file content is limited to 6 MB.
+
+Server-side package helpers are exported from `openpond-sdk/taskset-packages`:
+
+```ts
+const projected = prepareImportedTasksetPackage({
+  package: source, profileId: owner.scopeId, name, createdAt: now,
+});
+const initialized = prepareTasksetDraftSource({
+  source, preparation, expectedModelRevision,
+  sourceDraft: tasksetDraftFromTaskset(projected.taskset, now),
+});
+const workspace = materializeTasksetDraftWorkspace({ initialized, source });
+const publishedPackage = compileModelTasksetDraftWorkspace({
+  workspace, preparation, adapterId: "my-authoring-host", now,
+});
+```
+
+`tasksetDraftFromTaskset` is exported from `openpond-sdk/taskset-drafts`.
+Retain the original `preparation` and source package before initialization.
+Compilation verifies that preparation, applies the same publication validation
+as Desktop, pins changed code and private assets, and seals an owned package.
+It does not execute a model, run graders, select a Taskset or commit host state.
+Imported source still requires explicit source review before publication.
+
+## Hosted draft client contract
+
+`OpenPondTasksetDraftClient` from `openpond-sdk/taskset-drafts` defines the
+scoped `/v1/models/:modelId/taskset-drafts` protocol. Construct it in server code
+with `baseUrl`, `apiKey` and `teamId`. It supports source inspection,
+initialization, listing, document/file reads and edits, explicit Model refresh,
+validation, publication and deletion. Hosting these endpoints requires a server
+implementation; exporting this client alone does not make them available.
+
+Validation pins the exact draft revision and workspace hash and returns the
+compiled package hash and Taskset reference. Publication requires those same
+values plus an operation ID. The host must atomically compare the draft and
+Model revisions, publish/select the package, finalize the draft and retain the
+retry receipt. The client verifies response scope, revisions and file hashes;
+it never retries writes automatically. Hosts own authorization, durable storage,
+pagination, transaction isolation and idempotent recovery.
