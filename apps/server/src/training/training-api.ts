@@ -597,6 +597,10 @@ export function createTrainingApi(deps: {
       action === "hosted_model_projects"
       || action === "pull_hosted_model_project"
       || action === "sync_model_project"
+      || action === "hosted_taskset_runs"
+      || action === "hosted_taskset_run"
+      || action === "cancel_hosted_taskset_run"
+      || action === "hosted_taskset_run_result"
     ) {
       return runModelProjectHostingAction(deps.modelProjectHosting, action, input);
     }
