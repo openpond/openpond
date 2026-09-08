@@ -31,7 +31,7 @@ import {
 import { TrainingLocalRolloutExecutor } from "./training-local-rollout-executor.js";
 import { ensureTrainingLocalExecutor } from "./training-local-executor-manager.js";
 import { declaredEnvironmentId, resolveTrainingHarnessAdapter, supportsTrainingHarness } from "./training-harness-registry.js";
-import { loadTrainingHarnessSource } from "./training-harness-source.js";
+import { assertHostedTrainingHarnessSource, loadTrainingHarnessSource } from "./training-harness-source.js";
 import { createModelProjectHostingService } from "./model-project-hosting.js";
 import {
   dateString,
@@ -355,10 +355,13 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         try {
           const selected = await loadTrainingHarnessSource({ storeDir: this.dependencies.storeDir, manifestHash: plan.manifest.contentHash });
           if (selected.sourcePackage) {
-            if (plan.runtime.placement !== "local") throw new Error("Selected Harness source execution is not yet supported by the hosted adapter.");
-            const adapter = resolveTrainingHarnessAdapter({ taskset, environmentId: declaredEnvironmentId(taskset) });
-            if (!adapter.validateSource) throw new Error("This adapter does not execute selected Harness source.");
-            await adapter.validateSource({ taskset, storeDir: this.dependencies.storeDir, harnessSource: selected.sourcePackage });
+            if (plan.runtime.placement === "local") {
+              const adapter = resolveTrainingHarnessAdapter({ taskset, environmentId: declaredEnvironmentId(taskset) });
+              if (!adapter.validateSource) throw new Error("This adapter does not execute selected Harness source.");
+              await adapter.validateSource({ taskset, storeDir: this.dependencies.storeDir, harnessSource: selected.sourcePackage });
+            } else {
+              assertHostedTrainingHarnessSource({ environmentKind: taskset.environment.kind, sourcePackage: selected.sourcePackage });
+            }
           }
         } catch (error) {
           issues.push({ code: "managed_harness_source_invalid", path: "manifest.harnessRelease",
