@@ -4,13 +4,13 @@ import { JavaScriptIsolateExecutionError, validateJavaScriptIsolateInput, type J
 import { assertBoundedTaskJson } from "./task-schema.js";
 
 /** A Node subprocess owns the interpreter; completion always waits for its exit. */
-export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolateInput): Promise<unknown> {
+export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolateInput & { stripTypeScript?: boolean }): Promise<unknown> {
   input.signal?.throwIfAborted();
   validateJavaScriptIsolateInput(input);
-  const { signal, ...data } = input;
+  const { signal, stripTypeScript, ...data } = input;
   const error = (suffix: string) => new Error(`${input.errorPrefix}_${suffix}`);
   // The authored source remains JSON data passed to QuickJS, never host code.
-  const program = `globalThis.__openpondIsolateInput = JSON.parse(${JSON.stringify(JSON.stringify(data))});\n${javascriptIsolateProcessSource}`;
+  const program = `globalThis.__openpondIsolateInput = JSON.parse(${JSON.stringify(JSON.stringify(data))});\n${stripTypeScript ? 'globalThis.__openpondIsolateInput.source = require("node:module").stripTypeScriptTypes(globalThis.__openpondIsolateInput.source, { mode: "strip" });\n' : ""}${javascriptIsolateProcessSource}`;
   return new Promise((resolve, reject) => {
     const child = spawn("node", ["--max-old-space-size=64", "--input-type=commonjs", "-"], {
       stdio: ["pipe", "pipe", "pipe"],
