@@ -342,9 +342,10 @@ export function createTaskEvaluationService(deps: {
 
   async function auditFixtures(input: {
     tasksetId: string;
+    tasksetRef?: LocalTasksetRevisionRef;
     fixtures?: AuditFixtureInput[];
   }) {
-    const taskset = await requireTaskset(input.tasksetId);
+    const taskset = await requireLocalTasksetRevision(deps.store, input.tasksetId, input.tasksetRef);
     const customVerifier = await createTasksetEvaluationVerifier(deps, taskset);
     const fixtures = input.fixtures?.length
       ? input.fixtures.map((fixture, index) => ({
@@ -614,8 +615,8 @@ export function createTaskEvaluationService(deps: {
     };
   }
 
-  async function readiness(tasksetId: string) {
-    const taskset = await requireTaskset(tasksetId);
+  async function readiness(tasksetId: string, tasksetRef?: LocalTasksetRevisionRef) {
+    const taskset = await requireLocalTasksetRevision(deps.store, tasksetId, tasksetRef);
     const auditReports =
       await deps.store.listGraderAuditReports(tasksetId);
     let graderAudit =
@@ -626,7 +627,7 @@ export function createTaskEvaluationService(deps: {
       !graderAudit
       && !taskset.graders.some((grader) => grader.kind === "model_judge")
     ) {
-      graderAudit = (await auditFixtures({ tasksetId })).report;
+      graderAudit = (await auditFixtures({ tasksetId, tasksetRef })).report;
     }
     const report = buildTasksetReadiness({ taskset, graderAudit });
     await deps.store.saveReadinessReport(report);

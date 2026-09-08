@@ -807,7 +807,7 @@ export function createTrainingApi(deps: {
         revision: current.revision + 1,
         status: "draft",
         updatedAt: new Date().toISOString(),
-      }));
+      }), current.revision);
     }
     if (action === "taskset_draft_workspace") {
       const workspace = await deps.store.getTasksetDraftWorkspace(
@@ -830,12 +830,13 @@ export function createTrainingApi(deps: {
             )
           : null;
         if (!taskset) throw new Error("Published Taskset draft lost its immutable Taskset revision.");
+        await deps.evaluation.readiness(taskset.id, taskset);
         return publishTasksetToHostedProject({
           store: deps.store,
           benchmarkTasksets: deps.benchmarkTasksets,
           draft,
           modelProjectHosting: deps.modelProjectHosting,
-          taskset,
+          taskset: await deps.store.getTasksetRevision(taskset.id, taskset.revision, taskset.contentHash) ?? taskset,
           modelId: string(input.modelId),
         });
       }
@@ -849,26 +850,16 @@ export function createTrainingApi(deps: {
         draftId: draft.id,
         taskset: authoredTaskset,
       });
-      await deps.store.upsertTaskset(materializedTaskset);
-      await deps.evaluation.readiness(materializedTaskset.id);
-      const taskset = await deps.store.getTaskset(materializedTaskset.id)
-        ?? materializedTaskset;
-      const published = TasksetDraftSchema.parse({
-        ...draft,
-        revision: draft.revision + 1,
-        status: "published",
-        publishedTasksetRef: {
-          id: taskset.id,
-          revision: taskset.revision,
-          contentHash: taskset.contentHash,
-        },
-        updatedAt: new Date().toISOString(),
+      const finalized = await deps.store.finalizeTasksetDraftPublication({
+        draft, packageHash: workspace.packageHash, taskset: materializedTaskset,
       });
-      await deps.store.saveTasksetDraft(published);
+      await deps.evaluation.readiness(finalized.taskset.id, finalized.taskset);
+      const taskset = await deps.store.getTasksetRevision(finalized.taskset.id, finalized.taskset.revision, finalized.taskset.contentHash)
+        ?? finalized.taskset;
       return publishTasksetToHostedProject({
         store: deps.store,
         benchmarkTasksets: deps.benchmarkTasksets,
-        draft: published,
+        draft: finalized.draft,
         modelProjectHosting: deps.modelProjectHosting,
         taskset,
         modelId: string(input.modelId),
