@@ -10,6 +10,7 @@ import { computeTasksetHash } from "@openpond/taskset-sdk";
 import { describe, expect, test } from "vitest";
 
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
+import { tasksetEvaluationScore } from "../apps/server/src/training/taskset-evaluation-score.js";
 import {
   tasksetFixture,
   withTrainingStore,
@@ -46,6 +47,19 @@ describe("portable Evaluation release isolation", () => {
       expect(calls).toBe(2);
       expect(first.evaluationResult).toMatchObject({ meanScore: 0.5, authoredMetric: { value: 1, includedCount: 2, policy: taskset.metrics, policyHash: contentHash(taskset.metrics) } });
       expect(first.evaluationResult.authoredMetric?.receiptRefs).toEqual(first.evaluationResult.receiptRefs);
+      // Qualification must consume the authored score, never the unrelated mean,
+      // and must reject stale policies or metrics copied from another population.
+      expect(tasksetEvaluationScore(taskset, first.evaluationResult)).toBe(1);
+      expect(() => tasksetEvaluationScore(taskset, { ...first.evaluationResult, authoredMetric: undefined })).toThrow("lacks");
+      expect(() => tasksetEvaluationScore(taskset, { ...first.evaluationResult, receiptRefs: first.evaluationResult.receiptRefs.slice(1) })).toThrow("population");
+      const { contentHash: metricHash, ...metricContent } = first.evaluationResult.authoredMetric!;
+      const emptyMetric = { ...metricContent, value: null, includedCount: 0, excludedCount: 2, missingRewardCount: 2 };
+      expect(tasksetEvaluationScore(taskset, { ...first.evaluationResult,
+        authoredMetric: { ...emptyMetric, contentHash: contentHash(emptyMetric) },
+      })).toBeNull();
+      expect(() => tasksetEvaluationScore(taskset, { ...first.evaluationResult,
+        authoredMetric: { ...emptyMetric, contentHash: metricHash },
+      })).toThrow();
       expect(JSON.stringify(first)).not.toContain(source);
       expect(await store.getEvaluationResult(first.evaluationResult.id)).toEqual(first.evaluationResult);
       await expect(evaluation.execute({ tasksetId: taskset.id, taskId: "task_eval", model, seed: 19, attempt: 0 })).rejects.toThrow("pinned content hash");
@@ -58,6 +72,8 @@ describe("portable Evaluation release isolation", () => {
       await store.upsertTaskset(next);
       const second = await evaluation.executeBaseline({ tasksetId: taskset.id, model, reviewRef, seeds: [17, 18] });
       expect(second.evaluationResult).toMatchObject({ meanScore: 0.5, authoredMetric: { value: 0, policy: next.metrics } });
+      expect(tasksetEvaluationScore(next, second.evaluationResult)).toBe(0);
+      expect(() => tasksetEvaluationScore(next, first.evaluationResult)).toThrow("policy");
       expect(second.evaluationResult.tasksetRelease.contentHash).not.toBe(first.evaluationResult.tasksetRelease.contentHash);
       expect(await store.getEvaluationResult(first.evaluationResult.id)).toEqual(first.evaluationResult);
     }));
