@@ -752,10 +752,11 @@ export function createTrainingApi(deps: {
     }
     if (action === "taskset_operational_state") {
       const tasksetId = requiredString(input.tasksetId, "tasksetId");
-      const [attempts, artifacts, grades] = await Promise.all([
+      const [attempts, artifacts, grades, evaluationResults] = await Promise.all([
         deps.store.listTaskAttempts(tasksetId),
         deps.store.listTaskAttemptArtifacts({ tasksetId }),
         deps.store.listGradeResultsForTaskset(tasksetId),
+        deps.store.listEvaluationResults(tasksetId),
       ]);
       return TasksetOperationalStateSchema.parse({
         schemaVersion: "openpond.tasksetOperationalState.v1",
@@ -763,6 +764,7 @@ export function createTrainingApi(deps: {
         attempts,
         artifacts,
         grades,
+        evaluationResults,
         generatedAt: new Date().toISOString(),
       });
     }

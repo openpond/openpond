@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ImmutableReleaseRefSchema, ReleaseHashSchema } from "@openpond/harness";
+import { assertContentHash, contentHash, ImmutableReleaseRefSchema, ReleaseHashSchema } from "@openpond/harness";
 
 const MetricIdSchema = z.string().trim().min(1).max(240);
 const ModulePathSchema = z.string().trim().min(1).max(1_000).refine((value) =>
@@ -43,3 +43,15 @@ export const TasksetMetricResultContentSchema = z.object({
 export const TasksetMetricResultSchema = TasksetMetricResultContentSchema.extend({ contentHash: ReleaseHashSchema }).strict();
 export type TasksetMetricPolicy = z.infer<typeof TasksetMetricPolicySchema>;
 export type TasksetMetricResult = z.infer<typeof TasksetMetricResultSchema>;
+
+export function assertTasksetMetricResult(input: TasksetMetricResult): void {
+  const result = TasksetMetricResultSchema.parse(input);
+  assertContentHash(result, "Taskset metric result");
+  if (result.policyHash !== contentHash(result.policy)) throw new Error("Taskset metric policy hash differs from its policy.");
+  if (result.includedCount + result.excludedCount !== result.receiptRefs.length
+    || (result.includedCount === 0) !== (result.value === null)
+    || result.missingRewardCount > (result.policy.missingReward === "zero" ? result.includedCount : result.excludedCount)
+    || new Set(result.receiptRefs.map(ref => ref.id)).size !== result.receiptRefs.length) {
+    throw new Error("Taskset metric population differs from its receipt references.");
+  }
+}

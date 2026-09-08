@@ -1,8 +1,9 @@
 import { z } from "zod";
-import type {
-  BenchmarkComparison,
-  BenchmarkRunSummary,
-  EvaluationResult,
+import {
+  EvaluationResultSchema,
+  type BenchmarkComparison,
+  type BenchmarkRunSummary,
+  type EvaluationResult,
 } from "@openpond/evals";
 import {
   ModelProjectSchema as PublicModelProjectSchema,
@@ -961,6 +962,7 @@ export const TasksetOperationalStateSchema = z.object({
   attempts: z.array(TaskAttemptResultSchema),
   artifacts: z.array(TaskAttemptArtifactSchema),
   grades: z.array(GradeResultSchema),
+  evaluationResults: z.array(EvaluationResultSchema).default([]),
   generatedAt: TimestampSchema,
 });
 

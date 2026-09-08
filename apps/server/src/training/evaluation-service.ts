@@ -1,11 +1,10 @@
 import path from "node:path";
 import {
-  aggregateEvaluationReceipts,
-  compareBenchmarkRuns,
   createBenchmarkRunSummary,
   type BenchmarkRunPhase,
   type TasksetRelease,
 } from "@openpond/evals";
+import { aggregateTasksetEvaluationInWorker } from "@openpond/evals/metrics/node";
 import {
   GraderAuditReportSchema,
   TasksetSchema,
@@ -47,6 +46,8 @@ import { runStarterToolFixture } from "./starter-tool-fixture.js";
 import { materializeTasksetRevisionFromSource } from "./generated-taskset-package.js";
 import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
 import { verifyPublishedTasksetAssets } from "./taskset-package-assets.js";
+import { assertLocalTasksetMetric, captureTasksetMetricSource } from "./taskset-metric-source.js";
+import { persistBenchmarkComparison } from "./benchmark-comparison-history.js";
 
 type AuditFixtureInput = {
   label:
@@ -117,7 +118,7 @@ export function createTaskEvaluationService(deps: {
       harnessRelease: import("@openpond/harness").HarnessRelease;
       instructionContext?: string;
     };
-  }) {
+  }, retainedMetricSource?: string) {
     if (
       !deps.storeDir
       || !deps.modelText
@@ -150,6 +151,8 @@ export function createTaskEvaluationService(deps: {
       model: input.model,
       now: input.admittedAt ? () => input.admittedAt! : undefined,
     });
+    const metricSource = retainedMetricSource ?? await captureTasksetMetricSource(taskset, deps.storeDir, input.signal);
+    assertLocalTasksetMetric(taskset, portable.tasksetRelease, metricSource);
     const attempt = await runPostTrainingEvaluationAttempt({
       store: deps.store,
       storeDir: deps.storeDir,
@@ -219,12 +222,17 @@ export function createTaskEvaluationService(deps: {
       artifacts,
     });
     const receipt = canonical.attemptReceipt;
-    const evaluationResult = aggregateEvaluationReceipts({
+    const evaluationResult = await aggregateTasksetEvaluationInWorker({
       id: `evaluation-${receipt.id}`,
       manifest: portable.runManifest,
       receipts: [receipt],
+      taskset: portable.tasksetRelease,
+      source: metricSource,
+      signal: input.signal,
       metadata: {
         sourceTasksetId: taskset.id,
+        sourceTasksetRevision: taskset.revision,
+        sourceTasksetHash: taskset.contentHash,
         sourceAttemptId: attempt.id,
         sourceGradeId: gradeResult.id,
       },
@@ -672,6 +680,7 @@ export function createTaskEvaluationService(deps: {
         result.metadata.sourceTasksetHash === taskset.contentHash &&
         result.model.provider === input.model.providerId &&
         result.model.model === input.model.modelId &&
+        (!taskset.metrics || result.authoredMetric?.policyHash === contentHash(taskset.metrics)) &&
         reviewRefMatches(result.metadata.harnessEvaluationReview, input.reviewRef),
       );
     if (existing) return { evaluationResult: existing, attempts: [], reused: true };
@@ -683,6 +692,7 @@ export function createTaskEvaluationService(deps: {
     const seeds = [...new Set(input.seeds?.length ? input.seeds : [17])].slice(0, 100);
     const attemptsPerTask = Math.max(1, Math.min(20, Math.trunc(input.attemptsPerTask ?? 1)));
     const admittedAt = new Date().toISOString();
+    const metricSource = await captureTasksetMetricSource(taskset, deps.storeDir, input.signal);
     const executions: Awaited<ReturnType<typeof execute>>[] = [];
     for (const task of tasks) {
       for (const seed of seeds) {
@@ -706,7 +716,7 @@ export function createTaskEvaluationService(deps: {
               seed,
               attempt,
             }).slice(0, 24)}`,
-          });
+          }, metricSource);
           executions.push(execution);
         }
       }
@@ -720,7 +730,7 @@ export function createTaskEvaluationService(deps: {
     const scores = receipts.flatMap((receipt) =>
       typeof receipt.metadata.score === "number" ? [receipt.metadata.score] : [],
     );
-    const evaluationResult = aggregateEvaluationReceipts({
+    const evaluationResult = await aggregateTasksetEvaluationInWorker({
       id: `baseline-evaluation-${contentHash({
         manifest: manifest.contentHash,
         receipts: receipts.map((receipt) => receipt.contentHash),
@@ -728,6 +738,9 @@ export function createTaskEvaluationService(deps: {
       }).slice(0, 24)}`,
       manifest,
       receipts,
+      taskset: portableTaskset,
+      source: metricSource,
+      signal: input.signal,
       metadata: {
         kind: "baseline",
         sourceTasksetId: taskset.id,
@@ -815,6 +828,7 @@ export function createTaskEvaluationService(deps: {
     const repetitions = Math.max(1, Math.min(20, Math.trunc(input.repetitions ?? 1)));
     const admittedAt = new Date().toISOString();
     const executions: Awaited<ReturnType<typeof execute>>[] = [];
+    const metricSource = await captureTasksetMetricSource(taskset, deps.storeDir, input.signal);
     for (const task of tasks) {
       for (const seed of seeds) {
         for (let attempt = 0; attempt < repetitions; attempt += 1) {
@@ -845,7 +859,7 @@ export function createTaskEvaluationService(deps: {
               attempt,
               admittedAt,
             }).slice(0, 24)}`,
-          });
+          }, metricSource);
           executions.push(execution);
           await input.onAttemptComplete?.(execution);
         }
@@ -856,7 +870,7 @@ export function createTaskEvaluationService(deps: {
       throw new Error("Benchmark attempts did not share one pinned Run Manifest.");
     }
     const receipts = executions.map((execution) => execution.portable.receipt);
-    const evaluationResult = aggregateEvaluationReceipts({
+    const evaluationResult = await aggregateTasksetEvaluationInWorker({
       id: `benchmark-evaluation-${contentHash({
         manifest: manifest.contentHash,
         phase: input.phase,
@@ -864,6 +878,9 @@ export function createTaskEvaluationService(deps: {
       }).slice(0, 24)}`,
       manifest,
       receipts,
+      taskset: executions[0]!.portable.tasksetRelease,
+      source: metricSource,
+      signal: input.signal,
       metadata: {
         kind: "benchmark",
         phase: input.phase,
@@ -913,44 +930,7 @@ export function createTaskEvaluationService(deps: {
     });
     await deps.store.saveBenchmarkRun({ tasksetId: taskset.id, run });
 
-    const priorRuns = await deps.store.listBenchmarkRuns(taskset.id);
-    const baseline = input.phase === "baseline"
-      ? run
-      : priorRuns.find((candidate) =>
-          candidate.phase === "baseline"
-          && candidate.tasksetRelease.contentHash === run.tasksetRelease.contentHash
-          && candidate.model.provider === run.model.provider
-          && candidate.model.model === run.model.model
-          && candidate.reasoningEffort === run.reasoningEffort
-          && contentHash(candidate.protocol) === contentHash(run.protocol)
-        ) ?? null;
-    const candidate = input.phase === "candidate"
-      ? run
-      : priorRuns.find((item) =>
-          item.phase === "candidate"
-          && item.tasksetRelease.contentHash === run.tasksetRelease.contentHash
-          && item.model.provider === run.model.provider
-          && item.model.model === run.model.model
-          && item.reasoningEffort === run.reasoningEffort
-          && contentHash(item.protocol) === contentHash(run.protocol)
-        ) ?? null;
-    const comparison = baseline && candidate
-      ? compareBenchmarkRuns({
-          id: `benchmark-comparison-${contentHash([baseline.contentHash, candidate.contentHash]).slice(0, 24)}`,
-          baseline,
-          candidate,
-          primaryMetric: taskset.benchmark.primaryMetric,
-          qualityGate: taskset.benchmark.qualityGate,
-          createdAt: admittedAt,
-          metadata: {
-            sourceTasksetId: taskset.id,
-            benchmarkDefinitionId: taskset.benchmark.definitionId,
-          },
-        })
-      : null;
-    if (comparison) {
-      await deps.store.saveBenchmarkComparison({ tasksetId: taskset.id, comparison });
-    }
+    const comparison = await persistBenchmarkComparison({ store: deps.store, tasksetId: taskset.id, benchmark: taskset.benchmark, run, createdAt: admittedAt });
     return { evaluationResult, run, comparison, attempts: executions };
   }
 

@@ -131,13 +131,13 @@ export function materializePortableTasksetRelease(input: {
     capabilities: portableCapabilities(input.taskset),
     tasks: tasks.map(projectPortableTaskRecord),
     graders,
+    ...(input.taskset.metrics ? { metrics: input.taskset.metrics } : {}),
     metadata: input.taskset.metadata.derivedPortableMetadata ?? {
       sourceTasksetId: input.taskset.id,
       sourceTasksetHash: input.taskset.contentHash,
       sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
       environmentResources: input.taskset.environment.resources ?? [],
       ordinaryAuthoring: {
-        ...(input.taskset.metrics ? { metricPolicy: input.taskset.metrics } : {}),
         graderFixtures: input.taskset.graderFixtures,
         judgeCalibrationFixtures: Object.fromEntries(input.taskset.graders
           .filter(grader => grader.kind === "model_judge")

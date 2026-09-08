@@ -181,6 +181,37 @@
       ],
       "additionalProperties": false
     },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema16"
+        },
+        "primaryMetric": {
+          "$ref": "#/$defs/__schema17"
+        },
+        "aggregation": {
+          "$ref": "#/$defs/__schema18"
+        },
+        "missingReward": {
+          "$ref": "#/$defs/__schema19"
+        },
+        "taskWeights": {
+          "$ref": "#/$defs/__schema20"
+        },
+        "customAggregator": {
+          "$ref": "#/$defs/__schema21"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "primaryMetric",
+        "aggregation",
+        "missingReward",
+        "customAggregator"
+      ],
+      "additionalProperties": false
+    },
     "metadata": {
       "$ref": "#/$defs/__schema9"
     },
@@ -769,6 +800,83 @@
     "__schema15": {
       "default": false,
       "type": "boolean"
+    },
+    "__schema16": {
+      "type": "string",
+      "const": "openpond.tasksetMetricPolicy.v1"
+    },
+    "__schema17": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "__schema18": {
+      "type": "string",
+      "enum": [
+        "mean_score",
+        "pass_rate",
+        "weighted_mean",
+        "custom"
+      ]
+    },
+    "__schema19": {
+      "type": "string",
+      "enum": [
+        "zero",
+        "exclude"
+      ]
+    },
+    "__schema20": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/__schema17"
+      },
+      "additionalProperties": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "maximum": 1000000
+      }
+    },
+    "__schema21": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "exportName": {
+              "type": "string",
+              "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"
+            },
+            "contentHash": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 300000
+            },
+            "networkPolicy": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "required": [
+            "module",
+            "exportName",
+            "contentHash",
+            "timeoutMs",
+            "networkPolicy"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "$id": "urn:openpond:learning:v1:package",

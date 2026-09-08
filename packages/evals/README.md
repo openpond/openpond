@@ -52,6 +52,15 @@ Run Manifest, and verified attempt receipts. The result carries the policy,
 policy hash, all input receipt references, population counts and a content hash.
 It is separate from the evaluation's ordinary mean-score accounting.
 
+The release's optional `metrics` field is the authoritative policy. For complete
+evaluations, use `aggregateTasksetEvaluationReceipts` or the Node
+`aggregateTasksetEvaluationInWorker` export. They bind the release and task IDs
+to the manifest, calculate `authoredMetric`, and attach it only to the exact
+receipt population. `meanScore` remains the ordinary mean. Hosts should capture
+and validate custom source with `assertTasksetMetricSource` before model work,
+then retain those bytes throughout the run. Complete Taskset packages require
+the declared module as a private, content-matching file.
+
 Mean score, explicit grader pass rate, weighted mean and custom aggregation use
 one population rule: nonterminal attempts, infrastructure failures, timeouts and
 cancellations are excluded. Other missing or ineligible rewards obey the

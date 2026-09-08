@@ -12,6 +12,7 @@ import {
   assertContentHash,
   contentHash,
 } from "@openpond/harness";
+import { assertTasksetMetricResult, TasksetMetricResultSchema, type TasksetMetricResult } from "./metric-policy.js";
 
 export const RuntimeTargetBindingSchema = z.object({
   adapterId: ReleaseIdSchema,
@@ -75,6 +76,7 @@ export const EvaluationResultContentSchema = z.object({
   terminalCount: z.number().int().nonnegative(),
   meanScore: z.number().min(0).max(1).nullable(),
   failureCounts: z.record(FailureClassSchema, z.number().int().nonnegative()),
+  authoredMetric: TasksetMetricResultSchema.optional(),
   metadata: MetadataSchema,
 }).strict();
 export const EvaluationResultSchema = EvaluationResultContentSchema.extend({ contentHash: ReleaseHashSchema }).strict();
@@ -117,6 +119,7 @@ export function aggregateEvaluationReceipts(input: {
   manifest: RunManifest;
   receipts: AttemptReceipt[];
   metadata?: Record<string, unknown>;
+  authoredMetric?: TasksetMetricResult;
 }): EvaluationResult {
   if (!input.receipts.length) throw new Error("An evaluation requires at least one attempt receipt.");
   for (const receipt of input.receipts) {
@@ -124,6 +127,15 @@ export function aggregateEvaluationReceipts(input: {
       throw new Error(`Attempt receipt ${receipt.id} belongs to a different Run Manifest.`);
     }
     if (!verifyAttemptReceipt(receipt)) throw new Error(`Attempt receipt ${receipt.id} has an invalid content hash.`);
+  }
+  if (input.authoredMetric) {
+    assertTasksetMetricResult(input.authoredMetric);
+    const metric = input.authoredMetric;
+    if (metric.runManifest.id !== input.manifest.id || metric.runManifest.contentHash !== input.manifest.contentHash
+      || contentHash(metric.tasksetRelease) !== contentHash(input.manifest.tasksetRelease)
+      || contentHash(metric.receiptRefs) !== contentHash(input.receipts.map(({ id, contentHash }) => ({ id, contentHash })))) {
+      throw new Error("Authored metric does not describe this evaluation's exact manifest and receipts.");
+    }
   }
   const scores = input.receipts.flatMap((receipt) =>
     typeof receipt.metadata.score === "number" && Number.isFinite(receipt.metadata.score)
@@ -146,6 +158,7 @@ export function aggregateEvaluationReceipts(input: {
     terminalCount: input.receipts.filter((receipt) => receipt.terminal).length,
     meanScore: scores.length ? scores.reduce((total, score) => total + score, 0) / scores.length : null,
     failureCounts,
+    ...(input.authoredMetric ? { authoredMetric: input.authoredMetric } : {}),
     metadata: input.metadata ?? {},
   });
   return EvaluationResultSchema.parse({ ...content, contentHash: contentHash(content) });

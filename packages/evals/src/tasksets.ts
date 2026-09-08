@@ -10,6 +10,7 @@ import {
   assertContentHash,
   contentHash,
 } from "@openpond/harness";
+import { TasksetMetricPolicySchema } from "./metric-policy.js";
 
 export const TaskSplitSchema = z.enum(["train", "validation", "test", "frozen_eval"]);
 export const RequiredOutputContractSchema = z.object({
@@ -101,6 +102,7 @@ export const TasksetReleaseContentSchema = z.object({
   tasks: z.array(TaskRecordSchema).min(1).max(1_000_000),
   graders: z.array(GraderSpecSchema).min(1).max(1_000),
   verifierSetRelease: z.object({ id: ReleaseIdSchema, contentHash: ReleaseHashSchema }).strict().optional(),
+  metrics: TasksetMetricPolicySchema.optional(),
   metadata: MetadataSchema,
 }).strict();
 export const TasksetReleaseSchema = TasksetReleaseContentSchema.extend({ contentHash: ReleaseHashSchema }).strict();
@@ -144,6 +146,9 @@ export function validateTasksetRelease(input: unknown): {
   }
   const clusterSplits = new Map<string, Set<string>>();
   for (const task of taskset.tasks) {
+    if (taskset.metrics?.aggregation === "weighted_mean" && !Object.hasOwn(taskset.metrics.taskWeights!, task.id)) {
+      issues.push({ code: "metric_task_weight_missing", severity: "error", message: `Metric policy has no weight for task ${task.id}.`, path: "metrics.taskWeights" });
+    }
     const splits = clusterSplits.get(task.clusterKey) ?? new Set<string>();
     splits.add(task.split);
     clusterSplits.set(task.clusterKey, splits);

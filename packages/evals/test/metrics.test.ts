@@ -1,9 +1,10 @@
 import { expect, test } from "vitest";
 import { assertContentHash, contentHash, sha256 } from "@openpond/harness";
 import { genericToolConformance } from "../src/conformance.js";
-import { createAttemptReceipt, type AttemptReceipt } from "../src/runs.js";
-import { executeTasksetMetric, TasksetMetricPolicySchema, type TasksetMetricPolicy } from "../src/metrics.js";
+import { aggregateEvaluationReceipts, createAttemptReceipt, createRunManifest, type AttemptReceipt } from "../src/runs.js";
+import { aggregateTasksetEvaluationReceipts, executeTasksetMetric, TasksetMetricPolicySchema, type TasksetMetricPolicy } from "../src/metrics.js";
 import { executeJavaScriptIsolate } from "../src/javascript-isolate.js";
+import { TasksetReleaseSchema } from "../src/tasksets.js";
 
 const manifest = genericToolConformance.manifest;
 const policy: TasksetMetricPolicy = { schemaVersion: "openpond.tasksetMetricPolicy.v1", primaryMetric: "quality", aggregation: "mean_score", missingReward: "zero", customAggregator: null };
@@ -65,4 +66,27 @@ test("executes bounded deterministic custom metrics and preserves empty populati
   await expect(run("export function aggregate() { return NaN; }")).rejects.toThrow("finite number");
   await expect(run("export function aggregate() { return 2; }")).rejects.toThrow("finite number");
   expect((await run("export function aggregate() { throw Error('must not run'); }", 1_000, [receipt("infra", {}, "infrastructure_failure")])).value).toBeNull();
+});
+
+// A correct calculation for another release or population must not be attached
+// to this result, and the primary metric must not overwrite the factual mean.
+test("attaches only the pinned release's metric to its exact evaluation population", async () => {
+  const { contentHash: _tasksetHash, ...base } = genericToolConformance.taskset;
+  const content = { ...base, metrics: { ...policy, aggregation: "pass_rate" as const } };
+  const taskset = TasksetReleaseSchema.parse({ ...content, contentHash: contentHash(content) });
+  const { contentHash: _manifestHash, ...manifestContent } = manifest;
+  const admitted = createRunManifest({ ...manifestContent, tasksetRelease: { id: taskset.id, contentHash: taskset.contentHash } });
+  const { contentHash: _receiptHash, ...receiptContent } = receipt("metric-attempt", { score: 0.7, passed: true, rewardEligible: true });
+  const attempt = createAttemptReceipt({ ...receiptContent, taskId: taskset.tasks[0]!.id, runManifest: { id: admitted.id, contentHash: admitted.contentHash } });
+  const input = { id: "metric-evaluation", taskset, manifest: admitted, receipts: [attempt] };
+  const evaluation = await aggregateTasksetEvaluationReceipts(input);
+  expect(evaluation).toMatchObject({ meanScore: 0.7, authoredMetric: { value: 1, policy: taskset.metrics, receiptRefs: evaluation.receiptRefs } });
+  assertContentHash(evaluation, "Evaluation");
+  await expect(aggregateTasksetEvaluationReceipts({ ...input, taskset: genericToolConformance.taskset })).rejects.toThrow("pinned release");
+  await expect(aggregateTasksetEvaluationReceipts({ ...input, receipts: [createAttemptReceipt({ ...receiptContent, taskId: "outside", runManifest: attempt.runManifest })] })).rejects.toThrow("outside the pinned Taskset");
+  const another = createAttemptReceipt({ ...receiptContent, id: "other-attempt", taskId: attempt.taskId, runManifest: attempt.runManifest });
+  expect(() => aggregateEvaluationReceipts({ ...input, receipts: [another], authoredMetric: evaluation.authoredMetric })).toThrow("exact manifest and receipts");
+  const { contentHash: _metricHash, ...metricContent } = evaluation.authoredMetric!;
+  const forged = { ...metricContent, policyHash: contentHash("different policy") };
+  expect(() => aggregateEvaluationReceipts({ ...input, authoredMetric: { ...forged, contentHash: contentHash(forged) } })).toThrow("policy hash");
 });

@@ -52,6 +52,13 @@ outside the Taskset manifest. The 64 MiB limit includes the JSON envelope and
 base64 encoding. Validation does not establish execution readiness or authorize
 access to private resources.
 
+Authored aggregation is declared by `taskset.metrics` in the shared Evals
+contract. A custom metric's module must appear once in the package at its
+declared path, retain private visibility, match its content hash and stay within
+the 512 KiB source limit. Imports and owned revisions preserve that policy.
+Evaluations use the shared isolated executor and retain its named result
+separately from ordinary mean-score accounting.
+
 The client defines authenticated `POST /v1/taskset-packages` publication and
 `GET /v1/taskset-packages/{model}/{taskset}/{revision}/{hash}` readback. These
 operations require a host that implements the package protocol; availability

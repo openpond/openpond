@@ -95,6 +95,9 @@ export async function prepareAuthoredTasksetFiles(taskset: Taskset, directory: s
     }
     return grader;
   });
+  if (aggregator && ![...inventory.values()].some(file => file.asset.path === aggregator.module && file.sourcePath === aggregator.module && file.asset.visibility !== "policy")) {
+    add(ref(`metric-${contentHash(aggregator.module)}`, aggregator.module, "application/javascript", "host_private"));
+  }
   // Unreferenced source files are retained privately. Only explicit task or
   // environment declarations can make bytes visible to the policy.
   const previousInventory = AuthoredTasksetFileInventorySchema.parse(taskset.metadata.portableFileInventory ?? []);

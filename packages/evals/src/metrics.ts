@@ -1,6 +1,7 @@
 import { assertContentHash, contentHash, sha256 } from "@openpond/harness";
-import { RunManifestSchema, verifyAttemptReceipt, type AttemptReceipt, type RunManifest } from "./runs.js";
+import { aggregateEvaluationReceipts, RunManifestSchema, verifyAttemptReceipt, type AttemptReceipt, type EvaluationResult, type RunManifest } from "./runs.js";
 import { TasksetMetricPolicySchema, TasksetMetricResultContentSchema, TasksetMetricResultSchema, type TasksetMetricPolicy, type TasksetMetricResult } from "./metric-policy.js";
+import { assertTasksetRelease, type TasksetRelease } from "./tasksets.js";
 export * from "./metric-policy.js";
 
 export interface TasksetMetricExecutionInput {
@@ -20,6 +21,29 @@ export type TasksetMetricExecutor = (input: {
   timeoutMs: number;
   signal?: AbortSignal;
 }) => Promise<unknown>;
+
+export interface TasksetEvaluationInput extends Omit<TasksetMetricExecutionInput, "policy"> {
+  id: string;
+  taskset: TasksetRelease;
+  metadata?: Record<string, unknown>;
+}
+
+/** Preflight the exact metric source before any model or tool execution. */
+export function assertTasksetMetricSource(taskset: TasksetRelease, source?: string): void {
+  assertTasksetRelease(taskset);
+  if (taskset.metrics?.customAggregator) assertMetricSource(taskset.metrics.customAggregator, source);
+}
+
+/** Bind the declared metric to one frozen release and population, retaining
+ * ordinary mean-score accounting independently of the authored calculation. */
+export async function aggregateTasksetEvaluationReceipts(input: TasksetEvaluationInput, executor?: TasksetMetricExecutor): Promise<EvaluationResult> {
+  assertTasksetMetricSource(input.taskset, input.source);
+  if (input.taskset.id !== input.manifest.tasksetRelease.id || input.taskset.contentHash !== input.manifest.tasksetRelease.contentHash) throw new Error("Metric Taskset differs from the Run Manifest's pinned release.");
+  const taskIds = new Set(input.taskset.tasks.map(task => task.id));
+  if (input.receipts.some(receipt => !taskIds.has(receipt.taskId))) throw new Error("Metric receipt names a task outside the pinned Taskset.");
+  const authoredMetric = input.taskset.metrics ? await executeTasksetMetric({ ...input, policy: input.taskset.metrics }, executor) : undefined;
+  return aggregateEvaluationReceipts({ id: input.id, manifest: input.manifest, receipts: input.receipts, metadata: input.metadata, authoredMetric });
+}
 
 /** Hosts supply the policy from the pinned Taskset, never a mutable form.
  * Operational failures and nonterminal receipts are excluded for every policy.
@@ -60,11 +84,11 @@ export async function executeTasksetMetric(input: TasksetMetricExecutionInput, e
   const receiptRefs = input.receipts.map(({ id, contentHash }) => ({ id, contentHash }));
   const includedCount = scores.length;
   if (policy.customAggregator) {
-    if (input.source === undefined || new TextEncoder().encode(input.source).byteLength > 524_288 || sha256(input.source) !== policy.customAggregator.contentHash) throw new Error("Metric module bytes do not match the pinned content hash or exceed the source limit.");
+    assertMetricSource(policy.customAggregator, input.source);
     if (!executor) throw new Error("Custom metrics require an isolated executor.");
     // Empty populations remain unscorable, even if authored code would return a value.
     if (scores.length) {
-      const result = await executor({ source: input.source, module: policy.customAggregator.module, exportName: policy.customAggregator.exportName, scores, timeoutMs: policy.customAggregator.timeoutMs, signal: input.signal });
+      const result = await executor({ source: input.source!, module: policy.customAggregator.module, exportName: policy.customAggregator.exportName, scores, timeoutMs: policy.customAggregator.timeoutMs, signal: input.signal });
       if (typeof result !== "number" || !Number.isFinite(result) || result < 0 || result > 1) throw new Error("Custom metric must return a finite number between 0 and 1.");
       value = result;
     }
@@ -87,4 +111,8 @@ export async function executeTasksetMetric(input: TasksetMetricExecutionInput, e
     value,
   });
   return TasksetMetricResultSchema.parse({ ...content, contentHash: contentHash(content) });
+}
+
+function assertMetricSource(aggregator: NonNullable<TasksetMetricPolicy["customAggregator"]>, source?: string): void {
+  if (source === undefined || new TextEncoder().encode(source).byteLength > 524_288 || sha256(source) !== aggregator.contentHash) throw new Error("Metric module bytes do not match the pinned content hash or exceed the source limit.");
 }

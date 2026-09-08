@@ -12,7 +12,7 @@ function fixture() {
     asset: { id, path: `assets/${id}`, mediaType: "application/octet-stream", sizeBytes: bytes.byteLength, contentHash: sha256(bytes), visibility },
     base64: Buffer.from(bytes).toString("base64"),
   });
-  const files = [file("binary-input", new Uint8Array([0, 255, 128, 13, 10]), "policy"), file("private-context", new TextEncoder().encode("private expected state"), "host_private"), file("verifier", new TextEncoder().encode("export function verify() { return { score: 1, passed: true }; }"), "verifier"), file("schema", new TextEncoder().encode("{}"), "verifier")];
+  const files = [file("binary-input", new Uint8Array([0, 255, 128, 13, 10]), "policy"), file("private-context", new TextEncoder().encode("private expected state"), "host_private"), file("verifier", new TextEncoder().encode("export function verify() { return { score: 1, passed: true }; }"), "verifier"), file("schema", new TextEncoder().encode("{}"), "verifier"), file("metric", new TextEncoder().encode("export function aggregate(scores) { return Math.min(...scores); }"), "host_private")];
   const environment = createEnvironmentRelease({
     schemaVersion: "openpond.environmentRelease.v1", id: "work-environment", revision: 1,
     contract: { protocolVersion: "openpond.environment.v1", kind: "work", entrypoint: "work", stateful: true, deterministicSeeds: true, lifecycle: ["create", "reset", "step", "collect", "destroy"], networkPolicy: "none", defaultTimeoutMs: 10_000 },
@@ -28,6 +28,7 @@ function fixture() {
     schemaVersion: "openpond.tasksetRelease.v2", id: "work-tasks", revision: 1,
     policy: { policyVisibleFields: ["input"], privilegedFields: ["expectedOutput"], hiddenGraderRefs: ["verify"], connectedAppScopes: [] },
     environment: environment.contract, tools: [], capabilities: [], graders: verifierSet.graders,
+    metrics: { schemaVersion: "openpond.tasksetMetricPolicy.v1", primaryMetric: "quality", aggregation: "custom", missingReward: "zero", customAggregator: { module: files[4]!.asset.path, exportName: "aggregate", contentHash: files[4]!.asset.contentHash, timeoutMs: 1_000, networkPolicy: "none" } },
     tasks: [{ id: "task", clusterKey: "family", split: "train", input: { prompt: "Read input" }, expectedOutput: null, policyVisibleContext: {}, privilegedContextRef: "private-context", artifactRefs: [files[0]!.asset], requiredOutputs: [{ path: "output.json", mediaType: "application/json", schemaRef: files[3]!.asset, maxBytes: 1_000, metadata: {} }], tags: [] }], metadata: {},
   };
   const taskset = bindTasksetExecutionReleases({ taskset: TasksetReleaseSchema.parse({ ...content, contentHash: contentHash(content) }), environment, verifierSet });
@@ -67,6 +68,7 @@ it("prepares repeatable owned drafts and seals isolated ordinary revisions", () 
   expect(decodeTasksetPackageFile(published.files[2]!)).toEqual(code);
   expect(published.files.filter((_, index) => index !== 2)).toEqual(source.files.filter((_, index) => index !== 2));
   expect(published.environment).toEqual(source.environment);
+  expect(published.taskset.metrics).toEqual(source.taskset.metrics);
   expect(published.taskset.metadata).not.toHaveProperty("qualification");
   expect(published.taskset.metadata).not.toHaveProperty("privacyReview");
   expect(published.verifierSet.calibrationReceiptRefs).toEqual([]);
@@ -100,6 +102,7 @@ it("round-trips binary Work packages and enforces their complete private depende
   expect(() => createTasksetPackage({ ...content, files: [...content.files, content.files[0]!] })).toThrow("Duplicate");
   expect(() => createTasksetPackage({ ...content, files: content.files.map((file, index) => index === 0 ? { ...file, base64: Buffer.from("tampered").toString("base64") } : file) })).toThrow("immutable bytes");
   expect(() => createTasksetPackage({ ...content, files: content.files.map(file => file.asset.id === "private-context" ? { ...file, asset: { ...file.asset, visibility: "policy" } } : file) })).toThrow("private context");
+  expect(() => createTasksetPackage({ ...content, files: content.files.map(file => file.asset.id === "metric" ? { ...file, asset: { ...file.asset, visibility: "policy" } } : file) })).toThrow("metric module");
   expect(() => createTasksetPackage({ ...content, environment: { ...content.environment, revision: 2 } })).toThrow("execution releases");
   expect(() => validateTasksetPackage({ ...original, contentHash: "0".repeat(64) })).toThrow("content hash");
 });

@@ -83,6 +83,13 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
       if (ref.visibility === "policy") throw new Error(`Taskset grader asset must be private: ${ref.id}.`);
     }
   }
+  if (taskset.metrics?.customAggregator) {
+    const aggregator = taskset.metrics.customAggregator;
+    const modules = result.files.filter(file => file.asset.path === aggregator.module);
+    if (modules.length !== 1 || modules[0]!.asset.contentHash !== aggregator.contentHash || modules[0]!.asset.sizeBytes > 524_288 || modules[0]!.asset.visibility === "policy") {
+      throw new Error("Taskset metric module is missing or mismatched, public, or exceeds the source limit.");
+    }
+  }
   for (const declarations of [taskset.metadata.environmentResources, environment.metadata.resources]) {
     if (declarations === undefined) continue;
     for (const resource of z.array(z.object({ path: z.string().min(1) }).passthrough()).parse(declarations)) {
