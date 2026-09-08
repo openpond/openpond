@@ -126,6 +126,16 @@ compare the Model revision when attaching the newly prepared batch.
 
 ## Revising an ordinary package
 
+SDK `0.3.0` adds ordinary package authoring and requires Evals `0.9.0` for
+authored metric policies. JavaScript packages must include a complete private
+execution graph: ordinary packages carry `environment/execution.json`, while
+bound packages retain their declared Model execution resources. A JavaScript
+entrypoint alone no longer passes package validation. Use
+`createTasksetPackageExecutionFile` to serialize the declaration, include every
+referenced module/schema/state file, and call `validateTasksetPackage` before
+publication. Existing immutable packages must be revised to add missing assets;
+do not overwrite files retained by historical runs.
+
 The browser-safe `openpond-sdk/model-taskset-authoring` entry point also exports
 `TasksetDraftFileInfoSchema`, `TasksetDraftFileSchema`, and
 `TasksetDraftFileMutationSchema`. File mutations carry the draft revision and

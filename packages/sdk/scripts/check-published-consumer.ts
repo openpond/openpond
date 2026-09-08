@@ -93,7 +93,23 @@ async function main(): Promise<void> {
       ],
       { cwd: consumer, stdio: "inherit" },
     );
-    await writeFile(path.join(consumer, "verify-types.mts"), 'import { OpenPondLearningClient, type TaskExampleSubmission, type LearningCommand } from "openpond-sdk/learning";\ndeclare const client: OpenPondLearningClient;\ndeclare const example: TaskExampleSubmission;\nconst command: LearningCommand = { action: "submit_example", operationId: example.idempotencyKey, example };\nvoid client.command(command);\n');
+    await writeFile(path.join(consumer, "verify-types.mts"), [
+      'import { OpenPondLearningClient, type TaskExampleSubmission, type LearningCommand } from "openpond-sdk/learning";',
+      'import { type ModelTasksetDraftRequest, type TasksetDraftFileMutation, TasksetDraftFileMutationSchema } from "openpond-sdk/model-taskset-authoring";',
+      'import { type TasksetPackage, prepareModelTasksetDraft, publishModelTasksetDraftPackage, resolveTasksetPackageExecution, createTasksetPackageExecutionFile } from "openpond-sdk/taskset-packages";',
+      'declare const client: OpenPondLearningClient;',
+      'declare const example: TaskExampleSubmission;',
+      'const command: LearningCommand = { action: "submit_example", operationId: example.idempotencyKey, example };',
+      'void client.command(command);',
+      'declare const request: ModelTasksetDraftRequest;',
+      'declare const source: TasksetPackage;',
+      'const preparation = prepareModelTasksetDraft({ request, owner: { scopeId: "scope", modelId: request.modelId }, source });',
+      'const published = publishModelTasksetDraftPackage({ preparation, edited: source });',
+      'const execution = resolveTasksetPackageExecution(published);',
+      'if (execution) createTasksetPackageExecutionFile(execution.execution);',
+      'const mutation: TasksetDraftFileMutation = TasksetDraftFileMutationSchema.parse({ draftId: preparation.draftId, expectedDraftRevision: 1, path: "environment/world.js", expectedFileHash: null, content: { encoding: "utf8", data: "export const value = 1;" } });',
+      'void mutation;',
+    ].join("\n"));
     execFileSync(path.resolve(packageRoot, "../../node_modules/.bin/tsc"), ["--noEmit", "--strict", "--skipLibCheck", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", path.join(consumer, "verify-types.mts")], { cwd: consumer, stdio: "inherit" });
   } finally {
     await Promise.all([
