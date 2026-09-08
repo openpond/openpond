@@ -119,3 +119,29 @@ Keep hidden case inputs and expected results in the private initial-state asset.
 Ordinary task input is policy-visible. The service passes only each hidden case's
 explicit `input` to candidate code; expected results stay with the authored grader.
 See the Evals JavaScript environment contract for service fields and Node execution.
+
+### Complete Taskset evaluation runs
+
+`OpenPondModelTasksetRunsClient` from `openpond-sdk/model-taskset-runs` exposes
+`create`, `get`, `list`, `cancel` and `result` through
+`/v1/model-taskset-runs`. A request pins a Model attachment and an ordered
+population of `{ receiptId, taskId, seed, fixtureId }` members. Receipt IDs are
+unique within the run; hosted seeds are canonical integer strings between
+`0` and `2147483647`. Requests support up to 10,000 members and never accept
+replacement world state, verifier bytes or caller-generated scores.
+
+Use `{ kind: "fixture" }` with each member's authored fixture ID to check a
+package without claiming model execution. Use a `hosted_chat` policy with a
+model ID and sampling/output limits for a model evaluation; those members
+have `fixtureId: null`. A model evaluation pins both the provider snapshot and
+the requested sampling configuration. Reusing an operation ID must return the
+same admitted request or report a conflict.
+
+Details retain the request, immutable public run manifest, policy snapshot and
+current summary. Terminal results retain canonical receipts in admitted order
+and the authored metric only for completed evaluations. Failed and cancelled
+runs cannot publish a metric value; completed but entirely unscorable runs
+retain a null metric value. The client verifies workspace, manifest,
+population, grading role, metric references and result hashes on readback.
+Hosts remain responsible for owner-authenticated evidence and durable
+dispatch/cancellation; a content hash is not producer authentication.

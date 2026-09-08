@@ -33,6 +33,7 @@ await build({
     "model-starters": path.join(root, "src/model-starters.ts"),
     "model-starter-catalog": path.join(root, "src/model-starter-catalog.ts"),
     "model-starter-attempts": path.join(root, "src/model-starter-attempts.ts"),
+    "model-taskset-runs": path.join(root, "src/model-taskset-runs.ts"),
   },
   outdir: dist,
   bundle: true,

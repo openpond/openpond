@@ -119,3 +119,27 @@ runtime processes.
 plus a hash-bound trace. `EvaluationRunner` selects tasks, seeds, repetitions,
 and models, invokes the executor, runs graders in their declared boundary, and
 aggregates host results. Runtime adapters stay with Desktop or Sandbox.
+
+## Taskset evaluation populations
+
+`TasksetRunManifest` freezes the complete task/seed/receipt population before
+execution. Its policy distinguishes a real model plus configuration hash from
+an authored fixture check with no model identity. Execution either pins the
+Taskset-owned environment, verifier set and policy, or an actual selected
+Harness release. The complete package hash remains pinned in either case.
+Existing `RunManifest` Harness evaluations keep their existing contract.
+
+`aggregateTasksetRunReceipts` verifies the exact Taskset and metric policy,
+requires one matching receipt per admitted member, orders receipts by the
+manifest and consumes evaluation-role evidence. Missing members, repeated
+receipt IDs, changed tasks/seeds and training-role projections are rejected.
+Operational failures remain accounted for while being excluded from metric
+scores. A nonterminal member without an operational failure cannot finalize a
+run. Hosts must project receipts from their retained execution evidence.
+
+The authored metric uses the same implementation as existing evaluations.
+Without an authored policy, a run uses the mean of eligible measured scores
+and excludes missing rewards. An empty scorable population remains null.
+`aggregateTasksetRunInWorker` from `@openpond/evals/metrics/node` verifies custom
+module bytes and uses the existing bounded isolated worker. A fixture metric
+does not qualify a model for learning or acceptance.

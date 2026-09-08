@@ -67,6 +67,8 @@ async function main(): Promise<void> {
           'if (typeof deriveModelTaskset !== "function" || !ModelTasksetPackageSchema) throw new Error("Packed model Taskset compiler exports are missing");',
           'import { OpenPondModelStarterCatalogClient } from "openpond-sdk/model-starter-catalog";',
           'import { OpenPondModelStarterAttemptsClient, ModelStarterAttemptRequestSchema } from "openpond-sdk/model-starter-attempts";',
+          'import { OpenPondModelTasksetRunsClient, ModelTasksetRunRequestSchema, verifyModelTasksetRunResult } from "openpond-sdk/model-taskset-runs";',
+          'if (!OpenPondModelTasksetRunsClient || !ModelTasksetRunRequestSchema || !verifyModelTasksetRunResult) throw new Error("Packed evaluation run exports are missing");',
           'if (!OpenPondModelStarterAttemptsClient || !ModelStarterAttemptRequestSchema) throw new Error("Packed starter attempt exports are missing");',
           'import { OpenPondTasksetCatalogClient, HostedTasksetSummarySchema } from "openpond-sdk/taskset-catalog";',
           'import { OpenPondTasksetPackageClient, OpenPondTasksetPackageError, TasksetPackageSchema, createTasksetPackage, decodeTasksetPackageFile, resolveTasksetPackageExecution, resolveTasksetPackageInstructions, createTasksetPackageExecutionFile } from "openpond-sdk/taskset-packages";',
