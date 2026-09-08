@@ -15,7 +15,6 @@ import {
   type TaskDataRecord,
 } from "@openpond/contracts";
 import {
-  buildTaskset,
   computeTasksetHash,
   contentHash,
   gradeAttempt,
@@ -45,6 +44,9 @@ import { reviewRefMatches, variance } from "./evaluation-service-statistics.js";
 import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
 import { STARTER_TOOL_ENVIRONMENT, compileStarterToolHarness, loadStarterToolEnvironment } from "./starter-tool-environment.js";
 import { runStarterToolFixture } from "./starter-tool-fixture.js";
+import { materializeTasksetRevisionFromSource } from "./generated-taskset-package.js";
+import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
+import { verifyPublishedTasksetAssets } from "./taskset-package-assets.js";
 
 type AuditFixtureInput = {
   label:
@@ -576,7 +578,7 @@ export function createTaskEvaluationService(deps: {
         },
       },
     });
-    const updated = TasksetSchema.parse({
+    let updated = TasksetSchema.parse({
       ...unhashed,
       contentHash: computeTasksetHash(unhashed),
     });
@@ -584,9 +586,13 @@ export function createTaskEvaluationService(deps: {
       throw new Error("Managed Taskset storage is required for judge calibration.");
     }
     if (updated.purpose !== "benchmark") {
-      await buildTaskset(
+      const root = path.join(deps.storeDir, "training", "tasksets");
+      const sourceDirectory = path.join(root, tasksetPackageDirectoryId(taskset));
+      await verifyPublishedTasksetAssets(sourceDirectory, taskset);
+      updated = await materializeTasksetRevisionFromSource(
+        root,
         updated,
-        path.join(deps.storeDir, "training", "tasksets", updated.id),
+        sourceDirectory,
       );
     }
     await deps.store.upsertTaskset(updated);

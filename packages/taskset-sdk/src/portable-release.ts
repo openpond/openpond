@@ -5,6 +5,7 @@ import type {
 } from "@openpond/contracts";
 import {
   TaskRecordSchema,
+  GraderSpecSchema as PortableGraderSpecSchema,
   TasksetReleaseContentSchema,
   TasksetReleaseSchema,
   bindTasksetExecutionReleases,
@@ -31,7 +32,7 @@ import {
 } from "@openpond/harness";
 
 import { canonicalJson } from "./canonical-json.js";
-import { contentHash } from "./hashing.js";
+import { contentHash, sha256 } from "./hashing.js";
 import { TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
 import { compileBoundGraders, RewardBindingSchema, RewardReleaseSchema, type RewardBinding, type RewardRelease } from "@openpond/evals/rewards";
 
@@ -99,7 +100,7 @@ export function materializePortableTasksetRelease(input: {
       resources: input.taskset.environment.resources ?? [],
     },
   });
-  const verifierSetRelease = pinned ? VerifierSetReleaseSchema.parse(pinned.verifierSet) : createVerifierSetRelease({
+  const verifierSetRelease = pinned?.verifierSet !== undefined ? VerifierSetReleaseSchema.parse(pinned.verifierSet) : createVerifierSetRelease({
     schemaVersion: "openpond.verifierSetRelease.v1",
     id: `verifier-set-release-${input.taskset.id}-r${input.taskset.revision}`,
     revision: input.taskset.revision,
@@ -136,6 +137,12 @@ export function materializePortableTasksetRelease(input: {
       sourceTasksetHash: input.taskset.contentHash,
       sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
       environmentResources: input.taskset.environment.resources ?? [],
+      ordinaryAuthoring: {
+        graderFixtures: input.taskset.graderFixtures,
+        judgeCalibrationFixtures: Object.fromEntries(input.taskset.graders
+          .filter(grader => grader.kind === "model_judge")
+          .map(grader => [grader.id, grader.calibrationFixtureRefs])),
+      },
       ...(learning ? { learning } : {}),
       ...(rewardExecution && (input.rewardExecution || embedded) ? { rewardExecution: { binding: rewardExecution.binding, rewards: rewardExecution.rewards } } : {}),
     },
@@ -326,13 +333,9 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
   if (grader.kind === "model_judge") return {
     ...base,
     kind: "model_judge",
-    rubricRef: asset({
-      id: `rubric-${grader.id}`,
-      path: `graders/${segment(grader.id)}/rubric.md`,
-      hashInput: grader.rubric,
-      mediaType: "text/markdown",
-      visibility: "verifier",
-    }),
+    rubricRef: rubricAsset(grader),
+    model: modelJudgeRef(grader),
+    temperature: grader.temperature,
     calibrationStatus: grader.calibrationStatus,
   };
   if (grader.kind === "custom_verifier") return {
@@ -354,13 +357,7 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
   if (grader.kind === "human") return {
     ...base,
     kind: "human",
-    rubricRef: asset({
-      id: `rubric-${grader.id}`,
-      path: `graders/${segment(grader.id)}/rubric.md`,
-      hashInput: grader.rubric,
-      mediaType: "text/markdown",
-      visibility: "verifier",
-    }),
+    rubricRef: rubricAsset(grader),
     reviewerRole: grader.reviewerRole,
   };
   return {
@@ -422,6 +419,24 @@ function assertReleaseBindings(input: {
     throw new Error("Admitted Taskset graders differ from its bound Verifier Set Release.");
   }
   return input.draft;
+}
+
+function modelJudgeRef(grader: Extract<GraderSpec, { kind: "model_judge" }>) {
+  const previous = grader.metadata.portableGrader === undefined ? null : PortableGraderSpecSchema.parse(grader.metadata.portableGrader);
+  const revision = previous?.kind === "model_judge" && previous.model?.providerId === grader.judge.providerId && previous.model.modelId === grader.judge.modelId ? previous.model.revision : null;
+  return { ...grader.judge, revision };
+}
+
+function rubricAsset(grader: Extract<GraderSpec, { kind: "human" | "model_judge" }>): ImmutableAssetRef {
+  const contentHash = sha256(grader.rubric);
+  const sizeBytes = Buffer.byteLength(grader.rubric, "utf8");
+  const reference = grader.metadata.portableRubricRef;
+  if (reference !== undefined) {
+    const asset = ImmutableAssetRefSchema.parse(reference);
+    if (asset.contentHash !== contentHash || asset.sizeBytes !== sizeBytes || asset.visibility === "policy") throw new Error("Taskset rubric differs from its published private source.");
+    return asset;
+  }
+  return { id: `rubric-${grader.id}`, path: `graders/${segment(grader.id)}/rubric.md`, contentHash, sizeBytes, mediaType: "text/markdown", visibility: "verifier" };
 }
 
 function asset(input: {

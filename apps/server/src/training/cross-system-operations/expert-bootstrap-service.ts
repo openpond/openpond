@@ -13,11 +13,11 @@ import {
   type Taskset,
 } from "@openpond/contracts";
 import {
-  buildTaskset,
   computeTasksetHash,
   contentHash,
 } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../../store/store.js";
+import { materializeGeneratedTasksetPackage } from "../generated-taskset-package.js";
 import { buildExpertCrossSystemTrajectories } from "./expert-trajectories.js";
 import { buildCrossSystemBootstrapDataset } from "./bootstrap-dataset.js";
 import {
@@ -170,16 +170,12 @@ export function createCrossSystemExpertBootstrapService(deps: {
         },
       },
     });
-    const updated = TasksetSchema.parse({
+    const projected = TasksetSchema.parse({
       ...draft,
       contentHash: computeTasksetHash(draft),
     });
     const generatedFiles = await generatedTaskFiles(taskset, records, approval);
-    await buildTaskset(
-      updated,
-      path.join(deps.storeDir, "training", "tasksets", updated.id),
-      { generatedFiles },
-    );
+    const updated = await materializeGeneratedTasksetPackage(path.join(deps.storeDir, "training", "tasksets"), projected, generatedFiles);
     await deps.store.upsertTaskset(updated);
     return { approval, taskset: updated };
   }
