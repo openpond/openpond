@@ -488,6 +488,17 @@ export function createTaskEvaluationService(deps: {
       (grader) => grader.kind === "model_judge",
     );
     if (!judges.length) throw new Error("Taskset has no model judges to calibrate.");
+    const fixtureCounts = new Map<string, number>();
+    for (const fixture of taskset.graderFixtures) {
+      fixtureCounts.set(fixture.id, (fixtureCounts.get(fixture.id) ?? 0) + 1);
+    }
+    for (const judge of judges) {
+      for (const fixtureId of judge.calibrationFixtureRefs) {
+        if (fixtureCounts.get(fixtureId) !== 1) {
+          throw new Error(`Judge ${judge.id} calibration requires exactly one fixture for ${fixtureId}.`);
+        }
+      }
+    }
     const calibrationResults = [];
     const graders = [];
 
