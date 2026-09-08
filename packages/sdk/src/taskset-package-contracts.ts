@@ -4,6 +4,7 @@ import { EnvironmentReleaseSchema, VerifierSetReleaseSchema, verifyEnvironmentRe
 import { assertTasksetRelease, TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import { ModelTasksetPackageSchema, validateModelTasksetPackage } from "./model-taskset-derivation.js";
+import { taskBatchPackageMetadata } from "@openpond/evals/learning";
 import { TasksetPackageLearningResourcesSchema, learningPackageContextFiles, validateTasksetLearningResources } from "./taskset-package-learning.js";
 
 /** The limit covers the entire decoded JSON envelope, including base64. */
@@ -24,6 +25,11 @@ export const TasksetPackageContentSchema = z.object({
 }).strict();
 export const TasksetPackageSchema = TasksetPackageContentSchema.extend({ contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 export type TasksetPackage = z.infer<typeof TasksetPackageSchema>;
+
+/** The selected binding belongs to the package's declared authoring graph. */
+export function tasksetPackageRewardBinding(value: TasksetPackage) {
+  return value.learningResources ? taskBatchPackageMetadata(value.taskset).binding : value.modelResources?.rewardBinding ?? null;
+}
 
 export function decodeTasksetPackageFile(value: z.infer<typeof TasksetPackageFileSchema>): Uint8Array {
   const file = TasksetPackageFileSchema.parse(value);

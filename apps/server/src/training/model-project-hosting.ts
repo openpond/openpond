@@ -15,7 +15,7 @@ import {
   type HostedModelProjectDetail,
 } from "openpond-sdk/model-projects";
 import { z } from "zod";
-import { OpenPondTasksetPackageClient } from "openpond-sdk/taskset-packages";
+import { OpenPondTasksetPackageClient, tasksetPackageRewardBinding } from "openpond-sdk/taskset-packages";
 import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 import { prepareImportedTasksetPackage, type PreparedImportedTasksetPackage } from "./taskset-package-import.js";
 import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
@@ -209,7 +209,8 @@ export function createModelProjectHostingService(input: {
         new OpenPondTasksetCatalogClient(options).resolve(selected),
       ]);
       const selectedBinding = summary.trainingSetup.rewardBindingRef ?? null;
-      const packageBinding = value.modelResources ? learningRef(value.modelResources.rewardBinding) : null;
+      const binding = tasksetPackageRewardBinding(value);
+      const packageBinding = binding ? learningRef(binding) : null;
       if (Boolean(selectedBinding) !== Boolean(packageBinding) || (selectedBinding && packageBinding && !sameLearningRef(selectedBinding, packageBinding))) throw new Error("Hosted Model Reward selection differs from its immutable Taskset package.");
       const prepared: PreparedImportedTasksetPackage = prepareImportedTasksetPackage({ package: value,
         profileId: existing?.profileId ?? inputValue.profileId, name: metadata.name, createdAt: metadata.createdAt });

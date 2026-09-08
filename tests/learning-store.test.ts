@@ -16,8 +16,8 @@ import { createTasksetEvaluationVerifier } from "../apps/server/src/training/eva
 import { resolveTasksetTrainingReward } from "../apps/server/src/training/taskset-reward-binding";
 import { prepareLocalLearningBatch } from "../apps/server/src/training/learning-batch-preparation";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export";
-import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
-import { createTasksetPackage, decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
+import { createModelProjectSaveRequest, HostedModelProjectTrainingSetupSchema } from "openpond-sdk/model-projects";
+import { createTasksetPackage, decodeTasksetPackageFile, tasksetPackageRewardBinding, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "openpond-sdk/taskset-packages";
 
 const withStore = (run: (store: SqliteLearningStore, home: string) => Promise<void>) => withTempDirectory("openpond-learning-", async (home) => {
   const store = new SqliteLearningStore(home);
@@ -44,6 +44,21 @@ describe("durable task intake and admission", () => {
     const metadata = taskBatchPackageMetadata(value.taskset);
     expect(metadata.definition).toEqual(fixture.definition);
     expect(metadata.binding).toEqual(fixture.binding);
+    expect(tasksetPackageRewardBinding(value)).toEqual(fixture.binding);
+    const configuration = TasksetPackageModelConfigurationSchema.parse({ portableProjectId: model.id, name: model.name,
+      objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: {}, sourceRevision: 1, sourceUpdatedAt: learningNow });
+    const project = { ...configuration, id: "hosted-batch-model", teamId: "team", revision: 1, etag: "a".repeat(64), createdAt: learningNow, updatedAt: learningNow,
+      trainingSetup: HostedModelProjectTrainingSetupSchema.parse({ tasksetRef: learningRef(value.taskset), rewardBindingRef: learningRef(fixture.binding) }) };
+    let receivedProject = project;
+    const client = new OpenPondTasksetPackageClient({ baseUrl: "https://packages.example.test", apiKey: "test", teamId: "team", fetch: async () => Response.json({
+      schemaVersion: "openpond.tasksetPackageReceipt.v1", teamId: "team", modelProjectId: model.id, operationId: "publish-batch",
+      taskset: learningRef(value.taskset), packageHash: value.contentHash, hostedTasksetId: "hosted-taskset", projectEtag: project.etag, project: receivedProject,
+    }) });
+    const publication: TasksetPackagePublication = { schemaVersion: "openpond.tasksetPackagePublication.v1", modelProjectId: model.id,
+      operationId: "publish-batch", expectedProjectEtag: null, name: model.name, description: "", buildIntent: "demonstrations", methodHint: "sft", package: value, modelConfiguration: configuration };
+    expect((await client.publish(publication)).project?.trainingSetup.rewardBindingRef).toEqual(learningRef(fixture.binding));
+    receivedProject = { ...project, trainingSetup: { ...project.trainingSetup, rewardBindingRef: null } };
+    await expect(client.publish(publication)).rejects.toMatchObject({ code: "package_receipt_mismatch" });
     expect(metadata.admissions[0]?.decision).toEqual(learningRef(decision));
     expect(value.learningResources?.evidence).toEqual([evidence]);
     expect(value.learningResources?.decisions).toEqual([decision]);
