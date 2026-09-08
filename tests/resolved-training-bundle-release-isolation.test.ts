@@ -12,7 +12,7 @@ import {
 } from "../packages/training-sdk/src/index.js";
 import { computeTasksetHash, sha256 } from "../packages/taskset-sdk/src/index.js";
 import { publishRunGraph } from "../apps/server/src/training/portable-model-run-service.js";
-import { loadManagedRlHarnessSource } from "../apps/server/src/training/managed-rl-harness-source.js";
+import { loadTrainingHarnessSource } from "../apps/server/src/training/training-harness-source.js";
 import {
   FIXED_TIME,
   sftRecipeFixture,
@@ -153,7 +153,7 @@ describe("resolved training bundle release isolation", () => {
     );
     try {
       await publishRunGraph({ storeDir: cacheRoot, graph: selected });
-      const restored = await loadManagedRlHarnessSource({ storeDir: cacheRoot, manifestHash: selected.manifest.contentHash });
+      const restored = await loadTrainingHarnessSource({ storeDir: cacheRoot, manifestHash: selected.manifest.contentHash });
       expect(restored.sourcePackage).toEqual(originalSource);
       expect(restored.selection.sourcePackageHash).toBe(originalSource.contentHash);
       const materialized = await materializeResolvedTrainingBundle({

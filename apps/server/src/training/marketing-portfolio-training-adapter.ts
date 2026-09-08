@@ -5,17 +5,17 @@ import { createAttemptReceipt, type AttemptReceipt } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 import type { Taskset } from "@openpond/contracts";
 
-import { parseManagedRlPolicyCompletion, runMarketingPortfolioRollout } from "./marketing-portfolio-rollout.js";
+import { parseTrainingPolicyCompletion, runMarketingPortfolioRollout } from "./marketing-portfolio-rollout.js";
 import {
-  registerManagedRlHarnessAdapter,
-  type ManagedRlHarnessExecutionInput,
-} from "./managed-rl-harness-registry.js";
+  registerTrainingHarnessAdapter,
+  type TrainingHarnessExecutionInput,
+} from "./training-harness-registry.js";
 import { verifyMarketingPortfolioRuntime } from "./marketing-portfolio-runtime-verifier.js";
 import { createProfileAgentHarnessRuntime } from "./profile-agent-harness-runtime.js";
 
 export const MARKETING_PORTFOLIO_HARNESS_ADAPTER_ID = "marketing-portfolio-v1";
 
-export const marketingPortfolioManagedRlAdapter = {
+export const marketingPortfolioTrainingAdapter = {
   id: MARKETING_PORTFOLIO_HARNESS_ADAPTER_ID,
   priority: 100,
   supports(input: { taskset: Taskset; environmentId: string }): boolean {
@@ -28,12 +28,12 @@ export const marketingPortfolioManagedRlAdapter = {
       && benchmarkId === MARKETING_PORTFOLIO_HARNESS_ADAPTER_ID
       && tools.join(",") === "get_portfolio_snapshot,submit_budget_decision";
   },
-  execute: executeMarketingPortfolioManagedRl,
+  execute: executeMarketingPortfolioTraining,
 };
 
-registerManagedRlHarnessAdapter(marketingPortfolioManagedRlAdapter);
+registerTrainingHarnessAdapter(marketingPortfolioTrainingAdapter);
 
-export async function executeMarketingPortfolioManagedRl(input: ManagedRlHarnessExecutionInput): Promise<Record<string, unknown>> {
+export async function executeMarketingPortfolioTraining(input: TrainingHarnessExecutionInput): Promise<Record<string, unknown>> {
   const verified = await verifyMarketingPortfolioRuntime({ taskset: input.taskset, harnessRoot: input.harnessRoot });
   const runtime = createProfileAgentHarnessRuntime({
     agentRoot: verified.agentRoot,
@@ -65,12 +65,12 @@ export async function executeMarketingPortfolioManagedRl(input: ManagedRlHarness
           topLogprobs: 1,
           returnTokenIds: true,
         }, signal);
-        return { ...parseManagedRlPolicyCompletion(policyResult), policyResult };
+        return { ...parseTrainingPolicyCompletion(policyResult), policyResult };
       },
     },
   });
-  const trainingSample = record(rollout.policyResult.trainingSample, "Managed RL training sample");
-  const modelRequestId = requiredString(trainingSample.modelRequestId, "Managed RL model request ID");
+  const trainingSample = record(rollout.policyResult.trainingSample, "Training sample");
+  const modelRequestId = requiredString(trainingSample.modelRequestId, "Training model request ID");
   const trace = {
     schemaVersion: "openpond.managedRlLocalHarnessReceipt.v1",
     jobId: input.claim.jobId,
@@ -92,7 +92,7 @@ export async function executeMarketingPortfolioManagedRl(input: ManagedRlHarness
     toolSequence: rollout.toolSequence,
   };
   const completedAt = (input.timestamp ?? (() => new Date().toISOString()))();
-  const receipt = createManagedRlHarnessAttemptReceipt({
+  const receipt = createTrainingHarnessAttemptReceipt({
     claim: input.claim,
     taskId: input.task.id,
     seed: baseSeed,
@@ -110,8 +110,8 @@ export async function executeMarketingPortfolioManagedRl(input: ManagedRlHarness
   };
 }
 
-export function createManagedRlHarnessAttemptReceipt(input: {
-  claim: ManagedRlHarnessExecutionInput["claim"];
+export function createTrainingHarnessAttemptReceipt(input: {
+  claim: TrainingHarnessExecutionInput["claim"];
   taskId: string;
   seed: number;
   rollout: {

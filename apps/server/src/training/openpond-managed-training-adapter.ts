@@ -28,10 +28,10 @@ import {
   hostedApiAuthHeaders,
   resolveManagedAdapterUserAccess,
 } from "../openpond/hosted-api-access.js";
-import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
-import { ensureManagedRlLocalExecutor } from "./managed-rl-local-executor-manager.js";
-import { declaredEnvironmentId, resolveManagedRlHarnessAdapter, supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
-import { loadManagedRlHarnessSource } from "./managed-rl-harness-source.js";
+import { TrainingLocalRolloutExecutor } from "./training-local-rollout-executor.js";
+import { ensureTrainingLocalExecutor } from "./training-local-executor-manager.js";
+import { declaredEnvironmentId, resolveTrainingHarnessAdapter, supportsTrainingHarness } from "./training-harness-registry.js";
+import { loadTrainingHarnessSource } from "./training-harness-source.js";
 import { createModelProjectHostingService } from "./model-project-hosting.js";
 import {
   dateString,
@@ -68,7 +68,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   private readonly fetchImpl: typeof fetch;
   private readonly resolveAccess: (teamId?: string) => Promise<Access>;
   private readonly readFileImpl: typeof readFile;
-  private readonly localExecutors = new Map<string, ManagedRlLocalRolloutExecutor>();
+  private readonly localExecutors = new Map<string, TrainingLocalRolloutExecutor>();
   private readonly evidenceRefreshes = new Map<string, Promise<void>>();
   private readonly evidenceRefreshedAt = new Map<string, number>();
 
@@ -353,10 +353,10 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       }
       if (taskset && trainingPlan && taskset.contentHash === trainingPlan.tasksetHash) {
         try {
-          const selected = await loadManagedRlHarnessSource({ storeDir: this.dependencies.storeDir, manifestHash: plan.manifest.contentHash });
+          const selected = await loadTrainingHarnessSource({ storeDir: this.dependencies.storeDir, manifestHash: plan.manifest.contentHash });
           if (selected.sourcePackage) {
             if (plan.runtime.placement !== "local") throw new Error("Selected Harness source execution is not yet supported by the hosted adapter.");
-            const adapter = resolveManagedRlHarnessAdapter({ taskset, environmentId: declaredEnvironmentId(taskset) });
+            const adapter = resolveTrainingHarnessAdapter({ taskset, environmentId: declaredEnvironmentId(taskset) });
             if (!adapter.validateSource) throw new Error("This adapter does not execute selected Harness source.");
             await adapter.validateSource({ taskset, storeDir: this.dependencies.storeDir, harnessSource: selected.sourcePackage });
           }
@@ -398,7 +398,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           taskset.capabilities.requiresTools;
         if (
           requiresHarness &&
-          !supportsManagedRlHarness(taskset, plan.runtime.placement)
+          !supportsTrainingHarness(taskset, plan.runtime.placement)
         ) {
           issues.push({
             code: "managed_harness_unsupported",
@@ -982,7 +982,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     harnessReleaseHash?: string,
     validationTaskset?: import("@openpond/contracts").Taskset,
   ): Promise<void> {
-    await ensureManagedRlLocalExecutor({
+    await ensureTrainingLocalExecutor({
       access,
       dependencies: this.dependencies,
       executors: this.localExecutors,

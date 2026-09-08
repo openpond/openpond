@@ -6,8 +6,8 @@ import path from "node:path";
 import type { Taskset } from "@openpond/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ManagedRlHarnessExecutionInput } from "../apps/server/src/training/managed-rl-harness-registry.js";
-import { executePortableJsonlManagedRl, validatePortableJsonlHarnessSource } from "../apps/server/src/training/portable-jsonl-managed-rl-adapter.js";
+import type { TrainingHarnessExecutionInput } from "../apps/server/src/training/training-harness-registry.js";
+import { executePortableJsonlTraining, validatePortableJsonlHarnessSource } from "../apps/server/src/training/portable-jsonl-training-adapter.js";
 import { sourceRuntimeFixture } from "../packages/harness/test/source-runtime-fixture.js";
 
 const temporaryDirectories: string[] = [];
@@ -41,7 +41,7 @@ for await (const line of lines) {
     expect(fixture.policyRequests).toBe(0);
     const run = async (harnessSource: typeof original) => {
       const requests: Array<Record<string, unknown>> = [];
-      const result = await executePortableJsonlManagedRl({ ...fixture.input, harnessSource,
+      const result = await executePortableJsonlTraining({ ...fixture.input, harnessSource,
         executorId: "source-test", harnessRoot: "unused-current-workspace",
         claim: { schemaVersion: "openpond.managedRlLocalRolloutClaim.v1", executionKind: "evaluation", executionId: "eval-source",
           jobId: "job-source", groupId: null, rolloutId: null, deliveryId: "delivery-source", policyVersion: 0,
@@ -76,7 +76,7 @@ for await (const line of lines) {
 async function runtimeFixture(options: {
   moduleContents: string;
   maxTurns: number;
-}): Promise<{ input: ManagedRlHarnessExecutionInput; policyRequests: number }> {
+}): Promise<{ input: TrainingHarnessExecutionInput; policyRequests: number }> {
   const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-portable-runtime-"));
   temporaryDirectories.push(storeDir);
   const sourceTasksetId = "user-owned-taskset";
@@ -122,7 +122,7 @@ async function runtimeFixture(options: {
       policyRequests += 1;
       return {};
     },
-  } as unknown as ManagedRlHarnessExecutionInput;
+  } as unknown as TrainingHarnessExecutionInput;
   return {
     input,
     get policyRequests() {

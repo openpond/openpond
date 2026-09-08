@@ -8,13 +8,13 @@ import type { Taskset } from "@openpond/contracts";
 import { createHarnessSourceRuntime, executeHarnessRollout, type HarnessSourcePackage } from "@openpond/harness";
 
 import {
-  createManagedRlHarnessAttemptReceipt,
-} from "./marketing-portfolio-managed-rl-adapter.js";
-import { parseManagedRlPolicyCompletion, type ManagedRlPolicyMessage } from "./marketing-portfolio-rollout.js";
+  createTrainingHarnessAttemptReceipt,
+} from "./marketing-portfolio-training-adapter.js";
+import { parseTrainingPolicyCompletion, type TrainingPolicyMessage } from "./marketing-portfolio-rollout.js";
 import {
-  registerManagedRlHarnessAdapter,
-  type ManagedRlHarnessExecutionInput,
-} from "./managed-rl-harness-registry.js";
+  registerTrainingHarnessAdapter,
+  type TrainingHarnessExecutionInput,
+} from "./training-harness-registry.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 
 export const PORTABLE_JSONL_HARNESS_ADAPTER_ID = "portable-jsonl-stateful-v1";
@@ -37,7 +37,7 @@ type BridgeStep = {
   stateHashes: Record<string, string | null>;
 };
 
-export const portableJsonlManagedRlAdapter = {
+export const portableJsonlTrainingAdapter = {
   id: PORTABLE_JSONL_HARNESS_ADAPTER_ID,
   priority: -100,
   supports(input: { taskset: Taskset; environmentId: string }): boolean {
@@ -45,11 +45,11 @@ export const portableJsonlManagedRlAdapter = {
       && input.taskset.capabilities.requiresState
       && input.taskset.capabilities.requiresTools;
   },
-  execute: executePortableJsonlManagedRl,
+  execute: executePortableJsonlTraining,
   validateSource: validatePortableJsonlHarnessSource,
 };
 
-registerManagedRlHarnessAdapter(portableJsonlManagedRlAdapter);
+registerTrainingHarnessAdapter(portableJsonlTrainingAdapter);
 
 export async function validatePortableJsonlHarnessSource(input: { taskset: Taskset; storeDir: string; harnessSource: HarnessSourcePackage }): Promise<void> {
   const task = input.taskset.tasks.find(task => task.split === "train");
@@ -84,8 +84,8 @@ function sourceRuntime(source: HarnessSourcePackage, initialized: BridgeInit) {
   });
 }
 
-export async function executePortableJsonlManagedRl(
-  input: ManagedRlHarnessExecutionInput,
+export async function executePortableJsonlTraining(
+  input: TrainingHarnessExecutionInput,
 ): Promise<Record<string, unknown>> {
   const rewardGrader = input.taskset.graders.find((grader) => grader.rewardEligible);
   if (!rewardGrader) throw new Error("portable_jsonl_reward_grader_missing");
@@ -103,7 +103,7 @@ export async function executePortableJsonlManagedRl(
   const baseSeed = Number.isInteger(input.claim.request.seed)
     ? Number(input.claim.request.seed)
     : 0;
-  const messages: ManagedRlPolicyMessage[] = [];
+  const messages: TrainingPolicyMessage[] = [];
   const toolSequence: string[] = [];
   const trace: Array<Record<string, unknown>> = [];
   const policyResults: Array<Record<string, unknown>> = [];
@@ -153,7 +153,7 @@ export async function executePortableJsonlManagedRl(
           policyCostObserved = true;
           policyCostUsd += policyResult.costUsd;
         }
-        return { result: policyResult, ...parseManagedRlPolicyCompletion(policyResult) };
+        return { result: policyResult, ...parseTrainingPolicyCompletion(policyResult) };
       },
       step: request => bridge.request<BridgeStep>({ operation: "step", ...request }),
       terminate: reason => bridge.request<BridgeStep>({ operation: "terminate", reason }),
@@ -172,7 +172,7 @@ export async function executePortableJsonlManagedRl(
   }
   const trainingSamples = policyResults.map((policyResult, index) => requiredRecord(
     policyResult.trainingSample,
-    `Managed RL training sample turn ${index + 1}`,
+    `Training sample turn ${index + 1}`,
   ));
   const traceSha256 = sha256({ taskId, messages, trace, stateHashes: finalStep.stateHashes });
   const completedAt = (input.timestamp ?? (() => new Date().toISOString()))();
@@ -214,7 +214,7 @@ export async function executePortableJsonlManagedRl(
       terminationReason: finalStep.terminationReason ?? null,
       toolSequence,
     },
-    attemptReceipt: createManagedRlHarnessAttemptReceipt({
+    attemptReceipt: createTrainingHarnessAttemptReceipt({
       claim: input.claim,
       taskId: input.task.id,
       seed: baseSeed,

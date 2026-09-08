@@ -25,8 +25,6 @@ import {
 } from "@openpond/runtime";
 
 import { VERSION } from "./constants.js";
-import type { HarnessSourcePackage } from "@openpond/harness";
-import { importCapturedHarness } from "./harness/import-captured-harness.js";
 import {
   ensureSelectedLocalHarnessWorkspace,
   resolveSelectedLocalHarnessRelease,
@@ -95,7 +93,6 @@ export type OpenPondAppServerOptions = {
   maxHostedWorkspaceToolRounds?: number;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
   sandboxRequest?: AppServerSandboxRequest;
-  capturedHarnessSource?: HarnessSourcePackage;
 };
 
 export type OpenPondAppServerInstance = AppServerInstance & {
@@ -177,17 +174,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     logger,
   });
 
-  const capturedHarness = options.capturedHarnessSource
-    ? await importCapturedHarness({ store, storeDir, source: options.capturedHarnessSource })
-    : null;
-  if (capturedHarness) {
-    await store.selectHarnessWorkspace({
-      ownerKind: "personal",
-      ownerId: capturedHarness.workspace.ownerScope.id,
-      workspaceId: capturedHarness.workspace.id,
-      updatedAt: now(),
-    });
-  } else await ensureSelectedLocalHarnessWorkspace({
+  await ensureSelectedLocalHarnessWorkspace({
     store,
     storeDir,
     loadProfileState: loadOpenPondProfileState,
@@ -327,21 +314,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     ...createProfileTurnDependencies(),
     loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
-    loadSelectedHarnessRuntime: async (session) => {
-      if (capturedHarness) {
-        await ensureLocalHarnessRunOverlay({
-          store,
-          runId: session.id,
-          workspace: capturedHarness.workspace,
-          harnessRelease: {
-            id: capturedHarness.release.harnessRelease.id,
-            contentHash: capturedHarness.release.harnessRelease.contentHash,
-          },
-          admittedAt: now(),
-        });
-      }
-      return loadLocalHarnessRuntimeForAgentRun(store, session.id);
-    },
+    loadSelectedHarnessRuntime: (session) =>
+      loadLocalHarnessRuntimeForAgentRun(store, session.id),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
     harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }),

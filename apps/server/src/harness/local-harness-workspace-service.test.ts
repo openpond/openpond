@@ -11,11 +11,10 @@ import {
   TurnSchema,
   emptyOpenPondProfileState,
 } from "@openpond/contracts";
-import { contentHash, createHarnessSourcePackage } from "@openpond/harness";
+import { contentHash } from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
-import { importCapturedHarness } from "./import-captured-harness.js";
 import {
   compileAndRegisterLocalHarnessRelease,
   compileLocalHarnessSource,
@@ -806,30 +805,6 @@ describe("local Harness workspace service", () => {
     expect(admittedBeforeRefine?.instructionContext).toContain("Harness capability receipt:");
     expect(admittedBeforeRefine?.instructionContext).not.toContain("Use the document runtime.");
     expect(admittedBeforeRefine?.instructionContext).not.toContain("export const agent = {};");
-    // Training must use the same lazy Skill reader with captured bytes, independently
-    // of subsequent edits in the source workspace.
-    const capturedDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-captured-work-"));
-    const capturedStore = new SqliteStore(capturedDirectory);
-    cleanup.push({ directory: capturedDirectory, store: capturedStore });
-    const sourceFiles = new Map(await Promise.all(imported.release.harnessRelease.files.map(async asset => [
-      asset.path,
-      await fs.readFile(path.join(imported.release.bundlePath, "source", asset.path)),
-    ] as const)));
-    const source = createHarnessSourcePackage({
-      agentSnapshot: imported.release.agentSnapshot,
-      harnessRelease: imported.release.harnessRelease,
-      files: sourceFiles,
-    });
-    const captured = await importCapturedHarness({ store: capturedStore, storeDir: capturedDirectory, source });
-    expect(captured.release.harnessRelease).toEqual(imported.release.harnessRelease);
-    expect(captured.instructionContext).not.toContain("Use the document runtime.");
-    await expect(captured.skillRuntime.readSkill?.("documents")).resolves.toMatchObject({
-      body: "Use the document runtime.", resourceFiles: ["reference.md"],
-    });
-    const replay = await importCapturedHarness({ store: capturedStore, storeDir: capturedDirectory, source });
-    expect(replay.release.bundlePath).toBe(captured.release.bundlePath);
-    await fs.writeFile(path.join(captured.release.bundlePath, "source", "skills/documents/SKILL.md"), "tampered");
-    await expect(importCapturedHarness({ store: capturedStore, storeDir: capturedDirectory, source })).rejects.toThrow("expected");
     const improvedSkill = "---\nname: documents\ndescription: Create documents.\n---\n\nUse the bundled document runtime before importing DOCX libraries.\n";
     const edit = HarnessOverlayEditSchema.parse({
       id: "improve-documents-skill",
