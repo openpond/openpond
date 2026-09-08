@@ -57,6 +57,23 @@ import {
   HarnessRefinerActivityReceiptSchema,
 } from "@openpond/harness/refinement-lifecycle";
 import { ChatModelRefSchema, ProviderIdSchema } from "@openpond/harness/models";
+import { harnessRuntimeModuleSource, harnessRuntimeModuleSha256 } from "@openpond/harness/runtime-source";
+import { createHash } from "node:crypto";
+if (createHash("sha256").update(harnessRuntimeModuleSource).digest("hex") !== harnessRuntimeModuleSha256) {
+  throw new Error("packed standalone runtime hash mismatch");
+}
+// A data URL cannot resolve node_modules: this proves the distributed runtime is self-contained.
+const standalone = await import("data:text/javascript;base64," + Buffer.from(harnessRuntimeModuleSource).toString("base64"));
+const executed = await standalone.executeHarnessRollout({
+  turnId: "packed-consumer", maxTurns: 1, signal: new AbortController().signal,
+  runtime: null, systemPrompt: "Complete the task.", userPrompt: "Return done.", tools: [],
+  policyRequest: async () => ({ result: { requestId: "packed-request" }, content: "done", toolCalls: [] }),
+  step: async request => ({ toolResults: [], userMessage: null, terminal: request.content === "done" }),
+  terminate: async () => { throw new Error("standalone runtime did not complete"); },
+});
+if (executed.policyResults.length !== 1 || !executed.finalStep.terminal || typeof standalone.createHarnessSourceRuntime !== "function") {
+  throw new Error("packed standalone runtime execution failed");
+}
 if (ChatModelRefSchema.parse({ providerId: "openai", modelId: "example" }).modelId !== "example" || ProviderIdSchema.safeParse("unknown-provider").success) {
   throw new Error("packed chat model identity contract changed");
 }
@@ -101,6 +118,9 @@ import type {
   HarnessRefinerActivityReceipt,
 } from "@openpond/harness/refinement-lifecycle";
 import type { ChatModelRef, ProviderId } from "@openpond/harness/models";
+import { harnessRuntimeModuleSource, harnessRuntimeModuleSha256 } from "@openpond/harness/runtime-source";
+const runtimeDistribution: string[] = [harnessRuntimeModuleSource, harnessRuntimeModuleSha256];
+void runtimeDistribution;
 const chatModel: ChatModelRef = { providerId: "openai" satisfies ProviderId, modelId: "example" };
 void chatModel;
 void (null as unknown as

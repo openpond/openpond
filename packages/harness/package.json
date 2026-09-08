@@ -58,6 +58,10 @@
       "types": "./dist/types/tools.d.ts",
       "import": "./dist/tools.js"
     },
+    "./runtime-source": {
+      "types": "./dist/types/runtime-source.d.ts",
+      "import": "./dist/runtime-source.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -90,6 +94,7 @@
   },
   "devDependencies": {
     "@types/node": "24.13.3",
+    "esbuild": "0.28.1",
     "tsx": "4.23.1",
     "typescript": "^5.9.3",
     "vitest": "4.1.10"

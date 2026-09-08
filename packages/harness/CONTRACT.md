@@ -77,3 +77,12 @@ released subagents fail admission. Hosts must provide their actual tools and
 capabilities; this helper does not implement missing execution capabilities.
 The runtime receipt binds the source, effective system prompt, loaded assets
 and tool definitions. Hosts retain that receipt with attempt evidence.
+
+`executeHarnessRollout` owns the shared policy/environment round lifecycle,
+released resource calls, retained conversation and exhaustion behavior. Hosts
+supply policy transport and environment step/termination operations. Desktop's
+agent runtime re-exports the same provider loop from this package.
+`@openpond/harness/runtime-source` distributes a self-contained ESM build of
+source admission and rollout execution with its SHA-256. Hosted archives use
+those published bytes instead of implementing a second source reader or loop.
+The clean consumer check executes this distribution without module resolution.

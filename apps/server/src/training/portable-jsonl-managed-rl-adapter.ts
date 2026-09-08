@@ -5,7 +5,7 @@ import path from "node:path";
 import readline from "node:readline";
 
 import type { Taskset } from "@openpond/contracts";
-import { createHarnessSourceRuntime, HARNESS_SOURCE_READ_TOOL_NAME, type HarnessSourcePackage } from "@openpond/harness";
+import { createHarnessSourceRuntime, executeHarnessRollout, type HarnessSourcePackage } from "@openpond/harness";
 
 import {
   createManagedRlHarnessAttemptReceipt,
@@ -125,107 +125,45 @@ export async function executePortableJsonlManagedRl(
     if (input.harnessSource && (input.harnessSource.harnessRelease.id !== input.claim.harnessRelease.id
       || input.harnessSource.harnessRelease.contentHash !== input.claim.harnessRelease.contentHash)) throw new Error("Claim differs from the admitted Harness source.");
     harnessRuntime = input.harnessSource ? sourceRuntime(input.harnessSource, initialized) : null;
-    const policyTools = [...initialized.tools, ...(harnessRuntime?.tools ?? [])];
-    messages.push(
-      { role: "system", content: harnessRuntime?.systemPrompt ?? initialized.policy },
-      { role: "user", content: initialized.userPrompt },
-    );
-    for (let turnIndex = 0; turnIndex < runtime.maxTurns; turnIndex += 1) {
-      const policyResult = await input.policyRequest({
-        deliveryId: input.claim.deliveryId,
-        policyVersion: input.claim.policyVersion,
-        turnIndex,
-        messages,
-        tools: policyTools,
-        toolChoice: "auto",
-        maxTokens: 1_024,
-        temperature: 0.8,
-        seed: baseSeed + turnIndex,
-        logprobs: true,
-        topLogprobs: 1,
-        returnTokenIds: true,
-      }, input.signal);
-      lastPolicyResult = policyResult;
-      policyResults.push(policyResult);
-      const normalizedUsage = normalizeModelUsageTokens(policyResult.usage);
-      if (
-        normalizedUsage.promptTokens !== null
-        || normalizedUsage.completionTokens !== null
-        || normalizedUsage.totalTokens !== null
-      ) {
-        policyUsageObserved = true;
-        policyUsage.inputTokens += normalizedUsage.promptTokens ?? 0;
-        policyUsage.outputTokens += normalizedUsage.completionTokens ?? 0;
-        policyUsage.totalTokens += normalizedUsage.totalTokens
-          ?? (normalizedUsage.promptTokens ?? 0) + (normalizedUsage.completionTokens ?? 0);
-      }
-      if (typeof policyResult.costUsd === "number" && Number.isFinite(policyResult.costUsd) && policyResult.costUsd >= 0) {
-        policyCostObserved = true;
-        policyCostUsd += policyResult.costUsd;
-      }
-      const completion = parseManagedRlPolicyCompletion(policyResult);
-      messages.push({
-        role: "assistant",
-        content: completion.content,
-        tool_calls: completion.toolCalls.map((call) => ({
-          id: call.id,
-          type: "function",
-          function: { name: call.name, arguments: call.arguments },
-        })),
-      });
-      const sourceCalls = harnessRuntime ? completion.toolCalls.filter(call => call.name === HARNESS_SOURCE_READ_TOOL_NAME) : [];
-      const environmentCalls = harnessRuntime ? completion.toolCalls.filter(call => call.name !== HARNESS_SOURCE_READ_TOOL_NAME) : completion.toolCalls;
-      const sourceResults = sourceCalls.map(call => {
-        let output: unknown;
-        try { output = harnessRuntime!.readFile(JSON.parse(call.arguments)); }
-        catch (error) { output = { error: error instanceof Error ? error.message : "Harness source read failed." }; }
-        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
-        toolSequence.push(call.name);
-        return { id: call.id, name: call.name, output };
-      });
-      if (sourceCalls.length && !environmentCalls.length) {
-        trace.push({ turnIndex, content: completion.content, toolCalls: sourceCalls, toolResults: sourceResults, terminal: false });
-        continue;
-      }
-      finalStep = await bridge.request<BridgeStep>({
-        operation: "step",
-        content: completion.content,
-        toolCalls: environmentCalls,
-      });
-      for (const result of finalStep.toolResults) {
-        messages.push({
-          role: "tool",
-          tool_call_id: result.id,
-          content: JSON.stringify(result.output),
-        });
-        toolSequence.push(result.name);
-      }
-      if (finalStep.userMessage) {
-        messages.push({ role: "user", content: finalStep.userMessage });
-      }
-      trace.push({
-        turnIndex,
-        content: completion.content,
-        toolCalls: completion.toolCalls,
-        toolResults: [...sourceResults, ...finalStep.toolResults],
-        terminal: finalStep.terminal,
-      });
-      if (finalStep.terminal) break;
-    }
-    if (!finalStep?.terminal) {
-      finalStep = await bridge.request<BridgeStep>({
-        operation: "terminate",
-        reason: "max_turns",
-      });
-      trace.push({
-        turnIndex: runtime.maxTurns,
-        content: null,
-        toolCalls: [],
-        toolResults: [],
-        terminal: true,
-        terminationReason: "max_turns",
-      });
-    }
+    const execution = await executeHarnessRollout({
+      turnId: input.claim.deliveryId,
+      maxTurns: runtime.maxTurns,
+      signal: input.signal,
+      runtime: harnessRuntime,
+      systemPrompt: initialized.policy,
+      userPrompt: initialized.userPrompt,
+      tools: initialized.tools,
+      async policyRequest({ turnIndex, messages, tools }, signal) {
+        const policyResult = await input.policyRequest({
+          deliveryId: input.claim.deliveryId,
+          policyVersion: input.claim.policyVersion,
+          turnIndex, messages, tools, toolChoice: "auto", maxTokens: 1_024,
+          temperature: 0.8, seed: baseSeed + turnIndex, logprobs: true,
+          topLogprobs: 1, returnTokenIds: true,
+        }, signal);
+        const normalizedUsage = normalizeModelUsageTokens(policyResult.usage);
+        if (normalizedUsage.promptTokens !== null || normalizedUsage.completionTokens !== null || normalizedUsage.totalTokens !== null) {
+          policyUsageObserved = true;
+          policyUsage.inputTokens += normalizedUsage.promptTokens ?? 0;
+          policyUsage.outputTokens += normalizedUsage.completionTokens ?? 0;
+          policyUsage.totalTokens += normalizedUsage.totalTokens
+            ?? (normalizedUsage.promptTokens ?? 0) + (normalizedUsage.completionTokens ?? 0);
+        }
+        if (typeof policyResult.costUsd === "number" && Number.isFinite(policyResult.costUsd) && policyResult.costUsd >= 0) {
+          policyCostObserved = true;
+          policyCostUsd += policyResult.costUsd;
+        }
+        return { result: policyResult, ...parseManagedRlPolicyCompletion(policyResult) };
+      },
+      step: request => bridge.request<BridgeStep>({ operation: "step", ...request }),
+      terminate: reason => bridge.request<BridgeStep>({ operation: "terminate", reason }),
+    });
+    messages.push(...execution.messages);
+    trace.push(...execution.trace);
+    toolSequence.push(...execution.toolSequence);
+    policyResults.push(...execution.policyResults);
+    lastPolicyResult = policyResults.at(-1) ?? null;
+    finalStep = execution.finalStep;
   } finally {
     await bridge.close();
   }

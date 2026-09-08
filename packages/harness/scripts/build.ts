@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { copyFile, mkdir, readdir, rename, rm } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
@@ -22,6 +23,28 @@ try {
     "--tsBuildInfoFile",
     path.join(staging, ".tsbuildinfo"),
   ]);
+  const runtime = await build({
+    stdin: {
+      contents: 'export * from "./source-runtime.js"; export * from "./source-execution.js"; export * from "./source-package.js";',
+      resolveDir: path.join(root, "src"),
+      sourcefile: "harness-runtime.ts",
+      loader: "ts",
+    },
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "neutral",
+    target: "es2022",
+    minify: true,
+    legalComments: "inline",
+  });
+  const source = runtime.outputFiles[0]?.text;
+  if (!source) throw new Error("Harness runtime distribution was not generated.");
+  const hash = createHash("sha256").update(source).digest("hex");
+  await writeFile(path.join(staging, "runtime-source.js"),
+    `export const harnessRuntimeModuleSource = ${JSON.stringify(source)};\nexport const harnessRuntimeModuleSha256 = ${JSON.stringify(hash)};\n`);
+  await writeFile(path.join(staging, "types/runtime-source.d.ts"),
+    "export declare const harnessRuntimeModuleSource: string;\nexport declare const harnessRuntimeModuleSha256: string;\n");
   await publishBuild(staging, dist);
 } finally {
   await rm(staging, { force: true, recursive: true });
