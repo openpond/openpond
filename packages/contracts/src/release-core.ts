@@ -1,19 +1,7 @@
 import { z } from "zod";
 
-export const ReleaseIdSchema = z.string().trim().min(1).max(240);
-export const ReleaseHashSchema = z.string().regex(/^[a-f0-9]{64}$/);
-export const ReleaseTimestampSchema = z.string().datetime({ offset: true });
-
-export const ImmutableReleaseRefSchema = z
-  .object({
-    id: ReleaseIdSchema,
-    contentHash: ReleaseHashSchema,
-  })
-  .strict();
-
-export const VersionedReleaseRefSchema = ImmutableReleaseRefSchema.extend({
-  revision: z.number().int().positive(),
-}).strict();
+import { ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
+export { ReleaseIdSchema, ReleaseHashSchema, ReleaseTimestampSchema, ImmutableReleaseRefSchema, VersionedReleaseRefSchema, type ImmutableReleaseRef, type VersionedReleaseRef } from "@openpond/harness";
 
 export const ScopedSecretDeclarationSchema = z
   .object({
@@ -41,8 +29,6 @@ export const OpaqueSecretLeaseRefSchema = z
   })
   .strict();
 
-export type ImmutableReleaseRef = z.infer<typeof ImmutableReleaseRefSchema>;
-export type VersionedReleaseRef = z.infer<typeof VersionedReleaseRefSchema>;
 export type ScopedSecretDeclaration = z.infer<
   typeof ScopedSecretDeclarationSchema
 >;

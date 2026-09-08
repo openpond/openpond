@@ -1,3 +1,4 @@
+import { tasksetPackageSourceId as importedTasksetPackageDirectory } from "openpond-sdk/taskset-packages";
 import { constants } from "node:fs";
 import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -17,9 +18,7 @@ export async function readImportedLearningTasksetPackage(home: string | undefine
   return value;
 }
 
-export function importedTasksetPackageDirectory(profileId: string, packageHash: string): string {
-  return `package-${contentHash({ profileId, packageHash })}`;
-}
+export { tasksetPackageSourceId as importedTasksetPackageDirectory } from "openpond-sdk/taskset-packages";
 
 /** The cache retains the exact portable encoding independently of the local
  * Taskset projection, whose Profile/provenance give it a different hash. */

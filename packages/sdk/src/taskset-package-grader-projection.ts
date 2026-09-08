@@ -1,6 +1,8 @@
-import { GraderSpecSchema } from "@openpond/contracts";
-import { decodeTasksetPackageFile, type TasksetPackage } from "openpond-sdk/taskset-packages";
-import { learningVerifierModule } from "@openpond/taskset-sdk";
+import { compileBoundGraders, resolveBoundRewards, type RewardBinding, type RewardRelease } from "@openpond/evals/rewards";
+import { learningRef, verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
+import type { GraderSpec } from "./taskset-draft-core.js";
+import { GraderSpecSchema } from "./taskset-draft-core.js";
+import { decodeTasksetPackageFile, type TasksetPackage } from "./taskset-package-contracts.js";
 import { z } from "zod";
 
 /** Project an ordinary portable package without inventing a Reward binding. */
@@ -26,3 +28,24 @@ export function importedPackageGraders(value: TasksetPackage) {
       config: grader.kind === "artifact" ? { ...grader.config, ...(grader.config.refIncludes === undefined ? {} : { pathIncludes: grader.config.refIncludes }) } : grader.config });
   });
 }
+
+export function projectLearningBatchGraders(binding: RewardBinding, rewards: RewardRelease[], assets: LearningTextAsset[] = []): GraderSpec[] {
+  const resolved = resolveBoundRewards(binding, rewards);
+  return compileBoundGraders(binding, rewards).map((grader) => {
+    const reward = resolved.find(({ source }) => source.graderId === grader.id)!.reward;
+    const base = { ...grader, label: reward.name, metadata: { rewardBinding: learningRef(binding) } };
+    if (grader.kind === "model_judge") throw new Error(`Reward ${grader.id} needs a calibrated model execution adapter before preparation.`);
+    if (grader.kind === "custom_verifier") return GraderSpecSchema.parse({ ...base,
+      module: learningVerifierModule(grader.verifierRef.contentHash), exportName: grader.exportName ?? "verify",
+      metadata: { ...base.metadata, portableVerifierRef: grader.verifierRef },
+    });
+    if (grader.kind === "human") {
+      const asset = assets.find((asset) => asset.id === grader.rubricRef.id);
+      if (!asset) throw new Error(`Reward ${grader.id} is missing its immutable rubric.`);
+      return GraderSpecSchema.parse({ ...base, rubric: verifyLearningTextAsset(asset, grader.rubricRef) });
+    }
+    return GraderSpecSchema.parse({ ...base, kind: grader.kind === "artifact" ? "file" : grader.kind });
+  });
+}
+
+export function learningVerifierModule(hash: string) { return `graders/reward-${hash}.js`; }

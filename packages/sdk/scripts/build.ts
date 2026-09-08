@@ -29,6 +29,7 @@ await build({
     learning: path.join(root, "src/learning.ts"),
     "taskset-catalog": path.join(root, "src/taskset-catalog.ts"),
     "taskset-packages": path.join(root, "src/taskset-packages.ts"),
+    "taskset-drafts": path.join(root, "src/taskset-drafts.ts"),
     "model-starters": path.join(root, "src/model-starters.ts"),
     "model-starter-catalog": path.join(root, "src/model-starter-catalog.ts"),
     "model-starter-attempts": path.join(root, "src/model-starter-attempts.ts"),

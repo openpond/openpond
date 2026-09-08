@@ -51,6 +51,10 @@ import {
   HarnessRefinementCandidateSchema,
   HarnessRefinerActivityReceiptSchema,
 } from "@openpond/harness/refinement-lifecycle";
+import { ChatModelRefSchema, ProviderIdSchema } from "@openpond/harness/models";
+if (ChatModelRefSchema.parse({ providerId: "openai", modelId: "example" }).modelId !== "example" || ProviderIdSchema.safeParse("unknown-provider").success) {
+  throw new Error("packed chat model identity contract changed");
+}
 if (
   !HarnessRunOverlaySchema ||
   !HostedHarnessRefinerRequestSchema ||
@@ -84,6 +88,9 @@ import type {
   HarnessRefinementCandidate,
   HarnessRefinerActivityReceipt,
 } from "@openpond/harness/refinement-lifecycle";
+import type { ChatModelRef, ProviderId } from "@openpond/harness/models";
+const chatModel: ChatModelRef = { providerId: "openai" satisfies ProviderId, modelId: "example" };
+void chatModel;
 void (null as unknown as
   | AgentSnapshot
   | HarnessRefinerEvidenceBasis

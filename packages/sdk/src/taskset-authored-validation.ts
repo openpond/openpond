@@ -1,0 +1,438 @@
+import type { TasksetCapabilityManifest } from "./taskset-draft-core.js";
+import {
+  isTrainingSourceRef,
+  TASKSET_WORK_TOOL_NAMES,
+  TasksetSchema,
+  type Taskset,
+} from "./taskset-authored-contracts.js";
+import { contentHash } from "@openpond/harness";
+
+export type TasksetValidationIssue = {
+  code: string;
+  severity: "warning" | "error";
+  message: string;
+  path: string | null;
+};
+
+export type TasksetValidationReport = {
+  valid: boolean;
+  taskset: Taskset | null;
+  computedHash: string | null;
+  issues: TasksetValidationIssue[];
+};
+
+export function validateTaskset(input: unknown): TasksetValidationReport {
+  const parsed = TasksetSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      valid: false,
+      taskset: null,
+      computedHash: null,
+      issues: parsed.error.issues.map((issue) => ({
+        code: "schema_invalid",
+        severity: "error",
+        message: issue.message,
+        path: issue.path.join("."),
+      })),
+    };
+  }
+
+  const taskset = parsed.data;
+  const issues: TasksetValidationIssue[] = [];
+  validateSourceConsent(taskset, issues);
+  validateDatasetArtifact(taskset, issues);
+  validateSplitIsolation(taskset, issues);
+  validatePolicyBoundary(taskset, issues);
+  validateGraders(taskset, issues);
+  validateGraderFixtures(taskset, issues);
+  validateLearningSignals(taskset, issues);
+  validateCapabilities(taskset.capabilities, issues, taskset);
+  validateWorkExecution(taskset, issues);
+
+  const computedHash = tasksetContentHash(taskset);
+  if (taskset.contentHash !== computedHash) {
+    issues.push({
+      code: "content_hash_mismatch",
+      severity: "error",
+      message: `Taskset contentHash is ${taskset.contentHash}, expected ${computedHash}.`,
+      path: "contentHash",
+    });
+  }
+
+  return {
+    valid: !issues.some((issue) => issue.severity === "error"),
+    taskset,
+    computedHash,
+    issues,
+  };
+}
+
+function validateGraderFixtures(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  if (!taskset.graderFixtures.length) issues.push({ code: "grader_fixtures_required", severity: "error", message: "Taskset admission requires authored grader fixtures.", path: "graderFixtures" });
+  const taskIds = new Set(taskset.tasks.map((task) => task.id));
+  const required = new Set(["positive", "negative", "boundary", "adversarial", "prompt_injection", "infrastructure_failure"]);
+  for (const fixture of taskset.graderFixtures) {
+    if (!taskset.datasetArtifact && !taskIds.has(fixture.taskId)) issues.push({ code: "grader_fixture_task_missing", severity: "warning", message: `Fixture ${fixture.id} references a task outside this Taskset revision (${fixture.taskId}).`, path: `graderFixtures.${fixture.id}.taskId` });
+    required.delete(fixture.label);
+    if (fixture.label === "infrastructure_failure" && !fixture.infrastructureError) issues.push({ code: "infrastructure_fixture_error_missing", severity: "error", message: `Infrastructure fixture ${fixture.id} must declare an infrastructure error.`, path: `graderFixtures.${fixture.id}.infrastructureError` });
+  }
+  for (const label of required) issues.push({ code: "grader_fixture_missing", severity: "warning", message: `Taskset does not include the optional ${label} grader calibration fixture.`, path: "graderFixtures" });
+}
+
+function validateDatasetArtifact(
+  taskset: Taskset,
+  issues: TasksetValidationIssue[],
+): void {
+  const artifact = taskset.datasetArtifact;
+  if (!artifact) return;
+  if (
+    artifact.tasksetId !== taskset.id
+    || artifact.tasksetRevision !== taskset.revision
+  ) {
+    issues.push({
+      code: "dataset_artifact_taskset_mismatch",
+      severity: "error",
+      message: "Dataset artifact identity does not match its Taskset revision.",
+      path: "datasetArtifact",
+    });
+  }
+  const splitTotal = Object.values(artifact.splitCounts)
+    .reduce((total, count) => total + count, 0);
+  const shardTotal = artifact.shards
+    .reduce((total, shard) => total + shard.rowCount, 0);
+  if (splitTotal !== artifact.rowCount || shardTotal !== artifact.rowCount) {
+    issues.push({
+      code: "dataset_artifact_row_count_mismatch",
+      severity: "error",
+      message: "Dataset artifact row, split, and shard counts do not agree.",
+      path: "datasetArtifact.rowCount",
+    });
+  }
+  const shardSplitCounts = new Map<string, number>();
+  for (const shard of artifact.shards) {
+    shardSplitCounts.set(
+      shard.split,
+      (shardSplitCounts.get(shard.split) ?? 0) + shard.rowCount,
+    );
+  }
+  for (const [split, count] of Object.entries(artifact.splitCounts)) {
+    if ((shardSplitCounts.get(split) ?? 0) !== count) {
+      issues.push({
+        code: "dataset_artifact_split_count_mismatch",
+        severity: "error",
+        message: `Dataset artifact ${split} shard counts do not match its manifest.`,
+        path: `datasetArtifact.splitCounts.${split}`,
+      });
+    }
+  }
+  const { contentHash: _contentHash, ...hashable } = artifact;
+  if (contentHash(hashable) !== artifact.contentHash) {
+    issues.push({
+      code: "dataset_artifact_hash_mismatch",
+      severity: "error",
+      message: "Dataset artifact manifest content hash is invalid.",
+      path: "datasetArtifact.contentHash",
+    });
+  }
+}
+
+export function computeTasksetHash(taskset: Omit<Taskset, "contentHash"> | Taskset): string {
+  return tasksetContentHash(taskset);
+}
+
+function tasksetContentHash(taskset: Omit<Taskset, "contentHash"> | Taskset): string {
+  const { contentHash: _contentHash, status: _status, readiness: _readiness, updatedAt: _updatedAt, ...source } = taskset as Taskset;
+  return contentHash(source);
+}
+
+export function validatePortability(capabilities: TasksetCapabilityManifest): TasksetValidationIssue[] {
+  const issues: TasksetValidationIssue[] = [];
+  validateCapabilities(capabilities, issues, null);
+  return issues;
+}
+
+function validateSourceConsent(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  for (const [index, source] of taskset.sourceRefs.entries()) {
+    if (isTrainingSourceRef(source) && source.consent.status !== "granted") {
+      issues.push({ code: "source_consent_missing", severity: "error", message: `Source ${source.id} is not consented.`, path: `sourceRefs.${index}.consent.status` });
+    }
+    if (source.secretScanStatus !== "passed") {
+      issues.push({ code: "source_secret_scan", severity: "error", message: `Source ${source.id} did not pass secret scanning.`, path: `sourceRefs.${index}.secretScanStatus` });
+    }
+    if (source.piiScanStatus !== "passed") {
+      issues.push({ code: "source_pii_scan", severity: "error", message: `Source ${source.id} has unresolved PII policy.`, path: `sourceRefs.${index}.piiScanStatus` });
+    }
+    if (source.licensingStatus !== "approved") {
+      issues.push({ code: "source_license", severity: "error", message: `Source ${source.id} has unresolved licensing policy.`, path: `sourceRefs.${index}.licensingStatus` });
+    }
+  }
+}
+
+function validateSplitIsolation(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  const clusterSplits = new Map<string, Set<string>>();
+  for (const task of taskset.tasks) {
+    const splits = clusterSplits.get(task.clusterKey) ?? new Set<string>();
+    splits.add(task.split);
+    clusterSplits.set(task.clusterKey, splits);
+  }
+  for (const [cluster, splits] of clusterSplits) {
+    if (splits.size > 1) {
+      issues.push({ code: "split_cluster_contamination", severity: "error", message: `Source cluster ${cluster} appears in multiple splits: ${[...splits].join(", ")}.`, path: "tasks" });
+    }
+  }
+  const frozenCount = taskset.datasetArtifact
+    ? taskset.datasetArtifact.splitCounts.frozen_eval ?? 0
+    : taskset.tasks.filter((task) => task.split === "frozen_eval").length;
+  if (frozenCount === 0) issues.push({ code: "frozen_eval_missing", severity: "warning", message: "Add an independent test example before training.", path: "tasks" });
+}
+
+function validateWorkExecution(
+  taskset: Taskset,
+  issues: TasksetValidationIssue[],
+): void {
+  if (taskset.environment.kind !== "work") return;
+  if (taskset.environment.entrypoint !== "openpond-work-v1") {
+    issues.push({
+      code: "work_entrypoint_invalid",
+      severity: "error",
+      message: "Work Tasksets must use the openpond-work-v1 entrypoint.",
+      path: "environment.entrypoint",
+    });
+  }
+  if (taskset.environment.stateful) {
+    issues.push({
+      code: "work_stateful_invalid",
+      severity: "error",
+      message: "Automated Work attempts must start from clean state.",
+      path: "environment.stateful",
+    });
+  }
+  const allowedTools = new Set<string>(TASKSET_WORK_TOOL_NAMES);
+  const unknownTools = taskset.environment.toolNames.filter(
+    (name) => !allowedTools.has(name),
+  );
+  if (unknownTools.length) {
+    issues.push({
+      code: "work_tool_unknown",
+      severity: "error",
+      message: `Work Taskset declares unknown tools: ${unknownTools.join(", ")}.`,
+      path: "environment.toolNames",
+    });
+  }
+  if (!taskset.environment.toolNames.includes("work_save_output")) {
+    issues.push({
+      code: "work_output_tool_missing",
+      severity: "error",
+      message: "Work Tasksets must declare work_save_output.",
+      path: "environment.toolNames",
+    });
+  }
+  for (const lifecycle of ["create", "reset", "step", "grade", "cleanup"] as const) {
+    if (!taskset.environment.lifecycle.includes(lifecycle)) {
+      issues.push({
+        code: "work_lifecycle_incomplete",
+        severity: "error",
+        message: `Work Tasksets require the ${lifecycle} lifecycle stage.`,
+        path: "environment.lifecycle",
+      });
+    }
+  }
+
+  const sourceById = new Map(
+    taskset.sourceRefs.map((source) => [source.id, source]),
+  );
+  for (const [taskIndex, task] of taskset.tasks.entries()) {
+    const assetIds = new Set<string>();
+    const fileNames = new Set<string>();
+    for (const [assetIndex, asset] of (task.assets ?? []).entries()) {
+      const path = `tasks.${taskIndex}.assets.${assetIndex}`;
+      if (assetIds.has(asset.id)) {
+        issues.push({
+          code: "work_asset_duplicate_id",
+          severity: "error",
+          message: `Task ${task.id} repeats asset id ${asset.id}.`,
+          path: `${path}.id`,
+        });
+      }
+      if (fileNames.has(asset.fileName)) {
+        issues.push({
+          code: "work_asset_duplicate_name",
+          severity: "error",
+          message: `Task ${task.id} repeats staged file name ${asset.fileName}.`,
+          path: `${path}.fileName`,
+        });
+      }
+      assetIds.add(asset.id);
+      fileNames.add(asset.fileName);
+      if (!task.sourceRefs.includes(asset.sourceRefId)) {
+        issues.push({
+          code: "work_asset_task_source_missing",
+          severity: "error",
+          message: `Asset ${asset.id} references source ${asset.sourceRefId} outside task ${task.id}.`,
+          path: `${path}.sourceRefId`,
+        });
+      }
+      const source = sourceById.get(asset.sourceRefId);
+      if (!source) {
+        issues.push({
+          code: "work_asset_source_missing",
+          severity: "error",
+          message: `Asset ${asset.id} references missing source ${asset.sourceRefId}.`,
+          path: `${path}.sourceRefId`,
+        });
+      } else if (
+        "sourceFileHashes" in source
+        && !source.sourceFileHashes.includes(asset.sha256)
+      ) {
+        issues.push({
+          code: "work_asset_hash_unregistered",
+          severity: "error",
+          message: `Asset ${asset.id} hash is not registered by source ${asset.sourceRefId}.`,
+          path: `${path}.sha256`,
+        });
+      }
+      if (
+        source
+        && "kind" in source
+        && source.kind === "uploaded_file"
+        && !source.originalFileNames.includes(asset.fileName)
+      ) {
+        issues.push({
+          code: "work_asset_name_unregistered",
+          severity: "error",
+          message: `Asset ${asset.id} file name is not registered by source ${asset.sourceRefId}.`,
+          path: `${path}.fileName`,
+        });
+      }
+      if (
+        source
+        && "kind" in source
+        && source.kind === "uploaded_file"
+        && !source.mediaTypes.includes(asset.mediaType)
+      ) {
+        issues.push({
+          code: "work_asset_media_type_unregistered",
+          severity: "error",
+          message: `Asset ${asset.id} media type is not registered by source ${asset.sourceRefId}.`,
+          path: `${path}.mediaType`,
+        });
+      }
+      if (asset.split !== task.split) {
+        issues.push({
+          code: "work_asset_split_mismatch",
+          severity: "error",
+          message: `Asset ${asset.id} is assigned to ${asset.split}, not task split ${task.split}.`,
+          path: `${path}.split`,
+        });
+      }
+    }
+
+    const outputPaths = new Set<string>();
+    for (const [outputIndex, output] of (task.requiredOutputs ?? []).entries()) {
+      const normalized = output.path.replaceAll("\\", "/");
+      const path = `tasks.${taskIndex}.requiredOutputs.${outputIndex}.path`;
+      if (outputPaths.has(normalized)) {
+        issues.push({
+          code: "work_output_duplicate_path",
+          severity: "error",
+          message: `Task ${task.id} repeats required output path ${normalized}.`,
+          path,
+        });
+      }
+      outputPaths.add(normalized);
+    }
+    if ((task.requiredOutputs ?? []).length === 0) {
+      issues.push({
+        code: "work_output_missing",
+        severity: "error",
+        message: `Work task ${task.id} must declare at least one required output.`,
+        path: `tasks.${taskIndex}.requiredOutputs`,
+      });
+    }
+  }
+}
+
+function validatePolicyBoundary(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  const visible = new Set(taskset.policy.policyVisibleFields);
+  for (const field of taskset.policy.privilegedFields) {
+    if (visible.has(field)) issues.push({ code: "privileged_field_visible", severity: "error", message: `Field ${field} is both policy-visible and privileged.`, path: "policy" });
+  }
+  for (const task of taskset.tasks) {
+    if (task.privilegedContextRef && Object.keys(task.policyVisibleContext).includes(task.privilegedContextRef)) {
+      issues.push({ code: "privileged_context_leak", severity: "error", message: `Task ${task.id} exposes its privileged context reference.`, path: `tasks.${task.id}.policyVisibleContext` });
+    }
+  }
+}
+
+function validateGraders(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  const ids = new Set<string>();
+  for (const grader of taskset.graders) {
+    if (ids.has(grader.id)) issues.push({ code: "grader_duplicate", severity: "error", message: `Duplicate grader id ${grader.id}.`, path: "graders" });
+    ids.add(grader.id);
+    if (grader.kind === "model_judge" && grader.rewardEligible && grader.calibrationStatus !== "passed") {
+      issues.push({ code: "judge_calibration_pending", severity: "warning", message: `Model judge ${grader.id} is selected for reward without a passing advisory calibration report.`, path: `graders.${grader.id}` });
+    }
+    if (grader.kind === "model_judge" && grader.calibrationStatus === "passed" && typeof grader.metadata.calibrationEvidenceHash !== "string") {
+      issues.push({ code: "judge_calibration_evidence_missing", severity: "warning", message: `Model judge ${grader.id} declares calibration without an OpenPond fixture evidence hash.`, path: `graders.${grader.id}.metadata.calibrationEvidenceHash` });
+    }
+    if (grader.kind === "human" && grader.rewardEligible) {
+      issues.push({ code: "human_online_reward", severity: "error", message: `Human grader ${grader.id} cannot be an online optimizer reward.`, path: `graders.${grader.id}` });
+    }
+  }
+}
+
+function validateLearningSignals(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  const taskIds = new Set(taskset.tasks.map((task) => task.id));
+  const sourceIds = new Set(taskset.sourceRefs.map((source) => source.id));
+  for (const signal of [
+    ...taskset.learningSignals.demonstrations,
+    ...taskset.learningSignals.preferences,
+    ...taskset.learningSignals.corrections,
+    ...taskset.learningSignals.feedback,
+    ...taskset.learningSignals.rewards,
+    ...taskset.learningSignals.labels,
+  ]) {
+    if (signal.taskId && !taskset.datasetArtifact && !taskIds.has(signal.taskId)) {
+      issues.push({ code: "learning_signal_task_missing", severity: "error", message: `Signal ${signal.id} references missing task ${signal.taskId}.`, path: `learningSignals.${signal.kind}.${signal.id}.taskId` });
+    }
+    if (signal.sourceRefs.some((sourceId) => !sourceIds.has(sourceId))) {
+      issues.push({ code: "learning_signal_source_missing", severity: "error", message: `Signal ${signal.id} references a source outside the Dataset.`, path: `learningSignals.${signal.kind}.${signal.id}.sourceRefs` });
+    }
+  }
+  for (const preference of taskset.learningSignals.preferences) {
+    if (preference.chosen.trim() === preference.rejected.trim()) {
+      issues.push({ code: "preference_pair_identical", severity: "error", message: `Preference ${preference.id} has identical chosen and rejected responses.`, path: `learningSignals.preferences.${preference.id}` });
+    }
+  }
+  for (const reward of taskset.learningSignals.rewards) {
+    if (!reward.executable) {
+      issues.push({ code: "reward_not_executable", severity: "warning", message: `Reward ${reward.id} is a reviewed specification but has no executable verifier yet.`, path: `learningSignals.rewards.${reward.id}.executable` });
+    }
+  }
+}
+
+function validateCapabilities(
+  capabilities: TasksetCapabilityManifest,
+  issues: TasksetValidationIssue[],
+  taskset: Taskset | null,
+): void {
+  if (!capabilities.exportable && capabilities.portabilityBlockers.length === 0) {
+    issues.push({ code: "portability_reason_missing", severity: "error", message: "Non-exportable Tasksets must declare a portability blocker.", path: "capabilities.portabilityBlockers" });
+  }
+  if (capabilities.compatibleMethods.includes("grpo") && !capabilities.rewardKinds.some((kind) => kind === "exact" || kind === "deterministic" || kind === "model_judge")) {
+    issues.push({ code: "grpo_reward_missing", severity: "error", message: "GRPO compatibility requires a scalar reward kind.", path: "capabilities.rewardKinds" });
+  }
+  if (taskset?.capabilities.compatibleMethods.includes("sft") && taskset.learningSignals.demonstrations.length === 0) {
+    issues.push({ code: "sft_demonstrations_missing", severity: "error", message: "SFT compatibility requires approved demonstrations.", path: "learningSignals.demonstrations" });
+  }
+  if (taskset?.capabilities.compatibleMethods.includes("dpo") && taskset.learningSignals.preferences.length === 0) {
+    issues.push({ code: "dpo_preferences_missing", severity: "error", message: "DPO compatibility requires chosen and rejected response pairs.", path: "learningSignals.preferences" });
+  }
+  if (
+    taskset
+    && (taskset.capabilities.compatibleMethods.includes("grpo") || taskset.capabilities.compatibleMethods.includes("ppo"))
+    && !taskset.learningSignals.rewards.some((reward) => reward.executable)
+  ) {
+    issues.push({ code: "online_reward_not_executable", severity: "error", message: "GRPO/PPO compatibility requires an executable scalar reward.", path: "learningSignals.rewards" });
+  }
+}

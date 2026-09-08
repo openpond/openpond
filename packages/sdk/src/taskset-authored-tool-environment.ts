@@ -1,18 +1,19 @@
-import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/contracts";
+import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "./taskset-authored-contracts.js";
 import { createEnvironmentRelease } from "@openpond/evals";
 import { JavaScriptEnvironmentDefinitionSchema } from "@openpond/evals/javascript-environment";
 import { learningRef, sealLearningContent } from "@openpond/evals/learning";
 import { contentHash, type ImmutableAssetRef } from "@openpond/harness";
-import { computeTasksetHash, materializePortableTasksetRelease, portableTasksetEnvironment } from "@openpond/taskset-sdk";
-import { ModelStarterExecutionSchema } from "openpond-sdk/model-starters";
-import { createTasksetPackageExecutionFile, decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
-import { desktopTasksetRuntimeAdapterId } from "./portable-evals-adapter.js";
+import { computeTasksetHash } from "./taskset-authored-validation.js";
+import { materializePortableTasksetRelease, portableTasksetEnvironment } from "./taskset-authored-portable-release.js";
+import { ModelStarterExecutionSchema } from "./model-starter-execution.js";
+import { createTasksetPackageExecutionFile } from "./taskset-package-execution.js";
+import { decodeTasksetPackageFile } from "./taskset-package-files.js";
 
 type Inventory = Array<{ asset: ImmutableAssetRef; sourcePath: string }>;
 
 /** Source bytes change in the draft; publication owns all executable hashes.
  * The private declaration is regenerated with the newly compiled verifiers. */
-export function prepareAuthoredToolEnvironment(taskset: Taskset, bytes: Map<string, Buffer>, inventory: Inventory): { taskset: Taskset; inventory: Inventory; generatedFiles: GeneratedTaskFile[] } {
+export function prepareAuthoredToolEnvironment(taskset: Taskset, bytes: Map<string, Uint8Array>, inventory: Inventory, adapterId: string): { taskset: Taskset; inventory: Inventory; generatedFiles: GeneratedTaskFile[] } {
   if (taskset.environment.entrypoint !== "openpond.javascript-environment.v1") return { taskset, inventory, generatedFiles: [] };
   const declarationPath = "environment/execution.json";
   const declaration = bytes.get(declarationPath);
@@ -38,7 +39,7 @@ export function prepareAuthoredToolEnvironment(taskset: Taskset, bytes: Map<stri
   const prepared = TasksetSchema.parse({ ...taskset, environment: { ...taskset.environment,
     metadata: { ...taskset.environment.metadata, portableExecutionResources: { environment } },
   } });
-  const releases = materializePortableTasksetRelease({ taskset: prepared, adapterId: desktopTasksetRuntimeAdapterId(prepared) });
+  const releases = materializePortableTasksetRelease({ taskset: prepared, adapterId: adapterId });
   const file = createTasksetPackageExecutionFile({ javascript, environment, verifierSet: releases.verifierSetRelease });
   const nextInventory = [...inventory.filter(entry => entry.sourcePath !== declarationPath), { asset: file.asset, sourcePath: declarationPath }];
   const finalized = TasksetSchema.parse({ ...prepared, metadata: { ...prepared.metadata, portableFileInventory: nextInventory } });

@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "toml-eslint-parser": "1.0.3",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "@openpond/harness": "workspace:*"
   }
 }
