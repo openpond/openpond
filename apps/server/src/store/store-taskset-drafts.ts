@@ -28,6 +28,8 @@ import { selectTasksetDraftModel } from "./store-taskset-draft-model.js";
 import { ModelDraftInitializationSchema, materializeDraftInitialization, prepareDraftInitialization } from "./store-model-taskset-draft-initialization.js";
 import type { ModelTasksetDraftRequest, TasksetPackage } from "openpond-sdk/taskset-packages";
 import { materializeModelTasksetDraftPublication } from "../training/model-taskset-draft-publication.js";
+import { TasksetDraftFileMutationSchema, type TasksetDraftFileMutation } from "openpond-sdk/model-taskset-authoring";
+import { listTasksetDraftFiles, readTasksetDraftFile, mutateTasksetDraftFile, withTasksetDraftLock } from "./taskset-draft-files.js";
 
 const TasksetDraftPointerSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftPointer.v1"),
@@ -58,7 +60,7 @@ type TasksetDraftPointer = z.infer<typeof TasksetDraftPointerSchema>;
 export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
   async initializeModelTasksetDraft(profileId: string, request: ModelTasksetDraftRequest, source?: TasksetPackage): Promise<TasksetDraft | null> {
     await this.ready;
-    const operation = this.writeQueue.then(async () => {
+    const operation = this.writeQueue.then(() => withTasksetDraftLock(this.home, async () => {
       const db = this.database;
       const initialized = await prepareDraftInitialization({ db, home: this.home, profileId, request, source });
       if (!initialized) return null;
@@ -98,7 +100,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       } catch (error) { db.exec("ROLLBACK"); throw error; }
       const row = db.get<PayloadRow>("SELECT payload FROM taskset_drafts WHERE id = ?", [initialized.draft.id]);
       return this.draftFromStoredPayload(JSON.parse(row!.payload));
-    });
+    }));
     this.writeQueue = operation.then(() => undefined, () => undefined);
     return operation;
   }
@@ -106,7 +108,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
   async saveTasksetDraft(draftInput: TasksetDraft, expectedRevision?: number, options: { refreshModelRevision?: boolean } = {}): Promise<TasksetDraft> {
     const draft = TasksetDraftSchema.parse(draftInput);
     await this.ready;
-    const write = this.writeQueue.then(async () => {
+    const write = this.writeQueue.then(() => withTasksetDraftLock(this.home, async () => {
       const existing = this.database.get<PayloadRow>("SELECT payload FROM taskset_drafts WHERE id = ?", [draft.id]);
       const current = existing ? TasksetDraftPointerSchema.safeParse(JSON.parse(existing.payload)) : null;
       if (current?.success) {
@@ -139,7 +141,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
     });
     await this.savePointer(pointer, true);
     return persistedDraft;
-    });
+    }));
     this.writeQueue = write.then(() => undefined, () => undefined);
     return write;
   }
@@ -256,7 +258,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
     await this.ready;
     const draft = TasksetDraftSchema.parse(input.draft);
     const taskset = TasksetSchema.parse(input.taskset);
-    const write = this.writeQueue.then(() => {
+    const write = this.writeQueue.then(() => withTasksetDraftLock(this.home, async () => {
       const row = this.database.get<PayloadRow>("SELECT payload FROM taskset_drafts WHERE id = ?", [draft.id]);
       if (!row) throw new Error("Taskset draft was deleted before publication.");
       const pointer = TasksetDraftPointerSchema.parse(JSON.parse(row.payload));
@@ -284,7 +286,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
           [next.status, next.revision, JSON.stringify(next), next.updatedAt, draft.id]);
       });
       return { draft: published, taskset };
-    });
+    }));
     this.writeQueue = write.then(() => undefined, () => undefined);
     return write;
   }
@@ -329,7 +331,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
 
   async deleteTasksetDraft(id: string): Promise<void> {
     await this.ready;
-    const write = this.writeQueue.then(async () => {
+    const write = this.writeQueue.then(() => withTasksetDraftLock(this.home, async () => {
       const workspacePath = this.workspacePath(id);
       const recoverablePath = `${workspacePath}.delete-${randomUUID()}`;
       let movedWorkspace = false;
@@ -351,9 +353,51 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
         throw error;
       }
       if (movedWorkspace) await rm(recoverablePath, { recursive: true, force: true });
-    });
+    }));
     this.writeQueue = write.catch(() => undefined);
     await write;
+  }
+
+  async tasksetDraftFiles(profileId: string, draftId: string, filePath?: string) {
+    await this.ready;
+    return withTasksetDraftLock(this.home, async () => {
+      const row = this.database.get<PayloadRow>("SELECT payload FROM taskset_drafts WHERE id = ? AND profile_id = ?", [draftId, profileId]);
+      if (!row) throw new Error("Taskset draft was not found in this Profile.");
+      const pointer = TasksetDraftPointerSchema.parse(JSON.parse(row.payload));
+      if (filePath !== undefined) {
+        const file = await readTasksetDraftFile(pointer.workspacePath, filePath);
+        return { draftRevision: pointer.revision, file: { ...file, writable: file.writable && pointer.status !== "published" } };
+      }
+      const files = await listTasksetDraftFiles(pointer.workspacePath);
+      return { draftRevision: pointer.revision, files: files.map(file => ({ ...file, writable: file.writable && pointer.status !== "published" })) };
+    });
+  }
+
+  async saveTasksetDraftFile(profileId: string, input: TasksetDraftFileMutation): Promise<TasksetDraft> {
+    const request = TasksetDraftFileMutationSchema.parse(input);
+    await this.ready;
+    const write = this.writeQueue.then(() => withTasksetDraftLock(this.home, async () => {
+      const row = this.database.get<PayloadRow>("SELECT payload FROM taskset_drafts WHERE id = ? AND profile_id = ?", [request.draftId, profileId]);
+      if (!row) throw new Error("Taskset draft was not found in this Profile.");
+      const pointer = TasksetDraftPointerSchema.parse(JSON.parse(row.payload));
+      if (pointer.status === "published") throw new Error("Published Taskset drafts are immutable.");
+      if (pointer.revision !== request.expectedDraftRevision) throw new Error("Taskset draft changed. Reload before saving a file.");
+      return mutateTasksetDraftFile(pointer.workspacePath, request, async () => {
+        const next = TasksetDraftPointerSchema.parse({ ...pointer, revision: pointer.revision + 1,
+          packageHash: await hashTasksetDraftPackage(pointer.workspacePath), updatedAt: new Date().toISOString() });
+        const draft = await this.draftFromStoredPayload(next);
+        this.database.exec("BEGIN IMMEDIATE");
+        try {
+          const current = this.database.get<{ revision: number }>("SELECT revision FROM taskset_drafts WHERE id = ? AND profile_id = ?", [request.draftId, profileId]);
+          if (current?.revision !== pointer.revision) throw new Error("Taskset draft changed during file saving.");
+          this.database.run("UPDATE taskset_drafts SET revision = ?, payload = ?, updated_at = ? WHERE id = ?", [next.revision, JSON.stringify(next), next.updatedAt, next.id]);
+          this.database.exec("COMMIT");
+        } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+        return draft;
+      });
+    }));
+    this.writeQueue = write.then(() => undefined, () => undefined);
+    return write;
   }
 
   private workspacePath(id: string): string {

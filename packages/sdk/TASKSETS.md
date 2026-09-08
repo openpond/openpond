@@ -119,6 +119,16 @@ compare the Model revision when attaching the newly prepared batch.
 
 ## Revising an ordinary package
 
+The browser-safe `openpond-sdk/model-taskset-authoring` entry point also exports
+`TasksetDraftFileInfoSchema`, `TasksetDraftFileSchema`, and
+`TasksetDraftFileMutationSchema`. File mutations carry the draft revision and
+the prior file hash (`null` for a new file). A null content deletes a file;
+otherwise content uses UTF-8 text or canonical base64. Hosts must authorize the
+draft, serialize mutations against form saves/publication/deletion, reject stale
+versions, and protect generated manifests and retained source history. Desktop
+currently supports editing files up to 6 MB; larger dependencies remain listed
+and are preserved in packages.
+
 `openpond-sdk/model-taskset-authoring` exposes the draft request, preparation,
 and ownership schemas for editors. Server helpers `prepareModelTasksetDraft`
 and `publishModelTasksetDraftPackage` are exported from

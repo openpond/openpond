@@ -1,4 +1,4 @@
-import { ModelTasksetDraftRequestSchema } from "openpond-sdk/model-taskset-authoring";
+import { ModelTasksetDraftRequestSchema, TasksetDraftFileMutationSchema } from "openpond-sdk/model-taskset-authoring";
 import type { SqliteStore } from "../store/store.js";
 import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
 
@@ -20,4 +20,15 @@ export async function initializeModelTasksetDraftSource(deps: Dependencies, inpu
   if (retained) return retained;
   const source = await exportLocalModelTasksetPackage({ ...deps, profileId: input.profileId, modelId: request.modelId });
   return deps.store.initializeModelTasksetDraft(input.profileId, request, source);
+}
+
+export async function tasksetDraftFileAction(store: SqliteStore, action: string, input: Record<string, unknown>) {
+  if (typeof input.profileId !== "string" || !input.profileId.trim()) throw new Error("profileId is required.");
+  if (typeof input.draftId !== "string" || !input.draftId.trim()) throw new Error("draftId is required.");
+  if (action === "save_taskset_draft_file") {
+    const { profileId, ...mutation } = input;
+    return store.saveTasksetDraftFile(profileId, TasksetDraftFileMutationSchema.parse(mutation));
+  }
+  if (action === "taskset_draft_file" && typeof input.path !== "string") throw new Error("path is required.");
+  return store.tasksetDraftFiles(input.profileId, input.draftId, action === "taskset_draft_file" ? input.path as string : undefined);
 }

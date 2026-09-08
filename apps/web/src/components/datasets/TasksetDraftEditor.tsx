@@ -1,4 +1,6 @@
 import { TasksetDraftMetricsSection } from "./TasksetDraftMetricsSection";
+import { TasksetDraftFilesEditor } from "./TasksetDraftFilesEditor";
+import type { TasksetDraftFileInfo } from "openpond-sdk/model-taskset-authoring";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ChatModelRef,
@@ -57,6 +59,7 @@ export function TasksetDraftEditor({
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(training.payload?.tasksetDrafts.find((candidate) => candidate.id === draftId) ?? null));
   const [notice, setNotice] = useState<string | null>(null);
   const [validationOpen, setValidationOpen] = useState(false);
+  const [fileEditor, setFileEditor] = useState<TasksetDraftFileInfo[] | null>(null);
   const [workspace, setWorkspace] = useState<{
     draftId: string;
     workspacePath: string;
@@ -176,6 +179,14 @@ export function TasksetDraftEditor({
           ) : null}
         </div>
         <div className="model-build-actions">
+          <button className="training-button secondary" type="button" disabled={busy} onClick={async () => {
+            const saved = await save();
+            if (!saved) return;
+            const list = await training.actions.tasksetDraftFiles(saved.id);
+            if (!list) return;
+            if (list.draftRevision !== saved.revision) { setNotice("The draft changed. Reload before editing files."); return; }
+            setFileEditor(list.files);
+          }}>Files</button>
           {onOpenChat ? (
             <button
               className="training-button secondary"
@@ -284,6 +295,9 @@ export function TasksetDraftEditor({
           <ReviewSection draft={draft} disabled={readOnly} onChange={update} />
         ) : null}
       </div>
+      {fileEditor ? <TasksetDraftFilesEditor draft={draft} initialFiles={fileEditor} training={training} onClose={() => setFileEditor(null)} onSaved={saved => {
+        setDraft(saved); setSavedSnapshot(JSON.stringify(saved)); setNotice("File saved.");
+      }} /> : null}
     </main>
   );
 }

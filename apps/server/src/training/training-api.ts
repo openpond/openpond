@@ -105,7 +105,7 @@ import { handleModelComparisonAction } from "./training-api-model-comparison-act
 import { handleContinualLearningAction } from "./training-api-continual-learning-actions.js";
 import { readTasksetGraderDetails } from "./taskset-grader-details.js";
 import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
-import { initializeModelTasksetDraftSource, inspectModelTasksetDraftSource } from "./model-taskset-draft-api.js";
+import { initializeModelTasksetDraftSource, inspectModelTasksetDraftSource, tasksetDraftFileAction } from "./model-taskset-draft-api.js";
 import { createLocalLearningRuntime } from "./learning-runtime.js";
 import { parseModelProjectSaveRequest, ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
 import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
@@ -833,6 +833,9 @@ export function createTrainingApi(deps: {
       if (!workspace) throw new Error("Taskset draft workspace was not found.");
       return workspace;
     }
+    if (["taskset_draft_files", "taskset_draft_file", "save_taskset_draft_file"].includes(action)) return tasksetDraftFileAction(deps.store, action, {
+      ...input, profileId: input.profileId ?? requestUrl?.searchParams.get("profileId"), ...(action === "taskset_draft_file" ? { path: input.path ?? requestUrl?.searchParams.get("path") } : {}),
+    });
     if (action === "refresh_taskset_draft_model") {
       const draft = await requireTasksetDraft(deps.store, requiredString(input.draftId, "draftId"));
       if (!draft.modelScope) throw new Error("Taskset draft has no Model to refresh.");

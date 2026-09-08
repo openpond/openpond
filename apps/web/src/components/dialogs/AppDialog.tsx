@@ -7,6 +7,7 @@ import {
 } from "react";
 
 const dialogStack: symbol[] = [];
+const inertOwners = new WeakMap<HTMLElement, { count: number; ariaHidden: string | null; inert: boolean }>();
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -154,22 +155,17 @@ function makeBackgroundInert(
   exclusionSelector?: string,
 ): () => void {
   if (!dialog) return () => undefined;
-  const changes: Array<{
-    element: HTMLElement;
-    ariaHidden: string | null;
-    inert: boolean;
-  }> = [];
+  const changes: HTMLElement[] = [];
   let branch: HTMLElement = dialog.parentElement ?? dialog;
   while (branch.parentElement && branch !== document.body) {
     const parent = branch.parentElement;
     for (const sibling of Array.from(parent.children)) {
       if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
       if (exclusionSelector && sibling.matches(exclusionSelector)) continue;
-      changes.push({
-        element: sibling,
-        ariaHidden: sibling.getAttribute("aria-hidden"),
-        inert: sibling.inert,
-      });
+      const owner = inertOwners.get(sibling) ?? { count: 0, ariaHidden: sibling.getAttribute("aria-hidden"), inert: sibling.inert };
+      owner.count += 1;
+      inertOwners.set(sibling, owner);
+      changes.push(sibling);
       sibling.inert = true;
       sibling.setAttribute("aria-hidden", "true");
     }
@@ -177,10 +173,13 @@ function makeBackgroundInert(
     if (boundary && branch === boundary) break;
   }
   return () => {
-    for (const change of changes.reverse()) {
-      change.element.inert = change.inert;
-      if (change.ariaHidden === null) change.element.removeAttribute("aria-hidden");
-      else change.element.setAttribute("aria-hidden", change.ariaHidden);
+    for (const element of changes.reverse()) {
+      const owner = inertOwners.get(element);
+      if (!owner || --owner.count > 0) continue;
+      inertOwners.delete(element);
+      element.inert = owner.inert;
+      if (owner.ariaHidden === null) element.removeAttribute("aria-hidden");
+      else element.setAttribute("aria-hidden", owner.ariaHidden);
     }
   };
 }

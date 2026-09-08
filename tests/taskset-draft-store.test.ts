@@ -13,6 +13,7 @@ import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/tra
 import { createTasksetEvaluationVerifier } from "../apps/server/src/training/evaluation-custom-verifier.js";
 import { createModelProjectSaveRequest, ModelProjectEditableSchema } from "openpond-sdk/model-projects";
 import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
+import type { TasksetDraftFile } from "openpond-sdk/model-taskset-authoring";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export.js";
 import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import.js";
 import { materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files.js";
@@ -224,10 +225,14 @@ describe("Taskset draft persistence", () => {
           const sourceApi = createTrainingApi({ store: reopened, storeDir: directory, evaluation: { readiness: async () => undefined } } as never);
           const currentModel = (await reopened.getModelProject(model.id))!;
           const refreshed = await sourceApi.request("refresh_taskset_draft_model", { draftId: saved.id, expectedDraftRevision: saved.revision, expectedModelRevision: currentModel.revision }) as typeof saved;
-          await writeFile(path.join(initializedWorkspace.workspacePath, grader.module), "export function verify() { return { score: 0, passed: false, feedback: 'edited source' }; }");
+          const code = await sourceApi.request("taskset_draft_file", { profileId: model.profileId, draftId: refreshed.id, path: grader.module }) as { draftRevision: number; file: TasksetDraftFile };
+          await sourceApi.request("save_taskset_draft_file", { profileId: model.profileId, draftId: refreshed.id, expectedDraftRevision: code.draftRevision,
+            path: grader.module, expectedFileHash: code.file.contentHash, content: { encoding: "utf8", data: "export function verify() { return { score: 0, passed: false, feedback: 'edited source' }; }" } });
           const publishedSource = await sourceApi.request("publish_taskset_draft", { draftId: refreshed.id }) as { taskset: typeof firstPublished; draft: typeof saved };
           expect(publishedSource.taskset.id).toBe(initialized.modelScope?.source?.tasksetId);
           expect(publishedSource.taskset.revision).toBe(1);
+          await expect(sourceApi.request("save_taskset_draft_file", { profileId: model.profileId, draftId: refreshed.id, expectedDraftRevision: publishedSource.draft.revision,
+            path: grader.module, expectedFileHash: code.file.contentHash, content: { encoding: "utf8", data: "changed" } })).rejects.toThrow("immutable");
           const sourcePackage = await exportLocalModelTasksetPackage({ store: reopened, storeDir: directory, profileId: model.profileId, modelId: model.id });
           expect(sourcePackage.taskset.id).toBe(publishedSource.taskset.id);
           expect(sourcePackage.taskset.metadata.modelTasksetAuthoring).toEqual(initialized.modelScope?.source?.lineage);
