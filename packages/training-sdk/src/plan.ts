@@ -6,6 +6,7 @@ import {
   type TrainingRecipe,
   type ImmutableReleaseRef,
   type ModelComparisonEntryRef,
+  type VersionedReleaseRef,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 
@@ -21,6 +22,7 @@ export function createTrainingPlan(input: {
   harnessRelease?: ImmutableReleaseRef | null;
   modelImprovementQualification?: ImmutableReleaseRef | null;
   comparisonSeriesEntry?: ModelComparisonEntryRef | null;
+  evaluationTasksetRef?: VersionedReleaseRef | null;
 }): TrainingPlan {
   const createdAt = new Date().toISOString();
   const environmentPlacement = input.destinationId === "openpond_managed"
@@ -35,12 +37,13 @@ export function createTrainingPlan(input: {
     input.harnessRelease ?? null,
     input.modelImprovementQualification ?? null,
     input.comparisonSeriesEntry ?? null,
+    input.evaluationTasksetRef ?? null,
     input.exportApproved ?? false,
     input.retentionDays ?? null,
     input.region ?? null,
   ]).slice(0, 24)}`;
   const compatibility = { schemaVersion: "openpond.trainingCompatibility.v1" as const, compatible: false, destinationId: input.destinationId, tasksetId: input.taskset.id, recipeMethod: input.recipe.method, issues: [{ code: "compatibility_pending", severity: "error" as const, path: null, message: "Destination compatibility has not been checked." }], checkedAt: createdAt };
   const draft = { schemaVersion: "openpond.trainingPlan.v1" as const, id, modelId: input.modelId, tasksetId: input.taskset.id, tasksetHash: input.taskset.contentHash, harnessRelease: input.harnessRelease ?? null, modelImprovementQualification: input.modelImprovementQualification ?? null, comparisonSeriesEntry: input.comparisonSeriesEntry ?? null, destinationId: input.destinationId, recipe: input.recipe, environmentPlacement, compatibility, dataPolicy: { exportApproved: input.exportApproved ?? false, approvedSourceIds: input.taskset.sourceRefs.map((source) => source.id), retentionDays: input.retentionDays ?? null, region: input.region ?? null }, estimatedCostUsd: null, createdAt, contentHash: "00000000" };
-  const parsed = TrainingPlanSchema.parse(draft);
+  const parsed = TrainingPlanSchema.parse({ ...draft, evaluationTasksetRef: input.evaluationTasksetRef ?? null });
   return TrainingPlanSchema.parse({ ...parsed, contentHash: contentHash({ ...parsed, contentHash: "" }) });
 }

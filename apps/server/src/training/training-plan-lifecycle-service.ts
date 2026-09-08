@@ -7,6 +7,7 @@ import {
   type TrainingDestinationId,
   type ImmutableReleaseRef,
   type ModelComparisonEntryRef,
+  type VersionedReleaseRef,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
@@ -22,6 +23,7 @@ import {
 } from "./training-dataset-selection.js";
 import { withAuthoritativeRecipeHashes } from "./training-service-helpers.js";
 import { assertTasksetExecutableForTraining } from "./training-execution-readiness.js";
+import { buildManagedTrainingEvaluationSource } from "./managed-training-evaluation-source.js";
 
 export type TrainingStartInput = {
   modelId: string;
@@ -37,6 +39,7 @@ export type TrainingStartInput = {
   harnessRelease?: ImmutableReleaseRef | null;
   modelImprovementQualification?: ImmutableReleaseRef | null;
   comparisonSeriesEntry?: ModelComparisonEntryRef | null;
+  evaluationTasksetRef?: VersionedReleaseRef | null;
 };
 
 export function createTrainingPlanLifecycleService(deps: {
@@ -59,6 +62,13 @@ export function createTrainingPlanLifecycleService(deps: {
       : await deps.store.getTaskset(input.tasksetId);
     if (!taskset) throw new Error("Taskset not found.");
     assertTasksetExecutableForTraining(taskset);
+    if (input.evaluationTasksetRef && input.destinationId !== "openpond_managed") {
+      throw new Error("Separate held-out Tasksets currently require the OpenPond Managed evaluation adapter.");
+    }
+    const evaluationSource = input.destinationId === "openpond_managed"
+      ? await buildManagedTrainingEvaluationSource({ store: deps.store, storeDir: deps.storeDir, trainingTaskset: taskset,
+          trainingPlan: { evaluationTasksetRef: input.evaluationTasksetRef, comparisonSeriesEntry: input.comparisonSeriesEntry } })
+      : null;
     const recipe = TrainingRecipeSchema.parse(
       withAuthoritativeRecipeHashes(taskset, input.recipe),
     );
@@ -76,6 +86,7 @@ export function createTrainingPlanLifecycleService(deps: {
       harnessRelease: input.harnessRelease,
       modelImprovementQualification: input.modelImprovementQualification,
       comparisonSeriesEntry: input.comparisonSeriesEntry,
+      evaluationTasksetRef: evaluationSource?.taskset ?? input.evaluationTasksetRef,
     });
     const requestedPlacement =
       input.environmentPlacement ?? initial.environmentPlacement;
@@ -184,6 +195,7 @@ export function createTrainingPlanLifecycleService(deps: {
     if (existing) return existing;
     const approval = TrainingApprovalSchema.parse({
       schemaVersion: "openpond.trainingApproval.v1",
+      evaluationTasksetRef: plan.evaluationTasksetRef ?? null,
       id: approvalId,
       planId: plan.id,
       bundleHash: bundle.contentHash,

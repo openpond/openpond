@@ -1235,7 +1235,7 @@ export function createTrainingApi(deps: {
       tasksetId: requiredString(input.tasksetId, "tasksetId"),
       previewHash: requiredString(input.previewHash, "previewHash"),
     });
-    if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region), comparisonSeriesEntry: optionalComparisonEntryRef(input.comparisonSeriesEntry) });
+    if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region), comparisonSeriesEntry: optionalComparisonEntryRef(input.comparisonSeriesEntry), evaluationTasksetRef: input.evaluationTasksetRef == null ? null : ModelProjectVersionedRefSchema.parse(input.evaluationTasksetRef) });
     if (action === "prepare_model_improvement") {
       const qualificationRef = optionalImmutableRef(input.qualificationRef, "qualificationRef");
       const workspaceId = requiredString(input.workspaceId, "workspaceId");
@@ -1347,6 +1347,7 @@ export function createTrainingApi(deps: {
       retentionDays: nullableNumber(input.retentionDays),
       region: string(input.region),
       comparisonSeriesEntry: optionalComparisonEntryRef(input.comparisonSeriesEntry),
+      evaluationTasksetRef: input.evaluationTasksetRef == null ? null : ModelProjectVersionedRefSchema.parse(input.evaluationTasksetRef),
     });
     if (action === "start_prepared") {
       const result = await deps.training.startPrepared({

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export { deterministicTrainingRewardSource } from "./training-grading-plan.js";
+export { TRAINING_EVALUATION_SOURCE_PATH, TrainingEvaluationSourceSchema, assertTrainingEvaluationIsolation, trainingEvaluationSourceRef, type TrainingEvaluationSource } from "./training-evaluation-source.js";
 
 import {
   ModelProjectBaseModelSchema,
@@ -131,6 +132,10 @@ export const TrainingJobSourceSchema = z
     harnessRelease: ModelProjectImmutableRefSchema,
     taskset: ModelProjectVersionedRefSchema,
     tasksetRelease: ModelProjectImmutableRefSchema,
+    evaluation: z.object({
+      taskset: ModelProjectVersionedRefSchema,
+      dataset: ModelProjectImmutableRefSchema,
+    }).strict().nullable().optional(),
     dataset: ModelProjectImmutableRefSchema,
     evidenceSets: z.array(ModelProjectImmutableRefSchema).max(10_000),
   })

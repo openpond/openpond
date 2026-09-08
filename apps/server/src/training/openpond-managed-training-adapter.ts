@@ -53,12 +53,12 @@ import {
   type ManagedTrainingJob as ManagedJob,
   type OpenPondManagedTrainingAdapterDependencies,
 } from "./openpond-managed-training-adapter-support.js";
-import { resolveTasksetEvaluationAssetBytes } from "./taskset-work-assets.js";
 import { continuationResumeFrom } from "./openpond-managed-training-continuation.js";
 import { managedTrainingEvidenceFromPublic } from "./openpond-managed-training-evidence.js";
 import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
 import { resolveManagedTasksetReward } from "./taskset-reward-binding.js";
 import { managedTrainingGradingSource } from "./openpond-managed-training-grading.js";
+import { assertManagedTrainingEvaluationReceipt, resolvePreparedManagedTrainingEvaluationSource } from "./managed-training-evaluation-source.js";
 export { continuationResumeFrom };
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
@@ -345,6 +345,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         approval.destinationId !== "openpond_managed" ||
         contentHash(approval) !== plan.approvalHash ||
         approval.maximumCostUsd !== plan.maximumSpendUsd
+        || contentHash(approval.evaluationTasksetRef ?? null) !== contentHash(trainingPlan.evaluationTasksetRef ?? null)
       ) {
         issues.push({
           code: "managed_approval_changed",
@@ -353,6 +354,13 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         });
       }
       if (taskset && trainingPlan && taskset.contentHash === trainingPlan.tasksetHash) {
+        try {
+          await resolveManagedValidationTaskSource({ store: this.dependencies.store, storeDir: this.dependencies.storeDir,
+            trainingPlan, trainingTaskset: taskset });
+        } catch (error) {
+          issues.push({ code: "managed_evaluation_source_invalid", path: "execution.evaluationTasksetRef",
+            message: error instanceof Error ? error.message : "The held-out Taskset could not be verified." });
+        }
         try {
           const selected = await loadTrainingHarnessSource({ storeDir: this.dependencies.storeDir, manifestHash: plan.manifest.contentHash });
           if (selected.sourcePackage) {
@@ -495,25 +503,10 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     }
     const validationSource = await resolveManagedValidationTaskSource({
       store: this.dependencies.store,
+      storeDir: this.dependencies.storeDir,
       trainingPlan,
       trainingTaskset: taskset,
     });
-    const validationTasks = validationSource.tasks;
-    const validationAssetBytes = validationSource.taskset.environment.kind === "work"
-      ? await resolveTasksetEvaluationAssetBytes({
-          storeDir: this.dependencies.storeDir,
-          taskset: validationSource.taskset,
-        })
-      : new Map<string, Uint8Array>();
-    const validationAssets = [...validationAssetBytes.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([assetPath, value]) => ({
-        path: assetPath,
-        sha256: sha256(value),
-        sizeBytes: value.byteLength,
-        encoding: "base64" as const,
-        content: Buffer.from(value).toString("base64"),
-      }));
     const bundleDirectory = path.join(
       this.dependencies.storeDir,
       "training",
@@ -545,6 +538,8 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         };
       }),
     );
+    const { source: evaluationSource, reference: evaluation } = await resolvePreparedManagedTrainingEvaluationSource(
+      files, trainingPlan.evaluationTasksetRef, validationSource.tasks);
     let project = await this.dependencies.store.getModelProject(
       trainingPlan.modelId,
     );
@@ -597,8 +592,8 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         manifest: bundleManifest,
         files,
       },
-      validationTasks,
-      validationAssets,
+      validationTasks: evaluationSource.tasks,
+      validationAssets: evaluationSource.assets,
     };
     const client = this.trainingClient(access);
     const stagedContent = {
@@ -647,6 +642,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           contentHash: taskset.contentHash,
         },
         dataset: bundleManifest.datasetRelease,
+        evaluation,
         evidenceSets: bundleManifest.evidenceSetRelease
           ? [bundleManifest.evidenceSetRelease]
           : [],
@@ -884,13 +880,15 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     if (!receiptOutput) {
       throw new Error("Sandbox completed managed training without a receipt artifact.");
     }
-    await parseAndVerifyTrainingExecutionReceipt(output.receipt, {
+    const receipt = await parseAndVerifyTrainingExecutionReceipt(output.receipt, {
       id: output.receipt.id,
       contentHash: receiptOutput.contentHash,
       teamId: access.teamId,
       jobId: ref.runId,
       requireCleanup: true,
     });
+    await assertManagedTrainingEvaluationReceipt({ storeDir: this.dependencies.storeDir, receipt,
+      expectedManifestHash: ref.manifestHash, expectedSubmissionHash: ref.inputBundleHash });
     const artifacts = output.outputs
       .filter((candidate) => candidate.kind !== "scorer")
       .map((candidate) => ({

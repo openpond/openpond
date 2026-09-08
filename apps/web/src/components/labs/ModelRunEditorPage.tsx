@@ -159,8 +159,8 @@ export function ModelRunEditorPage({
         taskset.contentHash === setup.tasksetRef.contentHash
     ) ?? null;
   const methodCards = useMemo(
-    () => methodAvailability(selectedTaskset, state?.destinations ?? []),
-    [selectedTaskset, state?.destinations]
+    () => methodAvailability(selectedTaskset, state?.destinations ?? [], Boolean(setup.evaluationTasksetRef)),
+    [selectedTaskset, state?.destinations, setup.evaluationTasksetRef]
   );
   const dirty = comparableEditor(project, setup) !== savedSnapshot || JSON.stringify(runApproval) !== savedApproval;
   const busy = Boolean(training.busyAction);
@@ -400,6 +400,7 @@ export function ModelRunEditorPage({
           selectedTaskset={selectedTaskset}
           methodCards={methodCards}
           tasksets={availableTasksets}
+          evaluationTasksets={labModelTasksets(state)}
           baseModelCandidates={state?.baseModelCandidates ?? []}
           destinations={state?.destinations ?? []}
           connection={connection}

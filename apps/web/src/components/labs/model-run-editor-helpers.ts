@@ -166,9 +166,7 @@ export function buildPageReason(
   }
   if (!taskset) return "Choose a Taskset to enable Run.";
   if (!setup.method) return "Choose a training method.";
-  const readiness = taskset.readiness?.methodReadiness.find(
-    (item) => item.method === setup.method,
-  );
+  const readiness = methodReadinessWithEvaluation(taskset, setup.method, Boolean(setup.evaluationTasksetRef));
   if (readiness?.status === "needs_dataset_work") {
     return readiness.reasons[0] ?? "Resolve Taskset readiness for this method.";
   }
@@ -179,6 +177,10 @@ export function buildPageReason(
   }
   if (!setup.baseModel) return "Choose a base model.";
   if (!setup.destinationId) return "Choose a compatible destination.";
+  if (setup.destinationId === "openpond_managed" && !setup.evaluationTasksetRef
+    && !taskset.tasks.some(task => task.split === "validation" || task.split === "frozen_eval")) {
+    return "Select a held-out evaluation Taskset in the Taskset step.";
+  }
   return launchState.ready
     ? null
     : launchState.reason ?? "Complete the launch checks.";
@@ -235,11 +237,10 @@ export function methodAvailability(
   destinations: NonNullable<
     TrainingWorkspaceProps["training"]["payload"]
   >["destinations"],
+  evaluationSelected = false,
 ) {
   return METHODS.map((method) => {
-    const readiness = taskset?.readiness?.methodReadiness.find(
-      (item) => item.method === method,
-    );
+    const readiness = taskset ? methodReadinessWithEvaluation(taskset, method, evaluationSelected) : undefined;
     const datasetCompatible = Boolean(
       taskset &&
         (taskset.capabilities.compatibleMethods.includes(method) ||
@@ -277,6 +278,16 @@ export function methodAvailability(
         executable,
     };
   });
+}
+
+function methodReadinessWithEvaluation(taskset: Taskset, method: string, evaluationSelected: boolean) {
+  const readiness = taskset.readiness?.methodReadiness.find(item => item.method === method);
+  if (!readiness || !evaluationSelected || !taskset.readiness?.ready
+    || !readiness.reasonCodes.includes("frozen_eval_missing")) return readiness;
+  const retained = readiness.reasonCodes.map((code, index) => ({ code, reason: readiness.reasons[index] }))
+    .filter(item => item.code !== "frozen_eval_missing");
+  return { ...readiness, reasonCodes: retained.map(item => item.code), reasons: retained.map(item => item.reason).filter((reason): reason is string => Boolean(reason)),
+    status: retained.some(item => item.code !== "value_model_required") ? readiness.status : "compatible" as const };
 }
 
 function methodExecutionTargets(

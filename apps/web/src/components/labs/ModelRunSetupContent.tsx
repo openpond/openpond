@@ -13,6 +13,7 @@ import type {
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
+import { ModelRunEvaluationSource } from "./ModelRunEvaluationSource";
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import {
   TrainingStartDialog,
@@ -56,6 +57,7 @@ export function ModelRunSetupContent({
   selectedTaskset,
   methodCards,
   tasksets,
+  evaluationTasksets,
   baseModelCandidates,
   destinations,
   connection,
@@ -76,6 +78,7 @@ export function ModelRunSetupContent({
   selectedTaskset: Taskset | null;
   methodCards: ReturnType<typeof methodAvailability>;
   tasksets: Taskset[];
+  evaluationTasksets: Taskset[];
   baseModelCandidates: BaseModelCandidate[];
   destinations: TrainingDestinationCapabilities[];
   connection: ClientConnection | null;
@@ -154,6 +157,10 @@ export function ModelRunSetupContent({
                   : "Build a Taskset"}
               </button>
             </div>
+            <ModelRunEvaluationSource tasksets={evaluationTasksets} trainingTaskset={selectedTaskset}
+              value={setup.evaluationTasksetRef} onChange={evaluationTasksetRef => setSetup(current => ({
+                ...current, evaluationTasksetRef, updatedAt: new Date().toISOString(),
+              }))} />
           </div>
         </section>
       ) : activeStep === "method" ? (

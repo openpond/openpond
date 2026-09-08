@@ -40,6 +40,7 @@ import {
 import { compileBoundGraders } from "@openpond/evals/rewards";
 import { verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
 import { HarnessSourceSelectionSchema, validateHarnessSourcePackage, type HarnessSourcePackage } from "@openpond/harness";
+import { TRAINING_EVALUATION_SOURCE_PATH, TrainingEvaluationSourceSchema, assertTrainingEvaluationIsolation, type TrainingEvaluationSource } from "openpond-sdk/training";
 
 export type TasksetTrainingBundle = {
   manifest: HarnessRunManifest;
@@ -78,6 +79,7 @@ export function buildTasksetTrainingBundle(input: {
   tasksetAssetBytes?: ReadonlyMap<string, Uint8Array>;
   rewardExecution?: TasksetRewardExecution;
   verifierAssets?: LearningTextAsset[];
+  evaluationSource?: TrainingEvaluationSource;
 }): TasksetTrainingBundle {
   const { taskset, modelProject, harnessRelease, tasksetRelease } = input;
   const setup = modelProject.trainingSetup;
@@ -118,6 +120,16 @@ export function buildTasksetTrainingBundle(input: {
     }),
   };
   const assets = new Map<string, Uint8Array>();
+  if (input.evaluationSource) {
+    const evaluation = TrainingEvaluationSourceSchema.parse(input.evaluationSource);
+    if (contentHash(evaluation.taskset) !== contentHash(setup.evaluationTasksetRef)) {
+      throw new Error("The evaluation source differs from the prepared Model configuration.");
+    }
+    assertTrainingEvaluationIsolation(taskset.tasks.filter(task => task.split === "train"), evaluation.tasks);
+    assets.set(TRAINING_EVALUATION_SOURCE_PATH, new TextEncoder().encode(canonicalJson(evaluation)));
+  } else if (setup.evaluationTasksetRef) {
+    throw new Error("The prepared Model requires its pinned evaluation source bytes.");
+  }
   const harnessSource = input.harnessSource
     ? validateHarnessSourcePackage(input.harnessSource, releasedHarness)
     : null;

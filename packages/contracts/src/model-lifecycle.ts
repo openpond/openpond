@@ -61,6 +61,7 @@ export const ModelVersionSchema = z
     baseModel: BaseModelPreferenceSchema,
     taskset: VersionedReleaseRefSchema,
     comparisonSeriesEntry: ModelComparisonEntryRefSchema.nullable().optional(),
+    evaluationTasksetRef: VersionedReleaseRefSchema.nullable().optional(),
     releaseGraph: z
       .object({
         resolvedBundleHash: ReleaseHashSchema,
@@ -662,6 +663,7 @@ export const ModelRunSchema = z
     destinationId: ReleaseIdSchema.nullable(),
     taskset: VersionedReleaseRefSchema,
     comparisonSeriesEntry: ModelComparisonEntryRefSchema.nullable().optional(),
+    evaluationTasksetRef: VersionedReleaseRefSchema.nullable().optional(),
     harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
     quote: z
       .object({

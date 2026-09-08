@@ -155,6 +155,7 @@ export async function preparePortableModelRunLifecycle(input: {
       destinationId,
       taskset: setup.tasksetRef,
       comparisonSeriesEntry: input.comparisonSeriesEntry ?? null,
+      evaluationTasksetRef: setup.evaluationTasksetRef ?? null,
       harnessRelease: input.releaseGraph.harnessRelease,
       quote: {
         maximumSpendUsd: input.maximumSpendUsd ?? 0,
@@ -171,6 +172,7 @@ export async function preparePortableModelRunLifecycle(input: {
   );
   const sourceSnapshot = TrainingJobSourceSnapshotSchema.parse({
     schemaVersion: "openpond.trainingJobSourceSnapshot.v1",
+    evaluationTasksetRef: setup.evaluationTasksetRef ?? null,
     modelProjectId: input.modelProject.id,
     sourceProjectRevision: input.sourceProjectRevision,
     profileId: input.modelProject.profileId,
@@ -455,6 +457,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
     baseModel: source.baseModel,
     taskset: source.taskset,
     comparisonSeriesEntry: current.comparisonSeriesEntry ?? null,
+    evaluationTasksetRef: current.evaluationTasksetRef ?? null,
     releaseGraph,
     artifactLineageId: lineage.id,
     adapterStatus: "trained" as const,
