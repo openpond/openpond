@@ -18,7 +18,6 @@ import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import type { TrainingEngineAdapter } from "@openpond/training-sdk";
 import {
   createTrainingClient,
-  deterministicTrainingRewardSource,
   parseAndVerifyTrainingExecutionReceipt,
   trainingExecutionReceiptHash,
   trainingInputArtifactUploadHash,
@@ -59,6 +58,7 @@ import { continuationResumeFrom } from "./openpond-managed-training-continuation
 import { managedTrainingEvidenceFromPublic } from "./openpond-managed-training-evidence.js";
 import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
 import { resolveManagedTasksetReward } from "./taskset-reward-binding.js";
+import { managedTrainingGradingSource } from "./openpond-managed-training-grading.js";
 export { continuationResumeFrom };
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
@@ -616,20 +616,10 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       contentHash: await trainingInputArtifactUploadHash(stagedContent),
     };
     await client.stageArtifact(staged);
-    const gradersFile = files.find(file => file.path === "graders.json");
-    if (!gradersFile) throw new Error("Managed training requires its immutable grader set.");
-    const gradersPackage = recordOrEmpty(JSON.parse(Buffer.from(gradersFile.content, "base64").toString("utf8")));
-    const bindingFile = files.find(file => file.path === "reward-binding.json");
-    const boundReward = bindingFile
-      ? recordOrEmpty(JSON.parse(Buffer.from(bindingFile.content, "base64").toString("utf8")))
-      : null;
     const learnedPreference = plan.recipe.reward.learnedPreference ?? null;
     const rewardSource = learnedPreference
       ? learnedRewardSource(learnedPreference)
-      : await deterministicTrainingRewardSource({
-          graders: gradersPackage.graders,
-          rewardExecution: boundReward ? { binding: boundReward.binding, rewards: boundReward.rewards } : null,
-        });
+      : await managedTrainingGradingSource(files);
     const resumeFrom = continuationResumeFrom(plan.recipe);
     const jobContent: Omit<TrainingJobSubmission, "contentHash"> = {
       schemaVersion: "openpond.trainingJobSubmission.v2",
