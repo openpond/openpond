@@ -298,7 +298,7 @@ function OverviewSection({ draft, disabled, onChange }: SectionProps) {
   return (
     <EditorSection
       title="What should this Taskset measure?"
-      description="Start empty, then add only the task, environment, and scoring details this workload needs."
+      description={draft.modelScope?.source ? "Revise the source tasks, environment, and grading details for this Model." : "Start empty, then add only the task, environment, and scoring details this workload needs."}
     >
       <Field label="Objective">
         <textarea

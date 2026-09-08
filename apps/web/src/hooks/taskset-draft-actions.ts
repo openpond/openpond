@@ -1,10 +1,15 @@
 import type { Taskset, TasksetDraft } from "@openpond/contracts";
+import type { ModelTasksetDraftRequest } from "openpond-sdk/model-taskset-authoring";
 import { api, type ClientConnection } from "../api";
 
 type DraftMutation = <T>(key: string, path: string, body: unknown, method?: "POST" | "PUT" | "PATCH" | "DELETE") => Promise<T | null>;
 
 export function tasksetDraftActions(connection: ClientConnection | null, profileId: string, mutate: DraftMutation, onError: (error: unknown) => void) {
   return {
+    inspectTasksetDraftSource: (modelId: string, expectedModelRevision: number) =>
+      mutate<{ modelId: string; expectedModelRevision: number; sourcePackageHash: string }>("inspect-taskset-draft-source", "/taskset-drafts/source", { profileId, modelId, expectedModelRevision }),
+    createTasksetDraftFromSource: (sourceRequest: ModelTasksetDraftRequest) =>
+      mutate<TasksetDraft>("create-taskset-draft", "/taskset-drafts", { profileId, sourceRequest }),
     createTasksetDraft: (name = "", modelId?: string | null) =>
       mutate<TasksetDraft>("create-taskset-draft", "/taskset-drafts", { profileId, name, modelId: modelId ?? null }),
     importTasksetDraftPackage: (packagePath: string) =>

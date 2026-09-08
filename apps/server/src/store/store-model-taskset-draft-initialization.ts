@@ -59,9 +59,11 @@ export async function prepareDraftInitialization(input: { db: OpenPondSqliteConn
   const inventory = AuthoredTasksetFileInventorySchema.parse(source.metadata.portableFileInventory ?? []);
   // Prior authoring manifests are retained as private source artifacts. The
   // editor owns these paths and regenerates their current structured contents.
-  const sourcePath = (relative: string) => AUTHORING_FILES.has(relative) ? `source-artifacts/${contentHash(relative)}/${path.posix.basename(relative)}` : relative;
+  const sourcePath = (relative: string) => AUTHORING_FILES.has(relative) ? `source-artifacts/${sourcePackage.contentHash}/${contentHash(relative)}/${path.posix.basename(relative)}` : relative;
   const references = [...source.tasks.flatMap(task => (task.assets ?? []).map(asset => asset.artifactRef)),
     ...(source.environment.resources ?? []).map(resource => resource.path),
+    ...sourcePackage.taskset.tasks.flatMap(task => (task.requiredOutputs ?? []).flatMap(output => output.schemaRef ? [output.schemaRef.path] : [])),
+    ...(source.metrics?.customAggregator ? [source.metrics.customAggregator.module] : []),
     ...source.graders.flatMap(grader => grader.kind === "custom_verifier" ? [grader.module] : [])];
   if (references.some(relative => AUTHORING_FILES.has(relative))) throw new Error("A referenced source asset occupies a reserved Taskset authoring path.");
   const filePaths = sourcePackage.files.map(file => {
@@ -78,10 +80,13 @@ export async function prepareDraftInitialization(input: { db: OpenPondSqliteConn
   // the Model CAS; resuming never reads a newer mutable source directory.
   await cacheTasksetPackage(input.home, sourcePackage);
   const draft = TasksetDraftSchema.parse({ ...tasksetDraftFromTaskset(source), id: preparation.draftId,
+    environment: { ...source.environment, metadata: { ...source.environment.metadata, portableExecutionResources: { environment: sourcePackage.environment } } },
     modelScope: { modelId: model.id, expectedModelRevision: request.expectedModelRevision, source: preparation },
     publishedTasksetRef: preparation.tasksetRevision > 1 ? preparation.sourceTasksetRef : null,
     metadata: { ...source.metadata, modelTasksetAuthoring: preparation.lineage,
-      portableFileInventory: inventory.map(entry => ({ ...entry, sourcePath: sourcePath(entry.sourcePath), asset: { ...entry.asset, path: sourcePath(entry.asset.path) } })) },
+      portableFileInventory: inventory.map(entry => ({ ...entry, sourcePath: sourcePath(entry.sourcePath), asset: { ...entry.asset,
+        id: AUTHORING_FILES.has(entry.sourcePath) ? `source-artifact-${contentHash({ packageHash: sourcePackage.contentHash, assetId: entry.asset.id })}` : entry.asset.id,
+        path: sourcePath(entry.asset.path) } })) },
   });
   const initialized = ModelDraftInitializationSchema.parse({ draft, filePaths, workspaceHash: null });
   db.exec("BEGIN IMMEDIATE");

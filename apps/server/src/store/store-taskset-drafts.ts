@@ -27,6 +27,7 @@ import { saveTasksetRevision } from "./store-taskset-revisions.js";
 import { selectTasksetDraftModel } from "./store-taskset-draft-model.js";
 import { ModelDraftInitializationSchema, materializeDraftInitialization, prepareDraftInitialization } from "./store-model-taskset-draft-initialization.js";
 import type { ModelTasksetDraftRequest, TasksetPackage } from "openpond-sdk/taskset-packages";
+import { materializeModelTasksetDraftPublication } from "../training/model-taskset-draft-publication.js";
 
 const TasksetDraftPointerSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftPointer.v1"),
@@ -242,6 +243,8 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       source: { directory: workspace.workspacePath, packageHash: workspace.packageHash },
       verify: root => verifyPublishedTasksetAssets(root, taskset),
     });
+    const draft = await this.getTasksetDraft(input.draftId);
+    if (draft?.modelScope?.source) return materializeModelTasksetDraftPublication({ home: this.home, directory, taskset, preparation: draft.modelScope.source });
     return { directory, taskset };
   }
 
@@ -266,6 +269,9 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
         return { draft: TasksetDraftSchema.parse({ ...draft, status: pointer.status, revision: pointer.revision, publishedTasksetRef: ref, updatedAt: pointer.updatedAt }), taskset: TasksetSchema.parse(JSON.parse(saved.payload)) };
       }
       if (pointer.revision !== draft.revision || taskset.metadata.sourcePackageHash !== input.packageHash) throw new Error("Taskset draft changed before publication. Refresh before publishing.");
+      const preparedSource = pointer.modelScope?.source;
+      if (preparedSource && (taskset.id !== preparedSource.tasksetId || taskset.revision !== preparedSource.tasksetRevision
+        || contentHash(taskset.metadata.modelTasksetAuthoring) !== contentHash(preparedSource.lineage))) throw new Error("Taskset publication differs from its retained source preparation.");
       const published = TasksetDraftSchema.parse({ ...draft, status: "published", revision: draft.revision + 1,
         publishedTasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash }, updatedAt: new Date().toISOString() });
       const next = TasksetDraftPointerSchema.parse({ ...pointer, status: published.status, revision: published.revision,
