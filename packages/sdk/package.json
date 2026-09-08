@@ -70,6 +70,10 @@
       "types": "./dist/types/packages/sdk/src/model-batch-review-contracts.d.ts",
       "import": "./dist/model-batch-review.js"
     },
+    "./model-taskset-authoring": {
+      "types": "./dist/types/packages/sdk/src/model-taskset-authoring-contracts.d.ts",
+      "import": "./dist/model-taskset-authoring.js"
+    },
     "./training": {
       "types": "./dist/types/packages/sdk/src/training.d.ts",
       "import": "./dist/training.js"

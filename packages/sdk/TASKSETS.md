@@ -116,3 +116,31 @@ task changes clear the observed response because that response was produced for
 the original task. New evidence needs fresh grading and review before sealing;
 the helper does not attach a batch or start training. A host must separately
 compare the Model revision when attaching the newly prepared batch.
+
+## Revising an ordinary package
+
+`openpond-sdk/model-taskset-authoring` exposes the draft request, preparation,
+and ownership schemas for editors. Server helpers `prepareModelTasksetDraft`
+and `publishModelTasksetDraftPackage` are exported from
+`openpond-sdk/taskset-packages`.
+
+Preparation pins a complete source package hash, an operation ID and the expected
+Model revision. The host authorizes the selected Model/package and resolves its
+canonical owner before calling the helper. Persist the returned preparation and
+request hash before copying files into the draft workspace; a reused operation
+with different input must conflict. A matching portable Model ID alone does not
+establish a cross-workspace ownership link.
+
+The first revision forks a shared source into an owned identity. Subsequent
+revisions retain that identity and record the exact parent. Publication accepts
+a validated edited package, preserves its binary/private files and execution
+environment, and seals its owned Taskset and verifier set. Qualification,
+privacy attestations and verifier calibration for different bytes are cleared;
+authored fixtures remain available to run again. Package validation checks the
+declared identity and parent lineage.
+
+These pure helpers require the host to persist draft files and commit publication,
+Model selection and retry receipts atomically. Bound Reward packages and reviewed
+batches use their respective authoring graphs and are rejected by this ordinary
+package compiler. Draft persistence, HTTP operations and editor controls are host
+integration work.

@@ -6,6 +6,7 @@ import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import { ModelTasksetPackageSchema, validateModelTasksetPackage } from "./model-taskset-derivation.js";
 import { taskBatchPackageMetadata } from "@openpond/evals/learning";
 import { TasksetPackageLearningResourcesSchema, learningPackageContextFiles, validateTasksetLearningResources } from "./taskset-package-learning.js";
+import { assertModelTasksetAuthoring } from "./model-taskset-authoring-lineage.js";
 
 /** The limit covers the entire decoded JSON envelope, including base64. */
 export const MAX_TASKSET_PACKAGE_BYTES = 64 * 1024 * 1024;
@@ -49,6 +50,8 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
   if (contentHash(content) !== hash) throw new Error("Taskset package content hash differs from its bytes.");
   const { taskset, environment, verifierSet } = result;
   assertTasksetRelease(taskset);
+  const authoring = assertModelTasksetAuthoring(taskset);
+  if (authoring && (result.modelResources || result.learningResources)) throw new Error("Taskset package cannot declare competing authoring graphs.");
   if (!verifyEnvironmentRelease(environment) || !verifyVerifierSetRelease(verifierSet)
     || !same(taskset.environmentRelease, { id: environment.id, contentHash: environment.contentHash })
     || !same(taskset.verifierSetRelease, { id: verifierSet.id, contentHash: verifierSet.contentHash })

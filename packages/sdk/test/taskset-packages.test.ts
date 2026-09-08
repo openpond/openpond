@@ -4,6 +4,8 @@ import { bindTasksetExecutionReleases, createEnvironmentRelease, createVerifierS
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { createTasksetPackage, decodeTasksetPackageFile, validateTasksetPackage, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "../src/taskset-packages.js";
 import { HostedModelProjectTrainingSetupSchema } from "../src/model-projects.js";
+import { prepareModelTasksetDraft, publishModelTasksetDraftPackage, ModelTasksetAuthoringSchema } from "../src/taskset-packages.js";
+import { learningRef } from "@openpond/evals/learning";
 
 function fixture() {
   const file = (id: string, bytes: Uint8Array, visibility: "policy" | "host_private" | "verifier") => ({
@@ -31,6 +33,58 @@ function fixture() {
   const taskset = bindTasksetExecutionReleases({ taskset: TasksetReleaseSchema.parse({ ...content, contentHash: contentHash(content) }), environment, verifierSet });
   return createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files });
 }
+
+// Editing an ordinary shared package must fork only the intended Model while
+// retaining exact binary/private dependencies and immutable source history.
+it("prepares repeatable owned drafts and seals isolated ordinary revisions", () => {
+  const source = fixture();
+  const original = JSON.stringify(source);
+  const owner = { scopeId: "profile-a", modelId: "model-a" };
+  const request = { schemaVersion: "openpond.modelTasksetDraftRequest.v1" as const, operationId: "edit-one", modelId: owner.modelId,
+    expectedModelRevision: 1, sourcePackageHash: source.contentHash };
+  const prepared = prepareModelTasksetDraft({ owner, source, request });
+  expect(prepareModelTasksetDraft({ owner, source, request })).toEqual(prepared);
+  expect(() => prepareModelTasksetDraft({ owner, source, request: { ...request, sourcePackageHash: "a".repeat(64) } })).toThrow("source package changed");
+  const code = new TextEncoder().encode("export function verify() { return { score: 0, passed: false }; }");
+  const changedFile = { ...source.files[2]!, asset: { ...source.files[2]!.asset, contentHash: sha256(code), sizeBytes: code.byteLength }, base64: Buffer.from(code).toString("base64") };
+  const { contentHash: _oldVerifierHash, ...oldVerifier } = source.verifierSet;
+  const changedVerifier = createVerifierSetRelease({ ...oldVerifier, revision: 2,
+    graders: oldVerifier.graders.map(grader => grader.kind === "custom_verifier" ? { ...grader, verifierRef: changedFile.asset } : grader),
+    calibrationReceiptRefs: [{ id: "old-calibration", contentHash: "c".repeat(64) }],
+  });
+  const { contentHash: _hash, ...sourceContent } = source.taskset;
+  const changedContent = { ...sourceContent, graders: changedVerifier.graders, verifierSetRelease: { id: changedVerifier.id, contentHash: changedVerifier.contentHash },
+    tasks: source.taskset.tasks.map(task => ({ ...task, input: { prompt: "Read the revised input" } })),
+    metadata: { qualification: { passed: true }, privacyReview: { approved: true }, ordinaryAuthoring: { graderFixtures: [] } } };
+  const { contentHash: _packageHash, ...packageContent } = source;
+  const edited = createTasksetPackage({ ...packageContent, verifierSet: changedVerifier, files: source.files.map((file, index) => index === 2 ? changedFile : file),
+    taskset: TasksetReleaseSchema.parse({ ...changedContent, contentHash: contentHash(changedContent) }) });
+  const published = publishModelTasksetDraftPackage({ preparation: prepared, edited });
+  expect(published.taskset.id).not.toBe(source.taskset.id);
+  expect(published.taskset.revision).toBe(1);
+  expect(published.taskset.tasks[0]!.input).toEqual({ prompt: "Read the revised input" });
+  expect(published.files).toEqual(edited.files);
+  expect(decodeTasksetPackageFile(published.files[2]!)).toEqual(code);
+  expect(published.files.filter((_, index) => index !== 2)).toEqual(source.files.filter((_, index) => index !== 2));
+  expect(published.environment).toEqual(source.environment);
+  expect(published.taskset.metadata).not.toHaveProperty("qualification");
+  expect(published.taskset.metadata).not.toHaveProperty("privacyReview");
+  expect(published.verifierSet.calibrationReceiptRefs).toEqual([]);
+  expect(ModelTasksetAuthoringSchema.parse(published.taskset.metadata.modelTasksetAuthoring)).toMatchObject({ owner, root: learningRef(source.taskset), parent: learningRef(source.taskset) });
+  const second = prepareModelTasksetDraft({ owner, source: published, request: { ...request, operationId: "edit-two", expectedModelRevision: 2, sourcePackageHash: published.contentHash } });
+  const next = publishModelTasksetDraftPackage({ preparation: second, edited: published });
+  expect(next.taskset.id).toBe(published.taskset.id);
+  expect(next.taskset.revision).toBe(2);
+  expect(next.files).toEqual(edited.files);
+  const foreign = prepareModelTasksetDraft({ owner: { ...owner, scopeId: "another-profile" }, source: published,
+    request: { ...request, sourcePackageHash: published.contentHash } });
+  expect(foreign.tasksetId).not.toBe(published.taskset.id);
+  expect(foreign.tasksetRevision).toBe(1);
+  expect(() => publishModelTasksetDraftPackage({ preparation: { ...second, sourceTasksetRef: learningRef(source.taskset) }, edited: published })).toThrow("source lineage");
+  expect(() => publishModelTasksetDraftPackage({ preparation: { ...second, tasksetId: source.taskset.id }, edited: published })).toThrow("ownership lineage");
+  expect(JSON.stringify(source)).toBe(original);
+  expect(validateTasksetPackage(published)).toEqual(published);
+});
 
 // A metadata-only transfer must not appear complete while Work inputs or
 // evaluator dependencies are missing, substituted, or disclosed to the policy.
