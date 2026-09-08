@@ -22,6 +22,7 @@ export function importedPackageGraders(value: TasksetPackage) {
       return GraderSpecSchema.parse({ ...base, rubric, metadata, judge: grader.model, temperature: grader.temperature ?? 0,
         calibrationStatus: "pending", calibrationFixtureRefs: calibrationFixtures[grader.id] ?? [] });
     }
-    return GraderSpecSchema.parse({ ...base, kind: grader.kind === "artifact" ? "file" : grader.kind });
+    return GraderSpecSchema.parse({ ...base, kind: grader.kind === "artifact" ? "file" : grader.kind,
+      config: grader.kind === "artifact" ? { ...grader.config, ...(grader.config.refIncludes === undefined ? {} : { pathIncludes: grader.config.refIncludes }) } : grader.config });
   });
 }

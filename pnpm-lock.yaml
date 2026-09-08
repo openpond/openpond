@@ -552,7 +552,7 @@ importers:
   packages/sdk:
     dependencies:
       '@openpond/evals':
-        specifier: ^0.9.0
+        specifier: ^0.9.1
         version: link:../evals
       '@openpond/harness':
         specifier: ^0.2.5

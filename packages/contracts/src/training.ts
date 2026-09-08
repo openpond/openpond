@@ -827,7 +827,7 @@ export const TrainingEvaluationGradeSchema = z.object({
     .array(
       z.object({
         graderId: IdSchema,
-        score: z.number().min(0).max(1),
+        score: z.number().min(0).max(1).nullable(),
         passed: z.boolean(),
         feedback: z.string().trim().max(20_000).nullable(),
       })

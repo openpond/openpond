@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import { FailureClassSchema, ReleaseHashSchema, ReleaseIdSchema, contentHash } from "@openpond/harness";
 import type { DeterministicGraderSpec, GraderSpec, TaskRecord } from "./tasksets.js";
-import { validateTaskSchema, validateTaskValue } from "./task-schema.js";
+import { evaluateDeterministicGrader } from "./deterministic-graders.js";
+export { evaluateDeterministicGrader, portableDeterministicCheck } from "./deterministic-graders.js";
 
 export const GraderEvidenceContentSchema = z.object({
   schemaVersion: z.literal("openpond.graderEvidence.v1"),
@@ -60,44 +61,14 @@ export async function gradeEvidence(input: {
 }
 
 function gradeDeterministic(grader: DeterministicGraderSpec, task: TaskRecord, attempt: AttemptEvidence): Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash"> {
-  let passed = false;
-  const config = grader.config;
-  if (grader.kind === "content") {
-    const outputField = string(config.outputField) ?? "text";
-    const actual = string(attempt.output[outputField]);
-    const expected = string(config.expectedValue) ?? string(task.expectedOutput?.[string(config.expectedField) ?? "text"]);
-    if (expected === null || !normalize(expected)) return unavailable("Content grading requires a nonempty expected value.");
-    passed = actual !== null && expected !== null && normalize(actual) === normalize(expected);
-  } else if (grader.kind === "schema") {
-    if (config.jsonSchema !== undefined) {
-      const schema = validateTaskSchema(config.jsonSchema);
-      if (!schema.valid) return unavailable(schema.issues[0]!.message);
-      passed = validateTaskValue(config.jsonSchema, attempt.output).valid;
-    } else {
-      const required = strings(config.requiredKeys);
-      if (!required.length) return unavailable("Schema grading requires a JSON Schema or explicit required keys.");
-      passed = required.every((key) => Object.hasOwn(attempt.output, key));
-    }
-  } else if (grader.kind === "artifact") {
-    const contains = string(config.refIncludes) ?? "";
-    if (!contains) return unavailable("Artifact grading requires a declared artifact reference.");
-    passed = attempt.artifactRefs.some((ref) => ref.includes(contains));
-  } else if (grader.kind === "runtime_event") {
-    const requiredEvents = strings(config.requiredEvents);
-    if (!requiredEvents.length) return unavailable("Runtime event grading requires declared events.");
-    passed = requiredEvents.every((required) => attempt.runtimeEventRefs.some((ref) => ref.includes(required)));
-  } else {
-    const fields = strings(config.fields);
-    const compared = fields.length ? fields : Object.keys(task.expectedOutput ?? {});
-    if (!compared.length || compared.some((field) => !task.expectedOutput || !Object.hasOwn(task.expectedOutput, field))) return unavailable("State grading requires expected values for every compared field.");
-    passed = compared.every((field) => Object.hasOwn(attempt.output, field) && contentHash(attempt.output[field]) === contentHash(task.expectedOutput![field]));
-  }
+  const result = evaluateDeterministicGrader({ grader, task, evidence: attempt });
+  if (result.score === null) return unavailable(result.feedback);
   return {
-    score: passed ? 1 : 0,
-    passed,
+    score: result.score,
+    passed: result.passed,
     rewardEligible: grader.rewardEligible,
-    failureClass: passed ? null : "policy_failure",
-    feedback: [passed ? "Deterministic grader passed." : "Deterministic grader failed."],
+    failureClass: result.passed ? null : "policy_failure",
+    feedback: [result.feedback],
     visibleEvidenceRefs: [...attempt.runtimeEventRefs, ...attempt.artifactRefs],
     privilegedEvidenceRefs: grader.privileged ? [task.privilegedContextRef].filter((ref): ref is string => ref !== null) : [],
   };
@@ -116,8 +87,5 @@ function evidence(grader: GraderSpec, result: Omit<GraderEvidence, "schemaVersio
 function unavailable(message: string): Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash"> {
   return { score: null, passed: false, rewardEligible: false, failureClass: "grader_failure", feedback: [message], visibleEvidenceRefs: [], privilegedEvidenceRefs: [] };
 }
-function string(value: unknown): string | null { return typeof value === "string" ? value : null; }
-function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : []; }
-function normalize(value: string): string { return value.normalize("NFKC").trim().replace(/[,，]/g, "").replace(/[.\s]+$/g, "").replace(/\s+/g, " "); }
 
 export type GraderEvidence = z.infer<typeof GraderEvidenceSchema>;

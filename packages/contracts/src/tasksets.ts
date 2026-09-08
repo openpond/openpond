@@ -566,7 +566,7 @@ export const TaskAttemptArtifactSchema = z.object({
 export const GradeComponentSchema = z.object({
   graderId: IdSchema,
   graderVersion: z.string().trim().min(1).max(100),
-  score: z.number().min(0).max(1),
+  score: z.number().min(0).max(1).nullable(),
   passed: z.boolean(),
   hardGate: z.boolean(),
   rewardEligible: z.boolean(),

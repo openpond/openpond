@@ -896,8 +896,8 @@ function TasksetAttempts({
                               <tbody>{grade.components.map((component) => (
                                 <tr key={`${attempt.id}:${component.graderId}`}>
                                   <td>{component.graderId}</td>
-                                  <td>{component.score.toFixed(3)}</td>
-                                  <td>{component.hardGate ? (component.passed ? "Passed" : "Failed") : "Advisory"}</td>
+                                  <td>{component.score === null ? "Not scored" : component.score.toFixed(3)}</td>
+                                  <td>{component.score === null ? "—" : component.hardGate ? (component.passed ? "Passed" : "Failed") : "Advisory"}</td>
                                   <td>{component.feedback ?? "—"}</td>
                                 </tr>
                               ))}</tbody>

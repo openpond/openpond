@@ -44,6 +44,17 @@ Subpath exports are available at `/harness`, `/tasksets`, `/benchmarks`, `/grade
 not a hosted client. It does not execute OpenPond Desktop or Sandbox sessions,
 resolve credentials, or persist artifacts.
 
+## Ordinary graders
+
+`evaluateDeterministicGrader` and `portableDeterministicCheck` from `/graders`
+provide the shared local/portable interpretation of ordinary checks. They retain
+explicit exact-text normalization, final-answer extraction, structured JSON,
+artifact and runtime-event requirements, and structural state comparisons.
+Native test/diff checks declare their expected output field when exported.
+Empty, unsupported or unavailable checks remain unscorable rather than earning
+a zero or a passing reward. Desktop grade components preserve null scores and
+display them as not scored.
+
 ## Authored Taskset metrics
 
 `@openpond/evals/metrics` exports the shared `TasksetMetricPolicySchema` and

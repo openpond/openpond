@@ -17,6 +17,12 @@ describe("grader execution", () => {
     const grade = await gradeAttempt({ task, attempt: attemptFixture(), graders: [judge, custom], modelJudge: async () => ({ score: 0.8, passed: true, feedback: "rubric passed", evidenceRefs: ["judge-output"] }), customVerifier: async () => ({ score: 1, passed: true, feedback: "verified", evidenceRefs: ["artifact"] }) });
     expect(grade.components[0]).toMatchObject({ judge: judge.judge, calibrationStatus: "passed", score: 0.8 });
     expect(grade.components[1]?.evidenceRefs).toEqual(["artifact"]);
+    // Missing execution and pending human review are absent scores, including
+    // their components, and cannot be mistaken for a scored training failure.
+    for (const grader of [judge, custom, { id: "human", version: "1", label: "Human", kind: "human" as const, weight: 1, hardGate: false, rewardEligible: false, privileged: true, rubric: "Review the result", reviewerRole: "reviewer", metadata: {} }]) {
+      const missing = await gradeAttempt({ task, attempt: attemptFixture(), graders: [grader] });
+      expect(missing).toMatchObject({ score: null, rewardEligible: false, failureClass: "grader_failure", components: [{ score: null, rewardEligible: false }] });
+    }
   });
 
   test("infrastructure failure always returns null score and no reward", async () => {
