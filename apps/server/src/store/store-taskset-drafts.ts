@@ -161,7 +161,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
     const prepared = TasksetSchema.parse({
       ...authored.taskset,
       metadata: { ...authored.taskset.metadata, sourcePackageHash: workspace.packageHash },
-      environment: { ...input.taskset.environment, metadata: { ...input.taskset.environment.metadata, runtimeSourceTasksetId: directoryId } },
+      environment: { ...authored.taskset.environment, metadata: { ...authored.taskset.environment.metadata, runtimeSourceTasksetId: directoryId } },
     });
     const taskset = TasksetSchema.parse({ ...prepared, contentHash: computeTasksetHash(prepared) });
     const directory = await materializeImmutableTasksetPackage(this.home, { taskset, generatedFiles: authored.generatedFiles }, directoryId, {
