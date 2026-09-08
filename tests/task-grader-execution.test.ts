@@ -108,6 +108,23 @@ describe("grader execution", () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
+  // A partial or ambiguous fixture set must not produce a passing calibration.
+  test.each(["missing", "duplicate"])("rejects %s calibration fixtures before calling any judge", async (problem) => withTrainingStore(async ({ store, directory }) => {
+    const judge = { id: "judge", version: "1", label: "Judge", kind: "model_judge" as const, weight: 1, hardGate: true, rewardEligible: false, privileged: true, rubric: "Match the expected outcome", judge: { providerId: "openpond", modelId: "judge-v1" }, calibrationFixtureRefs: ["fixture_positive", "missing_fixture"], calibrationStatus: "pending" as const, temperature: 0, metadata: { requestedRewardEligible: true } };
+    const taskset = tasksetFixture({ graders: [judge] });
+    if (problem === "duplicate") {
+      judge.calibrationFixtureRefs = ["fixture_positive"];
+      taskset.graders = [judge];
+      taskset.graderFixtures.push({ ...taskset.graderFixtures.find(fixture => fixture.id === "fixture_positive")! });
+    }
+    await store.upsertTaskset(taskset);
+    let calls = 0;
+    const service = createTaskEvaluationService({ store, storeDir: directory, loadProfileState: async () => ({ mode: "local", sourcePath: directory } as any), modelJudge: async () => { calls += 1; return { score: 1, passed: true, feedback: "matched" }; } });
+    await expect(service.calibrateModelJudges(taskset.id)).rejects.toThrow(`exactly one fixture for ${problem === "missing" ? "missing_fixture" : "fixture_positive"}`);
+    expect(calls).toBe(0);
+    expect(await store.getTaskset(taskset.id)).toMatchObject({ revision: taskset.revision, graders: [{ calibrationStatus: "pending", rewardEligible: false }] });
+  }));
+
   test("calibrates model judges on declared fixtures before enabling reward", async () => withTrainingStore(async ({ store, directory }) => {
     const judge = { id: "judge", version: "1", label: "Judge", kind: "model_judge" as const, weight: 1, hardGate: true, rewardEligible: false, privileged: true, rubric: "Match the expected outcome", judge: { providerId: "openpond", modelId: "judge-v1" }, calibrationFixtureRefs: ["fixture_positive", "fixture_negative", "fixture_boundary", "fixture_adversarial", "fixture_prompt", "fixture_infra"], calibrationStatus: "pending" as const, temperature: 0, metadata: { requestedRewardEligible: true } };
     const taskset = tasksetFixture({ graders: [judge] });
