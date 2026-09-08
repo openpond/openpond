@@ -18,6 +18,8 @@ import { prepareImportedTasksetPackage } from "../apps/server/src/training/tasks
 import { materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files.js";
 import { materializeTasksetRevisionFromSource } from "../apps/server/src/training/generated-taskset-package.js";
 import { tasksetPackageDirectoryId } from "../apps/server/src/training/taskset-package-path.js";
+import { createTrainingApi } from "../apps/server/src/training/training-api.js";
+import { SqliteStore } from "../apps/server/src/store/store.js";
 import {
   closeTestDatabase,
   getTestSql,
@@ -25,6 +27,56 @@ import {
 } from "./helpers/sqlite-database.js";
 
 describe("Taskset draft persistence", () => {
+  test("retries interrupted readiness through the API using the published revision from a fresh store", async () => withTrainingStore(async ({ store, directory }) => {
+    const draft = await store.saveTasksetDraft(tasksetDraftFromTaskset(tasksetFixture(), "2026-09-08T02:00:00.000Z"));
+    const interrupted = createTrainingApi({ store, storeDir: directory, evaluation: { readiness: async () => { throw new Error("Readiness interrupted"); } } } as never);
+    await expect(interrupted.request("publish_taskset_draft", { draftId: draft.id })).rejects.toThrow("Readiness interrupted");
+    const published = (await store.getTasksetDraft(draft.id))!;
+    expect(published.status).toBe("published");
+    const ref = published.publishedTasksetRef!;
+    const original = await store.getTasksetRevision(ref.id, ref.revision, ref.contentHash);
+    const reloaded = new SqliteStore(directory);
+    try {
+      const checked: unknown[] = [];
+      const retry = createTrainingApi({ store: reloaded, storeDir: directory, evaluation: { readiness: async (_id: string, reference: unknown) => { checked.push(reference); } } } as never);
+      const result = await retry.request("publish_taskset_draft", { draftId: draft.id }) as { draft: typeof draft; taskset: typeof original };
+      expect(result.draft.publishedTasksetRef).toEqual(ref);
+      expect(result.taskset).toEqual(original);
+      expect(checked).toEqual([original]);
+    } finally { await reloaded.close(); }
+  }));
+
+  // Interrupted finalization must expose neither half of a publication, and
+  // concurrent retries must return the one revision that actually committed.
+  test("finalizes draft and Taskset atomically and replays the committed reference", async () => withTrainingStore(async ({ store, directory }) => {
+    const source = tasksetFixture();
+    const draft = await store.saveTasksetDraft(tasksetDraftFromTaskset(source, "2026-09-08T02:00:00.000Z"));
+    const workspace = (await store.getTasksetDraftWorkspace(draft.id))!;
+    const taskset = { ...source, metadata: { ...source.metadata, sourcePackageHash: workspace.packageHash } };
+    const input = { draft, packageHash: workspace.packageHash, taskset };
+    const db = openTestDatabase(path.join(directory, "state", "state.sqlite"));
+    try {
+      db.exec("CREATE TRIGGER reject_draft_finalization BEFORE UPDATE ON taskset_drafts BEGIN SELECT RAISE(ABORT, 'finalization interrupted'); END");
+      await expect(store.finalizeTasksetDraftPublication(input)).rejects.toThrow("finalization interrupted");
+      expect(await store.getTaskset(taskset.id)).toBeNull();
+      expect(await store.getTasksetRevision(taskset.id, taskset.revision)).toBeNull();
+      expect((await store.getTasksetDraft(draft.id))?.status).toBe(draft.status);
+      db.exec("DROP TRIGGER reject_draft_finalization");
+      const [first, retry] = await Promise.all([
+        store.finalizeTasksetDraftPublication(input),
+        store.finalizeTasksetDraftPublication({ ...input, taskset: { ...taskset, contentHash: "a".repeat(64) } }),
+      ]);
+      expect(retry).toEqual(first);
+      expect(first.draft.status).toBe("published");
+      const workspaceManifest = await readFile(path.join(workspace.workspacePath, "taskset.json"), "utf8");
+      await expect(store.saveTasksetDraft({ ...draft, name: "Stale editor overwrite", revision: draft.revision + 1 }, draft.revision))
+        .rejects.toThrow("Published Taskset drafts are immutable");
+      expect(await readFile(path.join(workspace.workspacePath, "taskset.json"), "utf8")).toBe(workspaceManifest);
+      expect((await store.getTasksetDraft(draft.id))?.publishedTasksetRef).toEqual(first.draft.publishedTasksetRef);
+      expect(await store.getTasksetRevision(taskset.id, taskset.revision)).toEqual(first.taskset);
+    } finally { db.close(); }
+  }));
+
   test("stores editable drafts separately from immutable Taskset revisions", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const draft = createTasksetDraft({
@@ -63,7 +115,12 @@ describe("Taskset draft persistence", () => {
         await closeTestDatabase(db);
       }
 
-      await store.deleteTasksetDraft(draft.id);
+      // Deletion queued behind an in-flight save must remove the saved files
+      // and pointer together, without leaving a recreated workspace behind.
+      await Promise.all([
+        store.saveTasksetDraft({ ...draft, revision: draft.revision + 1 }, draft.revision),
+        store.deleteTasksetDraft(draft.id),
+      ]);
       expect(await store.getTasksetDraft(draft.id)).toBeNull();
       await expect(
         readFile(path.join(workspace!.workspacePath, "taskset.json"), "utf8"),

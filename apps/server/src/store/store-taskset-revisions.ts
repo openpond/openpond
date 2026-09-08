@@ -2,7 +2,7 @@ import { TasksetSchema, type Taskset } from "@openpond/contracts";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 
 /** The current pointer and immutable history advance in the same write. */
-export function saveTasksetRevision(db: OpenPondSqliteConnection, taskset: Taskset): void {
+export function saveTasksetRevision(db: OpenPondSqliteConnection, taskset: Taskset, afterWrite?: () => void): void {
   db.exec("BEGIN IMMEDIATE");
   try {
     const revision = db.get<{ content_hash: string; profile_id: string }>(
@@ -33,6 +33,7 @@ export function saveTasksetRevision(db: OpenPondSqliteConnection, taskset: Tasks
         [taskset.id, taskset.profileId, taskset.status, payload, taskset.createdAt, taskset.updatedAt],
       );
     }
+    afterWrite?.();
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
