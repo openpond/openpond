@@ -1,4 +1,6 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import readline from "node:readline";
 import os from "node:os";
 import path from "node:path";
 
@@ -7,6 +9,10 @@ import {
   AgentJsonRpcDispatcher,
 } from "@openpond/agent-runtime";
 import { afterEach, describe, expect, test } from "vitest";
+import { createHarnessSourcePackage } from "@openpond/harness";
+import { SqliteStore } from "../apps/server/src/store/store.js";
+import { createLocalHarnessWorkspace } from "../apps/server/src/harness/local-harness-workspace-service.js";
+import { executeManagedRlWorkTurn } from "../apps/server/src/training/managed-rl-work-turn.js";
 
 import {
   APP_SERVER_COMPOSITION,
@@ -32,11 +38,26 @@ describe("lean app-server composition", () => {
     );
     const storeDir = path.join(directory, "state");
     const workspaceDir = path.join(directory, "workspace");
+    const sourceStoreDir = path.join(directory, "source-state");
+    const sourceStore = new SqliteStore(sourceStoreDir);
+    const { release } = await createLocalHarnessWorkspace({
+      store: sourceStore, storeDir: sourceStoreDir, id: "training-source",
+      ownerId: "desktop-personal", name: "Training source",
+    }).finally(() => sourceStore.close());
+    const capturedHarnessSource = createHarnessSourcePackage({
+      agentSnapshot: release.agentSnapshot,
+      harnessRelease: release.harnessRelease,
+      files: new Map(await Promise.all(release.harnessRelease.files.map(async asset => [
+        asset.path, await readFile(path.join(release.bundlePath, "source", asset.path)),
+      ] as const))),
+    });
     let providerRound = 0;
     const server = await createOpenPondAppServer({
       storeDir,
       workspaceDir,
-      streamOpenPondHostedChatTurn: async function* () {
+      capturedHarnessSource,
+      streamOpenPondHostedChatTurn: async function* (request) {
+        expect(JSON.stringify(request)).toContain(release.harnessRelease.contentHash);
         providerRound += 1;
         if (providerRound === 1) {
           yield {
@@ -141,6 +162,62 @@ describe("lean app-server composition", () => {
         expect.objectContaining({ name: "resource_search" }),
       ]),
     });
+    const controller = new AbortController();
+    let trainingRound = 0;
+    const executeTraining = (cancel: boolean) => executeManagedRlWorkTurn({
+      workspaceDir, scratchDir: directory, harnessSource: capturedHarnessSource,
+      prompt: "Write the training proof.", parentRunId: "deterministic-test",
+      maxToolTurns: 4, policyRequest: { deliveryId: "test-delivery", policyVersion: 3 },
+      signal: controller.signal,
+      async complete(request) {
+        expect(JSON.stringify(request.messages)).toContain(release.harnessRelease.contentHash);
+        expect(request.deliveryId).toBe("test-delivery");
+        if (cancel) controller.abort(new Error("test cancellation"));
+        const message = trainingRound++ === 0 || cancel
+          ? { content: null, tool_calls: [{ id: "training-exec", type: "function", function: {
+              name: "exec_command", arguments: JSON.stringify({
+                command: `printf 'training-ok' > ${cancel ? "cancelled-proof.txt" : "training-proof.txt"}`,
+                cwd: workspaceDir, timeoutSeconds: 30,
+              }),
+            } }] }
+          : { content: "Training completed." };
+        return { response: { choices: [{ message }] }, trainingSample: { round: trainingRound } };
+      },
+    });
+    const trained = await executeTraining(false);
+    expect(trained.policyResults).toHaveLength(2);
+    expect(trained.policyResult.trainingSample).toEqual({ round: 2 });
+    await expect(readFile(path.join(workspaceDir, "training-proof.txt"), "utf8")).resolves.toBe("training-ok");
+    await expect(executeTraining(true)).rejects.toThrow("test cancellation");
+    await expect(readFile(path.join(workspaceDir, "cancelled-proof.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await readdir(directory)).filter(name => name.startsWith("work-attempt-"))).toEqual([]);
+    const requestPath = path.join(directory, "work-request.json");
+    await writeFile(requestPath, JSON.stringify({
+      schemaVersion: "openpond.managedRlWorkRequest.v1", workspaceDir, scratchDir: directory,
+      harnessSource: capturedHarnessSource, prompt: "Return a completion.", parentRunId: "transport-test",
+      maxToolTurns: 4, timeoutMs: 15_000, policyRequest: { deliveryId: "transport-test" },
+    }));
+    const messages: Array<Record<string, any>> = [];
+    const child = spawn(process.execPath, ["--import", "tsx", "apps/server/src/app-server-entry.ts", "--managed-rl-work-request", requestPath], {
+      cwd: process.cwd(), env: { PATH: process.env.PATH }, stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.on("data", chunk => { stderr += String(chunk); });
+    const lines = readline.createInterface({ input: child.stdout });
+    lines.on("line", line => {
+      const message = JSON.parse(line);
+      messages.push(message);
+      if (message.type === "policy_request") child.stdin.write(`${JSON.stringify({ id: message.id, result: {
+        response: { choices: [{ message: { content: "Transport completed." } }] }, trainingSample: { transport: true },
+      } })}\n`);
+    });
+    const exit = await new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject); child.once("close", resolve);
+    });
+    expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
+    expect(messages.map(message => message.type)).toEqual(["policy_request", "result"]);
+    expect(messages[1]?.policyResults[0]?.trainingSample).toEqual({ transport: true });
+    expect((await readdir(directory)).filter(name => name.startsWith("work-attempt-"))).toEqual([]);
   }, 30_000);
 
   test("forwards hosted Work tools to only the attached remote sandbox", async () => {

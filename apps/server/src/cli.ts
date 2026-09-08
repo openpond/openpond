@@ -25,6 +25,7 @@ type ParsedCliArgs = {
   printAccessUrl: boolean;
   storeDir: string | null;
   sourceBrowserState?: string;
+  managedRlWorkRequest?: string;
   help: boolean;
 };
 type BrowserHandoff = typeof openUrlWithSystemBrowser;
@@ -57,6 +58,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let printAccessUrl = false;
   let storeDir: string | null = null;
   let sourceBrowserState: string | undefined;
+  let managedRlWorkRequest: string | undefined;
   let index = 0;
 
   const command = args[0];
@@ -90,6 +92,8 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
     } else if (arg === "--web-root") {
       webRoot = path.resolve(requireValue(args, i, arg));
       i += 1;
+    } else if (arg === "--managed-rl-work-request") {
+      managedRlWorkRequest = path.resolve(requireValue(args, i, arg)); i += 1;
     } else if (arg === "--source-browser-state") {
       sourceBrowserState = path.resolve(requireValue(args, i, arg)); i += 1;
     } else if (arg === "--store-dir") {
@@ -112,7 +116,8 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   if (mode !== "web" && (openBrowser || printAccessUrl)) {
     throw new Error("Browser options are only available in web mode.");
   }
-  return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, sourceBrowserState, help: false };
+  if (managedRlWorkRequest && mode !== "app-server") throw new Error("Managed Work requests require app-server mode.");
+  return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, sourceBrowserState, managedRlWorkRequest, help: false };
 }
 
 function defaultWebRootCandidates(): string[] {
@@ -209,7 +214,7 @@ export async function runOpenPondServerCli(factories: ServerCliFactories): Promi
   }
 
   if (args.mode === "app-server") {
-    await runAgentServer(factories.createOpenPondAppServer, args.storeDir);
+    await runAgentServer(factories.createOpenPondAppServer, args.storeDir, args.managedRlWorkRequest);
     return;
   }
 
@@ -289,13 +294,19 @@ export async function runOpenPondAppServerCli(
   if (args.mode !== "app-server") {
     throw new Error("The app-server entrypoint only accepts the app-server command.");
   }
-  await runAgentServer(createOpenPondAppServer, args.storeDir);
+  await runAgentServer(createOpenPondAppServer, args.storeDir, args.managedRlWorkRequest);
 }
 
 async function runAgentServer(
   createOpenPondAppServer: CreateAgentServer,
   storeDir: string | null,
+  managedRlWorkRequest?: string,
 ): Promise<void> {
+  if (managedRlWorkRequest) {
+    const { runManagedRlWorkCommand } = await import("./training/managed-rl-work-command.js");
+    await runManagedRlWorkCommand(managedRlWorkRequest);
+    return;
+  }
   if (storeDir) process.env.OPENPOND_HOME = storeDir;
   const appServer = await createOpenPondAppServer({
     ...(storeDir ? { storeDir } : {}),
