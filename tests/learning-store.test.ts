@@ -13,6 +13,7 @@ import { createLocalTaskGradeExecutor } from "../apps/server/src/training/learni
 import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import";
 import { materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files";
 import { createTasksetEvaluationVerifier } from "../apps/server/src/training/evaluation-custom-verifier";
+import { resolveTasksetTrainingReward } from "../apps/server/src/training/taskset-reward-binding";
 import { prepareLocalLearningBatch } from "../apps/server/src/training/learning-batch-preparation";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export";
 import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
@@ -68,7 +69,11 @@ describe("durable task intake and admission", () => {
       const task = imported.taskset.tasks[0]!;
       expect(await run({ grader, task, attempt: attemptFixture({ output: { answer: "correct" } }) })).toMatchObject({ passed: true, score: 1 });
       expect(await run({ grader, task, attempt: attemptFixture({ output: { answer: "wrong" } }) })).toMatchObject({ passed: false, score: 0 });
+      expect(await resolveTasksetTrainingReward(destination, imported.taskset, destinationDirectory)).toMatchObject({
+        rewardExecution: { binding: fixture.binding, rewards: [fixture.reward] }, verifierAssets: value.learningResources!.assets,
+      });
       expect(await destination.learningRepository().transaction("fresh-profile", tx => tx.get("source", fixture.source.id))).toBeNull();
+      expect(await destination.learningRepository().transaction("fresh-profile", tx => tx.get("asset", value.learningResources!.assets[0]!.id))).toBeNull();
     });
   }));
 

@@ -231,7 +231,7 @@ export function createPortableModelRunService(deps: {
         })
       : new Map<string, Uint8Array>();
     const graph = buildTasksetTrainingBundle({
-      ...await resolveTasksetTrainingReward(deps.store, taskset),
+      ...await resolveTasksetTrainingReward(deps.store, taskset, deps.storeDir),
       taskset,
       modelProject: preparedProject,
       modelRunId,

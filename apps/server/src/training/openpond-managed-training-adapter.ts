@@ -397,7 +397,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         if (!requiresHarness) {
           let boundReward = false;
           try {
-            const resolved = await resolveManagedTasksetReward(this.dependencies.store, taskset, { placement: plan.runtime.placement,
+            const resolved = await resolveManagedTasksetReward(this.dependencies.store, taskset, { placement: plan.runtime.placement, storeDir: this.dependencies.storeDir,
               hasLearnedPreferenceReward: plan.recipe.method === "grpo" && Boolean(plan.recipe.reward.learnedPreference) });
             boundReward = Boolean(resolved.rewardExecution);
           } catch (error) {

@@ -8,6 +8,7 @@ import type { SqliteStore } from "../store/store.js";
 import { executeLocalLearningVerifier } from "./learning-grade-executor.js";
 import { STARTER_TOOL_ENVIRONMENT } from "./starter-tool-environment.js";
 import { readStarterToolEvidence } from "./starter-tool-evidence.js";
+import { readImportedLearningTasksetPackage } from "./taskset-package-files.js";
 
 /** Authored Tasksets resolve published Rewards without inventing learning-batch admissions. */
 export async function resolveTasksetRewardBinding(store: SqliteStore, taskset: Taskset) {
@@ -22,11 +23,21 @@ export async function resolveTasksetRewardBinding(store: SqliteStore, taskset: T
   });
 }
 
-export async function resolveTasksetTrainingReward(store: SqliteStore, taskset: Taskset) {
+export async function resolveTasksetTrainingReward(store: SqliteStore, taskset: Taskset, storeDir?: string) {
   const rewardExecution = await resolveTasksetRewardBinding(store, taskset);
   if (!rewardExecution) return { rewardExecution: undefined, verifierAssets: [] };
   const references = compileBoundGraders(rewardExecution.binding, rewardExecution.rewards)
     .flatMap(grader => grader.kind === "custom_verifier" ? [grader.verifierRef] : []);
+  const imported = taskset.metadata.learning === undefined ? undefined : await readImportedLearningTasksetPackage(storeDir, taskset);
+  if (imported) {
+    const verifierAssets = [...new Map(references.map(reference => {
+      const asset = imported.learningResources!.assets.find(asset => asset.id === reference.id);
+      if (!asset) throw new Error("Imported batch verifier is missing from its package.");
+      verifyLearningTextAsset(asset, reference);
+      return [asset.id, asset] as const;
+    })).values()];
+    return { rewardExecution, verifierAssets };
+  }
   const verifierAssets = await store.learningRepository().transaction(taskset.profileId, async tx => {
     const assets = new Map<string, LearningTextAsset>();
     for (const reference of references) {
@@ -42,8 +53,9 @@ export async function resolveTasksetTrainingReward(store: SqliteStore, taskset: 
 export async function resolveManagedTasksetReward(store: SqliteStore, taskset: Taskset, options: {
   placement: HarnessRuntimeTargetBinding["placement"];
   hasLearnedPreferenceReward: boolean;
+  storeDir?: string;
 }) {
-  const resolved = await resolveTasksetTrainingReward(store, taskset);
+  const resolved = await resolveTasksetTrainingReward(store, taskset, options.storeDir);
   if (!resolved.rewardExecution) return resolved;
   const graders = compileBoundGraders(resolved.rewardExecution.binding, resolved.rewardExecution.rewards);
   if (options.placement !== "remote" || taskset.environment.kind === "work"

@@ -1,11 +1,11 @@
 import type { Taskset } from "@openpond/contracts";
 import { compileBoundGraders } from "@openpond/evals/rewards";
-import { requireLearningRelease, sameLearningRef, learningRef, verifyLearningTextAsset, taskBatchPackageMetadata, TaskBatchPackageMetadataSchema, taskRecordFromEvidence } from "@openpond/evals/learning";
+import { requireLearningRelease, sameLearningRef, learningRef, verifyLearningTextAsset, TaskBatchPackageMetadataSchema, taskRecordFromEvidence } from "@openpond/evals/learning";
 import { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-verifier/node";
 import { contentHash, type CustomVerifierRunner } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import { executeLocalLearningVerifier } from "./learning-grade-executor.js";
-import { readCachedTasksetPackage } from "./taskset-package-files.js";
+import { readImportedLearningTasksetPackage } from "./taskset-package-files.js";
 
 /** Private context is resolved by scoped immutable admission, never copied into policy data. */
 export function createLearningBatchVerifier(store: SqliteStore, taskset: Taskset, storeDir?: string): CustomVerifierRunner {
@@ -15,11 +15,7 @@ export function createLearningBatchVerifier(store: SqliteStore, taskset: Taskset
     const admission = learning.admissions.find((entry) => entry.taskId === task.id);
     const bound = graders.find((entry) => entry.id === grader.id);
     if (!admission || bound?.kind !== "custom_verifier") throw new Error("Prepared batch has no matching verifier admission.");
-    const packageHash = taskset.metadata.importedPackageHash;
-    if (packageHash !== undefined && (typeof packageHash !== "string" || !storeDir)) throw new Error("Imported batch requires its package storage directory.");
-    const imported = typeof packageHash === "string" ? await readCachedTasksetPackage(storeDir!, packageHash) : undefined;
-    if (imported && (imported.taskset.id !== taskset.id || imported.taskset.revision !== taskset.revision
-      || contentHash(taskBatchPackageMetadata(imported.taskset)) !== contentHash(learning))) throw new Error("Imported batch differs from its pinned package.");
+    const imported = await readImportedLearningTasksetPackage(storeDir, taskset);
     const evidence = imported
       ? imported.learningResources?.evidence.find(item => sameLearningRef(learningRef(item), admission.evidence))
       : await store.learningRepository().transaction(taskset.profileId, (transaction) => requireLearningRelease(transaction, "evidence", admission.evidence));

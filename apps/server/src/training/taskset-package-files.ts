@@ -4,6 +4,18 @@ import path from "node:path";
 import { contentHash } from "@openpond/harness";
 import { decodeTasksetPackageFile, MAX_TASKSET_PACKAGE_BYTES, validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import type { GeneratedTaskFile, Taskset } from "@openpond/contracts";
+import { taskBatchPackageMetadata } from "@openpond/evals/learning";
+
+/** Imported review snapshots remain package-owned, separate from live intake. */
+export async function readImportedLearningTasksetPackage(home: string | undefined, taskset: Taskset) {
+  const hash = taskset.metadata.importedPackageHash;
+  if (hash === undefined) return undefined;
+  if (typeof hash !== "string" || !home) throw new Error("Imported batch requires its package storage directory.");
+  const value = await readCachedTasksetPackage(home, hash);
+  if (!value.learningResources || value.taskset.id !== taskset.id || value.taskset.revision !== taskset.revision
+    || contentHash(taskBatchPackageMetadata(value.taskset)) !== contentHash(taskset.metadata.learning)) throw new Error("Imported batch differs from its pinned package.");
+  return value;
+}
 
 export function importedTasksetPackageDirectory(profileId: string, packageHash: string): string {
   return `package-${contentHash({ profileId, packageHash })}`;
