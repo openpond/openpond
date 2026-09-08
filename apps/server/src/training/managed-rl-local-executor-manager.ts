@@ -10,6 +10,7 @@ import type {
   OpenPondManagedTrainingAdapterDependencies,
 } from "./openpond-managed-training-adapter-support.js";
 import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
+import { loadManagedRlHarnessSource } from "./managed-rl-harness-source.js";
 
 export async function ensureManagedRlLocalExecutor(input: {
   access: ManagedTrainingAccess;
@@ -51,6 +52,11 @@ export async function ensureManagedRlLocalExecutor(input: {
   }
 
   if (input.executors.has(input.ref.runId)) return;
+  if (!input.ref.manifestHash) throw new Error("Managed local rollout is missing its run manifest hash.");
+  const admittedHarness = await loadManagedRlHarnessSource({ storeDir: input.dependencies.storeDir, manifestHash: input.ref.manifestHash });
+  if (admittedHarness.selection.harnessRelease.contentHash !== input.harnessReleaseHash) {
+    throw new Error("Managed local rollout differs from its admitted Harness release.");
+  }
   const executor = new ManagedRlLocalRolloutExecutor({
     runId: input.ref.runId,
     access: input.access,
@@ -66,6 +72,7 @@ export async function ensureManagedRlLocalExecutor(input: {
       "source",
     ),
     validationTaskset,
+    admittedHarness,
   });
   input.executors.set(input.ref.runId, executor);
   executor.start();

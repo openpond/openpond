@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
 import type { TaskDataRecord, Taskset } from "@openpond/contracts";
+import type { HarnessSourcePackage, HarnessSourceSelection } from "@openpond/harness";
 import "./marketing-portfolio-managed-rl-adapter.js";
 import "./portable-jsonl-managed-rl-adapter.js";
 import {
@@ -48,6 +49,7 @@ export class ManagedRlLocalRolloutExecutor {
       storeDir: string;
       harnessRoot: string;
       validationTaskset?: Taskset;
+      admittedHarness?: { selection: HarnessSourceSelection; sourcePackage: HarnessSourcePackage | null };
     },
   ) {
     this.executorId = input.executorId ?? `openpond-desktop:${randomUUID()}`;
@@ -149,9 +151,14 @@ export class ManagedRlLocalRolloutExecutor {
   private async executeOnce(
     claim: LocalRolloutClaim,
   ): Promise<Record<string, unknown>> {
+    const selected = this.input.admittedHarness?.selection.harnessRelease;
+    if (selected && (claim.harnessRelease.id !== selected.id || claim.harnessRelease.contentHash !== selected.contentHash)) {
+      throw new Error("Managed local claim differs from its admitted Harness release.");
+    }
     if (claim.reward.kind === "local_harness_receipt_v1") {
       return this.executeLocalHarness(claim, claim.reward.environmentId);
     }
+    if (this.input.admittedHarness?.sourcePackage) throw new Error("Selected Harness source requires a source-aware local execution adapter.");
     const policyResult = await this.policyRequest(
       claim.policy.path,
       claim.policy.token,
@@ -194,11 +201,13 @@ export class ManagedRlLocalRolloutExecutor {
       taskset: execution.taskset,
       environmentId,
     });
+    if (this.input.admittedHarness?.sourcePackage && !adapter.validateSource) throw new Error("This local adapter does not execute selected Harness source.");
     return adapter.execute({
       claim,
       taskset: execution.taskset,
       task: execution.task,
       harnessRoot: this.input.harnessRoot,
+      harnessSource: this.input.admittedHarness?.sourcePackage ?? null,
       storeDir: this.input.storeDir,
       executorId: this.executorId,
       signal: this.abortController.signal,

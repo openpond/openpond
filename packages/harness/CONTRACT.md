@@ -67,3 +67,13 @@ This is source transport, not runtime conformance. Hosts authorize export and
 select an execution adapter that consumes the captured source, verifies its
 capabilities and records effective context. A matching Harness release hash
 alone does not prove that instructions, Skills or executable dependencies ran.
+
+`createHarnessSourceRuntime` consumes captured source for the declarative
+`openpond.agent-runtime.v1` program. It loads released instruction and Skill
+text, verifies required capabilities, dependency versions and actual tool
+schemas, and exposes policy-visible resources through bounded byte-range reads.
+Private assets never enter its context or reader. Unsupported programs and
+released subagents fail admission. Hosts must provide their actual tools and
+capabilities; this helper does not implement missing execution capabilities.
+The runtime receipt binds the source, effective system prompt, loaded assets
+and tool definitions. Hosts retain that receipt with attempt evidence.

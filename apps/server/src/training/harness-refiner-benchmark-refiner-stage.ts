@@ -239,7 +239,17 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
   refinerStream: BenchmarkRefinerModelStream;
   signal: AbortSignal;
   now: () => string;
-}) {
+}): Promise<{
+  detection: NonNullable<Awaited<ReturnType<typeof recordLocalHarnessImprovementBoundary>>>;
+  result: Awaited<ReturnType<typeof runLocalHarnessRefinerWorker>> | null;
+  invocation?: {
+    usage: RefinerUsage;
+    costBasis: "authoritative" | "estimated" | "none";
+    estimatedCostUsd: number | null;
+    startedAt: string;
+    completedAt: string;
+  };
+}> {
   const boundary = await materializeBenchmarkRefinerBoundary(input);
   if (!boundary) {
     throw new Error(`Adaptation attempt ${input.result.attempt.id} has no Refiner boundary.`);

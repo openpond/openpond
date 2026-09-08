@@ -47,6 +47,7 @@ import {
   validateHarnessSourcePackage,
   harnessSourcePackageFiles,
   resolveHarnessSourceSelection,
+  createHarnessSourceRuntime,
   contentHash,
   admitLocalHarnessRefinerDecision,
 } from "@openpond/harness";
@@ -72,7 +73,8 @@ if (
   typeof createHarnessSourcePackage !== "function" ||
   typeof validateHarnessSourcePackage !== "function" ||
   typeof harnessSourcePackageFiles !== "function" ||
-  typeof resolveHarnessSourceSelection !== "function"
+  typeof resolveHarnessSourceSelection !== "function" ||
+  typeof createHarnessSourceRuntime !== "function"
 ) {
   throw new Error("packed Harness exports unavailable");
 }

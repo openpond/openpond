@@ -5,6 +5,7 @@ import path from "node:path";
 import readline from "node:readline";
 
 import type { Taskset } from "@openpond/contracts";
+import { createHarnessSourceRuntime, HARNESS_SOURCE_READ_TOOL_NAME, type HarnessSourcePackage } from "@openpond/harness";
 
 import {
   createManagedRlHarnessAttemptReceipt,
@@ -45,9 +46,43 @@ export const portableJsonlManagedRlAdapter = {
       && input.taskset.capabilities.requiresTools;
   },
   execute: executePortableJsonlManagedRl,
+  validateSource: validatePortableJsonlHarnessSource,
 };
 
 registerManagedRlHarnessAdapter(portableJsonlManagedRlAdapter);
+
+export async function validatePortableJsonlHarnessSource(input: { taskset: Taskset; storeDir: string; harnessSource: HarnessSourcePackage }): Promise<void> {
+  const task = input.taskset.tasks.find(task => task.split === "train");
+  const grader = input.taskset.graders.find(grader => grader.rewardEligible);
+  if (!task || !grader) throw new Error("Selected Harness admission requires a training task and reward grader.");
+  const runtime = await loadPortableJsonlRuntime(input.taskset, input.storeDir);
+  const bridge = await PortableJsonlBridge.start({ runtime,
+    taskId: typeof task.metadata.benchmarkTaskId === "string" ? task.metadata.benchmarkTaskId : task.id,
+    graderId: grader.id, signal: AbortSignal.timeout(input.taskset.environment.defaultTimeoutMs),
+  });
+  try {
+    const initialized = await bridge.request<BridgeInit>({ operation: "init" });
+    const toolNames = initialized.tools.map(tool =>
+      requiredString(requiredRecord(tool.function, "tool function").name, "tool name"));
+    if (toolNames.join(",") !== input.taskset.environment.toolNames.join(",")) {
+      throw new Error("portable_jsonl_tool_contract_mismatch");
+    }
+    sourceRuntime(input.harnessSource, initialized);
+  } finally { await bridge.close(); }
+}
+
+function sourceRuntime(source: HarnessSourcePackage, initialized: BridgeInit) {
+  return createHarnessSourceRuntime({
+    sourcePackage: source,
+    expectedRelease: { id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash },
+    baseSystemPrompt: initialized.policy,
+    runtimeId: PORTABLE_JSONL_HARNESS_ADAPTER_ID,
+    tools: initialized.tools.map(tool => {
+      const declaration = requiredRecord(tool.function, "tool function");
+      return { name: requiredString(declaration.name, "tool name"), inputSchema: requiredRecord(declaration.parameters, "tool parameters"), definition: tool };
+    }), maxContextCharacters: 50_000,
+  });
+}
 
 export async function executePortableJsonlManagedRl(
   input: ManagedRlHarnessExecutionInput,
@@ -78,6 +113,7 @@ export async function executePortableJsonlManagedRl(
   let policyCostUsd = 0;
   let policyCostObserved = false;
   let finalStep: BridgeStep | null = null;
+  let harnessRuntime: ReturnType<typeof createHarnessSourceRuntime> | null = null;
   try {
     const initialized = await bridge.request<BridgeInit>({ operation: "init" });
     const toolNames = initialized.tools.map((tool) =>
@@ -86,8 +122,12 @@ export async function executePortableJsonlManagedRl(
     if (toolNames.join(",") !== input.taskset.environment.toolNames.join(",")) {
       throw new Error("portable_jsonl_tool_contract_mismatch");
     }
+    if (input.harnessSource && (input.harnessSource.harnessRelease.id !== input.claim.harnessRelease.id
+      || input.harnessSource.harnessRelease.contentHash !== input.claim.harnessRelease.contentHash)) throw new Error("Claim differs from the admitted Harness source.");
+    harnessRuntime = input.harnessSource ? sourceRuntime(input.harnessSource, initialized) : null;
+    const policyTools = [...initialized.tools, ...(harnessRuntime?.tools ?? [])];
     messages.push(
-      { role: "system", content: initialized.policy },
+      { role: "system", content: harnessRuntime?.systemPrompt ?? initialized.policy },
       { role: "user", content: initialized.userPrompt },
     );
     for (let turnIndex = 0; turnIndex < runtime.maxTurns; turnIndex += 1) {
@@ -96,7 +136,7 @@ export async function executePortableJsonlManagedRl(
         policyVersion: input.claim.policyVersion,
         turnIndex,
         messages,
-        tools: initialized.tools,
+        tools: policyTools,
         toolChoice: "auto",
         maxTokens: 1_024,
         temperature: 0.8,
@@ -133,10 +173,24 @@ export async function executePortableJsonlManagedRl(
           function: { name: call.name, arguments: call.arguments },
         })),
       });
+      const sourceCalls = harnessRuntime ? completion.toolCalls.filter(call => call.name === HARNESS_SOURCE_READ_TOOL_NAME) : [];
+      const environmentCalls = harnessRuntime ? completion.toolCalls.filter(call => call.name !== HARNESS_SOURCE_READ_TOOL_NAME) : completion.toolCalls;
+      const sourceResults = sourceCalls.map(call => {
+        let output: unknown;
+        try { output = harnessRuntime!.readFile(JSON.parse(call.arguments)); }
+        catch (error) { output = { error: error instanceof Error ? error.message : "Harness source read failed." }; }
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
+        toolSequence.push(call.name);
+        return { id: call.id, name: call.name, output };
+      });
+      if (sourceCalls.length && !environmentCalls.length) {
+        trace.push({ turnIndex, content: completion.content, toolCalls: sourceCalls, toolResults: sourceResults, terminal: false });
+        continue;
+      }
       finalStep = await bridge.request<BridgeStep>({
         operation: "step",
         content: completion.content,
-        toolCalls: completion.toolCalls,
+        toolCalls: environmentCalls,
       });
       for (const result of finalStep.toolResults) {
         messages.push({
@@ -153,12 +207,12 @@ export async function executePortableJsonlManagedRl(
         turnIndex,
         content: completion.content,
         toolCalls: completion.toolCalls,
-        toolResults: finalStep.toolResults,
+        toolResults: [...sourceResults, ...finalStep.toolResults],
         terminal: finalStep.terminal,
       });
       if (finalStep.terminal) break;
     }
-    if (finalStep && !finalStep.terminal) {
+    if (!finalStep?.terminal) {
       finalStep = await bridge.request<BridgeStep>({
         operation: "terminate",
         reason: "max_turns",
@@ -211,6 +265,7 @@ export async function executePortableJsonlManagedRl(
       policyVersion: input.claim.policyVersion,
       environmentSha256: input.claim.environmentSha256,
       harnessReleaseSha256: input.claim.harnessRelease.contentHash,
+      harnessSourceRuntime: harnessRuntime?.receipt ?? null,
       tasksetSha256: input.claim.taskset.contentHash,
       traceSha256,
       trainingSampleSha256s: trainingSamples.map((sample) => sha256(sample)),
@@ -241,6 +296,7 @@ export async function executePortableJsonlManagedRl(
             terminal: rollout.terminal,
             terminationReason: finalStep.terminationReason ?? null,
             stateHashes: finalStep.stateHashes,
+            harnessSourceRuntime: harnessRuntime?.receipt ?? null,
             policyUsage: policyUsageObserved ? policyUsage : null,
             policyCostUsd: policyCostObserved ? policyCostUsd : null,
           },

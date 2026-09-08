@@ -30,7 +30,8 @@ import {
 } from "../openpond/hosted-api-access.js";
 import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
 import { ensureManagedRlLocalExecutor } from "./managed-rl-local-executor-manager.js";
-import { supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
+import { declaredEnvironmentId, resolveManagedRlHarnessAdapter, supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
+import { loadManagedRlHarnessSource } from "./managed-rl-harness-source.js";
 import { createModelProjectHostingService } from "./model-project-hosting.js";
 import {
   dateString,
@@ -351,6 +352,18 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         });
       }
       if (taskset && trainingPlan && taskset.contentHash === trainingPlan.tasksetHash) {
+        try {
+          const selected = await loadManagedRlHarnessSource({ storeDir: this.dependencies.storeDir, manifestHash: plan.manifest.contentHash });
+          if (selected.sourcePackage) {
+            if (plan.runtime.placement !== "local") throw new Error("Selected Harness source execution is not yet supported by the hosted adapter.");
+            const adapter = resolveManagedRlHarnessAdapter({ taskset, environmentId: declaredEnvironmentId(taskset) });
+            if (!adapter.validateSource) throw new Error("This adapter does not execute selected Harness source.");
+            await adapter.validateSource({ taskset, storeDir: this.dependencies.storeDir, harnessSource: selected.sourcePackage });
+          }
+        } catch (error) {
+          issues.push({ code: "managed_harness_source_invalid", path: "manifest.harnessRelease",
+            message: error instanceof Error ? error.message : "Selected Harness source could not be admitted." });
+        }
         if (trainingPlan.modelImprovementQualification) {
           const qualification = await managedQualification({
             store: this.dependencies.store,

@@ -1,4 +1,5 @@
 import type { TaskDataRecord, Taskset } from "@openpond/contracts";
+import type { HarnessSourcePackage } from "@openpond/harness";
 
 export type ManagedRlLocalRolloutClaim = {
   schemaVersion: "openpond.managedRlLocalRolloutClaim.v1";
@@ -23,6 +24,7 @@ export type ManagedRlHarnessExecutionInput = {
   taskset: Taskset;
   task: TaskDataRecord;
   harnessRoot: string;
+  harnessSource?: HarnessSourcePackage | null;
   storeDir: string;
   executorId: string;
   signal: AbortSignal;
@@ -35,6 +37,7 @@ export type ManagedRlHarnessAdapterDescriptor = {
   priority?: number;
   supports(input: { taskset: Taskset; environmentId: string }): boolean;
   execute(input: ManagedRlHarnessExecutionInput): Promise<Record<string, unknown>>;
+  validateSource?(input: { taskset: Taskset; storeDir: string; harnessSource: HarnessSourcePackage }): Promise<void>;
 };
 
 const adapters: ManagedRlHarnessAdapterDescriptor[] = [];
