@@ -19,6 +19,14 @@
     "LICENSE"
   ],
   "exports": {
+    "./metrics/node": {
+      "types": "./dist/types/metrics-node.d.ts",
+      "import": "./dist/metrics-node.js"
+    },
+    "./metrics": {
+      "types": "./dist/types/metrics.d.ts",
+      "import": "./dist/metrics.js"
+    },
     "./sql-execution/node": {
       "types": "./dist/types/sql-execution-node.d.ts",
       "import": "./dist/sql-execution-node.js"

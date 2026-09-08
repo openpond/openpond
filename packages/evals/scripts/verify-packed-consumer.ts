@@ -62,7 +62,22 @@ import { executeJavaScriptVerifierInWorker, executeJavaScriptVerifierInProcess }
 import { executeJavaScriptEnvironmentInWorker, executeJavaScriptEnvironmentInProcess } from "@openpond/evals/javascript-environment/node";
 import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
 import { createLearningTextAsset } from "@openpond/evals/learning";
-import { contentHash } from "@openpond/harness";
+import { contentHash, sha256 } from "@openpond/harness";
+import { TasksetMetricPolicySchema } from "@openpond/evals/metrics";
+import { executeTasksetMetricInWorker } from "@openpond/evals/metrics/node";
+const metricManifest = genericToolConformance.manifest;
+const metricReceipt = createAttemptReceipt({ schemaVersion: "openpond.attemptReceipt.v1", id: "metric-attempt", taskId: "metric-task", runManifest: { id: metricManifest.id, contentHash: metricManifest.contentHash }, seed: "0", terminal: true, failureClass: null, outputHash: null, traceHash: contentHash("metric-trace"), artifactRefs: [], graderEvidenceRefs: [], startedAt: metricManifest.createdAt, completedAt: metricManifest.createdAt, latencyMs: 0, costUsd: null, metadata: { score: 0.75, passed: true, rewardEligible: true } });
+const metricSource = "export function aggregate(scores: number[]): number { return Math.min(...scores); }";
+const metricPolicy = TasksetMetricPolicySchema.parse({ schemaVersion: "openpond.tasksetMetricPolicy.v1", primaryMetric: "quality", aggregation: "custom", missingReward: "zero", customAggregator: { module: "metrics/aggregate.ts", exportName: "aggregate", contentHash: sha256(metricSource), timeoutMs: 5000, networkPolicy: "none" } });
+const metricInput = { manifest: metricManifest, receipts: [metricReceipt], policy: metricPolicy, source: metricSource };
+if ((await executeTasksetMetricInWorker(metricInput)).value !== 0.75) throw new Error("Packed TypeScript metric did not execute");
+const metricLoop = "export function aggregate(scores: number[]): number { for (;;) {} }";
+const metricController = new AbortController();
+const metricTimer = setTimeout(() => metricController.abort(new Error("metric-consumer-cancelled")), 50);
+try {
+  await executeTasksetMetricInWorker({ ...metricInput, source: metricLoop, policy: { ...metricPolicy, customAggregator: { ...metricPolicy.customAggregator, contentHash: sha256(metricLoop) } }, signal: metricController.signal }).then(() => { throw new Error("Cancelled metric succeeded"); }, error => { if (error.message !== "metric-consumer-cancelled") throw error; });
+} finally { clearTimeout(metricTimer); }
+if ((await executeTasksetMetricInWorker(metricInput)).value !== 0.75) throw new Error("Metric worker was not healthy after cancellation");
 const verifierResult = await executeJavaScriptVerifierInWorker({ source: "export function verify({ output }) { return { score: Number(output.answer === 4), passed: output.answer === 4, feedback: 'Packed verifier executed' }; }", value: { output: { answer: 4 } }, timeoutMs: 5000 });
 if (!verifierResult.passed || verifierResult.score !== 1) throw new Error("Packed JavaScript verifier did not execute");
 const environmentAsset = createLearningTextAsset({ text: "export function create({ initialState }) { return { state: initialState, observation: {} }; } export const reset = create; export function step() { for (;;) {} } export function collect({ state }) { return { state, observation: {} }; } export function destroy() { return { state: {}, observation: {} }; }", path: "environment.mjs", mediaType: "application/javascript", visibility: "host_private" });

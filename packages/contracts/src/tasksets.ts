@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { RewardCompositionSchema } from "@openpond/evals/rewards";
+import { TasksetMetricPolicySchema } from "@openpond/evals/metrics";
+export { TasksetMetricPolicySchema } from "@openpond/evals/metrics";
 import { ChatModelRefSchema } from "./providers.js";
 import { CodexReasoningEffortSchema } from "./settings.js";
 import { TrainingTacticSchema } from "./task-mining.js";
@@ -399,36 +401,6 @@ export const TasksetCapabilityManifestSchema = z.object({
   environmentPlacements: z.array(z.enum(["local", "remote", "colocated", "provider_native"])),
   exportable: z.boolean(),
   portabilityBlockers: z.array(z.string().trim().min(1).max(2_000)).default([]),
-});
-
-export const TasksetMetricPolicySchema = z.object({
-  schemaVersion: z.literal("openpond.tasksetMetricPolicy.v1"),
-  primaryMetric: IdSchema,
-  aggregation: z.enum(["mean_score", "pass_rate", "weighted_mean", "custom"]),
-  missingReward: z.enum(["zero", "exclude"]),
-  customAggregator: z.object({
-    module: z.string().trim().min(1).max(1_000)
-      .refine(safeRelativeFilePath, "Custom metric modules must use a safe relative path."),
-    exportName: CodeIdentifierSchema,
-    contentHash: Sha256Schema,
-    timeoutMs: z.number().int().positive().max(300_000),
-    networkPolicy: z.literal("none"),
-  }).nullable(),
-}).superRefine((policy, context) => {
-  if (policy.aggregation === "custom" && !policy.customAggregator) {
-    context.addIssue({
-      code: "custom",
-      message: "Custom metric aggregation requires a content-hashed module.",
-      path: ["customAggregator"],
-    });
-  }
-  if (policy.aggregation !== "custom" && policy.customAggregator) {
-    context.addIssue({
-      code: "custom",
-      message: "Built-in metric aggregation cannot include a custom module.",
-      path: ["customAggregator"],
-    });
-  }
 });
 
 export const TaskFailureClassSchema = z.enum([

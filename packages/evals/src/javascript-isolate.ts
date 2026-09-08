@@ -10,7 +10,7 @@ export interface JavaScriptIsolateInput {
   signal?: AbortSignal;
   maxResultBytes: number;
   deterministic?: boolean;
-  errorPrefix: "verifier" | "environment" | "candidate";
+  errorPrefix: "verifier" | "environment" | "candidate" | "metric";
 }
 
 export class JavaScriptIsolateExecutionError extends Error {
