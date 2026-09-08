@@ -5,6 +5,7 @@ import { createModelProjectSaveRequest, ModelProjectEditableSchema } from "openp
 import type { Taskset, TasksetDraft } from "@openpond/contracts";
 import { tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
 import { createTrainingApi } from "../apps/server/src/training/training-api.js";
+import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { tasksetFixture, withTrainingStore } from "./helpers/training-fixtures.js";
 import type { TasksetDraftFile } from "openpond-sdk/model-taskset-authoring";
@@ -85,7 +86,14 @@ test("publishes Model drafts atomically with CAS and retains the original retry 
   const sourceRef = { id: source.id, revision: source.revision, contentHash: source.contentHash };
   const model = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "draft-publication-owner", profileId: source.profileId,
     name: "Draft publication owner", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { tasksetRef: sourceRef } }, 0));
-  const api = createTrainingApi({ store, storeDir: directory, evaluation: { readiness: async () => undefined } } as never);
+  // Run real readiness after the atomic commit: a full Taskset passed where an
+  // immutable reference is required otherwise turns success into an API error.
+  const evaluationFor = (target: SqliteStore) => createTaskEvaluationService({ store: target, storeDir: directory,
+    loadProfileState: async () => { throw new Error("Publication readiness must not load a model profile."); },
+    modelText: async () => { throw new Error("Publication must not invoke inference."); },
+    modelStream: async function* () { throw new Error("Publication must not invoke inference."); },
+  });
+  const api = createTrainingApi({ store, storeDir: directory, evaluation: evaluationFor(store) } as never);
   async function author(id: string) {
     const empty = await api.request("init_taskset_draft", { profileId: model.profileId, modelId: model.id }) as TasksetDraft;
     return api.request("save_taskset_draft", { draft: { ...tasksetDraftFromTaskset(source), id: empty.id,
@@ -116,10 +124,11 @@ test("publishes Model drafts atomically with CAS and retains the original retry 
     trainingSetup: { ...selected.trainingSetup, tasksetRef: sourceRef } }, selected.revision));
   const reopened = new SqliteStore(directory);
   try {
-    const retryApi = createTrainingApi({ store: reopened, storeDir: directory, evaluation: { readiness: async () => undefined } } as never);
+    const retryApi = createTrainingApi({ store: reopened, storeDir: directory, evaluation: evaluationFor(reopened) } as never);
     const retry = await retryApi.request("publish_taskset_draft", { draftId: draft.id }) as typeof published;
     expect(retry.draft).toEqual(published.draft);
-    expect(retry.taskset).toEqual(published.taskset);
+    expect(retry.taskset.contentHash).toEqual(published.taskset.contentHash);
+    expect(retry.taskset.readiness?.tasksetHash).toBe(published.taskset.contentHash);
     expect(await reopened.getModelProject(model.id)).toEqual(later);
   } finally { await reopened.close(); }
 }));

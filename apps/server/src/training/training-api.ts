@@ -863,7 +863,7 @@ export function createTrainingApi(deps: {
             )
           : null;
         if (!taskset) throw new Error("Published Taskset draft lost its immutable Taskset revision.");
-        await deps.evaluation.readiness(taskset.id, taskset);
+        await deps.evaluation.readiness(taskset.id, { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash });
         return publishTasksetToHostedProject({
           store: deps.store,
           benchmarkTasksets: deps.benchmarkTasksets,
@@ -886,7 +886,7 @@ export function createTrainingApi(deps: {
       const finalized = await deps.store.finalizeTasksetDraftPublication({
         draft, packageHash: workspace.packageHash, taskset: materializedTaskset,
       });
-      await deps.evaluation.readiness(finalized.taskset.id, finalized.taskset);
+      await deps.evaluation.readiness(finalized.taskset.id, { id: finalized.taskset.id, revision: finalized.taskset.revision, contentHash: finalized.taskset.contentHash });
       const taskset = await deps.store.getTasksetRevision(finalized.taskset.id, finalized.taskset.revision, finalized.taskset.contentHash)
         ?? finalized.taskset;
       return publishTasksetToHostedProject({
