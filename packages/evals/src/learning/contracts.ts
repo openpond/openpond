@@ -47,6 +47,15 @@ export const TaskSourceMappingSchema = z.object({
   familyKey: LearningJsonPointerSchema,
   split: TaskSplitSchema,
 }).strict();
+/** An explicit Model edit starts new evidence; the original admissions remain
+ * in the exact parent package and are never approvals for this source. */
+export const LearningReviewOriginSchema = z.object({
+  modelId: ReleaseIdSchema,
+  packageHash: ReleaseHashSchema,
+  taskset: LearningRevisionRefSchema,
+  batch: LearningRevisionRefSchema,
+  rewardBinding: LearningRevisionRefSchema,
+}).strict();
 export const LearningSourceContentSchema = z.object({
   schemaVersion: z.literal("openpond.learningSource.v1"),
   id: ReleaseIdSchema,
@@ -58,6 +67,7 @@ export const LearningSourceContentSchema = z.object({
   allowedSplits: z.array(TaskSplitSchema).min(1).max(4),
   mapping: TaskSourceMappingSchema.nullable(),
   adapterVersion: z.string().trim().min(1).max(200).nullable(),
+  reviewOrigin: LearningReviewOriginSchema.optional(),
 }).strict().superRefine((source, context) => {
   if (source.kind !== "direct" && !source.mapping) context.addIssue({ code: "custom", path: ["mapping"], message: "Mapped sources require an explicit mapping." });
   if (source.mapping && !source.allowedSplits.includes(source.mapping.split)) context.addIssue({ code: "custom", path: ["allowedSplits"], message: "The mapping split must be allowed by this source." });

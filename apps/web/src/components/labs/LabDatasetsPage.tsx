@@ -25,6 +25,8 @@ import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { modelProjectTasksetIds } from "./models-resource-scope";
+import { ModelBatchReviewAction } from "./learning/ModelBatchReviewAction";
+import { ModelBatchReviews } from "./learning/ModelBatchReviews";
 
 const PAGE_SIZE = 10;
 type TasksetListItem =
@@ -60,6 +62,7 @@ export function LabDatasetsPage({
   detailTab,
   onDetailTabChange,
   onCreateTaskset,
+  onReviewBatch,
 }: {
   state: TrainingStateResponse | null;
   runs: CreateImproveRun[];
@@ -79,6 +82,7 @@ export function LabDatasetsPage({
   detailTab?: TasksetDetailTab | null;
   onDetailTabChange?: (tab: TasksetDetailTab) => void;
   onCreateTaskset?: () => void;
+  onReviewBatch?: (evidenceId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -173,6 +177,8 @@ export function LabDatasetsPage({
             <p>{selected.objective}</p>
           </div>
           <div className="labs-dataset-detail-actions">
+            {!readOnly && project && onReviewBatch && selected.metadata.learning && project.trainingSetup.tasksetRef?.contentHash === selected.contentHash
+              ? <ModelBatchReviewAction key={`${project.id}:${selected.contentHash}`} model={project} training={training} onReview={onReviewBatch} /> : null}
             <button
               className="training-button"
               disabled={readOnly}
@@ -319,6 +325,7 @@ export function LabDatasetsPage({
           { label: "Graders", value: filtered.reduce((total, item) => total + ("graders" in item.value ? item.value.graders.length : 0), 0) },
         ]}
       />
+      {project && onReviewBatch ? <ModelBatchReviews key={project.id} model={project} training={training} onReview={onReviewBatch} /> : null}
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">
           <Search size={14} />

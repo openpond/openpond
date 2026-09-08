@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { ModelProject, Taskset } from "@openpond/contracts";
 import { hashTasksetDraftPackage } from "@openpond/taskset-sdk";
-import { SqliteTasksetDraftStore } from "./store-taskset-drafts.js";
+import { SqliteModelBatchReviewStore } from "./store-model-batch-review.js";
 import type { ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { commitModelProjectSave, findModelProjectSave } from "./store-model-project-authoring.js";
 import { commitModelStarterCreation, findModelStarterCreation, type ModelStarterCommitInput } from "./store-model-starters.js";
@@ -20,7 +20,7 @@ import { completeModelPackageOperation, pendingModelPackageOperation, prepareMod
 import type { TasksetPackageReceipt } from "openpond-sdk/taskset-packages";
 
 /** Model configuration, starter publication and hosting share the store write queue. */
-export class SqliteModelConfigurationStore extends SqliteTasksetDraftStore {
+export class SqliteModelConfigurationStore extends SqliteModelBatchReviewStore {
   async pendingModelPackagePush(scope: ModelPackageScope) {
     await this.ready;
     await this.writeQueue;
