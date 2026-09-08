@@ -97,6 +97,10 @@ export const TasksetDraftSchema = z.object({
   id: IdSchema,
   revision: z.number().int().positive(),
   profileId: IdSchema,
+  modelScope: z.object({
+    modelId: IdSchema,
+    expectedModelRevision: z.number().int().positive(),
+  }).strict().nullable().default(null),
   name: z.string().trim().max(500),
   objective: z.string().trim().max(20_000),
   purpose: TasksetPurposeSchema.default("general"),

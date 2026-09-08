@@ -781,8 +781,13 @@ export function createTrainingApi(deps: {
       return deps.datasetImports.cancel(requiredString(input.importId, "importId"));
     }
     if (action === "init_taskset_draft") {
+      const profileId = requiredString(input.profileId, "profileId");
+      const modelId = string(input.modelId);
+      const model = modelId ? await deps.store.getModelProject(modelId) : null;
+      if (modelId && (!model || model.profileId !== profileId)) throw new Error("Taskset draft Model was not found in this Profile.");
       const draft = createTasksetDraft({
-        profileId: requiredString(input.profileId, "profileId"),
+        profileId,
+        modelScope: model ? { modelId: model.id, expectedModelRevision: model.revision } : null,
         name: string(input.name) ?? "",
       });
       return deps.store.saveTasksetDraft(draft);
@@ -821,11 +826,22 @@ export function createTrainingApi(deps: {
       if (!workspace) throw new Error("Taskset draft workspace was not found.");
       return workspace;
     }
+    if (action === "refresh_taskset_draft_model") {
+      const draft = await requireTasksetDraft(deps.store, requiredString(input.draftId, "draftId"));
+      if (!draft.modelScope) throw new Error("Taskset draft has no Model to refresh.");
+      if (draft.revision !== input.expectedDraftRevision) throw new Error("Taskset draft changed. Refresh before editing.");
+      return deps.store.saveTasksetDraft(TasksetDraftSchema.parse({ ...draft, revision: draft.revision + 1,
+        modelScope: { ...draft.modelScope, expectedModelRevision: input.expectedModelRevision }, updatedAt: new Date().toISOString(),
+      }), draft.revision, { refreshModelRevision: true });
+    }
     if (action === "publish_taskset_draft") {
       const draft = await requireTasksetDraft(
         deps.store,
         requiredString(input.draftId, "draftId"),
       );
+      const requestedModelId = string(input.modelId);
+      if (draft.modelScope && requestedModelId && requestedModelId !== draft.modelScope.modelId) throw new Error("Taskset draft belongs to another Model.");
+      const modelId = draft.modelScope?.modelId ?? requestedModelId;
       if (draft.status === "published") {
         const taskset = draft.publishedTasksetRef
           ? await deps.store.getTasksetRevision(
@@ -842,7 +858,7 @@ export function createTrainingApi(deps: {
           draft,
           modelProjectHosting: deps.modelProjectHosting,
           taskset: await deps.store.getTasksetRevision(taskset.id, taskset.revision, taskset.contentHash) ?? taskset,
-          modelId: string(input.modelId),
+          modelId,
         });
       }
       const workspace = await deps.store.getTasksetDraftWorkspace(draft.id);
@@ -867,7 +883,7 @@ export function createTrainingApi(deps: {
         draft: finalized.draft,
         modelProjectHosting: deps.modelProjectHosting,
         taskset,
-        modelId: string(input.modelId),
+        modelId,
       });
     }
     if (action === "delete_taskset_draft") {

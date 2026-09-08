@@ -16,6 +16,7 @@ import {
   writeTasksetDraftPackage,
 } from "@openpond/taskset-sdk";
 import { z } from "zod";
+import { ModelProjectSchema } from "openpond-sdk/model-projects";
 
 import type { PayloadRow } from "../types.js";
 import { SqlitePreferenceComparisonStore } from "./store-preference-comparison.js";
@@ -23,11 +24,13 @@ import { materializeImmutableTasksetPackage } from "../training/model-starter-pa
 import { verifyPublishedTasksetAssets } from "../training/taskset-package-assets.js";
 import { prepareAuthoredTasksetFiles } from "../training/authored-taskset-files.js";
 import { saveTasksetRevision } from "./store-taskset-revisions.js";
+import { selectTasksetDraftModel } from "./store-taskset-draft-model.js";
 
 const TasksetDraftPointerSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftPointer.v1"),
   id: z.string().trim().min(1),
   profileId: z.string().trim().min(1),
+  modelScope: TasksetDraftSchema.shape.modelScope,
   status: z.enum(["draft", "validating", "needs_review", "published"]),
   revision: z.number().int().positive(),
   workspacePath: z.string().trim().min(1),
@@ -50,7 +53,7 @@ export type TasksetDraftWorkspace = {
 type TasksetDraftPointer = z.infer<typeof TasksetDraftPointerSchema>;
 
 export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
-  async saveTasksetDraft(draftInput: TasksetDraft, expectedRevision?: number): Promise<TasksetDraft> {
+  async saveTasksetDraft(draftInput: TasksetDraft, expectedRevision?: number, options: { refreshModelRevision?: boolean } = {}): Promise<TasksetDraft> {
     const draft = TasksetDraftSchema.parse(draftInput);
     await this.ready;
     const write = this.writeQueue.then(async () => {
@@ -58,9 +61,16 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       const current = existing ? TasksetDraftPointerSchema.safeParse(JSON.parse(existing.payload)) : null;
       if (current?.success) {
         if (current.data.profileId !== draft.profileId) throw new Error("Taskset draft profile cannot change.");
+        if (current.data.modelScope?.modelId !== draft.modelScope?.modelId
+          || (!options.refreshModelRevision && contentHash(current.data.modelScope) !== contentHash(draft.modelScope))) throw new Error("Taskset draft Model ownership cannot change.");
         if (current.data.status === "published") throw new Error("Published Taskset drafts are immutable. Initialize a new draft to revise the Taskset.");
         if (draft.revision < current.data.revision || (expectedRevision !== undefined && current.data.revision !== expectedRevision)) throw new Error("Taskset draft changed before saving. Refresh before saving.");
       } else if (expectedRevision !== undefined) throw new Error("Taskset draft is unavailable for saving.");
+      if ((!current?.success || options.refreshModelRevision) && draft.modelScope) {
+        const model = this.database.get<PayloadRow>("SELECT payload FROM model_projects WHERE id = ? AND profile_id = ?", [draft.modelScope.modelId, draft.profileId]);
+        if (!model) throw new Error("Taskset draft Model was not found in this Profile.");
+        if (ModelProjectSchema.parse(JSON.parse(model.payload)).revision !== draft.modelScope.expectedModelRevision) throw new Error("Taskset draft Model changed. Refresh before editing.");
+      }
       const workspacePath = this.workspacePath(draft.id);
       const written = await writeTasksetDraftPackage(draft, workspacePath);
       const persistedDraft = written.draft;
@@ -68,6 +78,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
         schemaVersion: "openpond.tasksetDraftPointer.v1",
         id: persistedDraft.id,
         profileId: persistedDraft.profileId,
+        modelScope: persistedDraft.modelScope,
         status: persistedDraft.status,
         revision: persistedDraft.revision,
         workspacePath,
@@ -114,6 +125,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
     const importedDraft = TasksetDraftSchema.parse({
       ...sourceDraft,
       profileId: input.profileId,
+      modelScope: null,
       status: "draft",
       revision: 1,
       publishedTasksetRef: null,
@@ -197,6 +209,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       if (!row) throw new Error("Taskset draft was deleted before publication.");
       const pointer = TasksetDraftPointerSchema.parse(JSON.parse(row.payload));
       if (pointer.profileId !== draft.profileId || taskset.profileId !== draft.profileId) throw new Error("Taskset publication belongs to another Profile.");
+      if (contentHash(pointer.modelScope) !== contentHash(draft.modelScope)) throw new Error("Taskset draft Model ownership cannot change.");
       if (pointer.status === "published" && pointer.publishedTasksetRef) {
         const ref = pointer.publishedTasksetRef;
         const saved = this.database.get<PayloadRow>("SELECT payload FROM taskset_revisions WHERE taskset_id = ? AND revision = ? AND content_hash = ?", [ref.id, ref.revision, ref.contentHash]);
@@ -209,6 +222,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       const next = TasksetDraftPointerSchema.parse({ ...pointer, status: published.status, revision: published.revision,
         publishedTasksetRef: published.publishedTasksetRef, updatedAt: published.updatedAt });
       saveTasksetRevision(this.database, taskset, () => {
+        selectTasksetDraftModel(this.database, draft, taskset);
         const current = this.database.get<{ revision: number }>("SELECT revision FROM taskset_drafts WHERE id = ?", [draft.id]);
         if (current?.revision !== draft.revision) throw new Error("Taskset draft changed during publication.");
         this.database.run("UPDATE taskset_drafts SET status = ?, revision = ?, payload = ?, updated_at = ? WHERE id = ?",
@@ -299,6 +313,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       ...workspaceDraft,
       id: pointer.id,
       profileId: pointer.profileId,
+      modelScope: pointer.modelScope,
       status: pointer.status,
       revision: pointer.revision,
       publishedTasksetRef: pointer.publishedTasksetRef,
