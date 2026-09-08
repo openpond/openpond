@@ -1,6 +1,20 @@
 import { z } from "zod";
-import { LearningJsonObjectSchema, LearningRevisionRefSchema, LearningSourceSchema, TaskEvidenceSchema, TaskFeedbackSchema } from "@openpond/evals/learning";
-import { ReleaseIdSchema } from "@openpond/harness";
+import { LearningJsonObjectSchema, LearningRevisionRefSchema, LearningSourceSchema, TaskEvidenceSchema, TaskFeedbackSchema, TaskDefinitionSchema, TaskAdmissionDecisionSchema } from "@openpond/evals/learning";
+import { RewardBindingSchema } from "@openpond/evals/rewards";
+// Reuse the canonical release ID already exposed by Evals without bundling a
+// second copy of Harness's schema graph into the browser contract entrypoint.
+const ReleaseIdSchema = LearningRevisionRefSchema.shape.id;
+
+/** Editor data from a server-validated package; excludes portable file bytes. */
+export const ModelBatchReviewInspectionSchema = z.object({
+  schemaVersion: z.literal("openpond.modelBatchReviewInspection.v1"),
+  packageHash: z.string().regex(/^[a-f0-9]{64}$/),
+  definition: TaskDefinitionSchema,
+  binding: RewardBindingSchema,
+  evidence: z.array(TaskEvidenceSchema).min(1).max(10_000),
+  decisions: z.array(TaskAdmissionDecisionSchema).min(1).max(10_000),
+}).strict();
+export type ModelBatchReviewInspection = z.infer<typeof ModelBatchReviewInspectionSchema>;
 
 export const ModelBatchReviewRequestSchema = z.object({
   schemaVersion: z.literal("openpond.modelBatchReviewRequest.v1"),

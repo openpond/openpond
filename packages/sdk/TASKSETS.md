@@ -89,6 +89,12 @@ edits, then merge the recovered hosted receipt without reverting those edits.
 
 ## Revising an approved batch
 
+Browser editors import schemas and types from `openpond-sdk/model-batch-review`.
+Servers use `inspectModelBatchPackage` from `openpond-sdk/taskset-packages` to
+validate the complete package and return its definition, binding, evidence, and
+decisions without portable file bytes. The inspection includes the sealed package
+hash. Full package validation and compilation remain on the server.
+
 `ModelBatchReviewRequestSchema`, `findModelBatchReview`, and
 `beginModelBatchReview` define explicit editing of a Model's selected reviewed
 batch. The host runs these helpers inside its authorized workspace transaction,

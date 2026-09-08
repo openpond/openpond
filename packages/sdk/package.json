@@ -66,6 +66,10 @@
       "types": "./dist/types/packages/sdk/src/model-projects.d.ts",
       "import": "./dist/model-projects.js"
     },
+    "./model-batch-review": {
+      "types": "./dist/types/packages/sdk/src/model-batch-review-contracts.d.ts",
+      "import": "./dist/model-batch-review.js"
+    },
     "./training": {
       "types": "./dist/types/packages/sdk/src/training.d.ts",
       "import": "./dist/training.js"

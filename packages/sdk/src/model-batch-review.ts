@@ -2,13 +2,21 @@ import { contentHash } from "@openpond/harness";
 import { LearningDomainError, learningRef, sameLearningRef, requireLearningRelease, requireLearningResource, taskBatchPackageMetadata,
   type LearningResourcePointer, type LearningTransaction } from "@openpond/evals/learning";
 import { validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
-import { ModelBatchReviewReceiptSchema, ModelBatchReviewRequestSchema, type ModelBatchReviewRequest } from "./model-batch-review-contracts.js";
+import { ModelBatchReviewInspectionSchema, ModelBatchReviewReceiptSchema, ModelBatchReviewRequestSchema, type ModelBatchReviewRequest } from "./model-batch-review-contracts.js";
 import { prepareModelBatchReview } from "./model-batch-review-preparation.js";
 
 export * from "./model-batch-review-contracts.js";
 export { LearningDomainError as ModelBatchReviewError } from "@openpond/evals/learning";
 
 const operation = (request: ModelBatchReviewRequest) => `model-batch-review-${contentHash([request.modelId, request.operationId])}`;
+
+export function inspectModelBatchPackage(raw: unknown) {
+  const value = validateTasksetPackage(raw);
+  if (!value.learningResources) throw new LearningDomainError("model_review_batch_required", 422);
+  const metadata = taskBatchPackageMetadata(value.taskset);
+  return ModelBatchReviewInspectionSchema.parse({ schemaVersion: "openpond.modelBatchReviewInspection.v1", packageHash: value.contentHash,
+    definition: metadata.definition, binding: metadata.binding, evidence: value.learningResources.evidence, decisions: value.learningResources.decisions });
+}
 
 export async function findModelBatchReview(transaction: LearningTransaction, raw: ModelBatchReviewRequest) {
   const request = ModelBatchReviewRequestSchema.parse(raw);

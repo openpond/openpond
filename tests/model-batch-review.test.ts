@@ -7,7 +7,7 @@ import { withTrainingStore } from "./helpers/training-fixtures";
 import { createLocalTaskGradeExecutor } from "../apps/server/src/training/learning-grade-executor";
 import { prepareLocalLearningBatch } from "../apps/server/src/training/learning-batch-preparation";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export";
-import { beginLocalModelBatchReview } from "../apps/server/src/training/model-batch-review";
+import { beginLocalModelBatchReview, inspectLocalModelBatchReview } from "../apps/server/src/training/model-batch-review";
 import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import";
 import { materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files";
 
@@ -37,6 +37,11 @@ test("revises a Model batch through new evidence and grading before attachment",
   const model = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...setup, id: "model-a" }, 0));
   const other = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...setup, id: "model-b" }, 0));
   const original = await exportLocalModelTasksetPackage({ store, storeDir: directory, profileId: model.profileId, modelId: model.id });
+  const inspection = await inspectLocalModelBatchReview({ store, storeDir: directory, profileId: model.profileId, modelId: model.id });
+  expect(inspection.packageHash).toBe(original.contentHash);
+  expect(inspection.evidence).toEqual(original.learningResources!.evidence);
+  expect(inspection.decisions).toEqual(original.learningResources!.decisions);
+  expect(inspection).not.toHaveProperty("files");
   const asset = createLearningTextAsset({ text: `export function verify({output, expectedOutput, evaluatorContext}) {
     const passed = output.answer === expectedOutput.answer.toUpperCase() && evaluatorContext?.private === "never show to policy";
     return {score: passed ? 1 : 0, passed, feedback: "Checked revised answer", evidenceRefs: []};

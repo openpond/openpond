@@ -16,9 +16,9 @@ import {
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
-  if (request.method === "POST" && requestUrl.pathname === "/v1/training/models/batch-review") {
+  if (request.method === "POST" && ["/v1/training/models/batch-review", "/v1/training/models/batch-review/inspect"].includes(requestUrl.pathname)) {
     try {
-      const result = await deps.trainingPayload("begin_model_batch_review", await readJson(request, { maxBytes: 16_777_216 }), requestUrl);
+      const result = await deps.trainingPayload(requestUrl.pathname.endsWith("/inspect") ? "inspect_model_batch_review" : "begin_model_batch_review", await readJson(request, { maxBytes: 16_777_216 }), requestUrl);
       response.setHeader("Cache-Control", "no-store");
       sendJson(response, 200, result);
     } catch (error) {

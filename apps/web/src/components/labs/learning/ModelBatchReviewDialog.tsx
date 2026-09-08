@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ModelProject } from "@openpond/contracts";
-import { learningRef, taskBatchPackageMetadata, type OpenPondLearningClient, type RewardBinding } from "openpond-sdk/learning";
-import { ModelBatchReviewRequestSchema, type ModelBatchReviewReceipt, type ModelBatchReviewRequest, type TasksetPackage } from "openpond-sdk/taskset-packages";
+import { learningRef, type OpenPondLearningClient, type RewardBinding } from "openpond-sdk/learning";
+import { ModelBatchReviewRequestSchema, type ModelBatchReviewReceipt, type ModelBatchReviewRequest, type ModelBatchReviewInspection } from "openpond-sdk/model-batch-review";
 import { AppDialog } from "../../dialogs/AppDialog";
 import { LearningError, LearningJsonField, LearningPager, parseLearningObject } from "./LearningFields";
 import { useLearningResources } from "./useLearningResources";
@@ -12,12 +12,12 @@ const json = (value: unknown) => JSON.stringify(value, null, 2);
 const nullableObject = (value: string) => value.trim() === "null" ? null : parseLearningObject(value);
 
 export function ModelBatchReviewDialog({ model, value, client, onSave, onClose, onReview }: {
-  model: ModelProject; value: TasksetPackage; client: OpenPondLearningClient | null;
+  model: ModelProject; value: ModelBatchReviewInspection; client: OpenPondLearningClient | null;
   onSave: (request: ModelBatchReviewRequest) => Promise<ModelBatchReviewReceipt | null>;
   onClose: () => void; onReview: (evidenceId: string) => void;
 }) {
-  const metadata = taskBatchPackageMetadata(value.taskset);
-  const resources = value.learningResources!;
+  const metadata = value;
+  const resources = value;
   const [operationId] = useState(() => crypto.randomUUID());
   const [name, setName] = useState(metadata.definition.name);
   const [instructions, setInstructions] = useState(metadata.definition.instructions);
@@ -60,9 +60,9 @@ export function ModelBatchReviewDialog({ model, value, client, onSave, onClose, 
     } catch (error) { setError(error instanceof Error ? error.message : "The review could not be saved."); }
     finally { setBusy(false); }
   }
-  return <><AppDialog ariaLabel="Revise reviewed batch" backdropClassName="labs-rename-backdrop" className="labs-rename-dialog labs-model-create-dialog learning-workspace"
+  return <><AppDialog ariaLabel="Revise reviewed batch" backdropClassName="labs-rename-backdrop" className="labs-rename-dialog labs-model-create-dialog learning-workspace model-batch-review-dialog"
     dismissDisabled={busy} onClose={() => { void guard.requestLeave(onClose); }}>
-    <header><h2>Revise reviewed batch</h2><p>Edit the task or Reward, then grade and review the new examples before selecting the new batch for {model.name}.</p></header>
+    <header><div><h2>Revise reviewed batch</h2><p>Edit the task or Reward, then grade and review the new examples before selecting the new batch for {model.name}.</p></div></header>
     <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <LearningError error={error ?? bindings.error} />
       <label>Task name<input value={name} disabled={busy} onChange={event => setName(event.target.value)} /></label>
