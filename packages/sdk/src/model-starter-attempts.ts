@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RewardCompositionSchema } from "@openpond/evals/rewards";
+import { TaskGradeSchema } from "@openpond/evals/graders";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { canonicalJson, canonicalSha256 } from "./protocol.js";
 
@@ -50,10 +51,17 @@ export const ModelStarterAttemptResultSchema = z.object({
   // Only model-facing messages, never the private environment snapshot.
   messages: z.array(z.record(z.string(), z.unknown())).max(4_002),
   composition: RewardCompositionSchema.nullable(),
+  // Ordinary Tasksets have no Reward binding. Absence preserves the hash of
+  // already retained v1 results; new producers explicitly return null or a grade.
+  grade: TaskGradeSchema.nullable().optional(),
   environment: z.object({ status: z.enum(["completed", "budget_exhausted", "cancelled", "timed_out", "policy_failure", "environment_failure"]), collected: z.boolean(), definition: ModelProjectVersionedRefSchema, initialStateHash: HashSchema.nullable(), finalStateHash: HashSchema.nullable(), attemptHash: HashSchema }).strict(),
   providerRequestIds: z.array(IdSchema).max(1_001),
   contentHash: HashSchema,
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (!value.grade) return;
+  if (value.composition) context.addIssue({ code: "custom", path: ["grade"], message: "An ordinary grade cannot also claim a Reward composition." });
+  if (!["completed", "failed"].includes(value.attempt.status) || !value.attempt.resultAvailable || value.attempt.score !== value.grade.score || value.attempt.gradingStatus !== value.grade.gradingStatus || value.attempt.passed !== (value.grade.score === null ? null : value.grade.passed)) context.addIssue({ code: "custom", path: ["grade"], message: "Ordinary grade differs from its terminal attempt summary." });
+});
 export type ModelStarterAttemptResult = z.infer<typeof ModelStarterAttemptResultSchema>;
 
 export class OpenPondModelStarterAttemptError extends Error {

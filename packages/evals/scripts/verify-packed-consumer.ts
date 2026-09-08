@@ -65,7 +65,7 @@ import { createLearningTextAsset } from "@openpond/evals/learning";
 import { contentHash, sha256 } from "@openpond/harness";
 import { TasksetMetricPolicySchema } from "@openpond/evals/metrics";
 import { executeTasksetMetricInWorker } from "@openpond/evals/metrics/node";
-import { evaluateDeterministicGrader, portableDeterministicCheck } from "@openpond/evals/graders";
+import { evaluateDeterministicGrader, portableDeterministicCheck, gradeTaskEvidence, verifyTaskGrade } from "@openpond/evals/graders";
 const exactCheck = evaluateDeterministicGrader({ grader: { kind: "content", config: { operator: "exact_equals", expectedValue: "answer" } }, task: { expectedOutput: null }, evidence: { output: { text: "answer " }, artifactRefs: [], runtimeEventRefs: [] } });
 if (exactCheck.score !== 0 || portableDeterministicCheck({ kind: "test", config: {} }).config.outputField !== "testsPassed") throw new Error("Packed deterministic grader semantics differ");
 const metricManifest = genericToolConformance.manifest;
@@ -129,6 +129,9 @@ const grades = await gradeEvidence({
   graders: genericToolConformance.taskset.graders,
 });
 if (!grades[0]?.passed) throw new Error("packed deterministic grader failed");
+const ordinaryInput = { task: genericToolConformance.taskset.tasks[0], evidence: { output: { text: "done" }, runtimeEventRefs: [], artifactRefs: [] }, graders: genericToolConformance.taskset.graders };
+const ordinaryGrade = verifyTaskGrade(await gradeTaskEvidence(ordinaryInput), ordinaryInput);
+if (ordinaryGrade.score !== 1 || ordinaryGrade.gradingStatus !== "scored") throw new Error("Packed ordinary grade aggregation failed");
 if (verifyAttemptReceipt({}) !== false) throw new Error("invalid receipt was accepted");
 const environment = createEnvironmentRelease({
   schemaVersion: "openpond.environmentRelease.v1",

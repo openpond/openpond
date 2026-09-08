@@ -13,7 +13,7 @@ import {
   genericToolConformance,
   marketingPortfolioConformance,
 } from "../src/conformance.js";
-import { gradeEvidence } from "../src/graders.js";
+import { aggregateGraderScores, gradeEvidence, gradeTaskEvidence, verifyTaskGrade } from "../src/graders.js";
 import {
   executeRuntimeProtocol,
   createHarnessRelease,
@@ -46,6 +46,28 @@ const artifact = {
 };
 
 describe("public package conformance", () => {
+  // A stored ordinary grade must retain its complete denominator, hard gates,
+  // unavailable checks and admitted evidence when another client reads it.
+  it("seals ordinary weighted grades and rejects changed inputs or result populations", async () => {
+    const base = genericToolConformance.taskset.graders[0]!;
+    const task = genericToolConformance.taskset.tasks[0]!;
+    const graders = [{ ...base, id: "pass", weight: 3, hardGate: false }, { ...base, id: "fail", weight: 1, hardGate: false, kind: "content" as const, config: { includes: ["absent"] } }];
+    const input = { task, graders, evidence: { output: { text: "done" }, artifactRefs: [artifact.id], runtimeEventRefs: [] } };
+    const grade = await gradeTaskEvidence(input);
+    expect(grade).toMatchObject({ score: 0.75, passed: false, rewardEligible: true, gradingStatus: "scored" });
+    expect(verifyTaskGrade(grade, input)).toEqual(grade);
+    expect(() => verifyTaskGrade(grade, { ...input, evidence: { ...input.evidence, output: { text: "different" } } })).toThrow("admitted");
+    expect(() => verifyTaskGrade(grade, { ...input, graders: [...graders].reverse() })).toThrow("admitted");
+    const altered = { ...grade, score: 1 };
+    const { contentHash: _hash, ...alteredContent } = altered;
+    expect(() => verifyTaskGrade({ ...altered, contentHash: contentHash(alteredContent) }, input)).toThrow("summary");
+    expect(() => aggregateGraderScores({ graders, components: grade.components.slice(0, 1) })).toThrow("population");
+    expect(() => aggregateGraderScores({ graders, components: [grade.components[0]!, grade.components[0]!] })).toThrow("duplicate");
+    expect(aggregateGraderScores({ graders: [graders[0]!, { ...graders[1]!, hardGate: true }], components: grade.components })).toMatchObject({ score: 0, rewardEligible: true });
+    expect(aggregateGraderScores({ graders: graders.map(grader => ({ ...grader, weight: 0 })), components: grade.components })).toMatchObject({ score: null, rewardEligible: false, gradingStatus: "unscorable" });
+    expect(aggregateGraderScores({ graders, components: [{ ...grade.components[0]!, score: null }, grade.components[1]!] })).toMatchObject({ score: null, rewardEligible: false, gradingStatus: "unscorable" });
+    expect(await gradeTaskEvidence({ ...input, evidence: { ...input.evidence, infrastructureError: "world failed" } })).toMatchObject({ score: null, failureClass: "infrastructure_failure", rewardEligible: false });
+  });
   it.each([
     ["", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],
     ["abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],

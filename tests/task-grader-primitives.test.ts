@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { gradeAttempt as gradeLocalAttempt, materializePortableTasksetRelease } from "../packages/taskset-sdk/src";
-import { gradeEvidence } from "@openpond/evals/graders";
+import { gradeTaskEvidence, verifyTaskGrade } from "@openpond/evals/graders";
 import { createTasksetPackage } from "openpond-sdk/taskset-packages";
 import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import.js";
 import { attemptFixture, tasksetFixture } from "./helpers/training-fixtures";
@@ -11,13 +11,15 @@ async function gradeAttempt(input: Parameters<typeof gradeLocalAttempt>[0]) {
   const native = await gradeLocalAttempt(input);
   const taskset = { ...tasksetFixture({ graders: input.graders }), tasks: [{ ...input.task, assets: [], privilegedContextRef: null }] };
   const releases = materializePortableTasksetRelease({ taskset, adapterId: "grader-parity" });
-  const portable = await gradeEvidence({ task: releases.tasksetRelease.tasks[0]!, graders: releases.tasksetRelease.graders,
-    evidence: { output: input.attempt.output, artifactRefs: input.attempt.artifactRefs, runtimeEventRefs: input.attempt.runtimeEventRefs, infrastructureError: input.attempt.infrastructureError } });
+  const gradingInput = { task: releases.tasksetRelease.tasks[0]!, graders: releases.tasksetRelease.graders,
+    evidence: { output: input.attempt.output, artifactRefs: input.attempt.artifactRefs, runtimeEventRefs: input.attempt.runtimeEventRefs, infrastructureError: input.attempt.infrastructureError } };
+  const portable = verifyTaskGrade(await gradeTaskEvidence(gradingInput), gradingInput);
   const value = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset: releases.tasksetRelease, environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease, files: [] });
   const imported = prepareImportedTasksetPackage({ package: value, profileId: "grader-import", name: "Imported graders", createdAt: input.attempt.completedAt });
   const roundtrip = await gradeLocalAttempt({ ...input, task: imported.taskset.tasks[0]!, graders: imported.taskset.graders });
   const outcomes = (items: Array<{ score: number | null; passed: boolean }>) => items.map(({ score, passed }) => ({ score, passed }));
-  expect(outcomes(portable)).toEqual(outcomes(native.components));
+  expect(outcomes(portable.components)).toEqual(outcomes(native.components));
+  expect(portable).toMatchObject({ score: native.score, passed: native.passed, rewardEligible: native.rewardEligible, failureClass: native.failureClass });
   expect(outcomes(roundtrip.components)).toEqual(outcomes(native.components));
   expect(materializePortableTasksetRelease({ taskset: imported.taskset, adapterId: "grader-parity" }).tasksetRelease).toEqual(value.taskset);
   return native;

@@ -46,6 +46,13 @@ resolve credentials, or persist artifacts.
 
 ## Ordinary graders
 
+`gradeTaskEvidence` returns a sealed ordinary Taskset grade with the complete
+grader population, weighted score, hard gates and explicit unavailable status.
+`verifyTaskGrade` checks retained results against the exact admitted task,
+attempt evidence and graders, including each component hash and aggregation.
+`aggregateGraderScores` provides the same policy to native grading adapters.
+Ordinary grades do not require or manufacture a Reward binding.
+
 `evaluateDeterministicGrader` and `portableDeterministicCheck` from `/graders`
 provide the shared local/portable interpretation of ordinary checks. They retain
 explicit exact-text normalization, final-answer extraction, structured JSON,

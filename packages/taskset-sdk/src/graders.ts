@@ -5,7 +5,7 @@ import {
   type TaskAttemptResult,
   type TaskDataRecord,
 } from "@openpond/contracts";
-import { evaluateDeterministicGrader, portableDeterministicCheck } from "@openpond/evals/graders";
+import { aggregateGraderScores, evaluateDeterministicGrader, portableDeterministicCheck } from "@openpond/evals/graders";
 import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
 import { contentHash } from "./hashing.js";
 import { gradeLearningBatchAttempt } from "./learning-graders.js";
@@ -43,19 +43,15 @@ export async function gradeAttempt(input: {
       ? component(grader, null, false, "Infrastructure failure; no reward was produced.", [], false)
       : await runGrader(grader, input.task, input.attempt, input.modelJudge, input.customVerifier, input.signal));
   }
-  const unscorable = components.some(item => item.score === null);
-  const hardGateFailed = components.some(item => item.hardGate && !item.passed);
-  const totalWeight = input.graders.reduce((sum, grader) => sum + grader.weight, 0);
-  const weighted = components.reduce((sum, item, index) => sum + (item.score ?? 0) * input.graders[index]!.weight, 0);
-  const score = input.attempt.infrastructureError || unscorable || totalWeight <= 0 ? null : hardGateFailed ? 0 : weighted / totalWeight;
-  const passed = score !== null && !hardGateFailed && components.every(item => item.passed);
+  const summary = aggregateGraderScores({ graders: input.graders, infrastructureError: input.attempt.infrastructureError,
+    components: components.map(item => ({ ...item, failureClass: item.score === null ? "grader_failure" : item.passed ? null : "policy_failure" })) });
   return {
     schemaVersion: "openpond.gradeResult.v1",
     id: `grade_${contentHash([input.attempt.id, graderSetHash, components]).slice(0, 24)}`,
-    attemptId: input.attempt.id, graderSetHash, score, passed, components,
-    failureClass: input.attempt.infrastructureError ? "infrastructure_failure" : score === null ? "grader_failure" : passed ? null : "policy_failure",
+    attemptId: input.attempt.id, graderSetHash, score: summary.score, passed: summary.passed, components,
+    failureClass: summary.failureClass,
     feedback: input.attempt.infrastructureError ? [input.attempt.infrastructureError] : components.flatMap(item => item.feedback ? [item.feedback] : []),
-    rewardEligible: score !== null && components.some(item => item.rewardEligible),
+    rewardEligible: summary.rewardEligible,
     createdAt: input.now?.() ?? new Date().toISOString(),
   };
 }
