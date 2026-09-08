@@ -1,19 +1,25 @@
 import {
   createLearningService, learningRef, LearningSourceSchema, TaskDefinitionSchema,
   TaskEvidenceSchema, TaskGradeRunSchema, type LearningRepository, type TaskExampleSubmission,
+  createLearningTextAsset,
 } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 
 export const learningContext = { scope: "profile-a", actor: { id: "reviewer-a", role: "reviewer" as const } };
 export const learningNow = "2026-09-06T12:00:00.000Z";
 
-export async function learningFixture(repository: LearningRepository) {
+export async function learningFixture(repository: LearningRepository, options: { verifierSource?: string } = {}) {
   const service = createLearningService(repository, { now: () => learningNow });
   let serial = 0;
   const command = (input: Record<string, unknown>) => service.command(learningContext, { operationId: `operation-${++serial}`, ...input });
+  const verifier = options.verifierSource ? createLearningTextAsset({ text: options.verifierSource, path: "reward/verify.js", mediaType: "text/javascript", visibility: "host_private" }) : undefined;
+  if (verifier) {
+    const { contentHash: _hash, ...content } = verifier;
+    await command({ action: "publish", kind: "asset", expectedRevision: 0, content });
+  }
   const reward = RewardReleaseSchema.parse((await command({
     action: "publish", kind: "reward", expectedRevision: 0,
-    content: { schemaVersion: "openpond.rewardRelease.v1", id: "match", revision: 1, name: "Exact answer", description: "Compare structured answer", implementation: { kind: "state", config: { fields: ["answer"] } }, rawScore: { minimum: 0, maximum: 1 }, assets: [] },
+    content: { schemaVersion: "openpond.rewardRelease.v1", id: "match", revision: 1, name: "Exact answer", description: "Compare structured answer", implementation: verifier ? { kind: "custom_verifier", verifierRef: verifier.asset, exportName: "verify", timeoutMs: 5_000, networkPolicy: "none" } : { kind: "state", config: { fields: ["answer"] } }, rawScore: { minimum: 0, maximum: 1 }, assets: verifier ? [verifier.asset] : [] },
   })).resources[0]);
   const binding = RewardBindingSchema.parse((await command({
     action: "publish", kind: "binding", expectedRevision: 0,

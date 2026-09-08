@@ -2,6 +2,7 @@ import path from "node:path";
 import { contentHash, type ImmutableAssetRef } from "@openpond/harness";
 import { materializePortableTasksetRelease, computeTasksetHash } from "@openpond/taskset-sdk";
 import type { TasksetPackage } from "openpond-sdk/taskset-packages";
+import { requireLearningRelease, requireLearningResource, taskBatchPackageMetadata } from "@openpond/evals/learning";
 import type { SqliteStore } from "../store/store.js";
 import { captureLocalTasksetPackage } from "./taskset-package-capture.js";
 import { resolveLocalTasksetModelResources } from "./taskset-package-resources.js";
@@ -42,6 +43,22 @@ export async function exportLocalModelTasksetPackage(input: {
     return captured;
   }
   const releases = materializePortableTasksetRelease({ taskset, adapterId: desktopTasksetRuntimeAdapterId(taskset) });
+  const learningResources = taskset.metadata.learning === undefined ? undefined : await input.store.learningRepository().transaction(input.profileId, async transaction => {
+    const metadata = taskBatchPackageMetadata(releases.tasksetRelease);
+    const batch = await requireLearningRelease(transaction, "batch", metadata.batch);
+    const evidence = await Promise.all(batch.examples.map(entry => requireLearningRelease(transaction, "evidence", entry.evidence)));
+    const decisions = await Promise.all(batch.examples.map(entry => requireLearningRelease(transaction, "decision", entry.decision)));
+    const sourceRefs = [...new Map(evidence.map(item => [contentHash(item.source), item.source])).values()];
+    const sources = await Promise.all(sourceRefs.map(ref => requireLearningRelease(transaction, "source", ref)));
+    const assetIds = new Set(metadata.rewards.flatMap(reward => [
+      ...reward.assets.map(asset => asset.id),
+      ...(reward.implementation.kind === "custom_verifier" ? [reward.implementation.verifierRef.id]
+        : reward.implementation.kind === "model_judge" || reward.implementation.kind === "human" ? [reward.implementation.rubricRef.id] : []),
+      ...("inputContract" in reward.implementation ? [reward.implementation.inputContract.id] : []),
+    ]));
+    const assets = await Promise.all([...assetIds].map(id => requireLearningResource(transaction, "asset", id, 1)));
+    return { batch, evidence, decisions, sources, assets };
+  });
   const resources = taskset.metadata.taskDefinition === undefined && taskset.metadata.rewardBinding === undefined ? null : await resolveLocalTasksetModelResources({
     store: input.store,
     taskset,
@@ -54,7 +71,7 @@ export async function exportLocalModelTasksetPackage(input: {
     const { taskset: _taskset, executionResources: _executionResources, ...portableResources } = resources;
     modelResources = portableResources;
   }
-  const inline = new Set(resources?.assets.map(asset => asset.id));
+  const inline = new Set([...(resources?.assets ?? []), ...(learningResources?.assets ?? [])].map(asset => asset.id));
   const sources = new Map<string, { asset: ImmutableAssetRef; sourcePath: string }>();
   const add = (asset: ImmutableAssetRef, sourcePath = asset.path) => {
     if (inline.has(asset.id)) return;
@@ -75,7 +92,7 @@ export async function exportLocalModelTasksetPackage(input: {
   }
   const captured = await captureLocalTasksetPackage({
     root: path.join(input.storeDir, "training", "tasksets", tasksetPackageDirectoryId(taskset)),
-    content: { schemaVersion: "openpond.tasksetPackage.v1", taskset: release, environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease, ...(modelResources ? { modelResources } : {}) },
+    content: { schemaVersion: "openpond.tasksetPackage.v1", taskset: release, environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease, ...(modelResources ? { modelResources } : {}), ...(learningResources ? { learningResources } : {}) },
     sources: [...sources.values()],
   });
   // Do not hand a newly stale selection to a caller about to publish it.

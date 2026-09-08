@@ -2,6 +2,7 @@
 // listener, package-build, or service boundary. Keep the list explicit so a
 // fast unit run never changes meaning because of a filename heuristic.
 export const ROOT_SYSTEM_TESTS = [
+  "tests/learning-store.test.ts",
   "tests/persistence-boundaries.test.ts",
   "apps/server/src/**/*.test.ts",
   "tests/agent-app-server-cli.test.ts",

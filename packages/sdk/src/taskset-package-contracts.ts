@@ -4,6 +4,8 @@ import { EnvironmentReleaseSchema, VerifierSetReleaseSchema, verifyEnvironmentRe
 import { assertTasksetRelease, TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import { ModelTasksetPackageSchema, validateModelTasksetPackage } from "./model-taskset-derivation.js";
+import { taskBatchPackageMetadata } from "@openpond/evals/learning";
+import { TasksetPackageLearningResourcesSchema, learningPackageContextFiles, validateTasksetLearningResources } from "./taskset-package-learning.js";
 
 /** The limit covers the entire decoded JSON envelope, including base64. */
 export const MAX_TASKSET_PACKAGE_BYTES = 64 * 1024 * 1024;
@@ -19,9 +21,15 @@ export const TasksetPackageContentSchema = z.object({
   verifierSet: VerifierSetReleaseSchema,
   files: z.array(TasksetPackageFileSchema).max(10_000),
   modelResources: BoundModelResourcesSchema.optional(),
+  learningResources: TasksetPackageLearningResourcesSchema.optional(),
 }).strict();
 export const TasksetPackageSchema = TasksetPackageContentSchema.extend({ contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 export type TasksetPackage = z.infer<typeof TasksetPackageSchema>;
+
+/** The selected binding belongs to the package's declared authoring graph. */
+export function tasksetPackageRewardBinding(value: TasksetPackage) {
+  return value.learningResources ? taskBatchPackageMetadata(value.taskset).binding : value.modelResources?.rewardBinding ?? null;
+}
 
 export function decodeTasksetPackageFile(value: z.infer<typeof TasksetPackageFileSchema>): Uint8Array {
   const file = TasksetPackageFileSchema.parse(value);
@@ -78,7 +86,14 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
       if (!result.files.some(file => file.asset.path === resource.path)) throw new Error(`Taskset environment resource is missing: ${resource.path}.`);
     }
   }
-  if (result.modelResources) {
+  if (result.learningResources) {
+    if (result.modelResources) throw new Error("Taskset package cannot declare competing authoring graphs.");
+    const learning = validateTasksetLearningResources(taskset, result.learningResources);
+    for (const expected of learningPackageContextFiles(learning)) {
+      if (!same(files.get(expected.asset.id), expected)) throw new Error("Taskset private context differs from its reviewed evidence.");
+    }
+    for (const asset of learning.assets) requireAsset(asset.asset);
+  } else if (result.modelResources) {
     const model = validateModelTasksetPackage({ ...result.modelResources, taskset, executionResources: { environment, verifierSet } });
     for (const asset of model.assets) requireAsset(asset.asset);
   } else if (["starter", "rewardBinding", "rewardExecution", "modelTasksetDerivation", "learning"].some(key => taskset.metadata[key] !== undefined)) {

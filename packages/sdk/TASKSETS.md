@@ -38,6 +38,14 @@ the service's error code.
 and Verifier Set releases, binary files encoded as canonical base64, and the
 complete model resource graph when the Taskset declares a model binding.
 
+Reviewed learning batches instead carry `learningResources`: the sealed batch,
+exact evidence and admission decisions, source snapshots, and Reward source
+assets. Validation recompiles the batch and checks its tasks, execution policy,
+and private context files against those snapshots. These are portable review
+records; importing a package does not enable an intake source, issue credentials,
+or grant training approval in the receiving workspace. Local import and grading
+can use the package without contacting a hosted service.
+
 Validation verifies release hashes, dependency references, file bytes and
 visibility. The package content hash seals the whole graph, including files
 outside the Taskset manifest. The 64 MiB limit includes the JSON envelope and

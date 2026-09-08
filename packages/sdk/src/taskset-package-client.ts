@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TasksetCatalogReleaseRefSchema } from "./taskset-catalog.js";
-import { MAX_TASKSET_PACKAGE_BYTES, TasksetPackageSchema, validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
+import { MAX_TASKSET_PACKAGE_BYTES, TasksetPackageSchema, tasksetPackageRewardBinding, validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
 import { HostedModelProjectSummarySchema, HostedModelProjectSyncSchema, HostedModelProjectTrainingSetupSchema } from "./model-projects.js";
 import { contentHash } from "@openpond/harness";
 import { learningRef } from "@openpond/evals/learning";
@@ -66,8 +66,9 @@ export class OpenPondTasksetPackageClient {
     if (request.modelConfiguration) {
       const expected = request.modelConfiguration;
       const project = receipt.project;
+      const binding = tasksetPackageRewardBinding(request.package);
       const setup = HostedModelProjectTrainingSetupSchema.parse({ ...expected.trainingSetup, tasksetRef: learningRef(release),
-        rewardBindingRef: request.package.modelResources ? learningRef(request.package.modelResources.rewardBinding) : null,
+        rewardBindingRef: binding ? learningRef(binding) : null,
         tasksetRelease: null, recipe: null });
       if (!project || project.teamId !== this.#options.teamId || project.etag !== receipt.projectEtag
         || ![project.id, project.portableProjectId].includes(request.modelProjectId)
