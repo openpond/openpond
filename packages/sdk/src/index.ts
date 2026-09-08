@@ -9,7 +9,7 @@ import { OpenPondProjectActionsClient } from "./project-actions.js";
 import { OpenPondProfileActionsClient } from "./profile-actions.js";
 import { OpenPondWorkflowsClient } from "./workflows.js";
 import type { OpenPondClientOptions } from "./types.js";
-import { OpenPondLearningClient } from "./learning.js";
+import { OpenPondLearningClient } from "./learning-client.js";
 
 export class OpenPondClient {
   readonly sandboxes: OpenPondSandboxClient;
@@ -92,8 +92,8 @@ export type {
   OpenPondWorkflowWeekday,
 } from "./workflows.js";
 export * from "./refiner.js";
-export { OpenPondLearningClient, OpenPondLearningError } from "./learning.js";
-export type { OpenPondLearningClientOptions, LearningRequestOptions } from "./learning.js";
+export { OpenPondLearningClient, OpenPondLearningError } from "./learning-client.js";
+export type { OpenPondLearningClientOptions, LearningRequestOptions } from "./learning-client.js";
 
 export * from "@openpond/cloud/sandbox/client";
 export * from "@openpond/cloud/sandbox/types";

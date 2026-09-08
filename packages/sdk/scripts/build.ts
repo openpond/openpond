@@ -36,6 +36,9 @@ await build({
   },
   outdir: dist,
   bundle: true,
+  // Keep shared schemas/authoring helpers single-instance across public entry
+  // points when consumers import several SDK protocols in the same renderer.
+  splitting: true,
   platform: "node",
   target: "node22.14",
   format: "esm",
