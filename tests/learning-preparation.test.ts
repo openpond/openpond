@@ -92,6 +92,10 @@ test("retains private code, source roles and normalization through prepared batc
     await fixture.command({ action: "seal_batch", batchId: "composed-batch", taskDefinition: learningRef(definition), purpose: "supervised_training",
       evidence: [learningRef(evidence)], decisions: [learningRef(decision)] });
     const taskset = await prepareLocalLearningBatch(store, home, { profileId: learningContext.scope, batchId: "composed-batch" });
+    // Reusing a release across roles must not duplicate the immutable bundle input.
+    const metadata = taskset.metadata.learning as { rewards: Array<{ id: string }> };
+    expect(metadata.rewards).toHaveLength(2);
+    expect(new Set(metadata.rewards.map(reward => reward.id)).size).toBe(2);
     const privateGrader = taskset.graders.find((grader) => grader.kind === "custom_verifier")!;
     if (privateGrader.kind !== "custom_verifier") throw new Error("Prepared code grader is missing.");
     expect(await readFile(path.join(home, "training", "tasksets", taskset.id, privateGrader.module), "utf8")).toBe(code.text);
