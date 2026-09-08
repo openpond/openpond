@@ -1,5 +1,5 @@
 import path from "node:path";
-import { GraderFixtureSchema, TasksetEnvironmentResourceSchema, TasksetSchema, TasksetSourceRefSchema, type GeneratedTaskFile } from "@openpond/contracts";
+import { GraderFixtureSchema, TasksetEnvironmentResourceSchema, TasksetMetricPolicySchema, TasksetSchema, TasksetSourceRefSchema, type GeneratedTaskFile } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import { learningRef, taskBatchPackageMetadata, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { computeTasksetHash, createTasksetDraft, learningVerifierModule, projectLearningBatchGraders } from "@openpond/taskset-sdk";
@@ -33,7 +33,7 @@ export function prepareImportedTasksetPackage(input: {
     const name = learningVerifierModule(grader.verifierRef.contentHash);
     if (!files.some(file => file.path === name)) files.push({ path: name, role: "verifier", content: asset ? verifyLearningTextAsset(asset, grader.verifierRef) : new TextDecoder("utf-8", { fatal: true }).decode(decodeTasksetPackageFile(file)) });
   }
-  const authoring = (release.metadata.ordinaryAuthoring ?? release.metadata.starterAuthoring) as { graderFixtures?: unknown } | undefined;
+  const authoring = (release.metadata.ordinaryAuthoring ?? release.metadata.starterAuthoring) as { graderFixtures?: unknown; metricPolicy?: unknown } | undefined;
   const fixtures = GraderFixtureSchema.array().max(100_000).parse(authoring?.graderFixtures ?? []);
   const kind = release.environment.kind === "text" ? "chat" : release.environment.kind === "custom_program" ? "program" : release.environment.kind;
   const projected = TasksetSchema.parse({
@@ -65,6 +65,7 @@ export function prepareImportedTasksetPackage(input: {
     graders: resources ? projectLearningBatchGraders(resources.rewardBinding, resources.rewards, resources.assets)
       : learning ? projectLearningBatchGraders(learning.binding, learning.rewards, value.learningResources!.assets) : importedPackageGraders(value),
     graderFixtures: fixtures, learningSignals: draft.learningSignals,
+    ...(authoring?.metricPolicy === undefined ? {} : { metrics: TasksetMetricPolicySchema.parse(authoring.metricPolicy) }),
     authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1", model: null, modelConfig: {},
       skillHash: contentHash("openpond-package-import-v1"), promptTemplateVersion: "package-import-v1", buildIntent: "discovery",
       buildSpecification: null, evidenceHashes: [value.contentHash], tasksetSdkVersion: "package-import-v1",

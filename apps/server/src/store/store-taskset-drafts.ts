@@ -219,7 +219,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       updatedAt: importedDraft.updatedAt,
     });
     await this.savePointer(pointer);
-    return importedDraft;
+    return this.draftFromStoredPayload(pointer);
   }
 
   async materializePublishedTasksetPackage(input: {

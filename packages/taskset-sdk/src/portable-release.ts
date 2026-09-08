@@ -137,6 +137,7 @@ export function materializePortableTasksetRelease(input: {
       sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
       environmentResources: input.taskset.environment.resources ?? [],
       ordinaryAuthoring: {
+        ...(input.taskset.metrics ? { metricPolicy: input.taskset.metrics } : {}),
         graderFixtures: input.taskset.graderFixtures,
         judgeCalibrationFixtures: Object.fromEntries(input.taskset.graders
           .filter(grader => grader.kind === "model_judge")

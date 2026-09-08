@@ -50,6 +50,10 @@ export async function prepareAuthoredTasksetFiles(taskset: Taskset, directory: s
     }
   }
   await visit();
+  const aggregator = taskset.metrics?.customAggregator;
+  const aggregatorBytes = aggregator ? bytes.get(aggregator.module) : undefined;
+  if (aggregator && !aggregatorBytes) throw new Error("Declared Taskset metric module is missing.");
+  const metrics = aggregator && aggregatorBytes ? { ...taskset.metrics!, customAggregator: { ...aggregator, contentHash: sha256(aggregatorBytes) } } : taskset.metrics;
   const inventory = new Map<string, { asset: ImmutableAssetRef; sourcePath: string }>();
   const declaredPaths = new Set<string>();
   const generatedFiles: GeneratedTaskFile[] = [];
@@ -108,7 +112,7 @@ export async function prepareAuthoredTasksetFiles(taskset: Taskset, directory: s
     const resources = z.object({ environment: z.unknown(), verifierSet: z.unknown().optional() }).parse(environmentMetadata.portableExecutionResources);
     environmentMetadata.portableExecutionResources = { environment: resources.environment };
   }
-  const prepared = TasksetSchema.parse({ ...taskset, graders,
+  const prepared = TasksetSchema.parse({ ...taskset, graders, metrics,
     environment: { ...taskset.environment, metadata: environmentMetadata },
     metadata: { ...metadata, ...(importedPackageHash === undefined ? {} : { sourceImportedPackageHash: importedPackageHash }), portableFileInventory: AuthoredTasksetFileInventorySchema.parse([...inventory.values()].sort((left, right) => left.asset.id.localeCompare(right.asset.id))) } });
   return { taskset: TasksetSchema.parse({ ...prepared, contentHash: computeTasksetHash(prepared) }), generatedFiles };

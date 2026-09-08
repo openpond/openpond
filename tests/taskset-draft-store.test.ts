@@ -8,6 +8,7 @@ import {
   tasksetDraftFromTaskset,
   writeTasksetDraftPackage,
   materializePortableTasksetRelease,
+  sha256,
 } from "../packages/taskset-sdk/src/index.js";
 import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures.js";
 import { createTasksetEvaluationVerifier } from "../apps/server/src/training/evaluation-custom-verifier.js";
@@ -143,7 +144,12 @@ describe("Taskset draft persistence", () => {
         "2026-08-30T12:00:00.000Z",
       );
       draft.environment.resources = draft.tasks.map(task => ({ id: task.privilegedContextRef!, kind: "file", path: `assets/${task.id}-context.json`, mediaType: "application/json", visibility: "privileged", required: true, metadata: {} }));
+      const metricSource = "export function aggregate(scores) { return Math.min(...scores); }";
+      draft.metrics = { ...draft.metrics, aggregation: "custom", customAggregator: { module: "metrics/aggregate.js", exportName: "aggregate", contentHash: "0".repeat(64), timeoutMs: 1000, networkPolicy: "none" } };
       await writeTasksetDraftPackage(draft, packageDirectory);
+      // A file edit can occur after the form manifest was written. Publication
+      // must pin the edited bytes rather than carry the old form hash.
+      await writeFile(path.join(packageDirectory, "metrics/aggregate.js"), metricSource);
       await mkdir(path.join(packageDirectory, "graders"), { recursive: true });
       await writeFile(path.join(packageDirectory, grader.module), "export function verify() { return { score: 1, passed: true, feedback: 'original' }; }");
       await mkdir(path.join(packageDirectory, "assets", "matter"), { recursive: true });
@@ -164,6 +170,8 @@ describe("Taskset draft persistence", () => {
         revision: 1,
       });
       const workspace = await store.getTasksetDraftWorkspace(imported.id);
+      const revisedMetricSource = metricSource.replace("Math.min", "Math.max");
+      await writeFile(path.join(workspace!.workspacePath, "metrics/aggregate.js"), revisedMetricSource);
       expect(
         await readFile(path.join(workspace!.workspacePath, "assets", "matter", "input.docx")),
       ).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
@@ -178,6 +186,7 @@ describe("Taskset draft persistence", () => {
       expect(JSON.parse(await readFile(path.join(tasksetRoot, "taskset.json"), "utf8")))
         .toMatchObject({ schemaVersion: "openpond.taskset.v1", id: taskset.id });
       await store.upsertTaskset(firstPublished);
+      expect(firstPublished.metrics?.customAggregator?.contentHash).toBe(sha256(revisedMetricSource));
       const model = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "ordinary-package-model", profileId: imported.profileId,
         name: "Ordinary package", objective: null, defaultBaseModel: null, defaultDestinationId: null,
         trainingSetup: { tasksetRef: { id: firstPublished.id, revision: firstPublished.revision, contentHash: firstPublished.contentHash } } }, 0));
@@ -258,6 +267,7 @@ describe("Taskset draft persistence", () => {
       } finally { await closeTestDatabase(initializationDb); }
       const importedHome = path.join(directory, "downloaded");
       const downloaded = prepareImportedTasksetPackage({ package: exported, profileId: "downloaded-profile", name: "Downloaded tasks", createdAt: "2026-09-08T01:00:00.000Z" });
+      expect(downloaded.taskset.metrics).toEqual(firstPublished.metrics);
       await materializeImportedTasksetPackage({ home: importedHome, ...downloaded });
       expect(materializePortableTasksetRelease({ taskset: downloaded.taskset, adapterId: "downloaded" }).tasksetRelease).toEqual(exported.taskset);
       const downloadedVerifier = await createTasksetEvaluationVerifier({ store, storeDir: importedHome }, downloaded.taskset);
