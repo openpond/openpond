@@ -2,6 +2,8 @@ import { expect, it } from "vitest";
 import { ModelStarterAttemptRequestSchema, ModelStarterAttemptSummarySchema, OpenPondModelStarterAttemptsClient } from "../src/model-starter-attempts.js";
 import { canonicalSha256 } from "../src/protocol.js";
 import { sealLearningContent } from "@openpond/evals/learning";
+import { gradeTaskEvidence } from "@openpond/evals/graders";
+import { genericToolConformance } from "@openpond/evals/conformance";
 import { verifyModelStarterEnvironmentAttempt } from "../src/model-starters.js";
 
 // A retry must select the same immutable task and policy; neither submitted
@@ -31,6 +33,13 @@ it("retains request identity, isolates fixture attribution and verifies returned
   expect((await client.result("attempt")).output).toBe("done");
   returned = { ...returned as object, output: "forged" };
   await expect(client.result("attempt")).rejects.toThrow("integrity failed");
+  const grade = await gradeTaskEvidence({ task: genericToolConformance.taskset.tasks[0]!, graders: genericToolConformance.taskset.graders, evidence: { output: { text: "done" }, artifactRefs: [], runtimeEventRefs: [] } });
+  const ordinary = { ...result, grade, attempt: { ...result.attempt, score: grade.score, passed: grade.passed, gradingStatus: grade.gradingStatus } };
+  returned = { ...ordinary, contentHash: await canonicalSha256(ordinary) };
+  expect((await client.result("attempt")).grade).toEqual(grade);
+  const mismatched = { ...ordinary, attempt: { ...ordinary.attempt, score: 0 } };
+  returned = { ...mismatched, contentHash: await canonicalSha256(mismatched) };
+  await expect(client.result("attempt")).rejects.toThrow("terminal attempt summary");
   expect(requests[0]).toBe("https://host.invalid/v1/model-starter-attempts");
   returned = { modelProjectId: request.modelProjectId, taskset: request.taskset, available: true, unavailableReason: null, tasks: [{ id: "task", split: "train", inputPreview: "Example", fixtures: [{ id: "positive", label: "positive" }] }], models: [], nextCursor: null };
   expect((await client.choices({ modelProjectId: request.modelProjectId, taskset: request.taskset })).tasks).toHaveLength(1);
