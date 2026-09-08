@@ -10,6 +10,17 @@ import {
   type TasksetPackage,
 } from "openpond-sdk/taskset-packages";
 
+/** Original authoring stores keep these bytes in immutable resources. Imported
+ * packages instead materialize every file and must verify those on-disk bytes. */
+export function tasksetPackageInlineAssetIds(value: TasksetPackage, imported: boolean): Set<string> {
+  if (imported) return new Set();
+  return new Set([
+    ...(value.modelResources?.assets ?? []).map(resource => resource.asset.id),
+    ...(value.learningResources?.assets ?? []).map(resource => resource.asset.id),
+    ...(value.learningResources ? learningPackageContextFiles(value.learningResources).map(file => file.asset.id) : []),
+  ]);
+}
+
 /** Source paths are local package locations, which may differ from the portable
  * asset path. Capture bytes before any hosted Model mutation is attempted. */
 export async function captureLocalTasksetPackage(input: {

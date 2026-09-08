@@ -4,7 +4,7 @@ import { materializePortableTasksetRelease, computeTasksetHash } from "@openpond
 import type { TasksetPackage } from "openpond-sdk/taskset-packages";
 import { requireLearningRelease, requireLearningResource, taskBatchPackageMetadata } from "@openpond/evals/learning";
 import type { SqliteStore } from "../store/store.js";
-import { captureLocalTasksetPackage } from "./taskset-package-capture.js";
+import { captureLocalTasksetPackage, tasksetPackageInlineAssetIds } from "./taskset-package-capture.js";
 import { resolveLocalTasksetModelResources } from "./taskset-package-resources.js";
 import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
 import { desktopTasksetRuntimeAdapterId } from "./portable-evals-adapter.js";
@@ -32,7 +32,7 @@ export async function exportLocalModelTasksetPackage(input: {
     const cached = await readCachedTasksetPackage(input.storeDir, packageHash);
     if (cached.taskset.id !== (linkedPackage?.releaseId ?? taskset.id) || cached.taskset.revision !== (linkedPackage?.releaseRevision ?? taskset.revision)) throw new Error("Imported package differs from the selected Taskset revision.");
     const { files, contentHash: _hash, ...content } = cached;
-    const inline = new Set(typeof taskset.metadata.importedPackageHash === "string" ? [] : cached.modelResources?.assets.map(asset => asset.id));
+    const inline = tasksetPackageInlineAssetIds(cached, typeof taskset.metadata.importedPackageHash === "string");
     const captured = await captureLocalTasksetPackage({
       root: path.join(input.storeDir, "training", "tasksets", tasksetPackageDirectoryId(taskset)),
       content, sources: files.filter(file => !inline.has(file.asset.id)).map(file => ({ asset: file.asset, sourcePath: taskset.tasks.flatMap(task => task.assets ?? []).find(asset => asset.id === file.asset.id)?.artifactRef ?? file.asset.path })), fileOrder: files.map(file => file.asset.id),
