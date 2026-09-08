@@ -54,6 +54,7 @@ export async function exportLocalModelTasksetPackage(input: {
       ...reward.assets.map(asset => asset.id),
       ...(reward.implementation.kind === "custom_verifier" ? [reward.implementation.verifierRef.id]
         : reward.implementation.kind === "model_judge" || reward.implementation.kind === "human" ? [reward.implementation.rubricRef.id] : []),
+      ...("inputContract" in reward.implementation ? [reward.implementation.inputContract.id] : []),
     ]));
     const assets = await Promise.all([...assetIds].map(id => requireLearningResource(transaction, "asset", id, 1)));
     return { batch, evidence, decisions, sources, assets };

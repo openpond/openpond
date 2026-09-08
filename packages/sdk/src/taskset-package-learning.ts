@@ -48,6 +48,7 @@ export function validateTasksetLearningResources(taskset: TasksetRelease, input:
   const rewardAssets = metadata.rewards.flatMap(reward => [...reward.assets,
     ...(reward.implementation.kind === "custom_verifier" ? [reward.implementation.verifierRef]
       : reward.implementation.kind === "model_judge" || reward.implementation.kind === "human" ? [reward.implementation.rubricRef] : []),
+    ...("inputContract" in reward.implementation ? [reward.implementation.inputContract] : []),
   ]);
   for (const ref of rewardAssets) {
     const asset = resources.assets.find(asset => asset.id === ref.id);
@@ -63,7 +64,7 @@ export function validateTasksetLearningResources(taskset: TasksetRelease, input:
   if (contentHash(execution(compiled)) !== contentHash(execution(taskset))) throw new Error("Taskset execution differs from its reviewed task definition.");
   const taskContent = (task: TasksetRelease["tasks"][number]) => ({ id: task.id, clusterKey: task.clusterKey, split: task.split,
     input: task.input, expectedOutput: task.expectedOutput, policyVisibleContext: task.policyVisibleContext,
-    privilegedContextRef: task.privilegedContextRef, artifactRefs: task.artifactRefs, tags: task.tags });
+    privilegedContextRef: task.privilegedContextRef, artifactRefs: task.artifactRefs, requiredOutputs: task.requiredOutputs ?? [], tags: task.tags });
   if (contentHash(compiled.tasks.map(taskContent)) !== contentHash(taskset.tasks.map(taskContent))) throw new Error("Taskset rows differ from their reviewed evidence.");
   return resources;
 }

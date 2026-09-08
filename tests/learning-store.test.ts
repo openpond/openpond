@@ -72,6 +72,10 @@ describe("durable task intake and admission", () => {
     const { contentHash: _releaseHash, ...releaseContent } = value.taskset;
     const changedPolicy = sealLearningContent({ ...releaseContent, policy: { ...releaseContent.policy, connectedAppScopes: ["unexpected-scope"] } });
     expect(() => createTasksetPackage({ ...content, taskset: changedPolicy })).toThrow("execution differs from its reviewed task definition");
+    const changedOutputs = sealLearningContent({ ...releaseContent, tasks: releaseContent.tasks.map(task => ({ ...task,
+      requiredOutputs: [{ path: "result.json", mediaType: "application/json", schemaRef: null, maxBytes: null, metadata: {} }],
+    })) });
+    expect(() => createTasksetPackage({ ...content, taskset: changedOutputs })).toThrow("rows differ from their reviewed evidence");
     await withTrainingStore(async ({ store: destination, directory: destinationDirectory }) => {
       const imported = prepareImportedTasksetPackage({ package: value, profileId: "fresh-profile", name: "Imported batch", createdAt: learningNow });
       await materializeImportedTasksetPackage({ home: destinationDirectory, ...imported });
