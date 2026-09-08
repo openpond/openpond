@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { modelBatchReviewActions } from "./model-batch-review-actions";
 import type {
   BaseModelPreference,
   ChatModelRef,
@@ -342,6 +343,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     ),
     checkModelProject: (project: ModelProject, expectedRevision = project.revision) =>
       checkModelConfiguration(connection, project, expectedRevision),
+    ...modelBatchReviewActions(connection, profileId, request => mutate("begin-model-batch-review", "/models/batch-review", { profileId, request })),
     saveModelProject: async (project: ModelProject, expectedRevision = project.revision) =>
       mutate<ModelProject>(
         "save-model-project",

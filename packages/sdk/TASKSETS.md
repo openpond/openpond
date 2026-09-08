@@ -86,3 +86,33 @@ release/package hashes; Profile provenance makes these different identities.
 Persist the exact publication intent and immutable package before sending it.
 After an uncertain response, replay that intent before publishing later local
 edits, then merge the recovered hosted receipt without reverting those edits.
+
+## Revising an approved batch
+
+Browser editors import schemas and types from `openpond-sdk/model-batch-review`.
+Servers use `inspectModelBatchPackage` from `openpond-sdk/taskset-packages` to
+validate the complete package and return its definition, binding, evidence, and
+decisions without portable file bytes. The inspection includes the sealed package
+hash. Full package validation and compilation remain on the server.
+
+`ModelBatchReviewRequestSchema`, `findModelBatchReview`, and
+`beginModelBatchReview` define explicit editing of a Model's selected reviewed
+batch. The host runs these helpers inside its authorized workspace transaction,
+checks the Model revision and selected Taskset reference, and verifies that the
+supplied package belongs to that immutable selection. An operation ID identifies
+one exact request; retries return the original receipt, while changed requests
+with the same operation ID conflict.
+
+The request can change task instructions, schemas, inputs, evaluator-only context,
+expected answers, and the selected published Reward binding. The helper creates
+a new definition, Reward graph, enabled direct source, and evidence with parent
+references. Sources record the original Model, package, batch, and Reward binding
+in `reviewOrigin`. Original source credentials and admission decisions are never
+imported. Attempts receive new IDs so matching example/attempt IDs from different
+parent sources remain distinct.
+
+Previously approved targets become pending feedback proposals. Policy-visible
+task changes clear the observed response because that response was produced for
+the original task. New evidence needs fresh grading and review before sealing;
+the helper does not attach a batch or start training. A host must separately
+compare the Model revision when attaching the newly prepared batch.

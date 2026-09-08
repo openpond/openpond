@@ -32,6 +32,8 @@
   color: var(--muted);
 }
 .learning-workspace h2 { font-size: 18px; }
+.model-batch-review-dialog > form { gap: 16px; }
+.model-batch-review-dialog :is(label, details) { margin-block: 0; }
 .learning-workspace h3 { font-size: 14px; }
 .learning-workspace > p,
 .learning-workspace section > p { font-size: 13px; line-height: 1.6; color: var(--muted); }

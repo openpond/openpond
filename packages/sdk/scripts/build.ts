@@ -23,6 +23,7 @@ await build({
     workflows: path.join(root, "src/workflows.ts"),
     refiner: path.join(root, "src/refiner.ts"),
     "model-projects": path.join(root, "src/model-projects.ts"),
+    "model-batch-review": path.join(root, "src/model-batch-review-contracts.ts"),
     training: path.join(root, "src/training.ts"),
     learning: path.join(root, "src/learning.ts"),
     "taskset-catalog": path.join(root, "src/taskset-catalog.ts"),

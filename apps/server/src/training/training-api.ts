@@ -108,6 +108,7 @@ import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.j
 import { createLocalLearningRuntime } from "./learning-runtime.js";
 import { parseModelProjectSaveRequest, ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
 import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
+import { beginLocalModelBatchReview, inspectLocalModelBatchReview } from "./model-batch-review.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
 import { checkModelProjectConfiguration } from "./model-project-configuration-check.js";
 import type { createModelStarterRuntime } from "./model-starter-runtime.js";
@@ -186,6 +187,10 @@ export function createTrainingApi(deps: {
     if (action === "learning_credentials") return learningRuntime().credentials(payload);
     if (action === "learning_source_config") return learningRuntime().sourceConfiguration(payload);
     if (action === "prepare_learning_batch") return prepareLocalLearningBatch(deps.store, deps.storeDir, payload);
+    if (action === "inspect_model_batch_review") return inspectLocalModelBatchReview({ store: deps.store, storeDir: deps.storeDir,
+      profileId: requiredString(input.profileId, "profileId"), modelId: requiredString(input.modelId, "modelId") });
+    if (action === "begin_model_batch_review") return beginLocalModelBatchReview({ store: deps.store, storeDir: deps.storeDir,
+      profileId: requiredString(input.profileId, "profileId"), request: input.request });
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "activity") return activity(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "portable_catalog") {

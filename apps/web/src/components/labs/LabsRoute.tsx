@@ -1,6 +1,7 @@
 import { LabComparisonSeriesCreateDialog } from "./LabComparisonSeriesCreateDialog";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LearnedPreferenceRewardBinding } from "@openpond/contracts";
+import { learningRef, type TaskBatch } from "openpond-sdk/learning";
 import { api } from "../../api";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
 import { useErrorToast } from "../../app/AppToastContext";
@@ -140,6 +141,18 @@ export function LabsRoute(props: LabsRouteProps) {
     const version = versions.find((version) => version.current) ?? versions.find((version) => version.lineage.promotable);
     if (version?.taskset) training.onChatWithModel(buildTrainingModelChatHandoff({ modelId: version.lineage.id, taskset: version.taskset }));
   }
+  async function attachBatch(batch: TaskBatch) {
+    const project = state?.modelProjects.find(project => project.id === route?.modelId);
+    if (!project) throw new Error("The selected Model is unavailable.");
+    const taskset = await training.training.actions.prepareLearningBatch(batch.id);
+    if (!taskset) throw new Error("The reviewed batch could not be prepared.");
+    const saved = await training.training.actions.saveModelProject({ ...project, trainingSetup: { ...project.trainingSetup,
+      tasksetRef: learningRef(taskset), rewardBindingRef: null, tasksetRelease: null, recipe: null, method: null,
+    } }, project.revision);
+    if (!saved) throw new Error("The Model could not be updated. Refresh it before retrying.");
+    toast("Reviewed batch selected for this Model.", "success");
+    openTaskset(taskset.id);
+  }
   function startRun(tasksetId?: string, reward?: LearnedPreferenceRewardBinding | null) {
     if (route?.modelId) {
       props.onNewModel(tasksetId, reward, route.modelId);
@@ -174,7 +187,7 @@ export function LabsRoute(props: LabsRouteProps) {
       renderDatasetBuilder={(onCreated, onUseExisting) => <TasksetDraftEditor defaultModel={training.defaultModel} modelProjectId={target.id} training={training.training} onBack={onUseExisting} onOpenChat={openTasksetChat} onPublished={onCreated} onUseExistingTaskset={onUseExisting} />}
     />;
   } else if (route.page === "tasksets") {
-    page = <><ModelsLocalViews route={route} views={[["default", "Tasksets"], ["formats", "Task formats"], ["batches", "Approved batches"]]} />{route.collection === "formats" ? <LearningTaskFormatsPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} onReview={(id) => open(modelsLocation("evaluations", route.modelId, { collection: "review", resourceId: id }))} /> : route.collection === "batches" ? <LearningBatchesPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} onTrain={async (batch) => { const taskset = await training.training.actions.prepareLearningBatch(batch.id); if (!taskset) throw new Error("The batch could not be prepared. Check the training error for details."); startRun(taskset.id); }} /> : route.collection === "drafts" ? <TasksetDraftEditor
+    page = <><ModelsLocalViews route={route} views={[["default", "Tasksets"], ["formats", "Task formats"], ["batches", "Approved batches"]]} />{route.collection === "formats" ? <LearningTaskFormatsPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} onReview={(id) => open(modelsLocation("evaluations", route.modelId, { collection: "review", resourceId: id }))} /> : route.collection === "batches" ? <LearningBatchesPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} onAttach={route.modelId ? attachBatch : undefined} onTrain={async (batch) => { const taskset = await training.training.actions.prepareLearningBatch(batch.id); if (!taskset) throw new Error("The batch could not be prepared. Check the training error for details."); startRun(taskset.id); }} /> : route.collection === "drafts" ? <TasksetDraftEditor
       key={`${workspaceKey}:${route.resourceId}`} draftId={route.resourceId} defaultModel={training.defaultModel} modelProjectId={route.modelId}
       training={training.training} onBack={() => openTaskset(null)} onOpenChat={openTasksetChat} onPublished={openTaskset}
     /> : <LabDatasetsPage
@@ -182,6 +195,7 @@ export function LabsRoute(props: LabsRouteProps) {
       runs={createImprove.runs} selectedId={route.resourceId} state={state} training={training.training}
       onDetailTabChange={(tab) => open(modelsResourceLocation(route, route.resourceId, tab))} onSelectedIdChange={openTaskset}
       onImproveInChat={openTasksetChat} onCreateTaskset={() => setImportSource("source")}
+      onReviewBatch={(id) => open(modelsLocation("evaluations", route.modelId, { collection: "review", resourceId: id }))}
       onOpenDraft={(id) => open(modelsLocation("tasksets", route.modelId, { collection: "drafts", resourceId: id }))}
       onOpenFiles={(id) => { training.onSelectedTasksetIdChange(id); training.onOpenTasksetFiles(); }} onToast={toast} onTrainModel={startRun}
     />}</>;

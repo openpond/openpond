@@ -51,7 +51,7 @@ export class SqliteLearningStore extends SqliteLearningCredentialStore {
   }
 }
 
-function createLearningTransaction(db: OpenPondSqliteConnection, scope: string, assertOpen: () => void): LearningTransaction {
+export function createLearningTransaction(db: OpenPondSqliteConnection, scope: string, assertOpen: () => void): LearningTransaction {
   const parse = <K extends LearningResourceKind>(kind: K, row: PayloadRow): LearningResourceFor<K> =>
     learningResourceSchemas[kind].parse(JSON.parse(row.payload)) as LearningResourceFor<K>;
   return {

@@ -4,10 +4,10 @@ import { ModelProjectPageHeader } from "../ModelProjectPageHeader";
 import { LearningActions, LearningError, LearningPager, LearningValue } from "./LearningFields";
 import { useLearningMutation, useLearningResource, useLearningResources } from "./useLearningResources";
 
-export function LearningBatchesPage({ client, selectedId, after, onSelect, onPage, onTrain }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (cursor: string | null) => void; onTrain: (batch: TaskBatch) => Promise<void> }) {
+export function LearningBatchesPage({ client, selectedId, after, onSelect, onPage, onTrain, onAttach }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (cursor: string | null) => void; onTrain: (batch: TaskBatch) => Promise<void>; onAttach?: (batch: TaskBatch) => Promise<void> }) {
   const batches = useLearningResources(client, "batch", { limit: 30, ...(after ? { afterId: after } : {}) });
   const [composing, setComposing] = useState(false);
-  if (selectedId) return <BatchDetail client={client} id={selectedId} onBack={() => onSelect(null)} onTrain={onTrain} />;
+  if (selectedId) return <BatchDetail client={client} id={selectedId} onBack={() => onSelect(null)} onTrain={onTrain} onAttach={onAttach} />;
   return <div className="labs-flat-body labs-resource-page learning-workspace"><ModelProjectPageHeader title="Approved batches" description="Seal exact evidence and review revisions for supervised training, reward training, or held-out evaluation." actions={<button type="button" className="training-button" onClick={() => setComposing(true)}>Seal a batch</button>} />
     <LearningError error={batches.error} />
     {composing ? <BatchComposer client={client} onClose={() => setComposing(false)} onSealed={(batch) => { setComposing(false); batches.refresh(); onSelect(batch.id); }} /> : <>
@@ -46,12 +46,13 @@ function BatchComposer({ client, onClose, onSealed }: { client: OpenPondLearning
   </section>;
 }
 
-function BatchDetail({ client, id, onBack, onTrain }: { client: OpenPondLearningClient | null; id: string; onBack: () => void; onTrain: (batch: TaskBatch) => Promise<void> }) {
+function BatchDetail({ client, id, onBack, onTrain, onAttach }: { client: OpenPondLearningClient | null; id: string; onBack: () => void; onTrain: (batch: TaskBatch) => Promise<void>; onAttach?: (batch: TaskBatch) => Promise<void> }) {
   const batch = useLearningResource(client, "batch", id);
   const packages = useLearningResources(client, "package", { parentId: id, limit: 1 });
   const mutation = useLearningMutation(client);
   return <div className="labs-flat-body labs-resource-page learning-workspace"><ModelProjectPageHeader title="Sealed task batch" description={id} actions={<button type="button" className="training-button secondary" onClick={onBack}>All batches</button>} /><LearningError error={batch.error ?? packages.error ?? mutation.error} />
     {batch.resource ? <><p>{batch.resource.examples.length} examples · {batch.resource.purpose.replaceAll("_", " ")} · sealed by {batch.resource.sealedBy}</p><details><summary>Inspect exact batch provenance</summary><LearningValue label="Exact batch provenance" value={batch.resource} /></details>
+      {onAttach && batch.resource.purpose !== "evaluation" ? <button type="button" className="training-button" disabled={mutation.busy} onClick={() => { void mutation.run(async () => { await onAttach(batch.resource!); return true; }); }}>Use batch for this Model</button> : null}
       <LearningActions>{batch.resource.purpose !== "evaluation" ? <button type="button" className="training-button" disabled={mutation.busy} onClick={() => { void mutation.run(async () => { await onTrain(batch.resource!); return true; }); }}>Prepare training run</button> : null}{packages.page?.items[0] ? <button type="button" className="training-button secondary" onClick={() => {
         const release = packages.page!.items[0]!;
         const url = URL.createObjectURL(new Blob([JSON.stringify(release, null, 2)], { type: "application/json" }));
