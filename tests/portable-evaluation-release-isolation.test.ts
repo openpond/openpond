@@ -1,19 +1,83 @@
-import type { OpenPondProfileState } from "@openpond/contracts";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import type { OpenPondProfileState, Taskset } from "@openpond/contracts";
 import {
   assertComparableRunManifests,
   createVerifiedHarnessCompatibilityReceipt,
 } from "@openpond/evals";
-import { contentHash } from "@openpond/harness";
+import { contentHash, sha256 } from "@openpond/harness";
 import { computeTasksetHash } from "@openpond/taskset-sdk";
 import { describe, expect, test } from "vitest";
 
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";
+import { tasksetEvaluationScore } from "../apps/server/src/training/taskset-evaluation-score.js";
 import {
   tasksetFixture,
   withTrainingStore,
 } from "./helpers/training-fixtures.js";
 
 describe("portable Evaluation release isolation", () => {
+  // A running evaluation must use the admitted private metric even if its
+  // file is edited, while a new run rejects changed bytes before inference.
+  test("executes and persists the pinned authored metric independently of mean score", async () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const reviewRef = { id: "review-metric", contentHash: contentHash("review-metric") };
+      const source = "export function aggregate(scores: number[]): number { return Math.max(...scores); }";
+      const changed = source.replace("Math.max", "Math.min");
+      const base = tasksetFixture({ ready: true });
+      const taskset: Taskset = { ...base,
+        metrics: { schemaVersion: "openpond.tasksetMetricPolicy.v1", primaryMetric: "best_score", aggregation: "custom", missingReward: "exclude",
+          customAggregator: { module: "metrics/aggregate.ts", exportName: "aggregate", contentHash: sha256(source), timeoutMs: 5_000, networkPolicy: "none" } },
+        metadata: { ...base.metadata, harnessEvaluationReview: reviewRef },
+      };
+      taskset.contentHash = computeTasksetHash(taskset);
+      taskset.readiness = { ...taskset.readiness!, tasksetHash: taskset.contentHash };
+      const module = path.join(directory, "training", "tasksets", taskset.id, "metrics", "aggregate.ts");
+      await mkdir(path.dirname(module), { recursive: true });
+      await writeFile(module, source);
+      await store.upsertTaskset(taskset);
+      let calls = 0;
+      const evaluation = createTaskEvaluationService({ store, storeDir: directory,
+        loadProfileState: async () => profileFixture("metric-head", "metric-skill"),
+        modelText: async () => { calls += 1; if (calls === 1) await writeFile(module, changed); return calls % 2 ? "Goodbye friend" : "Wrong answer"; },
+        modelStream: async function* () { throw new Error("Chat metric fixture must not invoke Work."); },
+      });
+      const model = { providerId: "custom-openai-compatible", modelId: "fixture" } as const;
+      const first = await evaluation.executeBaseline({ tasksetId: taskset.id, model, reviewRef, seeds: [17, 18] });
+      expect(calls).toBe(2);
+      expect(first.evaluationResult).toMatchObject({ meanScore: 0.5, authoredMetric: { value: 1, includedCount: 2, policy: taskset.metrics, policyHash: contentHash(taskset.metrics) } });
+      expect(first.evaluationResult.authoredMetric?.receiptRefs).toEqual(first.evaluationResult.receiptRefs);
+      // Qualification must consume the authored score, never the unrelated mean,
+      // and must reject stale policies or metrics copied from another population.
+      expect(tasksetEvaluationScore(taskset, first.evaluationResult)).toBe(1);
+      expect(() => tasksetEvaluationScore(taskset, { ...first.evaluationResult, authoredMetric: undefined })).toThrow("lacks");
+      expect(() => tasksetEvaluationScore(taskset, { ...first.evaluationResult, receiptRefs: first.evaluationResult.receiptRefs.slice(1) })).toThrow("population");
+      const { contentHash: metricHash, ...metricContent } = first.evaluationResult.authoredMetric!;
+      const emptyMetric = { ...metricContent, value: null, includedCount: 0, excludedCount: 2, missingRewardCount: 2 };
+      expect(tasksetEvaluationScore(taskset, { ...first.evaluationResult,
+        authoredMetric: { ...emptyMetric, contentHash: contentHash(emptyMetric) },
+      })).toBeNull();
+      expect(() => tasksetEvaluationScore(taskset, { ...first.evaluationResult,
+        authoredMetric: { ...emptyMetric, contentHash: metricHash },
+      })).toThrow();
+      expect(JSON.stringify(first)).not.toContain(source);
+      expect(await store.getEvaluationResult(first.evaluationResult.id)).toEqual(first.evaluationResult);
+      await expect(evaluation.execute({ tasksetId: taskset.id, taskId: "task_eval", model, seed: 19, attempt: 0 })).rejects.toThrow("pinned content hash");
+      expect(calls).toBe(2);
+      await writeFile(module, source);
+      await writeFile(path.join(path.dirname(module), "aggregate-min.ts"), changed);
+      const next: Taskset = { ...taskset, revision: 2, metrics: { ...taskset.metrics!, primaryMetric: "worst_score", customAggregator: { ...taskset.metrics!.customAggregator!, module: "metrics/aggregate-min.ts", contentHash: sha256(changed) } } };
+      next.contentHash = computeTasksetHash(next);
+      next.readiness = { ...next.readiness!, tasksetHash: next.contentHash };
+      await store.upsertTaskset(next);
+      const second = await evaluation.executeBaseline({ tasksetId: taskset.id, model, reviewRef, seeds: [17, 18] });
+      expect(second.evaluationResult).toMatchObject({ meanScore: 0.5, authoredMetric: { value: 0, policy: next.metrics } });
+      expect(tasksetEvaluationScore(next, second.evaluationResult)).toBe(0);
+      expect(() => tasksetEvaluationScore(next, first.evaluationResult)).toThrow("policy");
+      expect(second.evaluationResult.tasksetRelease.contentHash).not.toBe(first.evaluationResult.tasksetRelease.contentHash);
+      expect(await store.getEvaluationResult(first.evaluationResult.id)).toEqual(first.evaluationResult);
+    }));
+
   test("persists and reuses one real baseline over the frozen Evaluation split", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const reviewRef = { id: "review-baseline", contentHash: contentHash("review-baseline") };

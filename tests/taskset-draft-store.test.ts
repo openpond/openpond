@@ -8,11 +8,13 @@ import {
   tasksetDraftFromTaskset,
   writeTasksetDraftPackage,
   materializePortableTasksetRelease,
+  sha256,
 } from "../packages/taskset-sdk/src/index.js";
 import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures.js";
 import { createTasksetEvaluationVerifier } from "../apps/server/src/training/evaluation-custom-verifier.js";
-import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { createModelProjectSaveRequest, ModelProjectEditableSchema } from "openpond-sdk/model-projects";
 import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
+import type { TasksetDraftFile } from "openpond-sdk/model-taskset-authoring";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export.js";
 import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import.js";
 import { materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files.js";
@@ -42,7 +44,7 @@ describe("Taskset draft persistence", () => {
       const result = await retry.request("publish_taskset_draft", { draftId: draft.id }) as { draft: typeof draft; taskset: typeof original };
       expect(result.draft.publishedTasksetRef).toEqual(ref);
       expect(result.taskset).toEqual(original);
-      expect(checked).toEqual([original]);
+      expect(checked).toEqual([ref]);
     } finally { await reloaded.close(); }
   }));
 
@@ -142,7 +144,12 @@ describe("Taskset draft persistence", () => {
         "2026-08-30T12:00:00.000Z",
       );
       draft.environment.resources = draft.tasks.map(task => ({ id: task.privilegedContextRef!, kind: "file", path: `assets/${task.id}-context.json`, mediaType: "application/json", visibility: "privileged", required: true, metadata: {} }));
+      const metricSource = "export function aggregate(scores) { return Math.min(...scores); }";
+      draft.metrics = { ...draft.metrics, aggregation: "custom", customAggregator: { module: "metrics/aggregate.js", exportName: "aggregate", contentHash: "0".repeat(64), timeoutMs: 1000, networkPolicy: "none" } };
       await writeTasksetDraftPackage(draft, packageDirectory);
+      // A file edit can occur after the form manifest was written. Publication
+      // must pin the edited bytes rather than carry the old form hash.
+      await writeFile(path.join(packageDirectory, "metrics/aggregate.js"), metricSource);
       await mkdir(path.join(packageDirectory, "graders"), { recursive: true });
       await writeFile(path.join(packageDirectory, grader.module), "export function verify() { return { score: 1, passed: true, feedback: 'original' }; }");
       await mkdir(path.join(packageDirectory, "assets", "matter"), { recursive: true });
@@ -163,6 +170,8 @@ describe("Taskset draft persistence", () => {
         revision: 1,
       });
       const workspace = await store.getTasksetDraftWorkspace(imported.id);
+      const revisedMetricSource = metricSource.replace("Math.min", "Math.max");
+      await writeFile(path.join(workspace!.workspacePath, "metrics/aggregate.js"), revisedMetricSource);
       expect(
         await readFile(path.join(workspace!.workspacePath, "assets", "matter", "input.docx")),
       ).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
@@ -177,6 +186,7 @@ describe("Taskset draft persistence", () => {
       expect(JSON.parse(await readFile(path.join(tasksetRoot, "taskset.json"), "utf8")))
         .toMatchObject({ schemaVersion: "openpond.taskset.v1", id: taskset.id });
       await store.upsertTaskset(firstPublished);
+      expect(firstPublished.metrics?.customAggregator?.contentHash).toBe(sha256(revisedMetricSource));
       const model = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "ordinary-package-model", profileId: imported.profileId,
         name: "Ordinary package", objective: null, defaultBaseModel: null, defaultDestinationId: null,
         trainingSetup: { tasksetRef: { id: firstPublished.id, revision: firstPublished.revision, contentHash: firstPublished.contentHash } } }, 0));
@@ -194,8 +204,70 @@ describe("Taskset draft persistence", () => {
       expect(retained.asset.visibility).toBe("host_private");
       expect(Buffer.from(decodeTasksetPackageFile(retained))).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
       for (const task of exported.taskset.tasks) expect(exported.files.find(file => file.asset.id === task.privilegedContextRef)?.asset.visibility).toBe("host_private");
+      // A failed pointer commit must resume the pinned package after reopening,
+      // preserve private/binary bytes, and never overwrite later editor changes.
+      const request = { schemaVersion: "openpond.modelTasksetDraftRequest.v1" as const, operationId: "edit-imported-source", modelId: model.id,
+        expectedModelRevision: model.revision, sourcePackageHash: exported.contentHash };
+      const initializationDb = openTestDatabase(path.join(directory, "state", "state.sqlite"));
+      try {
+        initializationDb.exec("CREATE TRIGGER reject_source_initialization BEFORE INSERT ON taskset_drafts BEGIN SELECT RAISE(ABORT, 'initialization interrupted'); END");
+        await expect(store.initializeModelTasksetDraft(model.profileId, request, exported)).rejects.toThrow("initialization interrupted");
+        initializationDb.exec("DROP TRIGGER reject_source_initialization");
+        await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...ModelProjectEditableSchema.strip().parse(model), name: "Changed after initialization" }, model.revision));
+        await expect(store.initializeModelTasksetDraft(model.profileId, { ...request, operationId: "stale-new-operation" }, exported)).rejects.toThrow("Model changed");
+        await expect(store.initializeModelTasksetDraft("another-profile", request, exported)).rejects.toThrow("not found in this Profile");
+        const reopened = new SqliteStore(directory);
+        try {
+          const [initialized, concurrent] = await Promise.all([reopened.initializeModelTasksetDraft(model.profileId, request), store.initializeModelTasksetDraft(model.profileId, request)]);
+          expect(concurrent).toEqual(initialized);
+          if (!initialized) throw new Error("Missing initialized draft");
+          expect(initialized.modelScope?.source?.sourcePackageHash).toBe(exported.contentHash);
+          expect(initialized.id).not.toBe(imported.id);
+          const initializedWorkspace = (await reopened.getTasksetDraftWorkspace(initialized.id))!;
+          expect(await readFile(path.join(initializedWorkspace.workspacePath, grader.module), "utf8"))
+            .toBe("export function verify() { return { score: 1, passed: true, feedback: 'original' }; }");
+          expect(await readFile(path.join(initializedWorkspace.workspacePath, "assets/matter/input.docx")))
+            .toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+          const saved = await reopened.saveTasksetDraft({ ...initialized, name: "Edited source", revision: initialized.revision + 1 }, initialized.revision);
+          expect(await reopened.initializeModelTasksetDraft(model.profileId, request, exported)).toEqual(saved);
+          await expect(reopened.initializeModelTasksetDraft(model.profileId, { ...request, sourcePackageHash: "a".repeat(64) })).rejects.toThrow("different input");
+          const sourceApi = createTrainingApi({ store: reopened, storeDir: directory, evaluation: { readiness: async () => undefined } } as never);
+          const currentModel = (await reopened.getModelProject(model.id))!;
+          const refreshed = await sourceApi.request("refresh_taskset_draft_model", { draftId: saved.id, expectedDraftRevision: saved.revision, expectedModelRevision: currentModel.revision }) as typeof saved;
+          const code = await sourceApi.request("taskset_draft_file", { profileId: model.profileId, draftId: refreshed.id, path: grader.module }) as { draftRevision: number; file: TasksetDraftFile };
+          await sourceApi.request("save_taskset_draft_file", { profileId: model.profileId, draftId: refreshed.id, expectedDraftRevision: code.draftRevision,
+            path: grader.module, expectedFileHash: code.file.contentHash, content: { encoding: "utf8", data: "export function verify() { return { score: 0, passed: false, feedback: 'edited source' }; }" } });
+          const publishedSource = await sourceApi.request("publish_taskset_draft", { draftId: refreshed.id }) as { taskset: typeof firstPublished; draft: typeof saved };
+          expect(publishedSource.taskset.id).toBe(initialized.modelScope?.source?.tasksetId);
+          expect(publishedSource.taskset.revision).toBe(1);
+          await expect(sourceApi.request("save_taskset_draft_file", { profileId: model.profileId, draftId: refreshed.id, expectedDraftRevision: publishedSource.draft.revision,
+            path: grader.module, expectedFileHash: code.file.contentHash, content: { encoding: "utf8", data: "changed" } })).rejects.toThrow("immutable");
+          const sourcePackage = await exportLocalModelTasksetPackage({ store: reopened, storeDir: directory, profileId: model.profileId, modelId: model.id });
+          expect(sourcePackage.taskset.id).toBe(publishedSource.taskset.id);
+          expect(sourcePackage.taskset.metadata.modelTasksetAuthoring).toEqual(initialized.modelScope?.source?.lineage);
+          expect(sourcePackage.environment).toEqual(exported.environment);
+          expect(sourcePackage.verifierSet.calibrationReceiptRefs).toEqual([]);
+          const editedVerifier = await createTasksetEvaluationVerifier({ store: reopened, storeDir: directory }, publishedSource.taskset);
+          await expect(editedVerifier!({ grader: publishedSource.taskset.graders[0] as typeof grader, task: publishedSource.taskset.tasks[1]!, attempt: attemptFixture() })).resolves.toMatchObject({ score: 0, feedback: "edited source" });
+          const selectedModel = (await reopened.getModelProject(model.id))!;
+          const inspected = await sourceApi.request("inspect_taskset_draft_source", { profileId: model.profileId, modelId: model.id, expectedModelRevision: selectedModel.revision }) as { sourcePackageHash: string };
+          const next = await sourceApi.request("init_taskset_draft", { profileId: model.profileId, sourceRequest: { ...request, operationId: "revise-published-source", expectedModelRevision: selectedModel.revision, sourcePackageHash: inspected.sourcePackageHash } }) as typeof saved;
+          expect(next.modelScope?.source?.tasksetId).toBe(publishedSource.taskset.id);
+          expect(next.modelScope?.source?.tasksetRevision).toBe(2);
+          const secondSource = await sourceApi.request("publish_taskset_draft", { draftId: next.id }) as typeof publishedSource;
+          expect(secondSource.taskset.id).toBe(publishedSource.taskset.id);
+          expect(secondSource.taskset.revision).toBe(2);
+          expect((await exportLocalModelTasksetPackage({ store: reopened, storeDir: directory, profileId: model.profileId, modelId: model.id })).taskset.revision).toBe(2);
+          expect(await reopened.getTasksetRevision(firstPublished.id, firstPublished.revision, firstPublished.contentHash)).toEqual(firstPublished);
+          const latestModel = (await reopened.getModelProject(model.id))!;
+          await reopened.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...ModelProjectEditableSchema.strip().parse(latestModel), trainingSetup: model.trainingSetup }, latestModel.revision));
+          await reopened.deleteTasksetDraft(initialized.id);
+          await expect(reopened.initializeModelTasksetDraft(model.profileId, request, exported)).rejects.toThrow("deleted");
+        } finally { await reopened.close(); }
+      } finally { await closeTestDatabase(initializationDb); }
       const importedHome = path.join(directory, "downloaded");
       const downloaded = prepareImportedTasksetPackage({ package: exported, profileId: "downloaded-profile", name: "Downloaded tasks", createdAt: "2026-09-08T01:00:00.000Z" });
+      expect(downloaded.taskset.metrics).toEqual(firstPublished.metrics);
       await materializeImportedTasksetPackage({ home: importedHome, ...downloaded });
       expect(materializePortableTasksetRelease({ taskset: downloaded.taskset, adapterId: "downloaded" }).tasksetRelease).toEqual(exported.taskset);
       const downloadedVerifier = await createTasksetEvaluationVerifier({ store, storeDir: importedHome }, downloaded.taskset);

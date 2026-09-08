@@ -204,12 +204,14 @@ export function publishTasksetDraft(input: {
   const issues = draftPublishIssues(draft);
   if (issues.length) throw new TasksetDraftPublishError(issues);
 
-  const tasksetId = input.tasksetId?.trim()
+  const preparedSource = draft.modelScope?.source;
+  if (preparedSource && input.tasksetId && input.tasksetId !== preparedSource.tasksetId) throw new Error("Taskset draft publication differs from its prepared identity.");
+  const tasksetId = preparedSource?.tasksetId || input.tasksetId?.trim()
     || draft.publishedTasksetRef?.id
     || draft.id.replace(/-draft$/, "");
-  const revision = draft.publishedTasksetRef?.id === tasksetId
+  const revision = preparedSource?.tasksetRevision ?? (draft.publishedTasksetRef?.id === tasksetId
     ? draft.publishedTasksetRef.revision + 1
-    : 1;
+    : 1);
   const sourceRefs = draft.sourceRefs.length
     ? draft.sourceRefs
     : [generatedDraftSource(draft, tasksetId, timestamp)];
@@ -269,6 +271,7 @@ export function publishTasksetDraft(input: {
     updatedAt: timestamp,
     metadata: {
       ...draft.metadata,
+      ...(preparedSource ? { modelTasksetAuthoring: preparedSource.lineage } : {}),
       tasksetReviewPolicy: draft.review,
       tasksetOutputContract: draft.output,
       ...(input.sourcePackageHash

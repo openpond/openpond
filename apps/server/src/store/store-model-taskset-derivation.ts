@@ -91,6 +91,7 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
   const taskset = TasksetReleaseSchema.parse(sealLearningContent({
     schemaVersion: "openpond.tasksetRelease.v2", id: source.id, revision: source.revision,
     ...taskDefinition.execution, graders: compileBoundGraders(rewardBinding, rewards),
+    ...(source.metrics ? { metrics: source.metrics } : {}),
     tasks: source.tasks.map(task => {
       const projected = projectPortableTaskRecord(task);
       // Existing source revisions omit undeclared output contracts. Preserve
@@ -143,6 +144,9 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
     learningSignals: { ...draft.learningSignals, rewards: draft.learningSignals.rewards.map(signal => ({ ...signal, rules: [{ id: selectedBinding.id, points: 1, condition: "Execute the published Reward binding with its declared normalization, weights and required gates." }], artifactRef: selectedBinding.id, metadata: { ...signal.metadata, rewardBinding: learningRef(selectedBinding) } })) },
     metadata: { ...draft.metadata, portableCapabilities: derived.taskset.capabilities, taskDefinition: learningRef(derived.taskDefinition), rewardBinding: learningRef(selectedBinding), rewardExecution: { binding: selectedBinding, rewards: selectedRewards }, derivedPortableMetadata: derived.taskset.metadata, modelTasksetDerivation: derived.taskset.metadata.modelTasksetDerivation },
   } });
+  // Reward edits preserve the exact source metric, including its absence.
+  published.metrics = derived.taskset.metrics;
+  published.contentHash = computeTasksetHash(published);
   if (published.revision !== derived.taskset.revision) throw new Error("Derived local and portable Taskset revisions differ.");
   return { taskset: published, generatedFiles, directoryId, source, sourcePackage, derived };
 }

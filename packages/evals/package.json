@@ -1,6 +1,6 @@
 {
   "name": "@openpond/evals",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Portable Tasksets, graders, evaluation runs, receipts, conformance fixtures, and Work evidence for OpenPond Harnesses",
   "license": "MIT",
   "type": "module",
@@ -19,6 +19,14 @@
     "LICENSE"
   ],
   "exports": {
+    "./metrics/node": {
+      "types": "./dist/types/metrics-node.d.ts",
+      "import": "./dist/metrics-node.js"
+    },
+    "./metrics": {
+      "types": "./dist/types/metrics.d.ts",
+      "import": "./dist/metrics.js"
+    },
     "./sql-execution/node": {
       "types": "./dist/types/sql-execution-node.d.ts",
       "import": "./dist/sql-execution-node.js"

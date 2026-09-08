@@ -1,5 +1,6 @@
 import type { TasksetDraft } from "@openpond/contracts";
-import { EditorSection, Field } from "./TasksetDraftEditorPrimitives";
+import { TasksetMetricPolicySchema } from "@openpond/evals/metrics";
+import { EditorSection, Field, JsonObjectField } from "./TasksetDraftEditorPrimitives";
 
 export function TasksetDraftMetricsSection({ draft, disabled, onChange }: { draft: TasksetDraft; disabled: boolean; onChange: (draft: TasksetDraft) => void }) {
   const metrics = draft.metrics;
@@ -23,6 +24,7 @@ export function TasksetDraftMetricsSection({ draft, disabled, onChange }: { draf
                 metrics: {
                   ...metrics,
                   aggregation,
+                  taskWeights: aggregation === "weighted_mean" ? metrics.taskWeights ?? Object.fromEntries(draft.tasks.map((task) => [task.id, 1])) : undefined,
                   customAggregator: aggregation === "custom"
                     ? metrics.customAggregator ?? {
                         module: "metrics/aggregate.ts",
@@ -49,6 +51,14 @@ export function TasksetDraftMetricsSection({ draft, disabled, onChange }: { draf
           </select>
         </Field>
       </div>
+      {metrics.aggregation === "weighted_mean" ? (
+        <JsonObjectField
+          label="Task weights (task ID → positive weight for each attempt)"
+          disabled={disabled}
+          value={metrics.taskWeights ?? {}}
+          onChange={(taskWeights) => onChange({ ...draft, metrics: TasksetMetricPolicySchema.parse({ ...metrics, taskWeights }) })}
+        />
+      ) : null}
       {metrics.customAggregator ? (
         <div className="taskset-draft-field-grid">
           <Field label="Module">

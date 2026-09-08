@@ -27,6 +27,7 @@ import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { modelProjectTasksetIds } from "./models-resource-scope";
 import { ModelBatchReviewAction } from "./learning/ModelBatchReviewAction";
 import { ModelBatchReviews } from "./learning/ModelBatchReviews";
+import { ModelTasksetDraftAction } from "./ModelTasksetDraftAction";
 
 const PAGE_SIZE = 10;
 type TasksetListItem =
@@ -178,6 +179,9 @@ export function LabDatasetsPage({
             <p>{selected.objective}</p>
           </div>
           <div className="labs-dataset-detail-actions">
+            {!readOnly && project && !selected.metadata.learning && !selected.metadata.taskDefinition && !selected.metadata.rewardBinding
+              && project.trainingSetup.tasksetRef?.contentHash === selected.contentHash
+              ? <ModelTasksetDraftAction key={`${training.connection?.serverUrl}:${project.profileId}:${project.id}`} model={project} training={training} onOpen={onOpenDraft} /> : null}
             {!readOnly && project && onReviewBatch && selected.metadata.learning && project.trainingSetup.tasksetRef?.contentHash === selected.contentHash
               ? <ModelBatchReviewAction key={`${project.id}:${selected.contentHash}`} model={project} training={training} onReview={onReviewBatch} /> : null}
             <button

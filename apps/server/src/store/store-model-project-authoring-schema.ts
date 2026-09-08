@@ -1,4 +1,14 @@
 export const MODEL_PROJECT_AUTHORING_TABLES_SQL = `
+CREATE TABLE IF NOT EXISTS model_taskset_draft_operations (
+  profile_id TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  draft_id TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('prepared', 'ready', 'deleted')),
+  payload TEXT NOT NULL,
+  PRIMARY KEY (profile_id, operation_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS model_taskset_draft_operation_identity ON model_taskset_draft_operations(draft_id);
 CREATE TABLE IF NOT EXISTS model_project_package_operations (
   operation_id TEXT PRIMARY KEY,
   profile_id TEXT NOT NULL,

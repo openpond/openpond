@@ -248,6 +248,9 @@ export function draftValidationIssues(draft: TasksetDraft): string[] {
   if (draft.metrics.aggregation === "custom" && !draft.metrics.customAggregator) {
     issues.push("Configure the content-hashed custom metric module.");
   }
+  if (draft.metrics.aggregation === "weighted_mean" && (!draft.metrics.taskWeights || !Object.keys(draft.metrics.taskWeights).length || draft.tasks.some((task) => !Object.hasOwn(draft.metrics.taskWeights!, task.id)))) {
+    issues.push("Assign a positive weight to every scenario before using a weighted mean.");
+  }
   if (
     draft.capabilities.compatibleMethods.includes("grpo")
     && !draft.capabilities.rewardKinds.some((kind) =>

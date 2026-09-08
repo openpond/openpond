@@ -1,18 +1,17 @@
 import { z } from "zod";
-import { ImmutableAssetRefSchema, contentHash, sha256, type ImmutableAssetRef } from "@openpond/harness";
+import { contentHash, type ImmutableAssetRef } from "@openpond/harness";
 import { EnvironmentReleaseSchema, VerifierSetReleaseSchema, verifyEnvironmentRelease, verifyVerifierSetRelease } from "@openpond/evals";
 import { assertTasksetRelease, TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import { ModelTasksetPackageSchema, validateModelTasksetPackage } from "./model-taskset-derivation.js";
 import { taskBatchPackageMetadata } from "@openpond/evals/learning";
 import { TasksetPackageLearningResourcesSchema, learningPackageContextFiles, validateTasksetLearningResources } from "./taskset-package-learning.js";
+import { assertModelTasksetAuthoring } from "./model-taskset-authoring-lineage.js";
+import { resolveTasksetPackageExecution } from "./taskset-package-execution.js";
+import { MAX_TASKSET_PACKAGE_BYTES, TasksetPackageFileSchema, decodeTasksetPackageFile } from "./taskset-package-files.js";
+export { MAX_TASKSET_PACKAGE_BYTES, TasksetPackageFileSchema, decodeTasksetPackageFile } from "./taskset-package-files.js";
+export { resolveTasksetPackageExecution, createTasksetPackageExecutionFile } from "./taskset-package-execution.js";
 
-/** The limit covers the entire decoded JSON envelope, including base64. */
-export const MAX_TASKSET_PACKAGE_BYTES = 64 * 1024 * 1024;
-export const TasksetPackageFileSchema = z.object({
-  asset: ImmutableAssetRefSchema,
-  base64: z.string().max(Math.ceil(MAX_TASKSET_PACKAGE_BYTES / 3) * 4),
-}).strict();
 const BoundModelResourcesSchema = ModelTasksetPackageSchema.omit({ taskset: true, executionResources: true });
 export const TasksetPackageContentSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetPackage.v1"),
@@ -31,15 +30,6 @@ export function tasksetPackageRewardBinding(value: TasksetPackage) {
   return value.learningResources ? taskBatchPackageMetadata(value.taskset).binding : value.modelResources?.rewardBinding ?? null;
 }
 
-export function decodeTasksetPackageFile(value: z.infer<typeof TasksetPackageFileSchema>): Uint8Array {
-  const file = TasksetPackageFileSchema.parse(value);
-  const raw = atob(file.base64);
-  if (btoa(raw) !== file.base64) throw new Error(`Taskset asset ${file.asset.id} has noncanonical base64.`);
-  const bytes = Uint8Array.from(raw, character => character.charCodeAt(0));
-  if (bytes.byteLength !== file.asset.sizeBytes || sha256(bytes) !== file.asset.contentHash) throw new Error(`Taskset asset ${file.asset.id} differs from its immutable bytes.`);
-  return bytes;
-}
-
 /** Admission verifies the complete declared dependency graph, not readiness or
  * permission to execute it. Hosts separately authorize the workspace/project. */
 export function validateTasksetPackage(value: unknown): TasksetPackage {
@@ -49,6 +39,8 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
   if (contentHash(content) !== hash) throw new Error("Taskset package content hash differs from its bytes.");
   const { taskset, environment, verifierSet } = result;
   assertTasksetRelease(taskset);
+  const authoring = assertModelTasksetAuthoring(taskset);
+  if (authoring && (result.modelResources || result.learningResources)) throw new Error("Taskset package cannot declare competing authoring graphs.");
   if (!verifyEnvironmentRelease(environment) || !verifyVerifierSetRelease(verifierSet)
     || !same(taskset.environmentRelease, { id: environment.id, contentHash: environment.contentHash })
     || !same(taskset.verifierSetRelease, { id: verifierSet.id, contentHash: verifierSet.contentHash })
@@ -80,6 +72,13 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
       if (ref.visibility === "policy") throw new Error(`Taskset grader asset must be private: ${ref.id}.`);
     }
   }
+  if (taskset.metrics?.customAggregator) {
+    const aggregator = taskset.metrics.customAggregator;
+    const modules = result.files.filter(file => file.asset.path === aggregator.module);
+    if (modules.length !== 1 || modules[0]!.asset.contentHash !== aggregator.contentHash || modules[0]!.asset.sizeBytes > 524_288 || modules[0]!.asset.visibility === "policy") {
+      throw new Error("Taskset metric module is missing or mismatched, public, or exceeds the source limit.");
+    }
+  }
   for (const declarations of [taskset.metadata.environmentResources, environment.metadata.resources]) {
     if (declarations === undefined) continue;
     for (const resource of z.array(z.object({ path: z.string().min(1) }).passthrough()).parse(declarations)) {
@@ -99,6 +98,7 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
   } else if (["starter", "rewardBinding", "rewardExecution", "modelTasksetDerivation", "learning"].some(key => taskset.metadata[key] !== undefined)) {
     throw new Error("Bound Taskset publication requires its complete model resources.");
   }
+  resolveTasksetPackageExecution(result);
   return result;
 }
 

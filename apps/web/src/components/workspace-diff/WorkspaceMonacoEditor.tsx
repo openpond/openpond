@@ -15,6 +15,7 @@ type MonacoFileEditorProps = {
   onSave: () => void;
   value: string;
   wordWrap: boolean;
+  readOnly?: boolean;
 };
 
 export type WorkspaceMonacoLspActionInput = {
@@ -55,6 +56,7 @@ function WorkspaceMonacoEditor({
   onSave,
   value,
   wordWrap,
+  readOnly = false,
 }: MonacoFileEditorProps, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -65,6 +67,8 @@ function WorkspaceMonacoEditor({
   const onLspActionRef = useRef(onLspAction);
   const onSaveRef = useRef(onSave);
   const [activeModelKey, setActiveModelKey] = useState<string | null>(null);
+
+  useEffect(() => { editorRef.current?.updateOptions({ readOnly }); }, [readOnly, activeModelKey]);
 
   useEffect(() => {
     latestValueRef.current = value;
@@ -112,6 +116,7 @@ function WorkspaceMonacoEditor({
         monaco.Uri.parse(`file:///${filePath.split("/").map(encodeURIComponent).join("/")}`),
       );
       editor = monaco.editor.create(container, {
+        readOnly,
         automaticLayout: true,
         contextmenu: true,
         cursorBlinking: "smooth",

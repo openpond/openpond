@@ -19,6 +19,7 @@ import { z } from "zod";
 
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskEvaluationService } from "./evaluation-service.js";
+import { tasksetEvaluationScore } from "./taskset-evaluation-score.js";
 
 type ImmutableRef = { id: string; contentHash: string };
 
@@ -107,6 +108,7 @@ export async function qualifyHarnessModelImprovement(input: {
     throw new Error("Taskset readiness is stale or blocked.");
   }
   assertBaselineLineage(taskset, baseline, input.reviewRef);
+  const primaryScore = tasksetEvaluationScore(taskset, baseline);
   const lineage = harnessLineage(taskset);
   const sourcePolicies = HarnessReviewSourcePolicyRefSchema.array().parse(lineage.sourcePolicies);
   const frozenEvidenceRefs = taskEvidenceRefs(
@@ -125,9 +127,13 @@ export async function qualifyHarnessModelImprovement(input: {
   );
   const reasons = [...signal.reasons];
   let decision = signal.decision;
-  if (baseline.meanScore !== null && baseline.meanScore >= 0.95) {
+  if (primaryScore !== null && primaryScore >= 0.95) {
     decision = "no_training";
     reasons.push("The real baseline already meets the protected success threshold.");
+  }
+  if (primaryScore === null) {
+    decision = "no_training";
+    reasons.push("The baseline has no usable primary metric value for model-improvement qualification.");
   }
   if (!privacyReady || !input.privacyApproval) {
     decision = "no_training";

@@ -12,6 +12,69 @@ import { createLearningTextAsset, learningRef, sealLearningContent } from "@open
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 import { ModelTasksetExecutionResourcesSchema } from "openpond-sdk/model-starters";
 import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { ordinaryToolTaskset } from "../packages/sdk/test/fixtures/ordinary-tool-taskset.js";
+import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import.js";
+import { materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files.js";
+import { createTrainingApi } from "../apps/server/src/training/training-api.js";
+import type { Taskset, TasksetDraft } from "@openpond/contracts";
+import type { TasksetDraftFile } from "openpond-sdk/model-taskset-authoring";
+
+// A complete ordinary package must run through the same isolated environment
+// and owner-recorded grading boundary without inventing a bound starter graph.
+it("executes imported ordinary tool packages without a learning-store binding", async () => withTempDirectory("ordinary-tool-owner-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const prepared = prepareImportedTasksetPackage({ package: ordinaryToolTaskset(), profileId: "profile", name: "Ordinary tool", createdAt: "2026-09-08T08:00:00.000Z" });
+    await materializeImportedTasksetPackage({ home, ...prepared });
+    await store.upsertTaskset(prepared.taskset);
+    let turns = 0;
+    let expectedValue = 1;
+    const service = createTaskEvaluationService({ store, storeDir: home, modelText: async () => { throw new Error("Text-only execution must not run."); },
+      modelStream: async function* (request) {
+        expect(JSON.stringify(request.messages)).not.toContain("private-initial-state");
+        expect(JSON.stringify(request.messages)).not.toContain("export function");
+        if (turns++ === 0) yield { toolCalls: [{ id: "ordinary-inspect", type: "function", function: { name: "inspect", arguments: "{}" } }] };
+        else { expect(request.messages.at(-1)).toMatchObject({ role: "tool", content: JSON.stringify({ value: expectedValue }) }); yield { text: String(expectedValue) }; }
+      },
+    });
+    const result = await service.execute({ tasksetId: prepared.taskset.id, taskId: "inspect-task", model: { providerId: "openpond", modelId: "fixture" }, seed: 17, attempt: 0 });
+    expect(result.attempt.metadata.environmentStatus).toBe("completed");
+    expect(result.attempt.output).toEqual({ text: "1" });
+    expect(result.grade, JSON.stringify(result.grade)).toMatchObject({ score: 1, passed: true });
+    expect(result.portable.environmentRelease).toEqual(prepared.package.environment);
+    expect(prepared.taskset.metadata.taskDefinition).toBeUndefined();
+    const evidence = await readStarterToolEvidence({ store, storeDir: home, taskset: prepared.taskset, task: prepared.taskset.tasks[0]!, attempt: result.attempt });
+    expect(evidence).toMatchObject({ environment: { collected: true, finalState: { privateToken: "private-initial-state" } } });
+    await expect(readStarterToolEvidence({ store, storeDir: home, taskset: prepared.taskset, task: prepared.taskset.tasks[0]!, attempt: { ...result.attempt, id: "copied-attempt" } })).rejects.toThrow("owner-recorded");
+    const model = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "ordinary-world-owner", profileId: "profile", name: "Ordinary world owner", objective: null, defaultBaseModel: null, defaultDestinationId: null,
+      trainingSetup: { tasksetRef: { id: prepared.taskset.id, revision: prepared.taskset.revision, contentHash: prepared.taskset.contentHash } },
+    }, 0));
+    const api = createTrainingApi({ store, storeDir: home, evaluation: service } as never);
+    const source = await api.request("inspect_taskset_draft_source", { profileId: model.profileId, modelId: model.id, expectedModelRevision: model.revision }) as { sourcePackageHash: string };
+    let draft = await api.request("init_taskset_draft", { profileId: model.profileId, sourceRequest: { schemaVersion: "openpond.modelTasksetDraftRequest.v1", operationId: "revise-world", modelId: model.id, expectedModelRevision: model.revision, sourcePackageHash: source.sourcePackageHash } }) as TasksetDraft;
+    await expect(api.request("publish_taskset_draft", { draftId: draft.id })).rejects.toThrow("secret scanning");
+    // This fixture is original synthetic source. Import itself must not grant
+    // the authoring approval; explicitly record its reviewed source status.
+    draft = await api.request("save_taskset_draft", { draft: { ...draft, sourceRefs: draft.sourceRefs.map(source => source.schemaVersion === "openpond.uploadedFileDatasetSource.v1"
+      ? { ...source, secretScanStatus: "passed", piiScanStatus: "passed", licensingStatus: "approved" } : source) } }) as TasksetDraft;
+    const file = await api.request("taskset_draft_file", { profileId: model.profileId, draftId: draft.id, path: "environment/world.js" }) as { draftRevision: number; file: TasksetDraftFile };
+    await api.request("save_taskset_draft_file", { profileId: model.profileId, draftId: draft.id, expectedDraftRevision: file.draftRevision, path: file.file.path, expectedFileHash: file.file.contentHash,
+      content: { encoding: "utf8", data: file.file.content.data.replace("value: 1", "value: 2") },
+    });
+    const published = await api.request("publish_taskset_draft", { draftId: draft.id }) as { taskset: Taskset };
+    expect(published.taskset.id).not.toBe(prepared.taskset.id);
+    expect((await store.getModelProject(model.id))!.trainingSetup.tasksetRef?.contentHash).toBe(published.taskset.contentHash);
+    turns = 0; expectedValue = 2;
+    const revised = await service.execute({ tasksetId: published.taskset.id, taskId: "inspect-task", model: { providerId: "openpond", modelId: "fixture" }, seed: 17, attempt: 0 });
+    expect(revised.attempt.output).toEqual({ text: "2" });
+    expect(revised.grade).toMatchObject({ score: 1, passed: true });
+    expect(revised.portable.environmentRelease.contentHash).not.toBe(result.portable.environmentRelease.contentHash);
+    turns = 0; expectedValue = 1;
+    const original = await service.execute({ tasksetId: prepared.taskset.id, taskId: "inspect-task", model: { providerId: "openpond", modelId: "fixture" }, seed: 18, attempt: 0 });
+    expect(original.attempt.output).toEqual({ text: "1" });
+    expect(original.portable.environmentRelease).toEqual(result.portable.environmentRelease);
+  } finally { await store.close(); }
+}));
 
 // A model claiming success, a copied receipt, or changed artifact bytes must not
 // earn the same state Reward as an actual scoped write through the tool runtime.

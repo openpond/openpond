@@ -4,13 +4,46 @@ import { bindTasksetExecutionReleases, createEnvironmentRelease, createVerifierS
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { createTasksetPackage, decodeTasksetPackageFile, validateTasksetPackage, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "../src/taskset-packages.js";
 import { HostedModelProjectTrainingSetupSchema } from "../src/model-projects.js";
+import { prepareModelTasksetDraft, publishModelTasksetDraftPackage, ModelTasksetAuthoringSchema } from "../src/taskset-packages.js";
+import { learningRef } from "@openpond/evals/learning";
+import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
+import { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript-environment/node";
+import { resolveTasksetPackageExecution } from "../src/taskset-packages.js";
+import { ordinaryToolTaskset } from "./fixtures/ordinary-tool-taskset.js";
+
+// Ordinary executable packages must close their private graph at admission,
+// and owned revisions must execute changed code without altering the source.
+it("validates and reseals ordinary JavaScript execution across owned revisions", async () => {
+  const source = ordinaryToolTaskset();
+  const owner = { scopeId: "local", modelId: "ordinary-model" };
+  const prepared = prepareModelTasksetDraft({ owner, source, request: { schemaVersion: "openpond.modelTasksetDraftRequest.v1", operationId: "edit-world", modelId: owner.modelId, expectedModelRevision: 1, sourcePackageHash: source.contentHash } });
+  const published = publishModelTasksetDraftPackage({ preparation: prepared, edited: ordinaryToolTaskset(2) });
+  expect(resolveTasksetPackageExecution(published)?.execution.verifierSet).toEqual(published.verifierSet);
+  async function inspect(value: typeof source) {
+    const resolved = resolveTasksetPackageExecution(value)!;
+    const session = await createJavaScriptEnvironmentSession({ definition: resolved.execution.javascript,
+      asset: resolved.assets.find(asset => asset.id === resolved.execution.javascript.module.id)!,
+      initialState: JSON.parse(resolved.assets.find(asset => asset.id === value.taskset.tasks[0]!.privilegedContextRef)!.text),
+      input: value.taskset.tasks[0]!.input, seed: 17, execute: executeJavaScriptEnvironmentInWorker,
+    });
+    try { return await session.step({ name: "inspect", arguments: {} }); }
+    finally { await session.destroy(); }
+  }
+  expect(await inspect(source)).toEqual({ value: 1 });
+  expect(await inspect(published)).toEqual({ value: 2 });
+  expect(await inspect(source)).toEqual({ value: 1 });
+  const { contentHash: _hash, ...content } = source;
+  for (const file of source.files) expect(() => createTasksetPackage({ ...content, files: source.files.filter(candidate => candidate !== file) })).toThrow(/missing/);
+  const module = resolveTasksetPackageExecution(source)!.execution.javascript.module;
+  expect(() => createTasksetPackage({ ...content, files: source.files.map(file => file.asset.id === module.id ? { ...file, asset: { ...file.asset, visibility: "policy" } } : file) })).toThrow();
+});
 
 function fixture() {
   const file = (id: string, bytes: Uint8Array, visibility: "policy" | "host_private" | "verifier") => ({
     asset: { id, path: `assets/${id}`, mediaType: "application/octet-stream", sizeBytes: bytes.byteLength, contentHash: sha256(bytes), visibility },
     base64: Buffer.from(bytes).toString("base64"),
   });
-  const files = [file("binary-input", new Uint8Array([0, 255, 128, 13, 10]), "policy"), file("private-context", new TextEncoder().encode("private expected state"), "host_private"), file("verifier", new TextEncoder().encode("export function verify() { return { score: 1, passed: true }; }"), "verifier"), file("schema", new TextEncoder().encode("{}"), "verifier")];
+  const files = [file("binary-input", new Uint8Array([0, 255, 128, 13, 10]), "policy"), file("private-context", new TextEncoder().encode("private expected state"), "host_private"), file("verifier", new TextEncoder().encode("export function verify() { return { score: 1, passed: true }; }"), "verifier"), file("schema", new TextEncoder().encode("{}"), "verifier"), file("metric", new TextEncoder().encode("export function aggregate(scores) { return Math.min(...scores); }"), "host_private")];
   const environment = createEnvironmentRelease({
     schemaVersion: "openpond.environmentRelease.v1", id: "work-environment", revision: 1,
     contract: { protocolVersion: "openpond.environment.v1", kind: "work", entrypoint: "work", stateful: true, deterministicSeeds: true, lifecycle: ["create", "reset", "step", "collect", "destroy"], networkPolicy: "none", defaultTimeoutMs: 10_000 },
@@ -26,11 +59,65 @@ function fixture() {
     schemaVersion: "openpond.tasksetRelease.v2", id: "work-tasks", revision: 1,
     policy: { policyVisibleFields: ["input"], privilegedFields: ["expectedOutput"], hiddenGraderRefs: ["verify"], connectedAppScopes: [] },
     environment: environment.contract, tools: [], capabilities: [], graders: verifierSet.graders,
+    metrics: { schemaVersion: "openpond.tasksetMetricPolicy.v1", primaryMetric: "quality", aggregation: "custom", missingReward: "zero", customAggregator: { module: files[4]!.asset.path, exportName: "aggregate", contentHash: files[4]!.asset.contentHash, timeoutMs: 1_000, networkPolicy: "none" } },
     tasks: [{ id: "task", clusterKey: "family", split: "train", input: { prompt: "Read input" }, expectedOutput: null, policyVisibleContext: {}, privilegedContextRef: "private-context", artifactRefs: [files[0]!.asset], requiredOutputs: [{ path: "output.json", mediaType: "application/json", schemaRef: files[3]!.asset, maxBytes: 1_000, metadata: {} }], tags: [] }], metadata: {},
   };
   const taskset = bindTasksetExecutionReleases({ taskset: TasksetReleaseSchema.parse({ ...content, contentHash: contentHash(content) }), environment, verifierSet });
   return createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files });
 }
+
+// Editing an ordinary shared package must fork only the intended Model while
+// retaining exact binary/private dependencies and immutable source history.
+it("prepares repeatable owned drafts and seals isolated ordinary revisions", () => {
+  const source = fixture();
+  const original = JSON.stringify(source);
+  const owner = { scopeId: "profile-a", modelId: "model-a" };
+  const request = { schemaVersion: "openpond.modelTasksetDraftRequest.v1" as const, operationId: "edit-one", modelId: owner.modelId,
+    expectedModelRevision: 1, sourcePackageHash: source.contentHash };
+  const prepared = prepareModelTasksetDraft({ owner, source, request });
+  expect(prepareModelTasksetDraft({ owner, source, request })).toEqual(prepared);
+  expect(() => prepareModelTasksetDraft({ owner, source, request: { ...request, sourcePackageHash: "a".repeat(64) } })).toThrow("source package changed");
+  const code = new TextEncoder().encode("export function verify() { return { score: 0, passed: false }; }");
+  const changedFile = { ...source.files[2]!, asset: { ...source.files[2]!.asset, contentHash: sha256(code), sizeBytes: code.byteLength }, base64: Buffer.from(code).toString("base64") };
+  const { contentHash: _oldVerifierHash, ...oldVerifier } = source.verifierSet;
+  const changedVerifier = createVerifierSetRelease({ ...oldVerifier, revision: 2,
+    graders: oldVerifier.graders.map(grader => grader.kind === "custom_verifier" ? { ...grader, verifierRef: changedFile.asset } : grader),
+    calibrationReceiptRefs: [{ id: "old-calibration", contentHash: "c".repeat(64) }],
+  });
+  const { contentHash: _hash, ...sourceContent } = source.taskset;
+  const changedContent = { ...sourceContent, graders: changedVerifier.graders, verifierSetRelease: { id: changedVerifier.id, contentHash: changedVerifier.contentHash },
+    tasks: source.taskset.tasks.map(task => ({ ...task, input: { prompt: "Read the revised input" } })),
+    metadata: { qualification: { passed: true }, privacyReview: { approved: true }, ordinaryAuthoring: { graderFixtures: [] } } };
+  const { contentHash: _packageHash, ...packageContent } = source;
+  const edited = createTasksetPackage({ ...packageContent, verifierSet: changedVerifier, files: source.files.map((file, index) => index === 2 ? changedFile : file),
+    taskset: TasksetReleaseSchema.parse({ ...changedContent, contentHash: contentHash(changedContent) }) });
+  const published = publishModelTasksetDraftPackage({ preparation: prepared, edited });
+  expect(published.taskset.id).not.toBe(source.taskset.id);
+  expect(published.taskset.revision).toBe(1);
+  expect(published.taskset.tasks[0]!.input).toEqual({ prompt: "Read the revised input" });
+  expect(published.files).toEqual(edited.files);
+  expect(decodeTasksetPackageFile(published.files[2]!)).toEqual(code);
+  expect(published.files.filter((_, index) => index !== 2)).toEqual(source.files.filter((_, index) => index !== 2));
+  expect(published.environment).toEqual(source.environment);
+  expect(published.taskset.metrics).toEqual(source.taskset.metrics);
+  expect(published.taskset.metadata).not.toHaveProperty("qualification");
+  expect(published.taskset.metadata).not.toHaveProperty("privacyReview");
+  expect(published.verifierSet.calibrationReceiptRefs).toEqual([]);
+  expect(ModelTasksetAuthoringSchema.parse(published.taskset.metadata.modelTasksetAuthoring)).toMatchObject({ owner, root: learningRef(source.taskset), parent: learningRef(source.taskset) });
+  const second = prepareModelTasksetDraft({ owner, source: published, request: { ...request, operationId: "edit-two", expectedModelRevision: 2, sourcePackageHash: published.contentHash } });
+  const next = publishModelTasksetDraftPackage({ preparation: second, edited: published });
+  expect(next.taskset.id).toBe(published.taskset.id);
+  expect(next.taskset.revision).toBe(2);
+  expect(next.files).toEqual(edited.files);
+  const foreign = prepareModelTasksetDraft({ owner: { ...owner, scopeId: "another-profile" }, source: published,
+    request: { ...request, sourcePackageHash: published.contentHash } });
+  expect(foreign.tasksetId).not.toBe(published.taskset.id);
+  expect(foreign.tasksetRevision).toBe(1);
+  expect(() => publishModelTasksetDraftPackage({ preparation: { ...second, sourceTasksetRef: learningRef(source.taskset) }, edited: published })).toThrow("source lineage");
+  expect(() => publishModelTasksetDraftPackage({ preparation: { ...second, tasksetId: source.taskset.id }, edited: published })).toThrow("ownership lineage");
+  expect(JSON.stringify(source)).toBe(original);
+  expect(validateTasksetPackage(published)).toEqual(published);
+});
 
 // A metadata-only transfer must not appear complete while Work inputs or
 // evaluator dependencies are missing, substituted, or disclosed to the policy.
@@ -46,6 +133,7 @@ it("round-trips binary Work packages and enforces their complete private depende
   expect(() => createTasksetPackage({ ...content, files: [...content.files, content.files[0]!] })).toThrow("Duplicate");
   expect(() => createTasksetPackage({ ...content, files: content.files.map((file, index) => index === 0 ? { ...file, base64: Buffer.from("tampered").toString("base64") } : file) })).toThrow("immutable bytes");
   expect(() => createTasksetPackage({ ...content, files: content.files.map(file => file.asset.id === "private-context" ? { ...file, asset: { ...file.asset, visibility: "policy" } } : file) })).toThrow("private context");
+  expect(() => createTasksetPackage({ ...content, files: content.files.map(file => file.asset.id === "metric" ? { ...file, asset: { ...file.asset, visibility: "policy" } } : file) })).toThrow("metric module");
   expect(() => createTasksetPackage({ ...content, environment: { ...content.environment, revision: 2 } })).toThrow("execution releases");
   expect(() => validateTasksetPackage({ ...original, contentHash: "0".repeat(64) })).toThrow("content hash");
 });

@@ -44,6 +44,42 @@ Subpath exports are available at `/harness`, `/tasksets`, `/benchmarks`, `/grade
 not a hosted client. It does not execute OpenPond Desktop or Sandbox sessions,
 resolve credentials, or persist artifacts.
 
+## Authored Taskset metrics
+
+`@openpond/evals/metrics` exports the shared `TasksetMetricPolicySchema` and
+`executeTasksetMetric`. Supply the policy from the pinned Taskset Release, its
+Run Manifest, and verified attempt receipts. The result carries the policy,
+policy hash, all input receipt references, population counts and a content hash.
+It is separate from the evaluation's ordinary mean-score accounting.
+
+The release's optional `metrics` field is the authoritative policy. For complete
+evaluations, use `aggregateTasksetEvaluationReceipts` or the Node
+`aggregateTasksetEvaluationInWorker` export. They bind the release and task IDs
+to the manifest, calculate `authoredMetric`, and attach it only to the exact
+receipt population. `meanScore` remains the ordinary mean. Hosts should capture
+and validate custom source with `assertTasksetMetricSource` before model work,
+then retain those bytes throughout the run. Complete Taskset packages require
+the declared module as a private, content-matching file.
+
+Mean score, explicit grader pass rate, weighted mean and custom aggregation use
+one population rule: nonterminal attempts, infrastructure failures, timeouts and
+cancellations are excluded. Other missing or ineligible rewards obey the
+policy's `zero` or `exclude` setting. Pass rate requires an explicit boolean
+`passed` verdict. Empty populations return `null`.
+
+Weighted means require positive `taskWeights` keyed by task ID; each attempt
+uses its task's declared weight. Missing weights are errors. Custom modules
+export `aggregate(scores)` (or the declared export) and return a finite number
+between zero and one. Exact UTF-8 source must match the policy's SHA-256 before
+execution. Module source is limited to 512 KiB and custom inputs to 4 MiB.
+
+Node hosts use `executeTasksetMetricInWorker` from `@openpond/evals/metrics/node`.
+It strips type annotations from `.ts`, `.mts` and `.cts` modules, then executes
+them in a fresh deterministic interpreter without host APIs or imports. Workers
+stop before success, failure or cancellation is returned. Other hosts pass an
+isolated executor to the portable function; authored source must never run in
+the host JavaScript context.
+
 ## Benchmarks
 
 `BenchmarkDefinition` binds a named benchmark to an immutable Taskset Release,

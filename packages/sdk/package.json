@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -70,6 +70,10 @@
       "types": "./dist/types/packages/sdk/src/model-batch-review-contracts.d.ts",
       "import": "./dist/model-batch-review.js"
     },
+    "./model-taskset-authoring": {
+      "types": "./dist/types/packages/sdk/src/model-taskset-authoring-contracts.d.ts",
+      "import": "./dist/model-taskset-authoring.js"
+    },
     "./training": {
       "types": "./dist/types/packages/sdk/src/training.d.ts",
       "import": "./dist/training.js"
@@ -123,7 +127,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
-    "@openpond/evals": "^0.8.1",
+    "@openpond/evals": "^0.9.0",
     "@openpond/harness": "^0.2.5",
     "esbuild": "0.28.1",
     "zod": "^4.1.13"

@@ -65,6 +65,7 @@ export function prepareImportedTasksetPackage(input: {
     graders: resources ? projectLearningBatchGraders(resources.rewardBinding, resources.rewards, resources.assets)
       : learning ? projectLearningBatchGraders(learning.binding, learning.rewards, value.learningResources!.assets) : importedPackageGraders(value),
     graderFixtures: fixtures, learningSignals: draft.learningSignals,
+    ...(release.metrics ? { metrics: release.metrics } : {}),
     authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1", model: null, modelConfig: {},
       skillHash: contentHash("openpond-package-import-v1"), promptTemplateVersion: "package-import-v1", buildIntent: "discovery",
       buildSpecification: null, evidenceHashes: [value.contentHash], tasksetSdkVersion: "package-import-v1",

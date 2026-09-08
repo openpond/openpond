@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ChatModelRef, GraderSpec, Taskset } from "@openpond/contracts";
+import { contentHash } from "@openpond/harness";
 
 import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
@@ -62,12 +63,21 @@ export function LabModelScoring({
     return () => {
       active = false;
     };
-  }, [taskset.id, training.actions]);
+  }, [taskset.id, taskset.contentHash, training.actions]);
 
   const metricPolicy = taskset.metrics ?? {
     primaryMetric: "score",
     aggregation: "mean_score" as const,
   };
+  const metricPolicyHash = taskset.metrics ? contentHash(taskset.metrics) : null;
+  const latestEvaluation = metricOperations?.evaluationResults.find(result =>
+    result.metadata.sourceTasksetHash === taskset.contentHash
+    && result.authoredMetric?.policyHash === metricPolicyHash);
+  const authoredMetric = latestEvaluation?.authoredMetric;
+  const authoredValue = authoredMetric?.value == null ? "—" : authoredMetric.value.toFixed(3);
+  const authoredHint = authoredMetric && latestEvaluation
+    ? `Latest evaluation · ${authoredMetric.includedCount}/${authoredMetric.receiptRefs.length} included · ${latestEvaluation.model.model}`
+    : "No evaluation for this revision";
   const grades = metricOperations?.grades ?? [];
   const scoredGrades = grades.filter((grade) => grade.score !== null);
   const meanScore = scoredGrades.length
@@ -152,7 +162,7 @@ export function LabModelScoring({
             <div>
               <h2 id="recorded-scoring-evidence">Recorded scoring evidence</h2>
               <p>
-                Results captured from attempts against this Taskset release.
+                Recorded attempt history and the latest evaluation for this revision.
               </p>
             </div>
           </div>
@@ -169,9 +179,9 @@ export function LabModelScoring({
             progress={passRate}
           />
           <Metric
-            label="Mean score"
-            value={metricsLoading ? "…" : meanScore === null ? "—" : meanScore.toFixed(3)}
-            hint={`${scoredGrades.length} scored grade${scoredGrades.length === 1 ? "" : "s"}`}
+            label={taskset.metrics ? titleCase(metricPolicy.primaryMetric) : "Mean score"}
+            value={metricsLoading ? "…" : taskset.metrics ? authoredValue : meanScore?.toFixed(3) ?? "—"}
+            hint={taskset.metrics ? authoredHint : `${scoredGrades.length} scored grade${scoredGrades.length === 1 ? "" : "s"}`}
           />
           <Metric
             label="Attempts"
@@ -188,6 +198,7 @@ export function LabModelScoring({
         <dl className="labs-scoring-evidence-meta">
           <Fact label="Primary metric" value={titleCase(metricPolicy.primaryMetric)} />
           <Fact label="Aggregation" value={titleCase(metricPolicy.aggregation)} />
+          {taskset.metrics ? <Fact label="Mean grade score" value={metricsLoading ? "…" : meanScore?.toFixed(3) ?? "—"} /> : null}
           <Fact label="Distinct outputs" value={metricsLoading ? "…" : String(distinctOutputs)} />
           <Fact label="Preference groups" value={metricsLoading ? "…" : String(preferenceGroups)} />
         </dl>
@@ -372,7 +383,7 @@ function Metric({
     <div>
       <dt>{label}</dt>
       <dd>{value}</dd>
-      <small>{hint}</small>
+      <small title={hint}>{hint}</small>
       {progress !== undefined && progress !== null ? (
         <span className="labs-scoring-progress" aria-hidden="true">
           <span style={{ width: `${Math.max(0, Math.min(progress, 1)) * 100}%` }} />

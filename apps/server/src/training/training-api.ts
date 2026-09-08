@@ -105,6 +105,7 @@ import { handleModelComparisonAction } from "./training-api-model-comparison-act
 import { handleContinualLearningAction } from "./training-api-continual-learning-actions.js";
 import { readTasksetGraderDetails } from "./taskset-grader-details.js";
 import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
+import { initializeModelTasksetDraftSource, inspectModelTasksetDraftSource, tasksetDraftFileAction } from "./model-taskset-draft-api.js";
 import { createLocalLearningRuntime } from "./learning-runtime.js";
 import { parseModelProjectSaveRequest, ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
 import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
@@ -751,10 +752,11 @@ export function createTrainingApi(deps: {
     }
     if (action === "taskset_operational_state") {
       const tasksetId = requiredString(input.tasksetId, "tasksetId");
-      const [attempts, artifacts, grades] = await Promise.all([
+      const [attempts, artifacts, grades, evaluationResults] = await Promise.all([
         deps.store.listTaskAttempts(tasksetId),
         deps.store.listTaskAttemptArtifacts({ tasksetId }),
         deps.store.listGradeResultsForTaskset(tasksetId),
+        deps.store.listEvaluationResults(tasksetId),
       ]);
       return TasksetOperationalStateSchema.parse({
         schemaVersion: "openpond.tasksetOperationalState.v1",
@@ -762,6 +764,7 @@ export function createTrainingApi(deps: {
         attempts,
         artifacts,
         grades,
+        evaluationResults,
         generatedAt: new Date().toISOString(),
       });
     }
@@ -780,8 +783,14 @@ export function createTrainingApi(deps: {
     if (action === "cancel_dataset_import") {
       return deps.datasetImports.cancel(requiredString(input.importId, "importId"));
     }
+    if (action === "inspect_taskset_draft_source") {
+      return inspectModelTasksetDraftSource(deps, { profileId: requiredString(input.profileId, "profileId"), modelId: requiredString(input.modelId, "modelId"), expectedModelRevision: input.expectedModelRevision });
+    }
     if (action === "init_taskset_draft") {
       const profileId = requiredString(input.profileId, "profileId");
+      if (input.sourceRequest !== undefined) {
+        return initializeModelTasksetDraftSource(deps, { profileId, sourceRequest: input.sourceRequest, modelId: input.modelId });
+      }
       const modelId = string(input.modelId);
       const model = modelId ? await deps.store.getModelProject(modelId) : null;
       if (modelId && (!model || model.profileId !== profileId)) throw new Error("Taskset draft Model was not found in this Profile.");
@@ -826,6 +835,9 @@ export function createTrainingApi(deps: {
       if (!workspace) throw new Error("Taskset draft workspace was not found.");
       return workspace;
     }
+    if (["taskset_draft_files", "taskset_draft_file", "save_taskset_draft_file"].includes(action)) return tasksetDraftFileAction(deps.store, action, {
+      ...input, profileId: input.profileId ?? requestUrl?.searchParams.get("profileId"), ...(action === "taskset_draft_file" ? { path: input.path ?? requestUrl?.searchParams.get("path") } : {}),
+    });
     if (action === "refresh_taskset_draft_model") {
       const draft = await requireTasksetDraft(deps.store, requiredString(input.draftId, "draftId"));
       if (!draft.modelScope) throw new Error("Taskset draft has no Model to refresh.");
@@ -851,7 +863,7 @@ export function createTrainingApi(deps: {
             )
           : null;
         if (!taskset) throw new Error("Published Taskset draft lost its immutable Taskset revision.");
-        await deps.evaluation.readiness(taskset.id, taskset);
+        await deps.evaluation.readiness(taskset.id, { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash });
         return publishTasksetToHostedProject({
           store: deps.store,
           benchmarkTasksets: deps.benchmarkTasksets,
@@ -874,7 +886,7 @@ export function createTrainingApi(deps: {
       const finalized = await deps.store.finalizeTasksetDraftPublication({
         draft, packageHash: workspace.packageHash, taskset: materializedTaskset,
       });
-      await deps.evaluation.readiness(finalized.taskset.id, finalized.taskset);
+      await deps.evaluation.readiness(finalized.taskset.id, { id: finalized.taskset.id, revision: finalized.taskset.revision, contentHash: finalized.taskset.contentHash });
       const taskset = await deps.store.getTasksetRevision(finalized.taskset.id, finalized.taskset.revision, finalized.taskset.contentHash)
         ?? finalized.taskset;
       return publishTasksetToHostedProject({

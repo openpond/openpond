@@ -69,10 +69,11 @@ async function main(): Promise<void> {
           'import { OpenPondModelStarterAttemptsClient, ModelStarterAttemptRequestSchema } from "openpond-sdk/model-starter-attempts";',
           'if (!OpenPondModelStarterAttemptsClient || !ModelStarterAttemptRequestSchema) throw new Error("Packed starter attempt exports are missing");',
           'import { OpenPondTasksetCatalogClient, HostedTasksetSummarySchema } from "openpond-sdk/taskset-catalog";',
-          'import { OpenPondTasksetPackageClient, OpenPondTasksetPackageError, TasksetPackageSchema, createTasksetPackage, decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";',
-          'if (!TasksetPackageSchema || typeof createTasksetPackage !== "function" || typeof decodeTasksetPackageFile !== "function") throw new Error("Packed Taskset package exports are missing");',
+          'import { OpenPondTasksetPackageClient, OpenPondTasksetPackageError, TasksetPackageSchema, createTasksetPackage, decodeTasksetPackageFile, resolveTasksetPackageExecution, createTasksetPackageExecutionFile } from "openpond-sdk/taskset-packages";',
+          'if (!TasksetPackageSchema || typeof createTasksetPackage !== "function" || typeof decodeTasksetPackageFile !== "function" || typeof resolveTasksetPackageExecution !== "function" || typeof createTasksetPackageExecutionFile !== "function") throw new Error("Packed Taskset package exports are missing");',
           'import { beginModelBatchReview, findModelBatchReview, ModelBatchReviewRequestSchema, ModelBatchReviewReceiptSchema } from "openpond-sdk/taskset-packages";',
           'import { ModelBatchReviewInspectionSchema } from "openpond-sdk/model-batch-review"; if (!ModelBatchReviewInspectionSchema) throw new Error("Packed review inspection schema is missing");',
+          'import { ModelTasksetDraftRequestSchema, TasksetDraftFileMutationSchema, TasksetDraftFileSchema, TasksetDraftFileInfoSchema } from "openpond-sdk/model-taskset-authoring"; import { prepareModelTasksetDraft, publishModelTasksetDraftPackage } from "openpond-sdk/taskset-packages"; if (!ModelTasksetDraftRequestSchema || !TasksetDraftFileMutationSchema || !TasksetDraftFileSchema || !TasksetDraftFileInfoSchema || typeof prepareModelTasksetDraft !== "function" || typeof publishModelTasksetDraftPackage !== "function") throw new Error("Packed Model draft authoring exports are missing");',
           'if (typeof beginModelBatchReview !== "function" || typeof findModelBatchReview !== "function" || !ModelBatchReviewRequestSchema || !ModelBatchReviewReceiptSchema) throw new Error("Packed Model batch review exports are missing");',
           'const packages = new OpenPondTasksetPackageClient({ baseUrl: "https://consumer.invalid", apiKey: "test", teamId: "team", fetch: async (url, init) => { if (init.headers["X-OpenPond-Team-Id"] !== "team" || init.redirect !== "error" || !String(url).endsWith("/v1/taskset-packages/model/taskset/1/" + "a".repeat(64))) throw new Error("Packed Taskset package request failed"); return Response.json({ code: "package_missing", message: "Missing package" }, { status: 404 }); } }); try { await packages.get("model", { id: "taskset", revision: 1, contentHash: "a".repeat(64) }); throw new Error("Expected missing package"); } catch (error) { if (!(error instanceof OpenPondTasksetPackageError) || error.status !== 404 || error.code !== "package_missing") throw error; }',
           'import { TrainingJobSubmissionSchema } from "openpond-sdk/training";',
@@ -92,7 +93,23 @@ async function main(): Promise<void> {
       ],
       { cwd: consumer, stdio: "inherit" },
     );
-    await writeFile(path.join(consumer, "verify-types.mts"), 'import { OpenPondLearningClient, type TaskExampleSubmission, type LearningCommand } from "openpond-sdk/learning";\ndeclare const client: OpenPondLearningClient;\ndeclare const example: TaskExampleSubmission;\nconst command: LearningCommand = { action: "submit_example", operationId: example.idempotencyKey, example };\nvoid client.command(command);\n');
+    await writeFile(path.join(consumer, "verify-types.mts"), [
+      'import { OpenPondLearningClient, type TaskExampleSubmission, type LearningCommand } from "openpond-sdk/learning";',
+      'import { type ModelTasksetDraftRequest, type TasksetDraftFileMutation, TasksetDraftFileMutationSchema } from "openpond-sdk/model-taskset-authoring";',
+      'import { type TasksetPackage, prepareModelTasksetDraft, publishModelTasksetDraftPackage, resolveTasksetPackageExecution, createTasksetPackageExecutionFile } from "openpond-sdk/taskset-packages";',
+      'declare const client: OpenPondLearningClient;',
+      'declare const example: TaskExampleSubmission;',
+      'const command: LearningCommand = { action: "submit_example", operationId: example.idempotencyKey, example };',
+      'void client.command(command);',
+      'declare const request: ModelTasksetDraftRequest;',
+      'declare const source: TasksetPackage;',
+      'const preparation = prepareModelTasksetDraft({ request, owner: { scopeId: "scope", modelId: request.modelId }, source });',
+      'const published = publishModelTasksetDraftPackage({ preparation, edited: source });',
+      'const execution = resolveTasksetPackageExecution(published);',
+      'if (execution) createTasksetPackageExecutionFile(execution.execution);',
+      'const mutation: TasksetDraftFileMutation = TasksetDraftFileMutationSchema.parse({ draftId: preparation.draftId, expectedDraftRevision: 1, path: "environment/world.js", expectedFileHash: null, content: { encoding: "utf8", data: "export const value = 1;" } });',
+      'void mutation;',
+    ].join("\n"));
     execFileSync(path.resolve(packageRoot, "../../node_modules/.bin/tsc"), ["--noEmit", "--strict", "--skipLibCheck", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", path.join(consumer, "verify-types.mts")], { cwd: consumer, stdio: "inherit" });
   } finally {
     await Promise.all([

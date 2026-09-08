@@ -25,7 +25,7 @@ import { buildTasksetTrainingBundle } from "@openpond/training-sdk";
 import { resolveTasksetTrainingReward, resolveManagedTasksetReward } from "../apps/server/src/training/taskset-reward-binding.js";
 import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release.js";
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
-import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
+import { TasksetReleaseSchema, type TasksetRelease } from "@openpond/evals/tasksets";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
 import { createModelProjectSaveRequest, ModelProjectSchema, HostedModelProjectSummarySchema, type HostedModelProjectSummary, type ModelProject } from "openpond-sdk/model-projects";
 import { readTasksetGraderDetails } from "../apps/server/src/training/taskset-grader-details.js";
@@ -411,8 +411,14 @@ it("prepares verifier-based GRPO from approved training tasks and preserves priv
   expect(prepared.taskset.readiness).toBeNull();
 });
 
-async function starterInput() {
-  const resolved = validateResolvedModelStarter(structuredClone(starterImportFixture));
+async function starterInput(metrics?: TasksetRelease["metrics"]) {
+  const original = validateResolvedModelStarter(structuredClone(starterImportFixture));
+  const { contentHash: _tasksetHash, ...tasksetContent } = original.taskset;
+  const { contentHash: _starterHash, ...starterContent } = original.starter;
+  const taskset = metrics ? TasksetReleaseSchema.parse(sealLearningContent({ ...tasksetContent, metrics })) : original.taskset;
+  const resolved = metrics ? validateResolvedModelStarter({ ...original, taskset,
+    starter: ModelStarterSchema.parse(sealLearningContent({ ...starterContent, taskset: learningRef(taskset) })),
+  }) : original;
   const request = await createModelStarterCreationRequest({ profileId: "profile", modelId: "model", name: "Invoices", starter: learningRef(resolved.starter), startingModel: resolved.starter.startingModel, method: "sft" });
   const createdAt = "2026-09-06T20:00:00.000Z";
   const source = TasksetSourceRefSchema.parse({ schemaVersion: "openpond.generatedDatasetSource.v1", kind: "generated", id: "source", profileId: "profile", title: "Original test invoices", sourceHash: resolved.starter.contentHash, occurredAt: createdAt, licensingStatus: "approved", secretScanStatus: "passed", piiScanStatus: "passed", generatorId: "invoice-fixture", generatorVersion: "1", generatorHash: resolved.taskset.contentHash, seed: 0, metadata: {} });
@@ -523,7 +529,8 @@ it("atomically derives model-owned Tasksets while preserving shared sources and 
   let retry: Awaited<ReturnType<typeof createModelProjectSaveRequest>>;
   let firstSaved: ModelProject;
   try {
-    const input = await starterInput();
+    const metrics = { schemaVersion: "openpond.tasksetMetricPolicy.v1" as const, primaryMetric: "quality", aggregation: "pass_rate" as const, missingReward: "exclude" as const, customAggregator: null };
+    const input = await starterInput(metrics);
     const model = await store.saveModelStarterCreation(input);
     // An installed v60 store has no preparation table; opening the new server
     // must migrate it without changing the existing model or source release.
@@ -536,6 +543,7 @@ it("atomically derives model-owned Tasksets while preserving shared sources and 
     expect(await store.getModelProject(model.id)).toEqual(model);
     const sourceRef = model.trainingSetup.tasksetRef!;
     const source = (await store.getTasksetRevision(sourceRef.id, sourceRef.revision))!;
+    expect(source.metrics).toEqual(metrics);
     const editable = (value: ModelProject) => ({ id: value.id, profileId: value.profileId, name: value.name, objective: value.objective, defaultBaseModel: value.defaultBaseModel, defaultDestinationId: value.defaultDestinationId, trainingSetup: value.trainingSetup });
     const other = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...editable(model), id: "other-consumer" }, 0));
     const { contentHash: _oldHash, ...binding } = input.package.rewardBinding;
@@ -563,6 +571,8 @@ it("atomically derives model-owned Tasksets while preserving shared sources and 
     expect(derived.metadata.rewardBinding).toEqual(learningRef(replacement));
     expect(derived.graders[0]!.weight).toBe(2);
     const portable = materializePortableTasksetRelease({ taskset: derived, adapterId: "derived-boundary" }).tasksetRelease;
+    expect(derived.metrics).toEqual(metrics);
+    expect(portable.metrics).toEqual(metrics);
     expect(await store.learningRepository().transaction(model.profileId, tx => tx.get("package", portable.id, portable.revision))).toEqual(portable);
     const resourcesAsset = await store.learningRepository().transaction(model.profileId, tx => tx.get("asset", modelTasksetExecutionResourcesAssetId(portable), 1));
     expect(resolveModelTasksetExecutionResourcesAsset(portable, resourcesAsset!)).toEqual(derived.environment.metadata.portableExecutionResources);

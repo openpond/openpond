@@ -7,13 +7,15 @@ import { ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
 import { ModelStarterExecutionSchema, modelStarterExecutionAssetId, resolveModelStarterExecutionAsset } from "openpond-sdk/model-starters";
 import { contentHash } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
+import { loadOrdinaryToolEnvironment } from "./ordinary-tool-environment.js";
 
 export const STARTER_TOOL_ENVIRONMENT = "openpond.javascript-environment.v1";
 
 /** Resolve only the selected task's private world from the execution owner's store. */
-export async function loadStarterToolEnvironment(store: SqliteStore, taskset: Taskset, task: TaskDataRecord) {
+export async function loadStarterToolEnvironment(store: SqliteStore, taskset: Taskset, task: TaskDataRecord, storeDir?: string) {
   const saved = taskset.tasks.find(candidate => candidate.id === task.id);
   if (!saved || contentHash(saved) !== contentHash(task)) throw new Error("Tool task differs from the selected immutable Taskset.");
+  if (taskset.metadata.taskDefinition === undefined) return loadOrdinaryToolEnvironment(taskset, task, storeDir);
   return store.learningRepository().transaction(taskset.profileId, async tx => {
     const definition = await requireLearningRelease(tx, "definition", ModelProjectVersionedRefSchema.parse(taskset.metadata.taskDefinition));
     const contract = definition.execution.environment;

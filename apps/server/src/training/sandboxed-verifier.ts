@@ -12,6 +12,7 @@ export async function runSandboxedVerifier(input: {
   attempt: TaskAttemptResult;
   allowedRoot: string;
   signal?: AbortSignal;
+  evaluatorContext?: Record<string, unknown>;
 }): Promise<{ score: number; passed: boolean; feedback: string; evidenceRefs?: string[] }> {
   const root = await realpath(input.allowedRoot);
   const modulePath = await realpath(path.resolve(root, input.grader.module));
@@ -28,6 +29,7 @@ export async function runSandboxedVerifier(input: {
       task: input.task, attempt: input.attempt, input: input.task.input,
       expectedOutput: input.task.expectedOutput, output: input.attempt.output,
       infrastructureError: input.attempt.infrastructureError,
+      ...(input.evaluatorContext ? { evaluatorContext: input.evaluatorContext } : {}),
     },
   });
 }

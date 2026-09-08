@@ -52,6 +52,13 @@ outside the Taskset manifest. The 64 MiB limit includes the JSON envelope and
 base64 encoding. Validation does not establish execution readiness or authorize
 access to private resources.
 
+Authored aggregation is declared by `taskset.metrics` in the shared Evals
+contract. A custom metric's module must appear once in the package at its
+declared path, retain private visibility, match its content hash and stay within
+the 512 KiB source limit. Imports and owned revisions preserve that policy.
+Evaluations use the shared isolated executor and retain its named result
+separately from ordinary mean-score accounting.
+
 The client defines authenticated `POST /v1/taskset-packages` publication and
 `GET /v1/taskset-packages/{model}/{taskset}/{revision}/{hash}` readback. These
 operations require a host that implements the package protocol; availability
@@ -116,3 +123,62 @@ task changes clear the observed response because that response was produced for
 the original task. New evidence needs fresh grading and review before sealing;
 the helper does not attach a batch or start training. A host must separately
 compare the Model revision when attaching the newly prepared batch.
+
+## Revising an ordinary package
+
+SDK `0.3.0` adds ordinary package authoring and requires Evals `0.9.0` for
+authored metric policies. JavaScript packages must include a complete private
+execution graph: ordinary packages carry `environment/execution.json`, while
+bound packages retain their declared Model execution resources. A JavaScript
+entrypoint alone no longer passes package validation. Use
+`createTasksetPackageExecutionFile` to serialize the declaration, include every
+referenced module/schema/state file, and call `validateTasksetPackage` before
+publication. Existing immutable packages must be revised to add missing assets;
+do not overwrite files retained by historical runs.
+
+The browser-safe `openpond-sdk/model-taskset-authoring` entry point also exports
+`TasksetDraftFileInfoSchema`, `TasksetDraftFileSchema`, and
+`TasksetDraftFileMutationSchema`. File mutations carry the draft revision and
+the prior file hash (`null` for a new file). A null content deletes a file;
+otherwise content uses UTF-8 text or canonical base64. Hosts must authorize the
+draft, serialize mutations against form saves/publication/deletion, reject stale
+versions, and protect generated manifests and retained source history. Desktop
+currently supports editing files up to 6 MB; larger dependencies remain listed
+and are preserved in packages.
+
+`openpond-sdk/model-taskset-authoring` exposes the draft request, preparation,
+and ownership schemas for editors. Server helpers `prepareModelTasksetDraft`
+and `publishModelTasksetDraftPackage` are exported from
+`openpond-sdk/taskset-packages`.
+
+Preparation pins a complete source package hash, an operation ID and the expected
+Model revision. The host authorizes the selected Model/package and resolves its
+canonical owner before calling the helper. Persist the returned preparation and
+request hash before copying files into the draft workspace; a reused operation
+with different input must conflict. A matching portable Model ID alone does not
+establish a cross-workspace ownership link.
+
+The first revision forks a shared source into an owned identity. Subsequent
+revisions retain that identity and record the exact parent. Publication accepts
+a validated edited package, preserves its binary/private files and execution
+environment, and seals its owned Taskset and verifier set. Qualification,
+privacy attestations and verifier calibration for different bytes are cleared;
+authored fixtures remain available to run again. Package validation checks the
+declared identity and parent lineage.
+
+Ordinary JavaScript environments carry a private `environment/execution.json`
+declaration created with `createTasksetPackageExecutionFile`. It binds the
+environment release, verifier set and JavaScript definition to the module and
+each task's private initial state. `validateTasksetPackage` verifies this graph;
+`resolveTasksetPackageExecution` returns its verified text assets for an
+authorized execution host. Bound packages retain their existing execution
+resource graph. Publication regenerates the ordinary declaration when it seals
+the owned verifier set. Local file authoring also pins changed module bytes and
+reseals the environment before publication, while historical revisions keep
+their original executable files.
+
+These pure helpers require the host to persist draft files and commit publication,
+Model selection and retry receipts atomically. Bound Reward packages and reviewed
+batches use their respective authoring graphs and are rejected by this ordinary
+package compiler. Draft persistence, HTTP operations and editor controls are host
+integration work.
