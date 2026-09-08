@@ -78,6 +78,24 @@ checkpoint inventory or qualification metrics, when the portable client needs
 that evidence to validate the artifact. This metadata is immutable output
 evidence, not private worker-control, lease, or provider state.
 
+## Deterministic grading identity
+
+For portable training bundles, derive `job.rewardSource` with
+`deterministicTrainingRewardSource({ graders, rewardExecution })` from the
+verified bundle's `graders.json` and optional `reward-binding.json`. The grader
+reference identifies the entire ordered set, including configuration, using the
+canonical hash of `{ schemaVersion: "openpond.trainingGraderSet.v1", graders }`.
+Its ID is `training-graders-` followed by the first 32 hash characters.
+
+When a Reward binding exists, the helper compiles its verified releases to the
+executed grader set and uses the binding's immutable ID/hash as `composer`.
+This pins role, normalization, membership, weights, required sources and hard
+gates even when those changes leave grader code unchanged. An unbound plan has
+a null composer. Providers must recompute both references from the admitted
+bundle before provisioning and retain both in receipt inputs when non-null.
+Identity validation does not establish that a provider can execute a grader;
+providers must also reject unsupported execution configurations at admission.
+
 ## Conformance
 
 Published fixtures live in `fixtures/training/v2`. Providers should:

@@ -228,9 +228,19 @@ it("exports verified private Reward assets separately from policy task assets", 
   const store = new SqliteStore(home);
   try {
     const input = await starterInput();
-    const saved = await store.saveModelStarterCreation(input);
+    let saved = await store.saveModelStarterCreation(input);
     expect(saved.trainingSetup.managedRolloutPlacement).toBe("remote");
-    const taskset = (await store.getTaskset(saved.trainingSetup.tasksetRef!.id))!;
+    const trainingOnly = (await store.getTaskset(saved.trainingSetup.tasksetRef!.id))!;
+    await expect(resolveManagedTasksetReward(store, trainingOnly, { placement: "remote", hasLearnedPreferenceReward: false }))
+      .rejects.toThrow("evaluation Reward source");
+    const { contentHash: _oldBindingHash, ...bindingContent } = input.package.rewardBinding;
+    const binding = RewardBindingSchema.parse(sealLearningContent({ ...bindingContent, id: "managed-validation-binding",
+      sources: [...bindingContent.sources, ...bindingContent.sources.map(source => ({ ...source, graderId: `${source.graderId}-evaluation`, role: "evaluation" }))] }));
+    await store.learningRepository().transaction(saved.profileId, async tx => { await tx.put("binding", binding, 0); });
+    saved = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: saved.id, profileId: saved.profileId,
+      name: saved.name, objective: saved.objective, defaultBaseModel: saved.defaultBaseModel, defaultDestinationId: saved.defaultDestinationId,
+      trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(binding) } }, saved.revision));
+    const taskset = (await store.getTasksetRevision(saved.trainingSetup.tasksetRef!.id, saved.trainingSetup.tasksetRef!.revision))!;
     const resolved = await resolveTasksetTrainingReward(store, taskset);
     expect(await resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: false })).toEqual(resolved);
     await expect(resolveManagedTasksetReward(store, taskset, { placement: "local", hasLearnedPreferenceReward: false })).rejects.toThrow("additional managed execution adapter");

@@ -58,6 +58,7 @@ import { continuationResumeFrom } from "./openpond-managed-training-continuation
 import { managedTrainingEvidenceFromPublic } from "./openpond-managed-training-evidence.js";
 import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
 import { resolveManagedTasksetReward } from "./taskset-reward-binding.js";
+import { managedTrainingGradingSource } from "./openpond-managed-training-grading.js";
 export { continuationResumeFrom };
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
@@ -615,16 +616,10 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       contentHash: await trainingInputArtifactUploadHash(stagedContent),
     };
     await client.stageArtifact(staged);
-    const grader = taskset.graders[0];
-    if (!grader) throw new Error("Managed training requires an immutable grader.");
     const learnedPreference = plan.recipe.reward.learnedPreference ?? null;
     const rewardSource = learnedPreference
       ? learnedRewardSource(learnedPreference)
-      : {
-          kind: "deterministic" as const,
-          grader: { id: grader.id, contentHash: contentHash(grader) },
-          composer: null,
-        };
+      : await managedTrainingGradingSource(files);
     const resumeFrom = continuationResumeFrom(plan.recipe);
     const jobContent: Omit<TrainingJobSubmission, "contentHash"> = {
       schemaVersion: "openpond.trainingJobSubmission.v2",

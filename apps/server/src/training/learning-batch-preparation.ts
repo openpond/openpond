@@ -17,7 +17,10 @@ export async function prepareLocalLearningBatch(store: SqliteStore, storeDir: st
     const batch = await requireLearningResource(transaction, "batch", input.batchId);
     const definition = await requireLearningRelease(transaction, "definition", batch.taskDefinition);
     const binding = await requireLearningRelease(transaction, "binding", batch.rewardBinding);
-    const rewards = await Promise.all(binding.sources.map((source) => requireLearningRelease(transaction, "reward", source.reward)));
+    const rewardRefs = [...new Map(binding.sources.map(source => [
+      `${source.reward.id}:${source.reward.revision}:${source.reward.contentHash}`, source.reward,
+    ])).values()];
+    const rewards = await Promise.all(rewardRefs.map(reference => requireLearningRelease(transaction, "reward", reference)));
     const evidence = await Promise.all(batch.examples.map((entry) => requireLearningRelease(transaction, "evidence", entry.evidence)));
     const decisions = await Promise.all(batch.examples.map((entry) => requireLearningRelease(transaction, "decision", entry.decision)));
     const assetIds = new Set(rewards.flatMap((reward) => [

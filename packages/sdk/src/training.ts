@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export { deterministicTrainingRewardSource } from "./training-grading-plan.js";
+
 import {
   ModelProjectBaseModelSchema,
   ModelProjectImmutableRefSchema,
