@@ -12,7 +12,7 @@ import { TasksetSchema } from "@openpond/contracts";
 import { assertLearningContentHash, learningRef, sameLearningRef } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
-import { commitPreparedModelTaskset, type PreparedModelTaskset } from "./store-model-taskset-derivation.js";
+import { commitPreparedModelTaskset, reviewedTasksetRewardBinding, type PreparedModelTaskset } from "./store-model-taskset-derivation.js";
 
 type PayloadRow = { payload: string };
 
@@ -53,8 +53,10 @@ export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, valu
   if (existing && existing.profileId !== project.profileId) fail(404, "model_not_found", "Model is not available in this Profile.");
   if ((existing?.revision ?? 0) !== expectedRevision) fail(409, "model_revision_conflict", "Model changed since it was opened. Refresh before saving.");
   const selectedTaskset = assertTaskset(db, request);
-  assertReward(db, request);
-  const tasksetBinding = selectedTaskset?.metadata.rewardBinding === undefined ? null : ModelProjectVersionedRefSchema.parse(selectedTaskset.metadata.rewardBinding);
+  const reviewedBinding = reviewedTasksetRewardBinding(selectedTaskset);
+  if (!reviewedBinding) assertReward(db, request);
+  const tasksetBinding = reviewedBinding ? learningRef(reviewedBinding)
+    : selectedTaskset?.metadata.rewardBinding === undefined ? null : ModelProjectVersionedRefSchema.parse(selectedTaskset.metadata.rewardBinding);
   if (tasksetBinding && project.trainingSetup.rewardBindingRef && !sameLearningRef(tasksetBinding, project.trainingSetup.rewardBindingRef) && !prepared) fail(409, "model_taskset_preparation_required", "Changing this Reward requires publishing its model-owned Taskset revision.");
   if (prepared) {
     if (!project.trainingSetup.tasksetRef || !sameLearningRef(project.trainingSetup.tasksetRef, learningRef(prepared.source)) ||

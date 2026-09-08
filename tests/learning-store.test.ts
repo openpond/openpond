@@ -80,7 +80,15 @@ describe("durable task intake and admission", () => {
       const imported = prepareImportedTasksetPackage({ package: value, profileId: "fresh-profile", name: "Imported batch", createdAt: learningNow });
       await materializeImportedTasksetPackage({ home: destinationDirectory, ...imported });
       await destination.upsertTaskset(imported.taskset);
-      const importedModel = await destination.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "imported-model", profileId: "fresh-profile", name: "Imported batch Model", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { tasksetRef: learningRef(imported.taskset) } }, 0));
+      const importedModel = await destination.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "imported-model", profileId: "fresh-profile", name: "Imported batch Model", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { tasksetRef: learningRef(imported.taskset), rewardBindingRef: learningRef(fixture.binding) } }, 0));
+      const renamed = await destination.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: importedModel.id, profileId: importedModel.profileId,
+        name: "Renamed imported batch", objective: importedModel.objective, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: importedModel.trainingSetup }, importedModel.revision));
+      expect(renamed.trainingSetup).toEqual(importedModel.trainingSetup);
+      const changedReward = await createModelProjectSaveRequest({ id: renamed.id, profileId: renamed.profileId, name: renamed.name,
+        objective: renamed.objective, defaultBaseModel: null, defaultDestinationId: null,
+        trainingSetup: { ...renamed.trainingSetup, rewardBindingRef: { ...learningRef(fixture.binding), id: "different-binding" } } }, renamed.revision);
+      await expect(destination.saveModelProjectConfiguration(changedReward)).rejects.toMatchObject({ code: "model_batch_reward_review_required" });
+      expect(await destination.getModelProject(renamed.id)).toEqual(renamed);
       expect(await exportLocalModelTasksetPackage({ store: destination, storeDir: destinationDirectory, profileId: "fresh-profile", modelId: importedModel.id })).toEqual(value);
       const run = await createTasksetEvaluationVerifier({ store: destination, storeDir: destinationDirectory }, imported.taskset);
       const grader = imported.taskset.graders[0]!;

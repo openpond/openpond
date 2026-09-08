@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/contracts";
-import { assertLearningContentHash, learningRef, learningResourceSchemas, sameLearningRef, sealLearningContent, verifyLearningTextAsset, type LearningResourceFor, type LearningTextAsset } from "@openpond/evals/learning";
-import { compileBoundGraders } from "@openpond/evals/rewards";
+import { assertLearningContentHash, learningRef, learningResourceSchemas, sameLearningRef, sealLearningContent, TaskBatchPackageMetadataSchema, verifyLearningTextAsset, type LearningResourceFor, type LearningTextAsset } from "@openpond/evals/learning";
+import { compileBoundGraders, resolveBoundRewards } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { computeTasksetHash, learningVerifierModule, projectLearningBatchGraders, projectPortableTaskRecord, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
 import { ModelProjectSchema, ModelProjectVersionedRefSchema, OpenPondModelProjectApiError, parseModelProjectSaveRequest, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
@@ -23,6 +23,16 @@ export interface PreparedModelTaskset {
   imported?: PreparedImportedTasksetPackage;
 }
 
+/** Reviewed snapshots remain owned by their Taskset, including after import. */
+export function reviewedTasksetRewardBinding(taskset: Taskset | null | undefined) {
+  if (taskset?.metadata.learning === undefined) return null;
+  const learning = TaskBatchPackageMetadataSchema.parse(taskset.metadata.learning);
+  assertLearningContentHash(learning.definition);
+  resolveBoundRewards(learning.binding, learning.rewards);
+  if (!sameLearningRef(learning.definition.rewardBinding, learningRef(learning.binding))) fail(409, "model_batch_binding_changed", "Reviewed task definition and Reward binding do not match.");
+  return learning.binding;
+}
+
 /** Runs inside the serialized write queue, before filesystem materialization.
  * The preparation timestamp survives failures without exposing a Model change. */
 export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: ModelProjectSaveRequest, persistPreparation = true, completeSource?: TasksetPackage): PreparedModelTaskset | null {
@@ -38,9 +48,14 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
   const source = row ? TasksetSchema.parse(JSON.parse(row.payload)) : null;
   if (!source || source.profileId !== project.profileId) fail(404, "model_taskset_not_found", "The selected Taskset revision is not available in this Profile.");
   if (source.contentHash !== reference.contentHash || computeTasksetHash(source) !== source.contentHash) fail(409, "model_taskset_changed", "The selected Taskset does not match its immutable content hash.");
+  const reviewedBinding = reviewedTasksetRewardBinding(source);
+  if (reviewedBinding) {
+    if (!sameLearningRef(learningRef(reviewedBinding), project.trainingSetup.rewardBindingRef)) fail(422, "model_batch_reward_review_required", "Changing a reviewed batch's Reward requires regrading and a new reviewed batch.");
+    return null;
+  }
   const bindingRef = source.metadata.rewardBinding === undefined ? null : ModelProjectVersionedRefSchema.parse(source.metadata.rewardBinding);
   if (bindingRef && sameLearningRef(bindingRef, project.trainingSetup.rewardBindingRef)) return null;
-  if (!bindingRef || source.metadata.learning !== undefined) fail(422, "model_taskset_derivation_unavailable", "This Taskset needs an authored task definition and Reward binding before its Reward can be changed.");
+  if (!bindingRef) fail(422, "model_taskset_derivation_unavailable", "This Taskset needs an authored task definition and Reward binding before its Reward can be changed.");
   const read = <K extends "asset" | "definition" | "binding" | "reward">(kind: K, ref: { id: string; revision: number; contentHash?: string }): LearningResourceFor<K> => {
     const row = db.get<{ payload: string }>("SELECT payload FROM learning_revisions WHERE scope = ? AND kind = ? AND id = ? AND revision = ?", [project.profileId, kind, ref.id, ref.revision]);
     if (!row) fail(404, "model_reward_unavailable", `The exact ${kind} resource is unavailable in this Profile.`);
