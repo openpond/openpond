@@ -18,6 +18,10 @@
     "MODEL_STARTERS.md"
   ],
   "exports": {
+    "./model-taskset-runs": {
+      "types": "./dist/types/packages/sdk/src/model-taskset-runs.d.ts",
+      "import": "./dist/model-taskset-runs.js"
+    },
     "./taskset-packages": {
       "types": "./dist/types/packages/sdk/src/taskset-packages.d.ts",
       "import": "./dist/taskset-packages.js"

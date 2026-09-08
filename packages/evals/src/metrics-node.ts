@@ -1,6 +1,6 @@
 import { stripTypeScriptTypes } from "node:module";
 import { executeJavaScriptIsolateInWorker } from "./javascript-isolate-node.js";
-import { aggregateTasksetEvaluationReceipts, executeTasksetMetric, type TasksetEvaluationInput, type TasksetMetricExecutionInput, type TasksetMetricExecutor } from "./metrics.js";
+import { aggregateTasksetEvaluationReceipts, aggregateTasksetRunReceipts, executeTasksetMetric, type TasksetEvaluationInput, type TasksetRunEvaluationInput, type TasksetMetricExecutionInput, type TasksetMetricExecutor } from "./metrics.js";
 import type { TasksetMetricResult } from "./metric-policy.js";
 import type { EvaluationResult } from "./runs.js";
 
@@ -12,6 +12,10 @@ export function executeTasksetMetricInWorker(input: TasksetMetricExecutionInput)
 
 export function aggregateTasksetEvaluationInWorker(input: TasksetEvaluationInput): Promise<EvaluationResult> {
   return aggregateTasksetEvaluationReceipts(input, executeMetric);
+}
+
+export function aggregateTasksetRunInWorker(input: TasksetRunEvaluationInput): Promise<TasksetMetricResult> {
+  return aggregateTasksetRunReceipts(input, executeMetric);
 }
 
 const executeMetric: TasksetMetricExecutor = ({ source, module, exportName, scores, timeoutMs, signal }) =>

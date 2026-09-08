@@ -9,6 +9,7 @@ export * from "./harness.js";
 export * from "./learned-preference.js";
 export * from "./runs.js";
 export * from "./metrics.js";
+export * from "./taskset-run-contract.js";
 export * from "./model-improvement-qualification.js";
 export * from "./preferences.js";
 export * from "./review-conformance.js";

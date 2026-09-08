@@ -2,10 +2,12 @@ import { assertContentHash, contentHash, sha256 } from "@openpond/harness";
 import { aggregateEvaluationReceipts, RunManifestSchema, verifyAttemptReceipt, type AttemptReceipt, type EvaluationResult, type RunManifest } from "./runs.js";
 import { TasksetMetricPolicySchema, TasksetMetricResultContentSchema, TasksetMetricResultSchema, type TasksetMetricPolicy, type TasksetMetricResult } from "./metric-policy.js";
 import { assertTasksetRelease, type TasksetRelease } from "./tasksets.js";
+import { TasksetRunManifestSchema, assertTasksetRunRelease, orderTasksetRunReceipts, type TasksetRunManifest } from "./taskset-run-contract.js";
 export * from "./metric-policy.js";
+export * from "./taskset-run-contract.js";
 
 export interface TasksetMetricExecutionInput {
-  manifest: RunManifest;
+  manifest: RunManifest | TasksetRunManifest;
   receipts: AttemptReceipt[];
   policy: TasksetMetricPolicy;
   /** Exact UTF-8 module bytes, verified before any compiler or executor sees them. */
@@ -23,9 +25,24 @@ export type TasksetMetricExecutor = (input: {
 }) => Promise<unknown>;
 
 export interface TasksetEvaluationInput extends Omit<TasksetMetricExecutionInput, "policy"> {
+  manifest: RunManifest;
   id: string;
   taskset: TasksetRelease;
   metadata?: Record<string, unknown>;
+}
+
+export interface TasksetRunEvaluationInput extends Omit<TasksetMetricExecutionInput, "policy" | "manifest"> {
+  manifest: TasksetRunManifest;
+  taskset: TasksetRelease;
+}
+
+/** Complete Taskset-owned, selected-Harness or fixture runs share the same
+ * metric arithmetic, with the population fixed before execution. */
+export async function aggregateTasksetRunReceipts(input: TasksetRunEvaluationInput, executor?: TasksetMetricExecutor): Promise<TasksetMetricResult> {
+  input.signal?.throwIfAborted();
+  assertTasksetRunRelease(input.manifest, input.taskset);
+  assertTasksetMetricSource(input.taskset, input.source);
+  return executeTasksetMetric({ ...input, policy: input.manifest.metricPolicy, receipts: orderTasksetRunReceipts(input.manifest, input.receipts) }, executor);
 }
 
 /** Preflight the exact metric source before any model or tool execution. */
@@ -53,8 +70,14 @@ export async function aggregateTasksetEvaluationReceipts(input: TasksetEvaluatio
 export async function executeTasksetMetric(input: TasksetMetricExecutionInput, executor?: TasksetMetricExecutor): Promise<TasksetMetricResult> {
   input.signal?.throwIfAborted();
   const policy = TasksetMetricPolicySchema.parse(input.policy);
-  const manifest = RunManifestSchema.parse(input.manifest);
+  const manifest = input.manifest.schemaVersion === "openpond.tasksetRunManifest.v1"
+    ? TasksetRunManifestSchema.parse(input.manifest) : RunManifestSchema.parse(input.manifest);
   assertContentHash(manifest, "Metric Run Manifest");
+  if (manifest.schemaVersion === "openpond.tasksetRunManifest.v1") {
+    if (contentHash(policy) !== contentHash(manifest.metricPolicy)) throw new Error("Metric policy differs from the admitted run.");
+    const ordered = orderTasksetRunReceipts(manifest, input.receipts);
+    if (ordered.some((receipt, index) => receipt.id !== input.receipts[index]?.id)) throw new Error("Metric receipts must follow the admitted population order.");
+  }
   if (!input.receipts.length || input.receipts.length > 1_000_000) throw new Error("Metric execution requires 1 to 1,000,000 attempt receipts.");
   const ids = new Set<string>();
   const scores: number[] = [];
