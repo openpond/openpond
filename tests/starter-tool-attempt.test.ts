@@ -44,6 +44,11 @@ it("executes imported ordinary tool packages without a learning-store binding", 
     expect(result.attempt.metadata.environmentStatus).toBe("completed");
     expect(result.attempt.output).toEqual({ text: "1" });
     expect(result.grade, JSON.stringify(result.grade)).toMatchObject({ score: 1, passed: true });
+    // The authored { text } answer must reach the same real grader as model
+    // text; serializing its envelope again makes a valid fixture fail.
+    const fixtureAudit = await service.auditFixtures({ tasksetId: prepared.taskset.id });
+    expect(fixtureAudit.passed).toBe(true);
+    expect(turns).toBe(2);
     expect(result.portable.environmentRelease).toEqual(prepared.package.environment);
     expect(prepared.taskset.metadata.taskDefinition).toBeUndefined();
     const evidence = await readStarterToolEvidence({ store, storeDir: home, taskset: prepared.taskset, task: prepared.taskset.tasks[0]!, attempt: result.attempt });

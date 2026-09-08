@@ -16,7 +16,7 @@ export async function runStarterToolFixture(input: { store: SqliteStore; storeDi
     stream: async function* () {
       const action = script.actions[step++];
       if (action) yield { toolCalls: [{ id: `fixture-call-${step}`, type: "function", function: { name: action.name, arguments: JSON.stringify(action.arguments) } }] };
-      else yield { text: JSON.stringify(input.fixture.output) };
+      else yield { text: typeof input.fixture.output.text === "string" ? input.fixture.output.text : JSON.stringify(input.fixture.output) };
     },
   });
 }
