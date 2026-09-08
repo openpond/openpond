@@ -126,6 +126,14 @@ compare the Model revision when attaching the newly prepared batch.
 
 ## Revising an ordinary package
 
+SDK `0.3.1` exposes `resolveTasksetPackageInstructions` from
+`openpond-sdk/taskset-packages`. It reads the admitted Model or learning
+definition for bound packages and `taskset.metadata.ordinaryAuthoring.instructions`
+for ordinary packages. Ordinary authoring stores the objective in that hashed
+metadata so import, execution and later revisions use the same instructions.
+An omitted ordinary instruction is an empty package-wide prompt; a display name
+is never substituted. Individual task inputs may contain their own instructions.
+
 SDK `0.3.0` adds ordinary package authoring and requires Evals `0.9.0` for
 authored metric policies. JavaScript packages must include a complete private
 execution graph: ordinary packages carry `environment/execution.json`, while

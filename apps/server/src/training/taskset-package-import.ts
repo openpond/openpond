@@ -3,7 +3,7 @@ import { GraderFixtureSchema, TasksetEnvironmentResourceSchema, TasksetSchema, T
 import { contentHash } from "@openpond/harness";
 import { learningRef, taskBatchPackageMetadata, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { computeTasksetHash, createTasksetDraft, learningVerifierModule, projectLearningBatchGraders } from "@openpond/taskset-sdk";
-import { decodeTasksetPackageFile, validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
+import { decodeTasksetPackageFile, resolveTasksetPackageInstructions, validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import { importedTasksetPackageDirectory } from "./taskset-package-files.js";
 import { importedPackageGraders } from "./taskset-package-graders.js";
 
@@ -39,7 +39,7 @@ export function prepareImportedTasksetPackage(input: {
   const projected = TasksetSchema.parse({
     schemaVersion: "openpond.taskset.v1", id: release.id, revision: release.revision,
     profileId: input.profileId, profileRelease: null, createImproveRunId: null,
-    name: input.name, objective: resources?.taskDefinition.instructions ?? learning?.definition.instructions ?? input.name, status: "needs_review",
+    name: input.name, objective: resolveTasksetPackageInstructions(value), status: "needs_review",
     sourceRefs: [source], datasetArtifact: null, policy: release.policy,
     environment: { ...draft.environment, kind, entrypoint: release.environment.entrypoint,
       resources: TasksetEnvironmentResourceSchema.array().max(10_000).parse(release.metadata.environmentResources ?? []),
