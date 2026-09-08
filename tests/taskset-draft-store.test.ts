@@ -115,7 +115,12 @@ describe("Taskset draft persistence", () => {
         await closeTestDatabase(db);
       }
 
-      await store.deleteTasksetDraft(draft.id);
+      // Deletion queued behind an in-flight save must remove the saved files
+      // and pointer together, without leaving a recreated workspace behind.
+      await Promise.all([
+        store.saveTasksetDraft({ ...draft, revision: draft.revision + 1 }, draft.revision),
+        store.deleteTasksetDraft(draft.id),
+      ]);
       expect(await store.getTasksetDraft(draft.id)).toBeNull();
       await expect(
         readFile(path.join(workspace!.workspacePath, "taskset.json"), "utf8"),

@@ -260,16 +260,16 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
 
   async deleteTasksetDraft(id: string): Promise<void> {
     await this.ready;
-    const workspacePath = this.workspacePath(id);
-    const recoverablePath = `${workspacePath}.delete-${randomUUID()}`;
-    let movedWorkspace = false;
-    try {
-      await rename(workspacePath, recoverablePath);
-      movedWorkspace = true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
     const write = this.writeQueue.then(async () => {
+      const workspacePath = this.workspacePath(id);
+      const recoverablePath = `${workspacePath}.delete-${randomUUID()}`;
+      let movedWorkspace = false;
+      try {
+        await rename(workspacePath, recoverablePath);
+        movedWorkspace = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
       try {
         await this.run("DELETE FROM taskset_drafts WHERE id = ?", [id]);
       } catch (error) {
