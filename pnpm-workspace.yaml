@@ -10,7 +10,7 @@ linkWorkspacePackages: true
 # Trusted first-party release required by the SDK publish chain. Keep this
 # exact; do not exempt future Harness versions from the release-age policy.
 minimumReleaseAgeExclude:
-  - "@openpond/harness@0.2.5"
+  - '@openpond/harness@0.2.5 || 0.2.6'
 
 allowBuilds:
   electron: true
