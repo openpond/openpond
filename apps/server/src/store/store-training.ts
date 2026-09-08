@@ -51,6 +51,7 @@ import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
 import { SqliteModelConfigurationStore } from "./store-model-configuration.js";
+import { saveTasksetRevision } from "./store-taskset-revisions.js";
 import {
   appendTrainingChatSearchText,
   trainingChatFtsQuery,
@@ -467,22 +468,10 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
 
   async upsertTaskset(tasksetInput: Taskset): Promise<Taskset> {
     const taskset = TasksetSchema.parse(tasksetInput);
-    const existingRevision = await this.getTasksetRevision(taskset.id, taskset.revision);
-    if (existingRevision && existingRevision.contentHash !== taskset.contentHash) {
-      throw new Error(`Taskset ${taskset.id}@${taskset.revision} is immutable and already has another content hash.`);
-    }
-    await this.upsertPayload(
-      `INSERT INTO tasksets (id, profile_id, status, payload, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [taskset.id, taskset.profileId, taskset.status, JSON.stringify(taskset), taskset.createdAt, taskset.updatedAt],
-    );
-    await this.upsertPayload(
-      `INSERT INTO taskset_revisions (taskset_id, revision, content_hash, profile_id, status, payload, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(taskset_id, revision) DO UPDATE SET status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [taskset.id, taskset.revision, taskset.contentHash, taskset.profileId, taskset.status, JSON.stringify(taskset), taskset.createdAt, taskset.updatedAt],
-    );
+    await this.ready;
+    const write = this.writeQueue.then(() => saveTasksetRevision(this.database, taskset));
+    this.writeQueue = write.catch(() => undefined);
+    await write;
     return taskset;
   }
 

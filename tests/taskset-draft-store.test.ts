@@ -172,7 +172,13 @@ describe("Taskset draft persistence", () => {
       await writeFile(path.join(workspace!.workspacePath, grader.module), "export function verify() { return { score: 0, passed: false, feedback: 'revised' }; }");
       await expect(store.materializePublishedTasksetPackage({ draftId: imported.id, taskset: firstPublished })).rejects.toThrow("changed before publication");
       const revised = publishTasksetDraft({ draft: { ...imported, publishedTasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash } }, now: "2026-09-07T20:00:00.000Z" });
+      // A downloaded draft pins the original environment and verifier set.
+      // Editing its verifier must retain the environment and seal new checks.
+      revised.environment.metadata.portableExecutionResources = { environment: exported.environment, verifierSet: exported.verifierSet };
       const second = await store.materializePublishedTasksetPackage({ draftId: imported.id, taskset: revised });
+      const revisedRelease = materializePortableTasksetRelease({ taskset: second.taskset, adapterId: "edited-draft" });
+      expect(revisedRelease.environmentRelease).toEqual(exported.environment);
+      expect(revisedRelease.verifierSetRelease.contentHash).not.toBe(exported.verifierSet.contentHash);
       expect(second.directory).not.toBe(tasksetRoot);
       expect(second.taskset.environment.metadata.runtimeSourceTasksetId).toBe(path.basename(second.directory));
       expect(await readFile(path.join(tasksetRoot, "taskset.json"), "utf8")).toBe(firstManifest);
