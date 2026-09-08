@@ -18,6 +18,7 @@ import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import type { TrainingEngineAdapter } from "@openpond/training-sdk";
 import {
   createTrainingClient,
+  deterministicTrainingRewardSource,
   parseAndVerifyTrainingExecutionReceipt,
   trainingExecutionReceiptHash,
   trainingInputArtifactUploadHash,
@@ -615,16 +616,20 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       contentHash: await trainingInputArtifactUploadHash(stagedContent),
     };
     await client.stageArtifact(staged);
-    const grader = taskset.graders[0];
-    if (!grader) throw new Error("Managed training requires an immutable grader.");
+    const gradersFile = files.find(file => file.path === "graders.json");
+    if (!gradersFile) throw new Error("Managed training requires its immutable grader set.");
+    const gradersPackage = recordOrEmpty(JSON.parse(Buffer.from(gradersFile.content, "base64").toString("utf8")));
+    const bindingFile = files.find(file => file.path === "reward-binding.json");
+    const boundReward = bindingFile
+      ? recordOrEmpty(JSON.parse(Buffer.from(bindingFile.content, "base64").toString("utf8")))
+      : null;
     const learnedPreference = plan.recipe.reward.learnedPreference ?? null;
     const rewardSource = learnedPreference
       ? learnedRewardSource(learnedPreference)
-      : {
-          kind: "deterministic" as const,
-          grader: { id: grader.id, contentHash: contentHash(grader) },
-          composer: null,
-        };
+      : await deterministicTrainingRewardSource({
+          graders: gradersPackage.graders,
+          rewardExecution: boundReward ? { binding: boundReward.binding, rewards: boundReward.rewards } : null,
+        });
     const resumeFrom = continuationResumeFrom(plan.recipe);
     const jobContent: Omit<TrainingJobSubmission, "contentHash"> = {
       schemaVersion: "openpond.trainingJobSubmission.v2",

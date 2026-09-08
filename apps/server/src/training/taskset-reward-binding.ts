@@ -58,6 +58,9 @@ export async function resolveManagedTasksetReward(store: SqliteStore, taskset: T
   const resolved = await resolveTasksetTrainingReward(store, taskset, options.storeDir);
   if (!resolved.rewardExecution) return resolved;
   const graders = compileBoundGraders(resolved.rewardExecution.binding, resolved.rewardExecution.rewards);
+  if (!resolved.rewardExecution.binding.sources.some(source => source.role === "evaluation" && source.weight > 0)) {
+    throw new Error("Managed training requires a positively weighted evaluation Reward source for retained validation.");
+  }
   if (options.placement !== "remote" || taskset.environment.kind === "work"
     || taskset.capabilities.requiresState || taskset.capabilities.requiresTools
     || graders.some(grader => grader.kind === "human" || grader.kind === "model_judge")
