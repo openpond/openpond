@@ -3,6 +3,15 @@ import type { createModelProjectHostingService } from "./model-project-hosting.j
 type ModelProjectHosting = ReturnType<typeof createModelProjectHostingService>;
 type HostingAction = "hosted_model_projects" | "pull_hosted_model_project" | "sync_model_project" | "hosted_taskset_runs" | "hosted_taskset_run" | "cancel_hosted_taskset_run" | "hosted_taskset_run_result";
 
+const hostingActions = new Set<string>([
+  "hosted_model_projects", "pull_hosted_model_project", "sync_model_project",
+  "hosted_taskset_runs", "hosted_taskset_run", "cancel_hosted_taskset_run", "hosted_taskset_run_result",
+]);
+
+export function isModelProjectHostingAction(action: string): action is HostingAction {
+  return hostingActions.has(action);
+}
+
 export async function runModelProjectHostingAction(
   service: ModelProjectHosting | undefined,
   action: HostingAction,
