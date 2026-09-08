@@ -201,7 +201,8 @@ describe("Task Creator pipeline", () => {
     expect(taskset?.tasks.map((task) => task.split)).toEqual(["train", "frozen_eval"]);
     expect(new Set(taskset?.tasks.map((task) => task.clusterKey)).size).toBe(2);
     expect(taskset?.graderFixtures).toHaveLength(6);
-    const root = path.join(tasksetRoot, taskset!.id);
+    const root = path.join(tasksetRoot, String(taskset!.environment.metadata.runtimeSourceTasksetId));
+    const originalManifest = await readFile(path.join(root, "taskset.json"), "utf8");
     await access(path.join(root, "taskset.json"));
     await access(path.join(root, "environment", "taskset.ts"));
     expect(await readFile(path.join(root, "fixtures", "grader-fixtures.json"), "utf8")).toContain("prompt_injection");
@@ -232,6 +233,8 @@ describe("Task Creator pipeline", () => {
       },
     });
     expect(revised?.contentHash).not.toBe(taskset!.contentHash);
+    expect(revised?.environment.metadata.runtimeSourceTasksetId).not.toBe(taskset!.environment.metadata.runtimeSourceTasksetId);
+    expect(await readFile(path.join(root, "taskset.json"), "utf8")).toBe(originalManifest);
     expect(await store.getTasksetRevision(taskset!.id, 1, taskset!.contentHash)).toMatchObject({
       id: taskset!.id,
       revision: 1,

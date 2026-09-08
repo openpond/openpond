@@ -34,6 +34,10 @@ export async function createTasksetEvaluationVerifier(deps: {
     await buildTaskset(taskset, tasksetRoot, { generatedFiles: proposal?.generatedFiles ?? [] });
   }
   return tasksetRoot
-    ? ({ grader, task, attempt }) => runSandboxedVerifier({ grader, task, attempt, allowedRoot: tasksetRoot })
+    ? ({ grader, task, attempt }) => {
+      const pinned = taskset.graders.find(candidate => candidate.id === grader.id);
+      if (!pinned || pinned.kind !== "custom_verifier") throw new Error("Verifier is not declared by this Taskset revision.");
+      return runSandboxedVerifier({ grader: pinned, task, attempt, allowedRoot: tasksetRoot });
+    }
     : undefined;
 }

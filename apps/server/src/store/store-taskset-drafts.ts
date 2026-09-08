@@ -21,6 +21,7 @@ import type { PayloadRow } from "../types.js";
 import { SqlitePreferenceComparisonStore } from "./store-preference-comparison.js";
 import { materializeImmutableTasksetPackage } from "../training/model-starter-package-files.js";
 import { verifyPublishedTasksetAssets } from "../training/taskset-package-assets.js";
+import { prepareAuthoredTasksetFiles } from "../training/authored-taskset-files.js";
 
 const TasksetDraftPointerSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftPointer.v1"),
@@ -156,13 +157,14 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       throw new Error("Taskset draft files changed before publication. Refresh before publishing.");
     }
     const directoryId = `draft-${contentHash({ taskset: input.taskset, packageHash: workspace.packageHash })}`;
+    const authored = await prepareAuthoredTasksetFiles(input.taskset, workspace.workspacePath);
     const prepared = TasksetSchema.parse({
-      ...input.taskset,
-      metadata: { ...input.taskset.metadata, sourcePackageHash: workspace.packageHash },
+      ...authored.taskset,
+      metadata: { ...authored.taskset.metadata, sourcePackageHash: workspace.packageHash },
       environment: { ...input.taskset.environment, metadata: { ...input.taskset.environment.metadata, runtimeSourceTasksetId: directoryId } },
     });
     const taskset = TasksetSchema.parse({ ...prepared, contentHash: computeTasksetHash(prepared) });
-    const directory = await materializeImmutableTasksetPackage(this.home, { taskset, generatedFiles: [] }, directoryId, {
+    const directory = await materializeImmutableTasksetPackage(this.home, { taskset, generatedFiles: authored.generatedFiles }, directoryId, {
       source: { directory: workspace.workspacePath, packageHash: workspace.packageHash },
       verify: root => verifyPublishedTasksetAssets(root, taskset),
     });

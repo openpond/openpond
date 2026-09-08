@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import { loadOpenPondProfileState } from "@openpond/cloud";
 import {
   TASK_AUTHORING_MAX_DISCLOSED_EVIDENCE_TOKENS,
@@ -30,7 +29,7 @@ import {
   type Session,
   type Turn,
 } from "@openpond/contracts";
-import { buildTaskset, computeTasksetHash, contentHash } from "@openpond/taskset-sdk";
+import { computeTasksetHash, contentHash } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import { now } from "../utils.js";
 import { scanAndRedactEvidence } from "./privacy.js";
@@ -56,6 +55,7 @@ import {
   trainingPathForProposal,
 } from "./task-creator-materialization.js";
 import { harnessReviewLineageFromSources } from "./harness-review-taskset.js";
+import { materializeGeneratedTasksetPackage } from "./generated-taskset-package.js";
 
 export { crossSystemStructuredExample, enrichCrossSystemProposal };
 
@@ -590,12 +590,8 @@ export function createTaskCreatorService(deps: {
       },
     };
     const unhashed = TasksetSchema.parse({ ...draft, contentHash: "00000000" });
-    const taskset = TasksetSchema.parse({ ...unhashed, contentHash: computeTasksetHash(unhashed) });
-    await buildTaskset(taskset, path.join(deps.tasksetRootDir, taskset.id), {
-      generatedFiles: [
-        ...proposal.generatedFiles,
-      ],
-    });
+    const taskset = await materializeGeneratedTasksetPackage(deps.tasksetRootDir,
+      TasksetSchema.parse({ ...unhashed, contentHash: computeTasksetHash(unhashed) }), proposal.generatedFiles);
     await deps.store.upsertTaskset(taskset);
     return taskset;
   }

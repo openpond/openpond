@@ -1,9 +1,12 @@
 import { GraderSpecSchema } from "@openpond/contracts";
 import { decodeTasksetPackageFile, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import { learningVerifierModule } from "@openpond/taskset-sdk";
+import { z } from "zod";
 
 /** Project an ordinary portable package without inventing a Reward binding. */
 export function importedPackageGraders(value: TasksetPackage) {
+  const authoring = value.taskset.metadata.ordinaryAuthoring as { judgeCalibrationFixtures?: unknown } | undefined;
+  const calibrationFixtures = z.record(z.string(), z.array(z.string().min(1)).max(100_000)).parse(authoring?.judgeCalibrationFixtures ?? {});
   return value.taskset.graders.map(grader => {
     const base = { ...grader, label: grader.id, metadata: { portableGrader: grader } };
     if (grader.kind === "custom_verifier") return GraderSpecSchema.parse({ ...base,
@@ -13,10 +16,11 @@ export function importedPackageGraders(value: TasksetPackage) {
       const file = value.files.find(file => file.asset.id === grader.rubricRef.id);
       if (!file) throw new Error(`Imported rubric is missing: ${grader.id}.`);
       const rubric = new TextDecoder("utf-8", { fatal: true }).decode(decodeTasksetPackageFile(file));
-      if (grader.kind === "human") return GraderSpecSchema.parse({ ...base, rubric });
+      const metadata = { ...base.metadata, portableRubricRef: grader.rubricRef };
+      if (grader.kind === "human") return GraderSpecSchema.parse({ ...base, rubric, metadata });
       if (!grader.model) throw new Error(`Imported judge ${grader.id} requires its declared model before local preparation.`);
-      return GraderSpecSchema.parse({ ...base, rubric, judge: grader.model, temperature: grader.temperature ?? 0,
-        calibrationStatus: "pending", calibrationFixtureRefs: value.verifierSet.calibrationReceiptRefs.map(ref => ref.id) });
+      return GraderSpecSchema.parse({ ...base, rubric, metadata, judge: grader.model, temperature: grader.temperature ?? 0,
+        calibrationStatus: "pending", calibrationFixtureRefs: calibrationFixtures[grader.id] ?? [] });
     }
     return GraderSpecSchema.parse({ ...base, kind: grader.kind === "artifact" ? "file" : grader.kind });
   });

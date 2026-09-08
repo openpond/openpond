@@ -4,7 +4,8 @@ import { runSandboxedVerifier } from "../apps/server/src/training/sandboxed-veri
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service";
 import { buildTaskset } from "../packages/taskset-sdk/src";
 import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tasksetPackageDirectoryId } from "../apps/server/src/training/taskset-package-path.js";
 import os from "node:os";
 import path from "node:path";
 
@@ -112,6 +113,10 @@ describe("grader execution", () => {
     const taskset = tasksetFixture({ graders: [judge] });
     const profileSource = path.join(directory, "profile");
     await buildTaskset(taskset, path.join(profileSource, "tasksets", taskset.id));
+    const originalDirectory = path.join(directory, "training", "tasksets", taskset.id);
+    await buildTaskset(taskset, originalDirectory);
+    await writeFile(path.join(originalDirectory, "context.txt"), "private calibration context");
+    const originalManifest = await readFile(path.join(originalDirectory, "taskset.json"));
     await store.upsertTaskset(taskset);
     const service = createTaskEvaluationService({ store, storeDir: directory, loadProfileState: async () => ({ mode: "local", sourcePath: profileSource } as any), modelJudge: async ({ attempt }) => { const passed = attempt.output.text === "Goodbye friend"; return { score: passed ? 1 : 0, passed, feedback: passed ? "matched" : "did not match" }; } });
     const calibrated = await service.calibrateModelJudges(taskset.id);
@@ -127,6 +132,10 @@ describe("grader execution", () => {
     });
     expect(calibrated.taskset.graders[0]).toMatchObject({ kind: "model_judge", calibrationStatus: "passed", rewardEligible: true, metadata: { calibrationEvidenceHash: expect.any(String), calibrationAccuracy: 1 } });
     expect(calibrated.taskset.contentHash).not.toBe(taskset.contentHash);
+    const calibratedDirectory = path.join(directory, "training", "tasksets", tasksetPackageDirectoryId(calibrated.taskset));
+    expect(calibratedDirectory).not.toBe(originalDirectory);
+    expect(await readFile(path.join(calibratedDirectory, "context.txt"), "utf8")).toBe("private calibration context");
+    expect(await readFile(path.join(originalDirectory, "taskset.json"))).toEqual(originalManifest);
     await expect(store.getTasksetRevision(taskset.id, taskset.revision, taskset.contentHash)).resolves.toMatchObject({
       contentHash: taskset.contentHash,
       revision: taskset.revision,

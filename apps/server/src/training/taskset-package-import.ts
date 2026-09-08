@@ -1,5 +1,5 @@
 import path from "node:path";
-import { GraderFixtureSchema, TasksetSchema, TasksetSourceRefSchema, type GeneratedTaskFile } from "@openpond/contracts";
+import { GraderFixtureSchema, TasksetEnvironmentResourceSchema, TasksetSchema, TasksetSourceRefSchema, type GeneratedTaskFile } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import { learningRef, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { computeTasksetHash, createTasksetDraft, learningVerifierModule, projectLearningBatchGraders } from "@openpond/taskset-sdk";
@@ -32,7 +32,7 @@ export function prepareImportedTasksetPackage(input: {
     const name = learningVerifierModule(grader.verifierRef.contentHash);
     if (!files.some(file => file.path === name)) files.push({ path: name, role: "verifier", content: asset ? verifyLearningTextAsset(asset, grader.verifierRef) : new TextDecoder("utf-8", { fatal: true }).decode(decodeTasksetPackageFile(file)) });
   }
-  const authoring = release.metadata.starterAuthoring as { graderFixtures?: unknown } | undefined;
+  const authoring = (release.metadata.ordinaryAuthoring ?? release.metadata.starterAuthoring) as { graderFixtures?: unknown } | undefined;
   const fixtures = GraderFixtureSchema.array().max(100_000).parse(authoring?.graderFixtures ?? []);
   const kind = release.environment.kind === "text" ? "chat" : release.environment.kind === "custom_program" ? "program" : release.environment.kind;
   const projected = TasksetSchema.parse({
@@ -41,6 +41,7 @@ export function prepareImportedTasksetPackage(input: {
     name: input.name, objective: resources?.taskDefinition.instructions ?? input.name, status: "needs_review",
     sourceRefs: [source], datasetArtifact: null, policy: release.policy,
     environment: { ...draft.environment, kind, entrypoint: release.environment.entrypoint,
+      resources: TasksetEnvironmentResourceSchema.array().max(10_000).parse(release.metadata.environmentResources ?? []),
       stateful: release.environment.stateful, deterministicSeeds: release.environment.deterministicSeeds,
       toolNames: release.tools.map(tool => tool.name), defaultTimeoutMs: release.environment.defaultTimeoutMs,
       networkPolicy: release.environment.networkPolicy, metadata: {
@@ -67,7 +68,9 @@ export function prepareImportedTasksetPackage(input: {
       buildSpecification: null, evidenceHashes: [value.contentHash], tasksetSdkVersion: "package-import-v1",
       sourceCommit: null, repairHistory: [], createdAt: input.createdAt },
     readiness: null, contentHash: "00000000", createdAt: input.createdAt, updatedAt: input.createdAt,
-    metadata: { importedPackageHash: value.contentHash, ...(resources ? { taskDefinition: learningRef(resources.taskDefinition),
+    metadata: { importedPackageHash: value.contentHash,
+      portableFileInventory: value.files.map(file => ({ asset: file.asset, sourcePath: file.asset.path })),
+      ...(resources ? { taskDefinition: learningRef(resources.taskDefinition),
       rewardBinding: learningRef(resources.rewardBinding), rewardExecution: { binding: resources.rewardBinding, rewards: resources.rewards } } : {}),
       portableCapabilities: release.capabilities, derivedPortableMetadata: release.metadata,
       ...(release.metadata.modelTasksetDerivation ? { modelTasksetDerivation: release.metadata.modelTasksetDerivation } : {}),

@@ -17,8 +17,14 @@ export async function materializeImmutableTasksetPackage(home: string, prepared:
   source?: { directory: string; packageHash: string };
   verify?: (directory: string) => Promise<void>;
 } = {}) {
+  return materializeImmutableTasksetPackageAtRoot(path.join(home, "training", "tasksets"), prepared, directoryId, options);
+}
+
+export async function materializeImmutableTasksetPackageAtRoot(root: string, prepared: { taskset: Taskset; generatedFiles: GeneratedTaskFile[] }, directoryId: string, options: {
+  source?: { directory: string; packageHash: string };
+  verify?: (directory: string) => Promise<void>;
+} = {}) {
   if (!/^[a-z0-9][a-z0-9-]{1,239}$/.test(directoryId)) throw new Error("Taskset package identity is not a safe directory name.");
-  const root = path.join(home, "training", "tasksets");
   await mkdir(root, { recursive: true });
   const temporary = await mkdtemp(path.join(root, ".starter-"));
   const target = path.join(root, directoryId);

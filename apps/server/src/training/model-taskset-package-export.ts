@@ -8,6 +8,7 @@ import { resolveLocalTasksetModelResources } from "./taskset-package-resources.j
 import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
 import { desktopTasksetRuntimeAdapterId } from "./portable-evals-adapter.js";
 import { readCachedTasksetPackage } from "./taskset-package-files.js";
+import { AuthoredTasksetFileInventorySchema } from "./authored-taskset-files.js";
 
 /** Export the selected or explicitly requested immutable revision in this Profile.
  * No hosted state or local Model configuration changes during preparation. */
@@ -61,13 +62,15 @@ export async function exportLocalModelTasksetPackage(input: {
     if (existing && (contentHash(existing.asset) !== contentHash(asset) || existing.sourcePath !== sourcePath)) throw new Error(`Conflicting local Taskset file reference: ${asset.id}.`);
     sources.set(asset.id, { asset, sourcePath });
   };
+  for (const file of AuthoredTasksetFileInventorySchema.parse(taskset.metadata.portableFileInventory ?? [])) add(file.asset, file.sourcePath);
   for (const task of release.tasks) {
     const local = taskset.tasks.find(candidate => candidate.id === task.id);
     for (const asset of task.artifactRefs) add(asset, local?.assets?.find(candidate => candidate.id === asset.id)?.artifactRef ?? asset.path);
     for (const output of task.requiredOutputs ?? []) if (output.schemaRef) add(output.schemaRef);
   }
   for (const grader of release.graders) {
-    if ("verifierRef" in grader) add(grader.verifierRef);
+    const local = taskset.graders.find(local => local.id === grader.id);
+    if ("verifierRef" in grader) add(grader.verifierRef, local?.kind === "custom_verifier" ? local.module : grader.verifierRef.path);
     if ("rubricRef" in grader) add(grader.rubricRef);
   }
   const captured = await captureLocalTasksetPackage({
