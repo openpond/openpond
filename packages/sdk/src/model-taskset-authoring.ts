@@ -5,6 +5,8 @@ import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { ModelTasksetAuthoringOwnerSchema, ModelTasksetDraftPreparationSchema, ModelTasksetDraftRequestSchema, type ModelTasksetDraftPreparation, type ModelTasksetDraftRequest } from "./model-taskset-authoring-contracts.js";
 import { assertModelTasksetAuthoring, modelAuthoredTasksetId } from "./model-taskset-authoring-lineage.js";
 import { createTasksetPackage, validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
+import { createTasksetPackageExecutionFile, resolveTasksetPackageExecution } from "./taskset-package-execution.js";
+import { modelStarterExecutionAssetId } from "./model-starter-execution.js";
 
 export * from "./model-taskset-authoring-contracts.js";
 
@@ -45,7 +47,12 @@ export function publishModelTasksetDraftPackage(input: { preparation: ModelTasks
       ...(edited.taskset.metadata.ordinaryAuthoring === undefined ? {} : { ordinaryAuthoring: edited.taskset.metadata.ordinaryAuthoring }),
     },
   }));
-  return createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment: edited.environment, verifierSet, files: edited.files });
+  const resolved = resolveTasksetPackageExecution(edited);
+  const files = resolved ? [
+    ...edited.files.filter(file => file.asset.id !== modelStarterExecutionAssetId(edited.taskset)),
+    createTasksetPackageExecutionFile({ ...resolved.execution, verifierSet }),
+  ] : edited.files;
+  return createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment: edited.environment, verifierSet, files });
 }
 
 function requireOrdinaryPackage(value: unknown) {

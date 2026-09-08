@@ -6,6 +6,7 @@ import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/c
 import { contentHash, ImmutableAssetRefSchema, sha256, type ImmutableAssetRef } from "@openpond/harness";
 import { computeTasksetHash, projectPortableTaskRecord } from "@openpond/taskset-sdk";
 import { MAX_TASKSET_PACKAGE_BYTES } from "openpond-sdk/taskset-packages";
+import { prepareAuthoredToolEnvironment } from "./authored-tool-environment.js";
 
 export const AuthoredTasksetFileInventorySchema = z.array(z.object({
   asset: ImmutableAssetRefSchema, sourcePath: z.string().min(1),
@@ -118,5 +119,6 @@ export async function prepareAuthoredTasksetFiles(taskset: Taskset, directory: s
   const prepared = TasksetSchema.parse({ ...taskset, graders, metrics,
     environment: { ...taskset.environment, metadata: environmentMetadata },
     metadata: { ...metadata, ...(importedPackageHash === undefined ? {} : { sourceImportedPackageHash: importedPackageHash }), portableFileInventory: AuthoredTasksetFileInventorySchema.parse([...inventory.values()].sort((left, right) => left.asset.id.localeCompare(right.asset.id))) } });
-  return { taskset: TasksetSchema.parse({ ...prepared, contentHash: computeTasksetHash(prepared) }), generatedFiles };
+  const executable = prepareAuthoredToolEnvironment(prepared, bytes, [...inventory.values()]);
+  return { taskset: TasksetSchema.parse({ ...executable.taskset, contentHash: computeTasksetHash(executable.taskset) }), generatedFiles: [...generatedFiles, ...executable.generatedFiles] };
 }

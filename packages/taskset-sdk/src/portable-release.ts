@@ -342,12 +342,17 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
     if (grader.metadata.portableVerifierRef === undefined) {
       throw new Error(`Custom verifier ${grader.id} requires its immutable executable asset before publication.`);
     }
+    const imported = PortableGraderSpecSchema.safeParse(grader.metadata.portableGrader);
+    // An omitted portable export means "verify". Preserve that encoding on an
+    // unchanged import so executing it does not silently replace its release.
+    const preserveDefault = imported.success && imported.data.kind === "custom_verifier"
+      && imported.data.exportName === undefined && grader.exportName === "verify";
     return {
       ...base,
       kind: "custom_verifier",
       verifierRef: ImmutableAssetRefSchema.parse(grader.metadata.portableVerifierRef),
       timeoutMs: grader.timeoutMs,
-      exportName: grader.exportName,
+      ...(preserveDefault ? {} : { exportName: grader.exportName }),
       networkPolicy: "none",
     };
   }

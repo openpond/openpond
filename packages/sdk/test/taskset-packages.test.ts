@@ -6,6 +6,37 @@ import { createTasksetPackage, decodeTasksetPackageFile, validateTasksetPackage,
 import { HostedModelProjectTrainingSetupSchema } from "../src/model-projects.js";
 import { prepareModelTasksetDraft, publishModelTasksetDraftPackage, ModelTasksetAuthoringSchema } from "../src/taskset-packages.js";
 import { learningRef } from "@openpond/evals/learning";
+import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
+import { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript-environment/node";
+import { resolveTasksetPackageExecution } from "../src/taskset-packages.js";
+import { ordinaryToolTaskset } from "./fixtures/ordinary-tool-taskset.js";
+
+// Ordinary executable packages must close their private graph at admission,
+// and owned revisions must execute changed code without altering the source.
+it("validates and reseals ordinary JavaScript execution across owned revisions", async () => {
+  const source = ordinaryToolTaskset();
+  const owner = { scopeId: "local", modelId: "ordinary-model" };
+  const prepared = prepareModelTasksetDraft({ owner, source, request: { schemaVersion: "openpond.modelTasksetDraftRequest.v1", operationId: "edit-world", modelId: owner.modelId, expectedModelRevision: 1, sourcePackageHash: source.contentHash } });
+  const published = publishModelTasksetDraftPackage({ preparation: prepared, edited: ordinaryToolTaskset(2) });
+  expect(resolveTasksetPackageExecution(published)?.execution.verifierSet).toEqual(published.verifierSet);
+  async function inspect(value: typeof source) {
+    const resolved = resolveTasksetPackageExecution(value)!;
+    const session = await createJavaScriptEnvironmentSession({ definition: resolved.execution.javascript,
+      asset: resolved.assets.find(asset => asset.id === resolved.execution.javascript.module.id)!,
+      initialState: JSON.parse(resolved.assets.find(asset => asset.id === value.taskset.tasks[0]!.privilegedContextRef)!.text),
+      input: value.taskset.tasks[0]!.input, seed: 17, execute: executeJavaScriptEnvironmentInWorker,
+    });
+    try { return await session.step({ name: "inspect", arguments: {} }); }
+    finally { await session.destroy(); }
+  }
+  expect(await inspect(source)).toEqual({ value: 1 });
+  expect(await inspect(published)).toEqual({ value: 2 });
+  expect(await inspect(source)).toEqual({ value: 1 });
+  const { contentHash: _hash, ...content } = source;
+  for (const file of source.files) expect(() => createTasksetPackage({ ...content, files: source.files.filter(candidate => candidate !== file) })).toThrow(/missing/);
+  const module = resolveTasksetPackageExecution(source)!.execution.javascript.module;
+  expect(() => createTasksetPackage({ ...content, files: source.files.map(file => file.asset.id === module.id ? { ...file, asset: { ...file.asset, visibility: "policy" } } : file) })).toThrow();
+});
 
 function fixture() {
   const file = (id: string, bytes: Uint8Array, visibility: "policy" | "host_private" | "verifier") => ({

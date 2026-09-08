@@ -25,7 +25,7 @@ export async function runStarterToolAttempt(input: {
 }) {
   const { attemptInput, taskset } = input;
   const modelRef = input.policySource === "fixture" ? null : attemptInput.model;
-  const resolved = await loadStarterToolEnvironment(input.store, taskset, attemptInput.task);
+  const resolved = await loadStarterToolEnvironment(input.store, taskset, attemptInput.task, input.storeDir);
   const startedAt = input.timestamp();
   const requestId = `starter-tool-${contentHash({ taskset: learningRef(taskset), task: attemptInput.task.id, model: modelRef, seed: attemptInput.seed, attempt: attemptInput.attempt, startedAt }).slice(0, 32)}`;
   const attemptId = input.resultId ?? requestId;

@@ -44,7 +44,7 @@ describe("Taskset draft persistence", () => {
       const result = await retry.request("publish_taskset_draft", { draftId: draft.id }) as { draft: typeof draft; taskset: typeof original };
       expect(result.draft.publishedTasksetRef).toEqual(ref);
       expect(result.taskset).toEqual(original);
-      expect(checked).toEqual([original]);
+      expect(checked).toEqual([ref]);
     } finally { await reloaded.close(); }
   }));
 

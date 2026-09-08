@@ -135,7 +135,7 @@ export function createTaskEvaluationService(deps: {
     // Profile source may change while an Evaluation is running, but the
     // attempt, grade, and receipt must remain bound to the release selected at
     // admission time.
-    const releasedHarness = toolEnvironment ? compileStarterToolHarness(await loadStarterToolEnvironment(deps.store, taskset, task)) : input.releasedHarness
+    const releasedHarness = toolEnvironment ? compileStarterToolHarness(await loadStarterToolEnvironment(deps.store, taskset, task, deps.storeDir)) : input.releasedHarness
       ?? await deps.resolveReleasedHarness?.()
       ?? null;
     const boundTasksetRelease = await deps.resolveTasksetRelease?.(taskset) ?? null;

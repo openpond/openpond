@@ -25,7 +25,7 @@ export async function readStarterToolEvidence(input: {
   store: SqliteStore; storeDir: string; taskset: Taskset; task: TaskDataRecord; attempt: TaskAttemptResult;
 }): Promise<Record<string, unknown>> {
   const { store, taskset, task, attempt } = input;
-  const resolved = await loadStarterToolEnvironment(store, taskset, task);
+  const resolved = await loadStarterToolEnvironment(store, taskset, task, input.storeDir);
   const records = await store.listTaskAttemptArtifacts({ attemptId: attempt.id });
   const candidates = records.filter(artifact => artifact.kind === "environment_state" && artifact.tasksetId === taskset.id && artifact.taskId === task.id && artifact.attemptId === attempt.id && attempt.artifactRefs.includes(artifact.id) && attempt.privilegedOutcomeRef === artifact.id);
   if (candidates.length !== 1) throw new Error("Tool grading requires exactly one owner-recorded environment artifact.");

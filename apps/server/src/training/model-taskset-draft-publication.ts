@@ -1,7 +1,7 @@
 import { TasksetSchema, type Taskset } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import { computeTasksetHash, hashTasksetDraftPackage, materializePortableTasksetRelease } from "@openpond/taskset-sdk";
-import { publishModelTasksetDraftPackage, type ModelTasksetDraftPreparation } from "openpond-sdk/taskset-packages";
+import { decodeTasksetPackageFile, publishModelTasksetDraftPackage, type ModelTasksetDraftPreparation } from "openpond-sdk/taskset-packages";
 import { AuthoredTasksetFileInventorySchema } from "./authored-taskset-files.js";
 import { captureLocalTasksetPackage } from "./taskset-package-capture.js";
 import { cacheTasksetPackage } from "./taskset-package-files.js";
@@ -20,14 +20,22 @@ export async function materializeModelTasksetDraftPublication(input: {
     sources: AuthoredTasksetFileInventorySchema.parse(input.taskset.metadata.portableFileInventory ?? []),
   });
   const compiled = publishModelTasksetDraftPackage({ preparation: input.preparation, edited });
+  const previousInventory = AuthoredTasksetFileInventorySchema.parse(input.taskset.metadata.portableFileInventory ?? []);
+  const inventory = compiled.files.map(file => ({ asset: file.asset,
+    sourcePath: previousInventory.find(previous => previous.asset.id === file.asset.id)?.sourcePath ?? file.asset.path,
+  }));
+  const declaration = compiled.taskset.environment.entrypoint === "openpond.javascript-environment.v1"
+    ? compiled.files.find(file => file.asset.path === "environment/execution.json") : undefined;
   const directoryId = `model-draft-${contentHash({ packageHash: compiled.contentHash, taskset: input.taskset })}`;
   const prepared = TasksetSchema.parse({ ...input.taskset, id: compiled.taskset.id, revision: compiled.taskset.revision,
-    metadata: { ...input.taskset.metadata, importedPackageHash: compiled.contentHash, derivedPortableMetadata: compiled.taskset.metadata },
+    metadata: { ...input.taskset.metadata, portableFileInventory: inventory, importedPackageHash: compiled.contentHash, derivedPortableMetadata: compiled.taskset.metadata },
     environment: { ...input.taskset.environment, metadata: { ...input.taskset.environment.metadata,
       runtimeSourceTasksetId: directoryId, portableExecutionResources: { environment: compiled.environment, verifierSet: compiled.verifierSet } } },
   });
   const taskset = TasksetSchema.parse({ ...prepared, contentHash: computeTasksetHash(prepared) });
-  const directory = await materializeImmutableTasksetPackage(input.home, { taskset, generatedFiles: [] }, directoryId, {
+  const directory = await materializeImmutableTasksetPackage(input.home, { taskset, generatedFiles: declaration
+    ? [{ path: declaration.asset.path, role: "environment", content: new TextDecoder("utf-8", { fatal: true }).decode(decodeTasksetPackageFile(declaration)) }] : [],
+  }, directoryId, {
     source: { directory: input.directory, packageHash: await hashTasksetDraftPackage(input.directory) },
     verify: root => verifyPublishedTasksetAssets(root, taskset),
   });

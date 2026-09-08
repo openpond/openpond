@@ -156,6 +156,17 @@ privacy attestations and verifier calibration for different bytes are cleared;
 authored fixtures remain available to run again. Package validation checks the
 declared identity and parent lineage.
 
+Ordinary JavaScript environments carry a private `environment/execution.json`
+declaration created with `createTasksetPackageExecutionFile`. It binds the
+environment release, verifier set and JavaScript definition to the module and
+each task's private initial state. `validateTasksetPackage` verifies this graph;
+`resolveTasksetPackageExecution` returns its verified text assets for an
+authorized execution host. Bound packages retain their existing execution
+resource graph. Publication regenerates the ordinary declaration when it seals
+the owned verifier set. Local file authoring also pins changed module bytes and
+reseals the environment before publication, while historical revisions keep
+their original executable files.
+
 These pure helpers require the host to persist draft files and commit publication,
 Model selection and retry receipts atomically. Bound Reward packages and reviewed
 batches use their respective authoring graphs and are rejected by this ordinary
