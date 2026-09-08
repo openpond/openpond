@@ -31,7 +31,6 @@ import {
   ToolDeclarationSchema,
 } from "@openpond/harness";
 
-import { canonicalJson } from "./canonical-json.js";
 import { contentHash, sha256 } from "./hashing.js";
 import { TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
 import { compileBoundGraders, RewardBindingSchema, RewardReleaseSchema, type RewardBinding, type RewardRelease } from "@openpond/evals/rewards";
@@ -338,22 +337,19 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
     temperature: grader.temperature,
     calibrationStatus: grader.calibrationStatus,
   };
-  if (grader.kind === "custom_verifier") return {
-    ...base,
-    kind: "custom_verifier",
-    verifierRef: grader.metadata.portableVerifierRef === undefined
-      ? asset({
-          id: `verifier-${grader.id}`,
-          path: `graders/${segment(grader.id)}/verifier.json`,
-          hashInput: { module: grader.module, exportName: grader.exportName },
-          mediaType: "application/json",
-          visibility: "host_private",
-        })
-      : ImmutableAssetRefSchema.parse(grader.metadata.portableVerifierRef),
-    timeoutMs: grader.timeoutMs,
-    exportName: grader.exportName,
-    networkPolicy: "none",
-  };
+  if (grader.kind === "custom_verifier") {
+    if (grader.metadata.portableVerifierRef === undefined) {
+      throw new Error(`Custom verifier ${grader.id} requires its immutable executable asset before publication.`);
+    }
+    return {
+      ...base,
+      kind: "custom_verifier",
+      verifierRef: ImmutableAssetRefSchema.parse(grader.metadata.portableVerifierRef),
+      timeoutMs: grader.timeoutMs,
+      exportName: grader.exportName,
+      networkPolicy: "none",
+    };
+  }
   if (grader.kind === "human") return {
     ...base,
     kind: "human",
@@ -437,23 +433,6 @@ function rubricAsset(grader: Extract<GraderSpec, { kind: "human" | "model_judge"
     return asset;
   }
   return { id: `rubric-${grader.id}`, path: `graders/${segment(grader.id)}/rubric.md`, contentHash, sizeBytes, mediaType: "text/markdown", visibility: "verifier" };
-}
-
-function asset(input: {
-  id: string;
-  path: string;
-  hashInput: unknown;
-  mediaType: string;
-  visibility: ImmutableAssetRef["visibility"];
-}): ImmutableAssetRef {
-  return {
-    id: input.id,
-    path: input.path,
-    contentHash: contentHash(input.hashInput),
-    sizeBytes: Buffer.byteLength(canonicalJson(input.hashInput)),
-    mediaType: input.mediaType,
-    visibility: input.visibility,
-  };
 }
 
 function hash(value: string): string {

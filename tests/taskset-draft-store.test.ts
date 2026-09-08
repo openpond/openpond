@@ -77,6 +77,9 @@ describe("Taskset draft persistence", () => {
       const human = { id: "human-review", version: "1", label: "Human review", kind: "human" as const, weight: 1, hardGate: false, rewardEligible: false, privileged: true, rubric: "Assess clarity using only the supplied evidence.", reviewerRole: "reviewer", metadata: {} };
       const sourceTaskset = tasksetFixture({ profileId: "source-profile", graders: [grader, human] });
       sourceTaskset.policy.hiddenGraderRefs.push(human.id);
+      // Publication must never replace missing executable bytes with a descriptor.
+      expect(() => materializePortableTasksetRelease({ taskset: sourceTaskset, adapterId: "unprepared" }))
+        .toThrow("requires its immutable executable asset");
       const draft = tasksetDraftFromTaskset(
         sourceTaskset,
         "2026-08-30T12:00:00.000Z",
