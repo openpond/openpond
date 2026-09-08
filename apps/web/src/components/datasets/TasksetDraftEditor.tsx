@@ -67,14 +67,14 @@ export function TasksetDraftEditor({
   useEffect(() => {
     if (draft || localDraftId || creatingRef.current) return;
     creatingRef.current = true;
-    void training.actions.createTasksetDraft().then((created) => {
+    void training.actions.createTasksetDraft("", modelProjectId).then((created) => {
       creatingRef.current = false;
       if (!created) return;
       setDraft(created);
       setSavedSnapshot(JSON.stringify(created));
       setLocalDraftId(created.id);
     });
-  }, [draft, localDraftId, training.actions]);
+  }, [draft, localDraftId, modelProjectId, training.actions]);
 
   useEffect(() => {
     if (draft || !localDraftId) return;
@@ -94,6 +94,10 @@ export function TasksetDraftEditor({
   }, [localDraftId, training.actions]);
 
   const issues = useMemo(() => draft ? draftValidationIssues(draft) : [], [draft]);
+  const owningModel = draft?.modelScope
+    ? training.payload?.modelProjects.find((model) => model.id === draft.modelScope!.modelId)
+    : null;
+  const modelChanged = Boolean(owningModel && owningModel.revision !== draft?.modelScope?.expectedModelRevision);
   const busy = training.busyAction?.includes("taskset-draft") ?? false;
   const draftNavigation = useDraftNavigation({ dirty: draft !== null && draft.status !== "published" && JSON.stringify(draft) !== savedSnapshot, busy, name: "Taskset draft", save: async () => Boolean(await save()) });
 
@@ -217,6 +221,20 @@ export function TasksetDraftEditor({
           </button>
         </div>
       </header>
+      {modelChanged && !readOnly ? (
+        <section className="taskset-draft-validation" aria-label="Model changed">
+          <p>{owningModel!.name} changed after this draft was opened. Publishing this draft will replace its current Taskset selection. Your saved draft is retained.</p>
+          <button className="training-button secondary" type="button" disabled={busy} onClick={async () => {
+            const saved = await save();
+            if (!saved || !owningModel) return;
+            const refreshed = await training.actions.refreshTasksetDraftModel(saved, owningModel.revision);
+            if (!refreshed) return;
+            setDraft(refreshed);
+            setSavedSnapshot(JSON.stringify(refreshed));
+            setNotice("Draft ready to publish against the current Model revision.");
+          }}>Use current Model revision</button>
+        </section>
+      ) : null}
 
       <nav className="taskset-draft-tabs" aria-label="Taskset draft sections">
         {TASKSET_DRAFT_SECTIONS.map((candidate) => (

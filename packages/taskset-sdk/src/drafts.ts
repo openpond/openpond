@@ -34,6 +34,7 @@ export class TasksetDraftPublishError extends Error {
 
 export function createTasksetDraft(input: {
   profileId: string;
+  modelScope?: TasksetDraft["modelScope"];
   id?: string;
   name?: string;
   now?: string;
@@ -45,6 +46,7 @@ export function createTasksetDraft(input: {
     id,
     revision: 1,
     profileId: input.profileId,
+    modelScope: input.modelScope ?? null,
     name: input.name?.trim() ?? "",
     objective: "",
     purpose: "general",

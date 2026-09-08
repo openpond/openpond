@@ -198,6 +198,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/workspace$/, method: "GET", action: "taskset_draft_workspace", key: "draftId" },
     { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)$/, method: "PUT", action: "save_taskset_draft", key: "draftId", wrap: "draft" },
     { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/publish$/, method: "POST", action: "publish_taskset_draft", key: "draftId" },
+    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/model-revision$/, method: "POST", action: "refresh_taskset_draft_model", key: "draftId" },
     { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)$/, method: "DELETE", action: "delete_taskset_draft", key: "draftId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/attempts$/, method: "POST", action: "execute_taskset_attempt", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/synthetic-collection$/, method: "POST", action: "materialize_synthetic_collection", key: "tasksetId" },

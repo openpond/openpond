@@ -112,7 +112,8 @@ export function LabDatasetsPage({
     const normalized = query.trim().toLowerCase();
     const attachedTasksetIds = modelProjectTasksetIds(project);
     return [
-      ...(modelProjectId ? [] : (state?.tasksetDrafts ?? []))
+      ...(state?.tasksetDrafts ?? [])
+        .filter((draft) => !modelProjectId || draft.modelScope?.modelId === modelProjectId)
         .filter((draft) => draft.status !== "published")
         .map((value) => ({ kind: "draft" as const, value })),
       ...tasksets
@@ -307,14 +308,14 @@ export function LabDatasetsPage({
   return (
     <div className="labs-flat-body labs-datasets-page">
       <ModelProjectPageHeader
-        actions={!modelProjectId && onCreateTaskset ? (
+        actions={onCreateTaskset && (!modelProjectId || project) ? (
           <button className="training-button" type="button" onClick={onCreateTaskset}>
             New Taskset
           </button>
         ) : undefined}
         title="Tasksets"
         description={modelProjectId
-          ? "Taskset releases attached to this Model Project."
+          ? "Saved drafts and Taskset releases attached to this Model Project."
           : "Reusable task releases, environment inputs, scoring rules, and immutable evidence."}
         metrics={[
           {

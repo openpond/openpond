@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { modelBatchReviewActions } from "./model-batch-review-actions";
+import { tasksetDraftActions } from "./taskset-draft-actions";
 import type {
   BaseModelPreference,
   ChatModelRef,
@@ -43,7 +44,6 @@ import type {
   TaskAttemptResult,
   Taskset,
   TasksetGraderDetailsResponse,
-  TasksetDraft,
   TasksetOperationalState,
   LearnedPreferenceRewardBinding,
 } from "@openpond/contracts";
@@ -417,18 +417,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       { grader, tasksetId, modelProjectId: modelProjectId ?? null },
     ),
     prepareLearningBatch: (batchId: string) => mutate<Taskset>("prepare-learning-batch", "/learning-batches/prepare", { profileId, batchId }),
-    createTasksetDraft: (name = "") =>
-      mutate<TasksetDraft>(
-        "create-taskset-draft",
-        "/taskset-drafts",
-        { profileId, name },
-      ),
-    importTasksetDraftPackage: (packagePath: string) =>
-      mutate<TasksetDraft>(
-        "import-taskset-draft-package",
-        "/taskset-drafts/import",
-        { packagePath, profileId },
-      ),
+    ...tasksetDraftActions(connection, profileId, mutate, caught => setError(message(caught))),
     tasksetGraderDetails: async (tasksetId: string) => {
       if (!connection) return null;
       try {
@@ -443,48 +432,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         return null;
       }
     },
-    saveTasksetDraft: (draft: TasksetDraft) =>
-      mutate<TasksetDraft>(
-        "save-taskset-draft",
-        `/taskset-drafts/${encodeURIComponent(draft.id)}`,
-        draft,
-        "PUT",
-      ),
-    tasksetDraftWorkspace: async (draftId: string) => {
-      if (!connection) return null;
-      try {
-        return await api.trainingRequest<{
-          draftId: string;
-          workspacePath: string;
-          packageHash: string;
-        }>(
-          connection,
-          `/taskset-drafts/${encodeURIComponent(draftId)}/workspace`,
-          {},
-          "GET",
-        );
-      } catch (caught) {
-        setError(message(caught));
-        return null;
-      }
-    },
-    publishTasksetDraft: (draftId: string, modelId?: string | null) =>
-      mutate<{
-        draft: TasksetDraft;
-        taskset: Taskset;
-        hostedSync: { state: "local" | "synced" | "sync_failed"; error: string | null };
-      }>(
-        "publish-taskset-draft",
-        `/taskset-drafts/${encodeURIComponent(draftId)}/publish`,
-        { modelId: modelId ?? null },
-      ),
-    deleteTasksetDraft: (draftId: string) =>
-      mutate<{ deleted: boolean; draftId: string }>(
-        "delete-taskset-draft",
-        `/taskset-drafts/${encodeURIComponent(draftId)}`,
-        {},
-        "DELETE",
-      ),
     inspectHuggingFaceDataset: (url: string) =>
       mutate<DatasetImportJob>(
         "inspect-huggingface-dataset",
