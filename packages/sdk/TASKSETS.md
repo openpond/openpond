@@ -57,3 +57,24 @@ checks response ownership and release identity, rejects credential redirects,
 and bounds streamed response bytes. Hosts must authorize Model access, enforce
 immutable release-to-package mappings, and commit attachment and operation
 receipts atomically with the project revision check.
+
+To create or update a Model and select its package in one commit, supply
+`selection: "select"` and `modelConfiguration`. The configuration includes the
+portable Model ID, editable name/objective/defaults, source revision/timestamp,
+and training setup without package-owned Taskset/Reward references or a prepared
+recipe. The host derives those references from the validated package and returns
+the committed Model summary in `receipt.project`. The client verifies that the
+summary retains the requested configuration. Initial creation uses a null
+expected ETag; later writes compare against the last saved hosted ETag.
+
+Use `selection: "attach"` for a historical or comparison package. This requires
+an existing Model and expected ETag, disallows `modelConfiguration`, and must
+leave the selected configuration and ETag unchanged. The client verifies the
+selection mode and unchanged ETag in the attachment receipt.
+
+Desktop links retain the canonical API origin as well as workspace and Model
+identity. Each package mapping records both the local Taskset hash and portable
+release/package hashes; Profile provenance makes these different identities.
+Persist the exact publication intent and immutable package before sending it.
+After an uncertain response, replay that intent before publishing later local
+edits, then merge the recovered hosted receipt without reverting those edits.

@@ -8,6 +8,7 @@ export function commitModelProjectHosting(
   previous: ModelProject | null,
   value: ModelProject,
   replace: boolean,
+  importResources?: () => void,
 ): ModelProject {
   const next = ModelProjectSchema.parse(value);
   db.exec("BEGIN IMMEDIATE");
@@ -26,7 +27,8 @@ export function commitModelProjectHosting(
       const existing = current.hosted;
       let hosted = existing;
       if (incoming) {
-        const sameProject = existing?.teamId === incoming.teamId && existing.projectId === incoming.projectId;
+        if (existing?.apiOrigin && existing.apiOrigin !== incoming.apiOrigin) conflict("Model hosting API changed during synchronization.");
+        const sameProject = existing?.apiOrigin === incoming.apiOrigin && existing?.teamId === incoming.teamId && existing.projectId === incoming.projectId;
         if (sameProject && existing.revision === incoming.revision && existing.etag !== incoming.etag) conflict("Hosted Model receipts disagree about the same revision.");
         const latest = sameProject && existing.revision > incoming.revision ? existing : incoming;
         hosted = { ...latest, tasksets: sameProject
@@ -37,6 +39,7 @@ export function commitModelProjectHosting(
         tasksetSyncs: mergeLatest(current.tasksetSyncs, next.tasksetSyncs, (item) => item.localTasksetId, (item) => item.lastAttemptAt),
       });
     }
+    importResources?.();
     db.run(`INSERT INTO model_projects (id, profile_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`,
     [saved.id, saved.profileId, JSON.stringify(saved), saved.createdAt, saved.updatedAt]);

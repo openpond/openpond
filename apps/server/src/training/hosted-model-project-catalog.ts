@@ -79,7 +79,7 @@ export async function listHostedModelProjectCatalog(
         project,
         localProjectId: local?.id ?? null,
         localRevision: local?.revision ?? null,
-        localState: hostedProjectLocalState(project, local, access.teamId),
+        localState: hostedProjectLocalState(project, local, access.teamId, access.apiBaseUrl),
       };
     }),
     generatedAt: catalog.generatedAt,
@@ -116,10 +116,12 @@ function hostedProjectLocalState(
   hosted: HostedModelProjectSummary,
   local: ModelProject | null,
   teamId: string,
+  apiBaseUrl: string,
 ): HostedModelProjectLocalState {
   if (!local) return "not_pulled";
   if (
     local.hosted?.teamId !== teamId ||
+    local.hosted.apiOrigin !== new URL(apiBaseUrl).origin ||
     local.hosted.projectId !== hosted.id ||
     local.hosted.portableProjectId !== hosted.portableProjectId
   ) {

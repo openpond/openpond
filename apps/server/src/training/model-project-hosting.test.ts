@@ -1,5 +1,4 @@
 import { describe, expect, test, vi } from "vitest";
-import { gunzipSync } from "node:zlib";
 
 import { createModelProjectHostingService } from "./model-project-hosting.js";
 
@@ -192,7 +191,7 @@ describe("Model Project hosting", () => {
     expect(pulled.hosted).toMatchObject({ jobCount: 2 });
     expect(pulled.importedJobCount).toBe(1);
     expect(pulled.importedMetricCount).toBe(6);
-    expect(saveModelProjectHosting).toHaveBeenCalledWith(null, pulled.project, true);
+    expect(saveModelProjectHosting).toHaveBeenCalledWith(null, pulled.project, true, []);
     expect(saveTrainingJob).toHaveBeenCalledWith(expect.objectContaining({
       id: hostedJob.id,
       status: "succeeded",
@@ -378,6 +377,7 @@ describe("Model Project hosting", () => {
       trainingSetup: emptyTrainingSetup(),
       hosted: {
         schemaVersion: "openpond.hostedModelProjectLink.v1" as const,
+        apiOrigin: "https://hosted.example.test",
         teamId: "team_1",
         projectId: "hosted_project_1",
         portableProjectId: "model_project_1",
@@ -420,6 +420,9 @@ describe("Model Project hosting", () => {
     });
 
     await expect(service.syncProject(project.id)).rejects.toThrow("model_project_sync_conflict");
+    expect(request).toHaveBeenCalledTimes(1);
+    project.hosted.apiOrigin = "https://another-api.example.test";
+    await expect(service.syncProject(project.id)).rejects.toThrow("linked API and workspace");
     expect(request).toHaveBeenCalledTimes(1);
   });
 
@@ -465,134 +468,9 @@ describe("Model Project hosting", () => {
     );
   });
 
-  test("publishes immutable Taskset releases with compressed transport", async () => {
-    const project = {
-      schemaVersion: "openpond.modelProject.v2" as const,
-      id: "model_project_1",
-      profileId: "default",
-      revision: 1,
-      name: "Taste model",
-      objective: "Learn taste",
-      defaultBaseModel: null,
-      defaultDestinationId: "openpond_managed" as const,
-      trainingSetup: emptyTrainingSetup(),
-      hosted: null,
-      tasksetSyncs: [],
-      createdAt: "2026-08-25T12:00:00.000Z",
-      updatedAt: "2026-08-25T12:00:00.000Z",
-    };
-    let saved = project as unknown;
-    const request = vi.fn(async (urlValue: string | URL | Request, init?: RequestInit) => {
-      const url = String(urlValue);
-      if (url.endsWith(`/v1/model-projects/${project.id}`)) {
-        return Response.json({
-          project: {
-            id: "hosted_project_1",
-            portableProjectId: project.id,
-            revision: 1,
-            etag: "b".repeat(64),
-          },
-        });
-      }
-      expect(new Headers(init?.headers).get("content-type")).toBe(
-        "application/vnd.openpond.taskset-publication+json+gzip",
-      );
-      const publication = JSON.parse(
-        gunzipSync(Buffer.from(init?.body as Uint8Array)).toString("utf8"),
-      );
-      expect(publication).toMatchObject({
-        modelProjectId: "hosted_project_1",
-        release: { id: "taskset_1", revision: 1 },
-      });
-      return Response.json({
-        project: {
-          id: "hosted_project_1",
-          portableProjectId: project.id,
-          revision: 1,
-          etag: "b".repeat(64),
-        },
-        taskset: {
-          id: "hosted_taskset_1",
-          portableTasksetId: "taskset_1",
-          revision: 1,
-          contentHash: "a".repeat(64),
-        },
-      });
-    });
-    const service = createModelProjectHostingService({
-      store: {
-        getModelProject: vi.fn(async () => saved),
-        saveModelProjectHosting: vi.fn(async (_previous: unknown, value: unknown) => {
-          saved = value;
-          return value;
-        }),
-      } as never,
-      resolveAccess: async () => ({
-        apiBaseUrl: "https://hosted.example.test",
-        teamId: "team_1",
-        token: "test-token",
-      }),
-      env: {},
-      fetch: request as typeof fetch,
-    });
-    await service.publishTaskset({
-      projectId: project.id,
-      taskset: {
-        id: "taskset_1",
-        name: "Taskset",
-        objective: "Rank outputs",
-        preferenceComparison: null,
-        graders: [],
-      } as never,
-      release: {
-        schemaVersion: "openpond.tasksetRelease.v2",
-        id: "taskset_1",
-        revision: 1,
-        policy: {
-          policyVisibleFields: [],
-          privilegedFields: [],
-          hiddenGraderRefs: [],
-          connectedAppScopes: [],
-        },
-        environment: {
-          protocolVersion: "openpond.environment.v1",
-          kind: "text",
-          entrypoint: "chat",
-          stateful: false,
-          deterministicSeeds: true,
-          lifecycle: ["create", "reset", "step", "collect", "destroy"],
-          networkPolicy: "none",
-          defaultTimeoutMs: 30_000,
-        },
-        tools: [],
-        capabilities: [],
-        tasks: [{
-          id: "task_1",
-          clusterKey: "cluster_1",
-          split: "train",
-          input: { prompt: "Choose traits" },
-          expectedOutput: null,
-          policyVisibleContext: {},
-          privilegedContextRef: null,
-          artifactRefs: [],
-          tags: [],
-        }],
-        graders: [{
-          id: "schema_grader",
-          version: "1",
-          weight: 1,
-          hardGate: true,
-          rewardEligible: true,
-          privileged: false,
-          kind: "schema",
-          config: {},
-        }],
-        metadata: {},
-        contentHash: "a".repeat(64),
-      } as never,
-    });
-    expect(request).toHaveBeenCalledTimes(2);
-  });
+  // Complete-package publication, attachment and restart recovery are covered
+  // with a real SQLite store in model-starter-taskset.test.ts.
+
 });
 
 function emptyTrainingSetup() {

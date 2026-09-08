@@ -7,9 +7,11 @@ export function canReplaceFromHosted(
   local: ModelProject,
   hosted: HostedModelProjectSummary,
   teamId: string,
+  apiBaseUrl: string,
 ): boolean {
   return (
     local.hosted?.teamId === teamId
+    && (local.hosted.apiOrigin === null || local.hosted.apiOrigin === new URL(apiBaseUrl).origin)
     && local.hosted.projectId === hosted.id
     && local.hosted.portableProjectId === hosted.portableProjectId
     && local.revision === local.hosted.syncedSourceRevision

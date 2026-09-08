@@ -68,6 +68,7 @@ export function validateTaskset(input: unknown): TasksetValidationReport {
 }
 
 function validateGraderFixtures(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  if (!taskset.graderFixtures.length) issues.push({ code: "grader_fixtures_required", severity: "error", message: "Taskset admission requires authored grader fixtures.", path: "graderFixtures" });
   const taskIds = new Set(taskset.tasks.map((task) => task.id));
   const required = new Set(["positive", "negative", "boundary", "adversarial", "prompt_injection", "infrastructure_failure"]);
   for (const fixture of taskset.graderFixtures) {
