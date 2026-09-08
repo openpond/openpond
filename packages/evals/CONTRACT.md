@@ -145,7 +145,7 @@ module bytes and uses the existing bounded isolated worker. A fixture metric
 does not qualify a model for learning or acceptance.
 
 `aggregateTasksetRunInProcess` and `executeTasksetMetricInProcess` use an owned
-Node subprocess for hosts such as Bun. The process strips authored TypeScript
+Node subprocess for hosts without Node worker APIs. It strips authored TypeScript
 inside its deadline, evaluates the verified source in the same deterministic
 isolate, and exits before success, failure or cancellation settles. Importing
 the metrics entrypoint does not require Node's type-stripping API on the host.

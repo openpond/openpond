@@ -18,7 +18,7 @@ export function aggregateTasksetRunInWorker(input: TasksetRunEvaluationInput): P
   return aggregateTasksetRunReceipts(input, executeMetric);
 }
 
-/** Bun hosts use the same Node process ownership as verifier/environment
+/** Hosted callers use the same Node process ownership as verifier/environment
  * execution. Type stripping happens in that process within its deadline. */
 export function executeTasksetMetricInProcess(input: TasksetMetricExecutionInput): Promise<TasksetMetricResult> {
   return executeTasksetMetric(input, executeProcessMetric);
