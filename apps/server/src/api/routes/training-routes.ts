@@ -62,6 +62,13 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     sendJson(response, 200, await deps.trainingPayload("activity", {}, requestUrl));
     return true;
   }
+  const hostedRun = /^\/v1\/training\/models\/([^/]+)\/hosted-evaluations(?:\/([^/]+)(?:\/(result|cancel))?)?$/.exec(requestUrl.pathname);
+  if (hostedRun && (request.method === "GET" && hostedRun[3] !== "cancel" || request.method === "POST" && hostedRun[3] === "cancel")) {
+    const action = hostedRun[3] === "cancel" ? "cancel_hosted_taskset_run" : hostedRun[3] === "result" ? "hosted_taskset_run_result" : hostedRun[2] ? "hosted_taskset_run" : "hosted_taskset_runs";
+    const payload = { modelId: decodeURIComponent(hostedRun[1]!), runId: hostedRun[2] ? decodeURIComponent(hostedRun[2]) : undefined, profileId: requestUrl.searchParams.get("profileId"), afterId: requestUrl.searchParams.get("afterId") };
+    sendJson(response, 200, await deps.trainingPayload(action, payload, requestUrl));
+    return true;
+  }
   if (
     request.method === "GET"
     && requestUrl.pathname === "/v1/training/catalog"

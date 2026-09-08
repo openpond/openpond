@@ -19,6 +19,7 @@ import {
 } from "./model-comparison-evaluation";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { LabEvaluationRunCreateDialog } from "./LabEvaluationRunCreateDialog";
+import { LabHostedTasksetRuns } from "./LabHostedTasksetRuns";
 
 export type EvaluationDetailTab = "overview" | "comparison" | "activity";
 
@@ -88,15 +89,16 @@ export function LabEvaluationsPage({
           ? "Compare Model Versions on frozen Taskset and scoring releases."
           : "Evaluation studies and comparable results across Model Projects."}
         metrics={[
-          { label: "Evaluation runs", value: runs.length },
-          { label: "Completed", value: completed.length },
+          { label: "Local evaluation runs", value: runs.length },
+          { label: "Local completed", value: completed.length },
           { label: "Comparable suites", value: comparableSuites },
         ]}
         actions={<button className="training-button" disabled={!state || Boolean(training.busyAction)} type="button" onClick={() => setCreateOpen(true)}>New evaluation run</button>}
       />
       <EvaluationComparisonSummary runs={completed} state={state} />
+      {modelProjectId && projects.get(modelProjectId)?.hosted ? <LabHostedTasksetRuns key={`${projects.get(modelProjectId)!.profileId}:${training.connection?.serverUrl}:${projects.get(modelProjectId)!.hosted!.apiOrigin}:${projects.get(modelProjectId)!.hosted!.teamId}:${modelProjectId}`} model={projects.get(modelProjectId)!} connection={training.connection} /> : null}
       <section className="training-detail-section">
-        <h2>Evaluation history</h2>
+        <h2>Local evaluation history</h2>
         <div className="training-table-wrap">
           <table className="training-data-table">
             <thead>

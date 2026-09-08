@@ -29,6 +29,7 @@ import {
   type HostedModelProjectCatalogItem,
 } from "./hosted-model-project-catalog.js";
 import { hostedModelProjectTrainingSetup } from "./model-project-hosted-projection.js";
+import { createModelTasksetRunHostingService } from "./model-taskset-run-hosting.js";
 import {
   canReplaceFromHosted,
   errorMessage,
@@ -501,7 +502,7 @@ export function createModelProjectHostingService(input: {
     return payload as T;
   }
 
-  return { listProjects, pullProject, publishTaskset, syncProject };
+  return { listProjects, pullProject, publishTaskset, syncProject, tasksetRuns: createModelTasksetRunHostingService(input) };
 
   async function recordTasksetSync(value: {
     projectId: string;

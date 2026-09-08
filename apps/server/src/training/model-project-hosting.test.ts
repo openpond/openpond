@@ -1,8 +1,43 @@
 import { describe, expect, test, vi } from "vitest";
+import { OpenPondModelTasksetRunsClient } from "openpond-sdk/model-taskset-runs";
 
 import { createModelProjectHostingService } from "./model-project-hosting.js";
+import { createModelTasksetRunHostingService } from "./model-taskset-run-hosting.js";
 
 describe("Model Project hosting", () => {
+  // A stale Profile or workspace selection must never send a cancellation to
+  // the currently connected account, even when the caller supplies a run ID.
+  test("rejects hosted evaluation access outside the selected Profile and connection", async () => {
+    const project = { id: "local", profileId: "profile", hosted: { projectId: "hosted", teamId: "team", apiOrigin: "https://host.invalid" } };
+    const request = vi.fn(async (_url: string | URL | Request) => Response.json({ items: [], nextCursor: null }));
+    const service = createModelTasksetRunHostingService({
+      store: { getModelProject: async () => project } as never,
+      resolveAccess: async () => ({ apiBaseUrl: "https://host.invalid", teamId: "team", token: "test" }),
+      fetch: request,
+    });
+    await expect(service.cancel({ modelId: "local", profileId: "other", runId: "run" })).rejects.toThrow("this Profile");
+    project.hosted.teamId = "other";
+    await expect(service.list({ modelId: "local", profileId: "profile" })).rejects.toThrow("active connection");
+    project.hosted.teamId = "team";
+    project.hosted.apiOrigin = "https://other.invalid";
+    await expect(service.cancel({ modelId: "local", profileId: "profile", runId: "run" })).rejects.toThrow("active connection");
+    expect(request).not.toHaveBeenCalled();
+    project.hosted.apiOrigin = "https://host.invalid";
+    expect(await service.list({ modelId: "local", profileId: "profile" })).toEqual({ items: [], nextCursor: null });
+    expect(String(request.mock.calls[0]?.[0])).toContain("modelProjectId=hosted");
+    // The SDK validates the workspace; this service must additionally reject a
+    // valid run belonging to another Model before issuing a destructive call.
+    const get = vi.spyOn(OpenPondModelTasksetRunsClient.prototype, "get").mockResolvedValue({ summary: { modelProjectId: "another-model" } } as never);
+    const cancel = vi.spyOn(OpenPondModelTasksetRunsClient.prototype, "cancel");
+    try {
+      await expect(service.cancel({ modelId: "local", profileId: "profile", runId: "foreign-run" })).rejects.toThrow("another Model");
+      expect(get).toHaveBeenCalledWith("foreign-run");
+      expect(cancel).not.toHaveBeenCalled();
+    } finally {
+      get.mockRestore();
+      cancel.mockRestore();
+    }
+  });
   test("discovers hosted projects and pulls a pristine definition without overwriting local work", async () => {
     const hosted = {
       id: "hosted_project_1",
