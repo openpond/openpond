@@ -199,7 +199,7 @@ export function TrainingCatalogSetup({
         <div>
           <strong>Preparation</strong>
           <span>
-            {preparationStateLabel(
+            {!catalog ? catalogError ? "Unavailable" : "Loading…" : preparationStateLabel(
               selectedCatalogCompatibility?.state ??
                 selectedCatalogModel?.preparationState ??
                 "unsupported",

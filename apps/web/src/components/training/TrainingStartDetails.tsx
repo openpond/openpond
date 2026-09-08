@@ -69,7 +69,7 @@ export function TrainingStartSummary({
   trainingExamples: number;
   availableTrainExamples: number;
   approvedExamples: number;
-  evaluationExamples: number;
+  evaluationExamples: number | null;
   preparedQuote: number | null;
   selectedComputeTarget: TrainingTarget | null;
   approvalPresentation: "inline" | "dialog";
@@ -100,8 +100,8 @@ export function TrainingStartSummary({
       <div>
         <dt>Evaluation</dt>
         <dd>
-          {evaluationExamples} test example
-          {evaluationExamples === 1 ? "" : "s"}
+          {evaluationExamples === null ? "Selected revision unavailable"
+            : `${evaluationExamples} test example${evaluationExamples === 1 ? "" : "s"}`}
         </dd>
       </div>
       <div>

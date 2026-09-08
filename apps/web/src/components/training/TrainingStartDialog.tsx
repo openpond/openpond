@@ -41,6 +41,10 @@ export function TrainingStartDialog({
   baseModelCandidates,
   connection,
   taskset,
+  evaluationTaskset = null,
+  evaluationTasksetSelected = false,
+  initialRecipe,
+  initialApproval,
   learnedPreferenceReward = null,
   modelId = null,
   destinations,
@@ -64,6 +68,8 @@ export function TrainingStartDialog({
   environmentPlacement,
 }: TrainingStartDialogProps) {
   const {
+    savedRecipe,
+    savedRecipeError,
     primaryMethod,
     bootstrap,
     methodOptions,
@@ -113,6 +119,8 @@ export function TrainingStartDialog({
     taskset,
     initialMethod,
     runPreset,
+    initialRecipe,
+    initialApproval,
   });
   const {
     catalog,
@@ -134,7 +142,10 @@ export function TrainingStartDialog({
     method === "dpo"
       ? taskset.learningSignals.preferences.filter((pair) => pair.approved).length
       : taskset.learningSignals.demonstrations.filter((example) => example.approved).length;
-  const evaluationExamples = trainingSplitCount(taskset, "frozen_eval");
+  const evaluationSource = evaluationTaskset ?? taskset;
+  const evaluationExamples = evaluationTasksetSelected && !evaluationTaskset ? null
+    : trainingSplitCount(evaluationSource, "frozen_eval") + trainingSplitCount(evaluationSource, "validation");
+  const evaluationSourceError = evaluationExamples === null ? "The selected held-out Taskset revision is unavailable." : null;
   const selectedBaseModel =
     baseModelCandidates.find((candidate) => candidate.selectionKey === baseModelKey) ?? null;
   const selectedExecutionOption =
@@ -159,7 +170,7 @@ export function TrainingStartDialog({
 
   useEffect(() => {
     if (
-      !selectedComputeTarget ||
+      !catalog || !selectedComputeTarget ||
       selectedComputeTarget.destinationId !== destinationId
     ) {
       return;
@@ -171,22 +182,28 @@ export function TrainingStartDialog({
     });
     if (initializedTargetDefaultsRef.current === key) return;
     initializedTargetDefaultsRef.current = key;
-    setRank(selectedComputeTarget.defaults.loraRank);
-    setRolloutGroupSize(selectedComputeTarget.defaults.rolloutGroupSize);
-    setRolloutConcurrency(selectedComputeTarget.defaults.rolloutConcurrency);
-    setRolloutMaxOutputTokens(selectedComputeTarget.defaults.rolloutOutputTokens);
-    setMaxSteps(selectedComputeTarget.defaults.maxSteps);
-    setMaximumCostUsd(
-      selectedComputeTarget.approvalPolicy?.defaultMaximumSpendUsd ?? null,
-    );
-    setRetentionDays(
-      selectedComputeTarget.approvalPolicy?.defaultRetentionDays ?? 7,
-    );
-    if (selectedComputeTarget.destinationId === "openpond_managed") {
+    if (!savedRecipe) {
+      setRank(selectedComputeTarget.defaults.loraRank);
+      setRolloutGroupSize(selectedComputeTarget.defaults.rolloutGroupSize);
+      setRolloutConcurrency(selectedComputeTarget.defaults.rolloutConcurrency);
+      setRolloutMaxOutputTokens(selectedComputeTarget.defaults.rolloutOutputTokens);
+      setMaxSteps(selectedComputeTarget.defaults.maxSteps);
+    }
+    if (initialApproval?.maximumCostUsd == null) {
+      setMaximumCostUsd(selectedComputeTarget.approvalPolicy?.defaultMaximumSpendUsd ?? null);
+    }
+    if (initialApproval?.retentionDays == null) {
+      setRetentionDays(selectedComputeTarget.approvalPolicy?.defaultRetentionDays ?? 7);
+    }
+    if (!savedRecipe && selectedComputeTarget.destinationId === "openpond_managed") {
       setLearningRate(0.00001);
       setSequenceLength(4_096);
     }
   }, [
+    catalog,
+    savedRecipe,
+    initialApproval?.maximumCostUsd,
+    initialApproval?.retentionDays,
     destinationId,
     selectedComputeTarget,
     setLearningRate,
@@ -240,6 +257,7 @@ export function TrainingStartDialog({
       })
     : null;
   const configurationCompatible = Boolean(
+    catalog && !savedRecipeError && !evaluationSourceError &&
     taskset.readiness?.ready &&
     executableMethod &&
     destination?.available &&
@@ -252,7 +270,9 @@ export function TrainingStartDialog({
     rolloutIncompatibility === null,
   );
   const compatible = configurationCompatible && approvalReady;
-  const configurationIncompatibility = !taskset.readiness?.ready
+  const configurationIncompatibility = savedRecipeError ?? evaluationSourceError ?? (!catalog
+    ? catalogError ?? "Loading the training catalog."
+    : !taskset.readiness?.ready
     ? "The Taskset must pass environment, grader, and data readiness before training."
     : !executableMethod
       ? `${method.toUpperCase()} is the primary recommendation but no compatible execution backend is available here.${bootstrap ? " Choose the optional SFT trajectory bootstrap to run the local precursor." : ""}`
@@ -267,7 +287,7 @@ export function TrainingStartDialog({
               "The selected base model cannot run on this compute destination.")
             : !destination?.methods.includes(method as never)
                 ? `${destinationLabel(destinationId)} does not execute ${method.toUpperCase()}.`
-                : (destination?.unavailableReason ?? null);
+                : (destination?.unavailableReason ?? null));
   const launchIncompatibility =
     configurationIncompatibility ??
     rolloutIncompatibility ??
@@ -285,6 +305,7 @@ export function TrainingStartDialog({
           ? "Choose a provider retention record from 1 through 30 days."
           : null);
   const recipe = trainingRecipe({
+    savedRecipe,
     method,
     taskset,
     destinationId,
@@ -347,6 +368,7 @@ export function TrainingStartDialog({
     next: TrainingDestinationId,
     target = catalogTargets.find((candidate) => candidate.destinationId === next),
   ) {
+    if (next === destinationId) return;
     setDestinationId(next);
     setBaseModelKey((current) =>
       preserveBaseModelSelection(baseModelCandidates, current, next, method),
@@ -468,6 +490,7 @@ export function TrainingStartDialog({
   ]);
 
   useEffect(() => {
+    if (!catalog || savedRecipeError) return;
     onConfigurationChange?.({
       baseModel: selectedBaseModel?.preference ?? null,
       method,
@@ -475,7 +498,7 @@ export function TrainingStartDialog({
       recipe,
       approval,
     });
-  }, [configurationKey, onConfigurationChange]);
+  }, [catalog, savedRecipeError, configurationKey, onConfigurationChange]);
 
   const providerApprovalFields = approvalPolicy ? (
     <TrainingProviderApprovalFields

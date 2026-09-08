@@ -225,6 +225,8 @@ export function ModelRunEditorPage({
         method: current.method ?? configuration.method,
         destinationId: configuration.destinationId,
         recipe: configuration.recipe,
+        preferredMaximumSpendUsd: configuration.approval.maximumCostUsd,
+        preferredRetentionDays: configuration.approval.retentionDays,
         updatedAt: new Date().toISOString(),
       }));
     },

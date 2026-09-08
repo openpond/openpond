@@ -55,7 +55,7 @@ export function selectableMethods(taskset: Taskset): PortableTrainingMethod[] {
 
 export function trainingSplitCount(
   taskset: Taskset,
-  split: "train" | "frozen_eval",
+  split: "train" | "validation" | "frozen_eval",
 ): number {
   return (
     taskset.datasetArtifact?.splitCounts[split] ??
