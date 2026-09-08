@@ -16,6 +16,7 @@ const RequestSchema = z.object({
   maxToolTurns: z.number().int().min(1).max(64),
   timeoutMs: z.number().int().min(1).max(3_600_000),
   policyRequest: z.record(z.string(), z.unknown()),
+  sandboxId: z.string().min(1).optional(),
 }).strict();
 
 /** JSONL policy port for the same app-server used by hosted Work. The host owns
@@ -23,12 +24,12 @@ const RequestSchema = z.object({
 export async function runManagedRlWorkCommand(requestPath: string): Promise<void> {
   const request = RequestSchema.parse(JSON.parse(await readFile(requestPath, "utf8")));
   const cancelled = new AbortController();
-  const pending = new Map<number, { resolve(value: Record<string, unknown>): void; reject(error: unknown): void }>();
+  const pending = new Map<number, { resolve(value: unknown): void; reject(error: unknown): void }>();
   let sequence = 0;
   const lines = readline.createInterface({ input: process.stdin });
   lines.on("line", line => {
     try {
-      const response = z.object({ id: z.number().int().nonnegative(), result: z.record(z.string(), z.unknown()) }).strict().parse(JSON.parse(line));
+      const response = z.object({ id: z.number().int().nonnegative(), result: z.unknown() }).strict().parse(JSON.parse(line));
       const waiter = pending.get(response.id);
       if (!waiter) throw new Error("Unexpected Work policy response.");
       pending.delete(response.id);
@@ -41,23 +42,31 @@ export async function runManagedRlWorkCommand(requestPath: string): Promise<void
   const stop = () => cancelled.abort(new Error("Managed Work process interrupted."));
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
+  const signal = AbortSignal.any([cancelled.signal, AbortSignal.timeout(request.timeoutMs)]);
+  function exchange(type: "policy_request" | "sandbox_request", body: unknown, requestSignal: AbortSignal): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      const id = sequence++;
+      const abort = () => { pending.delete(id); reject(requestSignal.reason); };
+      requestSignal.addEventListener("abort", abort, { once: true });
+      pending.set(id, {
+        resolve(value) { requestSignal.removeEventListener("abort", abort); resolve(value); },
+        reject(error) { requestSignal.removeEventListener("abort", abort); reject(error); },
+      });
+      if (requestSignal.aborted) { abort(); return; }
+      process.stdout.write(`${JSON.stringify({ type, id, request: body })}\n`);
+    });
+  }
   try {
     await mkdir(request.scratchDir, { recursive: true });
     const result = await executeManagedRlWorkTurn({
       ...request,
-      signal: AbortSignal.any([cancelled.signal, AbortSignal.timeout(request.timeoutMs)]),
-      complete(body, signal) {
-        return new Promise((resolve, reject) => {
-          const id = sequence++;
-          const abort = () => { pending.delete(id); reject(signal.reason); };
-          signal.addEventListener("abort", abort, { once: true });
-          pending.set(id, {
-            resolve(value) { signal.removeEventListener("abort", abort); resolve(value); },
-            reject(error) { signal.removeEventListener("abort", abort); reject(error); },
-          });
-          if (signal.aborted) { abort(); return; }
-          process.stdout.write(`${JSON.stringify({ type: "policy_request", id, request: body })}\n`);
-        });
+      signal,
+      ...(request.sandboxId ? { sandbox: {
+        id: request.sandboxId,
+        request: action => exchange("sandbox_request", action, signal),
+      } } : {}),
+      async complete(body, requestSignal) {
+        return z.record(z.string(), z.unknown()).parse(await exchange("policy_request", body, requestSignal));
       },
     });
     process.stdout.write(`${JSON.stringify({ type: "result", schemaVersion: "openpond.managedRlWorkResult.v1", ...result })}\n`);

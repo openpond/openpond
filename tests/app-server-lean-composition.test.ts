@@ -196,6 +196,7 @@ describe("lean app-server composition", () => {
       schemaVersion: "openpond.managedRlWorkRequest.v1", workspaceDir, scratchDir: directory,
       harnessSource: capturedHarnessSource, prompt: "Return a completion.", parentRunId: "transport-test",
       maxToolTurns: 4, timeoutMs: 15_000, policyRequest: { deliveryId: "transport-test" },
+      sandboxId: "training-rollout-sandbox",
     }));
     const messages: Array<Record<string, any>> = [];
     const child = spawn(process.execPath, ["--import", "tsx", "apps/server/src/app-server-entry.ts", "--managed-rl-work-request", requestPath], {
@@ -204,19 +205,46 @@ describe("lean app-server composition", () => {
     let stderr = "";
     child.stderr.on("data", chunk => { stderr += String(chunk); });
     const lines = readline.createInterface({ input: child.stdout });
+    const remoteFiles = new Map<string, string>();
+    let transportRound = 0;
     lines.on("line", line => {
       const message = JSON.parse(line);
       messages.push(message);
-      if (message.type === "policy_request") child.stdin.write(`${JSON.stringify({ id: message.id, result: {
-        response: { choices: [{ message: { content: "Transport completed." } }] }, trainingSample: { transport: true },
-      } })}\n`);
+      if (message.type === "policy_request") {
+        const completion = transportRound++ === 0 ? { content: null, tool_calls: [{
+          id: "remote-training-write", type: "function", function: {
+            name: "work_write_file", arguments: JSON.stringify({
+              area: "outputs", path: "transport-proof.txt", content: "remote-training-ok",
+            }),
+          },
+        }] } : { content: "Transport completed." };
+        child.stdin.write(`${JSON.stringify({ id: message.id, result: {
+          response: { choices: [{ message: completion }] }, trainingSample: { transport: true },
+        } })}\n`);
+      } else if (message.type === "sandbox_request") {
+        const action = message.request;
+        let result: unknown = { sandbox: { id: action.sandboxId, state: "running", status: "running" } };
+        if (action.type === "upload_file") {
+          remoteFiles.set(action.payload.path, action.payload.contents);
+          result = { file: { path: action.payload.path } };
+        }
+        child.stdin.write(`${JSON.stringify({ id: message.id, result })}\n`);
+      }
     });
     const exit = await new Promise<number | null>((resolve, reject) => {
       child.once("error", reject); child.once("close", resolve);
     });
     expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
-    expect(messages.map(message => message.type)).toEqual(["policy_request", "result"]);
-    expect(messages[1]?.policyResults[0]?.trainingSample).toEqual({ transport: true });
+    expect(messages.at(-1)?.type).toBe("result");
+    expect(messages.at(-1)?.policyResults).toHaveLength(2);
+    expect(messages.at(-1)?.policyResults[0]?.trainingSample).toEqual({ transport: true });
+    expect(remoteFiles.get("outputs/transport-proof.txt")).toContain("remote-training-ok");
+    expect(messages.filter(message => message.type === "sandbox_request").every(message =>
+      message.request.sandboxId === "training-rollout-sandbox")).toBe(true);
+    const policyTools = messages.filter(message => message.type === "policy_request")
+      .flatMap(message => message.request.tools).map(tool => tool.function.name);
+    expect(policyTools).not.toContain("exec_command");
+    await expect(readFile(path.join(workspaceDir, "outputs", "transport-proof.txt"))).rejects.toMatchObject({ code: "ENOENT" });
     expect((await readdir(directory)).filter(name => name.startsWith("work-attempt-"))).toEqual([]);
   }, 30_000);
 

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { createOpenPondAppServer } from "../app-server-runtime.js";
 import { parseManagedRlPolicyCompletion } from "./marketing-portfolio-rollout.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
+import type { AppServerSandboxRequest } from "../runtime/app-server-sandbox-tools.js";
 
 /** Run one training attempt through the normal Work engine. The caller owns
  * task setup and grading; this adapter only supplies the learner policy port. */
@@ -20,6 +21,10 @@ export async function executeManagedRlWorkTurn(input: {
   maxToolTurns: number;
   policyRequest: Record<string, unknown>;
   signal: AbortSignal;
+  sandbox?: {
+    id: string;
+    request: AppServerSandboxRequest;
+  };
   complete(request: Record<string, unknown>, signal: AbortSignal): Promise<Record<string, unknown>>;
 }) {
   input.signal.throwIfAborted();
@@ -39,6 +44,15 @@ export async function executeManagedRlWorkTurn(input: {
       storeDir,
       workspaceDir: input.workspaceDir,
       capturedHarnessSource: input.harnessSource,
+      ...(input.sandbox ? { sandboxRequest: async (action) => {
+        input.signal.throwIfAborted();
+        if (!("sandboxId" in action) || action.sandboxId !== input.sandbox!.id) {
+          throw new Error("Training tools must target the assigned rollout sandbox.");
+        }
+        const result = await input.sandbox!.request(action);
+        input.signal.throwIfAborted();
+        return result;
+      } } : {}),
       maxHostedWorkspaceToolRounds: input.maxToolTurns,
       streamOpenPondHostedChatTurn: async function* (request) {
         const signal = request.signal ? AbortSignal.any([input.signal, request.signal]) : input.signal;
@@ -83,10 +97,11 @@ export async function executeManagedRlWorkTurn(input: {
     const { thread } = z.object({ thread: SessionSchema }).parse(await server.runtime.threadStart({
       session: {
         provider: "openpond", modelRef, experience: "work",
-        openPondCommandAccessMode: "full-access",
+        openPondCommandAccessMode: input.sandbox ? "disabled" : "full-access",
+        ...(input.sandbox ? { workspaceKind: "sandbox", workspaceId: input.sandbox.id } : {}),
         cwd: input.workspaceDir, title: "Training attempt",
         metadata: {
-          workspaceTarget: "local", automatedTasksetWorkAttempt: true,
+          workspaceTarget: input.sandbox ? "hybrid" : "local", automatedTasksetWorkAttempt: true,
           parentModelRunId: input.parentRunId,
         },
       },
