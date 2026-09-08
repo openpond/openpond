@@ -29,8 +29,11 @@ it("executes imported ordinary tool packages without a learning-store binding", 
     await store.upsertTaskset(prepared.taskset);
     let turns = 0;
     let expectedValue = 1;
+    let expectedInstructions = "";
     const service = createTaskEvaluationService({ store, storeDir: home, modelText: async () => { throw new Error("Text-only execution must not run."); },
       modelStream: async function* (request) {
+        expect(request.messages.find(message => message.role === "system")?.content)
+          .toBe(`${expectedInstructions}\n${JSON.stringify({ policyVisibleContext: prepared.taskset.tasks[0]!.policyVisibleContext })}`);
         expect(JSON.stringify(request.messages)).not.toContain("private-initial-state");
         expect(JSON.stringify(request.messages)).not.toContain("export function");
         if (turns++ === 0) yield { toolCalls: [{ id: "ordinary-inspect", type: "function", function: { name: "inspect", arguments: "{}" } }] };
@@ -52,6 +55,9 @@ it("executes imported ordinary tool packages without a learning-store binding", 
     const api = createTrainingApi({ store, storeDir: home, evaluation: service } as never);
     const source = await api.request("inspect_taskset_draft_source", { profileId: model.profileId, modelId: model.id, expectedModelRevision: model.revision }) as { sourcePackageHash: string };
     let draft = await api.request("init_taskset_draft", { profileId: model.profileId, sourceRequest: { schemaVersion: "openpond.modelTasksetDraftRequest.v1", operationId: "revise-world", modelId: model.id, expectedModelRevision: model.revision, sourcePackageHash: source.sourcePackageHash } }) as TasksetDraft;
+    expect(draft.objective).toBe("");
+    await expect(api.request("publish_taskset_draft", { draftId: draft.id })).rejects.toThrow("Objective is required");
+    draft = await api.request("save_taskset_draft", { draft: { ...draft, objective: "Inspect the world and report its observed value." } }) as TasksetDraft;
     await expect(api.request("publish_taskset_draft", { draftId: draft.id })).rejects.toThrow("secret scanning");
     // This fixture is original synthetic source. Import itself must not grant
     // the authoring approval; explicitly record its reviewed source status.
@@ -64,12 +70,12 @@ it("executes imported ordinary tool packages without a learning-store binding", 
     const published = await api.request("publish_taskset_draft", { draftId: draft.id }) as { taskset: Taskset };
     expect(published.taskset.id).not.toBe(prepared.taskset.id);
     expect((await store.getModelProject(model.id))!.trainingSetup.tasksetRef?.contentHash).toBe(published.taskset.contentHash);
-    turns = 0; expectedValue = 2;
+    turns = 0; expectedValue = 2; expectedInstructions = draft.objective;
     const revised = await service.execute({ tasksetId: published.taskset.id, taskId: "inspect-task", model: { providerId: "openpond", modelId: "fixture" }, seed: 17, attempt: 0 });
     expect(revised.attempt.output).toEqual({ text: "2" });
     expect(revised.grade).toMatchObject({ score: 1, passed: true });
     expect(revised.portable.environmentRelease.contentHash).not.toBe(result.portable.environmentRelease.contentHash);
-    turns = 0; expectedValue = 1;
+    turns = 0; expectedValue = 1; expectedInstructions = "";
     const original = await service.execute({ tasksetId: prepared.taskset.id, taskId: "inspect-task", model: { providerId: "openpond", modelId: "fixture" }, seed: 18, attempt: 0 });
     expect(original.attempt.output).toEqual({ text: "1" });
     expect(original.portable.environmentRelease).toEqual(result.portable.environmentRelease);
