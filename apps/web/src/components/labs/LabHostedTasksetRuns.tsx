@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ModelProject } from "@openpond/contracts";
-import { ModelTasksetRunPageSchema, verifyModelTasksetRunResult, type ModelTasksetRunResult } from "openpond-sdk/model-taskset-runs";
+import type { ModelTasksetRunPageSchema, ModelTasksetRunResult } from "openpond-sdk/model-taskset-runs";
 import { api, type ClientConnection } from "../../api";
 
 type Page = ReturnType<typeof ModelTasksetRunPageSchema.parse>;
@@ -20,7 +20,8 @@ export function LabHostedTasksetRuns({ model, connection }: { model: ModelProjec
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       try {
-        const value = ModelTasksetRunPageSchema.parse(await api.trainingRequest(connection, `${base}?${query}${after ? `&afterId=${encodeURIComponent(after)}` : ""}`, {}, "GET"));
+        // The Desktop server verifies SDK schemas, hashes and Model ownership.
+        const value = await api.trainingRequest<Page>(connection, `${base}?${query}${after ? `&afterId=${encodeURIComponent(after)}` : ""}`, {}, "GET");
         if (!stopped) { setPage(value); setError(null); }
       } catch (cause) { if (!stopped) setError(cause instanceof Error ? cause.message : "Hosted evaluations could not be loaded."); }
       finally { if (!stopped) timer = setTimeout(() => void load(), 5_000); }
@@ -31,7 +32,7 @@ export function LabHostedTasksetRuns({ model, connection }: { model: ModelProjec
   async function open(id: string) {
     if (!connection || busy) return;
     setBusy(true); setError(null);
-    try { setResult(await verifyModelTasksetRunResult(await api.trainingRequest(connection, `${base}/${encodeURIComponent(id)}/result?${query}`, {}, "GET"))); setVisible(50); }
+    try { setResult(await api.trainingRequest<ModelTasksetRunResult>(connection, `${base}/${encodeURIComponent(id)}/result?${query}`, {}, "GET")); setVisible(50); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "The hosted result could not be read."); }
     finally { setBusy(false); }
   }
@@ -40,7 +41,7 @@ export function LabHostedTasksetRuns({ model, connection }: { model: ModelProjec
     setBusy(true); setError(null);
     try {
       await api.trainingRequest(connection, `${base}/${encodeURIComponent(id)}/cancel?${query}`, {}, "POST");
-      setPage(ModelTasksetRunPageSchema.parse(await api.trainingRequest(connection, `${base}?${query}${after ? `&afterId=${encodeURIComponent(after)}` : ""}`, {}, "GET")));
+      setPage(await api.trainingRequest<Page>(connection, `${base}?${query}${after ? `&afterId=${encodeURIComponent(after)}` : ""}`, {}, "GET"));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The hosted evaluation could not be cancelled."); }
     finally { setBusy(false); }
   }
