@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   managedRlSandboxCompletion,
-  resolveManagedRlExecutionTask,
-} from "./managed-rl-local-rollout-executor.js";
+  resolveTrainingExecutionTask,
+} from "./training-local-rollout-executor.js";
 
 function taskset(
   id: string,
@@ -20,14 +20,14 @@ function taskset(
   } as Taskset;
 }
 
-describe("Managed RL local execution task resolution", () => {
+describe("Training local execution task resolution", () => {
   it("resolves a private validation claim from its exact validation Taskset", () => {
     const training = taskset("training", [{ id: "train-1", split: "train" }]);
     const validation = taskset("development", [
       { id: "validation-1", split: "validation" },
     ]);
 
-    const result = resolveManagedRlExecutionTask({
+    const result = resolveTrainingExecutionTask({
       claimTaskId: "validation-1",
       trainingTaskset: training,
       validationTaskset: validation,

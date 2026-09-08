@@ -9,15 +9,14 @@ export async function materializeHarnessSource(input: {
   storeDir: string;
   harnessHash: string;
   files: ImmutableAssetRef[];
-}): Promise<void> {
+}): Promise<ReadonlyMap<string, Uint8Array>> {
   const root = path.join(input.storeDir, "training", "harnesses", input.harnessHash, "source");
   let exists = false;
   try { await access(root); exists = true; } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   if (exists) {
-    await verifyFiles(root, input.files);
-    return;
+    return verifyFiles(root, input.files);
   }
   await mkdir(path.dirname(root), { recursive: true });
   const temporary = `${root}.materializing-${randomUUID()}`;
@@ -33,13 +32,15 @@ export async function materializeHarnessSource(input: {
     try { await rename(temporary, root); } catch (error) {
       if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
     }
-    await verifyFiles(root, input.files);
+    return await verifyFiles(root, input.files);
   } finally { await rm(temporary, { recursive: true, force: true }); }
 }
 
 async function verifyFiles(root: string, files: ImmutableAssetRef[]) {
   const resolved = await realpath(root);
-  for (const file of files) await readVerifiedFile(resolved, file);
+  const bytes = new Map<string, Uint8Array>();
+  for (const file of files) bytes.set(file.path, await readVerifiedFile(resolved, file));
+  return bytes;
 }
 
 async function readVerifiedFile(root: string, file: ImmutableAssetRef) {

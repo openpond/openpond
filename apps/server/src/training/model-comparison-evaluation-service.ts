@@ -22,9 +22,9 @@ import type { SqliteStore } from "../store/store.js";
 import type { createModelComparisonSeriesService } from "./model-comparison-series-service.js";
 import {
   declaredEnvironmentId,
-  resolveManagedRlHarnessAdapter,
-} from "./managed-rl-harness-registry.js";
-import "./portable-jsonl-managed-rl-adapter.js";
+  resolveTrainingHarnessAdapter,
+} from "./training-harness-registry.js";
+import "./portable-jsonl-training-adapter.js";
 import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
 import { NativeToolCallAccumulator } from "../openpond/native-tool-calls.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
@@ -545,7 +545,7 @@ export function createModelComparisonEvaluationService(deps: {
               const capability = input.targetEntry || input.managedCheckpointId
                 ? await requestJson<{ token: string; source: { policyVersion: number } }>(access!, fetchImpl, `/v1/managed-rl/serving-soaks/${encodeURIComponent(soak!.job.id)}/deliveries`, { method: "POST", body: JSON.stringify({ deliveryId }) })
                 : { token: "external-reference", source: { policyVersion: 0 } };
-              const adapter = resolveManagedRlHarnessAdapter({
+              const adapter = resolveTrainingHarnessAdapter({
                 taskset: input.taskset,
                 environmentId: declaredEnvironmentId(input.taskset),
               });

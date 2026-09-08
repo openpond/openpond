@@ -4,17 +4,18 @@ import type {
   TrainingExecutionRef,
 } from "@openpond/contracts";
 
-import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
+import { TrainingLocalRolloutExecutor } from "./training-local-rollout-executor.js";
 import type {
   ManagedTrainingAccess,
   OpenPondManagedTrainingAdapterDependencies,
 } from "./openpond-managed-training-adapter-support.js";
 import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
+import { loadTrainingHarnessSource } from "./training-harness-source.js";
 
-export async function ensureManagedRlLocalExecutor(input: {
+export async function ensureTrainingLocalExecutor(input: {
   access: ManagedTrainingAccess;
   dependencies: OpenPondManagedTrainingAdapterDependencies;
-  executors: Map<string, ManagedRlLocalRolloutExecutor>;
+  executors: Map<string, TrainingLocalRolloutExecutor>;
   fetchImpl: typeof fetch;
   harnessReleaseHash?: string;
   ref: TrainingExecutionRef;
@@ -22,7 +23,7 @@ export async function ensureManagedRlLocalExecutor(input: {
 }): Promise<void> {
   if (input.executors.has(input.ref.runId)) return;
   if (!input.harnessReleaseHash) {
-    throw new Error("Managed local rollout is missing its Harness release hash.");
+    throw new Error("Local training rollout is missing its Harness release hash.");
   }
 
   let validationTaskset = input.validationTaskset;
@@ -39,7 +40,7 @@ export async function ensureManagedRlLocalExecutor(input: {
       || !trainingTaskset
       || trainingTaskset.contentHash !== trainingPlan.tasksetHash
     ) {
-      throw new Error("Managed local rollout cannot restore its Taskset lineage.");
+      throw new Error("Local training rollout cannot restore its Taskset lineage.");
     }
     validationTaskset = (
       await resolveManagedValidationTaskSource({
@@ -51,7 +52,12 @@ export async function ensureManagedRlLocalExecutor(input: {
   }
 
   if (input.executors.has(input.ref.runId)) return;
-  const executor = new ManagedRlLocalRolloutExecutor({
+  if (!input.ref.manifestHash) throw new Error("Local training rollout is missing its run manifest hash.");
+  const admittedHarness = await loadTrainingHarnessSource({ storeDir: input.dependencies.storeDir, manifestHash: input.ref.manifestHash });
+  if (admittedHarness.selection.harnessRelease.contentHash !== input.harnessReleaseHash) {
+    throw new Error("Local training rollout differs from its admitted Harness release.");
+  }
+  const executor = new TrainingLocalRolloutExecutor({
     runId: input.ref.runId,
     access: input.access,
     fetchImpl: input.fetchImpl,
@@ -66,6 +72,7 @@ export async function ensureManagedRlLocalExecutor(input: {
       "source",
     ),
     validationTaskset,
+    admittedHarness,
   });
   input.executors.set(input.ref.runId, executor);
   executor.start();

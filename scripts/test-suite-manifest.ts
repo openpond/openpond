@@ -57,6 +57,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/release-version.test.ts",
   "tests/remove-openpond-account.test.ts",
   "tests/resolved-training-bundle-release-isolation.test.ts",
+  "tests/portable-jsonl-harness-source.test.ts",
   "tests/reward-model-qualification-store.test.ts",
   "tests/runtime-event-bus.test.ts",
   "tests/scripted-chat-provider.test.ts",

@@ -19,6 +19,7 @@ import {
   type TrainingDestinationId,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
+import type { HarnessSourcePackage } from "@openpond/harness";
 import {
   TrainingAdapterRegistry,
   buildTasksetTrainingBundle,
@@ -78,6 +79,7 @@ export function createPortableModelRunService(deps: {
   }) => Promise<{
     harnessRelease: { id: string; contentHash: string };
     tasksetRelease: { id: string; contentHash: string };
+    harnessSource: HarnessSourcePackage | null;
   }>;
 }) {
   const reconciliationIntervalMs = 5_000;
@@ -158,7 +160,7 @@ export function createPortableModelRunService(deps: {
       trainingSetup: {
         ...setup,
         recipe,
-        harnessRelease: releasedHarness.harnessRelease,
+        harnessRelease: setup.harnessRelease,
         tasksetRelease: releasedHarness.tasksetRelease,
       },
     };
@@ -250,6 +252,7 @@ export function createPortableModelRunService(deps: {
           : "openpond.localTrainingWorker.v1",
       harnessRelease: releasedHarness.harnessRelease,
       tasksetRelease: releasedHarness.tasksetRelease,
+      harnessSource: releasedHarness.harnessSource,
       tasksetAssetBytes,
     });
     const resolvedPlanBase = {

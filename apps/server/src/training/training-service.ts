@@ -10,7 +10,7 @@ import {
   type Taskset,
 } from "@openpond/contracts";
 import type { PreferenceDatasetRelease, TasksetRelease } from "@openpond/evals";
-import { contentHash } from "@openpond/harness";
+import { contentHash, createHarnessSourcePackage } from "@openpond/harness";
 import { OpenPondTrainingApiError } from "openpond-sdk/training";
 import {
   TrainingAdapterRegistry,
@@ -220,18 +220,23 @@ export function createTrainingService(deps: {
         throw new Error("The configured Taskset release does not match the selected Taskset revision.");
       }
       const sourcePath = releasedHarness?.sourcePath;
-      if (releasedHarness && context.harnessRelease.files.length && !sourcePath) {
+      if (releasedHarness && !sourcePath) {
         throw new Error("The selected Harness release has no verified execution source.");
       }
-      if (sourcePath) {
-        await materializeHarnessSource({
+      const sourceFiles = sourcePath
+        ? await materializeHarnessSource({
           sourcePath,
           storeDir: deps.storeDir,
           harnessHash: context.harnessRelease.contentHash,
           files: context.harnessRelease.files,
-        });
-      }
+        })
+        : null;
       return {
+        harnessSource: releasedHarness && sourceFiles ? createHarnessSourcePackage({
+          agentSnapshot: context.agentSnapshot,
+          harnessRelease: context.harnessRelease,
+          files: sourceFiles,
+        }) : null,
         harnessRelease: {
           id: context.harnessRelease.id,
           contentHash: context.harnessRelease.contentHash,

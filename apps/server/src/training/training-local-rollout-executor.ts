@@ -3,20 +3,21 @@ import { randomUUID } from "node:crypto";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
 import type { TaskDataRecord, Taskset } from "@openpond/contracts";
-import "./marketing-portfolio-managed-rl-adapter.js";
-import "./portable-jsonl-managed-rl-adapter.js";
+import type { HarnessSourcePackage, HarnessSourceSelection } from "@openpond/harness";
+import "./marketing-portfolio-training-adapter.js";
+import "./portable-jsonl-training-adapter.js";
 import {
-  resolveManagedRlHarnessAdapter,
-  type ManagedRlLocalRolloutClaim,
-} from "./managed-rl-harness-registry.js";
+  resolveTrainingHarnessAdapter,
+  type TrainingLocalRolloutClaim,
+} from "./training-harness-registry.js";
 
-export type ManagedRlLocalExecutorAccess = {
+export type TrainingLocalExecutorAccess = {
   apiBaseUrl: string;
   token: string;
   teamId: string;
 };
 
-type LocalRolloutClaim = ManagedRlLocalRolloutClaim;
+type LocalRolloutClaim = TrainingLocalRolloutClaim;
 
 type ClaimResponse = {
   jobState: string;
@@ -29,7 +30,7 @@ const EXECUTION_ATTEMPTS = 3;
 const COMPLETION_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 100;
 
-export class ManagedRlLocalRolloutExecutor {
+export class TrainingLocalRolloutExecutor {
   readonly executorId: string;
   private readonly active = new Set<Promise<void>>();
   private stopped = false;
@@ -40,7 +41,7 @@ export class ManagedRlLocalRolloutExecutor {
   constructor(
     private readonly input: {
       runId: string;
-      access: ManagedRlLocalExecutorAccess;
+      access: TrainingLocalExecutorAccess;
       fetchImpl?: typeof fetch;
       executorId?: string;
       env?: Record<string, string | undefined>;
@@ -48,6 +49,7 @@ export class ManagedRlLocalRolloutExecutor {
       storeDir: string;
       harnessRoot: string;
       validationTaskset?: Taskset;
+      admittedHarness?: { selection: HarnessSourceSelection; sourcePackage: HarnessSourcePackage | null };
     },
   ) {
     this.executorId = input.executorId ?? `openpond-desktop:${randomUUID()}`;
@@ -149,9 +151,14 @@ export class ManagedRlLocalRolloutExecutor {
   private async executeOnce(
     claim: LocalRolloutClaim,
   ): Promise<Record<string, unknown>> {
+    const selected = this.input.admittedHarness?.selection.harnessRelease;
+    if (selected && (claim.harnessRelease.id !== selected.id || claim.harnessRelease.contentHash !== selected.contentHash)) {
+      throw new Error("Local training claim differs from its admitted Harness release.");
+    }
     if (claim.reward.kind === "local_harness_receipt_v1") {
       return this.executeLocalHarness(claim, claim.reward.environmentId);
     }
+    if (this.input.admittedHarness?.sourcePackage) throw new Error("Selected Harness source requires a source-aware local execution adapter.");
     const policyResult = await this.policyRequest(
       claim.policy.path,
       claim.policy.token,
@@ -185,20 +192,22 @@ export class ManagedRlLocalRolloutExecutor {
       claim.taskset.contentHash,
     );
     if (!taskset) throw new Error("managed_rl_local_taskset_missing");
-    const execution = resolveManagedRlExecutionTask({
+    const execution = resolveTrainingExecutionTask({
       claimTaskId: claim.task.id,
       trainingTaskset: taskset,
       validationTaskset: this.input.validationTaskset,
     });
-    const adapter = resolveManagedRlHarnessAdapter({
+    const adapter = resolveTrainingHarnessAdapter({
       taskset: execution.taskset,
       environmentId,
     });
+    if (this.input.admittedHarness?.sourcePackage && !adapter.validateSource) throw new Error("This local adapter does not execute selected Harness source.");
     return adapter.execute({
       claim,
       taskset: execution.taskset,
       task: execution.task,
       harnessRoot: this.input.harnessRoot,
+      harnessSource: this.input.admittedHarness?.sourcePackage ?? null,
       storeDir: this.input.storeDir,
       executorId: this.executorId,
       signal: this.abortController.signal,
@@ -279,7 +288,7 @@ export class ManagedRlLocalRolloutExecutor {
   }
 }
 
-export function resolveManagedRlExecutionTask(input: {
+export function resolveTrainingExecutionTask(input: {
   claimTaskId: string;
   trainingTaskset: Taskset;
   validationTaskset?: Taskset;
@@ -348,7 +357,7 @@ async function requestJson<T>(fetchImpl: typeof fetch, url: string, init: Reques
         ? payload.message
         : typeof payload.error === "string"
           ? payload.error
-          : `Managed RL desktop executor request failed (${response.status}).`,
+          : `Training desktop executor request failed (${response.status}).`,
     );
   }
   return payload as T;

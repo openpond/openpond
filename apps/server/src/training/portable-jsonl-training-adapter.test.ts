@@ -6,8 +6,8 @@ import path from "node:path";
 import type { Taskset } from "@openpond/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ManagedRlHarnessExecutionInput } from "./managed-rl-harness-registry.js";
-import { executePortableJsonlManagedRl } from "./portable-jsonl-managed-rl-adapter.js";
+import type { TrainingHarnessExecutionInput } from "./training-harness-registry.js";
+import { executePortableJsonlTraining } from "./portable-jsonl-training-adapter.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -17,11 +17,11 @@ afterEach(async () => {
   )));
 });
 
-describe("portable JSONL managed-RL runtime", () => {
+describe("portable JSONL training runtime", () => {
   it("rejects a user-owned verifier whose contents do not match its declared hash", async () => {
     const fixture = await runtimeFixture({ moduleSha256: "0".repeat(64) });
 
-    await expect(executePortableJsonlManagedRl(fixture.input)).rejects.toThrow(
+    await expect(executePortableJsonlTraining(fixture.input)).rejects.toThrow(
       "portable_jsonl_module_hash_mismatch",
     );
     expect(fixture.policyRequests).toBe(0);
@@ -30,7 +30,7 @@ describe("portable JSONL managed-RL runtime", () => {
   it("rejects verifier modules outside the declared Taskset directory", async () => {
     const fixture = await runtimeFixture({ externalModule: true });
 
-    await expect(executePortableJsonlManagedRl(fixture.input)).rejects.toThrow(
+    await expect(executePortableJsonlTraining(fixture.input)).rejects.toThrow(
       "portable_jsonl_module_outside_taskset",
     );
     expect(fixture.policyRequests).toBe(0);
@@ -40,7 +40,7 @@ describe("portable JSONL managed-RL runtime", () => {
 async function runtimeFixture(options: {
   externalModule?: boolean;
   moduleSha256?: string;
-}): Promise<{ input: ManagedRlHarnessExecutionInput; policyRequests: number }> {
+}): Promise<{ input: TrainingHarnessExecutionInput; policyRequests: number }> {
   const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-portable-runtime-"));
   temporaryDirectories.push(storeDir);
   const sourceTasksetId = "user-owned-taskset";
@@ -86,7 +86,7 @@ async function runtimeFixture(options: {
       policyRequests += 1;
       return {};
     },
-  } as unknown as ManagedRlHarnessExecutionInput;
+  } as unknown as TrainingHarnessExecutionInput;
   return {
     input,
     get policyRequests() {

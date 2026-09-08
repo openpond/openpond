@@ -1,6 +1,7 @@
 import type { TaskDataRecord, Taskset } from "@openpond/contracts";
+import type { HarnessSourcePackage } from "@openpond/harness";
 
-export type ManagedRlLocalRolloutClaim = {
+export type TrainingLocalRolloutClaim = {
   schemaVersion: "openpond.managedRlLocalRolloutClaim.v1";
   executionKind: "rollout" | "evaluation";
   executionId: string;
@@ -18,11 +19,12 @@ export type ManagedRlLocalRolloutClaim = {
   policy: { path: string; token: string };
 };
 
-export type ManagedRlHarnessExecutionInput = {
-  claim: ManagedRlLocalRolloutClaim;
+export type TrainingHarnessExecutionInput = {
+  claim: TrainingLocalRolloutClaim;
   taskset: Taskset;
   task: TaskDataRecord;
   harnessRoot: string;
+  harnessSource?: HarnessSourcePackage | null;
   storeDir: string;
   executorId: string;
   signal: AbortSignal;
@@ -30,24 +32,25 @@ export type ManagedRlHarnessExecutionInput = {
   policyRequest(request: Record<string, unknown>, signal: AbortSignal): Promise<Record<string, unknown>>;
 };
 
-export type ManagedRlHarnessAdapterDescriptor = {
+export type TrainingHarnessAdapterDescriptor = {
   id: string;
   priority?: number;
   supports(input: { taskset: Taskset; environmentId: string }): boolean;
-  execute(input: ManagedRlHarnessExecutionInput): Promise<Record<string, unknown>>;
+  execute(input: TrainingHarnessExecutionInput): Promise<Record<string, unknown>>;
+  validateSource?(input: { taskset: Taskset; storeDir: string; harnessSource: HarnessSourcePackage }): Promise<void>;
 };
 
-const adapters: ManagedRlHarnessAdapterDescriptor[] = [];
+const adapters: TrainingHarnessAdapterDescriptor[] = [];
 
-export function registerManagedRlHarnessAdapter(adapter: ManagedRlHarnessAdapterDescriptor): void {
+export function registerTrainingHarnessAdapter(adapter: TrainingHarnessAdapterDescriptor): void {
   if (adapters.some((candidate) => candidate.id === adapter.id)) return;
   adapters.push(adapter);
 }
 
-export function resolveManagedRlHarnessAdapter(input: {
+export function resolveTrainingHarnessAdapter(input: {
   taskset: Taskset;
   environmentId: string;
-}): ManagedRlHarnessAdapterDescriptor {
+}): TrainingHarnessAdapterDescriptor {
   const matches = adapters.filter((adapter) => adapter.supports(input));
   if (!matches.length) throw new Error(`managed_rl_local_harness_unsupported:${input.environmentId}`);
   const highestPriority = Math.max(...matches.map((adapter) => adapter.priority ?? 0));
@@ -58,7 +61,7 @@ export function resolveManagedRlHarnessAdapter(input: {
   return selected[0]!;
 }
 
-export function supportsManagedRlHarness(taskset: Taskset, placement: string): boolean {
+export function supportsTrainingHarness(taskset: Taskset, placement: string): boolean {
   if (
     placement === "remote" &&
     taskset.environment.kind === "work" &&
@@ -69,7 +72,7 @@ export function supportsManagedRlHarness(taskset: Taskset, placement: string): b
   if (placement !== "local") return false;
   const environmentId = declaredEnvironmentId(taskset);
   try {
-    resolveManagedRlHarnessAdapter({ taskset, environmentId });
+    resolveTrainingHarnessAdapter({ taskset, environmentId });
     return true;
   } catch {
     return false;

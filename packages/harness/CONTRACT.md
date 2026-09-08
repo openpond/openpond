@@ -51,3 +51,38 @@ unselected evidence remains available to a later host watermark.
 Evaluation execution and model-improvement qualification contracts that bind a
 Harness to a Taskset, scored baseline, Model, verifier, and training signal
 belong to `@openpond/evals`.
+
+## Released source transport
+
+`openpond.harnessSourcePackage.v1` carries the complete immutable Agent
+snapshot, Harness release and their released file bytes. Creation and readback
+verify both release hashes, dependency references, the exact file population,
+canonical base64, individual file hashes and a 25 MiB total byte limit.
+Rehashing a transport envelope does not authorize different source bytes.
+Instruction and Skill entry files must be policy-visible; verifier and
+host-private assets retain their declared visibility and must never be exposed
+to a policy by iterating the complete source map.
+
+This is source transport, not runtime conformance. Hosts authorize export and
+select an execution adapter that consumes the captured source, verifies its
+capabilities and records effective context. A matching Harness release hash
+alone does not prove that instructions, Skills or executable dependencies ran.
+
+`createHarnessSourceRuntime` consumes captured source for the declarative
+`openpond.agent-runtime.v1` program. It loads released instruction and Skill
+text, verifies required capabilities, dependency versions and actual tool
+schemas, and exposes policy-visible resources through bounded byte-range reads.
+Private assets never enter its context or reader. Unsupported programs and
+released subagents fail admission. Hosts must provide their actual tools and
+capabilities; this helper does not implement missing execution capabilities.
+The runtime receipt binds the source, effective system prompt, loaded assets
+and tool definitions. Hosts retain that receipt with attempt evidence.
+
+`executeHarnessRollout` owns the shared policy/environment round lifecycle,
+released resource calls, retained conversation and exhaustion behavior. Hosts
+supply policy transport and environment step/termination operations. Desktop's
+agent runtime re-exports the same provider loop from this package.
+`@openpond/harness/runtime-source` distributes a self-contained ESM build of
+source admission and rollout execution with its SHA-256. Hosted archives use
+those published bytes instead of implementing a second source reader or loop.
+The clean consumer check executes this distribution without module resolution.

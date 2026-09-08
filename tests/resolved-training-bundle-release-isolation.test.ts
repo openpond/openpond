@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { ModelProjectSchema } from "@openpond/contracts";
+import { createAgentSnapshot, createHarnessRelease, createHarnessSourcePackage, harnessSourcePackageFiles, type HarnessSourcePackage } from "@openpond/harness";
 import { describe, expect, test } from "vitest";
 
 import {
@@ -10,6 +11,8 @@ import {
   materializeResolvedTrainingBundle,
 } from "../packages/training-sdk/src/index.js";
 import { computeTasksetHash, sha256 } from "../packages/taskset-sdk/src/index.js";
+import { publishRunGraph } from "../apps/server/src/training/portable-model-run-service.js";
+import { loadTrainingHarnessSource } from "../apps/server/src/training/training-harness-source.js";
 import {
   FIXED_TIME,
   sftRecipeFixture,
@@ -70,10 +73,12 @@ describe("resolved training bundle release isolation", () => {
       updatedAt: FIXED_TIME,
     });
     const capabilityReceipt = sha256("release-isolation-capability");
-    const build = (selectedTaskset: typeof taskset) =>
+    const build = (selectedTaskset: typeof taskset, harnessSource?: HarnessSourcePackage, computeKind: "local" | "managed" = "local") =>
       buildTasksetTrainingBundle({
         taskset: selectedTaskset,
-        modelProject,
+        modelProject: harnessSource ? { ...modelProject, trainingSetup: { ...modelProject.trainingSetup,
+          harnessRelease: { id: harnessSource.harnessRelease.id, contentHash: harnessSource.harnessRelease.contentHash },
+        } } : modelProject,
         modelRunId: "model-run-release-isolation",
         runtime: {
           adapterId: "local-harness",
@@ -84,7 +89,7 @@ describe("resolved training bundle release isolation", () => {
         },
         compute: {
           adapterId: "openpond-managed",
-          kind: "local",
+          kind: computeKind,
           deviceOrPool: "cpu",
           capabilityReceipt,
           provider: null,
@@ -103,7 +108,11 @@ describe("resolved training bundle release isolation", () => {
         },
         openpondRelease: "0.0.38",
         workerProtocol: "openpond.localTrainingWorker.v1",
-        harnessRelease: {
+        harnessSource,
+        harnessRelease: harnessSource ? {
+          id: harnessSource.harnessRelease.id,
+          contentHash: harnessSource.harnessRelease.contentHash,
+        } : {
           id: "harness-release-isolation",
           contentHash: sha256("harness-release-isolation"),
         },
@@ -120,11 +129,33 @@ describe("resolved training bundle release isolation", () => {
     expect(released.manifest.harnessRelease.id).toBe(
       "harness-release-isolation",
     );
+    // A selected release must survive bundle transport as executable source,
+    // while a later release cannot rewrite an already-captured run.
+    const originalSource = sourceFixture("Use the original released instruction.");
+    const selected = build(taskset, originalSource);
+    const next = build(taskset, sourceFixture("Use the revised instruction."));
+    const sourceAsset = selected.assets.get("harness/source-package.json")!;
+    const readback = JSON.parse(new TextDecoder().decode(sourceAsset));
+    expect(harnessSourcePackageFiles(readback)).toEqual(harnessSourcePackageFiles(originalSource));
+    expect(selected.manifest.resolvedBundleHash).not.toBe(next.manifest.resolvedBundleHash);
+    expect(JSON.parse(new TextDecoder().decode(selected.assets.get("harness/execution.json")))).toMatchObject({
+      mode: "selected_release", sourcePackageHash: originalSource.contentHash,
+    });
+    modelProject.trainingSetup.harnessRelease = { id: originalSource.harnessRelease.id, contentHash: originalSource.harnessRelease.contentHash };
+    expect(() => build(taskset)).toThrow("complete immutable source package");
+    modelProject.trainingSetup.harnessRelease = null;
+    const localOnlySource = sourceFixture("Use the local-only instruction.", false);
+    expect(() => build(taskset, localOnlySource)).not.toThrow();
+    expect(() => build(taskset, localOnlySource, "managed")).toThrow("cannot leave its local host");
 
     const cacheRoot = await mkdtemp(
       path.join(os.tmpdir(), "openpond-release-isolation-"),
     );
     try {
+      await publishRunGraph({ storeDir: cacheRoot, graph: selected });
+      const restored = await loadTrainingHarnessSource({ storeDir: cacheRoot, manifestHash: selected.manifest.contentHash });
+      expect(restored.sourcePackage).toEqual(originalSource);
+      expect(restored.selection.sourcePackageHash).toBe(originalSource.contentHash);
       const materialized = await materializeResolvedTrainingBundle({
         manifest: released.resolvedBundleManifest,
         assets: released.assets,
@@ -186,3 +217,28 @@ describe("resolved training bundle release isolation", () => {
     );
   });
 });
+
+function sourceFixture(instruction: string, portable = true): HarnessSourcePackage {
+  const files = new Map([
+    ["program.json", new TextEncoder().encode('{"runtimeProtocol":"openpond.agent-runtime.v1"}')],
+    ["dependency-lock.json", new TextEncoder().encode('{"dependencies":{}}')],
+    ["instructions/system.md", new TextEncoder().encode(instruction)],
+  ]);
+  const assets = [...files].map(([path, bytes], index) => ({
+    id: `harness-file-${index}`, path, contentHash: sha256(bytes), sizeBytes: bytes.byteLength,
+    mediaType: "text/plain", visibility: "policy" as const,
+  }));
+  const agentSnapshot = createAgentSnapshot({
+    schemaVersion: "openpond.agentSnapshot.v2", id: "source-agent", sourceRelease: null,
+    instructions: [assets[2]!], skills: [], agents: [], toolDeclarations: [], capabilityRequirements: [],
+    dependencyLock: assets[1]!, portability: { portable, blockers: portable ? [] : ["Local-only source"], localOnlyAssetRefs: portable ? [] : [assets[2]!.id], hostPrivateAssetRefs: [] }, metadata: {},
+  });
+  const harnessRelease = createHarnessRelease({
+    schemaVersion: "openpond.harnessRelease.v2", id: "source-harness",
+    agentSnapshot: { id: agentSnapshot.id, contentHash: agentSnapshot.contentHash }, program: assets[0]!, tools: [],
+    lifecycle: { create: true, reset: true, step: true, collect: true, destroy: true, resetScope: "attempt" },
+    graderInterface: { visibleEvidence: ["output"], privilegedEvidence: ["private_verifier"], privateVerifierIsolation: true },
+    files: assets, metadata: { runtimeProtocol: "openpond.agent-runtime.v1" },
+  });
+  return createHarnessSourcePackage({ agentSnapshot, harnessRelease, files });
+}

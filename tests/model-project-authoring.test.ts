@@ -141,7 +141,7 @@ test("prepares an immutable run without overwriting a concurrent Model edit", as
         newer.tasks = taskset.tasks.map((task) => ({ ...task, expectedOutput: { text: "Changed target" } }));
         newer.contentHash = computeTasksetHash(newer);
         await store.upsertTaskset(newer);
-        return { harnessRelease: { id: "harness-admission", contentHash: sha256("harness-admission") },
+        return { harnessSource: null, harnessRelease: { id: "harness-admission", contentHash: sha256("harness-admission") },
           tasksetRelease: { id: "taskset-admission", contentHash: sha256("taskset-admission") } };
       },
       prepare: async ({ modelProject }) => {

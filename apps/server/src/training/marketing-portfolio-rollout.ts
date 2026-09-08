@@ -17,7 +17,7 @@ type PolicyToolCall = {
   arguments: string;
 };
 
-export type ManagedRlPolicyMessage = {
+export type TrainingPolicyMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string | null;
   tool_call_id?: string;
@@ -28,10 +28,10 @@ export type ManagedRlPolicyMessage = {
   }>;
 };
 
-export type ManagedRlHarnessPolicy = {
+export type TrainingHarnessPolicy = {
   complete(input: {
     turnIndex: number;
-    messages: ManagedRlPolicyMessage[];
+    messages: TrainingPolicyMessage[];
     tools: Array<{
       type: "function";
       function: {
@@ -53,7 +53,7 @@ export type ManagedRlHarnessPolicy = {
 export async function runMarketingPortfolioRollout(input: {
   taskset: Taskset;
   task: TaskDataRecord;
-  policy: ManagedRlHarnessPolicy;
+  policy: TrainingHarnessPolicy;
   runtime: ProfileAgentHarnessRuntime;
   maxTurns?: number;
   signal?: AbortSignal;
@@ -79,7 +79,7 @@ export async function runMarketingPortfolioRollout(input: {
       "Marketing rollout requires the exact ordered snapshot and decision tools.",
     );
   }
-  const messages: ManagedRlPolicyMessage[] = [
+  const messages: TrainingPolicyMessage[] = [
     { role: "system", content: MARKETING_PORTFOLIO_POLICY_SYSTEM_PROMPT },
     { role: "user", content: taskPrompt(input.task) },
   ];
@@ -258,7 +258,7 @@ function removeUnsupportedUniqueItems(value: unknown): unknown {
   );
 }
 
-export function parseManagedRlPolicyCompletion(
+export function parseTrainingPolicyCompletion(
   policyResult: Record<string, unknown>,
 ): {
   content: string | null;
