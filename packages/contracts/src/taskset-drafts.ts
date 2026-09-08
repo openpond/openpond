@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ModelTasksetDraftPreparationSchema } from "openpond-sdk/model-taskset-authoring";
 
 import { DatasetArtifactManifestSchema } from "./dataset-artifacts.js";
 import {
@@ -100,6 +101,7 @@ export const TasksetDraftSchema = z.object({
   modelScope: z.object({
     modelId: IdSchema,
     expectedModelRevision: z.number().int().positive(),
+    source: ModelTasksetDraftPreparationSchema.optional(),
   }).strict().nullable().default(null),
   name: z.string().trim().max(500),
   objective: z.string().trim().max(20_000),

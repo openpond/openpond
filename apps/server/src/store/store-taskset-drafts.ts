@@ -25,6 +25,8 @@ import { verifyPublishedTasksetAssets } from "../training/taskset-package-assets
 import { prepareAuthoredTasksetFiles } from "../training/authored-taskset-files.js";
 import { saveTasksetRevision } from "./store-taskset-revisions.js";
 import { selectTasksetDraftModel } from "./store-taskset-draft-model.js";
+import { ModelDraftInitializationSchema, materializeDraftInitialization, prepareDraftInitialization } from "./store-model-taskset-draft-initialization.js";
+import type { ModelTasksetDraftRequest, TasksetPackage } from "openpond-sdk/taskset-packages";
 
 const TasksetDraftPointerSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftPointer.v1"),
@@ -53,6 +55,53 @@ export type TasksetDraftWorkspace = {
 type TasksetDraftPointer = z.infer<typeof TasksetDraftPointerSchema>;
 
 export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
+  async initializeModelTasksetDraft(profileId: string, request: ModelTasksetDraftRequest, source?: TasksetPackage): Promise<TasksetDraft | null> {
+    await this.ready;
+    const operation = this.writeQueue.then(async () => {
+      const db = this.database;
+      const initialized = await prepareDraftInitialization({ db, home: this.home, profileId, request, source });
+      if (!initialized) return null;
+      const completed = () => {
+        const state = db.get<{ state: string }>("SELECT state FROM model_taskset_draft_operations WHERE profile_id = ? AND operation_id = ?", [profileId, request.operationId]);
+        if (state?.state === "deleted") throw new Error("This Taskset draft was deleted.");
+        const row = db.get<PayloadRow>("SELECT payload FROM taskset_drafts WHERE id = ?", [initialized.draft.id]);
+        if (!row) {
+          if (state?.state === "ready") throw new Error("The initialized Taskset draft is unavailable.");
+          return false;
+        }
+        const pointer = TasksetDraftPointerSchema.parse(JSON.parse(row.payload));
+        if (pointer.profileId !== profileId || pointer.modelScope?.source?.requestHash !== initialized.draft.modelScope?.source?.requestHash) throw new Error("Taskset draft identity conflicts with its initialization.");
+        return true;
+      };
+      const workspacePath = this.workspacePath(initialized.draft.id);
+      await materializeDraftInitialization({ home: this.home, initialized, workspacePath, completed, retainHash: value => {
+        const retained = db.get<PayloadRow>("SELECT payload FROM model_taskset_draft_operations WHERE profile_id = ? AND operation_id = ?", [profileId, request.operationId]);
+        const prior = ModelDraftInitializationSchema.parse(JSON.parse(retained!.payload));
+        if (prior.workspaceHash && prior.workspaceHash !== value.workspaceHash) throw new Error("Taskset draft initialization produced different files on retry.");
+        db.run("UPDATE model_taskset_draft_operations SET payload = ? WHERE profile_id = ? AND operation_id = ? AND state = 'prepared'", [JSON.stringify(value), profileId, request.operationId]);
+      } });
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (!completed()) {
+          const retained = db.get<PayloadRow>("SELECT payload FROM model_taskset_draft_operations WHERE profile_id = ? AND operation_id = ?", [profileId, request.operationId]);
+          const preparation = ModelDraftInitializationSchema.parse(JSON.parse(retained!.payload));
+          const draft = preparation.draft;
+          const pointer = TasksetDraftPointerSchema.parse({ schemaVersion: "openpond.tasksetDraftPointer.v1", id: draft.id, profileId,
+            modelScope: draft.modelScope, status: draft.status, revision: draft.revision, workspacePath, packageHash: preparation.workspaceHash,
+            publishedTasksetRef: draft.publishedTasksetRef, createdAt: draft.createdAt, updatedAt: draft.updatedAt });
+          db.run("INSERT INTO taskset_drafts (id, profile_id, status, revision, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [draft.id, profileId, draft.status, draft.revision, JSON.stringify(pointer), draft.createdAt, draft.updatedAt]);
+          db.run("UPDATE model_taskset_draft_operations SET state = 'ready' WHERE profile_id = ? AND operation_id = ?", [profileId, request.operationId]);
+        }
+        db.exec("COMMIT");
+      } catch (error) { db.exec("ROLLBACK"); throw error; }
+      const row = db.get<PayloadRow>("SELECT payload FROM taskset_drafts WHERE id = ?", [initialized.draft.id]);
+      return this.draftFromStoredPayload(JSON.parse(row!.payload));
+    });
+    this.writeQueue = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
   async saveTasksetDraft(draftInput: TasksetDraft, expectedRevision?: number, options: { refreshModelRevision?: boolean } = {}): Promise<TasksetDraft> {
     const draft = TasksetDraftSchema.parse(draftInput);
     await this.ready;
@@ -61,7 +110,7 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       const current = existing ? TasksetDraftPointerSchema.safeParse(JSON.parse(existing.payload)) : null;
       if (current?.success) {
         if (current.data.profileId !== draft.profileId) throw new Error("Taskset draft profile cannot change.");
-        if (current.data.modelScope?.modelId !== draft.modelScope?.modelId
+        if (contentHash(current.data.modelScope ? { ...current.data.modelScope, expectedModelRevision: 0 } : null) !== contentHash(draft.modelScope ? { ...draft.modelScope, expectedModelRevision: 0 } : null)
           || (!options.refreshModelRevision && contentHash(current.data.modelScope) !== contentHash(draft.modelScope))) throw new Error("Taskset draft Model ownership cannot change.");
         if (current.data.status === "published") throw new Error("Published Taskset drafts are immutable. Initialize a new draft to revise the Taskset.");
         if (draft.revision < current.data.revision || (expectedRevision !== undefined && current.data.revision !== expectedRevision)) throw new Error("Taskset draft changed before saving. Refresh before saving.");
@@ -285,7 +334,12 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       try {
-        await this.run("DELETE FROM taskset_drafts WHERE id = ?", [id]);
+        this.database.exec("BEGIN IMMEDIATE");
+        try {
+          this.database.run("DELETE FROM taskset_drafts WHERE id = ?", [id]);
+          this.database.run("UPDATE model_taskset_draft_operations SET state = 'deleted' WHERE draft_id = ?", [id]);
+          this.database.exec("COMMIT");
+        } catch (error) { this.database.exec("ROLLBACK"); throw error; }
       } catch (error) {
         if (movedWorkspace) await rename(recoverablePath, workspacePath).catch(() => undefined);
         throw error;

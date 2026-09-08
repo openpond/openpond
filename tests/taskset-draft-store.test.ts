@@ -11,7 +11,7 @@ import {
 } from "../packages/taskset-sdk/src/index.js";
 import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures.js";
 import { createTasksetEvaluationVerifier } from "../apps/server/src/training/evaluation-custom-verifier.js";
-import { createModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { createModelProjectSaveRequest, ModelProjectEditableSchema } from "openpond-sdk/model-projects";
 import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export.js";
 import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import.js";
@@ -194,6 +194,37 @@ describe("Taskset draft persistence", () => {
       expect(retained.asset.visibility).toBe("host_private");
       expect(Buffer.from(decodeTasksetPackageFile(retained))).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
       for (const task of exported.taskset.tasks) expect(exported.files.find(file => file.asset.id === task.privilegedContextRef)?.asset.visibility).toBe("host_private");
+      // A failed pointer commit must resume the pinned package after reopening,
+      // preserve private/binary bytes, and never overwrite later editor changes.
+      const request = { schemaVersion: "openpond.modelTasksetDraftRequest.v1" as const, operationId: "edit-imported-source", modelId: model.id,
+        expectedModelRevision: model.revision, sourcePackageHash: exported.contentHash };
+      const initializationDb = openTestDatabase(path.join(directory, "state", "state.sqlite"));
+      try {
+        initializationDb.exec("CREATE TRIGGER reject_source_initialization BEFORE INSERT ON taskset_drafts BEGIN SELECT RAISE(ABORT, 'initialization interrupted'); END");
+        await expect(store.initializeModelTasksetDraft(model.profileId, request, exported)).rejects.toThrow("initialization interrupted");
+        initializationDb.exec("DROP TRIGGER reject_source_initialization");
+        await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...ModelProjectEditableSchema.strip().parse(model), name: "Changed after initialization" }, model.revision));
+        await expect(store.initializeModelTasksetDraft(model.profileId, { ...request, operationId: "stale-new-operation" }, exported)).rejects.toThrow("Model changed");
+        await expect(store.initializeModelTasksetDraft("another-profile", request, exported)).rejects.toThrow("not found in this Profile");
+        const reopened = new SqliteStore(directory);
+        try {
+          const [initialized, concurrent] = await Promise.all([reopened.initializeModelTasksetDraft(model.profileId, request), store.initializeModelTasksetDraft(model.profileId, request)]);
+          expect(concurrent).toEqual(initialized);
+          if (!initialized) throw new Error("Missing initialized draft");
+          expect(initialized.modelScope?.source?.sourcePackageHash).toBe(exported.contentHash);
+          expect(initialized.id).not.toBe(imported.id);
+          const initializedWorkspace = (await reopened.getTasksetDraftWorkspace(initialized.id))!;
+          expect(await readFile(path.join(initializedWorkspace.workspacePath, grader.module), "utf8"))
+            .toBe("export function verify() { return { score: 1, passed: true, feedback: 'original' }; }");
+          expect(await readFile(path.join(initializedWorkspace.workspacePath, "assets/matter/input.docx")))
+            .toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+          const saved = await reopened.saveTasksetDraft({ ...initialized, name: "Edited source", revision: initialized.revision + 1 }, initialized.revision);
+          expect(await reopened.initializeModelTasksetDraft(model.profileId, request, exported)).toEqual(saved);
+          await expect(reopened.initializeModelTasksetDraft(model.profileId, { ...request, sourcePackageHash: "a".repeat(64) })).rejects.toThrow("different input");
+          await reopened.deleteTasksetDraft(initialized.id);
+          await expect(reopened.initializeModelTasksetDraft(model.profileId, request, exported)).rejects.toThrow("deleted");
+        } finally { await reopened.close(); }
+      } finally { await closeTestDatabase(initializationDb); }
       const importedHome = path.join(directory, "downloaded");
       const downloaded = prepareImportedTasksetPackage({ package: exported, profileId: "downloaded-profile", name: "Downloaded tasks", createdAt: "2026-09-08T01:00:00.000Z" });
       await materializeImportedTasksetPackage({ home: importedHome, ...downloaded });
