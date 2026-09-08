@@ -5,6 +5,7 @@ import { ImmutableAssetRefSchema, type ImmutableAssetRef } from "@openpond/harne
 import { verifyLearningTextAsset } from "@openpond/evals/learning";
 import {
   createTasksetPackage,
+  learningPackageContextFiles,
   MAX_TASKSET_PACKAGE_BYTES,
   type TasksetPackage,
 } from "openpond-sdk/taskset-packages";
@@ -56,9 +57,12 @@ export async function captureLocalTasksetPackage(input: {
       await handle.close();
     }
   }
-  for (const resource of input.content.modelResources?.assets ?? []) {
+  for (const resource of [...(input.content.modelResources?.assets ?? []), ...(input.content.learningResources?.assets ?? [])]) {
     if (identities.has(resource.asset.id)) continue;
     append(resource.asset, Buffer.from(verifyLearningTextAsset(resource, resource.asset), "utf8"));
+  }
+  if (input.content.learningResources) for (const file of learningPackageContextFiles(input.content.learningResources)) {
+    if (!identities.has(file.asset.id)) append(file.asset, Buffer.from(file.base64, "base64"));
   }
   if (input.fileOrder) {
     if (new Set(input.fileOrder).size !== files.length || input.fileOrder.length !== files.length || input.fileOrder.some(id => !identities.has(id))) throw new Error("Saved package file order differs from its inventory.");

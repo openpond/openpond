@@ -1,7 +1,7 @@
 import path from "node:path";
 import { GraderFixtureSchema, TasksetEnvironmentResourceSchema, TasksetSchema, TasksetSourceRefSchema, type GeneratedTaskFile } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
-import { learningRef, verifyLearningTextAsset } from "@openpond/evals/learning";
+import { learningRef, taskBatchPackageMetadata, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { computeTasksetHash, createTasksetDraft, learningVerifierModule, projectLearningBatchGraders } from "@openpond/taskset-sdk";
 import { decodeTasksetPackageFile, validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import { importedTasksetPackageDirectory } from "./taskset-package-files.js";
@@ -15,6 +15,7 @@ export function prepareImportedTasksetPackage(input: {
   const value = validateTasksetPackage(input.package);
   const release = value.taskset;
   const resources = value.modelResources;
+  const learning = value.learningResources ? taskBatchPackageMetadata(release) : undefined;
   const source = TasksetSourceRefSchema.parse({
     schemaVersion: "openpond.uploadedFileDatasetSource.v1", kind: "uploaded_file",
     id: `package-source-${contentHash({ profileId: input.profileId, packageHash: value.contentHash })}`,
@@ -38,7 +39,7 @@ export function prepareImportedTasksetPackage(input: {
   const projected = TasksetSchema.parse({
     schemaVersion: "openpond.taskset.v1", id: release.id, revision: release.revision,
     profileId: input.profileId, profileRelease: null, createImproveRunId: null,
-    name: input.name, objective: resources?.taskDefinition.instructions ?? input.name, status: "needs_review",
+    name: input.name, objective: resources?.taskDefinition.instructions ?? learning?.definition.instructions ?? input.name, status: "needs_review",
     sourceRefs: [source], datasetArtifact: null, policy: release.policy,
     environment: { ...draft.environment, kind, entrypoint: release.environment.entrypoint,
       resources: TasksetEnvironmentResourceSchema.array().max(10_000).parse(release.metadata.environmentResources ?? []),
@@ -61,7 +62,8 @@ export function prepareImportedTasksetPackage(input: {
         schemaRef: output.schemaRef?.id ?? null, maxBytes: output.maxBytes ?? undefined })) } : {}),
       metadata: { portableTaskRecord: task, exampleOrigin: "imported" },
     })),
-    graders: resources ? projectLearningBatchGraders(resources.rewardBinding, resources.rewards, resources.assets) : importedPackageGraders(value),
+    graders: resources ? projectLearningBatchGraders(resources.rewardBinding, resources.rewards, resources.assets)
+      : learning ? projectLearningBatchGraders(learning.binding, learning.rewards, value.learningResources!.assets) : importedPackageGraders(value),
     graderFixtures: fixtures, learningSignals: draft.learningSignals,
     authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1", model: null, modelConfig: {},
       skillHash: contentHash("openpond-package-import-v1"), promptTemplateVersion: "package-import-v1", buildIntent: "discovery",
@@ -69,6 +71,7 @@ export function prepareImportedTasksetPackage(input: {
       sourceCommit: null, repairHistory: [], createdAt: input.createdAt },
     readiness: null, contentHash: "00000000", createdAt: input.createdAt, updatedAt: input.createdAt,
     metadata: { importedPackageHash: value.contentHash,
+      ...(learning ? { learning } : {}),
       portableFileInventory: value.files.map(file => ({ asset: file.asset, sourcePath: file.asset.path })),
       ...(resources ? { taskDefinition: learningRef(resources.taskDefinition),
       rewardBinding: learningRef(resources.rewardBinding), rewardExecution: { binding: resources.rewardBinding, rewards: resources.rewards } } : {}),

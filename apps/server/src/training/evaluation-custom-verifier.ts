@@ -14,7 +14,7 @@ export async function createTasksetEvaluationVerifier(deps: {
   loadProfileState?: typeof loadOpenPondProfileState;
 }, taskset: Taskset): Promise<CustomVerifierRunner | undefined> {
   if (!taskset.graders.some((grader) => grader.kind === "custom_verifier")) return undefined;
-  if (taskset.metadata.learning !== undefined) return createLearningBatchVerifier(deps.store, taskset);
+  if (taskset.metadata.learning !== undefined) return createLearningBatchVerifier(deps.store, taskset, deps.storeDir);
   if (taskset.metadata.rewardBinding !== undefined) return createTasksetBindingVerifier(deps.store, taskset, deps.storeDir);
   const profile = deps.storeDir
     ? null
