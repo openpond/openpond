@@ -17,6 +17,7 @@ import {
   type TrainingPreparedStart,
   type ModelProject,
   type TrainingDestinationId,
+  type VersionedReleaseRef,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import type { HarnessSourcePackage } from "@openpond/harness";
@@ -42,6 +43,7 @@ import { resolvePortableBindings } from "./portable-training-catalog.js";
 import { resolveTasksetTrainingAssetBytes } from "./taskset-work-assets.js";
 import { comparisonSeriesTrainingRecipe } from "./comparison-series-training-recipe.js";
 import { resolveTasksetTrainingReward } from "./taskset-reward-binding.js";
+import { buildManagedTrainingEvaluationSource } from "./managed-training-evaluation-source.js";
 
 export function createPortableModelRunService(deps: {
   store: SqliteStore;
@@ -65,6 +67,7 @@ export function createPortableModelRunService(deps: {
     retentionDays?: number | null;
     harnessRelease?: { id: string; contentHash: string } | null;
     comparisonSeriesEntry?: ModelComparisonEntryRef | null;
+    evaluationTasksetRef?: VersionedReleaseRef | null;
   }): Promise<TrainingPreparedStart>;
   approve(input: {
     planId: string;
@@ -129,6 +132,7 @@ export function createPortableModelRunService(deps: {
           ...setup,
           tasksetRef: comparisonEntry.taskset,
           tasksetRelease: null,
+          evaluationTasksetRef: null,
         },
       };
       setup = sourceProject.trainingSetup;
@@ -165,6 +169,12 @@ export function createPortableModelRunService(deps: {
       },
     };
     setup = sourceProject.trainingSetup;
+    if (setup.destinationId === "openpond_managed") {
+      const evaluationSource = await buildManagedTrainingEvaluationSource({ store: deps.store, storeDir: deps.storeDir,
+        trainingTaskset: taskset, trainingPlan: { evaluationTasksetRef: setup.evaluationTasksetRef, comparisonSeriesEntry } });
+      sourceProject = { ...sourceProject, trainingSetup: { ...setup, evaluationTasksetRef: evaluationSource.taskset } };
+      setup = sourceProject.trainingSetup;
+    }
     const preparation = await deps.prepare({
       modelProjectId: sourceProject.id,
       modelProject: sourceProject,
@@ -197,6 +207,7 @@ export function createPortableModelRunService(deps: {
       retentionDays: input.retentionDays,
       harnessRelease: releasedHarness.harnessRelease,
       comparisonSeriesEntry,
+      evaluationTasksetRef: setup.evaluationTasksetRef,
     });
     // Preparation resolves the caller-authored Recipe into the persisted,
     // executable contract (authoritative hashes plus GRPO semantics). Export
@@ -207,6 +218,7 @@ export function createPortableModelRunService(deps: {
       trainingSetup: {
         ...sourceProject.trainingSetup,
         recipe: preparedRecipe,
+        evaluationTasksetRef: prepared.plan.evaluationTasksetRef ?? null,
       },
     };
     const approval = await deps.approve({
@@ -233,6 +245,9 @@ export function createPortableModelRunService(deps: {
         })
       : new Map<string, Uint8Array>();
     const graph = buildTasksetTrainingBundle({
+      evaluationSource: setup.destinationId === "openpond_managed"
+        ? await buildManagedTrainingEvaluationSource({ store: deps.store, storeDir: deps.storeDir,
+            trainingTaskset: taskset, trainingPlan: prepared.plan }) : undefined,
       ...await resolveTasksetTrainingReward(deps.store, taskset, deps.storeDir),
       taskset,
       modelProject: preparedProject,
@@ -304,7 +319,7 @@ export function createPortableModelRunService(deps: {
     });
     const lifecycle = await preparePortableModelRunLifecycle({
       store: deps.store,
-      modelProject: sourceProject,
+      modelProject: preparedProject,
       modelRunId,
       taskset,
       sourceProjectRevision: sourceProject.revision,

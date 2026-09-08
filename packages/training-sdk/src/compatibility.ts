@@ -91,7 +91,8 @@ export function validateTrainingCompatibility(input: {
         message: "DPO policy and reference models must use the same tokenizer revision and chat template.",
       });
     }
-    if (!input.taskset.tasks.some((task) => task.split === recipe.dataset.validationSplit)) {
+    if (!(input.plan.destinationId === "openpond_managed" && input.plan.evaluationTasksetRef)
+      && !input.taskset.tasks.some((task) => task.split === recipe.dataset.validationSplit)) {
       issues.push({
         code: "dpo_frozen_eval_missing",
         severity: "error",
@@ -120,7 +121,8 @@ export function validateTrainingCompatibility(input: {
         message: "The controlled PPO executor accepts only exact or deterministic verifier rewards.",
       });
     }
-    if (!input.taskset.tasks.some((task) => task.split === "frozen_eval")) {
+    if (!(input.plan.destinationId === "openpond_managed" && input.plan.evaluationTasksetRef)
+      && !input.taskset.tasks.some((task) => task.split === "frozen_eval")) {
       issues.push({
         code: "ppo_frozen_eval_missing",
         severity: "error",

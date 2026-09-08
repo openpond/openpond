@@ -96,6 +96,26 @@ bundle before provisioning and retain both in receipt inputs when non-null.
 Identity validation does not establish that a provider can execute a grader;
 providers must also reject unsupported execution configurations at admission.
 
+## Held-out evaluation source
+
+Managed policy training carries `evaluation-source.json` inside the verified
+resolved bundle. `TrainingEvaluationSourceSchema` describes its exact Taskset
+revision, complete held-out task records and evaluator-only asset bytes.
+`assertTrainingEvaluationIsolation` rejects train/held-out split violations,
+duplicate task IDs and shared training/evaluation families. The data remains
+private to evaluation and must not become policy-visible context.
+
+`trainingEvaluationSourceRef` derives `source.evaluation`: the original Taskset
+reference and the canonical evaluation dataset hash. Providers compare these
+references with the admitted bundle before provisioning and retain both in
+receipt inputs. Changing private answers or assets changes the bundle and
+evaluation dataset identity. Model configuration may select a separate immutable
+`evaluationTasksetRef`; a train-only batch does not need a Comparison Series.
+
+The nullable wire field preserves historical records. A provider that requires
+pinned evaluation must reject new policy submissions without it. Artifact
+admission alone does not establish model execution or learning quality.
+
 ## Conformance
 
 Published fixtures live in `fixtures/training/v2`. Providers should:

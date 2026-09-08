@@ -135,6 +135,7 @@ export function createTrainingService(deps: {
 
   const portableSupport = createPortableTrainingServiceSupport({
     store: deps.store,
+    storeDir: deps.storeDir,
     destinations,
     adapters: portableAdapters,
     searchTrainingModels: deps.searchTrainingModels,

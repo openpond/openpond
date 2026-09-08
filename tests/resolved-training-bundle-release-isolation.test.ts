@@ -5,6 +5,7 @@ import path from "node:path";
 import { ModelProjectSchema } from "@openpond/contracts";
 import { createAgentSnapshot, createHarnessRelease, createHarnessSourcePackage, harnessSourcePackageFiles, type HarnessSourcePackage } from "@openpond/harness";
 import { describe, expect, test } from "vitest";
+import { TRAINING_EVALUATION_SOURCE_PATH, type TrainingEvaluationSource } from "openpond-sdk/training";
 
 import {
   buildTasksetTrainingBundle,
@@ -13,6 +14,7 @@ import {
 import { computeTasksetHash, sha256 } from "../packages/taskset-sdk/src/index.js";
 import { publishRunGraph } from "../apps/server/src/training/portable-model-run-service.js";
 import { loadTrainingHarnessSource } from "../apps/server/src/training/training-harness-source.js";
+import { loadManagedTrainingEvaluationSource } from "../apps/server/src/training/managed-training-evaluation-source.js";
 import {
   FIXED_TIME,
   sftRecipeFixture,
@@ -73,8 +75,9 @@ describe("resolved training bundle release isolation", () => {
       updatedAt: FIXED_TIME,
     });
     const capabilityReceipt = sha256("release-isolation-capability");
-    const build = (selectedTaskset: typeof taskset, harnessSource?: HarnessSourcePackage, computeKind: "local" | "managed" = "local") =>
+    const build = (selectedTaskset: typeof taskset, harnessSource?: HarnessSourcePackage, computeKind: "local" | "managed" = "local", evaluationSource?: TrainingEvaluationSource) =>
       buildTasksetTrainingBundle({
+        evaluationSource,
         taskset: selectedTaskset,
         modelProject: harnessSource ? { ...modelProject, trainingSetup: { ...modelProject.trainingSetup,
           harnessRelease: { id: harnessSource.harnessRelease.id, contentHash: harnessSource.harnessRelease.contentHash },
@@ -125,6 +128,24 @@ describe("resolved training bundle release isolation", () => {
         ]),
       });
 
+    // Private held-out bytes must alter the resolved manifest, and the source
+    // must agree with the selection covered by the prepared configuration.
+    const evaluationSource: TrainingEvaluationSource = {
+      schemaVersion: "openpond.trainingEvaluationSource.v1",
+      taskset: { id: "held-out", revision: 1, contentHash: sha256("held-out") },
+      tasks: [{ ...taskset.tasks[0], id: "held-out-1", clusterKey: "held-out-family", split: "validation" }], assets: [],
+    };
+    modelProject.trainingSetup.evaluationTasksetRef = evaluationSource.taskset;
+    const evaluated = build(taskset, undefined, "local", evaluationSource);
+    expect(evaluated.resolvedBundleManifest.files.some(file => file.path === TRAINING_EVALUATION_SOURCE_PATH)).toBe(true);
+    expect(JSON.parse(new TextDecoder().decode(evaluated.assets.get(TRAINING_EVALUATION_SOURCE_PATH)))).toEqual(evaluationSource);
+    const changedEvaluation = build(taskset, undefined, "local", { ...evaluationSource,
+      tasks: [{ ...evaluationSource.tasks[0], expectedOutput: { text: "changed private answer" } }],
+    });
+    expect(changedEvaluation.manifest.resolvedBundleHash).not.toBe(evaluated.manifest.resolvedBundleHash);
+    expect(() => build(taskset)).toThrow("pinned evaluation source");
+    expect(() => build(taskset, undefined, "local", { ...evaluationSource, taskset: { ...evaluationSource.taskset, revision: 2 } })).toThrow("prepared Model");
+    modelProject.trainingSetup.evaluationTasksetRef = null;
     const released = build(taskset);
     expect(released.manifest.harnessRelease.id).toBe(
       "harness-release-isolation",
@@ -152,6 +173,10 @@ describe("resolved training bundle release isolation", () => {
       path.join(os.tmpdir(), "openpond-release-isolation-"),
     );
     try {
+      const publishedEvaluation = await publishRunGraph({ storeDir: cacheRoot, graph: evaluated });
+      expect(await loadManagedTrainingEvaluationSource(cacheRoot, evaluated.manifest.contentHash)).toEqual(evaluationSource);
+      await writeFile(path.join(publishedEvaluation.resolvedBundleDirectory, TRAINING_EVALUATION_SOURCE_PATH), "tampered", "utf8");
+      await expect(loadManagedTrainingEvaluationSource(cacheRoot, evaluated.manifest.contentHash)).rejects.toThrow();
       await publishRunGraph({ storeDir: cacheRoot, graph: selected });
       const restored = await loadTrainingHarnessSource({ storeDir: cacheRoot, manifestHash: selected.manifest.contentHash });
       expect(restored.sourcePackage).toEqual(originalSource);

@@ -30,7 +30,18 @@
       "id": "dataset-fixture",
       "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     },
-    "evidenceSets": []
+    "evidenceSets": [],
+    "evaluation": {
+      "taskset": {
+        "id": "held-out-fixture",
+        "revision": 1,
+        "contentHash": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "dataset": {
+        "id": "evaluation-dataset-fixture",
+        "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+      }
+    }
   },
   "job": {
     "kind": "policy_optimize",
@@ -81,5 +92,5 @@
     "retentionDays": 7,
     "region": null
   },
-  "contentHash": "339e6f2a48e275b0558c81c7bb71489a3e94a0a2e09de6b04e44046745cce8ee"
+  "contentHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b"
 }

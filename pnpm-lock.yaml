@@ -625,6 +625,9 @@ importers:
       '@openpond/taskset-sdk':
         specifier: workspace:*
         version: link:../taskset-sdk
+      openpond-sdk:
+        specifier: workspace:*
+        version: link:../sdk
     devDependencies:
       '@types/node':
         specifier: ^24.10.1

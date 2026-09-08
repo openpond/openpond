@@ -66,7 +66,7 @@ import {
   TrainingTimestampSchema as TimestampSchema,
 } from "./training-schema-primitives.js";
 import { RolloutTrajectoryReceiptSchema } from "./training-trajectories.js";
-import { ImmutableReleaseRefSchema } from "./release-core.js";
+import { ImmutableReleaseRefSchema, VersionedReleaseRefSchema } from "./release-core.js";
 export * from "./training-managed-adapter.js";
 export * from "./training-trajectories.js";
 export {
@@ -513,6 +513,7 @@ export const TrainingPlanSchema = z.object({
   tasksetId: IdSchema,
   tasksetHash: HashSchema,
   comparisonSeriesEntry: ModelComparisonEntryRefSchema.nullable().optional(),
+  evaluationTasksetRef: VersionedReleaseRefSchema.nullable().optional(),
   harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
   modelImprovementQualification: ImmutableReleaseRefSchema.nullable().optional(),
   destinationId: TrainingDestinationIdSchema,
@@ -595,6 +596,7 @@ export const TrainingPreparedStartSchema = z.object({
 
 export const TrainingApprovalSchema = z.object({
   schemaVersion: z.literal("openpond.trainingApproval.v1"),
+  evaluationTasksetRef: VersionedReleaseRefSchema.nullable().optional(),
   id: IdSchema,
   planId: IdSchema,
   bundleHash: HashSchema,
@@ -616,6 +618,7 @@ export const TrainingApprovalSchema = z.object({
  */
 export const TrainingJobSourceSnapshotSchema = z.object({
   schemaVersion: z.literal("openpond.trainingJobSourceSnapshot.v1"),
+  evaluationTasksetRef: VersionedReleaseRefSchema.nullable().optional(),
   modelProjectId: IdSchema,
   sourceProjectRevision: z.number().int().positive(),
   profileId: IdSchema,

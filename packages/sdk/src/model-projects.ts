@@ -72,6 +72,7 @@ export const ModelProjectRecipeDocumentSchema = z
 export const ModelProjectTrainingSetupSchema = z
   .object({
     tasksetRef: ModelProjectVersionedRefSchema.nullable().default(null),
+    evaluationTasksetRef: ModelProjectVersionedRefSchema.nullable().optional(),
     rewardBindingRef: ModelProjectVersionedRefSchema.nullable().optional(),
     tasksetRelease: ModelProjectImmutableRefSchema.nullable().default(null),
     harnessRelease: ModelProjectImmutableRefSchema.nullable().default(null),

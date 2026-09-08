@@ -10,9 +10,11 @@ import {
   createPortableTrainingCatalog,
   preparePortableModelRun,
 } from "./portable-training-catalog.js";
+import { buildManagedTrainingEvaluationSource } from "./managed-training-evaluation-source.js";
 
 export function createPortableTrainingServiceSupport(input: {
-  store: Pick<SqliteStore, "getModelProject">;
+  store: SqliteStore;
+  storeDir: string;
   destinations: () => Promise<TrainingDestinationCapabilities[]>;
   adapters: TrainingAdapterRegistry;
   searchTrainingModels?: (
@@ -53,6 +55,16 @@ export function createPortableTrainingServiceSupport(input: {
       throw new Error("A saved Model Project is required.");
     }
     if (modelProject.id !== inputPlan.modelProjectId) throw new Error("Model preparation identity does not match the selected configuration.");
+    if (modelProject.trainingSetup.evaluationTasksetRef && modelProject.trainingSetup.destinationId !== "openpond_managed") {
+      throw new Error("Separate held-out Tasksets currently require the OpenPond Managed evaluation adapter.");
+    }
+    if (modelProject.trainingSetup.destinationId === "openpond_managed") {
+      const reference = modelProject.trainingSetup.tasksetRef;
+      const taskset = reference ? await input.store.getTasksetRevision(reference.id, reference.revision, reference.contentHash) : null;
+      if (!taskset || taskset.profileId !== modelProject.profileId) throw new Error("The training Taskset revision is unavailable in this workspace.");
+      await buildManagedTrainingEvaluationSource({ store: input.store, storeDir: input.storeDir, trainingTaskset: taskset,
+        trainingPlan: { evaluationTasksetRef: modelProject.trainingSetup.evaluationTasksetRef } });
+    }
     const trainingCatalog = await catalog();
     return preparePortableModelRun({
       modelProject,
