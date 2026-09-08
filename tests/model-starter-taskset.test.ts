@@ -215,6 +215,7 @@ it("pulls complete private packages atomically and exports their exact bytes aft
       const ordinary = await service(generic).pullProject({ hostedProjectId: hosted.id, profileId: "ordinary-profile" });
       expect(ordinary.project.trainingSetup.rewardBindingRef).toBeNull();
       const ordinaryTaskset = (await generic.getTaskset(ordinary.project.trainingSetup.tasksetRef!.id))!;
+      expect(ordinaryTaskset.objective).toBe("");
       expect(ordinaryTaskset.metadata.taskDefinition).toBeUndefined();
       expect(ordinaryTaskset.graders[0]!.kind).toBe(exported.taskset.graders[0]!.kind);
       expect(await exportLocalModelTasksetPackage({ store: generic, storeDir: generic.home, profileId: ordinary.project.profileId, modelId: ordinary.project.id })).toEqual(servedPackage);

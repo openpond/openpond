@@ -711,7 +711,9 @@ export const TasksetSchema = z.object({
   profileRelease: VersionedReleaseRefSchema.nullable().optional(),
   createImproveRunId: NullableIdSchema.default(null),
   name: z.string().trim().min(1).max(500),
-  objective: z.string().trim().min(1).max(20_000),
+  // Portable tasks may carry all instructions in their individual inputs.
+  // Preserve an absent package prompt; draft publication validates its objective.
+  objective: z.string().trim().max(20_000),
   purpose: TasksetPurposeSchema.default("general"),
   benchmark: TasksetBenchmarkBindingSchema.nullable().default(null),
   preferenceComparison: TasksetPreferenceComparisonBindingSchema.nullable().default(null),

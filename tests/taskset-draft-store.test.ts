@@ -134,7 +134,7 @@ describe("Taskset draft persistence", () => {
       const packageDirectory = path.join(directory, "portable-taskset");
       const grader = { id: "expected_output", version: "1", label: "Private verifier", kind: "custom_verifier" as const, weight: 1, hardGate: true, rewardEligible: true, privileged: true, module: "graders/verify.js", exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" as const, metadata: {} };
       const human = { id: "human-review", version: "1", label: "Human review", kind: "human" as const, weight: 1, hardGate: false, rewardEligible: false, privileged: true, rubric: "Assess clarity using only the supplied evidence.", reviewerRole: "reviewer", metadata: {} };
-      const sourceTaskset = tasksetFixture({ profileId: "source-profile", graders: [grader, human] });
+      const sourceTaskset = tasksetFixture({ profileId: "source-profile", objective: "Apply the supplied evidence without inventing missing facts.", graders: [grader, human] });
       sourceTaskset.policy.hiddenGraderRefs.push(human.id);
       // Publication must never replace missing executable bytes with a descriptor.
       expect(() => materializePortableTasksetRelease({ taskset: sourceTaskset, adapterId: "unprepared" }))
@@ -192,6 +192,7 @@ describe("Taskset draft persistence", () => {
         trainingSetup: { tasksetRef: { id: firstPublished.id, revision: firstPublished.revision, contentHash: firstPublished.contentHash } } }, 0));
       const exported = await exportLocalModelTasksetPackage({ store, storeDir: directory, profileId: imported.profileId, modelId: model.id });
       expect(exported.modelResources).toBeUndefined();
+      expect(exported.taskset.metadata.ordinaryAuthoring).toMatchObject({ instructions: sourceTaskset.objective });
       const portableHuman = exported.taskset.graders.find(grader => grader.kind === "human")!;
       if (portableHuman.kind !== "human") throw new Error("Missing human rubric");
       expect(Buffer.from(decodeTasksetPackageFile(exported.files.find(file => file.asset.id === portableHuman.rubricRef.id)!)).toString("utf8")).toBe(human.rubric);
@@ -223,12 +224,13 @@ describe("Taskset draft persistence", () => {
           if (!initialized) throw new Error("Missing initialized draft");
           expect(initialized.modelScope?.source?.sourcePackageHash).toBe(exported.contentHash);
           expect(initialized.id).not.toBe(imported.id);
+          expect(initialized.objective).toBe(sourceTaskset.objective);
           const initializedWorkspace = (await reopened.getTasksetDraftWorkspace(initialized.id))!;
           expect(await readFile(path.join(initializedWorkspace.workspacePath, grader.module), "utf8"))
             .toBe("export function verify() { return { score: 1, passed: true, feedback: 'original' }; }");
           expect(await readFile(path.join(initializedWorkspace.workspacePath, "assets/matter/input.docx")))
             .toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
-          const saved = await reopened.saveTasksetDraft({ ...initialized, name: "Edited source", revision: initialized.revision + 1 }, initialized.revision);
+          const saved = await reopened.saveTasksetDraft({ ...initialized, name: "Edited source", objective: "Use the revised evidence and report missing facts explicitly.", revision: initialized.revision + 1 }, initialized.revision);
           expect(await reopened.initializeModelTasksetDraft(model.profileId, request, exported)).toEqual(saved);
           await expect(reopened.initializeModelTasksetDraft(model.profileId, { ...request, sourcePackageHash: "a".repeat(64) })).rejects.toThrow("different input");
           const sourceApi = createTrainingApi({ store: reopened, storeDir: directory, evaluation: { readiness: async () => undefined } } as never);
@@ -244,6 +246,7 @@ describe("Taskset draft persistence", () => {
             path: grader.module, expectedFileHash: code.file.contentHash, content: { encoding: "utf8", data: "changed" } })).rejects.toThrow("immutable");
           const sourcePackage = await exportLocalModelTasksetPackage({ store: reopened, storeDir: directory, profileId: model.profileId, modelId: model.id });
           expect(sourcePackage.taskset.id).toBe(publishedSource.taskset.id);
+          expect(sourcePackage.taskset.metadata.ordinaryAuthoring).toMatchObject({ instructions: saved.objective });
           expect(sourcePackage.taskset.metadata.modelTasksetAuthoring).toEqual(initialized.modelScope?.source?.lineage);
           expect(sourcePackage.environment).toEqual(exported.environment);
           expect(sourcePackage.verifierSet.calibrationReceiptRefs).toEqual([]);
@@ -254,6 +257,7 @@ describe("Taskset draft persistence", () => {
           const next = await sourceApi.request("init_taskset_draft", { profileId: model.profileId, sourceRequest: { ...request, operationId: "revise-published-source", expectedModelRevision: selectedModel.revision, sourcePackageHash: inspected.sourcePackageHash } }) as typeof saved;
           expect(next.modelScope?.source?.tasksetId).toBe(publishedSource.taskset.id);
           expect(next.modelScope?.source?.tasksetRevision).toBe(2);
+          expect(next.objective).toBe(saved.objective);
           const secondSource = await sourceApi.request("publish_taskset_draft", { draftId: next.id }) as typeof publishedSource;
           expect(secondSource.taskset.id).toBe(publishedSource.taskset.id);
           expect(secondSource.taskset.revision).toBe(2);
@@ -267,6 +271,7 @@ describe("Taskset draft persistence", () => {
       } finally { await closeTestDatabase(initializationDb); }
       const importedHome = path.join(directory, "downloaded");
       const downloaded = prepareImportedTasksetPackage({ package: exported, profileId: "downloaded-profile", name: "Downloaded tasks", createdAt: "2026-09-08T01:00:00.000Z" });
+      expect(downloaded.taskset.objective).toBe(sourceTaskset.objective);
       expect(downloaded.taskset.metrics).toEqual(firstPublished.metrics);
       await materializeImportedTasksetPackage({ home: importedHome, ...downloaded });
       expect(materializePortableTasksetRelease({ taskset: downloaded.taskset, adapterId: "downloaded" }).tasksetRelease).toEqual(exported.taskset);

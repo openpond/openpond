@@ -2,7 +2,7 @@ import path from "node:path";
 import type { TaskDataRecord, Taskset } from "@openpond/contracts";
 import { learningRef } from "@openpond/evals/learning";
 import { materializePortableTasksetRelease } from "@openpond/taskset-sdk";
-import { resolveTasksetPackageExecution } from "openpond-sdk/taskset-packages";
+import { resolveTasksetPackageExecution, resolveTasksetPackageInstructions } from "openpond-sdk/taskset-packages";
 import { AuthoredTasksetFileInventorySchema } from "./authored-taskset-files.js";
 import { captureLocalTasksetPackage } from "./taskset-package-capture.js";
 import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
@@ -25,5 +25,5 @@ export async function loadOrdinaryToolEnvironment(taskset: Taskset, task: TaskDa
   const module = resolved.assets.find(asset => asset.id === resolved.execution.javascript.module.id)!;
   const state = resolved.assets.find(asset => asset.id === releasedTask.privilegedContextRef)!;
   return { execution: resolved.execution, module, initialState: JSON.parse(state.text) as Record<string, unknown>,
-    definition: learningRef(packageValue.taskset), instructions: taskset.objective, task: releasedTask };
+    definition: learningRef(packageValue.taskset), instructions: resolveTasksetPackageInstructions(packageValue), task: releasedTask };
 }

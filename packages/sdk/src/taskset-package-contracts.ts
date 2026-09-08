@@ -30,6 +30,16 @@ export function tasksetPackageRewardBinding(value: TasksetPackage) {
   return value.learningResources ? taskBatchPackageMetadata(value.taskset).binding : value.modelResources?.rewardBinding ?? null;
 }
 
+/** Instructions follow the admitted authoring graph. An ordinary package with
+ * no instructions declares an empty prompt, never its display name. */
+export function resolveTasksetPackageInstructions(value: Pick<TasksetPackage, "taskset" | "modelResources" | "learningResources">): string {
+  if (value.learningResources) return taskBatchPackageMetadata(value.taskset).definition.instructions;
+  if (value.modelResources) return value.modelResources.taskDefinition.instructions;
+  const authoring = z.object({ instructions: z.string().max(20_000).optional() }).passthrough()
+    .parse(value.taskset.metadata.ordinaryAuthoring ?? {});
+  return authoring.instructions ?? "";
+}
+
 /** Admission verifies the complete declared dependency graph, not readiness or
  * permission to execute it. Hosts separately authorize the workspace/project. */
 export function validateTasksetPackage(value: unknown): TasksetPackage {
@@ -99,6 +109,7 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
     throw new Error("Bound Taskset publication requires its complete model resources.");
   }
   resolveTasksetPackageExecution(result);
+  resolveTasksetPackageInstructions(result);
   return result;
 }
 
