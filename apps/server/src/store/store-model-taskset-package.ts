@@ -3,7 +3,7 @@ import { TasksetSchema } from "@openpond/contracts";
 import { ModelProjectSchema, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { readCachedTasksetPackage } from "../training/taskset-package-files.js";
-import { captureLocalTasksetPackage } from "../training/taskset-package-capture.js";
+import { captureLocalTasksetPackage, tasksetPackageInlineAssetIds } from "../training/taskset-package-capture.js";
 import { tasksetPackageDirectoryId } from "../training/taskset-package-path.js";
 
 /** Verify the current imported bytes before deriving a new immutable revision. */
@@ -25,7 +25,7 @@ export async function loadModelTasksetPackage(db: OpenPondSqliteConnection, home
   const cached = await readCachedTasksetPackage(home, hash);
   if (cached.taskset.id !== (linked?.releaseId ?? ref.id) || cached.taskset.revision !== (linked?.releaseRevision ?? ref.revision)) throw new Error("Cached package differs from its selected Taskset revision.");
   const { files, contentHash: _hash, ...content } = cached;
-  const inline = new Set(typeof taskset.metadata.importedPackageHash === "string" ? [] : cached.modelResources?.assets.map(asset => asset.id));
+  const inline = tasksetPackageInlineAssetIds(cached, typeof taskset.metadata.importedPackageHash === "string");
   const captured = await captureLocalTasksetPackage({ root: path.join(home, "training", "tasksets", tasksetPackageDirectoryId(taskset)),
     content, sources: files.filter(file => !inline.has(file.asset.id)).map(file => ({ asset: file.asset, sourcePath: taskset.tasks.flatMap(task => task.assets ?? []).find(asset => asset.id === file.asset.id)?.artifactRef ?? file.asset.path })), fileOrder: files.map(file => file.asset.id) });
   if (captured.contentHash !== cached.contentHash) throw new Error("Imported package bytes changed before the Reward edit.");

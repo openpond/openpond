@@ -11,12 +11,12 @@ import { learningContext, learningFixture, learningNow } from "./helpers/learnin
 import { attemptFixture, withTrainingStore } from "./helpers/training-fixtures";
 import { createLocalTaskGradeExecutor } from "../apps/server/src/training/learning-grade-executor";
 import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import";
-import { materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files";
+import { cacheTasksetPackage, materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files";
 import { createTasksetEvaluationVerifier } from "../apps/server/src/training/evaluation-custom-verifier";
 import { resolveTasksetTrainingReward } from "../apps/server/src/training/taskset-reward-binding";
 import { prepareLocalLearningBatch } from "../apps/server/src/training/learning-batch-preparation";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export";
-import { createModelProjectSaveRequest, HostedModelProjectTrainingSetupSchema } from "openpond-sdk/model-projects";
+import { createModelProjectSaveRequest, HostedModelProjectTrainingSetupSchema, ModelProjectSchema } from "openpond-sdk/model-projects";
 import { createTasksetPackage, decodeTasksetPackageFile, tasksetPackageRewardBinding, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "openpond-sdk/taskset-packages";
 
 const withStore = (run: (store: SqliteLearningStore, home: string) => Promise<void>) => withTempDirectory("openpond-learning-", async (home) => {
@@ -41,6 +41,21 @@ describe("durable task intake and admission", () => {
     const taskset = await prepareLocalLearningBatch(store, directory, { profileId: learningContext.scope, batchId: "package-batch" });
     const model = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "batch-model", profileId: learningContext.scope, name: "Reviewed batch Model", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { tasksetRef: learningRef(taskset) } }, 0));
     const value = await exportLocalModelTasksetPackage({ store, storeDir: directory, profileId: learningContext.scope, modelId: model.id });
+    // A source Model must survive its first hosted receipt even though generated
+    // private context files exist in the package, not its authored directory.
+    await cacheTasksetPackage(directory, value);
+    const linked = await store.saveModelProjectHosting(model, ModelProjectSchema.parse({ ...model, hosted: {
+      schemaVersion: "openpond.hostedModelProjectLink.v1", apiOrigin: "https://packages.example.test", teamId: "team",
+      projectId: "hosted-batch-model", portableProjectId: model.id, revision: 1, etag: "a".repeat(64),
+      syncedSourceRevision: model.revision, syncedAt: learningNow, tasksets: [{ localTasksetId: taskset.id,
+        localTasksetHash: taskset.contentHash, releaseId: value.taskset.id, releaseRevision: value.taskset.revision,
+        releaseHash: value.taskset.contentHash, packageHash: value.contentHash, hostedTasksetId: "hosted-taskset", syncedAt: learningNow }],
+    } }));
+    expect(await exportLocalModelTasksetPackage({ store, storeDir: directory, profileId: model.profileId, modelId: model.id })).toEqual(value);
+    const renamedSource = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: linked.id,
+      profileId: linked.profileId, name: "Renamed source batch", objective: linked.objective, defaultBaseModel: null,
+      defaultDestinationId: null, trainingSetup: linked.trainingSetup }, linked.revision));
+    expect(renamedSource.trainingSetup).toEqual(linked.trainingSetup);
     const metadata = taskBatchPackageMetadata(value.taskset);
     expect(metadata.definition).toEqual(fixture.definition);
     expect(metadata.binding).toEqual(fixture.binding);
@@ -80,7 +95,15 @@ describe("durable task intake and admission", () => {
       const imported = prepareImportedTasksetPackage({ package: value, profileId: "fresh-profile", name: "Imported batch", createdAt: learningNow });
       await materializeImportedTasksetPackage({ home: destinationDirectory, ...imported });
       await destination.upsertTaskset(imported.taskset);
-      const importedModel = await destination.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "imported-model", profileId: "fresh-profile", name: "Imported batch Model", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { tasksetRef: learningRef(imported.taskset) } }, 0));
+      const importedModel = await destination.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "imported-model", profileId: "fresh-profile", name: "Imported batch Model", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { tasksetRef: learningRef(imported.taskset), rewardBindingRef: learningRef(fixture.binding) } }, 0));
+      const renamed = await destination.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: importedModel.id, profileId: importedModel.profileId,
+        name: "Renamed imported batch", objective: importedModel.objective, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: importedModel.trainingSetup }, importedModel.revision));
+      expect(renamed.trainingSetup).toEqual(importedModel.trainingSetup);
+      const changedReward = await createModelProjectSaveRequest({ id: renamed.id, profileId: renamed.profileId, name: renamed.name,
+        objective: renamed.objective, defaultBaseModel: null, defaultDestinationId: null,
+        trainingSetup: { ...renamed.trainingSetup, rewardBindingRef: { ...learningRef(fixture.binding), id: "different-binding" } } }, renamed.revision);
+      await expect(destination.saveModelProjectConfiguration(changedReward)).rejects.toMatchObject({ code: "model_batch_reward_review_required" });
+      expect(await destination.getModelProject(renamed.id)).toEqual(renamed);
       expect(await exportLocalModelTasksetPackage({ store: destination, storeDir: destinationDirectory, profileId: "fresh-profile", modelId: importedModel.id })).toEqual(value);
       const run = await createTasksetEvaluationVerifier({ store: destination, storeDir: destinationDirectory }, imported.taskset);
       const grader = imported.taskset.graders[0]!;
