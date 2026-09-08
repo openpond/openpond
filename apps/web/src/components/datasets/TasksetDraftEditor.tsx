@@ -295,8 +295,8 @@ export function TasksetDraftEditor({
           <ReviewSection draft={draft} disabled={readOnly} onChange={update} />
         ) : null}
       </div>
-      {fileEditor ? <TasksetDraftFilesEditor draft={draft} initialFiles={fileEditor} training={training} onClose={() => setFileEditor(null)} onSaved={saved => {
-        setDraft(saved); setSavedSnapshot(JSON.stringify(saved)); setNotice("File saved.");
+      {fileEditor ? <TasksetDraftFilesEditor draft={draft} initialFiles={fileEditor} training={training} onClose={() => setFileEditor(null)} onSaved={(saved, message = "File saved.") => {
+        setDraft(saved); setSavedSnapshot(JSON.stringify(saved)); setNotice(message);
       }} /> : null}
     </main>
   );

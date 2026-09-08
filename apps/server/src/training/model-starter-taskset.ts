@@ -1,6 +1,6 @@
 import { TasksetDraftSchema, type GraderFixture, type GeneratedTaskFile, type TasksetSourceRef } from "@openpond/contracts";
 import { learningRef, sameLearningRef, verifyLearningTextAsset } from "@openpond/evals/learning";
-import { createTasksetDraft, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft } from "@openpond/taskset-sdk";
+import { computeTasksetHash, createTasksetDraft, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft } from "@openpond/taskset-sdk";
 import { deriveModelTaskset, ModelStarterToolFixtureScriptSchema, validateModelStarterCreation, type ModelStarterCreationRequest, type ModelTasksetPackage } from "openpond-sdk/model-starters";
 
 /** Trusted catalog publication supplies authored fixtures and reviewed training
@@ -49,6 +49,7 @@ export function prepareModelStarterTaskset(input: {
   const authored = TasksetDraftSchema.parse({
     ...draft,
     objective: taskDefinition.instructions,
+    metrics: release.metrics ?? draft.metrics,
     sourceRefs: [input.source],
     policy: release.policy,
     environment: { ...draft.environment, kind: toolEnvironment ? "agent" : "chat", entrypoint: release.environment.entrypoint, stateful: release.environment.stateful, toolNames: release.tools.map(tool => tool.name), deterministicSeeds: release.environment.deterministicSeeds, defaultTimeoutMs: release.environment.defaultTimeoutMs, networkPolicy: release.environment.networkPolicy, metadata: { portableEnvironment: release.environment, portableTools: release.tools, ...(resources.executionResources ? { portableExecutionResources: resources.executionResources } : resources.execution ? { portableExecutionResources: { environment: resources.execution.environment, verifierSet: resources.execution.verifierSet } } : {}) } },
@@ -68,5 +69,9 @@ export function prepareModelStarterTaskset(input: {
     })) },
     metadata: { starter: learningRef(starter), starterTasksetRelease: learningRef(release), taskDefinition: learningRef(taskDefinition), rewardBinding: learningRef(rewardBinding), rewardExecution: { binding: rewardBinding, rewards }, portableCapabilities: release.capabilities, derivedPortableMetadata: release.metadata, modelTasksetDerivation: release.metadata.modelTasksetDerivation },
   });
-  return { draft: authored, taskset: publishTasksetDraft({ draft: authored, now: input.createdAt, tasksetId, sourcePackageHash: release.contentHash }), generatedFiles: files, resources };
+  const taskset = publishTasksetDraft({ draft: authored, now: input.createdAt, tasksetId, sourcePackageHash: release.contentHash });
+  // A draft's editor default is not an authored policy on the pinned release.
+  taskset.metrics = release.metrics;
+  taskset.contentHash = computeTasksetHash(taskset);
+  return { draft: authored, taskset, generatedFiles: files, resources };
 }
