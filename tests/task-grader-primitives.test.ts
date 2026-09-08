@@ -1,6 +1,27 @@
 import { describe, expect, test } from "vitest";
-import { gradeAttempt } from "../packages/taskset-sdk/src";
+import { gradeAttempt as gradeLocalAttempt, materializePortableTasksetRelease } from "../packages/taskset-sdk/src";
+import { gradeEvidence } from "@openpond/evals/graders";
+import { createTasksetPackage } from "openpond-sdk/taskset-packages";
+import { prepareImportedTasksetPackage } from "../apps/server/src/training/taskset-package-import.js";
 import { attemptFixture, tasksetFixture } from "./helpers/training-fixtures";
+
+// A grader must retain its meaning through real release construction and import,
+// including negative attempts; native-only checks missed changed configuration.
+async function gradeAttempt(input: Parameters<typeof gradeLocalAttempt>[0]) {
+  const native = await gradeLocalAttempt(input);
+  const taskset = { ...tasksetFixture({ graders: input.graders }), tasks: [{ ...input.task, assets: [], privilegedContextRef: null }] };
+  const releases = materializePortableTasksetRelease({ taskset, adapterId: "grader-parity" });
+  const portable = await gradeEvidence({ task: releases.tasksetRelease.tasks[0]!, graders: releases.tasksetRelease.graders,
+    evidence: { output: input.attempt.output, artifactRefs: input.attempt.artifactRefs, runtimeEventRefs: input.attempt.runtimeEventRefs, infrastructureError: input.attempt.infrastructureError } });
+  const value = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset: releases.tasksetRelease, environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease, files: [] });
+  const imported = prepareImportedTasksetPackage({ package: value, profileId: "grader-import", name: "Imported graders", createdAt: input.attempt.completedAt });
+  const roundtrip = await gradeLocalAttempt({ ...input, task: imported.taskset.tasks[0]!, graders: imported.taskset.graders });
+  const outcomes = (items: Array<{ score: number | null; passed: boolean }>) => items.map(({ score, passed }) => ({ score, passed }));
+  expect(outcomes(portable)).toEqual(outcomes(native.components));
+  expect(outcomes(roundtrip.components)).toEqual(outcomes(native.components));
+  expect(materializePortableTasksetRelease({ taskset: imported.taskset, adapterId: "grader-parity" }).tasksetRelease).toEqual(value.taskset);
+  return native;
+}
 
 describe("deterministic grader primitives", () => {
   test("executes content, schema, file, diff, test, runtime-event, and state graders", async () => {
@@ -18,6 +39,24 @@ describe("deterministic grader primitives", () => {
     const grade = await gradeAttempt({ task, attempt, graders });
     expect(grade.passed).toBe(true);
     expect(grade.components.map((item) => item.graderId)).toEqual(graders.map((item) => item.id));
+    const failed = await gradeAttempt({ task, attempt: attemptFixture({ output: { response: "secret", testsPassed: false, diffAccepted: false }, artifactRefs: [], runtimeEventRefs: [] }), graders });
+    expect(failed.components.every(component => component.score === 0 && !component.passed)).toBe(true);
+  });
+
+  test("keeps empty and unsupported checks unscorable through package transfer", async () => {
+    const task = tasksetFixture().tasks[1]!;
+    for (const check of [
+      { kind: "content" as const, config: { includes: [] } },
+      { kind: "content" as const, config: { operator: "unknown" } },
+      { kind: "schema" as const, config: { requiredKeys: [] } },
+      { kind: "file" as const, config: {} },
+      { kind: "runtime_event" as const, config: { requiredEvents: [] } },
+      { kind: "state" as const, config: { fields: ["missing"] } },
+    ]) {
+      const grader = { id: "unscorable", version: "1", label: "Unscorable", weight: 1, hardGate: false, rewardEligible: true, privileged: false, metadata: {}, ...check };
+      const result = await gradeAttempt({ task, attempt: attemptFixture(), graders: [grader] });
+      expect(result).toMatchObject({ score: null, rewardEligible: false, failureClass: "grader_failure", components: [{ score: null }] });
+    }
   });
 
   test("supports exact content fields authored for deterministic graders", async () => {

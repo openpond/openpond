@@ -72,7 +72,7 @@ export async function gradeLearningBatchAttempt(input: {
     components: composition.results.map((result) => {
       const source = binding.sources.find((source) => source.graderId === result.graderId)!;
       const grader = input.graders.find((grader) => grader.id === result.graderId)!;
-      return { graderId: result.graderId, graderVersion: grader.version, score: result.normalizedScore ?? 0,
+      return { graderId: result.graderId, graderVersion: grader.version, score: result.normalizedScore,
         passed: result.passed === true, hardGate: source.hardGate,
         rewardEligible: source.role === "training" && result.status === "scored", feedback: result.message?.trim() || null,
         evidenceRefs: result.evidenceHashes, judge: grader.kind === "model_judge" ? grader.judge : null,

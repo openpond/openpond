@@ -182,7 +182,7 @@ function evaluationStage(attempt: TaskAttemptResult): "base" | "trained" {
 
 function gradeView(grade: GradeResult | null): TrainingEvaluationGrade | null {
   if (!grade) return null;
-  const unavailable = grade.feedback.some((feedback) => /(?:runner is unavailable|human review is pending|calibration has not passed)/i.test(feedback));
+  const unavailable = grade.score === null;
   return {
     status: unavailable ? "unavailable" : "scored",
     score: unavailable ? null : grade.score,

@@ -5,22 +5,16 @@ import {
   type TaskAttemptResult,
   type TaskDataRecord,
 } from "@openpond/contracts";
+import { evaluateDeterministicGrader, portableDeterministicCheck } from "@openpond/evals/graders";
+import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
 import { contentHash } from "./hashing.js";
 import { gradeLearningBatchAttempt } from "./learning-graders.js";
-import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
 
 export type ModelJudgeRunner = (input: {
   grader: Extract<GraderSpec, { kind: "model_judge" }>;
   task: TaskDataRecord;
   attempt: TaskAttemptResult;
-}) => Promise<{
-  score: number;
-  passed: boolean;
-  feedback: string;
-  evidenceRefs?: string[];
-  usage?: unknown;
-  costUsd?: number;
-}>;
+}) => Promise<{ score: number; passed: boolean; feedback: string; evidenceRefs?: string[]; usage?: unknown; costUsd?: number }>;
 
 export type CustomVerifierRunner = (input: {
   grader: Extract<GraderSpec, { kind: "custom_verifier" }>;
@@ -40,283 +34,56 @@ export async function gradeAttempt(input: {
   signal?: AbortSignal;
 }): Promise<GradeResult> {
   if (input.learning) return gradeLearningBatchAttempt({ ...input, learning: input.learning });
-  if (input.graders.some((grader) => grader.metadata.rewardBinding !== undefined)) {
-    throw new Error("This Taskset requires its immutable public Reward binding to grade an attempt.");
-  }
-  const now = input.now ?? (() => new Date().toISOString());
+  if (input.graders.some(grader => grader.metadata.rewardBinding !== undefined)) throw new Error("This Taskset requires its immutable public Reward binding to grade an attempt.");
   const graderSetHash = contentHash(input.graders);
-  if (input.attempt.infrastructureError) {
-    return {
-      schemaVersion: "openpond.gradeResult.v1",
-      id: `grade_${contentHash([input.attempt.id, graderSetHash]).slice(0, 24)}`,
-      attemptId: input.attempt.id,
-      graderSetHash,
-      score: null,
-      passed: false,
-      components: input.graders.map((grader) => component(
-        grader,
-        0,
-        false,
-        "Infrastructure failure; no reward was produced.",
-        [],
-        false,
-      )),
-      failureClass: "infrastructure_failure",
-      feedback: [input.attempt.infrastructureError],
-      rewardEligible: false,
-      createdAt: now(),
-    };
-  }
-
   const components: GradeComponent[] = [];
   for (const grader of input.graders) {
-    components.push(await runGrader(grader, input.task, input.attempt, input.modelJudge, input.customVerifier));
+    input.signal?.throwIfAborted();
+    components.push(input.attempt.infrastructureError
+      ? component(grader, null, false, "Infrastructure failure; no reward was produced.", [], false)
+      : await runGrader(grader, input.task, input.attempt, input.modelJudge, input.customVerifier, input.signal));
   }
-  const hardGateFailed = components.some((item) => item.hardGate && !item.passed);
-  const weighted = components.reduce((sum, item, index) => sum + item.score * (input.graders[index]?.weight ?? 1), 0);
+  const unscorable = components.some(item => item.score === null);
+  const hardGateFailed = components.some(item => item.hardGate && !item.passed);
   const totalWeight = input.graders.reduce((sum, grader) => sum + grader.weight, 0);
-  const score = hardGateFailed ? 0 : totalWeight > 0 ? weighted / totalWeight : 0;
+  const weighted = components.reduce((sum, item, index) => sum + (item.score ?? 0) * input.graders[index]!.weight, 0);
+  const score = input.attempt.infrastructureError || unscorable || totalWeight <= 0 ? null : hardGateFailed ? 0 : weighted / totalWeight;
+  const passed = score !== null && !hardGateFailed && components.every(item => item.passed);
   return {
     schemaVersion: "openpond.gradeResult.v1",
     id: `grade_${contentHash([input.attempt.id, graderSetHash, components]).slice(0, 24)}`,
-    attemptId: input.attempt.id,
-    graderSetHash,
-    score,
-    passed: !hardGateFailed && components.every((item) => item.passed),
-    components,
-    failureClass: hardGateFailed || components.some((item) => !item.passed) ? "policy_failure" : null,
-    feedback: components.flatMap((item) => item.feedback ? [item.feedback] : []),
-    rewardEligible: components.some((item) => item.rewardEligible),
-    createdAt: now(),
+    attemptId: input.attempt.id, graderSetHash, score, passed, components,
+    failureClass: input.attempt.infrastructureError ? "infrastructure_failure" : score === null ? "grader_failure" : passed ? null : "policy_failure",
+    feedback: input.attempt.infrastructureError ? [input.attempt.infrastructureError] : components.flatMap(item => item.feedback ? [item.feedback] : []),
+    rewardEligible: score !== null && components.some(item => item.rewardEligible),
+    createdAt: input.now?.() ?? new Date().toISOString(),
   };
 }
 
-async function runGrader(
-  grader: GraderSpec,
-  task: TaskDataRecord,
-  attempt: TaskAttemptResult,
-  modelJudge?: ModelJudgeRunner,
-  customVerifier?: CustomVerifierRunner,
-): Promise<GradeComponent> {
+async function runGrader(grader: GraderSpec, task: TaskDataRecord, attempt: TaskAttemptResult, modelJudge?: ModelJudgeRunner, customVerifier?: CustomVerifierRunner, signal?: AbortSignal): Promise<GradeComponent> {
   if (grader.kind === "model_judge") {
-    if (!modelJudge) return component(grader, 0, false, "Model judge runner is unavailable.", [], false);
-    if (grader.calibrationStatus !== "passed") return component(grader, 0, false, "Model judge calibration has not passed.", [], false);
+    if (!modelJudge) return component(grader, null, false, "Model judge runner is unavailable.", [], false);
+    if (grader.calibrationStatus !== "passed") return component(grader, null, false, "Model judge calibration has not passed.", [], false);
     const result = await modelJudge({ grader, task, attempt });
-    return component(grader, clamp(result.score), result.passed, result.feedback, result.evidenceRefs ?? []);
+    return component(grader, result.score, result.passed, result.feedback, result.evidenceRefs ?? []);
   }
-  if (grader.kind === "human") return component(grader, 0, false, "Human review is pending.", [], false);
+  if (grader.kind === "human") return component(grader, null, false, "Human review is pending.", [], false);
   if (grader.kind === "custom_verifier") {
-    if (!customVerifier) return component(grader, 0, false, "Sandboxed verifier runner is unavailable.", [], false);
-    const result = await customVerifier({ grader, task, attempt });
-    return component(grader, clamp(result.score), result.passed, result.feedback, result.evidenceRefs ?? []);
+    if (!customVerifier) return component(grader, null, false, "Sandboxed verifier runner is unavailable.", [], false);
+    const result = await customVerifier({ grader, task, attempt, signal });
+    return component(grader, result.score, result.passed, result.feedback, result.evidenceRefs ?? []);
   }
-  return runDeterministic(grader, task, attempt);
+  const result = evaluateDeterministicGrader({ grader: portableDeterministicCheck(grader), task, evidence: attempt });
+  return component(grader, result.score, result.passed, result.feedback, [...attempt.artifactRefs, ...attempt.runtimeEventRefs]);
 }
 
-function runDeterministic(grader: Extract<GraderSpec, { kind: "content" | "schema" | "file" | "diff" | "test" | "runtime_event" | "state" }>, task: TaskDataRecord, attempt: TaskAttemptResult): GradeComponent {
-  const config = grader.config;
-  if (grader.kind === "content") {
-    if (config.operator === "final_answer_equals_expected") {
-      const outputField =
-        typeof config.outputField === "string" ? config.outputField : "text";
-      const expectedField =
-        typeof config.expectedField === "string" ? config.expectedField : "text";
-      const actual = typeof attempt.output[outputField] === "string"
-        ? attempt.output[outputField]
-        : null;
-      const expected = typeof task.expectedOutput?.[expectedField] === "string"
-        ? task.expectedOutput[expectedField]
-        : null;
-      const normalizedActual = actual === null ? null : normalizedFinalAnswer(actual);
-      const normalizedExpected = expected === null
-        ? null
-        : normalizedFinalAnswer(expected);
-      const passed =
-        normalizedActual !== null
-        && normalizedExpected !== null
-        && normalizedActual === normalizedExpected;
-      return component(
-        grader,
-        passed ? 1 : 0,
-        passed,
-        passed
-          ? "The final answer matched the privileged expected answer."
-          : "The final answer did not match the privileged expected answer.",
-        [],
-      );
-    }
-    if (config.operator === "exact_equals") {
-      const outputField = typeof config.outputField === "string" ? config.outputField : "text";
-      const expected = typeof config.expectedValue === "string" ? config.expectedValue : null;
-      const actual = typeof attempt.output[outputField] === "string" ? attempt.output[outputField] as string : null;
-      const normalize = (value: string) => {
-        const unicode = config.normalizeUnicode === true ? value.normalize("NFC") : value;
-        return config.trimWhitespace === true ? unicode.trim() : unicode;
-      };
-      const passed = expected !== null && actual !== null && normalize(actual) === normalize(expected);
-      return component(grader, passed ? 1 : 0, passed, passed ? "Content exactly matched the expected value." : "Content did not exactly match the expected value.", []);
-    }
-    const text = stringOutput(attempt.output);
-    const includes = stringArray(config.includes);
-    const excludes = stringArray(config.excludes);
-    const passed = includes.every((item) => text.includes(item)) && excludes.every((item) => !text.includes(item));
-    return component(grader, passed ? 1 : 0, passed, passed ? "Content requirements passed." : "Content requirements failed.", []);
-  }
-  if (grader.kind === "schema") {
-    if (config.operator === "json_schema_subset") {
-      const parsed = structuredJsonOutput(attempt.output, config.jsonField);
-      if (!parsed.ok) {
-        return component(grader, 0, false, parsed.message, []);
-      }
-      const issues = validateJsonSchemaSubset(parsed.value, record(config.schema));
-      const passed = issues.length === 0;
-      return component(
-        grader,
-        passed ? 1 : 0,
-        passed,
-        passed ? "Structured output satisfied the declared JSON Schema." : issues.join(" "),
-        [],
-      );
-    }
-    const requiredKeys = stringArray(config.requiredKeys);
-    const passed = requiredKeys.every((key) => Object.hasOwn(attempt.output, key));
-    return component(grader, passed ? 1 : 0, passed, passed ? "Schema requirements passed." : `Missing keys: ${requiredKeys.filter((key) => !Object.hasOwn(attempt.output, key)).join(", ")}.`, []);
-  }
-  if (grader.kind === "file") {
-    const pattern = typeof config.pathIncludes === "string" ? config.pathIncludes : "";
-    const passed = attempt.artifactRefs.some((ref) => ref.includes(pattern));
-    return component(grader, passed ? 1 : 0, passed, passed ? "Required artifact exists." : "Required artifact is missing.", attempt.artifactRefs);
-  }
-  if (grader.kind === "runtime_event") {
-    const required = stringArray(config.requiredEvents);
-    const passed = required.every((event) => attempt.runtimeEventRefs.some((ref) => ref.includes(event)));
-    return component(grader, passed ? 1 : 0, passed, passed ? "Runtime event requirements passed." : "Runtime event requirements failed.", attempt.runtimeEventRefs);
-  }
-  if (grader.kind === "state") {
-    const expected = task.expectedOutput ?? {};
-    const fields = stringArray(config.fields);
-    const compared = fields.length > 0 ? fields : Object.keys(expected);
-    const passed = compared.every((field) => Object.is(attempt.output[field], expected[field]));
-    return component(grader, passed ? 1 : 0, passed, passed ? "State matched expected outcome." : "State did not match expected outcome.", []);
-  }
-  const evidenceKey = grader.kind === "test" ? "testsPassed" : "diffAccepted";
-  const passed = attempt.output[evidenceKey] === true;
-  return component(grader, passed ? 1 : 0, passed, passed ? `${grader.kind} evidence passed.` : `${grader.kind} evidence failed.`, attempt.artifactRefs);
-}
-
-function component(
-  grader: GraderSpec,
-  score: number,
-  passed: boolean,
-  feedback: string,
-  evidenceRefs: string[],
-  rewardEligible = grader.rewardEligible,
-): GradeComponent {
+function component(grader: GraderSpec, score: number | null, passed: boolean, feedback: string, evidenceRefs: string[], rewardEligible = grader.rewardEligible): GradeComponent {
+  const bounded = score !== null && Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null;
   return {
-    graderId: grader.id,
-    graderVersion: grader.version,
-    score,
-    passed,
-    hardGate: grader.hardGate,
-    rewardEligible,
-    feedback,
-    evidenceRefs,
+    graderId: grader.id, graderVersion: grader.version, score: bounded,
+    passed: bounded !== null && passed, hardGate: grader.hardGate,
+    rewardEligible: bounded !== null && rewardEligible, feedback, evidenceRefs,
     judge: grader.kind === "model_judge" ? grader.judge : null,
     calibrationStatus: grader.kind === "model_judge" ? grader.calibrationStatus : "not_applicable",
   };
-}
-
-function clamp(value: number): number { return Math.max(0, Math.min(1, value)); }
-function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
-function stringOutput(output: Record<string, unknown>): string { return typeof output.text === "string" ? output.text : JSON.stringify(output); }
-
-function normalizedFinalAnswer(value: string): string {
-  const boxed = [...value.matchAll(/\\boxed\{([^{}]+)\}/g)].at(-1)?.[1];
-  const hashAnswer = value.match(/####\s*([^\n\r]+)/)?.[1];
-  const answerLabel = value.match(
-    /(?:final\s+answer|answer)\s*(?::|is|=)\s*([^\n\r]+)/i,
-  )?.[1];
-  const selected = boxed ?? hashAnswer ?? answerLabel ?? value;
-  return selected
-    .normalize("NFKC")
-    .trim()
-    .replace(/^\$+|\$+$/g, "")
-    .replace(/^\\\(|\\\)$/g, "")
-    .replace(/[,，]/g, "")
-    .replace(/[.\s]+$/g, "")
-    .replace(/\s+/g, " ");
-}
-
-function structuredJsonOutput(
-  output: Record<string, unknown>,
-  jsonField: unknown,
-): { ok: true; value: unknown } | { ok: false; message: string } {
-  const field = typeof jsonField === "string" ? jsonField : "text";
-  const encoded = output[field];
-  if (typeof encoded !== "string") return { ok: true, value: output };
-  const trimmed = encoded.trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "");
-  try {
-    return { ok: true, value: JSON.parse(trimmed) as unknown };
-  } catch {
-    return { ok: false, message: "The model output was not valid JSON." };
-  }
-}
-
-function validateJsonSchemaSubset(
-  value: unknown,
-  schema: Record<string, unknown>,
-  path = "$",
-): string[] {
-  const issues: string[] = [];
-  const enumValues = Array.isArray(schema.enum) ? schema.enum : null;
-  if (enumValues && !enumValues.some((candidate) => Object.is(candidate, value))) {
-    issues.push(`${path} must be one of the declared values.`);
-    return issues;
-  }
-  if (schema.type === "object") {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return [`${path} must be an object.`];
-    }
-    const objectValue = value as Record<string, unknown>;
-    const properties = record(schema.properties);
-    for (const key of stringArray(schema.required)) {
-      if (!Object.hasOwn(objectValue, key)) issues.push(`${path}.${key} is required.`);
-    }
-    if (schema.additionalProperties === false) {
-      for (const key of Object.keys(objectValue)) {
-        if (!Object.hasOwn(properties, key)) issues.push(`${path}.${key} is not allowed.`);
-      }
-    }
-    for (const [key, propertySchema] of Object.entries(properties)) {
-      if (!Object.hasOwn(objectValue, key)) continue;
-      issues.push(...validateJsonSchemaSubset(
-        objectValue[key],
-        record(propertySchema),
-        `${path}.${key}`,
-      ));
-    }
-    return issues;
-  }
-  if (schema.type === "array") {
-    if (!Array.isArray(value)) return [`${path} must be an array.`];
-    const itemSchema = record(schema.items);
-    for (const [index, item] of value.entries()) {
-      issues.push(...validateJsonSchemaSubset(item, itemSchema, `${path}[${index}]`));
-    }
-    return issues;
-  }
-  if (schema.type === "string" && typeof value !== "string") issues.push(`${path} must be a string.`);
-  if (schema.type === "number" && (typeof value !== "number" || !Number.isFinite(value))) issues.push(`${path} must be a finite number.`);
-  if (schema.type === "integer" && (typeof value !== "number" || !Number.isInteger(value))) issues.push(`${path} must be an integer.`);
-  if (schema.type === "boolean" && typeof value !== "boolean") issues.push(`${path} must be a boolean.`);
-  if (schema.type === "null" && value !== null) issues.push(`${path} must be null.`);
-  return issues;
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
 }

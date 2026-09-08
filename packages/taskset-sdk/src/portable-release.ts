@@ -34,6 +34,7 @@ import {
 import { contentHash, sha256 } from "./hashing.js";
 import { TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
 import { compileBoundGraders, RewardBindingSchema, RewardReleaseSchema, type RewardBinding, type RewardRelease } from "@openpond/evals/rewards";
+import { portableDeterministicCheck } from "@openpond/evals/graders";
 
 export type TasksetRewardExecution = { binding: RewardBinding; rewards: RewardRelease[] };
 
@@ -365,10 +366,7 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
   };
   return {
     ...base,
-    kind: grader.kind === "file" ? "artifact"
-      : grader.kind === "diff" || grader.kind === "test" ? "state"
-        : grader.kind,
-    config: grader.config,
+    ...portableDeterministicCheck(grader),
   };
 }
 
