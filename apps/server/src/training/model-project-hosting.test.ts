@@ -1,3 +1,5 @@
+import { OpenPondLearningClient } from "openpond-sdk/learning";
+import { createModelLearningHostingService } from "./model-learning-hosting.js";
 import { describe, expect, test, vi } from "vitest";
 import { OpenPondModelTasksetRunsClient } from "openpond-sdk/model-taskset-runs";
 
@@ -37,6 +39,39 @@ describe("Model Project hosting", () => {
       get.mockRestore();
       cancel.mockRestore();
     }
+  });
+  // A supplied policy or iteration ID must not escape the selected Model,
+  // and stale Profile/workspace selections must not contact hosted services.
+  test("fences hosted learning commands to their Model and connection", async () => {
+    const local = { id: "model", profileId: "profile", hosted: { projectId: "hosted", teamId: "team", apiOrigin: "https://host.invalid" } };
+    const project = { id: "hosted", teamId: "team", portableProjectId: "model", name: "Model", objective: null, defaultBaseModel: null,
+      defaultDestinationId: null, trainingSetup: emptyTrainingSetup(), sourceRevision: 1, sourceUpdatedAt: "2026-09-01T00:00:00.000Z",
+      revision: 1, etag: "b".repeat(64), createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z" };
+    const request = vi.fn(async () => Response.json({ project, resources: [], jobCount: 0, latestJobIds: [] }));
+    const service = createModelLearningHostingService({ store: { getModelProject: async () => local } as never,
+      resolveAccess: async () => ({ apiBaseUrl: "https://host.invalid", teamId: "team", token: "test" }), fetch: request });
+    await expect(service.overview({ modelId: "model", profileId: "other" })).rejects.toThrow("this Profile");
+    local.hosted.teamId = "foreign";
+    await expect(service.overview({ modelId: "model", profileId: "profile" })).rejects.toThrow("active connection");
+    local.hosted.teamId = "team"; local.hosted.apiOrigin = "https://foreign.invalid";
+    await expect(service.overview({ modelId: "model", profileId: "profile" })).rejects.toThrow("active connection");
+    expect(request).not.toHaveBeenCalled();
+    local.hosted.apiOrigin = "https://host.invalid";
+    const policy = { id: "policy", revision: 1, contentHash: "a".repeat(64), modelProjectId: "foreign", executionOwner: "hosted" };
+    const get = vi.spyOn(OpenPondLearningClient.prototype, "get").mockImplementation(async (kind) =>
+      (kind === "iteration" ? { policy: { id: "policy", revision: 1, contentHash: policy.contentHash } } : policy) as never);
+    const command = vi.spyOn(OpenPondLearningClient.prototype, "command").mockResolvedValue({ resources: [] } as never);
+    const cancel = { action: "cancel_iteration" as const, operationId: "cancel", iterationId: "iteration", expectedRevision: 1 };
+    try {
+      await expect(service.command({ modelId: "model", profileId: "profile", command: cancel })).rejects.toThrow("does not belong");
+      expect(command).not.toHaveBeenCalled();
+      policy.modelProjectId = "model";
+      await service.command({ modelId: "model", profileId: "profile", command: cancel });
+      expect(command).toHaveBeenCalledWith(cancel);
+      project.portableProjectId = "foreign";
+      await expect(service.command({ modelId: "model", profileId: "profile", command: cancel })).rejects.toThrow("identity differs");
+      expect(command).toHaveBeenCalledTimes(1);
+    } finally { get.mockRestore(); command.mockRestore(); }
   });
   test("discovers hosted projects and pulls a pristine definition without overwriting local work", async () => {
     const hosted = {
