@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import type { Taskset } from "@openpond/contracts";
 import { prepareReviewedLearningBatch } from "openpond-sdk/training-bundle";
-import { requireLearningRelease, requireLearningResource } from "@openpond/evals/learning";
+import { learningRef, requireLearningRelease, requireLearningResource } from "@openpond/evals/learning";
 import { contentHash } from "@openpond/harness";
 import { buildTaskset } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
@@ -43,7 +43,10 @@ export async function prepareLocalLearningBatch(store: SqliteStore, storeDir: st
   }
   const assetBytes = new Map<string, Uint8Array>();
   for (const asset of snapshot.inputAssets) if (asset) assetBytes.set(asset.id, new TextEncoder().encode(asset.text));
-  for (const hash of new Set(snapshot.sources.flatMap(source => source.reviewOrigin ? [source.reviewOrigin.packageHash] : []))) {
+  const sourcePackages = snapshot.sources.filter(source => source.reviewOrigin && snapshot.evidence.some(item =>
+    contentHash(item.source) === contentHash(learningRef(source))
+    && item.submission.assets.some(asset => !assetBytes.has(asset.id))));
+  for (const hash of new Set(sourcePackages.map(source => source.reviewOrigin!.packageHash))) {
     const parent = await readCachedTasksetPackage(storeDir, hash);
     for (const file of parent.files) {
       if (!snapshot.evidence.some(item => item.submission.assets.some(asset => asset.id === file.asset.id && asset.contentHash === file.asset.contentHash))) continue;
