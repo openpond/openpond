@@ -1,19 +1,19 @@
-import { ModelProjectSchema, TrainingJobSchema } from "@openpond/contracts";
+import { ModelProjectSchema, TrainingJobSchema, type TrainingExecutionStatus } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
-import { buildTasksetTrainingBundle, createTrainingPlan } from "@openpond/training-sdk";
+import { buildTasksetTrainingBundle, createTrainingPlan, TrainingAdapterRegistry } from "@openpond/training-sdk";
 import { describe, expect, test } from "vitest";
 
 import {
   portableModelVersionMetadata,
   portableReleaseGraphMetadata,
   preparePortableModelRunLifecycle,
-  reconcilePortableModelRunLifecycle,
 } from "../apps/server/src/training/portable-model-run-lifecycle.js";
 import { managedRftRecipe, rftTasksetFixture } from "./helpers/managed-training-fixtures.js";
 import { FIXED_TIME, withTrainingStore } from "./helpers/training-fixtures.js";
+import { createPortableModelRunService } from "../apps/server/src/training/portable-model-run-service.js";
 
 describe("portable Model Run lifecycle", () => {
-  test("imports a Sandbox-owned managed candidate into canonical lineage and Model Version state", async () =>
+  test("recovers failed collection without repeating training and waits for authoritative cancellation", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const taskset = rftTasksetFixture();
       const recipeFixture = managedRftRecipe();
@@ -205,13 +205,7 @@ describe("portable Model Run lifecycle", () => {
         createdAt: FIXED_TIME,
       };
       const completedAt = "2026-07-12T00:10:00.000Z";
-      const terminal = await reconcilePortableModelRunLifecycle({
-        store,
-        storeDir: directory,
-        modelRunId,
-        job,
-        executionRef,
-        status: {
+      let providerStatus: TrainingExecutionStatus = {
           runId: "managed-provider-job-1",
           state: "succeeded",
           phase: "complete",
@@ -224,12 +218,50 @@ describe("portable Model Run lifecycle", () => {
           },
           updatedAt: completedAt,
           errorCode: null,
-        },
-        artifacts: {
+      };
+      const portableArtifacts = {
           ...artifactBase,
           contentHash: contentHash(artifactBase),
+      };
+      await store.saveTrainingJob({ ...job, metadata: { ...job.metadata, modelRunId, portableExecutionRef: executionRef } });
+      let collectionUnavailable = true;
+      let collections = 0;
+      const unavailable = async (): Promise<never> => { throw new Error("Collection must not prepare or launch new training."); };
+      const adapters = new TrainingAdapterRegistry();
+      adapters.registerEngine({
+        id: executionRef.adapterId, capabilities: unavailable, validate: unavailable,
+        launch: unavailable, consumeSignals: unavailable, logs: unavailable,
+        status: async (ref) => ({ ...providerStatus, runId: ref.runId }),
+        cancel: async () => { providerStatus = { ...providerStatus, state: "cancelling", phase: "cancelling" }; },
+        collect: async () => {
+          collections += 1;
+          if (collectionUnavailable) throw new Error("The receipt could not be verified.");
+          return portableArtifacts;
         },
       });
+      const createService = () => createPortableModelRunService({
+        store, storeDir: directory, adapters, catalog: unavailable, prepare: unavailable,
+        prepareStart: unavailable, approve: unavailable, resolveReleasedHarness: unavailable,
+      });
+      const service = createService();
+      expect(await service.status(modelRunId)).toMatchObject({ state: "failed" });
+      expect(await store.getTrainingJob(jobId)).toMatchObject({ status: "failed", metadata: { phase: "artifact_collection_failed" } });
+      expect(await store.listTrainingArtifacts(jobId)).toHaveLength(0);
+      const failedRun = (await store.getModelRun(modelRunId))!;
+      await expect(store.saveModelRun({ ...failedRun, status: "running" })).rejects.toThrow("immutable");
+      await expect(store.saveModelRun({ ...failedRun, status: "running" }, { recoverCollectionForJobId: jobId }))
+        .rejects.toThrow("preserve the failed Job's execution and lineage");
+      expect(await service.retryCollection(modelRunId)).toMatchObject({ state: "failed" });
+      providerStatus = { ...providerStatus, state: "cancelled" };
+      await expect(service.retryCollection(modelRunId)).rejects.toThrow("successful execution");
+      expect(collections).toBe(2);
+      providerStatus = { ...providerStatus, state: "succeeded" };
+      collectionUnavailable = false;
+      // Recreate the service: recovery must use the persisted run and execution.
+      expect(await createService().retryCollection(modelRunId)).toMatchObject({ state: "succeeded" });
+      expect(await createService().retryCollection(modelRunId)).toMatchObject({ state: "succeeded" });
+      expect(collections).toBe(3);
+      const terminal = (await store.getModelRun(modelRunId))!;
 
       expect(terminal).toMatchObject({
         status: "succeeded",
@@ -270,6 +302,7 @@ describe("portable Model Run lifecycle", () => {
         metadata: {
           importedModelLineageId: terminal.adapterArtifactLineageId,
           modelVersionId: prepared.targetVersion.id,
+          artifactCollectionRecovery: { previousFailure: "The receipt could not be verified." },
           rolloutProgress: {
             groupsCompleted: 4,
             groupsTarget: 4,
@@ -278,5 +311,23 @@ describe("portable Model Run lifecycle", () => {
           },
         },
       });
+      const cancellationRunId = "portable-cancellation-run";
+      const cancellation = await preparePortableModelRunLifecycle({
+        store, modelProject, modelRunId: cancellationRunId, taskset,
+        sourceProjectRevision: 3, releaseGraph, maximumSpendUsd: 2, startedAt: FIXED_TIME,
+      });
+      const cancellationJobId = "portable-cancellation-job";
+      await store.saveTrainingJob({ ...job, id: cancellationJobId, metadata: {
+        ...job.metadata, modelRunId: cancellationRunId,
+        portableExecutionRef: { ...executionRef, runId: "cancel-provider-job", providerJobId: "cancel-provider-job" },
+        sourceSnapshot: cancellation.sourceSnapshot,
+      } });
+      expect(await service.cancel(cancellationRunId)).toMatchObject({ state: "cancelling" });
+      expect(await store.getModelRun(cancellationRunId)).toMatchObject({ status: "running", completedAt: null });
+      expect(await store.getTrainingJob(cancellationJobId)).toMatchObject({ status: "cancelling", completedAt: null });
+      providerStatus = { ...providerStatus, state: "cancelled", phase: "cancelled" };
+      expect(await service.status(cancellationRunId)).toMatchObject({ state: "cancelled" });
+      await expect(service.retryCollection(cancellationRunId)).rejects.toThrow("failed artifact collection");
+      expect(collections).toBe(3);
     }));
 });

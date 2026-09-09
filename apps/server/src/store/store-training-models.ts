@@ -8,6 +8,7 @@ import type {
   RewardModelRun,
   RewardModelVersion,
   RolloutTrajectoryReceipt,
+  TrainingJob,
 } from "@openpond/contracts";
 import {
   ModelComparisonSeriesEntrySchema,
@@ -19,6 +20,8 @@ import {
   RewardModelRunSchema,
   RewardModelVersionSchema,
   RolloutTrajectoryReceiptSchema,
+  TrainingJobSchema,
+  TrainingExecutionRefSchema,
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
 import { SqliteLearningStore } from "./store-learning.js";
@@ -503,9 +506,20 @@ export class SqliteTrainingModelStore extends SqliteLearningStore {
     );
   }
 
-  async saveModelRun(runInput: ModelRun): Promise<ModelRun> {
+  async saveModelRun(runInput: ModelRun, options: { recoverCollectionForJobId?: string } = {}): Promise<ModelRun> {
     const modelRun = ModelRunSchema.parse(runInput);
     const existing = await this.getModelRun(modelRun.id);
+    if (existing && JSON.stringify(existing) === JSON.stringify(modelRun)) return existing;
+    let collectionRecovery = false;
+    if (options.recoverCollectionForJobId) {
+      const job = await this.getParsedPayload(
+        "SELECT payload FROM training_jobs WHERE id = ?",
+        [options.recoverCollectionForJobId],
+        TrainingJobSchema.parse,
+      );
+      collectionRecovery = Boolean(existing && job && isArtifactCollectionRecoveryTransition(existing, modelRun, job));
+      if (!collectionRecovery) throw new Error("Model Run collection recovery must preserve the failed Job's execution and lineage.");
+    }
     if (
       existing
       && (
@@ -524,6 +538,7 @@ export class SqliteTrainingModelStore extends SqliteLearningStore {
       && ["succeeded", "failed", "cancelled"].includes(existing.status)
       && JSON.stringify(existing) !== JSON.stringify(modelRun)
       && !isCheckpointResumeTransition(existing, modelRun)
+      && !collectionRecovery
     ) {
       throw new Error(`Terminal Model Run ${modelRun.id} is immutable.`);
     }
@@ -934,6 +949,19 @@ function validEntryRetryEvolution(
     : current.priorRunAttempts;
   return next.attemptOrdinal === current.attemptOrdinal + (hasAttempt ? 1 : 0)
     && JSON.stringify(next.priorRunAttempts) === JSON.stringify(expectedAttempts);
+}
+
+function isArtifactCollectionRecoveryTransition(existing: ModelRun, candidate: ModelRun, job: TrainingJob): boolean {
+  const execution = TrainingExecutionRefSchema.safeParse(job.metadata.portableExecutionRef);
+  if (existing.kind !== "training" || existing.status !== "failed" || existing.receipt !== null
+    || candidate.status !== "succeeded" || candidate.receipt?.schemaVersion !== "openpond.modelRunReceipt.v1" || candidate.failure !== null
+    || job.status !== "failed" || job.metadata.phase !== "artifact_collection_failed"
+    || job.metadata.modelRunId !== existing.id || !execution.success
+    || candidate.receipt.providerRunId !== (execution.data.providerJobId ?? execution.data.runId)
+    || candidate.receipt.assignmentHash !== job.metadata.harnessRunManifestHash) return false;
+  return JSON.stringify({ ...existing, status: candidate.status, receipt: candidate.receipt,
+    adapterArtifactLineageId: candidate.adapterArtifactLineageId, failure: null,
+    completedAt: candidate.completedAt, updatedAt: candidate.updatedAt }) === JSON.stringify(candidate);
 }
 
 export function isCheckpointResumeTransition(

@@ -418,16 +418,22 @@ export function createPortableModelRunService(deps: {
     return TrainingExecutionRefSchema.safeParse(job.metadata.portableExecutionRef);
   }
 
-  async function status(modelRunId: string) {
+  async function status(modelRunId: string, options: { retryCollection?: boolean } = {}) {
     const canonical = await deps.store.getModelRun(modelRunId);
+    const job = await execution(modelRunId);
+    const retryCollection = options.retryCollection === true
+      && canonical?.status === "failed"
+      && job.metadata.phase === "artifact_collection_failed";
+    if (options.retryCollection && !retryCollection && canonical?.status !== "succeeded") {
+      throw new Error("Only a completed run with failed artifact collection can retry collection.");
+    }
     const terminalStatus =
       canonical?.status === "succeeded"
       || canonical?.status === "failed"
       || canonical?.status === "cancelled"
         ? canonical.status
         : null;
-    if (canonical && terminalStatus) {
-      const job = await execution(modelRunId);
+    if (canonical && terminalStatus && !retryCollection) {
       if (["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)) {
         await deps.store.saveTrainingJob({
           ...job,
@@ -439,7 +445,6 @@ export function createPortableModelRunService(deps: {
       }
       return portableStatusFromModelRun(canonical);
     }
-    const job = await execution(modelRunId);
     const parsed = executionRef(job);
     if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
       const adapter = deps.adapters.engine(parsed.data.adapterId);
@@ -470,6 +475,9 @@ export function createPortableModelRunService(deps: {
           artifacts: recovered,
         });
         return portableStatusFromModelRun(modelRun);
+      }
+      if (retryCollection && executionStatus.state !== "succeeded") {
+        throw new Error("Artifact recovery requires a successful execution from the training service.");
       }
       if (!["succeeded", "failed", "cancelled"].includes(executionStatus.state)) {
         await reconcilePortableModelRunLifecycle({
@@ -526,6 +534,7 @@ export function createPortableModelRunService(deps: {
         executionRef: parsed.data,
         status: executionStatus,
         artifacts,
+        retryArtifactCollection: retryCollection,
       });
       return portableStatusFromModelRun(modelRun);
     }
@@ -570,23 +579,9 @@ export function createPortableModelRunService(deps: {
     const parsed = executionRef(job);
     if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
       await deps.adapters.engine(parsed.data.adapterId).cancel(parsed.data);
-      const timestamp = new Date().toISOString();
-      const modelRun = await reconcilePortableModelRunLifecycle({
-        store: deps.store,
-        storeDir: deps.storeDir,
-        modelRunId,
-        job,
-        executionRef: parsed.data,
-        status: {
-          runId: parsed.data.runId,
-          state: "cancelled",
-          phase: "cancelled",
-          progress: 1,
-          updatedAt: timestamp,
-          errorCode: null,
-        },
-      });
-      return portableStatusFromModelRun(modelRun);
+      // A cancellation request is not a cleanup receipt. Preserve the
+      // provider's nonterminal state until it confirms termination.
+      return status(modelRunId);
     }
     throw new Error("Training execution has no registered portable engine.");
   }
@@ -622,7 +617,8 @@ export function createPortableModelRunService(deps: {
     return reconciliation;
   }
 
-  return { start, status, events, logs, artifacts, cancel, reconcileActive };
+  return { start, status, events, logs, artifacts, cancel, reconcileActive,
+    retryCollection: (modelRunId: string) => status(modelRunId, { retryCollection: true }) };
 }
 
 function assertSubmittedManifest(
