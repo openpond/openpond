@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "policy": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "contentHash",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "modelProjectId": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "inspectedAt": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "chain": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "string",
+              "const": "openpond.learningChain.v1"
+            },
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "modelProjectId": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "activeIterationId": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema0"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "latestIterationId": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "lastReservedAt": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "updatedAt": {
+              "$ref": "#/$defs/__schema1"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "id",
+            "revision",
+            "modelProjectId",
+            "activeIterationId",
+            "latestIterationId",
+            "lastReservedAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "counts": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "eligible": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "awaitingReview": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "excluded": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "consumed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "eligible",
+            "awaitingReview",
+            "excluded",
+            "consumed"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "minimumApprovedExamples": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "canReserve": {
+      "type": "boolean"
+    },
+    "blockers": {
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema2"
+      }
+    },
+    "cooldownUntil": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "reservedSpendUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "settledSpendUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "committedSpendUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximumIterationSpendUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximumDailySpendUsd": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "reservedSpendUsd",
+        "settledSpendUsd",
+        "committedSpendUsd",
+        "maximumIterationSpendUsd",
+        "maximumDailySpendUsd"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "policy",
+    "modelProjectId",
+    "inspectedAt",
+    "chain",
+    "counts",
+    "minimumApprovedExamples",
+    "canReserve",
+    "blockers",
+    "cooldownUntil",
+    "budget"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "__schema1": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "__schema2": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "urn:openpond:learning:v1:policy-inspection",
+  "$comment": "Generated from @openpond/evals. Cross-resource identity, authorization, idempotency, admission, grading and split constraints are enforced by the shared domain service in addition to this structural schema."
+}

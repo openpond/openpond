@@ -4,6 +4,7 @@ import { sealLearningBatch } from "./batch-service.js";
 import { LearningIterationSchema, learningRef, sameLearningRef } from "./contracts.js";
 import { LearningDomainError } from "./errors.js";
 import { inspectIterationEligibility, learningChainId, learningConsumptionId } from "./iteration-eligibility.js";
+import { readLearningIterationBudget } from "./iteration-budget.js";
 import { LearningChainSchema, LearningConsumptionSchema, LearningIterationReservationSchema } from "./iteration-reservation-contracts.js";
 import type { LearningCommand } from "./operations.js";
 import { requireLearningRelease, requireLearningResource, type LearningResourcePointer, type LearningTransaction } from "./repository.js";
@@ -88,16 +89,6 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
 }
 
 async function assertAvailableBudget(transaction: LearningTransaction, chainId: string, now: string, requested: number, maximum: number) {
-  let committed = 0;
-  let afterId: string | undefined;
-  do {
-    const page = await transaction.list("reservation", { parentId: chainId, limit: 100, ...(afterId ? { afterId } : {}) });
-    for (const { budget } of page.items) {
-      // Unsettled reservations carry across midnight and worker restarts.
-      committed += budget.reservedSpendUsd;
-      if (budget.settledAt && new Date(budget.settledAt).toISOString().slice(0, 10) === new Date(now).toISOString().slice(0, 10)) committed += budget.settledSpendUsd;
-    }
-    afterId = page.nextCursor ?? undefined;
-  } while (afterId);
-  if (committed + requested > maximum) throw new LearningDomainError("learning_daily_budget_exhausted", 409);
+  const budget = await readLearningIterationBudget(transaction, chainId, now);
+  if (budget.committedSpendUsd + requested > maximum) throw new LearningDomainError("learning_daily_budget_exhausted", 409);
 }

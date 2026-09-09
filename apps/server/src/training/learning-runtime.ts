@@ -60,6 +60,7 @@ export function createLocalLearningRuntime(store: SqliteLearningStore, options: 
     async read(raw: unknown) {
       assertLearningRequestJson(raw);
       const request = LearningReadRequestSchema.parse(raw);
+      if (request.action === "inspect_policy") return service.inspectPolicy(context(request.scope), request.policy);
       if (request.action === "inspect_evidence") return service.inspectEvidence(context(request.scope), request.evidence);
       if (request.action === "get") return service.get(context(request.scope), request.kind, request.id, request.revision);
       const { action: _action, scope, kind, ...query } = request;

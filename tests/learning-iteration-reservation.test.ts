@@ -115,6 +115,9 @@ describe("durable learning iteration reservations", () => {
       await tx.put("reservation", { ...reservation, revision: reservation.revision + 1, budget: { maximumSpendUsd: 4, reservedSpendUsd: 1, settledSpendUsd: 2, settledAt: "2026-09-05T23:30:00-04:00" } }, reservation.revision, { parentId: reservation.chainId });
     });
     await f.approve(await f.submit({ idempotencyKey: "second", exampleId: "second", familyKey: "second", input: { question: "Next" } }));
+    expect(await f.service.inspectPolicy(learningContext, learningRef(policy))).toMatchObject({ canReserve: false,
+      budget: { reservedSpendUsd: 1, settledSpendUsd: 2, committedSpendUsd: 3 },
+      blockers: [{ code: "learning_daily_budget_exhausted" }] });
     await expect(f.reserve(policy, "over-budget")).rejects.toThrow("learning_daily_budget_exhausted");
     expect((await f.service.list(learningContext, "reservation")).items).toHaveLength(1);
     expect(LearningChainSchema.parse((await f.service.list(learningContext, "chain")).items[0]).activeIterationId).toBeNull();

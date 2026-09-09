@@ -19,3 +19,4 @@ export * from "./iteration-candidate-decision.js";
 export * from "./schedule-contracts.js";
 export * from "./schedule-service.js";
 export * from "./schedule-worker.js";
+export * from "./policy-inspection.js";

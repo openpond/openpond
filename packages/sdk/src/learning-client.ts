@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   LearningCommandRequestSchema, LearningOperationResultSchema, LearningReadRequestSchema,
   TaskEvidenceInspectionResultSchema, sameLearningRef, type LearningRevisionRef,
+  LearningPolicyInspectionResultSchema,
   assertLearningRequestJson,
   learningResourceSchemas, type LearningCommand, type LearningOperationResult,
   type LearningResourceFor, type LearningResourceKind, type LearningResourcePage,
@@ -67,6 +68,14 @@ export class OpenPondLearningClient {
     const request = LearningReadRequestSchema.parse({ action: "inspect_evidence", scope: this.#options.scope, evidence });
     const result = TaskEvidenceInspectionResultSchema.parse(await this.#request("read", request, options));
     if (!sameLearningRef(result.evidence, evidence)) throw new OpenPondLearningError(502, "evidence_identity_mismatch", "Inspection did not match the requested evidence release.", null);
+    return result;
+  }
+
+  /** Read current shared eligibility and budget without reserving or launching work. */
+  async inspectPolicy(policy: LearningRevisionRef, options: LearningRequestOptions = {}) {
+    const request = LearningReadRequestSchema.parse({ action: "inspect_policy", scope: this.#options.scope, policy });
+    const result = LearningPolicyInspectionResultSchema.parse(await this.#request("read", request, options));
+    if (!sameLearningRef(result.policy, policy)) throw new OpenPondLearningError(502, "policy_identity_mismatch", "Inspection did not match the requested policy release.", null);
     return result;
   }
 

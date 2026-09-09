@@ -232,6 +232,23 @@ owns it. Duplicate observations are idempotent, older decision revisions cannot
 overwrite newer ones, and contradictory observations at the same revision fail.
 This operation does not change the training parent or activate serving.
 
+### Policy readiness reads
+
+`client.inspectPolicy({ id, revision, contentHash })` sends the read payload
+`{ "action": "inspect_policy", "scope": "<profile-or-team>", "policy": { "id": "...", "revision": 1, "contentHash": "..." } }`.
+The authenticated owner reads a scope-serialized snapshot of the current policy's
+eligible, awaiting-review, excluded and consumed counts, chain identity, cooldown
+and daily budget. It uses the same eligibility, complete batch validation and
+budget accounting as manual or scheduled reservation. A stale policy reference is
+rejected; source-only credentials cannot read it.
+
+`canReserve` describes shared reservation readiness at `inspectedAt`. The actual
+command rechecks current state and execution-owner preparation still validates
+its training configuration. `blockers` explains unmet constraints. `counts: null`
+means inspection could not count valid sources or supported admission, not that
+the backlog is empty. Reads never write an iteration, timer fire, family
+reservation, batch, consumption or operation record and never launch training.
+
 ### Durable learning schedules
 
 Policy publication atomically synchronizes a `schedule` resource. Enabling

@@ -2,6 +2,7 @@ import { cancelLearningIterationReservation } from "./iteration-reservation-canc
 import { commandLearningIterationDispatch } from "./iteration-dispatch-commands.js";
 import { reserveLearningIteration } from "./iteration-reservation-service.js";
 import { synchronizeLearningSchedule } from "./schedule-service.js";
+import { inspectLearningPolicy } from "./policy-inspection.js";
 import { requireCurrentLearningEvidence as currentEvidence, sealLearningBatch } from "./batch-service.js";
 import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft } from "./authoring-service.js";
 import { queueRewardCheck, cancelRewardCheck } from "./reward-check-service.js";
@@ -275,6 +276,11 @@ export function createLearningService(repository: LearningRepository, options: {
 
   return {
     command,
+    async inspectPolicy(context: LearningServiceContext, reference: LearningRevisionRef) {
+      authorizeRead(context);
+      const ref = LearningRevisionRefSchema.parse(reference);
+      return repository.transaction(context.scope, transaction => inspectLearningPolicy(transaction, ref, context.actor.id, now()));
+    },
     async inspectEvidence(context: LearningServiceContext, reference: LearningRevisionRef) {
       authorizeRead(context);
       const ref = LearningRevisionRefSchema.parse(reference);
