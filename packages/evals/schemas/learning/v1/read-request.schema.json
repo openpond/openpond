@@ -133,6 +133,9 @@
         "decision",
         "batch",
         "policy",
+        "chain",
+        "consumption",
+        "reservation",
         "iteration",
         "grade",
         "package"

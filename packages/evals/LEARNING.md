@@ -148,3 +148,36 @@ Policy and iteration contracts distinguish training parent, optional teacher and
 upstream trigger. The contracts themselves do not launch training, schedule jobs,
 qualify a model, accept a candidate or promote a serving endpoint. Hosts must
 implement those transitions and record actual execution/evaluation receipts.
+
+`reserve_iteration` is the shared reviewer-authorized reservation operation for
+manual and scheduled triggers. It pins the current enabled policy, checks the
+Model's active chain and cooldown, discovers approved training evidence across
+all source pages, and atomically seals a batch, records consumption, reserves
+spend and creates the iteration. It does not submit a training Job. The current
+approved-batch methods are SFT, GRPO and PPO with human admission; qualified
+automatic admission and automatic acceptance/serving are rejected until their
+execution paths are implemented.
+
+Manual triggers carry a stable `identity`; scheduled triggers carry a concrete
+`scheduledAt`. Equivalent timestamp offsets denote the same fire. A manual
+trigger can use a policy with a saved schedule without editing that policy.
+Retries, including another reviewer or a restarted host, resolve the same fire
+and dispatch identity. New events cannot bypass an active chain by editing the
+policy. Waiting for data/review records a zero-budget result and consumes no
+examples; a later event discovers newly approved evidence.
+
+The `chain`, `consumption` and `reservation` resources are stored through the same
+atomic repository interface. Consumption keys include the Model chain and exact
+evidence revision; decision identity is retained alongside it. Reapproval or a
+policy edit does not make consumed evidence new. Corrections create new evidence
+revisions. Numeric source watermarks remain empty because existing evidence has
+no ordered ingress sequence; hashed resource pagination is never a consumption
+watermark. Outstanding reserved spend carries across midnight and is counted
+alongside spend settled in the current UTC day.
+
+`cancel_iteration_reservation` releases only an undispatched reservation and
+requires its current revision. Consumption history remains intact. Once an
+execution owner claims the iteration, it must persist an executing status before
+making a network submission; local reservation cancellation then refuses to
+release its budget. Submitted-job cancellation and cost settlement belong to the
+execution reconciler and require authoritative provider state.

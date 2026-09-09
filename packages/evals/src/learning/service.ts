@@ -1,11 +1,14 @@
+import { cancelLearningIterationReservation } from "./iteration-reservation-cancellation.js";
+import { reserveLearningIteration } from "./iteration-reservation-service.js";
+import { requireCurrentLearningEvidence as currentEvidence, sealLearningBatch } from "./batch-service.js";
 import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft } from "./authoring-service.js";
 import { queueRewardCheck, cancelRewardCheck } from "./reward-check-service.js";
 import { LearningDomainError } from "./errors.js";
 import { contentHash } from "@openpond/harness";
 
-import { createRewardBinding, createRewardRelease, resolveBoundRewards, type RewardComposition } from "../rewards.js";
+import { createRewardBinding, createRewardRelease, type RewardComposition } from "../rewards.js";
 import { assertBoundedTaskJson, validateTaskValue } from "../task-schema.js";
-import { assertAdmissionDecision, assertGradeIdentity, compileTaskBatch, inspectTaskEvidence, sealTaskBatch, taskFamilyReservations, type TaskFamilySplit } from "./admission.js";
+import { assertAdmissionDecision, assertGradeIdentity, inspectTaskEvidence } from "./admission.js";
 import { learningRef, LearningSourceSchema, LearningPolicySchema, sameLearningRef, sealLearningContent, TaskAdmissionDecisionContentSchema, TaskAdmissionDecisionSchema, TaskDefinitionSchema, TaskEvidenceContentSchema, TaskEvidenceSchema, TaskFeedbackSchema, TaskGradeRunSchema, type LearningRevisionRef, type TaskEvidence, type TaskGradeRun } from "./contracts.js";
 import { LearningCommandSchema, type LearningCommand, type PublishLearningResourceCommand } from "./operations.js";
 import { LearningConflictError, learningEvidenceId, learningOperationId, requireLearningRelease, requireLearningResource, type LearningRepository, type LearningResourceFor, type LearningResourceKind, type LearningResourcePage, type LearningResourcePointer, type LearningResourceQuery, type LearningStoredResource, type LearningTransaction } from "./repository.js";
@@ -35,6 +38,8 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       let pointers: LearningResourcePointer[];
       switch (input.action) {
+        case "cancel_iteration_reservation": pointers = await cancelLearningIterationReservation(transaction, input, now()); break;
+        case "reserve_iteration": pointers = await reserveLearningIteration(transaction, input, context.actor.id, now()); break;
         case "queue_reward_check": pointers = [await queueRewardCheck(transaction, input, operationId, now())]; break;
         case "cancel_reward_check": pointers = [await cancelRewardCheck(transaction, input, now())]; break;
         case "save_draft": pointers = [await saveAuthoringDraft(transaction, input, now())]; break;
@@ -52,7 +57,7 @@ export function createLearningService(repository: LearningRepository, options: {
         case "queue_grade": pointers = [await queueGrade(transaction, input, operationId)]; break;
         case "cancel_grade": pointers = [await cancelGrade(transaction, input)]; break;
         case "review": pointers = [await review(transaction, input, context.actor.id)]; break;
-        case "seal_batch": pointers = await seal(transaction, input, context.actor.id); break;
+        case "seal_batch": pointers = await sealLearningBatch(transaction, input, context.actor.id, now()); break;
       }
       if (input.action === "publish" || input.action === "publish_resources") {
         const finalized = await finalizeAuthoringDraft(transaction, input, pointers, now());
@@ -116,7 +121,7 @@ export function createLearningService(repository: LearningRepository, options: {
         break;
       }
     }
-    await transaction.put(input.kind, resource as LearningResourceFor<typeof input.kind>, input.expectedRevision);
+    await transaction.put(input.kind, resource as LearningResourceFor<typeof input.kind>, input.expectedRevision, input.kind === "policy" ? { parentId: input.content.modelProjectId } : undefined);
     return pointer(input.kind, resource);
   }
 
@@ -263,35 +268,6 @@ export function createLearningService(repository: LearningRepository, options: {
     return pointer("decision", decision);
   }
 
-  async function seal(transaction: LearningTransaction, input: Extract<LearningCommand, { action: "seal_batch" }>, actorId: string): Promise<LearningResourcePointer[]> {
-    const definition = await requireLearningRelease(transaction, "definition", input.taskDefinition);
-    const binding = await requireLearningRelease(transaction, "binding", definition.rewardBinding);
-    const rewards = await Promise.all(binding.sources.map((source) => requireLearningRelease(transaction, "reward", source.reward)));
-    resolveBoundRewards(binding, rewards);
-    const evidence = await Promise.all(input.evidence.map((ref) => currentEvidence(transaction, ref)));
-    const decisions = await Promise.all(input.decisions.map(async (ref) => {
-      const decision = await requireLearningRelease(transaction, "decision", ref);
-      const current = await requireLearningResource(transaction, "decision", ref.id);
-      if (!sameLearningRef(learningRef(current), ref)) throw new LearningDomainError("task_admission_revision_stale", 409);
-      return decision;
-    }));
-    const priorSplits: TaskFamilySplit[] = [];
-    for (const item of evidence) {
-      for (const reservation of taskFamilyReservations(item, definition)) {
-        const split = await transaction.familySplit(reservation.namespace, reservation.kind, reservation.key);
-        if (split !== null) priorSplits.push({ ...reservation, split: split as TaskFamilySplit["split"] });
-      }
-    }
-    const batch = sealTaskBatch({ id: input.batchId, definition, binding, rewards, purpose: input.purpose, evidence, decisions, priorSplits, actorId, now: now() });
-    const release = compileTaskBatch({ batch, definition, binding, rewards, evidence, decisions });
-    for (const item of evidence) {
-      for (const reservation of taskFamilyReservations(item, definition)) await transaction.reserveFamilySplit(reservation.namespace, reservation.kind, reservation.key, reservation.split);
-    }
-    await transaction.put("batch", batch, 0, { parentId: definition.id });
-    await transaction.put("package", release, 0, { parentId: batch.id });
-    return [pointer("batch", batch), pointer("package", release)];
-  }
-
   return {
     command,
     async inspectEvidence(context: LearningServiceContext, reference: LearningRevisionRef) {
@@ -315,12 +291,6 @@ export function createLearningService(repository: LearningRepository, options: {
   };
 }
 
-async function currentEvidence(transaction: LearningTransaction, ref: LearningRevisionRef): Promise<TaskEvidence> {
-  const evidence = await requireLearningRelease(transaction, "evidence", ref);
-  const current = await requireLearningResource(transaction, "evidence", ref.id);
-  if (!sameLearningRef(learningRef(current), ref)) throw new LearningDomainError("task_evidence_revision_stale", 409);
-  return evidence;
-}
 async function gradeResult(transaction: LearningTransaction, id: string | null, evidence: TaskEvidence, target: TaskGradeRun["target"]): Promise<RewardComposition | null> {
   if (id === null) return null;
   const grade = await requireLearningResource(transaction, "grade", id);
@@ -339,5 +309,5 @@ function authorize(context: LearningServiceContext, input: LearningCommand): voi
     const sourceId = input.action === "submit_example" ? input.example.sourceId : input.action === "submit_feedback" ? input.feedback.sourceId : null;
     if (!sourceId || sourceId !== context.actor.sourceId) throw new LearningDomainError("learning_source_not_authorized", 403);
   }
-  if (["review", "apply_correction", "resolve_feedback", "seal_batch"].includes(input.action) && context.actor.role !== "reviewer") throw new LearningDomainError("learning_review_not_authorized", 403);
+  if (["review", "apply_correction", "resolve_feedback", "seal_batch", "reserve_iteration", "cancel_iteration_reservation"].includes(input.action) && context.actor.role !== "reviewer") throw new LearningDomainError("learning_review_not_authorized", 403);
 }
