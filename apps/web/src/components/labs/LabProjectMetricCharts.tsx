@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { ModelRun } from "@openpond/contracts";
+import type { ModelOverviewRun } from "./model-overview-runs";
 
 type MetricPoint = {
   label: string;
@@ -19,7 +19,7 @@ const CHART_HEIGHT = 132;
 const CHART_PADDING_X = 14;
 const CHART_PADDING_Y = 14;
 
-export function LabProjectMetricCharts({ runs }: { runs: ModelRun[] }) {
+export function LabProjectMetricCharts({ runs }: { runs: ModelOverviewRun[] }) {
   const charts = useMemo(() => projectMetricCharts(runs), [runs]);
 
   return (
@@ -104,31 +104,17 @@ function ProjectMetricChart({ chart }: { chart: MetricChart }) {
   );
 }
 
-function projectMetricCharts(runs: ModelRun[]): MetricChart[] {
+function projectMetricCharts(runs: ModelOverviewRun[]): MetricChart[] {
   const trainingRuns = runs.filter((run) => run.kind !== "evaluation");
   const numberedTrainingRuns = trainingRuns
     .map((run, index) => ({ run, number: trainingRuns.length - index }))
     .slice(0, MAX_POINTS)
     .reverse();
-  const evaluationRuns = runs
-    .filter((run) => run.kind === "evaluation")
-    .map((run, index, collection) => ({
-      run,
-      number: collection.length - index,
-    }))
-    .slice(0, MAX_POINTS)
-    .reverse();
-  const evaluationScorePoints = evaluationRuns.flatMap(({ run, number }) =>
-    run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
-      ? [{
-          label: `Eval ${number}`,
-          value: run.receipt.quality.candidatePassRate,
-        }]
-      : [],
-  );
+  const evaluationScorePoints = runs.filter(run => run.evaluation)
+    .slice(0, MAX_POINTS).reverse().map((run, index) => ({ label: `Eval ${index + 1}`, value: run.evaluation!.score }));
   const spendCeilingPoints = numberedTrainingRuns.flatMap(({ run, number }) =>
-    run.quote
-      ? [{ label: `Run ${number}`, value: run.quote.maximumSpendUsd }]
+    run.spendCeiling !== null
+      ? [{ label: `Run ${number}`, value: run.spendCeiling }]
       : [],
   );
 
@@ -137,21 +123,16 @@ function projectMetricCharts(runs: ModelRun[]): MetricChart[] {
       title: "Mean reward",
       description: "Final reported reward",
       points: numberedTrainingRuns.flatMap(({ run, number }) =>
-        run.reward ? [{ label: `Run ${number}`, value: run.reward.raw }] : [],
+        run.reward !== null ? [{ label: `Run ${number}`, value: run.reward }] : [],
       ),
       format: formatDecimal,
     },
     {
-      title: "Rollout completion",
-      description: "Completed attempts versus plan",
+      title: "Run completion",
+      description: "Completed groups or attempts",
       points: numberedTrainingRuns.flatMap(({ run, number }) =>
-        run.evaluationProgress
-          ? [{
-              label: `Run ${number}`,
-              value:
-                run.evaluationProgress.completedAttempts /
-                run.evaluationProgress.totalAttempts,
-            }]
+        run.completion !== null
+          ? [{ label: `Run ${number}`, value: run.completion }]
           : [],
       ),
       format: formatPercent,
@@ -159,21 +140,16 @@ function projectMetricCharts(runs: ModelRun[]): MetricChart[] {
     {
       title: "Run duration",
       description: "Elapsed wall-clock minutes",
-      points: numberedTrainingRuns.flatMap(({ run, number }) => {
-        const end = run.completedAt ?? run.updatedAt;
-        const duration = Date.parse(end) - Date.parse(run.startedAt);
-        return Number.isFinite(duration) && duration >= 0
-          ? [{ label: `Run ${number}`, value: duration / 60_000 }]
-          : [];
-      }),
+      points: numberedTrainingRuns.flatMap(({ run, number }) => run.durationMinutes !== null
+        ? [{ label: `Run ${number}`, value: run.durationMinutes }] : []),
       format: formatMinutes,
     },
     evaluationScorePoints.length
       ? {
           title: "Evaluation score",
-          description: "Candidate pass rate",
+          description: "Recorded candidate score",
           points: evaluationScorePoints,
-          format: formatPercent,
+          format: formatDecimal,
         }
       : {
           title: "Spend ceiling",

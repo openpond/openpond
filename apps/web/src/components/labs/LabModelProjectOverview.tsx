@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type {
   ModelProject,
-  ModelRun,
   TrainingStateResponse,
 } from "@openpond/contracts";
 
@@ -15,6 +14,7 @@ import {
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { LabProjectMetricCharts } from "./LabProjectMetricCharts";
 import { modelProjectTasksetIds } from "./models-resource-scope";
+import type { ModelOverviewRun } from "./model-overview-runs";
 
 export function LabModelProjectOverview({
   actions,
@@ -28,7 +28,7 @@ export function LabModelProjectOverview({
 }: {
   actions?: ReactNode;
   modelProject: ModelProject | null;
-  modelRuns: ModelRun[];
+  modelRuns: ModelOverviewRun[];
   onOpenRun: (runId: string) => void;
   onOpenSeries: (seriesId: string) => void;
   state: TrainingStateResponse | null;
@@ -42,10 +42,8 @@ export function LabModelProjectOverview({
     orderedRuns.find((run) => isActiveRunStatus(run.status)) ??
     orderedRuns[0] ??
     null;
-  const latestEvaluation = orderedRuns.find((run) => run.kind === "evaluation") ?? null;
-  const evaluationReceipt = latestEvaluation?.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
-    ? latestEvaluation.receipt
-    : null;
+  const latestEvaluation = orderedRuns.find((run) => run.evaluation || run.kind === "evaluation") ?? null;
+  const evaluation = latestEvaluation?.evaluation;
   const currentVersion = versions.find((version) => version.current) ?? versions[0] ?? null;
   const trainingModel = modelProject?.trainingSetup.baseModel ?? modelProject?.defaultBaseModel ?? null;
   const servingReady = currentVersion?.lineage.managedServing?.customerBindingAllowed ?? false;
@@ -77,20 +75,22 @@ export function LabModelProjectOverview({
               ? <LabRunStatusBadge status={currentRun.status} />
               : "Not started",
             hint: currentRun
-              ? `${runKindLabel(currentRun)} · ${formatDateTime(currentRun.updatedAt)}`
+              ? `${currentRun.label} · ${formatDateTime(currentRun.updatedAt)}`
               : `${tasksetCount} attached Taskset release${tasksetCount === 1 ? "" : "s"}`,
-            onSelect: currentRun ? () => onOpenRun(currentRun.id) : undefined,
+            onSelect: currentRun ? () => onOpenRun(currentRun.key) : undefined,
             ariaLabel: currentRun
-              ? `Open ${runKindLabel(currentRun)} run with status ${statusLabel(currentRun.status)}`
+              ? `Open ${currentRun.label} run with status ${statusLabel(currentRun.status)}`
               : undefined,
           },
           {
             label: "Latest evaluation",
-            value: evaluationReceipt
-              ? percent(evaluationReceipt.quality.candidatePassRate)
+            value: evaluation
+              ? evaluation.passRate ? percent(evaluation.score) : evaluation.score.toFixed(3)
               : latestEvaluation ? statusLabel(latestEvaluation.status) : "Not run",
-            hint: evaluationReceipt
-              ? `${signedPercent(evaluationReceipt.quality.candidatePassRate - evaluationReceipt.quality.baselinePassRate)} · retention ${evaluationReceipt.quality.heldOutCandidatePassed ? "passed" : "failed"}`
+            hint: evaluation
+              ? evaluation.baseline === null ? "Retained candidate score" : evaluation.passRate
+                ? `${signedPercent(evaluation.score - evaluation.baseline)} · retention ${evaluation.retentionPassed ? "passed" : "failed"}`
+                : `Baseline ${evaluation.baseline.toFixed(3)} · retained evaluation`
               : "No comparable evaluation result",
           },
         ]}
@@ -100,18 +100,12 @@ export function LabModelProjectOverview({
       <LabProjectMetricCharts runs={modelRuns} />
       <LabContinualLearningSeries
         modelProjectId={modelProject?.id ?? null}
-        onOpenRun={onOpenRun}
+        onOpenRun={(runId) => onOpenRun(`model-run:${runId}`)}
         onOpenSeries={onOpenSeries}
         state={state}
       />
     </div>
   );
-}
-
-function runKindLabel(run: ModelRun): string {
-  if (run.kind === "evaluation") return "Evaluation";
-  if (run.kind === "rollout_smoke") return "Preflight rollout";
-  return run.method ? `${run.method.toUpperCase()} training` : "Training";
 }
 
 function percent(value: number): string {

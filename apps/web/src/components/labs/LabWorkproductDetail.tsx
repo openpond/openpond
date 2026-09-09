@@ -62,6 +62,7 @@ import {
 } from "./LabWorkproductDetailSections";
 import { SquarePen } from "../icons";
 import { LabModelProjectOverview } from "./LabModelProjectOverview";
+import { modelOverviewRuns } from "./model-overview-runs";
 
 const LabModelVersionDetailPage = lazy(() =>
   import("./LabModelVersionDetailPage").then((module) => ({
@@ -620,10 +621,8 @@ export function LabWorkproductDetail({
                   </button>
                 ) : undefined}
                 modelProject={modelProject}
-                modelRuns={modelLifecycleRuns}
-                onOpenRun={(runId) =>
-                  setSelectedModelEntryKey(`model-run:${runId}`)
-                }
+                modelRuns={modelOverviewRuns(modelRunEntries(modelJobs, modelVersions, modelLifecycleRuns))}
+                onOpenRun={setSelectedModelEntryKey}
                 onOpenSeries={onOpenComparison}
                 status={modelProject ? (
                     <LabStatusBadge
