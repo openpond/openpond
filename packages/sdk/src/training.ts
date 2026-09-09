@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { parseAndVerifyTrainingEvaluationTaskPage } from "./training-evaluation-results.js";
 
 export { deterministicTrainingRewardSource } from "./training-grading-plan.js";
 export { TRAINING_EVALUATION_SOURCE_PATH, TrainingEvaluationSourceSchema, assertTrainingEvaluationIsolation, trainingEvaluationSourceRef, type TrainingEvaluationSource } from "./training-evaluation-source.js";
+export { TrainingEvaluationTaskResultSchema, TrainingEvaluationTaskPageSchema, trainingEvaluationTaskPageHash, parseAndVerifyTrainingEvaluationTaskPage, type TrainingEvaluationTaskResult, type TrainingEvaluationTaskPage } from "./training-evaluation-results.js";
 
 import {
   ModelProjectBaseModelSchema,
@@ -682,6 +684,24 @@ export function createTrainingClient(input: {
         await request(
           `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/outputs`,
         ),
+      );
+    },
+    async evaluationTasks(
+      jobId: string,
+      evaluation: { id: string; contentHash: string },
+      options: { cursor?: string; limit?: number } = {},
+    ) {
+      const id = IdSchema.parse(jobId);
+      const reference = ModelProjectImmutableRefSchema.parse(evaluation);
+      const parameters = new URLSearchParams();
+      const cursor = options.cursor === undefined ? undefined : z.string().regex(/^[1-9]\d*$/).parse(options.cursor);
+      const offset = cursor === undefined ? 0 : z.number().int().min(1).max(9_999).parse(Number(cursor));
+      if (cursor !== undefined) parameters.set("cursor", cursor);
+      if (options.limit !== undefined) parameters.set("limit", String(z.number().int().min(1).max(100).parse(options.limit)));
+      const query = parameters.size ? `?${parameters.toString()}` : "";
+      return parseAndVerifyTrainingEvaluationTaskPage(
+        await request(`/v1/training/jobs/${encodeURIComponent(id)}/evaluations/${encodeURIComponent(reference.id)}/tasks${query}`),
+        { jobId: id, evaluation: reference, offset },
       );
     },
     async logs(jobId: string) {
