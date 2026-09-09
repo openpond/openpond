@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
 import {
-  createLearningIterationWorker, createLearningService, LearningIterationSchema, reconcileLearningCandidateDecision,
+  createLearningIterationWorker, createLearningService, LearningIterationSchema, LearningChainSchema,
+  reconcileLearningCandidateDecision,
   type LearningIterationExecutor, type LearningIterationExecutionContext, type LearningIterationObservation,
 } from "@openpond/evals/learning";
 import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
@@ -63,6 +64,13 @@ describe("durable iteration dispatch", () => {
     try {
       const f = await fixture(store); const p = provider();
       const repository = store.learningRepository();
+      // Upgrading readers must preserve records written before parent selection
+      // existed, including exact historical revisions used by Jobs.
+      const { trainingParentSelection: _selection, candidateDecisionAt: _at, ...legacy } = f.iteration;
+      expect(LearningIterationSchema.parse(legacy)).toEqual(legacy);
+      const chain = (await f.service.list(learningContext, "chain")).items[0]!;
+      const { acceptedParent: _parent, ...legacyChain } = chain!;
+      expect(LearningChainSchema.parse(legacyChain)).toEqual(legacyChain);
       const worker = createLearningIterationWorker(repository, p.executor, { workerId: "review-worker", executionOwner: "hosted", now: f.now });
       await worker.run(learningContext.scope, f.iteration.id);
       p.complete(); f.advance(); await worker.run(learningContext.scope, f.iteration.id);
@@ -71,7 +79,14 @@ describe("durable iteration dispatch", () => {
         decision: { ...ref("decision-one"), revision: 1 }, outcome: "accepted" as const,
         execution: ref("provider-job"), candidate: ref("candidate"), evaluation: ref("retained-evaluation"), receipt: ref("terminal-receipt") };
       await expect(reconcileLearningCandidateDecision(repository, { ...observation, candidate: ref("other-candidate") })).rejects.toThrow("learning_candidate_decision_evidence_mismatch");
-      const accepted = await reconcileLearningCandidateDecision(repository, observation, { now: f.now });
+      let accepted = await reconcileLearningCandidateDecision(repository, observation, { now: f.now });
+      const { candidateDecisionAt: _legacyDecisionTime, ...legacyAccepted } = accepted;
+      await repository.transaction(learningContext.scope, tx => tx.put("iteration",
+        { ...legacyAccepted, revision: accepted.revision + 1 }, accepted.revision,
+        { parentId: chain.id, status: "accepted" }));
+      await expect(f.reserve(f.policy, "missing-parent-evidence")).rejects.toThrow("learning_accepted_parent_evidence_missing");
+      accepted = await reconcileLearningCandidateDecision(repository, observation, { now: f.now });
+      expect(accepted.candidateDecisionAt).toBe(observation.decidedAt);
       expect(accepted).toMatchObject({ status: "accepted", candidateDecision: observation.decision });
       expect((await f.service.list(learningContext, "chain")).items[0]?.activeIterationId).toBeNull();
       expect(await reconcileLearningCandidateDecision(repository, observation)).toEqual(accepted);

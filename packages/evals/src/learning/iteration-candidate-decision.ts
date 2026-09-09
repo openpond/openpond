@@ -40,9 +40,9 @@ export async function reconcileLearningCandidateDecision(repository: LearningRep
     if (previous && input.decision.revision < previous.revision) return iteration;
     if (previous && input.decision.revision === previous.revision) {
       if (!same(previous, input.decision) || iteration.status !== input.outcome
-        || (iteration.candidateDecisionAt !== null && iteration.candidateDecisionAt !== input.decidedAt))
+        || (iteration.candidateDecisionAt != null && iteration.candidateDecisionAt !== input.decidedAt))
         throw new LearningDomainError("learning_candidate_decision_revision_conflict", 409);
-      if (iteration.candidateDecisionAt !== null) return iteration;
+      if (iteration.candidateDecisionAt != null) return iteration;
     }
     const now = (options.now ?? (() => new Date().toISOString()))();
     const updated = LearningIterationSchema.parse({ ...iteration, revision: iteration.revision + 1,

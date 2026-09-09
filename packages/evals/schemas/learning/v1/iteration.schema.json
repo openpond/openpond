@@ -64,7 +64,6 @@
       "$ref": "#/$defs/__schema3"
     },
     "trainingParentSelection": {
-      "default": null,
       "anyOf": [
         {
           "type": "object",
@@ -163,7 +162,6 @@
       ]
     },
     "candidateDecisionAt": {
-      "default": null,
       "anyOf": [
         {
           "$ref": "#/$defs/__schema4"
@@ -226,14 +224,12 @@
     "batch",
     "sourceWatermarks",
     "trainingParent",
-    "trainingParentSelection",
     "teacher",
     "upstreamEvent",
     "trainingJob",
     "evaluationJob",
     "candidateVersion",
     "candidateDecision",
-    "candidateDecisionAt",
     "dispatchId",
     "retryCount",
     "spendUsd",

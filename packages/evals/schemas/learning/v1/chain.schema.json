@@ -28,7 +28,6 @@
       ]
     },
     "acceptedParent": {
-      "default": null,
       "anyOf": [
         {
           "type": "object",
@@ -120,7 +119,6 @@
     "revision",
     "modelProjectId",
     "activeIterationId",
-    "acceptedParent",
     "latestIterationId",
     "lastReservedAt",
     "updatedAt"

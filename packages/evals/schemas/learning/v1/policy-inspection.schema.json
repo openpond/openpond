@@ -42,7 +42,6 @@
               ]
             },
             "acceptedParent": {
-              "default": null,
               "anyOf": [
                 {
                   "$ref": "#/$defs/__schema4"
@@ -75,7 +74,6 @@
             "revision",
             "modelProjectId",
             "activeIterationId",
-            "acceptedParent",
             "latestIterationId",
             "lastReservedAt",
             "updatedAt"

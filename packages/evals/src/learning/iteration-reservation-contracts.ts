@@ -15,7 +15,7 @@ export const LearningChainSchema = z.object({
   revision: z.number().int().positive(),
   modelProjectId: ReleaseIdSchema,
   activeIterationId: ReleaseIdSchema.nullable(),
-  acceptedParent: LearningAcceptedParentSchema.nullable().default(null),
+  acceptedParent: LearningAcceptedParentSchema.nullable().optional(),
   latestIterationId: ReleaseIdSchema,
   lastReservedAt: ReleaseTimestampSchema.nullable(),
   updatedAt: ReleaseTimestampSchema,
