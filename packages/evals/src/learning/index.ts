@@ -12,3 +12,4 @@ export * from "./reward-authoring.js";
 export * from "./reward-checks.js";
 export * from "./reward-check-worker.js";
 export * from "./reward-fixture-executor.js";
+export * from "./iteration-reservation-contracts.js";

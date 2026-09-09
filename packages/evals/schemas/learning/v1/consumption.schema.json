@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "openpond.learningConsumption.v1"
+    },
+    "id": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "revision": {
+      "type": "number",
+      "const": 1
+    },
+    "chainId": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "iterationId": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "evidence": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "decision": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "reservedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "revision",
+    "chainId",
+    "iterationId",
+    "evidence",
+    "decision",
+    "reservedAt"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "__schema1": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "contentHash",
+        "revision"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "urn:openpond:learning:v1:consumption",
+  "$comment": "Generated from @openpond/evals. Cross-resource identity, authorization, idempotency, admission, grading and split constraints are enforced by the shared domain service in addition to this structural schema."
+}

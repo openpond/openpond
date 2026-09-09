@@ -1,3 +1,4 @@
+import { LearningChainSchema, LearningConsumptionSchema, LearningIterationReservationSchema } from "./iteration-reservation-contracts.js";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 
@@ -16,6 +17,7 @@ export const learningResourceSchemas = {
   definition: TaskDefinitionSchema, reward: RewardReleaseSchema, binding: RewardBindingSchema,
   source: LearningSourceSchema, evidence: TaskEvidenceSchema, feedback: TaskFeedbackSchema,
   decision: TaskAdmissionDecisionSchema, batch: TaskBatchSchema, policy: LearningPolicySchema,
+  chain: LearningChainSchema, consumption: LearningConsumptionSchema, reservation: LearningIterationReservationSchema,
   iteration: LearningIterationSchema, grade: TaskGradeRunSchema, package: TasksetReleaseSchema,
 } as const;
 export type LearningResourceKind = keyof typeof learningResourceSchemas;
