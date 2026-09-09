@@ -146,7 +146,9 @@ export function materializePortableTasksetRelease(input: {
           .map(grader => [grader.id, grader.calibrationFixtureRefs])),
       },
       ...(learning ? { learning } : {}),
-      ...(rewardExecution && (input.rewardExecution || embedded) ? { rewardExecution: { binding: rewardExecution.binding, rewards: rewardExecution.rewards } } : {}),
+      // A sealed batch already pins these resources in learning metadata.
+      // Resolving that same binding at admission must not change its release.
+      ...(rewardExecution && !learning && (input.rewardExecution || embedded) ? { rewardExecution: { binding: rewardExecution.binding, rewards: rewardExecution.rewards } } : {}),
     },
   });
   const draft = input.admittedTasksetRelease

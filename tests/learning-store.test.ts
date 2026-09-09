@@ -16,6 +16,7 @@ import { createTasksetEvaluationVerifier } from "../apps/server/src/training/eva
 import { resolveTasksetTrainingReward } from "../apps/server/src/training/taskset-reward-binding";
 import { prepareLocalLearningBatch } from "../apps/server/src/training/learning-batch-preparation";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export";
+import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release";
 import { createModelProjectSaveRequest, HostedModelProjectTrainingSetupSchema, ModelProjectSchema } from "openpond-sdk/model-projects";
 import { createTasksetPackage, decodeTasksetPackageFile, tasksetPackageRewardBinding, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "openpond-sdk/taskset-packages";
 
@@ -41,6 +42,10 @@ describe("durable task intake and admission", () => {
     const taskset = await prepareLocalLearningBatch(store, directory, { profileId: learningContext.scope, batchId: "package-batch" });
     const model = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: "batch-model", profileId: learningContext.scope, name: "Reviewed batch Model", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { tasksetRef: learningRef(taskset) } }, 0));
     const value = await exportLocalModelTasksetPackage({ store, storeDir: directory, profileId: learningContext.scope, modelId: model.id });
+    // Training admission resolves the Reward explicitly; package export reads
+    // the sealed batch. Both must publish exactly the same release identity.
+    const admitted = await requireReleasedTaskset({ releaseForTaskset: async () => null }, taskset, store);
+    expect(learningRef(admitted)).toEqual(learningRef(value.taskset));
     // A source Model must survive its first hosted receipt even though generated
     // private context files exist in the package, not its authored directory.
     await cacheTasksetPackage(directory, value);
