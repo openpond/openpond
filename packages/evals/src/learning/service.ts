@@ -1,4 +1,5 @@
 import { cancelLearningIterationReservation } from "./iteration-reservation-cancellation.js";
+import { commandLearningIterationDispatch } from "./iteration-dispatch-commands.js";
 import { reserveLearningIteration } from "./iteration-reservation-service.js";
 import { requireCurrentLearningEvidence as currentEvidence, sealLearningBatch } from "./batch-service.js";
 import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft } from "./authoring-service.js";
@@ -38,6 +39,8 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       let pointers: LearningResourcePointer[];
       switch (input.action) {
+        case "cancel_iteration":
+        case "retry_iteration_dispatch": pointers = await commandLearningIterationDispatch(transaction, input, now()); break;
         case "cancel_iteration_reservation": pointers = await cancelLearningIterationReservation(transaction, input, now()); break;
         case "reserve_iteration": pointers = await reserveLearningIteration(transaction, input, context.actor.id, now()); break;
         case "queue_reward_check": pointers = [await queueRewardCheck(transaction, input, operationId, now())]; break;
@@ -309,5 +312,5 @@ function authorize(context: LearningServiceContext, input: LearningCommand): voi
     const sourceId = input.action === "submit_example" ? input.example.sourceId : input.action === "submit_feedback" ? input.feedback.sourceId : null;
     if (!sourceId || sourceId !== context.actor.sourceId) throw new LearningDomainError("learning_source_not_authorized", 403);
   }
-  if (["review", "apply_correction", "resolve_feedback", "seal_batch", "reserve_iteration", "cancel_iteration_reservation"].includes(input.action) && context.actor.role !== "reviewer") throw new LearningDomainError("learning_review_not_authorized", 403);
+  if (["review", "apply_correction", "resolve_feedback", "seal_batch", "reserve_iteration", "cancel_iteration_reservation", "cancel_iteration", "retry_iteration_dispatch"].includes(input.action) && context.actor.role !== "reviewer") throw new LearningDomainError("learning_review_not_authorized", 403);
 }

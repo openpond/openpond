@@ -136,6 +136,7 @@
         "chain",
         "consumption",
         "reservation",
+        "dispatch",
         "iteration",
         "grade",
         "package"

@@ -15,6 +15,60 @@
             },
             "action": {
               "type": "string",
+              "const": "cancel_iteration"
+            },
+            "iterationId": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "operationId",
+            "action",
+            "iterationId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operationId": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "action": {
+              "type": "string",
+              "const": "retry_iteration_dispatch"
+            },
+            "iterationId": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "operationId",
+            "action",
+            "iterationId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operationId": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "action": {
+              "type": "string",
               "const": "cancel_iteration_reservation"
             },
             "iterationId": {

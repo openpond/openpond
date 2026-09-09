@@ -56,7 +56,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
-import { LearningCommandRequestSchema, LearningSourceSchema, TaskExampleSubmissionSchema, sealLearningContent, validateSourceSubmission } from "@openpond/evals/learning";
+import { LearningCommandRequestSchema, LearningSourceSchema, TaskExampleSubmissionSchema, sealLearningContent, validateSourceSubmission, createLearningIterationWorker, LearningIterationDispatchSchema } from "@openpond/evals/learning";
 import { RewardReleaseSchema } from "@openpond/evals/rewards";
 import { executeJavaScriptVerifierInWorker, executeJavaScriptVerifierInProcess } from "@openpond/evals/javascript-verifier/node";
 import { executeJavaScriptEnvironmentInWorker, executeJavaScriptEnvironmentInProcess } from "@openpond/evals/javascript-environment/node";
@@ -121,7 +121,7 @@ const packageRoot = path.dirname(createRequire(import.meta.url).resolve("@openpo
 const wireSchema = JSON.parse(readFileSync(path.join(packageRoot, "schemas/learning/v1/example-submission.schema.json"), "utf8"));
 const validateWire = new Ajv2020({ strict: false }).compile(wireSchema);
 if (!validateWire(example) || validateWire({ ...example, actor: "forged" })) throw new Error("Published structural schema disagrees with producer boundary");
-if (!RewardReleaseSchema || example.observedOutput.answer === example.expected.answer) throw new Error("Public learning exports failed");
+if (!RewardReleaseSchema || example.observedOutput.answer === example.expected.answer || typeof createLearningIterationWorker !== "function" || !LearningIterationDispatchSchema) throw new Error("Public learning exports failed");
 HarnessReleaseSchema.parse(genericToolConformance.harness);
 RunManifestSchema.parse(genericToolConformance.manifest);
 TasksetReleaseSchema.parse(genericToolConformance.taskset);
@@ -275,7 +275,7 @@ import type {
   WorkEvidenceReceipt,
 } from "@openpond/evals";
 import type { MetricObservation, RunTelemetryEvent } from "@openpond/evals/telemetry";
-import type { LearningRepository, LearningCommand, TaskExampleSubmission, TaskGradeExecutor } from "@openpond/evals/learning";
+import type { LearningRepository, LearningCommand, TaskExampleSubmission, TaskGradeExecutor, LearningIterationExecutor } from "@openpond/evals/learning";
 import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
 import type { executeJavaScriptVerifierInWorker, executeJavaScriptVerifierInProcess } from "@openpond/evals/javascript-verifier/node";
 import type { JavaScriptEnvironmentDefinition, JavaScriptEnvironmentSnapshot } from "@openpond/evals/javascript-environment";
@@ -285,7 +285,7 @@ void (null as unknown as JavaScriptEnvironmentDefinition | JavaScriptEnvironment
 void (null as unknown as Parameters<typeof runJavaScriptEnvironmentAttempt>[0] | Parameters<typeof executeJavaScriptEnvironmentInWorker>[0]);
 void (null as unknown as Parameters<typeof executeJavaScriptVerifierInWorker>[0]);
 void (null as unknown as Parameters<typeof executeJavaScriptVerifierInProcess>[0] | Parameters<typeof executeJavaScriptEnvironmentInProcess>[0]);
-void (null as unknown as LearningRepository | LearningCommand | TaskExampleSubmission | TaskGradeExecutor | RewardBinding | RewardRelease);
+void (null as unknown as LearningRepository | LearningCommand | TaskExampleSubmission | TaskGradeExecutor | LearningIterationExecutor | RewardBinding | RewardRelease);
 void (null as unknown as HarnessRelease | AttemptReceipt | ArtifactManifest | CanonicalRolloutRecord | EnvironmentRelease | EvaluationRunner | GraderEvidence | RewardReceipt | RunManifest | TaskRecord | WorkEvidenceReceipt | MetricObservation | RunTelemetryEvent);
 `);
   execFileSync(process.execPath, [path.join(temporary, "verify.mjs")], {

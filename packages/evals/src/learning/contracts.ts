@@ -207,7 +207,7 @@ export const LearningPolicyContentSchema = z.object({
   if (policy.limits.maxDailySpendUsd < policy.limits.maxIterationSpendUsd) context.addIssue({ code: "custom", path: ["limits"], message: "Daily spend must permit the iteration budget." });
 });
 export const LearningPolicySchema = LearningPolicyContentSchema.safeExtend({ contentHash: ReleaseHashSchema }).strict();
-export const LearningIterationStatusSchema = z.enum(["waiting_for_data", "waiting_for_review", "ready", "training", "evaluating", "candidate_ready", "accepted", "rejected", "paused", "failed", "cancelling", "cancelled"]);
+export const LearningIterationStatusSchema = z.enum(["waiting_for_data", "waiting_for_review", "ready", "dispatching", "training", "evaluating", "candidate_ready", "accepted", "rejected", "paused", "failed", "cancelling", "cancelled", "completed_without_candidate"]);
 export const LearningIterationSchema = z.object({
   schemaVersion: z.literal("openpond.learningIteration.v1"),
   id: ReleaseIdSchema,
