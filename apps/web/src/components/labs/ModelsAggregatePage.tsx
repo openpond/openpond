@@ -67,8 +67,8 @@ export function ModelsAggregatePage({ page, state, models, runs, modelId, query,
     <label className="labs-search"><span className="sr-only">Search {page}</span><input placeholder={`Search ${page}`} value={query} onChange={(event) => onSearch(event.target.value)} /></label>
     {!state ? <p role="status">Loading {page}…</p> : <div className="training-table-wrap"><table className="training-data-table">
       <thead><tr><th>{page === "runs" ? "Run" : "Version"}</th><th>Model or reward</th><th>Type</th><th>Status</th><th>Taskset</th><th>Updated</th></tr></thead>
-      <tbody>{visible.map((row) => <tr key={row.ref}>
-        <td><button className="labs-version-row-button" type="button" onClick={() => onOpen(row)}>{row.label}</button></td>
+      <tbody>{visible.map((row) => <tr key={row.ref} onClick={() => onOpen(row)}>
+        <td><button className="labs-version-row-button" type="button" onClick={(event) => { event.stopPropagation(); onOpen(row); }}>{row.label}</button></td>
         <td>{row.modelName}</td><td>{row.kind}</td><td><LabStatusBadge label={statusLabel(row.status)} value={row.status} /></td><td>{row.tasksetId}</td><td>{formatDateTime(row.updatedAt)}</td>
       </tr>)}{!visible.length ? <tr><td colSpan={6}>No {page} match this view.</td></tr> : null}</tbody>
     </table></div>}
