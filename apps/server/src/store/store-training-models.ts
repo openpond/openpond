@@ -950,4 +950,3 @@ function validEntryRetryEvolution(
   return next.attemptOrdinal === current.attemptOrdinal + (hasAttempt ? 1 : 0)
     && JSON.stringify(next.priorRunAttempts) === JSON.stringify(expectedAttempts);
 }
-
