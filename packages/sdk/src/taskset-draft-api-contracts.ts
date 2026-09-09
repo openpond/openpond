@@ -8,6 +8,13 @@ const RevisionSchema = z.number().int().positive();
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const scope = { teamId: IdSchema, modelId: IdSchema };
 
+export const TasksetDraftCreateRequestSchema = z.object({
+  schemaVersion: z.literal("openpond.tasksetDraftCreate.v1"),
+  operationId: IdSchema, modelId: IdSchema, expectedModelRevision: RevisionSchema,
+  name: TasksetDraftSchema.shape.name,
+}).strict();
+export type TasksetDraftCreateRequest = z.infer<typeof TasksetDraftCreateRequestSchema>;
+
 export const TasksetDraftSourceDescriptorSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftSourceDescriptor.v1"), ...scope,
   expectedModelRevision: RevisionSchema, sourcePackageHash: HashSchema,

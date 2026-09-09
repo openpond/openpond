@@ -258,3 +258,12 @@ receipt includes `evaluation.taskset`, `evaluation.packageHash` and
 The same configuration carries the saved recipe and limits. Publication does not
 run training or prove evaluation isolation, grader quality or training readiness.
 An attachment-only publication cannot change Model configuration.
+
+For a new collection without a source release, call `client.create` with
+`schemaVersion: "openpond.tasksetDraftCreate.v1"`, an operation ID, Model ID,
+expected Model revision and name. Retain the operation ID across retries. The
+host creates an empty owned draft using the same save, file, validation and
+publication lifecycle. It must not add example tasks or a judge rubric.
+`compileModelTasksetDraftWorkspace` accepts `preparation: null` only when the
+owned draft has no source preparation. Compilation pins the saved timestamp so
+validation and publication produce the same package hash.

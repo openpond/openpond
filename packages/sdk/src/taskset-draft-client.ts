@@ -6,7 +6,7 @@ import { TasksetDraftSchema } from "./taskset-draft-document.js";
 import { decodeTasksetDraftFileContent } from "./taskset-draft-files.js";
 import { MAX_TASKSET_DRAFT_WORKSPACE_BYTES } from "./taskset-draft-workspace.js";
 import { TasksetPackageReceiptSchema } from "./taskset-package-client.js";
-import { TasksetDraftSourceDescriptorSchema, TasksetDraftReadbackSchema, TasksetDraftListSchema, TasksetDraftSaveRequestSchema, TasksetDraftRefreshRequestSchema,
+import { TasksetDraftCreateRequestSchema, type TasksetDraftCreateRequest, TasksetDraftSourceDescriptorSchema, TasksetDraftReadbackSchema, TasksetDraftListSchema, TasksetDraftSaveRequestSchema, TasksetDraftRefreshRequestSchema,
   TasksetDraftValidationRequestSchema, TasksetDraftValidationSchema, TasksetDraftPublicationRequestSchema, TasksetDraftFileListSchema, TasksetDraftFileReadbackSchema, TasksetDraftDeletionSchema,
   type TasksetDraftSaveRequest, type TasksetDraftRefreshRequest, type TasksetDraftValidationRequest, type TasksetDraftPublicationRequest } from "./taskset-draft-api-contracts.js";
 
@@ -41,6 +41,14 @@ export class OpenPondTasksetDraftClient {
     const source = response.draft.modelScope?.source;
     if (!source || source.requestHash !== contentHash(request) || source.sourcePackageHash !== request.sourcePackageHash || source.draftId !== response.draft.id
       || source.lineage.owner.scopeId !== this.#options.teamId || source.lineage.owner.modelId !== request.modelId) this.#mismatch();
+    return response;
+  }
+
+  async create(input: TasksetDraftCreateRequest, options: Options = {}) {
+    const request = TasksetDraftCreateRequestSchema.parse(input);
+    const response = this.#draft(await this.#request(request.modelId, "", "POST", request, options.signal), request.modelId);
+    const expectedId = `model-taskset-draft-${contentHash({ owner: { scopeId: this.#options.teamId, modelId: request.modelId }, operationId: request.operationId })}`;
+    if (response.draft.id !== expectedId || response.draft.modelScope?.source !== undefined) this.#mismatch();
     return response;
   }
 
