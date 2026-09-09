@@ -68,9 +68,9 @@ export function prepareModelBatchReview(input: {
     // Example/attempt IDs are unique within the original source, not across
     // all sources in a batch. Preserve both parents when merging namespaces.
     const attemptId = `review-${parent.contentHash}`;
-    const policyChanged = contentHash({ instructions: definition.instructions, inputSchema: definition.inputSchema, outputSchema: definition.outputSchema,
+    const policyChanged = contentHash({ instructions: definition.instructions, inputSchema: definition.inputSchema, outputSchema: definition.outputSchema, requiredOutputs: definition.requiredOutputs ?? [],
       input: edit?.input ?? parent.submission.input }) !== contentHash({ instructions: metadata.definition.instructions,
-      inputSchema: metadata.definition.inputSchema, outputSchema: metadata.definition.outputSchema, input: parent.submission.input });
+      inputSchema: metadata.definition.inputSchema, outputSchema: metadata.definition.outputSchema, requiredOutputs: metadata.definition.requiredOutputs ?? [], input: parent.submission.input });
     return TaskEvidenceSchema.parse(sealLearningContent({
       schemaVersion: "openpond.taskEvidence.v1", id: learningEvidenceId(source.id, parent.submission.exampleId, attemptId), revision: 1,
       source: learningRef(source), submission: { ...parent.submission, sourceId: source.id, taskDefinition: learningRef(definition),
