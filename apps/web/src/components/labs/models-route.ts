@@ -9,6 +9,7 @@ export interface ModelsRoute {
   detailTab: string | null;
   query: string;
   after: string | null;
+  sourceId?: string | null;
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
@@ -53,13 +54,15 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   } else if (detailTab && !detailTabs[page]?.includes(detailTab)) return null;
   if (page === "serving" && detailTab) return null;
   const query = new URLSearchParams(input.search ?? "");
-  if ([...query.keys()].some((key) => !["model", "q", "after"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
+  if ([...query.keys()].some((key) => !["model", "q", "after", "source"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
+  const sourceId = query.get("source");
+  if (sourceId !== null && (page !== "evaluations" || collection !== "review" || !sourceId.trim() || sourceId.length > 500)) return null;
   const modelId = query.get("model");
   if (page === "get-started" && query.size !== 0) return null;
   const search = query.get("q") ?? "";
   const after = query.get("after");
   if ((modelId !== null && (!modelId.trim() || modelId.length > 500)) || search.length > 1_000 || (after !== null && (!after.trim() || after.length > 2_000))) return null;
-  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after });
+  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(sourceId !== null ? { sourceId } : {}) });
 }
 
 export function modelsPath(route: ModelsRoute): string {
@@ -72,6 +75,7 @@ export function modelsPath(route: ModelsRoute): string {
   if (route.modelId) query.set("model", route.modelId);
   if (route.query) query.set("q", route.query);
   if (route.after) query.set("after", route.after);
+  if (route.page === "evaluations" && route.collection === "review" && route.sourceId) query.set("source", route.sourceId);
   return `${parts.join("/")}${query.size ? `?${query}` : ""}`;
 }
 

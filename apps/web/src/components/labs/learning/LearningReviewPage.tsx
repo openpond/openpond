@@ -7,18 +7,21 @@ import { LearningFeedback } from "./LearningFeedback";
 import { RewardCompositionDetails } from "./RewardCompositionView";
 import { useDraftNavigation } from "../useDraftNavigation";
 
-export function LearningReviewPage({ client, selectedId, after, onSelect, onPage, onBatches }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (cursor: string | null) => void; onBatches: () => void }) {
-  const evidence = useLearningResources(client, "evidence", { limit: 30, ...(after ? { afterId: after } : {}) });
-  if (selectedId) return <EvidenceLoader key={selectedId} client={client} id={selectedId} onBack={() => onSelect(null)} onBatches={onBatches} />;
+export function LearningReviewPage({ client, selectedId, after, sourceId = null, onClearSource, onSelect, onPage, onBatches }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; sourceId?: string | null; onClearSource?: () => void; onSelect: (id: string | null) => void; onPage: (cursor: string | null) => void; onBatches: () => void }) {
+  const evidence = useLearningResources(client, "evidence", { ...(sourceId ? { parentId: sourceId } : {}), limit: 30, ...(after ? { afterId: after } : {}) });
+  const source = useLearningResource(client, "source", sourceId);
+  if (selectedId) return <EvidenceLoader key={selectedId} client={client} id={selectedId} sourceId={sourceId} onBack={() => onSelect(null)} onBatches={onBatches} />;
   return <div className="labs-flat-body labs-resource-page learning-workspace">
-    <ModelProjectPageHeader title="Example review" description="Review task validity, observed response quality, and supervised-target approval independently. Evidence is shared across models in this workspace." actions={<button type="button" className="training-button secondary" onClick={onBatches}>Approved batches</button>} />
-    <LearningError error={evidence.error} /><div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Example</th><th>Source</th><th>Family / split</th><th>Revision</th></tr></thead><tbody>{evidence.page?.items.map((entry) => <tr key={entry.id}><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(entry.id)}><strong>{entry.submission.exampleId}</strong><small>{entry.submission.attemptId}</small></button></td><td>{entry.submission.sourceId}</td><td>{entry.submission.familyKey ?? "Family unresolved"} · {entry.submission.split}</td><td>{entry.revision}</td></tr>)}</tbody></table></div>
+    <ModelProjectPageHeader title="Example review" description={sourceId ? `Reviewing tasks from ${source.resource?.name ?? sourceId}.` : "Review task validity, observed response quality, and supervised-target approval independently. Evidence is shared across models in this workspace."} actions={<button type="button" className="training-button secondary" onClick={onBatches}>Approved batches</button>} />
+    {sourceId && onClearSource ? <button type="button" className="training-button secondary" onClick={onClearSource}>All workspace examples</button> : null}
+    <LearningError error={evidence.error ?? source.error} /><div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Example</th><th>Source</th><th>Family / split</th><th>Revision</th></tr></thead><tbody>{evidence.page?.items.map((entry) => <tr key={entry.id}><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(entry.id)}><strong>{entry.submission.exampleId}</strong><small>{entry.submission.attemptId}</small></button></td><td>{entry.submission.sourceId}</td><td>{entry.submission.familyKey ?? "Family unresolved"} · {entry.submission.split}</td><td>{entry.revision}</td></tr>)}</tbody></table></div>
     {evidence.loading ? <p role="status">Loading examples…</p> : !evidence.page?.items.length ? <p>Submit examples from Tasksets → Task formats to begin review.</p> : null}<LearningPager after={after} next={evidence.page?.nextCursor} onPage={onPage} />
   </div>;
 }
 
-function EvidenceLoader({ client, id, onBack, onBatches }: { client: OpenPondLearningClient | null; id: string; onBack: () => void; onBatches: () => void }) {
+function EvidenceLoader({ client, id, sourceId, onBack, onBatches }: { client: OpenPondLearningClient | null; id: string; sourceId: string | null; onBack: () => void; onBatches: () => void }) {
   const evidence = useLearningResource(client, "evidence", id);
+  if (sourceId && evidence.resource && evidence.resource.source.id !== sourceId) return <div className="labs-flat-body learning-workspace"><LearningError error="This example does not belong to the selected task source." /><button type="button" className="training-button secondary" onClick={onBack}>Back to review</button></div>;
   return evidence.resource ? <EvidenceReview key={`${id}:${evidence.resource.revision}`} client={client} evidence={evidence.resource} onBack={onBack} onBatches={onBatches} onChanged={evidence.refresh} /> : <div className="labs-flat-body labs-resource-page learning-workspace"><LearningError error={evidence.error} /><p role="status">{evidence.error ? "This example could not be opened." : "Loading example…"}</p><button type="button" className="training-button secondary" onClick={onBack}>Back to review</button></div>;
 }
 
