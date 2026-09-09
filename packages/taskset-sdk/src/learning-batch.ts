@@ -55,7 +55,7 @@ export function materializeLearningBatchTaskset(input: {
     graders, graderFixtures: fixtures, learningSignals: signals,
     authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1", model: null, modelConfig: {}, skillHash: contentHash("openpond-learning-batch-v1"), promptTemplateVersion: "learning-batch-v1", buildIntent: input.batch.purpose === "supervised_training" ? "demonstrations" : "verifiable_reward", buildSpecification: null, evidenceHashes: input.batch.examples.map((entry) => entry.evidence.contentHash), tasksetSdkVersion: "learning-batch-v1", sourceCommit: null, repairHistory: [], createdAt: input.batch.sealedAt },
     readiness: null, contentHash: "00000000", createdAt: input.batch.sealedAt, updatedAt: input.batch.sealedAt,
-    metadata: { learning: metadata, learningRelease: learningRef(release), trainingMethod: input.batch.purpose === "supervised_training" ? "sft" : input.batch.purpose === "reward_training" ? "grpo" : "none", tasksetOutputContract: { kind: "structured", schema: input.definition.outputSchema } },
+    metadata: { learning: metadata, learningRelease: learningRef(release), trainingMethod: input.batch.purpose === "supervised_training" ? "sft" : input.batch.purpose === "reward_training" ? "grpo" : "none", tasksetOutputContract: { mode: "structured_json", jsonSchema: input.definition.outputSchema, renderer: null } },
   });
   return { taskset: TasksetSchema.parse({ ...taskset, contentHash: computeTasksetHash(taskset) }), release, generatedFiles };
 }

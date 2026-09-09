@@ -99,6 +99,7 @@ export function LabModelVersionDetailPage({
   onOpenConversation: (conversationId: string) => void;
 }) {
   const state = training.payload;
+  const [cancellation, setCancellation] = useState<{ runId: string; message: string } | null>(null);
   const jobs = useMemo(
     () => labModelJobs(workproduct, runs, state),
     [runs, state, workproduct]
@@ -338,6 +339,25 @@ export function LabModelVersionDetailPage({
           : selectedVersion ? `Version ${selectedVersion.number}` : "Run details"}
         description={`${trainingMethodLabel(selectedMethod)} on ${baseModelName(selectedPlan, selectedBaseModelId)}`}
         status={<LabRunStatusBadge status={currentRunStatus} />}
+        actions={runActive && (selectedLifecycleRun || selectedJob) ? (
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={training.busyAction !== null}
+            onClick={async () => {
+              const runId = selectedLifecycleRun?.id ?? selectedJob!.id;
+              const result = selectedLifecycleRun
+                ? await training.actions.cancelModelRun(selectedLifecycleRun.id)
+                : await training.actions.cancelJob(selectedJob!.id);
+              setCancellation({ runId, message: result
+                ? "Cancellation requested. Waiting for the training service to confirm."
+                : "Cancellation could not be requested. Try again." });
+            }}
+          >
+            {training.busyAction === "cancel-model-run" || training.busyAction === "cancel-job"
+              ? "Requesting cancellation…" : "Cancel run"}
+          </button>
+        ) : undefined}
         metrics={[
           {
             label: isGrpo ? "Training tasks" : "Training steps",
@@ -359,6 +379,8 @@ export function LabModelVersionDetailPage({
           },
         ]}
       />
+      {runActive && cancellation && cancellation.runId === (selectedLifecycleRun?.id ?? selectedJob?.id)
+        ? <p role="status">{cancellation.message}</p> : null}
 
       <section className="labs-run-detail-tabs">
         <div

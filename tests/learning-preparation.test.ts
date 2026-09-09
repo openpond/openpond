@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "vitest";
+import { TasksetDraftOutputContractSchema } from "openpond-sdk/taskset-drafts";
 import { createBuiltinTaskGradeExecutor, createTaskGradeWorker, createLearningTextAsset, learningRef, TaskAdmissionDecisionSchema, TaskDefinitionSchema, LearningSourceSchema, TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 import { buildTrainingBundle } from "@openpond/training-sdk";
@@ -30,6 +31,10 @@ test("prepares an immutable local Taskset and exports only the approved SFT resp
     await fixture.command({ action: "seal_batch", batchId: "preparation-batch", taskDefinition: learningRef(fixture.definition), purpose: "supervised_training", evidence: [learningRef(evidence)], decisions: [learningRef(decision)] });
     const request = { profileId: learningContext.scope, batchId: "preparation-batch" };
     const taskset = await prepareLocalLearningBatch(store, home, request);
+    // The managed bundle consumes this contract to constrain policy output.
+    expect(TasksetDraftOutputContractSchema.parse(taskset.metadata.tasksetOutputContract)).toEqual({
+      mode: "structured_json", jsonSchema: fixture.definition.outputSchema, renderer: null,
+    });
     expect(await prepareLocalLearningBatch(store, home, request)).toEqual(taskset);
     expect(taskset.tasks[0]!.expectedOutput).toEqual(evidence.submission.expected);
     expect(taskset.graderFixtures.map((fixture) => fixture.expectedPassed)).toEqual([false, true]);
