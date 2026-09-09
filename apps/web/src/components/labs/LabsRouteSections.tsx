@@ -283,6 +283,7 @@ export function ModelsTable({
             const pulling = hosted
               ? busyAction === `pull-hosted-model-project:${hosted.project.id}`
               : false;
+            const opening = hosted ? busyAction === `open-hosted-model-project:${hosted.project.id}` : false;
             const pullable = hosted
               ? hosted.localState === "not_pulled" ||
                 hosted.localState === "remote_ahead"
@@ -293,25 +294,24 @@ export function ModelsTable({
             return (
               <tr
                 key={row.key}
-                className={item ? undefined : "labs-hosted-only-row"}
-                onClick={item ? () => onSelect(item.key) : undefined}
+                onClick={() => { if (!opening) onSelect(row.key); }}
               >
                 <td>
                   {item ? (
                     <button
                       className="labs-workproduct-link"
                       type="button"
-                      onClick={() => onSelect(item.key)}
+                      onClick={(event) => { event.stopPropagation(); onSelect(item.key); }}
                     >
                       <strong>{name}</strong>
                       <span>{description}</span>
                     </button>
                   ) : (
-                    <div className="labs-workproduct-link labs-hosted-project-identity">
+                    <button type="button" disabled={opening} className="labs-workproduct-link labs-hosted-project-identity" onClick={(event) => { event.stopPropagation(); onSelect(row.key); }}>
                       <strong>{name}</strong>
                       <span>{description}</span>
-                      <small>{hosted!.project.portableProjectId}</small>
-                    </div>
+                      <small>{opening ? "Opening…" : hosted!.project.portableProjectId}</small>
+                    </button>
                   )}
                 </td>
                 <td>
@@ -419,7 +419,7 @@ export function ModelsTable({
 }
 
 function hostedLocalStateLabel(state: HostedModelProjectLocalState): string {
-  if (state === "not_pulled") return "Hosted only";
+  if (state === "not_pulled") return "Hosted";
   if (state === "up_to_date") return "Local + hosted";
   if (state === "remote_ahead") return "Update available";
   if (state === "local_ahead") return "Local changes";

@@ -134,5 +134,7 @@ function hostedProjectLocalState(
   if (remoteChanged || local.revision !== hosted.sourceRevision) {
     return "remote_ahead";
   }
+  const selectedPackages = [hosted.trainingSetup.tasksetRef, hosted.trainingSetup.evaluationTasksetRef].filter(ref => ref != null);
+  if (selectedPackages.some(ref => !local.hosted!.tasksets.some(link => link.releaseId === ref.id && link.releaseRevision === ref.revision && link.releaseHash === ref.contentHash))) return "not_pulled";
   return "up_to_date";
 }

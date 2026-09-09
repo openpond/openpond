@@ -1,5 +1,12 @@
-import type { ModelProject, TrainingStateResponse } from "@openpond/contracts";
+import type { ModelProject, TrainingJob, TrainingStateResponse } from "@openpond/contracts";
 import type { ModelsRoute } from "./models-route";
+
+export function trainingJobModelId(job: TrainingJob, state: TrainingStateResponse): string | null {
+  const recordedModelId = job.metadata.modelProjectId;
+  return typeof recordedModelId === "string" && recordedModelId
+    ? recordedModelId
+    : state.plans.find((plan) => plan.id === job.planId)?.modelId ?? null;
+}
 
 /** Discovery scope never rewrites the recorded execution/version owner. */
 export function modelResourceOwner(route: ModelsRoute, state: TrainingStateResponse | null): string | null {
@@ -10,7 +17,7 @@ export function modelResourceOwner(route: ModelsRoute, state: TrainingStateRespo
   if (kind === "model-run") return state.modelRuns.find((run) => run.id === id)?.modelId ?? null;
   if (kind === "job") {
     const job = state.jobs.find((job) => job.id === id);
-    return job ? state.plans.find((plan) => plan.id === job.planId)?.modelId ?? null : null;
+    return job ? trainingJobModelId(job, state) : null;
   }
   if (kind === "version") {
     return state.modelVersions.find((version) => version.artifactLineageId === id)?.modelId

@@ -297,6 +297,20 @@ describe("Model Project hosting", () => {
       }),
     }));
 
+    // API-created projects can populate the standard pages without downloading
+    // their Taskset packages. Refresh must preserve existing local edits.
+    Object.assign(hosted.trainingSetup, { tasksetRef: { id: "remote-package", revision: 1, contentHash: "a".repeat(64) } });
+    const openScope = { hostedProjectId: hosted.id, profileId: "profile_1", teamId: "team_1", apiOrigin: "https://hosted.example.test" };
+    const requestsBeforeOpen = request.mock.calls.length;
+    await expect(service.openProject({ ...openScope, teamId: "other" })).rejects.toThrow("active connection");
+    expect(request.mock.calls).toHaveLength(requestsBeforeOpen);
+    const opened = await service.openProject(openScope);
+    expect(opened.importedJobCount).toBe(1);
+    expect(opened.importedMetricCount).toBe(6);
+    expect(opened.project.trainingSetup.tasksetRef?.id).toBe("remote-package");
+    expect(opened.project.hosted?.tasksets).toEqual([]);
+    expect(request.mock.calls.slice(requestsBeforeOpen).some(([url]) => String(url).includes("taskset-packages"))).toBe(false);
+
     const conflictingService = createModelProjectHostingService({
       store: {
         getModelProject: vi.fn(async () => ({
@@ -305,6 +319,8 @@ describe("Model Project hosting", () => {
         })),
         saveModelProjectHosting,
         saveTrainingJob: vi.fn(async (value: unknown) => value),
+        getTrainingJob: vi.fn(async () => null),
+        saveTrainingJobEvent: vi.fn(async (value: unknown) => value),
       } as never,
       resolveAccess: async () => ({
         apiBaseUrl: "https://hosted.example.test",
@@ -318,6 +334,10 @@ describe("Model Project hosting", () => {
       hostedProjectId: hosted.id,
       profileId: "profile_1",
     })).rejects.toThrow("Pulling would overwrite local work");
+    const savedCount = saveModelProjectHosting.mock.calls.length;
+    expect((await conflictingService.openProject(openScope)).project.revision).toBe(pulled.project.revision + 1);
+    expect(saveModelProjectHosting.mock.calls).toHaveLength(savedCount);
+    await expect(conflictingService.openProject({ ...openScope, profileId: "other" })).rejects.toThrow("different Profile");
   });
 
   test("serves the persisted hosted catalog without a network wait", async () => {

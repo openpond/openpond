@@ -5,6 +5,7 @@ import { labModelVersions } from "./lab-models";
 import { formatDateTime, statusLabel } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { trainingJobModelId } from "./models-resource-scope";
 
 export interface ModelsAggregateRow {
   ref: string;
@@ -36,8 +37,10 @@ export function modelAggregateRows(page: "runs" | "versions", state: TrainingSta
   for (const job of state.jobs) {
     if (lifecycleIds.has(job.id) || (typeof job.metadata.modelRunId === "string" && lifecycleIds.has(job.metadata.modelRunId))) continue;
     const plan = plans.get(job.planId);
-    if (!plan?.modelId || !modelNames.has(plan.modelId)) continue;
-    rows.push({ ref: `job:${job.id}`, modelId: plan.modelId, modelName: modelNames.get(plan.modelId)!, kind: "Training", label: job.id, status: job.status, tasksetId: plan.tasksetId, updatedAt: job.updatedAt });
+    const ownerId = trainingJobModelId(job, state);
+    if (!ownerId || !modelNames.has(ownerId)) continue;
+    const tasksetId = typeof job.metadata.tasksetId === "string" ? job.metadata.tasksetId : plan?.tasksetId ?? "";
+    rows.push({ ref: `job:${job.id}`, modelId: ownerId, modelName: modelNames.get(ownerId)!, kind: "Training", label: job.id, status: job.status, tasksetId, updatedAt: job.updatedAt });
   }
   for (const run of modelId ? [] : state.rewardModelRuns) {
     rows.push({ ref: `reward-run:${run.id}`, modelId: null, modelName: `Reward ${run.rewardModelId}`, kind: "Reward training", label: run.id, status: run.status, tasksetId: run.taskset.id, updatedAt: run.updatedAt });

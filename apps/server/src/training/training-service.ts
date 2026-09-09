@@ -1,4 +1,5 @@
 import { createManagedCandidateReviewService } from "./managed-candidate-review.js";
+import { createHostedModelRunEvidence } from "./hosted-model-run-evidence.js";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -85,6 +86,7 @@ export function createTrainingService(deps: {
   } | null>;
 } & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();
+  const hostedRunEvidence = createHostedModelRunEvidence({ store: deps.store, resolveAccess: deps.resolveManagedTrainingAccess });
   const {
     setModelPinned,
     updateModelConfiguration,
@@ -667,6 +669,7 @@ export function createTrainingService(deps: {
   async function refreshManagedRunEvidence(jobId: string): Promise<void> {
     const job = await deps.store.getTrainingJob(jobId);
     if (!job || job.destinationId !== "openpond_managed") return;
+    if (job.metadata.source === "hosted_model_project_import") return hostedRunEvidence.refresh(job);
     await portableAdapters.refreshManagedEvidence(job);
   }
 
@@ -679,6 +682,7 @@ export function createTrainingService(deps: {
   async function managedEvaluationTasks(jobId: string, evaluationId: string, options: { cursor?: string; limit?: number } = {}) {
     const job = await deps.store.getTrainingJob(jobId);
     if (!job || job.destinationId !== "openpond_managed") throw new Error("Managed training job not found.");
+    if (job.metadata.source === "hosted_model_project_import") return hostedRunEvidence.evaluationTasks(job, evaluationId, options);
     return portableAdapters.managedEvaluationTasks(job, evaluationId, options);
   }
 

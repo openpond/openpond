@@ -18,6 +18,7 @@ import type { LabScorerCreateInput } from "./LabScorerCreateDialog";
 import { LabModelCreateDialog, type LabModelCreateInput } from "./LabModelCreateDialog";
 import { ModelStarterCatalog } from "./ModelStarterCatalog";
 import { LabModelsPage } from "./LabModelsPage";
+import { useHostedModelRefresh } from "./use-hosted-model-refresh";
 import { LabModelComparisonsPage } from "./LabModelComparisonsPage";
 import { LabServingPage } from "./LabServingPage";
 import { LabsView, type LabPrimaryTab } from "./LabsView";
@@ -71,6 +72,8 @@ export function LabsRoute(props: LabsRouteProps) {
     return workproducts.filter((item) => item.kind === "model" && ids.has(item.id));
   }, [state, profileId, training.settingsPreferences.defaultTeamId, workproducts]);
   const selected = models.find((model) => model.id === route?.modelId) ?? null;
+  const hostedRefreshError = useHostedModelRefresh(state?.modelProjects.find(model => model.id === selected?.id) ?? null,
+    training.settingsPreferences.defaultTeamId ?? null, props.account?.apiBaseUrl ?? null, training.training);
   const modelRunSyncKey = useMemo(() => trainingModelRunSyncKey(state), [state]);
   const agentRunSyncKey = useMemo(() => computeProfileAgentRunSyncKey(createImprove.runs), [createImprove.runs]);
   useEffect(() => {
@@ -222,8 +225,9 @@ export function LabsRoute(props: LabsRouteProps) {
       />
     </>;
   } else if (route.page === "models" && !route.modelId) {
-    page = <LabModelsPage activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
+    page = <LabModelsPage activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} hostedApiOrigin={props.account?.apiBaseUrl ?? null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
       onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
+      onOpened={(id) => open(modelsLocation("models", id))}
       onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}
     />;
   } else if ((route.page === "runs" || (route.page === "versions" && !route.modelId)) && !route.resourceId) {
@@ -242,6 +246,7 @@ export function LabsRoute(props: LabsRouteProps) {
   }
   const tab: LabPrimaryTab = (route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" ? "evals" : route?.page ?? "overview";
   return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
+    {hostedRefreshError ? <p role="status">{hostedRefreshError}</p> : null}
     {page}
     {comparisonCreateOpen && scopedState ? <LabComparisonSeriesCreateDialog busy={Boolean(training.training.busyAction)} profileId={scopedState.profileId} state={scopedState} onClose={() => setComparisonCreateOpen(false)} onCreate={async (series) => { const saved = await training.training.actions.saveComparisonSeries(series); if (!saved) return false; setComparisonCreateOpen(false); open(modelsLocation("runs", route?.modelId ?? null, { collection: "series", resourceId: saved.id })); return true; }} /> : null}
     {modelCreateOpen ? <LabModelCreateDialog key={`${workspaceKey}:${editingModelId ?? starterPreview?.starter.contentHash ?? "new"}`} starter={starterPreview ? { preview: starterPreview, profileId } : null} project={state?.modelProjects.find((project) => project.id === editingModelId) ?? null} tasksets={labModelTasksets(state).filter((taskset) => taskset.profileId === profileId)} learningClient={learningClient} baseModelCandidates={state?.baseModelCandidates ?? []} busy={training.training.busyAction === "save-model-project" || training.training.busyAction === "create-model-from-starter"} initialName={nextModelName(state?.modelProjects ?? [])} onClose={() => setModelCreateOpen(false)} onCheck={(input) => input.starterRequest ? training.training.actions.checkModelStarter(input.starterRequest) : training.training.actions.checkModelProject(modelConfiguration(input), input.expectedRevision)} onCreate={createModel} onSaved={() => { setModelCreateOpen(false); setEditingModelId(null); setStarterPreview(null); open(modelsLocation("models", savedModelId.current)); }} onManageModels={training.onOpenTrainingSettings} renderTasksetBuilder={(onPublished, onClose) => <TasksetDraftEditor defaultModel={training.defaultModel} training={training.training} onBack={onClose} onPublished={onPublished} />} /> : null}

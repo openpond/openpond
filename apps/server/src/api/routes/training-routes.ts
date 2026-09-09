@@ -255,6 +255,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/learned-preference-reward-binding$/, method: "POST", action: "learned_preference_reward_binding", key: "tasksetId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/harness-refiner-benchmark$/, method: "POST", action: "start_harness_refiner_benchmark", key: "modelId" },
     { pattern: /^\/v1\/training\/hosted-model-projects\/([^/]+)\/pull$/, method: "POST", action: "pull_hosted_model_project", key: "hostedProjectId" },
+    { pattern: /^\/v1\/training\/hosted-model-projects\/([^/]+)\/open$/, method: "POST", action: "open_hosted_model_project", key: "hostedProjectId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/sync$/, method: "POST", action: "sync_model_project", key: "modelId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/managed-base$/, method: "POST", action: "version_model_project_onto_managed_rl_base", key: "modelProjectId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/tasksets\/([^/]+)\/publish$/, method: "POST", action: "publish_model_project_taskset", key: "modelId", assignmentKey: "tasksetId" },
