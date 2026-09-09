@@ -15,3 +15,4 @@ export * from "./reward-fixture-executor.js";
 export * from "./iteration-reservation-contracts.js";
 export * from "./iteration-dispatch-contracts.js";
 export * from "./iteration-dispatch-worker.js";
+export * from "./iteration-candidate-decision.js";

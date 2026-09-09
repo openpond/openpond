@@ -218,3 +218,16 @@ A successful execution without an adapter becomes `completed_without_candidate`;
 it does not fabricate a version or an improvement. Provider adapters, timers,
 candidate-decision reconciliation and product controls must be connected by the
 host; this shared worker alone does not enable hosted scheduling.
+
+### Retained candidate decisions
+
+`reconcileLearningCandidateDecision` lets a trusted host reconcile an already
+authorized, verified provider decision into the learning chain. The host must
+verify the decision's immutable hash, ownership, revision and retained training
+evidence before invoking this boundary; it is not a public review command.
+Reconciliation matches the exact execution, candidate, evaluation and terminal
+cleanup receipt, retains the decision reference on the iteration, and records
+`accepted` or `rejected`. It releases the chain only when that iteration still
+owns it. Duplicate observations are idempotent, older decision revisions cannot
+overwrite newer ones, and contradictory observations at the same revision fail.
+This operation does not change the training parent or activate serving.

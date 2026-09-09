@@ -223,6 +223,7 @@ export const LearningIterationSchema = z.object({
   trainingJob: ImmutableReleaseRefSchema.nullable(),
   evaluationJob: ImmutableReleaseRefSchema.nullable(),
   candidateVersion: ImmutableReleaseRefSchema.nullable(),
+  candidateDecision: LearningRevisionRefSchema.nullable().default(null),
   dispatchId: ReleaseIdSchema,
   retryCount: z.number().int().nonnegative(),
   spendUsd: z.number().nonnegative(),

@@ -113,6 +113,17 @@
         }
       ]
     },
+    "candidateDecision": {
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "dispatchId": {
       "$ref": "#/$defs/__schema0"
     },
@@ -171,6 +182,7 @@
     "trainingJob",
     "evaluationJob",
     "candidateVersion",
+    "candidateDecision",
     "dispatchId",
     "retryCount",
     "spendUsd",
