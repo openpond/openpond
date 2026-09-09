@@ -14,6 +14,7 @@ describe("managed adapter chat runtime", () => {
     const store = {
       getActiveModelBinding: vi.fn(async () => binding),
       getModelArtifactLineage: vi.fn(async () => lineage),
+      getTrainingArtifact: vi.fn(async () => ({ baseModelId: "Qwen/Qwen3-8B" })),
     } as unknown as SqliteStore;
     const streamChat = vi.fn(async function* () {
       yield { text: "managed" };
@@ -38,6 +39,7 @@ describe("managed adapter chat runtime", () => {
       expect.objectContaining({
         teamId: "team_qa",
         logicalModelName: managedBindingLogicalModelName(binding),
+        messages: [{ role: "user", content: "hello\n\n/no_think" }],
       })
     );
   });
@@ -52,6 +54,7 @@ describe("managed adapter chat runtime", () => {
       store: {
         getActiveModelBinding: vi.fn(async () => binding),
         getModelArtifactLineage: vi.fn(async () => lineage),
+        getTrainingArtifact: vi.fn(async () => ({ baseModelId: "Qwen/Qwen3-8B" })),
         listModelVersions: vi.fn(async () => [
           {
             artifactLineageId: lineage.id,
@@ -108,6 +111,7 @@ describe("managed adapter chat runtime", () => {
         binding,
       ]),
       getModelArtifactLineage: vi.fn(async () => lineage),
+      getTrainingArtifact: vi.fn(async () => ({ baseModelId: "Qwen/Qwen3-8B" })),
     } as unknown as SqliteStore;
     const streamChat = vi.fn(async function* () {
       yield { text: "managed-lineage" };
@@ -158,6 +162,7 @@ describe("managed adapter chat runtime", () => {
           defaultBinding,
         ]),
         getModelArtifactLineage: vi.fn(async () => lineage),
+        getTrainingArtifact: vi.fn(async () => ({ baseModelId: "Qwen/Qwen3-8B" })),
       } as unknown as SqliteStore,
       client: { streamChat } as never,
     });
@@ -208,6 +213,7 @@ describe("managed adapter chat runtime", () => {
       const store = {
         getActiveModelBinding: vi.fn(async () => binding),
         getModelArtifactLineage: vi.fn(async () => lineage),
+        getTrainingArtifact: vi.fn(async () => ({ baseModelId: "Qwen/Qwen3-8B" })),
       } as unknown as SqliteStore;
       const streamChat = vi.fn(async function* () {
         yield { text: "must-not-run" };
@@ -247,6 +253,7 @@ describe("managed adapter chat runtime", () => {
       store: {
         getActiveModelBinding: vi.fn(async () => binding),
         getModelArtifactLineage: vi.fn(async () => lineage),
+        getTrainingArtifact: vi.fn(async () => ({ baseModelId: "Qwen/Qwen3-8B" })),
       } as unknown as SqliteStore,
       client: { streamChat } as never,
     });
@@ -272,6 +279,7 @@ describe("managed adapter chat runtime", () => {
       store: {
         getActiveModelBinding: vi.fn(async () => binding),
         getModelArtifactLineage: vi.fn(async () => lineage),
+        getTrainingArtifact: vi.fn(async () => ({ baseModelId: "Qwen/Qwen3-8B" })),
       } as unknown as SqliteStore,
       client: { streamChat: vi.fn() } as never,
     });

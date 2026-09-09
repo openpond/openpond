@@ -12,9 +12,11 @@ import {
 } from "./managed-model-binding-coordinator.js";
 import { updateModelCreateImproveRelease } from "./model-release-reconciliation.js";
 import { assertArtifactIntegrity } from "./training-service-helpers.js";
+import { assertManagedModelArtifactIntegrity } from "./managed-model-artifact-integrity.js";
+import type { ManagedTrainingOutputAccess } from "./managed-training-retained-outputs.js";
 
 export function createTrainingModelBindingService(
-  deps: { store: SqliteStore } & ManagedModelBindingCallbacks,
+  deps: { store: SqliteStore; resolveManagedTrainingAccess?: () => Promise<ManagedTrainingOutputAccess> } & ManagedModelBindingCallbacks,
 ) {
   const managedModelBindings = createManagedModelBindingCoordinator({
     store: deps.store,
@@ -97,7 +99,7 @@ export function createTrainingModelBindingService(
       deps.store.getTrainingJob(model.jobId),
       deps.store.getTrainingArtifact(model.artifactId),
     ]);
-    if (!taskset || taskset.profileId !== input.profileId) {
+    if (job?.destinationId !== "openpond_managed" && (!taskset || taskset.profileId !== input.profileId)) {
       throw new Error(
         "The Model does not belong to the active Profile.",
       );
@@ -107,11 +109,12 @@ export function createTrainingModelBindingService(
         "The Model artifact does not have a completed training receipt.",
       );
     }
-    await assertArtifactIntegrity(
-      artifact.path,
-      artifact.sha256,
-      artifact.sizeBytes,
-    );
+    if (job.destinationId === "openpond_managed") {
+      await assertManagedModelArtifactIntegrity({ store: deps.store, profileId: input.profileId,
+        model, job, artifact, resolveAccess: deps.resolveManagedTrainingAccess });
+    } else {
+      await assertArtifactIntegrity(artifact.path, artifact.sha256, artifact.sizeBytes);
+    }
     let current = await deps.store.getActiveModelBinding({
       profileId: input.profileId,
       role,
@@ -132,7 +135,7 @@ export function createTrainingModelBindingService(
       role,
       roleTargetId,
       modelArtifactLineageId: model.id,
-      tasksetId: taskset.id,
+      tasksetId: model.tasksetId,
       evaluationArtifactId: model.frozenEvaluationArtifactId,
       status: "active",
       priorBindingId: current?.id ?? null,

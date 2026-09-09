@@ -5,7 +5,7 @@ import { learningRef, type TaskBatch } from "openpond-sdk/learning";
 import { api } from "../../api";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
 import { useErrorToast } from "../../app/AppToastContext";
-import { buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
+import { buildHostedTrainingModelChatHandoff, buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { AppDialog } from "../dialogs/AppDialog";
 import { DatasetSourcePickerDialog, type DatasetCreateSource } from "../datasets/DatasetSourcePickerDialog";
 import { HuggingFaceDatasetImportDialog } from "../datasets/HuggingFaceDatasetImportDialog";
@@ -142,7 +142,11 @@ export function LabsRoute(props: LabsRouteProps) {
     if (!model) return;
     const versions = labModelVersions(model, createImprove.runs, state);
     const version = versions.find((version) => version.current) ?? versions.find((version) => version.lineage.promotable);
-    if (version?.taskset) training.onChatWithModel(buildTrainingModelChatHandoff({ modelId: version.lineage.id, taskset: version.taskset }));
+    if (!version) return;
+    if (version.taskset) training.onChatWithModel(buildTrainingModelChatHandoff({ modelId: version.lineage.id, taskset: version.taskset }));
+    else if (version.current && version.lineage.managedServing) training.onChatWithModel(buildHostedTrainingModelChatHandoff({
+      modelId: version.lineage.id, tasksetId: version.lineage.tasksetId, modelName: model.name,
+    }));
   }
   async function attachBatch(batch: TaskBatch) {
     const project = state?.modelProjects.find(project => project.id === route?.modelId);
