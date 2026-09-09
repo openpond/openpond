@@ -41,6 +41,7 @@ export function managedTrainingEvidenceFromPublic(input: {
     if (kind !== "baseline" && kind !== "candidate") return [];
     const metrics = record(output.metadata.metrics);
     return [{
+      reference: { id: output.id, contentHash: output.contentHash },
       kind,
       policyVersion: nonnegativeInteger(output.metadata.policyVersion) ?? 0,
       taskCount: nonnegativeInteger(metrics.taskCount),

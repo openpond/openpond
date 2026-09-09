@@ -13,6 +13,7 @@ export function createDestinationTrainingEngineRegistry(input: {
   const adapters = new TrainingAdapterRegistry() as TrainingAdapterRegistry & {
     close(): Promise<void>;
     refreshManagedEvidence(job: TrainingJob): Promise<void>;
+    managedEvaluationTasks(job: TrainingJob, evaluationId: string, options: { cursor?: string; limit?: number }): ReturnType<OpenPondManagedTrainingAdapter["evaluationTasks"]>;
     createCalibrationBatch(request: unknown): ReturnType<OpenPondManagedTrainingAdapter["createCalibrationBatch"]>;
     calibrationBatch(jobId: string): ReturnType<OpenPondManagedTrainingAdapter["calibrationBatch"]>;
     createRewardModelLaunch(request: Parameters<OpenPondManagedTrainingAdapter["createRewardModelLaunch"]>[0]): ReturnType<OpenPondManagedTrainingAdapter["createRewardModelLaunch"]>;
@@ -33,6 +34,11 @@ export function createDestinationTrainingEngineRegistry(input: {
     }
   };
   adapters.createCalibrationBatch = (request) => managed.createCalibrationBatch(request);
+  adapters.managedEvaluationTasks = (job, evaluationId, options) => {
+    const ref = TrainingExecutionRefSchema.parse(job.metadata.portableExecutionRef);
+    if (ref.adapterId !== "sandbox-managed-rl" || ref.runId !== job.id) throw new Error("The Job does not belong to the managed training adapter.");
+    return managed.evaluationTasks(ref, evaluationId, options);
+  };
   adapters.calibrationBatch = (jobId) => managed.calibrationBatch(jobId);
   adapters.createRewardModelLaunch = (request) => managed.createRewardModelLaunch(request);
   adapters.rewardModelJob = (jobId) => managed.rewardModelJob(jobId);

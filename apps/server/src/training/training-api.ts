@@ -53,7 +53,7 @@ import type { createHarnessRefinerBenchmarkService } from "./harness-refiner-ben
 import type { createPreferenceComparisonService } from "./preference-comparison-service.js";
 import type { createModelProjectHostingService } from "./model-project-hosting.js";
 import { isModelProjectHostingAction, runModelProjectHostingAction } from "./training-api-model-project-hosting-actions.js";
-import { trainingRunDetail } from "./run-detail.js";
+import { handleTrainingRunRead, isTrainingRunReadAction } from "./training-api-run-reads.js";
 import { managedStructuredOutputContract, preferenceCalibrationSourceHash } from "./managed-rl-calibration.js";
 import {
   materializeSyntheticCollectionRun,
@@ -1407,12 +1407,7 @@ export function createTrainingApi(deps: {
       pinned: input.pinned === true,
     });
     if (action === "cancel_job") return deps.training.cancelJob(requiredString(input.jobId, "jobId"));
-    if (action === "job_events") return deps.store.listTrainingJobEvents(requiredString(input.jobId, "jobId"));
-    if (action === "run_detail") {
-      const jobId = requiredString(input.jobId, "jobId");
-      await deps.training.refreshManagedRunEvidence(jobId);
-      return trainingRunDetail(deps.store, jobId, { includeEvaluation: input.includeEvaluation !== false });
-    }
+    if (isTrainingRunReadAction(action)) return handleTrainingRunRead({ action, payload: input, store: deps.store, training: deps.training });
     throw new Error(`Unknown training action ${action}.`);
   }
 

@@ -260,6 +260,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_job", key: "jobId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/events$/, method: "GET", action: "job_events", key: "jobId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/detail$/, method: "GET", action: "run_detail", key: "jobId" },
+    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/evaluations\/([^/]+)\/tasks$/, method: "GET", action: "managed_evaluation_tasks", key: "jobId", assignmentKey: "evaluationId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/reject$/, method: "POST", action: "reject_model", key: "modelId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/bind$/, method: "POST", action: "bind_model", key: "modelId" },
     { pattern: /^\/v1\/training\/bindings\/([^/]+)\/rollback$/, method: "POST", action: "rollback_model_binding", key: "bindingId" },
@@ -276,6 +277,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
       ...(item.assignmentKey ? { [item.assignmentKey]: decodeURIComponent(match[2]!) } : {}),
       ...(item.action === "model_comparison_attempt_evidence" ? { kind: requestUrl.searchParams.get("kind") } : {}),
       ...(item.action === "run_detail" ? { includeEvaluation: requestUrl.searchParams.get("evaluation") !== "false" } : {}),
+      ...(item.action === "managed_evaluation_tasks" ? { cursor: requestUrl.searchParams.get("cursor") ?? undefined, limit: requestUrl.searchParams.has("limit") ? Number(requestUrl.searchParams.get("limit")) : undefined } : {}),
     };
     const controller = new AbortController();
     request.once("aborted", () => controller.abort(new Error("training_request_aborted")));
