@@ -111,6 +111,7 @@ async function main(): Promise<void> {
       'import { type TasksetPackage, prepareModelTasksetDraft, publishModelTasksetDraftPackage, resolveTasksetPackageExecution, resolveTasksetPackageInstructions, createTasksetPackageExecutionFile } from "openpond-sdk/taskset-packages";',
       'declare const client: OpenPondLearningClient;',
       'import type { LearningSchedule, LearningScheduleFire } from "openpond-sdk/learning"; const schedule: Promise<LearningSchedule> = client.get("schedule", "timer"); const fire: Promise<LearningScheduleFire> = client.get("schedule_fire", "fire"); void schedule; void fire;',
+      'import type { LearningPolicyInspectionResult } from "openpond-sdk/learning"; const readiness: Promise<LearningPolicyInspectionResult> = client.inspectPolicy({ id: "policy", revision: 1, contentHash: "a".repeat(64) }); void readiness;',
       'declare const example: TaskExampleSubmission;',
       'const command: LearningCommand = { action: "submit_example", operationId: example.idempotencyKey, example };',
       'void client.command(command);',

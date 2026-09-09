@@ -9,14 +9,15 @@ import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src
 import { createLocalLearningRuntime } from "../apps/server/src/training/learning-runtime";
 import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
 import { withTempDirectory } from "./helpers/temp-directory";
-import { learningContext, learningFixture } from "./helpers/learning-fixtures";
+import { learningContext } from "./helpers/learning-fixtures";
+import { learningIterationFixture } from "./helpers/learning-iteration-fixtures";
 
 // Regression: a portable SDK request must reach authenticated Desktop storage and durable jobs unchanged.
 test("public learning SDK crosses the authenticated HTTP boundary with retries, validation, conflicts and real grading", async () => {
   await withTempDirectory("openpond-learning-api-", async (home) => {
     const store = new SqliteLearningStore(home);
     const runtime = createLocalLearningRuntime(store);
-    const fixture = await learningFixture(store.learningRepository());
+    const fixture = await learningIterationFixture(store.learningRepository());
     const server = createServer(createHttpRequestHandler({
       host: "127.0.0.1", getActualPort: () => 0, token: "test-local-owner", version: "test", runtimeVersion: "test",
       logger: { info() {}, warn() {}, error() {} },
@@ -47,6 +48,13 @@ test("public learning SDK crosses the authenticated HTTP boundary with retries, 
       await expect(sdk.submitExample({ ...fixture.example, input: { question: "Conflicting retry" } })).rejects.toMatchObject({ status: 409, code: "learning_idempotency_conflict" });
       await expect(sdk.get("evidence", "missing")).rejects.toMatchObject({ status: 404, code: "learning_resource_not_found" });
       const evidence = TaskEvidenceSchema.parse(first.resources[0]);
+      const policy = await fixture.publishPolicy();
+      const readiness = await sdk.inspectPolicy(learningRef(policy));
+      expect(readiness).toMatchObject({ policy: learningRef(policy), canReserve: false, counts: { eligible: 0, awaitingReview: 1 }, chain: null });
+      expect((await sdk.list("reservation")).items).toHaveLength(0);
+      const mismatched = new OpenPondLearningClient({ baseUrl, apiKey: "test-local-owner", scope: learningContext.scope,
+        fetch: async () => Response.json({ ...readiness, policy: { ...readiness.policy, revision: policy.revision + 1 } }) });
+      await expect(mismatched.inspectPolicy(learningRef(policy))).rejects.toMatchObject({ code: "policy_identity_mismatch" });
       // A producer key is durable, scoped to one source and cannot reach owner
       // reads, grading, credential management or unrelated server capabilities.
       const credentialRequest = createSourceCredentialRequest({ sourceId: fixture.source.id, name: "Application intake", expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
@@ -66,6 +74,7 @@ test("public learning SDK crosses the authenticated HTTP boundary with retries, 
       await expect(producer.submitExample({ ...producerExample, sourceId: "another-source" })).rejects.toMatchObject({ status: 403 });
       await expect(new OpenPondLearningClient({ baseUrl, apiKey: issued.apiKey, scope: "other-workspace" }).submitExample(producerExample)).rejects.toMatchObject({ status: 403 });
       await expect(producer.get("evidence", evidence.id)).rejects.toMatchObject({ status: 401 });
+      await expect(producer.inspectPolicy(learningRef(policy))).rejects.toMatchObject({ status: 401 });
       await expect(producer.listSourceCredentials(fixture.source.id)).rejects.toMatchObject({ status: 401 });
       await expect(producer.command({ operationId: "producer-cannot-grade", action: "queue_grade", evidence: learningRef(evidence), target: "observed", proposedTarget: null, timeoutMs: 30_000, maximumSpendUsd: 0 })).rejects.toMatchObject({ status: 403 });
       expect((await fetch(`${baseUrl}/v1/state`, { headers: { Authorization: `Bearer ${issued.apiKey}` } })).status).toBe(401);
