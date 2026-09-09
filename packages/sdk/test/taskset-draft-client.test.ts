@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { contentHash } from "@openpond/harness";
 import { createTasksetDraft, createTasksetDraftFile, OpenPondTasksetDraftClient } from "../src/taskset-drafts.js";
 
 // A hosted response must not substitute a foreign draft or stale revision, and
@@ -18,6 +19,12 @@ it("scopes draft requests and rejects mismatched revisions, bytes and owners", a
   } });
   expect((await client.get("model", "draft")).draft).toEqual(draft);
   expect(calls[0]?.url).toBe("https://example.invalid/v1/models/model/taskset-drafts/draft");
+  const create = { schemaVersion: "openpond.tasksetDraftCreate.v1" as const, modelId: "model", operationId: "create", expectedModelRevision: 1, name: "New tasks" };
+  await expect(client.create(create)).rejects.toMatchObject({ code: "draft_response_mismatch" });
+  const createdId = `model-taskset-draft-${contentHash({ owner: { scopeId: "team", modelId: "model" }, operationId: "create" })}`;
+  payload = { ...readback, draft: { ...draft, id: createdId } };
+  expect((await client.create(create)).draft.id).toBe(createdId);
+  expect(calls.at(-1)?.url).toBe("https://example.invalid/v1/models/model/taskset-drafts");
   payload = { ...readback, draft: { ...draft, id: "foreign-draft" } };
   await expect(client.get("model", "draft")).rejects.toMatchObject({ code: "draft_response_mismatch" });
   payload = readback;

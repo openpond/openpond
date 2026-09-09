@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
 import { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript-environment/node";
 import { prepareImportedTasksetPackage, prepareModelTasksetDraft, prepareTasksetDraftSource, materializeTasksetDraftWorkspace, compileModelTasksetDraftWorkspace, resolveTasksetPackageExecution } from "../src/taskset-packages.js";
-import { tasksetDraftFromTaskset, saveTasksetDraftWorkspaceDocument, saveTasksetDraftWorkspaceFile, readTasksetDraftWorkspaceFile } from "../src/taskset-drafts.js";
+import { createTasksetDraftWorkspace, tasksetDraftFromTaskset, saveTasksetDraftWorkspaceDocument, saveTasksetDraftWorkspaceFile, readTasksetDraftWorkspaceFile } from "../src/taskset-drafts.js";
 import { ordinaryToolTaskset } from "./fixtures/ordinary-tool-taskset.js";
 
 // Hosted snapshots must compile through the same authoring engine as local
@@ -30,6 +30,12 @@ it("opens, edits and compiles ordinary source snapshots without changing earlier
   workspace = saveTasksetDraftWorkspaceFile({ workspace, now, mutation: { draftId: workspace.draft.id, expectedDraftRevision: workspace.draft.revision,
     path, expectedFileHash: read.file.contentHash, content: { encoding: "utf8", data: read.file.content.data.replace("value: 1", "value: 2") } } });
   const compiled = compileModelTasksetDraftWorkspace({ workspace, preparation, now, adapterId: "test-private-environment" });
+  expect(() => compileModelTasksetDraftWorkspace({ workspace, preparation: null, now, adapterId: "test-private-environment" })).toThrow("retained source");
+  const customWorkspace = createTasksetDraftWorkspace({ schemaVersion: workspace.schemaVersion, files: workspace.files,
+    draft: { ...workspace.draft, modelScope: { modelId: owner.modelId, expectedModelRevision: 1 } } });
+  const custom = compileModelTasksetDraftWorkspace({ workspace: customWorkspace, preparation: null, now, adapterId: "test-private-environment" });
+  expect(custom.taskset.tasks[0]!.expectedOutput).toEqual({ text: "2" });
+  expect(compileModelTasksetDraftWorkspace({ workspace: customWorkspace, preparation: null, now: "2026-09-09T12:00:00.000Z", adapterId: "test-private-environment" })).toEqual(custom);
   expect(compiled.taskset.id).toBe(preparation.tasksetId);
   expect(compiled.taskset.revision).toBe(1);
   expect(compiled.taskset.tasks[0]!.expectedOutput).toEqual({ text: "2" });

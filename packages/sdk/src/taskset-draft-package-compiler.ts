@@ -13,15 +13,20 @@ import { createTasksetPackage } from "./taskset-package-contracts.js";
  * The host supplies its retained preparation and later commits Model/draft CAS. */
 export function compileModelTasksetDraftWorkspace(input: {
   workspace: TasksetDraftWorkspace;
-  preparation: ModelTasksetDraftPreparation;
+  preparation: ModelTasksetDraftPreparation | null;
   adapterId: string;
   now: string;
 }) {
   const workspace = validateTasksetDraftWorkspace(input.workspace);
-  const preparation = ModelTasksetDraftPreparationSchema.parse(input.preparation);
-  if (workspace.draft.id !== preparation.draftId || workspace.draft.modelScope?.modelId !== preparation.lineage.owner.modelId
-    || contentHash(workspace.draft.modelScope?.source ?? null) !== contentHash(preparation)) throw new Error("Taskset draft differs from its retained source preparation.");
-  const taskset = publishTasksetDraft({ draft: workspace.draft, now: input.now, sourcePackageHash: workspace.contentHash });
+  const preparation = input.preparation === null ? null : ModelTasksetDraftPreparationSchema.parse(input.preparation);
+  if (!workspace.draft.modelScope) throw new Error("Taskset draft requires a Model owner.");
+  if (preparation ? workspace.draft.id !== preparation.draftId || workspace.draft.modelScope.modelId !== preparation.lineage.owner.modelId
+    || workspace.draft.profileId !== preparation.lineage.owner.scopeId
+    || contentHash(workspace.draft.modelScope.source ?? null) !== contentHash(preparation)
+    : workspace.draft.modelScope.source !== undefined) throw new Error("Taskset draft differs from its retained source preparation.");
+  // Validation and publication may happen in different requests. Package
+  // identity depends on saved bytes, including their timestamp, not wall time.
+  const taskset = publishTasksetDraft({ draft: workspace.draft, now: workspace.draft.updatedAt, sourcePackageHash: workspace.contentHash });
   const files = new Map(workspace.files.map(file => [file.path, decodeTasksetDraftWorkspaceFile(file)]));
   for (const [path, source] of renderTasksetDraftManifests(workspace.draft)) if (!isGeneratedTasksetPublicationFilePath(path)) files.set(path, new TextEncoder().encode(source));
   const authored = prepareAuthoredTasksetSource(taskset, files, input.adapterId);
@@ -36,5 +41,5 @@ export function compileModelTasksetDraftWorkspace(input: {
       return { asset: entry.asset, base64: Buffer.from(bytes).toString("base64") };
     }),
   });
-  return publishModelTasksetDraftPackage({ preparation, edited });
+  return preparation ? publishModelTasksetDraftPackage({ preparation, edited }) : edited;
 }
