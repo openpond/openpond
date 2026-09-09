@@ -195,3 +195,12 @@ projection used by Desktop for GRPO, PPO and DPO, including GRPO optimizer
 semantics and bounded resource defaults. Validate the result with the applicable
 recipe contract, then retain that exact recipe through approval and submission.
 The shared `AdamwOptimizerConfigSchema` supplies the existing optimizer defaults.
+
+`createPolicyHarnessContext` compiles the Agent snapshot and Harness release
+from resolved immutable source, skill and agent dependencies. Desktop and hosted
+preparation use the same compiler. For Taskset-owned training, supply the pinned
+Taskset's source release (or `null`) without personal Profile dependencies.
+An explicitly selected Harness continues to use its verified source package.
+The compiler preserves existing release hashes and rejects dependencies whose
+visibility is not `policy`; environment, task tools and graders remain bound by
+the Taskset and training bundle.
