@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { ModelArtifactLineage, ModelBinding } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import { createManagedAdapterChatRuntime } from "./managed-adapter-chat-runtime.js";
+import { createManagedAdapterHostedChatStream } from "./managed-adapter-chat-stream.js";
 import {
   managedBindingLogicalModelName,
   managedBindingProjectionVersion,
@@ -97,7 +98,7 @@ describe("managed adapter chat runtime", () => {
     );
   });
 
-  test("routes a catalog lineage id through its active manual binding", async () => {
+  test("ordinary hosted chat preserves the selected managed lineage and fails closed when it degrades", async () => {
     const binding = modelBinding();
     const lineage = modelLineage();
     const store = {
@@ -115,29 +116,49 @@ describe("managed adapter chat runtime", () => {
     } as unknown as SqliteStore;
     const streamChat = vi.fn(async function* () {
       yield { text: "managed-lineage" };
+      yield { usage: { total_tokens: 12 } };
+      yield { finishReason: "stop" };
     });
     const runtime = createManagedAdapterChatRuntime({
       store,
       client: { streamChat } as never,
     });
 
-    expect(await runtime.appliesTo(lineage.id)).toBe(true);
+    const hosted = vi.fn(async function* () {
+      yield { type: "text_delta" as const, text: "catalog-model", raw: null };
+    });
+    const stream = createManagedAdapterHostedChatStream({ managed: runtime, hosted });
+    const input = {
+      model: lineage.id,
+      messages: [{ role: "user" as const, content: "hello" }],
+      requestId: "request-lineage",
+      maxTokens: 64,
+      signal: new AbortController().signal,
+    };
     await expect(
-      collect(
-        runtime.stream({
-          modelId: lineage.id,
-          messages: [{ role: "user", content: "hello" }],
-          requestId: "request-lineage",
-          signal: new AbortController().signal,
-        })
-      )
-    ).resolves.toEqual([{ text: "managed-lineage" }]);
+      collect(stream(input))
+    ).resolves.toEqual([
+      { type: "text_delta", text: "managed-lineage", raw: undefined },
+      { type: "usage", usage: { total_tokens: 12 }, raw: undefined },
+      { type: "finish", finishReason: "stop", raw: undefined },
+    ]);
     expect(streamChat).toHaveBeenCalledWith(
       expect.objectContaining({
         teamId: "team_qa",
         logicalModelName: managedBindingLogicalModelName(binding),
+        requestId: input.requestId,
+        signal: input.signal,
+        maxNewTokens: 64,
       })
     );
+    expect(hosted).not.toHaveBeenCalled();
+    lineage.managedServing = { ...lineage.managedServing!, customerBindingAllowed: false };
+    await expect(collect(stream(input))).rejects.toThrow("not ready on managed serving");
+    expect(hosted).not.toHaveBeenCalled();
+    await expect(collect(stream({ ...input, model: "catalog-model" }))).resolves.toEqual([
+      { type: "text_delta", text: "catalog-model", raw: null },
+    ]);
+    expect(hosted).toHaveBeenCalledOnce();
   });
 
   test("prefers the default active manual binding for a catalog lineage id", async () => {

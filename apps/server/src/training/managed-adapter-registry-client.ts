@@ -3,6 +3,7 @@ import type {
   HostedChatTool,
   HostedChatToolCall,
   HostedChatToolChoice,
+  HostedChatUsage,
 } from "@openpond/cloud";
 import type { ModelBinding } from "@openpond/contracts";
 import {
@@ -50,7 +51,7 @@ export type ManagedRegistryCapabilities = {
 
 export type ManagedAdapterChatDelta = {
   text?: string;
-  usage?: unknown;
+  usage?: HostedChatUsage;
   finishReason?: string;
   toolCalls?: HostedChatToolCall[];
   raw?: unknown;
