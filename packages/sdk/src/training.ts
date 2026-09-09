@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { createTrainingCandidateDecisionClient } from "./training-candidate-decisions.js";
+export { TrainingCandidateDecisionRequestSchema, TrainingCandidateDecisionSchema, trainingCandidateDecisionHash, parseAndVerifyTrainingCandidateDecision, type TrainingCandidateDecisionRequest, type TrainingCandidateDecision, type TrainingCandidateDecisionTarget } from "./training-candidate-decisions.js";
 import { parseAndVerifyTrainingEvaluationTaskPage } from "./training-evaluation-results.js";
 
 export { deterministicTrainingRewardSource } from "./training-grading-plan.js";
@@ -583,6 +585,7 @@ export function createTrainingClient(input: {
   }
 
   return {
+    ...createTrainingCandidateDecisionClient(request),
     async capabilities() {
       return TrainingCapabilitiesSchema.parse(
         unwrapObject(await request("/v1/training/capabilities"), "capabilities"),
