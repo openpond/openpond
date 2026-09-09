@@ -43,6 +43,21 @@ All client requests support an optional `AbortSignal`. Aborting a request does
 not cancel remote compute; use `cancel_grade` and read the authoritative terminal
 job state. Page through list responses with `nextCursor` as `afterId`.
 
+## Configure hosted learning
+
+Use `hostedLearningPolicyReferences(project)` from `openpond-sdk/learning` with
+the Model summary returned by the authenticated Model Projects API. It derives
+the exact recipe, training-parent and retained-evaluation references used by the
+hosted policy snapshot. The recipe identifier binds the Model's reviewed etag,
+including its Harness and data settings; the content hash binds the recipe.
+Missing recipe, starting model or retained evaluation is a configuration error.
+
+Keep those references when changing a policy's pause state, schedule or limits.
+Recompute them only when explicitly applying a newly reviewed Model configuration.
+The server verifies the references when publishing the policy and retains the
+immutable configuration for later preparation. Use `client.inspectPolicy(ref)`
+for shared readiness counts and blockers without reserving or launching work.
+
 ## Connect an application
 
 In the task format, open **Connect an application** and create a source credential.

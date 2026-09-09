@@ -6,10 +6,30 @@ import {
   createModelProjectsClient,
   createModelProjectSaveRequest,
   parseModelProjectSaveRequest,
+  HostedModelProjectSummarySchema,
 } from "../src/model-projects.js";
+import { hostedLearningPolicyReferences } from "../src/model-learning-policy.js";
 
 const HASH = "a".repeat(64);
 const NOW = "2026-08-26T20:00:00.000Z";
+
+// UI and execution-owner snapshots must pin the same reviewed configuration;
+// changing a Model's base revision or Harness selection cannot reuse its plan.
+it("preserves hosted policy reference identity across configuration review", () => {
+  const project = HostedModelProjectSummarySchema.parse({ ...hostedProject(),
+    defaultBaseModel: { schemaVersion: "openpond.baseModelPreference.v1", modelId: "base-model", revision: "weights-one",
+      tokenizerRevision: null, chatTemplateHash: null, modelAssetId: null, source: "managed" },
+    trainingSetup: { ...hostedProject().trainingSetup, evaluationTasksetRef: { id: "retained-taskset", revision: 1, contentHash: HASH } },
+  });
+  const refs = hostedLearningPolicyReferences(project);
+  expect(refs.recipe.id).toBe(`model-recipe-${HASH}`);
+  expect(refs.retentionEvaluation).toEqual({ id: "retained-taskset", contentHash: HASH });
+  const changedHarness = { ...project, etag: "b".repeat(64), trainingSetup: { ...project.trainingSetup, harnessRelease: { id: "new-harness", contentHash: "b".repeat(64) } } };
+  expect(hostedLearningPolicyReferences(changedHarness).recipe).toEqual({ id: `model-recipe-${"b".repeat(64)}`, contentHash: refs.recipe.contentHash });
+  expect(hostedLearningPolicyReferences({ ...project, trainingSetup: { ...project.trainingSetup, baseModel: { ...project.defaultBaseModel!, revision: "weights-two" } } }).trainingParent)
+    .not.toEqual(refs.trainingParent);
+  expect(() => hostedLearningPolicyReferences({ ...project, trainingSetup: { ...project.trainingSetup, evaluationTasksetRef: null } })).toThrow("learning_model_configuration_incomplete");
+});
 
 // Durable retries identify authored content, while hostile recursive recipes and
 // attempts to replace server-owned hosting receipts never enter the save path.
