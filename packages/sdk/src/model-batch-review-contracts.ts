@@ -28,6 +28,7 @@ export const ModelBatchReviewRequestSchema = z.object({
     instructions: z.string().trim().min(1).max(20_000).optional(),
     inputSchema: LearningJsonObjectSchema.optional(),
     outputSchema: LearningJsonObjectSchema.optional(),
+    requiredOutputs: TaskDefinitionSchema.shape.requiredOutputs,
   }).strict(),
   examples: z.array(z.object({
     evidence: LearningRevisionRefSchema,

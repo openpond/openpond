@@ -66,6 +66,16 @@ test("revises a Model batch through new evidence and grading before attachment",
   const started = await begin();
   expect(await begin()).toEqual(started);
   expect(started.evidence).toHaveLength(2);
+  // A new deliverable contract invalidates prior answers even when inputs and
+  // instructions stay identical; retaining them would misrepresent execution.
+  const requiredOutputs = [{ path: "answer.txt", mediaType: "text/plain", maxBytes: 1000, schemaRef: null, metadata: {} }];
+  const outputReview = await begin(ModelBatchReviewRequestSchema.parse({ ...request,
+    operationId: "revise-outputs", definition: { requiredOutputs }, examples: [],
+  }));
+  expect(outputReview.evidence.every(item => item.submission.observedOutput === null)).toBe(true);
+  const outputDefinition = await store.learningRepository().transaction(model.profileId,
+    tx => tx.get("definition", outputReview.source.taskDefinition.id));
+  expect(outputDefinition).toMatchObject({ requiredOutputs });
   expect(new Set(started.evidence.map(item => item.id)).size).toBe(2);
   expect(new Set(started.evidence.map(item => item.submission.attemptId)).size).toBe(2);
   expect(started.source.reviewOrigin).toMatchObject({ modelId: model.id, packageHash: original.contentHash, batch: learningRef(original.learningResources!.batch) });
