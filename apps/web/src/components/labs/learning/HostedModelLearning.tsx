@@ -74,6 +74,11 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
       {value?.iteration ? <p>Latest iteration: {value.iteration.status.replaceAll("_", " ")} · {value.iteration.id}</p> : null}
       {value?.iteration?.failure ? <LearningError error={value.iteration.failure.message} /> : null}
       {value?.inspection ? <p>Reserved: ${value.inspection.budget.reservedSpendUsd.toFixed(4)} · Spent: ${value.inspection.budget.settledSpendUsd.toFixed(4)} · Daily limit: ${policy.limits.maxDailySpendUsd}</p> : null}
+      {value?.inspection?.trainingParent ? <details><summary>Starting checkpoint for the next iteration</summary>
+        <p>{value.inspection.trainingParent.selection ? "Latest accepted candidate; optimizer state resets." : "Configured base model."}</p>
+        <p>{value.inspection.trainingParent.reference.id}</p>
+        <code>{value.inspection.trainingParent.reference.contentHash}</code>
+      </details> : null}
       {!readOnly ? <LearningActions>
         {policy.sources.map(source => <button key={source.id} type="button" className="training-button secondary" disabled={busy || Boolean(pending.current)} onClick={() => setReviewing({ policyId: policy.id, sourceId: source.id })}>Review {source.id}</button>)}
         {pending.current ? <button type="button" className="training-button" disabled={busy} onClick={() => { if (pending.current) void run(pending.current); }}>Retry pending action</button> : <>

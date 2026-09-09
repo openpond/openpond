@@ -20,7 +20,7 @@ async function fixture(store: SqliteLearningStore) {
   const now = () => new Date(clock).toISOString();
   return { ...f, policy, iteration, now, advance: (ms = 10_000) => { clock += ms; } };
 }
-function provider() {
+function provider(suffix = "") {
   let prepared = 0;
   let submitted = 0;
   let cancelled = 0;
@@ -30,7 +30,7 @@ function provider() {
   let last: LearningIterationExecutionContext | null = null;
   const observe = (input: LearningIterationExecutionContext): LearningIterationObservation => ({
     scope: input.scope, dispatchId: input.dispatch.id, submissionHash: input.dispatch.submissionHash!,
-    execution: ref("provider-job"), status: "running", spendUsd: 0.2, cleanupComplete: false,
+    execution: ref(`provider-job${suffix}`), status: "running", spendUsd: 0.2, cleanupComplete: false,
     receipt: null, evaluation: null, candidate: null, failure: null,
   });
   const executor: LearningIterationExecutor = {
@@ -51,14 +51,14 @@ function provider() {
   };
   return { executor, counts: () => ({ prepared, submitted, cancelled }), loseReply: () => { loseReply = true; },
     allowCancellation: () => { terminalCancellation = true; },
-    complete: (candidate = true) => { output = { ...observe(last!), status: "succeeded", spendUsd: 0.5, cleanupComplete: true, receipt: ref("terminal-receipt"), evaluation: ref("retained-evaluation"), candidate: candidate ? ref("candidate") : null }; },
+    complete: (candidate = true) => { output = { ...observe(last!), status: "succeeded", spendUsd: 0.5, cleanupComplete: true, receipt: ref(`terminal-receipt${suffix}`), evaluation: ref("retained-evaluation"), candidate: candidate ? ref(`candidate${suffix}`) : null }; },
   };
 }
 
 describe("durable iteration dispatch", () => {
   // Reviews can arrive twice or out of order after another iteration starts.
   // Reconciliation must retain exact evidence and never release that newer chain.
-  test("reconciles candidate decisions monotonically without clearing a newer iteration", async () => withTempDirectory("iteration-review-", async home => {
+  test("pins accepted parents, rolls back future selection and preserves newer reservations across later reviews", async () => withTempDirectory("iteration-review-", async home => {
     const store = new SqliteLearningStore(home);
     try {
       const f = await fixture(store); const p = provider();
@@ -67,6 +67,7 @@ describe("durable iteration dispatch", () => {
       await worker.run(learningContext.scope, f.iteration.id);
       p.complete(); f.advance(); await worker.run(learningContext.scope, f.iteration.id);
       const observation = { scope: learningContext.scope, iterationId: f.iteration.id,
+        decidedAt: f.now(),
         decision: { ...ref("decision-one"), revision: 1 }, outcome: "accepted" as const,
         execution: ref("provider-job"), candidate: ref("candidate"), evaluation: ref("retained-evaluation"), receipt: ref("terminal-receipt") };
       await expect(reconcileLearningCandidateDecision(repository, { ...observation, candidate: ref("other-candidate") })).rejects.toThrow("learning_candidate_decision_evidence_mismatch");
@@ -75,12 +76,35 @@ describe("durable iteration dispatch", () => {
       expect((await f.service.list(learningContext, "chain")).items[0]?.activeIterationId).toBeNull();
       expect(await reconcileLearningCandidateDecision(repository, observation)).toEqual(accepted);
       await expect(reconcileLearningCandidateDecision(repository, { ...observation, outcome: "rejected" })).rejects.toThrow("learning_candidate_decision_revision_conflict");
-      const chain = (await f.service.list(learningContext, "chain")).items[0]!;
-      await repository.transaction(learningContext.scope, tx => tx.put("chain", { ...chain, revision: chain.revision + 1, activeIterationId: "newer-iteration", latestIterationId: "newer-iteration" }, chain.revision));
-      const rejected = await reconcileLearningCandidateDecision(repository, { ...observation, outcome: "rejected", decision: { ...ref("decision-two"), revision: 2 } }, { now: f.now });
+      const reserveNext = async (number: number) => {
+        await f.approve(await f.submit({ idempotencyKey: `example-${number}`, exampleId: `example-${number}`,
+          familyKey: `family-${number}`, input: { question: `Question ${number}` } }));
+        return LearningIterationSchema.parse((await f.reserve(f.policy, `next-${number}`)).resources.find(value => value.schemaVersion === "openpond.learningIteration.v1"));
+      };
+      const second = await reserveNext(2);
+      expect(second.trainingParent).toEqual(observation.candidate);
+      expect(second.trainingParentSelection).toMatchObject({ iterationId: accepted.id, iterationRevision: accepted.revision, decision: observation.decision });
+      const nextProvider = provider("-2");
+      const nextWorker = createLearningIterationWorker(repository, nextProvider.executor, { workerId: "next-worker", executionOwner: "hosted", now: f.now });
+      await nextWorker.run(learningContext.scope, second.id);
+      nextProvider.complete(); f.advance(); await nextWorker.run(learningContext.scope, second.id);
+      const nextObservation = { ...observation, iterationId: second.id, decidedAt: f.now(),
+        decision: { ...ref("decision-second"), revision: 1 }, execution: ref("provider-job-2"), candidate: ref("candidate-2"), receipt: ref("terminal-receipt-2") };
+      await reconcileLearningCandidateDecision(repository, nextObservation, { now: f.now });
+      expect((await f.service.list(learningContext, "chain")).items[0]?.acceptedParent?.candidate).toEqual(nextObservation.candidate);
+      f.advance();
+      await reconcileLearningCandidateDecision(repository, { ...nextObservation, decidedAt: f.now(), outcome: "rejected",
+        decision: { ...nextObservation.decision, revision: 2, contentHash: contentHash("second-rejected") } }, { now: f.now });
+      expect((await f.service.list(learningContext, "chain")).items[0]?.acceptedParent?.candidate).toEqual(observation.candidate);
+      const third = await reserveNext(3);
+      expect(third.trainingParent).toEqual(observation.candidate);
+      f.advance();
+      const rejected = await reconcileLearningCandidateDecision(repository, { ...observation, decidedAt: f.now(), outcome: "rejected", decision: { ...ref("decision-two"), revision: 2 } }, { now: f.now });
       expect(rejected.status).toBe("rejected");
       expect(await reconcileLearningCandidateDecision(repository, observation)).toEqual(rejected);
-      expect((await f.service.list(learningContext, "chain")).items[0]?.activeIterationId).toBe("newer-iteration");
+      expect((await f.service.list(learningContext, "chain")).items[0]).toMatchObject({ activeIterationId: third.id, acceptedParent: null });
+      expect((await f.service.get(learningContext, "iteration", third.id)).trainingParent).toEqual(observation.candidate);
+      expect((await f.service.get(learningContext, "iteration", accepted.id, accepted.revision)).status).toBe("accepted");
       expect((await f.service.get(learningContext, "reservation", f.iteration.id)).budget).toMatchObject({ reservedSpendUsd: 0, settledSpendUsd: 0.5 });
     } finally { await store.close(); }
   }));

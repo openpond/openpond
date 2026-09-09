@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
 
-import { LearningRevisionRefSchema } from "./contracts.js";
+import { LearningAcceptedParentSchema, LearningRevisionRefSchema } from "./contracts.js";
 
 export const LearningIterationTriggerSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("manual"), identity: ReleaseIdSchema }).strict(),
@@ -15,6 +15,7 @@ export const LearningChainSchema = z.object({
   revision: z.number().int().positive(),
   modelProjectId: ReleaseIdSchema,
   activeIterationId: ReleaseIdSchema.nullable(),
+  acceptedParent: LearningAcceptedParentSchema.nullable().default(null),
   latestIterationId: ReleaseIdSchema,
   lastReservedAt: ReleaseTimestampSchema.nullable(),
   updatedAt: ReleaseTimestampSchema,

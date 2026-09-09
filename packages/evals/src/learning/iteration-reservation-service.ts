@@ -8,6 +8,7 @@ import { readLearningIterationBudget } from "./iteration-budget.js";
 import { LearningChainSchema, LearningConsumptionSchema, LearningIterationReservationSchema } from "./iteration-reservation-contracts.js";
 import type { LearningCommand } from "./operations.js";
 import { requireLearningRelease, requireLearningResource, type LearningResourcePointer, type LearningTransaction } from "./repository.js";
+import { latestAcceptedLearningParent, resolveLearningTrainingParent } from "./iteration-training-parent.js";
 
 type ReserveCommand = Extract<LearningCommand, { action: "reserve_iteration" }>;
 
@@ -42,6 +43,8 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
   const ready = eligibility.counts.eligible >= policy.admission.minimumApprovedExamples;
   const status = ready ? "ready" : eligibility.counts.awaitingReview > 0 ? "waiting_for_review" : "waiting_for_data";
   const pointers: LearningResourcePointer[] = [];
+  const acceptedParent = await latestAcceptedLearningParent(transaction, chainId, true);
+  const parent = await resolveLearningTrainingParent(transaction, policy, acceptedParent);
   let batch = null;
   if (ready) {
     await assertAvailableBudget(transaction, chainId, now, policy.limits.maxIterationSpendUsd, policy.limits.maxDailySpendUsd);
@@ -66,7 +69,7 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
     triggerIdentity, batch,
     // Existing evidence has no ordered ingress sequence. Consumption records,
     // not a count or lexicographic ID cursor, decide whether an example is new.
-    sourceWatermarks: {}, trainingParent: policy.trainingParent, teacher: policy.teacher, upstreamEvent: null,
+    sourceWatermarks: {}, ...parent, teacher: policy.teacher, upstreamEvent: null,
     trainingJob: null, evaluationJob: null, candidateVersion: null, dispatchId: `dispatch-${contentHash(id)}`,
     retryCount: 0, spendUsd: 0, failure: null, createdAt: now, updatedAt: now,
   });
@@ -80,6 +83,7 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
   const updatedChain = LearningChainSchema.parse({
     schemaVersion: "openpond.learningChain.v1", id: chainId, revision: (chain?.revision ?? 0) + 1,
     modelProjectId: policy.modelProjectId, activeIterationId: ready ? id : null, latestIterationId: id,
+    acceptedParent,
     lastReservedAt: ready ? now : chain?.lastReservedAt ?? null, updatedAt: now,
   });
   await transaction.put("iteration", iteration, 0, { parentId: chainId, status });

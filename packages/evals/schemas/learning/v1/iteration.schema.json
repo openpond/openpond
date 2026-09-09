@@ -63,6 +63,44 @@
     "trainingParent": {
       "$ref": "#/$defs/__schema3"
     },
+    "trainingParentSelection": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "iterationId": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "iterationRevision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "candidate": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "decision": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "decidedAt": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": [
+            "iterationId",
+            "iterationRevision",
+            "candidate",
+            "decision",
+            "decidedAt"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "teacher": {
       "anyOf": [
         {
@@ -124,6 +162,17 @@
         }
       ]
     },
+    "candidateDecisionAt": {
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema4"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "dispatchId": {
       "$ref": "#/$defs/__schema0"
     },
@@ -177,12 +226,14 @@
     "batch",
     "sourceWatermarks",
     "trainingParent",
+    "trainingParentSelection",
     "teacher",
     "upstreamEvent",
     "trainingJob",
     "evaluationJob",
     "candidateVersion",
     "candidateDecision",
+    "candidateDecisionAt",
     "dispatchId",
     "retryCount",
     "spendUsd",
