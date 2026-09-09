@@ -29,6 +29,7 @@ import {
   type HostedModelProjectCatalogItem,
 } from "./hosted-model-project-catalog.js";
 import { hostedModelProjectTrainingSetup } from "./model-project-hosted-projection.js";
+import { publishModelHarnessSource, type ReleasedTrainingHarnessResolver } from "./model-harness-source-hosting.js";
 import { createModelLearningHostingService } from "./model-learning-hosting.js";
 import { createModelTasksetRunHostingService } from "./model-taskset-run-hosting.js";
 import {
@@ -160,6 +161,7 @@ type HostedManagedJobDetail = z.infer<typeof HostedManagedJobDetailSchema>["job"
 export function createModelProjectHostingService(input: {
   store: SqliteStore;
   resolveAccess: () => Promise<HostedAccess>;
+  resolveReleasedHarness?: ReleasedTrainingHarnessResolver;
   env?: NodeJS.ProcessEnv;
   fetch?: typeof fetch;
 }) {
@@ -441,6 +443,7 @@ export function createModelProjectHostingService(input: {
     const project = await requireProject(input.store, projectId);
     const access = await input.resolveAccess();
     if (project.hosted && (project.hosted.apiOrigin !== new URL(access.apiBaseUrl).origin || project.hosted.teamId !== access.teamId)) throw new Error("Pull this Model from its linked API and workspace before pushing local changes.");
+    await publishModelHarnessSource({ project, storeDir: input.store.home, access, fetch: fetchImpl, resolveReleasedHarness: input.resolveReleasedHarness });
     if (project.trainingSetup.tasksetRef) return pushModelTasksetPackage({ store: input.store, projectId, access, fetch: fetchImpl });
     if (project.trainingSetup.evaluationTasksetRef) throw new Error("Select a training Taskset before syncing a Model with a retained evaluation.");
     const syncBody = {
@@ -493,6 +496,9 @@ export function createModelProjectHostingService(input: {
     const release = TasksetReleaseSchema.parse(inputValue.release);
     const access = await input.resolveAccess();
     try {
+      const project = await requireProject(input.store, inputValue.projectId);
+      if (project.hosted && (project.hosted.apiOrigin !== new URL(access.apiBaseUrl).origin || project.hosted.teamId !== access.teamId)) throw new Error("Pull this Model from its linked API and workspace before pushing local changes.");
+      await publishModelHarnessSource({ project, storeDir: input.store.home, access, fetch: fetchImpl, resolveReleasedHarness: input.resolveReleasedHarness });
       return await pushModelTasksetPackage({ store: input.store, projectId: inputValue.projectId, access, fetch: fetchImpl,
         attachment: { taskset: inputValue.taskset, release } });
     } catch (caught) {

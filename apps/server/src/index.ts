@@ -688,6 +688,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   const modelProjectHosting = createModelProjectHostingService({
     store,
     resolveAccess: resolveManagedTrainingAccess,
+    resolveReleasedHarness,
     env: process.env,
   });
   const trainingService = createTrainingService({

@@ -204,3 +204,9 @@ An explicitly selected Harness continues to use its verified source package.
 The compiler preserves existing release hashes and rejects dependencies whose
 visibility is not `policy`; environment, task tools and graders remain bound by
 the Taskset and training bundle.
+
+## Published Harness source
+
+`createTrainingClient().publishHarnessSource(sourcePackage)` publishes a verified, portable, policy-visible `@openpond/harness` source package to the authenticated workspace without starting a Job. `getHarnessSource({ id, contentHash })` retrieves and verifies that exact release. The endpoints are `PUT` and `GET /v1/training/harness-sources/:releaseId/:contentHash`; they use the existing Training media type and read/write scopes.
+
+Hosted learning resolves this immutable source with Desktop closed. Publish before selecting the release on a hosted Model. Preparation still checks the Taskset adapter, required tools, private grading boundary and effective context; publication is not training or quality qualification. Existing prepared Jobs retain their captured source when a newer release is published.

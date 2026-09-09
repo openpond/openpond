@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { createTrainingHarnessSourceClient } from "./training-harness-sources.js";
+export { TrainingHarnessSourcePublicationSchema } from "./training-harness-sources.js";
 import { createTrainingCandidateDecisionClient } from "./training-candidate-decisions.js";
 export { TrainingCandidateDecisionRequestSchema, TrainingCandidateDecisionSchema, trainingCandidateDecisionHash, parseAndVerifyTrainingCandidateDecision, type TrainingCandidateDecisionRequest, type TrainingCandidateDecision, type TrainingCandidateDecisionTarget } from "./training-candidate-decisions.js";
 import { parseAndVerifyTrainingEvaluationTaskPage } from "./training-evaluation-results.js";
@@ -533,7 +535,7 @@ export function createTrainingClient(input: {
   const fetchImpl = input.fetch ?? fetch;
   const baseUrl = input.baseUrl.replace(/\/$/, "");
 
-  async function request(pathname: string, init?: RequestInit): Promise<unknown> {
+  async function request(pathname: string, init?: RequestInit, responseLimit = TRAINING_API_RESPONSE_MAX_BYTES): Promise<unknown> {
     const readOnly = init?.method === undefined || init.method.toUpperCase() === "GET";
     const maximumAttempts = readOnly ? 3 : 1;
     for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
@@ -565,7 +567,7 @@ export function createTrainingClient(input: {
       }
       const body = parseBoundedJson(
         await response.text(),
-        TRAINING_API_RESPONSE_MAX_BYTES,
+        responseLimit,
         "Training API response",
       );
       if (response.ok) return body;
@@ -585,6 +587,7 @@ export function createTrainingClient(input: {
   }
 
   return {
+    ...createTrainingHarnessSourceClient(request),
     ...createTrainingCandidateDecisionClient(request),
     async capabilities() {
       return TrainingCapabilitiesSchema.parse(
