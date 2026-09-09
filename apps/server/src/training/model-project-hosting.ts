@@ -29,6 +29,7 @@ import {
   type HostedModelProjectCatalogItem,
 } from "./hosted-model-project-catalog.js";
 import { hostedModelProjectTrainingSetup } from "./model-project-hosted-projection.js";
+import { createModelLearningHostingService } from "./model-learning-hosting.js";
 import { createModelTasksetRunHostingService } from "./model-taskset-run-hosting.js";
 import {
   canReplaceFromHosted,
@@ -510,7 +511,7 @@ export function createModelProjectHostingService(input: {
     return payload as T;
   }
 
-  return { listProjects, pullProject, publishTaskset, syncProject, tasksetRuns: createModelTasksetRunHostingService(input) };
+  return { listProjects, pullProject, publishTaskset, syncProject, tasksetRuns: createModelTasksetRunHostingService(input), learning: createModelLearningHostingService(input) };
 
   async function recordTasksetSync(value: {
     projectId: string;

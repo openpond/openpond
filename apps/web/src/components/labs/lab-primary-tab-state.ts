@@ -150,6 +150,10 @@ export function registerDesktopNavigationGuard(guard: NavigationGuard): () => vo
   startListening();
   return () => { guards.delete(guard); };
 }
+/** Local detail panes must honor the same draft guards as URL navigation. */
+export async function requestDesktopViewChange(action: () => void): Promise<void> {
+  if (!popDecisionPending && await permit(locationPath())) action();
+}
 export function useModelsRoute(): ModelsRoute | null {
   return useSyncExternalStore(subscribe, () => { readLocation(); return cachedModels; }, () => null);
 }

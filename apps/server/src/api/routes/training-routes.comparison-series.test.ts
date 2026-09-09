@@ -15,6 +15,19 @@ class ResponseRecorder extends EventEmitter {
 }
 
 describe("Authenticated training routes", () => {
+  // The URL owns Model/Profile scope; command payloads never select a host
+  // or replace that scope. This protects Desktop's authenticated relay.
+  it("preserves Model scope when forwarding hosted learning commands", async () => {
+    const command = { action: "cancel_iteration", operationId: "cancel", iterationId: "iteration", expectedRevision: 1, modelId: "forged" };
+    const request = Readable.from([JSON.stringify(command)]);
+    Object.assign(request, { method: "POST", headers: { "content-type": "application/json" } });
+    const response = new ResponseRecorder();
+    const trainingPayload = vi.fn(async () => ({ resources: [] }));
+    const requestUrl = new URL("http://localhost/v1/training/models/selected/hosted-learning?profileId=profile");
+    expect(await handleTrainingRoutes({ deps: { trainingPayload } as never, request: request as never, requestUrl, response: response as never })).toBe(true);
+    expect(trainingPayload).toHaveBeenCalledWith("hosted_model_learning_command", { modelId: "selected", profileId: "profile", command }, requestUrl);
+    expect(response.statusCode).toBe(200);
+  });
   it.each([
     ["POST", "/v1/training/comparison-series/series-a/seal", "seal_model_comparison_series", "seriesId", "series-a"],
     ["POST", "/v1/training/comparison-series/series-a/archive", "archive_model_comparison_series", "seriesId", "series-a"],

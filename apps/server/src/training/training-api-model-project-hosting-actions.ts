@@ -1,9 +1,13 @@
+import { LearningCommandSchema } from "openpond-sdk/learning";
 import type { createModelProjectHostingService } from "./model-project-hosting.js";
 
 type ModelProjectHosting = ReturnType<typeof createModelProjectHostingService>;
-type HostingAction = "hosted_model_projects" | "pull_hosted_model_project" | "sync_model_project" | "hosted_taskset_runs" | "hosted_taskset_run" | "cancel_hosted_taskset_run" | "hosted_taskset_run_result";
+type HostingAction = "hosted_model_learning_review" | "hosted_model_learning_sources" | "hosted_model_learning" | "hosted_model_learning_command" | "hosted_model_projects" | "pull_hosted_model_project" | "sync_model_project" | "hosted_taskset_runs" | "hosted_taskset_run" | "cancel_hosted_taskset_run" | "hosted_taskset_run_result";
 
 const hostingActions = new Set<string>([
+  "hosted_model_learning_review",
+  "hosted_model_learning_sources",
+  "hosted_model_learning", "hosted_model_learning_command",
   "hosted_model_projects", "pull_hosted_model_project", "sync_model_project",
   "hosted_taskset_runs", "hosted_taskset_run", "cancel_hosted_taskset_run", "hosted_taskset_run_result",
 ]);
@@ -18,6 +22,13 @@ export async function runModelProjectHostingAction(
   input: Record<string, unknown>,
 ): Promise<unknown> {
   if (!service) throw new Error(`Hosted Model Project ${actionLabel(action)} is unavailable.`);
+  if (action === "hosted_model_learning" || action === "hosted_model_learning_command" || action === "hosted_model_learning_sources" || action === "hosted_model_learning_review") {
+    const scope = { modelId: requiredString(input.modelId, "modelId"), profileId: requiredString(input.profileId, "profileId") };
+    if (action === "hosted_model_learning_review") return service.learning.review({ ...scope, request: input.command });
+    if (action === "hosted_model_learning_sources") return service.learning.sources({ ...scope, afterId: typeof input.afterId === "string" ? input.afterId : undefined });
+    if (action === "hosted_model_learning_command") return service.learning.command({ ...scope, command: LearningCommandSchema.parse(input.command) });
+    return service.learning.overview({ ...scope, policyId: typeof input.policyId === "string" ? input.policyId : undefined, afterId: typeof input.afterId === "string" ? input.afterId : undefined });
+  }
   if (["hosted_taskset_runs", "hosted_taskset_run", "cancel_hosted_taskset_run", "hosted_taskset_run_result"].includes(action)) {
     const scope = { modelId: requiredString(input.modelId, "modelId"), profileId: requiredString(input.profileId, "profileId") };
     if (action === "hosted_taskset_runs") return service.tasksetRuns.list({ ...scope, afterId: typeof input.afterId === "string" ? input.afterId : undefined, limit: 25 });

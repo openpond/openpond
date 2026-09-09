@@ -1,3 +1,7 @@
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); this.name = "ApiRequestError"; }
+}
+
 export type ClientConnection = {
   serverUrl: string;
   token: string;
@@ -61,7 +65,7 @@ async function performFetch<T>(connection: ClientConnection, path: string, init?
       payload && typeof payload === "object" && "error" in payload
         ? String(payload.error)
         : response.statusText;
-    throw new Error(error);
+    throw new ApiRequestError(error, response.status);
   }
   const payload = await response.json();
   const revision = payload?.configuration?.rawRevision ?? (path === "/v1/preferences" ? payload?.rawRevision : undefined);

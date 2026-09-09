@@ -1,3 +1,4 @@
+import { OpenPondLearningError } from "openpond-sdk/learning";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -60,6 +61,23 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/training/activity") {
     sendJson(response, 200, await deps.trainingPayload("activity", {}, requestUrl));
+    return true;
+  }
+  const hostedLearning = /^\/v1\/training\/models\/([^/]+)\/hosted-learning(\/sources|\/review)?$/.exec(requestUrl.pathname);
+  if (hostedLearning && (request.method === "GET" && hostedLearning[2] !== "/review" || request.method === "POST" && hostedLearning[2] !== "/sources")) {
+    const scope = { modelId: decodeURIComponent(hostedLearning[1]!), profileId: requestUrl.searchParams.get("profileId") };
+    try {
+      const payload = request.method === "POST"
+        ? { ...scope, command: await readJson(request, { maxBytes: 524_288 }) }
+        : { ...scope, policyId: requestUrl.searchParams.get("policyId"), afterId: requestUrl.searchParams.get("afterId") };
+      const result = await deps.trainingPayload(hostedLearning[2] === "/review" ? "hosted_model_learning_review" : request.method === "POST" ? "hosted_model_learning_command" : hostedLearning[2] ? "hosted_model_learning_sources" : "hosted_model_learning", payload, requestUrl);
+      response.setHeader("Cache-Control", "no-store");
+      sendJson(response, 200, result);
+    } catch (error) {
+      if (error instanceof OpenPondLearningError || error instanceof OpenPondModelProjectApiError) sendJson(response, error.status, { code: error.code, error: error.message });
+      else if (error instanceof ZodError) sendJson(response, 400, { code: "model_learning_request_invalid", error: "Learning request does not match its contract." });
+      else throw error;
+    }
     return true;
   }
   const hostedRun = /^\/v1\/training\/models\/([^/]+)\/hosted-evaluations(?:\/([^/]+)(?:\/(result|cancel))?)?$/.exec(requestUrl.pathname);
