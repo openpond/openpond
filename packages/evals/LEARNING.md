@@ -231,3 +231,29 @@ cleanup receipt, retains the decision reference on the iteration, and records
 owns it. Duplicate observations are idempotent, older decision revisions cannot
 overwrite newer ones, and contradictory observations at the same revision fail.
 This operation does not change the training parent or activate serving.
+
+### Durable learning schedules
+
+Policy publication atomically synchronizes a `schedule` resource. Enabling
+scheduled training requires reviewer authority, including batched publication,
+because it authorizes the same reservation as manual Train. The timer preserves
+its pending occurrence through ordinary policy edits. Pause removes its pending
+due time; resume, cadence changes and execution-owner changes start a future
+occurrence. `synchronizeLearningSchedule` can initialize an existing current
+policy, but refuses stale policies and does not reset an unchanged timer.
+
+`createLearningScheduleWorker` runs a typed learning reservation in the same
+repository transaction as an immutable `schedule_fire` and timer advance.
+Duplicate replicas and restarts therefore cannot consume a second batch for an
+occurrence. Downtime retains the original due time and coalesces subsequent
+missed occurrences into one fire, recording the covered time and count.
+Insufficient approved evidence records waiting without reserved spend. An active
+chain, cooldown or daily budget limit records an explicit skip. Review approval
+does not move the next due time or independently start training.
+
+Other errors roll back reservation mutations and keep the original occurrence
+for bounded retries. Exhausting the policy retry limit blocks the timer with a
+retained diagnostic; a new reviewed policy revision may resume it. Hosts must
+poll due timers for their execution owner and supply an authorized actor. This
+worker does not execute a Work prompt or submit a provider Job; the existing
+iteration dispatch worker owns that next transition.

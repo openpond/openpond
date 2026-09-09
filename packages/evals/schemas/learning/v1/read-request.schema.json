@@ -137,6 +137,8 @@
         "consumption",
         "reservation",
         "dispatch",
+        "schedule",
+        "schedule_fire",
         "iteration",
         "grade",
         "package"

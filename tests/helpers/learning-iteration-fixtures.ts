@@ -1,8 +1,8 @@
 import { LearningPolicySchema, learningRef, type LearningPolicy, type LearningRepository, type TaskEvidence } from "@openpond/evals/learning";
 import { learningFixture } from "./learning-fixtures";
 
-export async function learningIterationFixture(repository: LearningRepository) {
-  const value = await learningFixture(repository);
+export async function learningIterationFixture(repository: LearningRepository, options: { now?: () => string } = {}) {
+  const value = await learningFixture(repository, options);
   const ref = (id: string) => ({ id, contentHash: "a".repeat(64) });
   const publishPolicy = async (previous?: LearningPolicy, changes: Partial<LearningPolicy> = {}) => {
     const { contentHash: _hash, ...content } = previous ?? {} as LearningPolicy;
