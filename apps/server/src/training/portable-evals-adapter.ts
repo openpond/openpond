@@ -1,3 +1,4 @@
+import { createPolicyHarnessContext } from "openpond-sdk/training-bundle";
 import {
   AttemptOutcomeClassSchema,
   AttemptReceiptSchema,
@@ -34,14 +35,11 @@ import {
   HarnessReleaseSchema,
   canonicalJson,
   contentHash,
-  createAgentSnapshot,
-  createHarnessRelease,
   type AgentSnapshot,
   type FailureClass,
   type HarnessRelease,
   type ImmutableArtifactRef,
   type ImmutableAssetRef,
-  type ToolDeclaration,
 } from "@openpond/harness";
 import type {
   ChatModelRef,
@@ -157,77 +155,17 @@ function compileTemporaryProfileHarness(
   taskset: Taskset,
   profile: OpenPondProfileState | null | undefined,
 ): Pick<DesktopHarnessContext, "agentSnapshot" | "harnessRelease"> {
-  // Temporary migration adapter only. Harness workspaces supply an already
-  // compiled immutable release and bypass every Profile read in this function.
-  const harnessTools: ToolDeclaration[] = [];
   const sourceRelease = taskset.profileRelease
     ? { id: taskset.profileRelease.id, contentHash: hash(taskset.profileRelease.contentHash) }
     : profile?.git?.head
       ? { id: `source-${segment(profile.git.head)}`, contentHash: hash(profile.git.head) }
       : null;
-  const skills = portableSkills(profile);
-  const agents = portableAgents(profile);
-  const dependencyLock = asset({
-    id: "desktop-dependency-lock",
-    path: ".openpond/harness/dependency-lock.json",
-    hashInput: {
-      profileHead: profile?.git?.head ?? null,
-      sourceRelease,
-      tools: harnessTools,
-      skills: skills.map(({ id, contentHash: assetHash }) => ({ id, contentHash: assetHash })),
-      agents: agents.map(({ id, contentHash: assetHash }) => ({ id, contentHash: assetHash })),
-    },
-    mediaType: "application/json",
-    visibility: "policy",
-  });
-  const agentSnapshot = createAgentSnapshot({
-    schemaVersion: "openpond.agentSnapshot.v2",
-    id: `agent-snapshot-${contentHash([sourceRelease, harnessTools, dependencyLock.contentHash]).slice(0, 24)}`,
+  return createPolicyHarnessContext({
     sourceRelease,
-    instructions: [],
-    skills,
-    agents,
-    toolDeclarations: harnessTools,
-    capabilityRequirements: [],
-    dependencyLock,
-    portability: {
-      portable: true,
-      blockers: [],
-      localOnlyAssetRefs: [],
-      hostPrivateAssetRefs: [],
-    },
-    metadata: { sourceReleaseId: sourceRelease?.id ?? null },
+    profileHead: profile?.git?.head ?? null,
+    skills: portableSkills(profile),
+    agents: portableAgents(profile),
   });
-  const program = asset({
-    id: "desktop-harness-program",
-    path: ".openpond/harness/program.json",
-    hashInput: { program: "openpond.desktop-agent-loop.v1" },
-    mediaType: "application/json",
-    visibility: "policy",
-  });
-  const harnessRelease = createHarnessRelease({
-    schemaVersion: "openpond.harnessRelease.v2",
-    id: `harness-${contentHash([agentSnapshot.contentHash, program.contentHash, harnessTools]).slice(0, 24)}`,
-    agentSnapshot: { id: agentSnapshot.id, contentHash: agentSnapshot.contentHash },
-    program,
-    tools: harnessTools,
-    lifecycle: {
-      create: true,
-      reset: true,
-      step: true,
-      collect: true,
-      destroy: true,
-      resetScope: "attempt",
-    },
-    graderInterface: {
-      visibleEvidence: ["output", "runtime_events", "artifacts"],
-      privilegedEvidence: ["expected_output", "private_verifier"],
-      privateVerifierIsolation: true,
-    },
-    files: [...skills, ...agents],
-    metadata: { runtimeProtocol: "openpond.desktop-agent-loop.v1" },
-  });
-  return { agentSnapshot, harnessRelease };
 }
 
 export function projectDesktopAttemptReceipt(input: {
@@ -592,23 +530,6 @@ function attemptFailureClass(attempt: TaskAttemptResult, grade: GradeResult): Fa
     || declared === "timeout" || declared === "cancelled" ? declared : null;
 }
 
-function asset(input: {
-  id: string;
-  path: string;
-  hashInput: unknown;
-  mediaType: string;
-  visibility: ImmutableAssetRef["visibility"];
-}): ImmutableAssetRef {
-  const bytes = canonicalJson(input.hashInput);
-  return {
-    id: input.id,
-    path: input.path,
-    contentHash: contentHash(input.hashInput),
-    sizeBytes: Buffer.byteLength(bytes),
-    mediaType: input.mediaType,
-    visibility: input.visibility,
-  };
-}
 
 function hash(value: string): string {
   return /^[a-f0-9]{64}$/.test(value) ? value : contentHash(value);

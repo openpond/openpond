@@ -325,3 +325,5 @@ function bytes(value: unknown): Uint8Array {
 }
 
 export { withAuthoritativeRecipeHashes, AdamwOptimizerConfigSchema } from "./training-recipe-binding.js";
+
+export { createPolicyHarnessContext } from "./training-policy-harness.js";

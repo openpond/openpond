@@ -6,6 +6,7 @@ import {
   verifyRewardReceipt,
 } from "../packages/evals/src/index.js";
 import { contentHash } from "../packages/harness/src/index.js";
+import { createPolicyHarnessContext } from "../packages/sdk/src/training-policy-harness.js";
 import { GradeResultSchema, TaskAttemptArtifactSchema, emptyOpenPondProfileState } from "../packages/contracts/src/index.js";
 import {
   compileDesktopHarnessContext,
@@ -26,6 +27,13 @@ describe("portable Desktop eval adapter", () => {
     });
     expect(context.runManifest.tasksetRelease.contentHash).toBe(context.tasksetRelease.contentHash);
     expect(context.runManifest.harnessRelease.contentHash).toBe(context.harnessRelease.contentHash);
+    // Failure story: moving preparation into the hosted SDK must not change
+    // a previously approved Harness or select a different local implementation.
+    const shared = createPolicyHarnessContext({ sourceRelease: taskset.profileRelease ?? null });
+    expect(context.agentSnapshot).toEqual(shared.agentSnapshot);
+    expect(context.harnessRelease).toEqual(shared.harnessRelease);
+    expect(shared.agentSnapshot.contentHash).toBe("430ff8db22dd82cd305115d41afa9f03b28c589c0379ff568ae73b010ccff6c0");
+    expect(shared.harnessRelease.contentHash).toBe("bdaa8032f87f4b478ddca389039a7b26986d189c19bec9d55af7d1510da0ecb9");
     expect(context.tasksetRelease.environmentRelease).toEqual({
       id: context.environmentRelease.id,
       contentHash: context.environmentRelease.contentHash,
