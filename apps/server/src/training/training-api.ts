@@ -1,3 +1,4 @@
+import { handleManagedCandidateReviewAction, isManagedCandidateReviewAction } from "./training-api-candidate-review.js";
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
 import { requireReleasedTaskset } from "./local-taskset-release.js";
 import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
@@ -1407,6 +1408,7 @@ export function createTrainingApi(deps: {
       pinned: input.pinned === true,
     });
     if (action === "cancel_job") return deps.training.cancelJob(requiredString(input.jobId, "jobId"));
+    if (isManagedCandidateReviewAction(action)) return handleManagedCandidateReviewAction(action, input, deps.training.candidateReviews);
     if (isTrainingRunReadAction(action)) return handleTrainingRunRead({ action, payload: input, store: deps.store, training: deps.training });
     throw new Error(`Unknown training action ${action}.`);
   }

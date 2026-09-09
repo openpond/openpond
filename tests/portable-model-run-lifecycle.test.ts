@@ -189,6 +189,21 @@ describe("portable Model Run lifecycle", () => {
           objectRef: "sandbox-managed-rl://managed-provider-job-1/model-artifact-1",
           sha256: sha256("managed candidate"),
           sizeBytes: 8_000_000,
+          metadata: { policyVersion: 3 },
+        },
+        {
+          kind: "evaluation" as const,
+          objectRef: "sandbox-managed-rl://managed-provider-job-1/baseline-evaluation",
+          sha256: sha256("baseline evaluation"),
+          sizeBytes: 100,
+          metadata: { kind: "baseline", policyVersion: 0 },
+        },
+        {
+          kind: "evaluation" as const,
+          objectRef: "sandbox-managed-rl://managed-provider-job-1/candidate-evaluation",
+          sha256: sha256("candidate evaluation"),
+          sizeBytes: 100,
+          metadata: { kind: "candidate", policyVersion: 3 },
         },
       ];
       const artifactBase = {
@@ -281,7 +296,9 @@ describe("portable Model Run lifecycle", () => {
         artifactLineageId: terminal.adapterArtifactLineageId,
       });
       const artifacts = await store.listTrainingArtifacts(jobId);
-      expect(artifacts).toHaveLength(1);
+      expect(artifacts).toHaveLength(3);
+      const lineage = await store.getModelArtifactLineage(terminal.adapterArtifactLineageId!);
+      expect(lineage?.frozenEvaluationArtifactId).toBe(artifacts.find(artifact => artifact.metadata.managedRlOutputId === "candidate-evaluation")?.id);
       expect(artifacts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({

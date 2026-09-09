@@ -19,7 +19,7 @@ import {
 import { contentHash } from "@openpond/taskset-sdk";
 
 import type { SqliteStore } from "../store/store.js";
-import { importPortableModelRunArtifacts } from "./portable-model-run-artifacts.js";
+import { candidateEvaluationArtifact, importPortableModelRunArtifacts } from "./portable-model-run-artifacts.js";
 
 type PortableReleaseGraph = {
   resolvedBundleHash: string;
@@ -444,10 +444,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
           engineMetadata(input.job, "upstreamRevision", "unknown")
         }`,
         importedAt: completedAt,
-        frozenEvaluationArtifactId:
-          persistedArtifacts.find(
-            (artifact) => artifact.kind === "evaluation",
-          )?.id ?? null,
+        frozenEvaluationArtifactId: candidateEvaluationArtifact(weights, persistedArtifacts)?.id ?? null,
         promotable: false,
         pinned: false,
         status: "imported",

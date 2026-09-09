@@ -445,10 +445,7 @@ async function saveProjection(
   lineage: ModelArtifactLineage,
   projection: ManagedAdapterServingProjection,
 ): Promise<void> {
-  await store.saveModelArtifactLineage({
-    ...lineage,
-    managedServing: projection,
-  });
+  await store.updateModelArtifactLineageServing(lineage.id, projection);
 }
 
 function artifactState(

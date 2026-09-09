@@ -304,3 +304,15 @@ function objectValue(value: unknown): Record<string, unknown> {
     ? (value as Record<string, unknown>)
     : {};
 }
+
+/** Managed receipts retain baseline and candidate outputs; only the adapter's policy evaluates its Version. */
+export function candidateEvaluationArtifact(weights: TrainingArtifact, artifacts: TrainingArtifact[]): TrainingArtifact | null {
+  if (weights.metadata.provider !== "sandbox") return artifacts.find(value => value.kind === "evaluation") ?? null;
+  const policyVersion = objectValue(weights.metadata.managedRlOutputMetadata).policyVersion;
+  if (typeof policyVersion !== "number" || !Number.isInteger(policyVersion) || policyVersion < 0) throw new Error("The managed adapter output has no checkpoint policy identity.");
+  const candidates = artifacts.filter(value => value.kind === "evaluation" && value.jobId === weights.jobId
+    && objectValue(value.metadata.managedRlOutputMetadata).kind === "candidate"
+    && objectValue(value.metadata.managedRlOutputMetadata).policyVersion === policyVersion);
+  if (candidates.length !== 1) throw new Error("The managed adapter requires its exact candidate evaluation.");
+  return candidates[0]!;
+}

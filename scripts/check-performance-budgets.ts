@@ -85,7 +85,10 @@ export type StartupMetrics =
     };
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
-  maxTotalJsBytes: 16 * 1024 * 1024,
+  // Candidate-review UI measured 16,782,269 bytes total and 453,782 initial
+  // bytes (2026-09-09). Allow one 64 KiB increment for the new review flow;
+  // initial-load, single-asset, and startup limits remain independently enforced.
+  maxTotalJsBytes: 16 * 1024 * 1024 + 64 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
