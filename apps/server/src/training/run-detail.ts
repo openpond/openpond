@@ -25,7 +25,7 @@ export async function trainingRunDetail(
     store.listTrainingJobEvents(jobId),
   ]);
   if (!job) throw new Error("Training job not found.");
-  const evaluation = options.includeEvaluation === false
+  const evaluation = options.includeEvaluation === false || job.metadata.source === "hosted_model_project_import"
     ? null
     : await trainingEvaluation(store, job.id, job.planId);
   return TrainingRunDetailSchema.parse({

@@ -289,6 +289,42 @@ export function createModelProjectHostingService(input: {
     };
   }
 
+  // Opening a remote project populates the ordinary read model without pulling
+  // its authoring packages. Existing local configuration is never overwritten.
+  async function openProject(inputValue: {
+    hostedProjectId: string;
+    profileId: string;
+    teamId: string;
+    apiOrigin: string;
+  }) {
+    const access = await input.resolveAccess();
+    if (access.teamId !== inputValue.teamId || new URL(access.apiBaseUrl).origin !== new URL(inputValue.apiOrigin).origin) {
+      throw new Error("The Model's hosted workspace differs from the active connection.");
+    }
+    const hosted = await hostedClient(access).get(inputValue.hostedProjectId);
+    const summary = hosted.project;
+    if (summary.id !== inputValue.hostedProjectId || summary.teamId !== access.teamId) throw new Error("The hosted Model identity differs from the selected Model.");
+    const existing = await input.store.getModelProject(summary.portableProjectId);
+    if (existing && (existing.profileId !== inputValue.profileId || existing.hosted?.teamId !== access.teamId
+      || existing.hosted.apiOrigin !== new URL(access.apiBaseUrl).origin || existing.hosted.projectId !== summary.id)) {
+      throw new Error("The Model belongs to a different Profile or hosted workspace. Local work was retained.");
+    }
+    const project = existing ?? await input.store.saveModelProjectHosting(null, ModelProjectSchema.parse({
+      schemaVersion: "openpond.modelProject.v2", id: summary.portableProjectId, profileId: inputValue.profileId,
+      revision: summary.sourceRevision, name: summary.name, objective: summary.objective,
+      defaultBaseModel: summary.defaultBaseModel, defaultDestinationId: summary.defaultDestinationId,
+      trainingSetup: summary.trainingSetup,
+      hosted: { schemaVersion: "openpond.hostedModelProjectLink.v1", apiOrigin: new URL(access.apiBaseUrl).origin,
+        teamId: access.teamId, projectId: summary.id, portableProjectId: summary.portableProjectId,
+        revision: summary.revision, etag: summary.etag, syncedSourceRevision: summary.sourceRevision,
+        syncedAt: new Date().toISOString(), tasksets: [] },
+      tasksetSyncs: [], createdAt: summary.createdAt, updatedAt: summary.sourceUpdatedAt,
+    }), true);
+    const jobs = await listHostedJobs(access, summary.id);
+    const importedMetricCount = await importHostedJobs(project, jobs, access);
+    return { project, hosted, importedJobCount: jobs.length, importedMetricCount };
+  }
+
   async function listHostedJobs(
     access: HostedAccess,
     hostedProjectId: string,
@@ -343,6 +379,7 @@ export function createModelProjectHostingService(input: {
     for (const [index, hostedJob] of jobs.entries()) {
       const detail = detailByJobId.get(hostedJob.id) ?? null;
       const existing = existingJobs[index] ?? null;
+      if (!detail && existing) continue;
       const events = detail ? hostedTrainingJobEvents(detail) : [];
       importedMetricCount += events.filter(
         (event) => event.type === "metric",
@@ -511,7 +548,7 @@ export function createModelProjectHostingService(input: {
     return payload as T;
   }
 
-  return { listProjects, pullProject, publishTaskset, syncProject, tasksetRuns: createModelTasksetRunHostingService(input), learning: createModelLearningHostingService(input) };
+  return { listProjects, openProject, pullProject, publishTaskset, syncProject, tasksetRuns: createModelTasksetRunHostingService(input), learning: createModelLearningHostingService(input) };
 
   async function recordTasksetSync(value: {
     projectId: string;

@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import type { TrainingCandidateDecision, TrainingCandidateDecisionRequest } from "openpond-sdk/training";
 import { api, type ClientConnection, type ManagedCandidateReview as Review } from "../../api";
 
-export function ManagedCandidateReview({ connection, lineageId, onSaved }: {
+export function ManagedCandidateReview({ connection, lineageId, jobId, onSaved }: {
   connection: ClientConnection | null;
-  lineageId: string;
   onSaved: () => Promise<unknown>;
-}) {
+} & ({ lineageId: string; jobId?: never } | { lineageId?: never; jobId: string })) {
+  const reviewId = jobId ?? lineageId;
+  const scope = jobId ? "jobs" : "models";
   const [view, setView] = useState<Review | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -25,15 +26,17 @@ export function ManagedCandidateReview({ connection, lineageId, onSaved }: {
     setLoading(true); setReady(false); setError(null); setHistory([]);
     void (async () => {
       try {
-        const cached = await api.candidateReview(connection, lineageId);
-        if (active && cached) setView(cached);
-        const current = await api.candidateReview(connection, lineageId, true);
+        if (scope === "models") {
+          const cached = await api.candidateReview(connection, reviewId);
+          if (active && cached) setView(cached);
+        }
+        const current = await api.candidateReview(connection, reviewId, true, scope);
         if (active) { setView(current); setReady(Boolean(current)); }
       } catch (caught) { if (active) setError(message(caught)); }
       finally { if (active) setLoading(false); }
     })();
     return () => { active = false; };
-  }, [connection, lineageId, refresh]);
+  }, [connection, reviewId, scope, refresh]);
 
   function begin(value: "accepted" | "rejected") { setOutcome(value); setReason(""); setAttempt(null); }
   async function save() {
@@ -45,7 +48,7 @@ export function ManagedCandidateReview({ connection, lineageId, onSaved }: {
     };
     setAttempt(request); setSaving(true); setError(null);
     try {
-      setView(await api.recordCandidateReview(connection, lineageId, request));
+      setView(await api.recordCandidateReview(connection, reviewId, request, scope));
       setOutcome(null); setAttempt(null); setHistory([]);
       await onSaved();
     } catch (caught) { setError(message(caught)); }
@@ -55,7 +58,7 @@ export function ManagedCandidateReview({ connection, lineageId, onSaved }: {
   async function readEarlier() {
     if (!connection || !earlier) return;
     setHistoryLoading(true); setError(null);
-    try { const value = await api.candidateReviewHistory(connection, lineageId, earlier); setHistory(values => [...values, value]); }
+    try { const value = await api.candidateReviewHistory(connection, reviewId, earlier, scope); setHistory(values => [...values, value]); }
     catch (caught) { setError(message(caught)); }
     finally { setHistoryLoading(false); }
   }
@@ -68,7 +71,7 @@ export function ManagedCandidateReview({ connection, lineageId, onSaved }: {
         <p>{decision.request.reason}</p>
         <p className="training-muted">Review {decision.revision} · {new Date(decision.decidedAt).toLocaleString()}</p>
       </> : <p className="training-muted">{loading ? "Loading candidate review…" : view ? "No candidate decision recorded." : "Candidate review unavailable."}</p>}
-      {view ? <p className="training-muted">Last synced {new Date(view.syncedAt).toLocaleString()}. Acceptance keeps this Version for later use; serving is activated separately.</p> : null}
+      {view ? <p className="training-muted">Last synced {new Date(view.syncedAt).toLocaleString()}. Acceptance keeps this candidate for later use; serving is activated separately.</p> : null}
       {error ? <p role="alert" className="training-error">{error}</p> : null}
       <div className="training-dialog-actions">
         <button className="training-button secondary" type="button" disabled={loading || saving} onClick={() => setRefresh(value => value + 1)}>Refresh review</button>
@@ -80,7 +83,7 @@ export function ManagedCandidateReview({ connection, lineageId, onSaved }: {
       {outcome ? <div className="training-dialog-backdrop" role="presentation" onMouseDown={() => !saving && setOutcome(null)}>
         <section className="training-dialog training-promotion-dialog" role="dialog" aria-modal="true" aria-label="Review candidate" onMouseDown={event => event.stopPropagation()}>
           <div className="training-dialog-header"><h2>{outcome === "accepted" ? "Accept this candidate?" : "Reject this candidate?"}</h2></div>
-          <p>The adapter and its recorded evaluation remain in this Version’s history.</p>
+          <p>The adapter and its recorded evaluation remain in the candidate’s history.</p>
           <label className="training-promotion-reason"><span>Reason</span><textarea autoFocus maxLength={5000} value={reason} onChange={event => setReason(event.target.value)} /></label>
           {error ? <p role="alert" className="training-error">{error}</p> : null}
           <div className="training-dialog-actions">

@@ -378,6 +378,12 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         }
       }
     },
+    openHostedModelProject: (hostedProjectId: string, teamId: string, apiOrigin: string, options: { silent?: boolean } = {}) =>
+      mutate<{ project: ModelProject; importedJobCount: number; importedMetricCount: number }>(
+        `open-hosted-model-project:${hostedProjectId}`,
+        `/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/open`,
+        { profileId, teamId, apiOrigin }, "POST", options,
+      ),
     pullHostedModelProject: (hostedProjectId: string) =>
       mutate<{
         project: ModelProject;

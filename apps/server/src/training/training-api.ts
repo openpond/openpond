@@ -1408,7 +1408,7 @@ export function createTrainingApi(deps: {
       pinned: input.pinned === true,
     });
     if (action === "cancel_job") return deps.training.cancelJob(requiredString(input.jobId, "jobId"));
-    if (isManagedCandidateReviewAction(action)) return handleManagedCandidateReviewAction(action, input, deps.training.candidateReviews);
+    if (isManagedCandidateReviewAction(action)) return handleManagedCandidateReviewAction(action, input, deps.training.candidateReviews, deps.training.hostedCandidateReviews);
     if (isTrainingRunReadAction(action)) return handleTrainingRunRead({ action, payload: input, store: deps.store, training: deps.training });
     throw new Error(`Unknown training action ${action}.`);
   }

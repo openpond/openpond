@@ -5,6 +5,7 @@ import { labModelVersions } from "./lab-models";
 import { formatDateTime, statusLabel } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { trainingJobModelId } from "./models-resource-scope";
 
 export interface ModelsAggregateRow {
   ref: string;
@@ -36,8 +37,10 @@ export function modelAggregateRows(page: "runs" | "versions", state: TrainingSta
   for (const job of state.jobs) {
     if (lifecycleIds.has(job.id) || (typeof job.metadata.modelRunId === "string" && lifecycleIds.has(job.metadata.modelRunId))) continue;
     const plan = plans.get(job.planId);
-    if (!plan?.modelId || !modelNames.has(plan.modelId)) continue;
-    rows.push({ ref: `job:${job.id}`, modelId: plan.modelId, modelName: modelNames.get(plan.modelId)!, kind: "Training", label: job.id, status: job.status, tasksetId: plan.tasksetId, updatedAt: job.updatedAt });
+    const ownerId = trainingJobModelId(job, state);
+    if (!ownerId || !modelNames.has(ownerId)) continue;
+    const tasksetId = typeof job.metadata.tasksetId === "string" ? job.metadata.tasksetId : plan?.tasksetId ?? "";
+    rows.push({ ref: `job:${job.id}`, modelId: ownerId, modelName: modelNames.get(ownerId)!, kind: "Training", label: job.id, status: job.status, tasksetId, updatedAt: job.updatedAt });
   }
   for (const run of modelId ? [] : state.rewardModelRuns) {
     rows.push({ ref: `reward-run:${run.id}`, modelId: null, modelName: `Reward ${run.rewardModelId}`, kind: "Reward training", label: run.id, status: run.status, tasksetId: run.taskset.id, updatedAt: run.updatedAt });
@@ -64,8 +67,8 @@ export function ModelsAggregatePage({ page, state, models, runs, modelId, query,
     <label className="labs-search"><span className="sr-only">Search {page}</span><input placeholder={`Search ${page}`} value={query} onChange={(event) => onSearch(event.target.value)} /></label>
     {!state ? <p role="status">Loading {page}…</p> : <div className="training-table-wrap"><table className="training-data-table">
       <thead><tr><th>{page === "runs" ? "Run" : "Version"}</th><th>Model or reward</th><th>Type</th><th>Status</th><th>Taskset</th><th>Updated</th></tr></thead>
-      <tbody>{visible.map((row) => <tr key={row.ref}>
-        <td><button className="labs-version-row-button" type="button" onClick={() => onOpen(row)}>{row.label}</button></td>
+      <tbody>{visible.map((row) => <tr key={row.ref} onClick={() => onOpen(row)}>
+        <td><button className="labs-version-row-button" type="button" onClick={(event) => { event.stopPropagation(); onOpen(row); }}>{row.label}</button></td>
         <td>{row.modelName}</td><td>{row.kind}</td><td><LabStatusBadge label={statusLabel(row.status)} value={row.status} /></td><td>{row.tasksetId}</td><td>{formatDateTime(row.updatedAt)}</td>
       </tr>)}{!visible.length ? <tr><td colSpan={6}>No {page} match this view.</td></tr> : null}</tbody>
     </table></div>}

@@ -110,7 +110,7 @@ function EvaluationPage({
         <>
           <p className="training-muted">
             Tasks {page.offset + 1}–{page.offset + page.tasks.length} of{" "}
-            {page.total}. Recorded outputs and scores are saved locally for this
+            {page.total}. Recorded outputs and scores are retained for this
             run.
           </p>
           {page.tasks.map((task, index) => (

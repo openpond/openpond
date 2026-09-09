@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateImproveRun,
   TrainingStateResponse,
@@ -21,6 +21,7 @@ const PAGE_SIZE = 10;
 export function LabModelsPage({
   activeProfileId,
   hostedScope,
+  hostedApiOrigin,
   items,
   loading,
   runs,
@@ -28,12 +29,14 @@ export function LabModelsPage({
   training,
   onCompare,
   onPulled,
+  onOpened,
   onSelect,
   onUseModel,
   onConfigure,
 }: {
   activeProfileId: string;
   hostedScope: string | null;
+  hostedApiOrigin: string | null;
   items: LabWorkproductSummary[];
   loading: boolean;
   runs: CreateImproveRun[];
@@ -47,10 +50,12 @@ export function LabModelsPage({
     importedMetricCount: number,
   ) => void;
   onSelect: (key: string) => void;
+  onOpened: (id: string) => void;
   onUseModel: (modelId: string) => void;
   onConfigure: (modelId: string) => void;
 }) {
   const listHostedModelProjects = training.actions.listHostedModelProjects;
+  const opening = useRef(false);
   const [profileId, setProfileId] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -166,6 +171,17 @@ export function LabModelsPage({
     if (catalog && hostedScope) setHostedResult({ scope: hostedScope, catalog });
   }
 
+  async function selectModel(key: string) {
+    const row = rows.find(item => item.key === key);
+    if (row?.local) { onSelect(key); return; }
+    if (!row?.hosted || !hostedCatalog || !hostedApiOrigin || opening.current) return;
+    opening.current = true;
+    try {
+      const result = await training.actions.openHostedModelProject(row.hosted.project.id, hostedCatalog.teamId, hostedApiOrigin);
+      if (result) onOpened(result.project.id);
+    } finally { opening.current = false; }
+  }
+
   return (
     <div className="labs-flat-body labs-models-page">
       <ModelProjectPageHeader
@@ -230,7 +246,7 @@ export function LabModelsPage({
         runs={runs}
         state={state}
         onPull={(item) => void pullHostedProject(item)}
-        onSelect={onSelect}
+        onSelect={(key) => { void selectModel(key); }}
         onUseModel={onUseModel}
         onConfigure={onConfigure}
       />

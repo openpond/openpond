@@ -15,6 +15,7 @@ import {
   statusLabel,
   trainingModelRows,
 } from "../training/training-model-data";
+import { trainingJobModelId } from "./models-resource-scope";
 
 export type LabWorkproductKind = "agent" | "skill" | "extension" | "model";
 
@@ -62,13 +63,8 @@ export function labWorkproductProjection(input: {
     (input.training?.modelProjects ?? []).map((project) => project.id)
   );
   const jobIdsByModelId = new Map<string, Set<string>>();
-  const planModelById = new Map(
-    (input.training?.plans ?? []).map(
-      (plan) => [plan.id, plan.modelId] as const
-    )
-  );
   for (const job of input.training?.jobs ?? []) {
-    const modelId = planModelById.get(job.planId);
+    const modelId = input.training ? trainingJobModelId(job, input.training) : null;
     if (!modelId) continue;
     const jobIds = jobIdsByModelId.get(modelId) ?? new Set<string>();
     jobIds.add(job.id);
@@ -261,7 +257,7 @@ export function labWorkproductProjection(input: {
         .map((plan) => plan.id)
     );
     const modelJobs = (input.training?.jobs ?? [])
-      .filter((job) => modelPlanIds.has(job.planId))
+      .filter((job) => modelPlanIds.has(job.planId) || (input.training && trainingJobModelId(job, input.training) === modelId))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     const latestModelJob = modelJobs[0] ?? null;
     const latestModelLineage = latestModelJob
