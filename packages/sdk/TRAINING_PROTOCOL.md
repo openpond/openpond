@@ -156,3 +156,22 @@ The endpoints are `GET` and `POST`
 `?decisionId=...`. These contracts require candidate-decision service support.
 Acceptance and rejection retain the original training/evaluation receipts. They
 do not launch inference, change a serving binding, or bypass serving eligibility.
+
+## Shared training bundle preparation
+
+`openpond-sdk/training-bundle` exports `buildTasksetTrainingBundle` and the
+runtime, compute, engine, run-manifest, and resolved-bundle schemas. Desktop and
+hosted workers use this compiler with the same pinned Model, Taskset, Harness,
+Reward, evaluation source, and asset bytes. It produces an immutable manifest
+and an in-memory asset map without creating a training job or acquiring compute.
+
+The compiler verifies selected release identities and private verifier bytes,
+checks training/evaluation isolation, and rejects missing or unexpected Work
+assets. Callers retain responsibility for authorizing the inputs and staging the
+result through the training artifact API before job admission. Filesystem cache
+materialization remains a Desktop concern.
+
+The same entry point exports `materializeLearningBatchTaskset`. It verifies a
+sealed learning batch and its evidence, admission decisions, Reward releases,
+and verifier assets, then returns the authored Taskset, portable release, and
+generated verifier files consumed by training preparation.
