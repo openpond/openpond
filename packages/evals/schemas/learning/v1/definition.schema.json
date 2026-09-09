@@ -55,6 +55,13 @@
       },
       "additionalProperties": {}
     },
+    "requiredOutputs": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema1"
+      }
+    },
     "rewardBinding": {
       "type": "object",
       "properties": {
@@ -62,7 +69,7 @@
           "$ref": "#/$defs/__schema0"
         },
         "contentHash": {
-          "$ref": "#/$defs/__schema1"
+          "$ref": "#/$defs/__schema2"
         },
         "revision": {
           "type": "integer",
@@ -86,7 +93,7 @@
               "$ref": "#/$defs/__schema0"
             },
             "contentHash": {
-              "$ref": "#/$defs/__schema1"
+              "$ref": "#/$defs/__schema2"
             }
           },
           "required": [
@@ -179,7 +186,7 @@
               "maxItems": 5,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema2"
+                "$ref": "#/$defs/__schema3"
               }
             },
             "networkPolicy": {
@@ -215,7 +222,7 @@
               "$ref": "#/$defs/__schema0"
             },
             "contentHash": {
-              "$ref": "#/$defs/__schema1"
+              "$ref": "#/$defs/__schema2"
             }
           },
           "required": [
@@ -228,14 +235,14 @@
           "maxItems": 200,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema3"
+            "$ref": "#/$defs/__schema4"
           }
         },
         "capabilities": {
           "maxItems": 200,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema4"
+            "$ref": "#/$defs/__schema5"
           }
         },
         "verifierSetRelease": {
@@ -245,7 +252,7 @@
               "$ref": "#/$defs/__schema0"
             },
             "contentHash": {
-              "$ref": "#/$defs/__schema1"
+              "$ref": "#/$defs/__schema2"
             }
           },
           "required": [
@@ -264,7 +271,7 @@
       "additionalProperties": false
     },
     "contentHash": {
-      "$ref": "#/$defs/__schema1"
+      "$ref": "#/$defs/__schema2"
     }
   },
   "required": [
@@ -291,10 +298,105 @@
       "maxLength": 240
     },
     "__schema1": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "schemaRef": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "contentHash": {
+                  "$ref": "#/$defs/__schema2"
+                },
+                "sizeBytes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 250000000
+                },
+                "mediaType": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "visibility": {
+                  "type": "string",
+                  "enum": [
+                    "policy",
+                    "verifier",
+                    "host_private"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "path",
+                "contentHash",
+                "sizeBytes",
+                "mediaType",
+                "visibility"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxBytes": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 250000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metadata": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "path",
+        "mediaType",
+        "schemaRef",
+        "maxBytes",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    "__schema2": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
-    "__schema2": {
+    "__schema3": {
       "type": "string",
       "enum": [
         "create",
@@ -304,7 +406,7 @@
         "destroy"
       ]
     },
-    "__schema3": {
+    "__schema4": {
       "type": "object",
       "properties": {
         "name": {
@@ -326,7 +428,7 @@
           "additionalProperties": {}
         },
         "inputSchemaHash": {
-          "$ref": "#/$defs/__schema1"
+          "$ref": "#/$defs/__schema2"
         },
         "sideEffect": {
           "type": "string",
@@ -351,7 +453,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema4": {
+    "__schema5": {
       "type": "object",
       "properties": {
         "id": {
@@ -365,7 +467,7 @@
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema5"
+            "$ref": "#/$defs/__schema6"
           }
         },
         "portability": {
@@ -386,7 +488,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema5": {
+    "__schema6": {
       "type": "string",
       "minLength": 1,
       "maxLength": 500

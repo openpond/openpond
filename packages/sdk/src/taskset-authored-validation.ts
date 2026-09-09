@@ -199,12 +199,12 @@ function validateWorkExecution(
       path: "environment.entrypoint",
     });
   }
-  if (taskset.environment.stateful) {
+  if (!taskset.environment.lifecycle.includes("reset") || !taskset.environment.lifecycle.includes("cleanup")) {
     issues.push({
-      code: "work_stateful_invalid",
+      code: "work_reset_lifecycle_missing",
       severity: "error",
-      message: "Automated Work attempts must start from clean state.",
-      path: "environment.stateful",
+      message: "Work attempts require reset and cleanup; filesystem state belongs to one attempt.",
+      path: "environment.lifecycle",
     });
   }
   const allowedTools = new Set<string>(TASKSET_WORK_TOOL_NAMES);

@@ -6,6 +6,8 @@ import { compileTaskBatch, learningRef, taskBatchPackageMetadata, verifyLearning
 import { computeTasksetHash } from "./taskset-authored-validation.js";
 import { contentHash } from "@openpond/harness";
 import { learningVerifierModule, projectLearningBatchGraders } from "./taskset-package-grader-projection.js";
+import { materializeLearningBatchAssets } from "./learning-batch-assets.js";
+import { MAX_TASKSET_PACKAGE_BYTES } from "./taskset-package-files.js";
 
 /** Projects a sealed batch into training inputs. The public batch compiler
  * rechecks every evidence/decision snapshot before adaptation. */
@@ -14,11 +16,15 @@ export function materializeLearningBatchTaskset(input: {
   evidence: TaskEvidence[]; decisions: TaskAdmissionDecision[]; profileId: string;
   source: TasksetSourceRef;
   assets?: LearningTextAsset[];
+  assetBytes?: ReadonlyMap<string, Uint8Array>;
 }) {
   const release = compileTaskBatch(input);
   const metadata = taskBatchPackageMetadata(release);
-  if (release.environment.kind !== "text" || release.tools.length || release.tasks.some((task) => task.artifactRefs.length)) throw new Error("This learning batch requires an environment or asset adapter before training preparation.");
+  const work = release.environment.kind === "work";
+  if ((!work && (release.environment.kind !== "text" || release.tools.length || release.tasks.some(task => task.artifactRefs.length)))
+    || (work && release.tasks.some(task => !task.requiredOutputs?.length))) throw new Error("This learning batch requires a supported text or Work environment with declared outputs.");
   const sourceId = input.source.id;
+  const materialized = materializeLearningBatchAssets({ tasks: release.tasks, sourceId, assets: input.assets, assetBytes: input.assetBytes });
   const signals: LearningSignalInventory = { demonstrations: [], preferences: [], corrections: [], feedback: [], rewards: [], labels: [] };
   const fixtures: GraderFixture[] = [];
   for (const admission of metadata.admissions) {
@@ -52,15 +58,15 @@ export function materializeLearningBatchTaskset(input: {
     profileId: input.profileId, profileRelease: null, createImproveRunId: null, name: `${input.definition.name} · ${input.batch.examples.length} approved examples`, objective: input.definition.instructions,
     purpose: "general", benchmark: null, status: "needs_review", sourceRefs: [input.source], datasetArtifact: null,
     policy: release.policy,
-    environment: { protocolVersion: "openpond.taskEnvironment.v1", kind: "chat", entrypoint: "openpond.text.v1", stateful: false, deterministicSeeds: release.environment.deterministicSeeds, toolNames: [], lifecycle: ["create", "reset", "step", "grade", "cleanup"], defaultTimeoutMs: release.environment.defaultTimeoutMs, networkPolicy: release.environment.networkPolicy, metadata: { portableEnvironment: release.environment } },
-    capabilities: { schemaVersion: "openpond.tasksetCapabilities.v1", taskKind: "chat", supportedSignals: signals.demonstrations.length ? ["demonstration", "reward"] : ["reward"], compatibleMethods: input.batch.purpose === "supervised_training" ? ["sft"] : input.batch.purpose === "reward_training" ? ["grpo", "ppo"] : ["none"], rewardKinds: ["deterministic"], requiresTools: false, requiresState: false, requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"], exportable: true, portabilityBlockers: [] },
-    tasks: release.tasks.map(({ artifactRefs: _assets, ...task }) => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [sourceId], metadata: { admission: metadata.admissions.find((entry) => entry.taskId === task.id), exampleOrigin: input.evidence.find((evidence) => evidence.id === task.id)?.correctionFeedbackId ? "corrected" : "extracted" } })),
+    environment: { protocolVersion: "openpond.taskEnvironment.v1", kind: work ? "work" : "chat", entrypoint: release.environment.entrypoint, stateful: release.environment.stateful, deterministicSeeds: release.environment.deterministicSeeds, toolNames: release.tools.map(tool => tool.name), lifecycle: ["create", "reset", "step", "grade", "cleanup"], defaultTimeoutMs: release.environment.defaultTimeoutMs, networkPolicy: release.environment.networkPolicy, metadata: { portableEnvironment: release.environment, portableTools: release.tools } },
+    capabilities: { schemaVersion: "openpond.tasksetCapabilities.v1", taskKind: work ? "single_agent" : "chat", supportedSignals: signals.demonstrations.length ? ["demonstration", "reward"] : ["reward"], compatibleMethods: input.batch.purpose === "supervised_training" ? ["sft"] : input.batch.purpose === "reward_training" ? ["grpo", "ppo"] : ["none"], rewardKinds: ["deterministic"], requiresTools: release.tools.length > 0, requiresState: release.environment.stateful, requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"], exportable: true, portabilityBlockers: [] },
+    tasks: materialized.tasks.map(task => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [sourceId], metadata: { admission: metadata.admissions.find((entry) => entry.taskId === task.id), exampleOrigin: input.evidence.find((evidence) => evidence.id === task.id)?.correctionFeedbackId ? "corrected" : "extracted" } })),
     graders, graderFixtures: fixtures, learningSignals: signals,
     authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1", model: null, modelConfig: {}, skillHash: contentHash("openpond-learning-batch-v1"), promptTemplateVersion: "learning-batch-v1", buildIntent: input.batch.purpose === "supervised_training" ? "demonstrations" : "verifiable_reward", buildSpecification: null, evidenceHashes: input.batch.examples.map((entry) => entry.evidence.contentHash), tasksetSdkVersion: "learning-batch-v1", sourceCommit: null, repairHistory: [], createdAt: input.batch.sealedAt },
     readiness: null, contentHash: "00000000", createdAt: input.batch.sealedAt, updatedAt: input.batch.sealedAt,
-    metadata: { learning: metadata, learningRelease: learningRef(release), trainingMethod: input.batch.purpose === "supervised_training" ? "sft" : input.batch.purpose === "reward_training" ? "grpo" : "none", tasksetOutputContract: { mode: "structured_json", jsonSchema: input.definition.outputSchema, renderer: null } },
+    metadata: { learning: metadata, learningRelease: learningRef(release), trainingMethod: input.batch.purpose === "supervised_training" ? "sft" : input.batch.purpose === "reward_training" ? "grpo" : "none", tasksetOutputContract: work ? { mode: "artifacts", requiredOutputSource: "task.requiredOutputs" } : { mode: "structured_json", jsonSchema: input.definition.outputSchema, renderer: null } },
   });
-  return { taskset: TasksetSchema.parse({ ...taskset, contentHash: computeTasksetHash(taskset) }), release, generatedFiles };
+  return { taskset: TasksetSchema.parse({ ...taskset, contentHash: computeTasksetHash(taskset) }), release, generatedFiles, tasksetAssetBytes: materialized.tasksetAssetBytes };
 }
 
 function fixtureOutcome(grade: RewardComposition | null) {
@@ -76,8 +82,20 @@ function fixtureOutcome(grade: RewardComposition | null) {
 export function prepareReviewedLearningBatch(input: Omit<Parameters<typeof materializeLearningBatchTaskset>[0], "source"> & {
   admissionContext?: "explicit_local_batch_review" | "explicit_hosted_batch_review";
 }) {
+  const inputAssetText: string[] = [];
+  let inputAssetSize = 0;
+  for (const ref of new Map(input.evidence.flatMap(item => item.submission.assets.map(ref => [ref.id, ref] as const))).values()) {
+    const bytes = input.assetBytes?.get(ref.id);
+    const stored = input.assets?.find(asset => asset.id === ref.id);
+    const size = bytes?.byteLength ?? (stored ? new TextEncoder().encode(stored.text).byteLength : 0);
+    inputAssetSize += size;
+    if (inputAssetSize > MAX_TASKSET_PACKAGE_BYTES) throw new Error("Learning input assets exceed the training package limit.");
+    if (bytes) inputAssetText.push(new TextDecoder().decode(bytes));
+    else if (stored) inputAssetText.push(stored.text);
+  }
   const scan = scanAndRedactEvidence(JSON.stringify({
     tasks: input.evidence.map(item => item.submission), targets: input.decisions.map(item => item.approvedTarget), definition: input.definition,
+    inputAssets: inputAssetText,
   }));
   if (scan.secretStatus !== "passed" || scan.piiStatus !== "passed") throw new Error(`Learning batch contains unresolved data findings (${scan.findings.join(", ")}). Correct the source examples and seal a revised batch before training.`);
   const source = LearningBatchDatasetSourceRefSchema.parse({

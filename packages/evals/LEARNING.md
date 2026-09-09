@@ -274,3 +274,9 @@ retained diagnostic; a new reviewed policy revision may resume it. Hosts must
 poll due timers for their execution owner and supply an authorized actor. This
 worker does not execute a Work prompt or submit a provider Job; the existing
 iteration dispatch worker owns that next transition.
+
+Task Definitions may declare `requiredOutputs`. These optional contracts use
+Taskset output paths, media types, schema references and size bounds. Evidence
+conversion copies them into every task before grading or sealing a batch, so a
+changed output contract requires a new definition and new matching evidence and
+review receipts. Definitions without this field retain their existing hashes.
