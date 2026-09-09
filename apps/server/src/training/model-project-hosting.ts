@@ -200,10 +200,17 @@ export function createModelProjectHostingService(input: {
     }
     const syncedAt = new Date().toISOString();
     const imported: PreparedImportedTasksetPackage[] = [];
-    const selected = summary.trainingSetup.tasksetRef;
-    let localTasksetRef = selected;
-    let selectedLink: NonNullable<ModelProject["hosted"]>["tasksets"][number] | null = null;
-    if (selected) {
+    const localReferences = { tasksetRef: summary.trainingSetup.tasksetRef, evaluationTasksetRef: summary.trainingSetup.evaluationTasksetRef };
+    const selectedLinks: NonNullable<ModelProject["hosted"]>["tasksets"] = [];
+    for (const field of ["tasksetRef", "evaluationTasksetRef"] as const) {
+      const selected = summary.trainingSetup[field];
+      if (!selected) continue;
+      const loaded = selectedLinks.find(link => link.releaseId === selected.id && link.releaseRevision === selected.revision && link.releaseHash === selected.contentHash);
+      if (loaded) {
+        const prepared = imported.find(item => item.taskset.id === loaded.localTasksetId && item.taskset.contentHash === loaded.localTasksetHash)!;
+        localReferences[field] = learningRef(prepared.taskset);
+        continue;
+      }
       const options = { baseUrl: access.apiBaseUrl, apiKey: access.token, teamId: access.teamId, fetch: fetchImpl };
       const [value, metadata] = await Promise.all([
         new OpenPondTasksetPackageClient(options).get(summary.id, selected),
@@ -212,7 +219,7 @@ export function createModelProjectHostingService(input: {
       const selectedBinding = summary.trainingSetup.rewardBindingRef ?? null;
       const binding = tasksetPackageRewardBinding(value);
       const packageBinding = binding ? learningRef(binding) : null;
-      if (Boolean(selectedBinding) !== Boolean(packageBinding) || (selectedBinding && packageBinding && !sameLearningRef(selectedBinding, packageBinding))) throw new Error("Hosted Model Reward selection differs from its immutable Taskset package.");
+      if (field === "tasksetRef" && (Boolean(selectedBinding) !== Boolean(packageBinding) || (selectedBinding && packageBinding && !sameLearningRef(selectedBinding, packageBinding)))) throw new Error("Hosted Model Reward selection differs from its immutable Taskset package.");
       const prepared: PreparedImportedTasksetPackage = prepareImportedTasksetPackage({ package: value,
         profileId: existing?.profileId ?? inputValue.profileId, name: metadata.name, createdAt: metadata.createdAt });
       const priorLink = existing?.hosted?.tasksets.find(link => link.releaseId === selected.id && link.releaseRevision === selected.revision && link.releaseHash === selected.contentHash);
@@ -222,18 +229,18 @@ export function createModelProjectHostingService(input: {
       if (previousTaskset) {
         if (previousTaskset.profileId !== prepared.taskset.profileId) throw new Error("The downloaded Taskset belongs to another Profile. Local work was retained.");
         if (previousTaskset.metadata.importedPackageHash !== value.contentHash) {
-          if (!existing || existing.trainingSetup.tasksetRef?.id !== previousTaskset.id || existing.trainingSetup.tasksetRef.revision !== previousTaskset.revision) throw new Error("The downloaded Taskset conflicts with an existing local revision. Local work was retained.");
-          const captured = await exportLocalModelTasksetPackage({ store: input.store, storeDir: input.store.home, profileId: existing.profileId, modelId: existing.id });
+          if (!existing || !existing.trainingSetup[field] || !sameLearningRef(existing.trainingSetup[field]!, learningRef(previousTaskset))) throw new Error("The downloaded Taskset conflicts with an existing local revision. Local work was retained.");
+          const captured = await exportLocalModelTasksetPackage({ store: input.store, storeDir: input.store.home, profileId: existing.profileId, modelId: existing.id, tasksetRef: learningRef(previousTaskset) });
           if (captured.contentHash !== value.contentHash) throw new Error("The downloaded package differs from the existing local files. Local work was retained.");
           prepared.reuseExisting = true;
         }
         prepared.taskset = previousTaskset;
       }
       imported.push(prepared);
-      localTasksetRef = { id: prepared.taskset.id, revision: prepared.taskset.revision, contentHash: prepared.taskset.contentHash };
-      selectedLink = { localTasksetId: prepared.taskset.id, localTasksetHash: prepared.taskset.contentHash,
+      localReferences[field] = learningRef(prepared.taskset);
+      selectedLinks.push({ localTasksetId: prepared.taskset.id, localTasksetHash: prepared.taskset.contentHash,
         releaseId: selected.id, releaseRevision: selected.revision, releaseHash: selected.contentHash,
-        packageHash: value.contentHash, hostedTasksetId: metadata.id, syncedAt };
+        packageHash: value.contentHash, hostedTasksetId: metadata.id, syncedAt });
     }
     const preserveHostedTasksets =
       existing?.hosted?.teamId === access.teamId &&
@@ -247,7 +254,7 @@ export function createModelProjectHostingService(input: {
       objective: summary.objective,
       defaultBaseModel: summary.defaultBaseModel,
       defaultDestinationId: summary.defaultDestinationId,
-      trainingSetup: { ...summary.trainingSetup, tasksetRef: localTasksetRef },
+      trainingSetup: { ...summary.trainingSetup, ...localReferences },
       hosted: {
         schemaVersion: "openpond.hostedModelProjectLink.v1",
         apiOrigin: new URL(access.apiBaseUrl).origin,
@@ -259,8 +266,8 @@ export function createModelProjectHostingService(input: {
         syncedSourceRevision: summary.sourceRevision,
         syncedAt,
         tasksets: [
-          ...(preserveHostedTasksets ? existing.hosted!.tasksets.filter(entry => !selectedLink || entry.releaseHash !== selectedLink.releaseHash) : []),
-          ...(selectedLink ? [selectedLink] : []),
+          ...(preserveHostedTasksets ? existing.hosted!.tasksets.filter(entry => !selectedLinks.some(link => entry.releaseHash === link.releaseHash)) : []),
+          ...selectedLinks,
         ],
       },
       tasksetSyncs: preserveHostedTasksets ? existing.tasksetSyncs : [],
@@ -397,6 +404,7 @@ export function createModelProjectHostingService(input: {
     const access = await input.resolveAccess();
     if (project.hosted && (project.hosted.apiOrigin !== new URL(access.apiBaseUrl).origin || project.hosted.teamId !== access.teamId)) throw new Error("Pull this Model from its linked API and workspace before pushing local changes.");
     if (project.trainingSetup.tasksetRef) return pushModelTasksetPackage({ store: input.store, projectId, access, fetch: fetchImpl });
+    if (project.trainingSetup.evaluationTasksetRef) throw new Error("Select a training Taskset before syncing a Model with a retained evaluation.");
     const syncBody = {
       schemaVersion: "openpond.hostedModelProjectSync.v2" as const,
       portableProjectId: project.id,

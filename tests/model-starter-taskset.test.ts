@@ -37,7 +37,12 @@ it("recovers atomic package pushes after restart and attaches history without re
   let store = new SqliteStore(home);
   try {
     const input = await starterInput();
-    const original = await store.saveModelStarterCreation(input);
+    const created = await store.saveModelStarterCreation(input);
+    const otherRequest = await createModelStarterCreationRequest({ profileId: input.request.profileId, modelId: "other-model", name: "Other tasks",
+      starter: input.request.starter, startingModel: input.request.startingModel, method: "sft" });
+    const other = await store.saveModelStarterCreation({ ...input, request: otherRequest });
+    const original = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: created.id, profileId: created.profileId, name: created.name, objective: created.objective, defaultBaseModel: created.defaultBaseModel, defaultDestinationId: created.defaultDestinationId,
+      trainingSetup: { ...created.trainingSetup, evaluationTasksetRef: other.trainingSetup.tasksetRef, recipe: sftRecipeFixture() } }, created.revision));
     const receipts = new Map<string, TasksetPackageReceipt>();
     let remote: HostedModelProjectSummary | null = null;
     let loseResponse = true;
@@ -59,13 +64,14 @@ it("recovers atomic package pushes after restart and attaches history without re
           remote = HostedModelProjectSummarySchema.parse({ ...configuration, id: "remote-model", teamId: "team",
             revision: (remote?.revision ?? 0) + 1, etag: sha256(request.operationId), createdAt: original.createdAt, updatedAt: configuration.sourceUpdatedAt,
             trainingSetup: { ...configuration.trainingSetup, tasksetRef: learningRef(request.package.taskset),
-              rewardBindingRef: learningRef(request.package.modelResources!.rewardBinding), tasksetRelease: null, recipe: null } });
+              rewardBindingRef: learningRef(request.package.modelResources!.rewardBinding), tasksetRelease: null } });
         } else expect(request.modelConfiguration).toBeUndefined();
         const receipt: TasksetPackageReceipt = { schemaVersion: "openpond.tasksetPackageReceipt.v1", teamId: "team",
           modelProjectId: request.modelProjectId, operationId: request.operationId, selection: request.selection,
           taskset: learningRef(request.package.taskset), packageHash: request.package.contentHash,
           hostedTasksetId: `hosted-${request.package.taskset.id}`, projectEtag: remote!.etag,
-          ...(request.selection === "select" ? { project: remote! } : {}) };
+          ...(request.selection === "select" ? { project: remote! } : {}),
+          ...(request.evaluationPackage ? { evaluation: { taskset: learningRef(request.evaluationPackage.taskset), packageHash: request.evaluationPackage.contentHash, hostedTasksetId: `hosted-${request.evaluationPackage.taskset.id}` } } : {}) };
         receipts.set(request.operationId, receipt);
         if (loseResponse) { loseResponse = false; throw new TypeError("Response lost after commit"); }
         return Response.json(receipt);
@@ -73,6 +79,10 @@ it("recovers atomic package pushes after restart and attaches history without re
     });
     await expect(service().syncProject(original.id)).rejects.toThrow("Response lost");
     expect((await store.getModelProject(original.id))!.hosted).toBeNull();
+    const pending = await store.pendingModelPackagePush({ profileId: original.profileId, modelId: original.id, apiOrigin: "https://staging-api.openpond.ai", teamId: "team" });
+    expect(pending?.localEvaluation).toEqual(other.trainingSetup.tasksetRef);
+    expect(pending?.evaluationPackageHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(pending?.request).not.toHaveProperty("evaluationPackage");
     await expect(service("other-workspace").syncProject(original.id)).rejects.toThrow("original API and workspace");
     expect(calls).toHaveLength(1);
     const edited = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: original.id, profileId: original.profileId,
@@ -88,6 +98,10 @@ it("recovers atomic package pushes after restart and attaches history without re
     expect(calls[0]).toBe(calls[1]);
     expect(receipts.size).toBe(2);
     expect(remote!.name).toBe(edited.name);
+    expect(remote!.trainingSetup.recipe).toEqual(original.trainingSetup.recipe);
+    const evaluationLink = pushed.hosted!.tasksets.find(link => link.localTasksetId === other.trainingSetup.tasksetRef!.id)!;
+    expect(remote!.trainingSetup.evaluationTasksetRef).toEqual({ id: evaluationLink.releaseId, revision: evaluationLink.releaseRevision, contentHash: evaluationLink.releaseHash });
+    expect(pushed.trainingSetup.evaluationTasksetRef).toEqual(other.trainingSetup.tasksetRef);
     const third = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: pushed.id, profileId: pushed.profileId,
       name: "Third configuration", objective: pushed.objective, defaultBaseModel: pushed.defaultBaseModel,
       defaultDestinationId: pushed.defaultDestinationId, trainingSetup: pushed.trainingSetup }, pushed.revision));
@@ -99,17 +113,17 @@ it("recovers atomic package pushes after restart and attaches history without re
     await service().publishTaskset({ projectId: third.id, taskset: selectedTaskset, release: selectedPackage.taskset });
     expect(calls[calls.length - 2]).toBe(calls[calls.length - 1]);
     expect(remote!.name).toBe(third.name);
-    const otherRequest = await createModelStarterCreationRequest({ profileId: input.request.profileId, modelId: "other-model", name: "Other tasks",
+    const historyRequest = await createModelStarterCreationRequest({ profileId: input.request.profileId, modelId: "history-model", name: "Historical tasks",
       starter: input.request.starter, startingModel: input.request.startingModel, method: "sft" });
-    const other = await store.saveModelStarterCreation({ ...input, request: otherRequest });
-    const otherTaskset = (await store.getTaskset(other.trainingSetup.tasksetRef!.id))!;
-    const otherPackage = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: other.profileId, modelId: other.id });
+    const history = await store.saveModelStarterCreation({ ...input, request: historyRequest });
+    const otherTaskset = (await store.getTaskset(history.trainingSetup.tasksetRef!.id))!;
+    const otherPackage = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: history.profileId, modelId: history.id });
     const selectedBefore = pushed.trainingSetup.tasksetRef;
     const etagBefore = remote!.etag;
     const attached = await service().publishTaskset({ projectId: original.id, taskset: otherTaskset, release: otherPackage.taskset });
     expect(attached.trainingSetup.tasksetRef).toEqual(selectedBefore);
     expect(remote!.etag).toBe(etagBefore);
-    expect(attached.hosted!.tasksets).toHaveLength(2);
+    expect(attached.hosted!.tasksets).toHaveLength(3);
     expect(receipts.size).toBe(4);
     expect(await store.pendingModelPackagePush({ profileId: original.profileId, modelId: original.id, apiOrigin: "https://staging-api.openpond.ai", teamId: "team" })).toBeNull();
   } finally { await store.close(); }
@@ -128,24 +142,29 @@ it("pulls complete private packages atomically and exports their exact bytes aft
     const asset = { id: "private-extra", path: "private/extra.bin", mediaType: "application/octet-stream", visibility: "host_private" as const, sizeBytes: bytes.length, contentHash: sha256(bytes) };
     const { contentHash: _hash, ...content } = exported;
     const value = createTasksetPackage({ ...content, files: [{ asset, base64: bytes.toString("base64") }, ...exported.files] });
+    const { contentHash: _evaluationHash, ...evaluationContent } = value.taskset;
+    const evaluation = createTasksetPackage({ ...content, files: value.files, taskset: TasksetReleaseSchema.parse(sealLearningContent({ ...evaluationContent, id: "retained-evaluation", tasks: evaluationContent.tasks.map(task => ({ ...task, split: "frozen_eval" as const })) })) });
     const hosted = { id: "remote-model", teamId: "team", portableProjectId: original.id, name: original.name,
       objective: original.objective, defaultBaseModel: original.defaultBaseModel, defaultDestinationId: original.defaultDestinationId,
-      trainingSetup: { ...hostedModelProjectTrainingSetup(original.trainingSetup), tasksetRef: learningRef(value.taskset) }, sourceRevision: 1, revision: 1,
+      trainingSetup: { ...hostedModelProjectTrainingSetup(original.trainingSetup), tasksetRef: learningRef(value.taskset), evaluationTasksetRef: learningRef(evaluation.taskset) }, sourceRevision: 1, revision: 1,
       etag: "a".repeat(64), sourceUpdatedAt: original.updatedAt, createdAt: original.createdAt, updatedAt: original.updatedAt };
     let corrupt = true;
+    let corruptEvaluation = true;
     let servedPackage = value;
     let duringDownload: (() => Promise<void>) | null = null;
     const service = (store = target) => createModelProjectHostingService({ store,
       resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test-key", teamId: "team" }),
       fetch: async url => {
         const pathname = new URL(String(url)).pathname;
+        const isEvaluation = pathname.includes(evaluation.taskset.id);
+        const selectedPackage = isEvaluation ? evaluation : servedPackage;
         if (pathname.startsWith("/v1/taskset-packages/")) {
           await duringDownload?.();
           return Response.json({ schemaVersion: "openpond.tasksetPackageReadback.v1", teamId: "team", modelProjectId: hosted.id,
-            package: corrupt ? { ...servedPackage, files: [] } : servedPackage });
+            package: (isEvaluation ? corruptEvaluation : corrupt) ? { ...selectedPackage, files: [] } : selectedPackage });
         }
         if (pathname.startsWith("/v1/taskset-catalog/")) return Response.json({ schemaVersion: "openpond.hostedTasksetSummary.v1",
-          id: "remote-taskset", teamId: "team", release: learningRef(servedPackage.taskset), name: "Imported invoices", description: "Private test package",
+          id: "remote-taskset", teamId: "team", release: learningRef(selectedPackage.taskset), name: "Imported invoices", description: "Private test package",
           taskCount: value.taskset.tasks.length, buildIntent: "verifiable_reward", methodHint: "sft", packageBytes: null, storedBytes: null, createdAt: original.createdAt });
         if (pathname === "/v1/managed-rl/jobs") return Response.json({ jobs: [] });
         return Response.json({ project: { ...hosted, trainingSetup: { ...hosted.trainingSetup, tasksetRef: learningRef(servedPackage.taskset),
@@ -157,9 +176,16 @@ it("pulls complete private packages atomically and exports their exact bytes aft
     expect(await target.getModelProject(original.id)).toBeNull();
     expect(await target.getTaskset(value.taskset.id)).toBeNull();
     corrupt = false;
+    await expect(pull()).rejects.toThrow();
+    expect(await target.getModelProject(original.id)).toBeNull();
+    expect(await target.getTaskset(value.taskset.id)).toBeNull();
+    corruptEvaluation = false;
     const pulled = (await pull()).project;
     const local = (await target.getTaskset(value.taskset.id))!;
     expect(pulled.trainingSetup.tasksetRef).toEqual(learningRef(local));
+    const localEvaluation = (await target.getTaskset(evaluation.taskset.id))!;
+    expect(pulled.trainingSetup.evaluationTasksetRef).toEqual(learningRef(localEvaluation));
+    expect(localEvaluation.contentHash).not.toBe(evaluation.taskset.contentHash);
     expect(local.contentHash).not.toBe(value.taskset.contentHash);
     expect(local.sourceRefs[0]).toMatchObject({ licensingStatus: "pending", secretScanStatus: "pending", piiScanStatus: "pending" });
     expect(validateTaskset(local).valid).toBe(false);
@@ -168,6 +194,7 @@ it("pulls complete private packages atomically and exports their exact bytes aft
     target = new SqliteStore(path.join(home, "target"));
     expect(await exportLocalModelTasksetPackage({ store: target, storeDir: target.home, profileId: pulled.profileId, modelId: pulled.id })).toEqual(value);
     expect((await pull()).project.trainingSetup.tasksetRef).toEqual(learningRef(local));
+    expect(await exportLocalModelTasksetPackage({ store: target, storeDir: target.home, profileId: pulled.profileId, modelId: pulled.id, tasksetRef: pulled.trainingSetup.evaluationTasksetRef! })).toEqual(evaluation);
     duringDownload = async () => {
       const current = (await target.getModelProject(pulled.id))!;
       await target.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: current.id, profileId: current.profileId,
