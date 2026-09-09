@@ -28,6 +28,7 @@ import {
   GradeResultSchema,
   GraderAuditReportSchema,
   ModelArtifactLineageSchema,
+  ManagedAdapterServingProjectionSchema,
   ModelProjectSchema,
   TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
@@ -811,6 +812,16 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
       [lineage.id, lineage.artifactId, lineage.tasksetId, JSON.stringify(lineage), lineage.importedAt],
     );
     return lineage;
+  }
+
+  async updateModelArtifactLineageServing(id: string, projection: ModelArtifactLineage["managedServing"]): Promise<void> {
+    const parsed = projection === null ? null : ManagedAdapterServingProjectionSchema.parse(projection);
+    await this.upsertPayload("UPDATE model_artifact_lineage SET payload = json_set(payload, '$.managedServing', json(?)) WHERE id = ?", [JSON.stringify(parsed), id]);
+  }
+
+  async updateModelArtifactLineageReview(id: string, patch: Pick<ModelArtifactLineage, "status" | "rejectedAt" | "rejectionReason" | "frozenEvaluationArtifactId">): Promise<void> {
+    const parsed = ModelArtifactLineageSchema.pick({ status: true, rejectedAt: true, rejectionReason: true, frozenEvaluationArtifactId: true }).parse(patch);
+    await this.upsertPayload("UPDATE model_artifact_lineage SET payload = json_set(payload, '$.status', ?, '$.rejectedAt', ?, '$.rejectionReason', ?, '$.frozenEvaluationArtifactId', ?) WHERE id = ?", [parsed.status, parsed.rejectedAt, parsed.rejectionReason, parsed.frozenEvaluationArtifactId, id]);
   }
 
   async listModelArtifactLineage(tasksetId?: string): Promise<ModelArtifactLineage[]> {

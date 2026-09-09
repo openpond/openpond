@@ -35,6 +35,8 @@ export function createTrainingModelBindingService(
   }) {
     const model = await deps.store.getModelArtifactLineage(input.modelId);
     if (!model) throw new Error("Imported model not found.");
+    const job = await deps.store.getTrainingJob(model.jobId);
+    if (job?.destinationId === "openpond_managed") throw new Error("Record managed candidate decisions from the Version’s Evaluation tab.");
     const activeBindings = (await deps.store.listModelBindings()).filter(
       (binding) =>
         binding.status === "active"

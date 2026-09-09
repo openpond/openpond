@@ -160,6 +160,7 @@ function createHarness(input: {
   const store = {
     listModelArtifactLineage: vi.fn(async () => [input.currentLineage]),
     listTrainingArtifacts: vi.fn(async () => input.artifacts),
+    updateModelArtifactLineageServing: vi.fn(async (_id: string, projection: ModelArtifactLineage["managedServing"]) => { saved = { ...input.currentLineage, managedServing: projection }; }),
     saveModelArtifactLineage: vi.fn(async (value: ModelArtifactLineage) => {
       saved = value;
       return value;

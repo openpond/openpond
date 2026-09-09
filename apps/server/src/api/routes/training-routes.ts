@@ -261,6 +261,9 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/events$/, method: "GET", action: "job_events", key: "jobId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/detail$/, method: "GET", action: "run_detail", key: "jobId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/evaluations\/([^/]+)\/tasks$/, method: "GET", action: "managed_evaluation_tasks", key: "jobId", assignmentKey: "evaluationId" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision$/, method: "GET", action: "managed_candidate_review", key: "modelId" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision$/, method: "POST", action: "record_managed_candidate_review", key: "modelId", wrap: "review" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision-history$/, method: "GET", action: "managed_candidate_review_history", key: "modelId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/reject$/, method: "POST", action: "reject_model", key: "modelId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/bind$/, method: "POST", action: "bind_model", key: "modelId" },
     { pattern: /^\/v1\/training\/bindings\/([^/]+)\/rollback$/, method: "POST", action: "rollback_model_binding", key: "bindingId" },
@@ -276,6 +279,8 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
       [item.key]: decodeURIComponent(match[1]!),
       ...(item.assignmentKey ? { [item.assignmentKey]: decodeURIComponent(match[2]!) } : {}),
       ...(item.action === "model_comparison_attempt_evidence" ? { kind: requestUrl.searchParams.get("kind") } : {}),
+      ...(item.action === "managed_candidate_review" ? { refresh: requestUrl.searchParams.get("refresh") === "true" } : {}),
+      ...(item.action === "managed_candidate_review_history" ? { decisionId: requestUrl.searchParams.get("decisionId"), decisionHash: requestUrl.searchParams.get("decisionHash") } : {}),
       ...(item.action === "run_detail" ? { includeEvaluation: requestUrl.searchParams.get("evaluation") !== "false" } : {}),
       ...(item.action === "managed_evaluation_tasks" ? { cursor: requestUrl.searchParams.get("cursor") ?? undefined, limit: requestUrl.searchParams.has("limit") ? Number(requestUrl.searchParams.get("limit")) : undefined } : {}),
     };

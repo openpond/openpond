@@ -1,3 +1,4 @@
+import { createManagedCandidateReviewService } from "./managed-candidate-review.js";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -111,6 +112,7 @@ export function createTrainingService(deps: {
     storeDir: deps.storeDir,
     resolveApprovalActor: deps.resolveApprovalActor,
   });
+  const candidateReviews = createManagedCandidateReviewService({ store: deps.store, storeDir: deps.storeDir, resolveAccess: deps.resolveManagedTrainingAccess });
   const modelBindings = createTrainingModelBindingService({
     store: deps.store,
     deactivateManagedBinding: deps.deactivateManagedBinding,
@@ -720,6 +722,7 @@ export function createTrainingService(deps: {
     cancelJob,
     refreshManagedRunEvidence,
     managedEvaluationTasks,
+    candidateReviews,
     createPreferenceCalibrationBatch: (request: unknown) => portableAdapters.createCalibrationBatch(request),
     preferenceCalibrationBatch: (jobId: string) => portableAdapters.calibrationBatch(jobId),
     close,

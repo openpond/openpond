@@ -55,6 +55,7 @@ export function TrainingModelPromotion({
     return <div className="training-run-placeholder">Promotion is available after a verified artifact is imported.</div>;
   }
   const model = lineage;
+  const managedReview = state?.jobs.some(job => job.id === model.jobId && job.destinationId === "openpond_managed");
   const promotionGate = resolveModelBindingPromotionGate(model);
 
   const busy = Boolean(training.busyAction);
@@ -133,13 +134,14 @@ export function TrainingModelPromotion({
           <button
             className="training-button danger"
             type="button"
-            disabled={busy || lineage.status === "rejected" || bindingIsCurrent}
+            disabled={busy || managedReview || lineage.status === "rejected" || bindingIsCurrent}
             onClick={() => setPending("reject")}
           >
             Reject
           </button>
         </div>
       </div>
+      {managedReview ? <p className="training-promotion-note">Record this candidate’s acceptance or rejection from its Version’s Evaluation tab.</p> : null}
       {!promotionGate ? (
         <p className="training-promotion-note">
           {evaluationIncomplete

@@ -14,6 +14,7 @@ import {
   TrainingRolloutReceipts,
 } from "../training/TrainingModelEvidence";
 import { TrainingRunEvaluation } from "../training/TrainingRunEvaluation";
+import { ManagedCandidateReview } from "../training/ManagedCandidateReview";
 import { ManagedTrainingEvaluationResults } from "../training/ManagedTrainingEvaluationResults";
 import { TrainingRunMetrics } from "../training/TrainingRunMetrics";
 import {
@@ -606,6 +607,7 @@ export function LabModelVersionDetailPage({
                   ))}
                 </dl>
               ) : null}
+              {selectedVersion && selectedJob?.destinationId === "openpond_managed" ? <ManagedCandidateReview key={selectedVersion.lineage.id} connection={connection} lineageId={selectedVersion.lineage.id} onSaved={training.refresh} /> : null}
               {selectedJob && managedEvidence?.evaluations.length ? (
                 <ManagedTrainingEvaluationResults key={selectedJob.id} connection={connection} jobId={selectedJob.id} evaluations={managedEvidence.evaluations} />
               ) : null}

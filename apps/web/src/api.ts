@@ -1,4 +1,4 @@
-import type { TrainingEvaluationTaskPage } from "openpond-sdk/training";
+import type { TrainingEvaluationTaskPage, TrainingCandidateDecision, TrainingCandidateDecisionRequest } from "openpond-sdk/training";
 import type {
   Approval,
   AppPreferences,
@@ -704,6 +704,9 @@ export const api = {
         options.includeEvaluation === false ? "false" : "true"
       }`
     ),
+  candidateReview: (connection: ClientConnection, modelId: string, refresh = false) => apiFetch<ManagedCandidateReview | null>(connection, `/v1/training/models/${encodeURIComponent(modelId)}/candidate-decision?refresh=${refresh}`),
+  recordCandidateReview: (connection: ClientConnection, modelId: string, review: TrainingCandidateDecisionRequest) => apiFetch<ManagedCandidateReview>(connection, `/v1/training/models/${encodeURIComponent(modelId)}/candidate-decision`, { method: "POST", body: JSON.stringify(review) }),
+  candidateReviewHistory: (connection: ClientConnection, modelId: string, decision: { id: string; contentHash: string }) => apiFetch<TrainingCandidateDecision>(connection, `/v1/training/models/${encodeURIComponent(modelId)}/candidate-decision-history?decisionId=${encodeURIComponent(decision.id)}&decisionHash=${decision.contentHash}`),
   trainingEvaluationTasks: async (
     connection: ClientConnection,
     jobId: string,
@@ -1640,3 +1643,5 @@ function usageSearchParams(input: {
   if (input.model) params.set("model", input.model);
   return params;
 }
+
+export type ManagedCandidateReview = { target: Pick<TrainingCandidateDecisionRequest, "teamId" | "jobId" | "artifact" | "evaluation" | "executionReceipt">; decision: TrainingCandidateDecision | null; syncedAt: string };
