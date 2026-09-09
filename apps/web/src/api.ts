@@ -1,4 +1,4 @@
-import { parseAndVerifyTrainingEvaluationTaskPage, type TrainingEvaluationTaskPage } from "openpond-sdk/training";
+import type { TrainingEvaluationTaskPage } from "openpond-sdk/training";
 import type {
   Approval,
   AppPreferences,
@@ -712,10 +712,9 @@ export const api = {
   ): Promise<TrainingEvaluationTaskPage> => {
     const query = new URLSearchParams({ limit: "25" });
     if (cursor) query.set("cursor", cursor);
-    const page = await apiFetch<unknown>(connection,
+    return apiFetch<TrainingEvaluationTaskPage>(connection,
       `/v1/training/jobs/${encodeURIComponent(jobId)}/evaluations/${encodeURIComponent(evaluation.id)}/tasks?${query}`,
     );
-    return parseAndVerifyTrainingEvaluationTaskPage(page, { jobId, evaluation, offset: Number(cursor ?? 0) });
   },
   trainingRequest: <T>(
     connection: ClientConnection,

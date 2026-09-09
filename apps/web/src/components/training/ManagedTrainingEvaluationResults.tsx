@@ -24,7 +24,7 @@ export function ManagedTrainingEvaluationResults({
       className="training-run-evaluation"
       aria-label="Retained evaluation answers"
     >
-      <label className="training-promotion-reason">
+      <label className="training-taskset-selector">
         <span>Evaluation answers</span>
         <select
           value={selected.reference.id}
@@ -113,44 +113,27 @@ function EvaluationPage({
             {page.total}. Recorded outputs and scores are saved locally for this
             run.
           </p>
-          <div className="training-table-wrap">
-            <table className="training-data-table training-evaluation-table">
-              <thead>
-                <tr>
-                  <th>Test example</th>
-                  <th>Recorded score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.tasks.map((task, index) => (
-                  <tr key={task.taskId}>
-                    <td>
-                      <details>
-                        <summary>Example {page.offset + index + 1}</summary>
-                        <div className="training-evaluation-output">
-                          <div>
-                            <span>Instruction</span>
-                            <pre>{task.input.instruction}</pre>
-                          </div>
-                          <div>
-                            <span>Context</span>
-                            <pre>
-                              {JSON.stringify(task.input.context, null, 2)}
-                            </pre>
-                          </div>
-                          <div>
-                            <span>Recorded output</span>
-                            <pre>{task.output}</pre>
-                          </div>
-                        </div>
-                      </details>
-                    </td>
-                    <td>{task.score.toFixed(3)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {page.tasks.map((task, index) => (
+            <details key={task.taskId} className="training-evidence">
+              <summary>Example {page.offset + index + 1} · score {task.score.toFixed(3)}</summary>
+              <div className="training-evaluation-output">
+                <div>
+                  <span>Instruction</span>
+                  <pre>{task.input.instruction}</pre>
+                </div>
+                <div>
+                  <span>Context</span>
+                  <pre>
+                    {JSON.stringify(task.input.context, null, 2)}
+                  </pre>
+                </div>
+                <div>
+                  <span>Recorded output</span>
+                  <pre>{task.output}</pre>
+                </div>
+              </div>
+            </details>
+          ))}
         </>
       ) : null}
       <div className="training-dialog-actions">
