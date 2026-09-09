@@ -14,6 +14,7 @@ import {
   TrainingRolloutReceipts,
 } from "../training/TrainingModelEvidence";
 import { TrainingRunEvaluation } from "../training/TrainingRunEvaluation";
+import { ManagedTrainingEvaluationResults } from "../training/ManagedTrainingEvaluationResults";
 import { TrainingRunMetrics } from "../training/TrainingRunMetrics";
 import {
   destinationLabel,
@@ -577,17 +578,13 @@ export function LabModelVersionDetailPage({
           ) : null}
           {activeDetailTab === "evaluation" ? (
             <div className="training-run-evaluation">
-              {!detail.detail?.evaluation && managedEvidence?.evaluations.length ? (
-                <p className="training-muted">
-                  Hosted evaluation scores are shown below. Per-task outputs have not been imported.
-                </p>
-              ) : (
+              {!managedEvidence?.evaluations.length || detail.detail?.evaluation ? (
                 <TrainingRunEvaluation
                   detail={detail.detail}
                   loading={detail.loading}
                   pending={runActive}
                 />
-              )}
+              ) : null}
               {!detail.detail?.evaluation &&
               managedEvidence?.evaluations.length ? (
                 <dl className="labs-inline-facts">
@@ -608,6 +605,9 @@ export function LabModelVersionDetailPage({
                     </Fragment>
                   ))}
                 </dl>
+              ) : null}
+              {selectedJob && managedEvidence?.evaluations.length ? (
+                <ManagedTrainingEvaluationResults key={selectedJob.id} connection={connection} jobId={selectedJob.id} evaluations={managedEvidence.evaluations} />
               ) : null}
               {selectedEvaluationArtifactId ? (
                 <button

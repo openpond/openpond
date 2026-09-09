@@ -7,11 +7,11 @@ import {
   canonicalSha256,
 } from "./protocol.js";
 
-const IdSchema = z.string().trim().min(1).max(500);
-const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
+const IdSchema = /* @__PURE__ */ (() => z.string().trim().min(1).max(500))();
+const HashSchema = /* @__PURE__ */ (() => z.string().regex(/^[a-f0-9]{64}$/))();
 
 /** Reviewer-facing evidence only: never a worker response or training sample. */
-export const TrainingEvaluationTaskResultSchema = z.object({
+export const TrainingEvaluationTaskResultSchema = /* @__PURE__ */ (() => z.object({
   taskId: IdSchema,
   taskSha256: HashSchema,
   resultSha256: HashSchema,
@@ -26,10 +26,10 @@ export const TrainingEvaluationTaskResultSchema = z.object({
     kind: z.enum(["worker_command", "hosted_trace", "local_trace"]),
     id: IdSchema,
   }).strict(),
-}).strict();
+}).strict())();
 
 /** Supplements an existing evaluation; does not replace its terminal receipt. */
-export const TrainingEvaluationTaskPageSchema = z.object({
+export const TrainingEvaluationTaskPageSchema = /* @__PURE__ */ (() => z.object({
   schemaVersion: z.literal("openpond.trainingEvaluationTaskPage.v1"),
   jobId: IdSchema,
   teamId: IdSchema,
@@ -52,7 +52,7 @@ export const TrainingEvaluationTaskPageSchema = z.object({
   if (new Set(page.tasks.map((task) => task.taskId)).size !== page.tasks.length) {
     context.addIssue({ code: "custom", path: ["tasks"], message: "Evaluation task identities must be unique." });
   }
-});
+}))();
 
 export type TrainingEvaluationTaskResult = z.infer<typeof TrainingEvaluationTaskResultSchema>;
 export type TrainingEvaluationTaskPage = z.infer<typeof TrainingEvaluationTaskPageSchema>;

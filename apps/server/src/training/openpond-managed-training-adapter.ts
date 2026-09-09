@@ -59,6 +59,7 @@ import { resolveManagedValidationTaskSource } from "./managed-training-validatio
 import { resolveManagedTasksetReward } from "./taskset-reward-binding.js";
 import { managedTrainingGradingSource } from "./openpond-managed-training-grading.js";
 import { assertManagedTrainingEvaluationReceipt, resolvePreparedManagedTrainingEvaluationSource } from "./managed-training-evaluation-source.js";
+import { readManagedTrainingEvaluationTasksForRun } from "./managed-training-evaluation-results.js";
 export { continuationResumeFrom };
 const ADAPTER_ID = "sandbox-managed-rl";
 const REMOTE_TRAINING_EVENT_SEQUENCE_BASE = 1_000_000;
@@ -746,7 +747,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     );
     if (
       terminal
-      && snapshot.schemaVersion === "openpond.managedEvidenceSnapshot.v4"
+      && snapshot.schemaVersion === "openpond.managedEvidenceSnapshot.v5"
       && snapshot.syncedJobUpdatedAt === localJob?.updatedAt
     ) {
       return;
@@ -826,7 +827,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           ...(terminal
             ? {
                 managedEvidenceSnapshot: {
-            schemaVersion: "openpond.managedEvidenceSnapshot.v4",
+            schemaVersion: "openpond.managedEvidenceSnapshot.v5",
                   syncedJobUpdatedAt: refreshedJob.updatedAt,
                   eventCount: events.length,
                   syncedAt,
@@ -836,6 +837,12 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         },
       });
     }
+  }
+
+  async evaluationTasks(ref: TrainingExecutionRef, evaluationId: string, options: { cursor?: string; limit?: number } = {}) {
+    return readManagedTrainingEvaluationTasksForRun({ ...this.dependencies, ref, evaluationId, options,
+      fetchPage: async (evaluation, pageOptions) => this.trainingClient(await this.resolveBoundAccess(ref.tenantId)).evaluationTasks(ref.runId, evaluation, pageOptions),
+    });
   }
 
   async logs(ref: TrainingExecutionRef, cursor?: string) {

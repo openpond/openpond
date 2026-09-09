@@ -1,3 +1,4 @@
+import type { TrainingEvaluationTaskPage } from "openpond-sdk/training";
 import type {
   Approval,
   AppPreferences,
@@ -703,6 +704,18 @@ export const api = {
         options.includeEvaluation === false ? "false" : "true"
       }`
     ),
+  trainingEvaluationTasks: async (
+    connection: ClientConnection,
+    jobId: string,
+    evaluation: { id: string; contentHash: string },
+    cursor?: string,
+  ): Promise<TrainingEvaluationTaskPage> => {
+    const query = new URLSearchParams({ limit: "25" });
+    if (cursor) query.set("cursor", cursor);
+    return apiFetch<TrainingEvaluationTaskPage>(connection,
+      `/v1/training/jobs/${encodeURIComponent(jobId)}/evaluations/${encodeURIComponent(evaluation.id)}/tasks?${query}`,
+    );
+  },
   trainingRequest: <T>(
     connection: ClientConnection,
     path: string,

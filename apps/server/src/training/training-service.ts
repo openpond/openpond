@@ -674,6 +674,12 @@ export function createTrainingService(deps: {
     ]);
   }
 
+  async function managedEvaluationTasks(jobId: string, evaluationId: string, options: { cursor?: string; limit?: number } = {}) {
+    const job = await deps.store.getTrainingJob(jobId);
+    if (!job || job.destinationId !== "openpond_managed") throw new Error("Managed training job not found.");
+    return portableAdapters.managedEvaluationTasks(job, evaluationId, options);
+  }
+
   return {
     registry,
     portableAdapters,
@@ -713,6 +719,7 @@ export function createTrainingService(deps: {
     setModelPinned,
     cancelJob,
     refreshManagedRunEvidence,
+    managedEvaluationTasks,
     createPreferenceCalibrationBatch: (request: unknown) => portableAdapters.createCalibrationBatch(request),
     preferenceCalibrationBatch: (jobId: string) => portableAdapters.calibrationBatch(jobId),
     close,

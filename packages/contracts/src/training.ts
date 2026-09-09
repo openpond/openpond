@@ -786,6 +786,7 @@ export const ManagedTrainingRunEvidenceSchema = z.object({
   }),
   evaluations: z.array(
     z.object({
+      reference: z.object({ id: IdSchema, contentHash: HashSchema }).nullable().optional(),
       kind: z.enum(["baseline", "candidate"]),
       policyVersion: z.number().int().nonnegative(),
       taskCount: z.number().int().nonnegative().nullable().optional(),

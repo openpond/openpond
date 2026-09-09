@@ -24,8 +24,8 @@ describe("managed training evidence projection", () => {
       ] as never,
       outputs: {
         outputs: [
-          { kind: "evaluation", metadata: { kind: "baseline", policyVersion: 0, score: 1, threshold: 0, passed: true, metrics: { taskCount: 1 } } },
-          { kind: "evaluation", metadata: { kind: "candidate", policyVersion: 1, score: 0.8, threshold: 0, passed: true, metrics: { taskCount: 20, targetTaskCount: 20 } } },
+          { id: "baseline", contentHash: "a".repeat(64), kind: "evaluation", metadata: { kind: "baseline", policyVersion: 0, score: 1, threshold: 0, passed: true, metrics: { taskCount: 1 } } },
+          { id: "candidate", contentHash: "b".repeat(64), kind: "evaluation", metadata: { kind: "candidate", policyVersion: 1, score: 0.8, threshold: 0, passed: true, metrics: { taskCount: 20, targetTaskCount: 20 } } },
         ],
         receipt: { spendUsd: 1.25, durationSeconds: 90 },
       } as never,
@@ -46,8 +46,8 @@ describe("managed training evidence projection", () => {
       resource: { durationSeconds: 90, gpuSeconds: 180 },
       movement: { adapterDeltaNorm: 0.125 },
       evaluations: [
-        { kind: "baseline", taskCount: 1, targetTaskCount: null },
-        { kind: "candidate", taskCount: 20, targetTaskCount: 20 },
+        { reference: { id: "baseline", contentHash: "a".repeat(64) }, kind: "baseline", taskCount: 1, targetTaskCount: null },
+        { reference: { id: "candidate", contentHash: "b".repeat(64) }, kind: "candidate", taskCount: 20, targetTaskCount: 20 },
       ],
     });
   });
