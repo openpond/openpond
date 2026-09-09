@@ -45,15 +45,16 @@ export async function runHostedLearningReview(client: OpenPondLearningClient, po
       }
     }
     if (request.action === "list") {
-      const { kind, parentId, afterId, limit, status } = request;
+      const { action: _action, scope: _scope, kind, ...query } = request;
+      const { parentId } = query;
       if (kind === "evidence" && parentId === sourceId) {
-        const page = await client.list(kind, { parentId, afterId, limit, status });
+        const page = await client.list(kind, query);
         // Preserve the server cursor while limiting the view to the pinned source release.
         return { ...page, items: page.items.filter(item => sameLearningRef(item.source, sourceRef) && sameLearningRef(item.submission.taskDefinition, policy.taskDefinition)) };
       }
       if ((kind === "grade" || kind === "decision" || kind === "feedback") && parentId) {
         await evidence(parentId);
-        const page = await client.list(kind, { parentId, afterId, limit, status });
+        const page = await client.list(kind, query);
         if (page.items.some(item => item.evidence?.id !== parentId)) return deny();
         return page;
       }

@@ -29,7 +29,7 @@ export function createHostedModelLearningApi(connection: ClientConnection, model
       return SourcesSchema.parse(await api.trainingRequest<unknown>(connection, `${path}/sources?${new URLSearchParams({ profileId, ...(afterId ? { afterId } : {}) })}`, undefined, "GET"));
     },
     async overview(query: { policyId?: string; afterId?: string } = {}) {
-      const params = new URLSearchParams({ profileId, ...query });
+      const params = new URLSearchParams({ profileId, ...(query.policyId ? { policyId: query.policyId } : {}), ...(query.afterId ? { afterId: query.afterId } : {}) });
       return OverviewSchema.parse(await api.trainingRequest<unknown>(connection, `${path}?${params}`, undefined, "GET"));
     },
     async command(command: LearningCommand) {

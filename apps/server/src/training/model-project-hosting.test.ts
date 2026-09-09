@@ -47,7 +47,9 @@ describe("Model Project hosting", () => {
     const project = { id: "hosted", teamId: "team", portableProjectId: "model", name: "Model", objective: null, defaultBaseModel: null,
       defaultDestinationId: null, trainingSetup: emptyTrainingSetup(), sourceRevision: 1, sourceUpdatedAt: "2026-09-01T00:00:00.000Z",
       revision: 1, etag: "b".repeat(64), createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z" };
-    const request = vi.fn(async () => Response.json({ project, resources: [], jobCount: 0, latestJobIds: [] }));
+    const request = vi.fn(async (url: string | URL | Request) => Response.json(String(url).endsWith("/read")
+      ? { items: [], nextCursor: null }
+      : { project, resources: [], jobCount: 0, latestJobIds: [] }));
     const service = createModelLearningHostingService({ store: { getModelProject: async () => local } as never,
       resolveAccess: async () => ({ apiBaseUrl: "https://host.invalid", teamId: "team", token: "test" }), fetch: request });
     await expect(service.overview({ modelId: "model", profileId: "other" })).rejects.toThrow("this Profile");
@@ -57,6 +59,9 @@ describe("Model Project hosting", () => {
     await expect(service.overview({ modelId: "model", profileId: "profile" })).rejects.toThrow("active connection");
     expect(request).not.toHaveBeenCalled();
     local.hosted.apiOrigin = "https://host.invalid";
+    // First-page reads must reach the real SDK transport without undefined JSON fields.
+    expect((await service.overview({ modelId: "model", profileId: "profile" })).policies.items).toEqual([]);
+    expect((await service.sources({ modelId: "model", profileId: "profile" })).sources.items).toEqual([]);
     const policy = { id: "policy", revision: 1, contentHash: "a".repeat(64), modelProjectId: "foreign", executionOwner: "hosted" };
     const get = vi.spyOn(OpenPondLearningClient.prototype, "get").mockImplementation(async (kind) =>
       (kind === "iteration" ? { policy: { id: "policy", revision: 1, contentHash: policy.contentHash } } : policy) as never);

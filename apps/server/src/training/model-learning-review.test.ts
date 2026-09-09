@@ -10,7 +10,8 @@ describe("hosted Model review boundary", () => {
     const definition = { id: "definition", revision: 1, contentHash: "b".repeat(64) };
     const evidence = { id: "evidence", revision: 1, contentHash: "c".repeat(64), source: learningRef(source), submission: { sourceId: source.id, taskDefinition: definition } };
     const policy = { sources: [learningRef(source)], taskDefinition: definition } as LearningPolicy;
-    const client = new OpenPondLearningClient({ baseUrl: "https://test.invalid", apiKey: "test", scope: "team" });
+    const transport = vi.fn(async () => Response.json({ items: [], nextCursor: null }));
+    const client = new OpenPondLearningClient({ baseUrl: "https://test.invalid", apiKey: "test", scope: "team", fetch: transport });
     const get = vi.spyOn(client, "get").mockImplementation(async (kind, id) => {
       if (kind === "source") return source as never;
       if (kind === "grade") return { evidence: { ...learningRef(evidence), id: "foreign" } } as never;
@@ -27,6 +28,11 @@ describe("hosted Model review boundary", () => {
     await expect(runHostedLearningReview(client, policy, "source", "commands", request)).rejects.toMatchObject({ status: 403 });
     expect(command).not.toHaveBeenCalled();
     evidence.source = learningRef(source);
+    // First-page review reads must survive strict JSON validation in the real SDK.
+    for (const kind of ["evidence", "grade", "decision", "feedback"]) {
+      await expect(runHostedLearningReview(client, policy, "source", "read", { scope: "team", action: "list", kind, parentId: kind === "evidence" ? "source" : "evidence", limit: 30 })).resolves.toEqual({ items: [], nextCursor: null });
+    }
+    expect(transport).toHaveBeenCalledTimes(4);
     await runHostedLearningReview(client, policy, "source", "commands", request);
     expect(command).toHaveBeenCalledExactlyOnceWith(request.command);
   });

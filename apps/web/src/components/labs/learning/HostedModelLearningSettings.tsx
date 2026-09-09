@@ -72,7 +72,7 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
     } finally { active.current = false; setBusy(false); }
   }
   const guard = useDraftNavigation({ name: "learning settings", dirty, busy, save });
-  return <><AppDialog ariaLabel="Continual learning settings" className="labs-rename-dialog learning-workspace" backdropClassName="labs-rename-backdrop" dismissDisabled={busy} onClose={() => { void guard.requestLeave(onClose); }}>
+  return <><AppDialog ariaLabel="Continual learning settings" className="labs-rename-dialog learning-workspace hosted-learning-settings" backdropClassName="labs-rename-backdrop" dismissDisabled={busy} onClose={() => { void guard.requestLeave(onClose); }}>
     <h2>Continual learning settings</h2><p>Train {project.name} from approved tasks. Acceptance and serving remain separate decisions.</p>
     <LearningError error={error ?? catalogError} />
     <form onSubmit={async event => { event.preventDefault(); if (await save()) { guard.allowNextNavigation(); onClose(); } }}>

@@ -3,6 +3,14 @@ import { createHostedModelLearningApi } from "./model-learning-api";
 
 afterEach(() => vi.unstubAllGlobals());
 
+test("omits unselected policy and pagination values from hosted overview requests", async () => {
+  const request = vi.fn(async () => Response.json({ error: "unavailable" }, { status: 503 }));
+  vi.stubGlobal("fetch", request);
+  const api = createHostedModelLearningApi({ serverUrl: "http://localhost:17881", token: "local-session", platform: "web" }, "model", "profile");
+  await expect(api.overview({ policyId: undefined, afterId: undefined })).rejects.toThrow();
+  expect((request.mock.calls[0] as unknown as [string])[0]).toBe("http://localhost:17881/v1/training/models/model/hosted-learning?profileId=profile");
+});
+
 // The shared review UI must use the hosted Model relay, never the local Profile
 // learning namespace or a hosted credential exposed to the renderer.
 test("routes SDK review reads through the selected Model, policy and source", async () => {

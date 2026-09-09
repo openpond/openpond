@@ -41,14 +41,14 @@ export function createModelLearningHostingService(input: {
     },
     async sources(value: Scope & { afterId?: string }) {
       const { client } = await scoped(value);
-      const sources = await client.list("source", { limit: 30, afterId: value.afterId });
+      const sources = await client.list("source", { limit: 30, ...(value.afterId ? { afterId: value.afterId } : {}) });
       const refs = [...new Map(sources.items.map(source => [JSON.stringify(source.taskDefinition), source.taskDefinition])).values()];
       const definitions = await Promise.all(refs.map(ref => client.get("definition", ref.id, ref.revision)));
       return { sources, definitions };
     },
     async overview(value: Scope & { policyId?: string; afterId?: string }) {
       const { client, project } = await scoped(value);
-      const policies = await client.list("policy", { parentId: project.portableProjectId, limit: 30, afterId: value.afterId });
+      const policies = await client.list("policy", { parentId: project.portableProjectId, limit: 30, ...(value.afterId ? { afterId: value.afterId } : {}) });
       if (policies.items.some(policy => policy.modelProjectId !== project.portableProjectId)) throw new Error("Learning policies differ from the selected Model.");
       const selectedId = value.policyId ?? (policies.items.length === 1 ? policies.items[0]!.id : null);
       if (!selectedId) return { project, policies, policy: null, inspection: null, schedule: null, iteration: null, dispatch: null };
