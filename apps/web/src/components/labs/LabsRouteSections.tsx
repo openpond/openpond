@@ -386,7 +386,8 @@ export function ModelsTable({
                             ? "Update"
                             : "Pull"}
                       </button>
-                    ) : item ? (
+                    ) : null}
+                    {item && (current || !pullable) ? (
                       <button
                         className="training-button secondary labs-compact-button labs-workproduct-use"
                         disabled={!current}

@@ -315,6 +315,16 @@ export function LabModelVersionsPage({
     );
   }
 
+  async function rollbackCurrent() {
+    if (readOnly || !currentBinding?.rollbackTargetBindingId) return;
+    if (!window.confirm(`Restore the previous default Version for ${workproduct.name}?`)) return;
+    const result = await training.actions.rollbackModelBinding(currentBinding.id);
+    onToast(
+      result ? "The previous default Version has been restored." : "The default Version could not be restored.",
+      result ? "success" : "error"
+    );
+  }
+
   async function togglePinned(versionId: string, pinned: boolean) {
     if (readOnly) return;
     const result = await training.actions.setModelPinned(versionId, pinned);
@@ -398,7 +408,7 @@ export function LabModelVersionsPage({
                   <td>
                     <VersionStatusBadge job={version.job} version={version} />
                   </td>
-                  <td>{trainingMethodLabel(version.plan?.recipe.method)}</td>
+                  <td>{trainingMethodLabel(version.plan?.recipe.method ?? hostedTrainingMethod(version.job))}</td>
                   <td>
                     {version.taskset ? (
                       <button
@@ -459,6 +469,19 @@ export function LabModelVersionsPage({
                           }}
                         >
                           Set as default
+                        </button>
+                      ) : null}
+                      {version.current && currentBinding?.rollbackTargetBindingId ? (
+                        <button
+                          className="training-button secondary"
+                          disabled={readOnly}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void rollbackCurrent();
+                          }}
+                        >
+                          Roll back
                         </button>
                       ) : null}
                       <button

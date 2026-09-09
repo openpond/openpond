@@ -42,10 +42,11 @@ export function createManagedAdapterChatRuntime(dependencies: {
     const version = versions.find(
       (candidate) => candidate.artifactLineageId === lineage.id,
     );
+    const artifact = version ? null : await dependencies.store.getTrainingArtifact(lineage.artifactId);
     return {
       binding,
       projection: lineage.managedServing,
-      baseModelId: version?.baseModel.modelId ?? lineage.modelId,
+      baseModelId: version?.baseModel.modelId ?? artifact?.baseModelId ?? lineage.modelId,
     };
   }
 

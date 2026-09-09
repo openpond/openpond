@@ -51,6 +51,19 @@ export function buildTrainingModelChatHandoff({
   };
 }
 
+/** Ordinary chat only needs the selected Version; hosted Taskset files stay remote. */
+export function buildHostedTrainingModelChatHandoff(input: {
+  modelId: string;
+  tasksetId: string;
+  modelName: string;
+}): TrainingModelChatHandoff {
+  return {
+    model: { providerId: "openpond", modelId: input.modelId },
+    tasksetId: input.tasksetId, tasksetName: input.modelName,
+    taskRuntime: null, sourceProjectId: null, tasks: [], selectedTaskIndex: 0, sessionId: null,
+  };
+}
+
 export function selectedTrainingModelChatTask(
   handoff: TrainingModelChatHandoff | null,
 ): TrainingModelChatTask | null {

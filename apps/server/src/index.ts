@@ -196,6 +196,7 @@ import { createManagedAdapterRegistryClient } from "./training/managed-adapter-r
 import { resolveHostedApiAccess, resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
 import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
 import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
+import { createManagedAdapterHostedChatStream } from "./training/managed-adapter-chat-stream.js";
 import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
 import {
   listManagedAdapterProviderModels,
@@ -717,6 +718,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     store,
     client: managedAdapterRegistryClient,
   });
+  const streamSelectedOpenPondChatTurn = createManagedAdapterHostedChatStream({
+    managed: managedAdapterChatRuntime,
+    hosted: streamOpenPondHostedChatTurn,
+  });
   managedAdapterSyncService.start();
   const trainingChatSearchService = createTrainingChatSearchService({ store });
   const datasetImportService = createDatasetImportService({
@@ -1108,7 +1113,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
           yield { finishReason: delta.finishReason, raw: delta.raw };
       }
     },
-    streamOpenPondHostedChatTurn,
+    streamOpenPondHostedChatTurn: streamSelectedOpenPondChatTurn,
     subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
     maxHostedWorkspaceToolRounds,
@@ -1259,7 +1264,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     }
   }
 
-  const runRecordedManualHostedContextCompaction = createManualCompactionRecorder({ home: storeDir, safeUpsertModelUsageRecord, streamOpenPondHostedChatTurn, localByokRuntimeState, providerSecretPaths });
+  const runRecordedManualHostedContextCompaction = createManualCompactionRecorder({ home: storeDir, safeUpsertModelUsageRecord, streamOpenPondHostedChatTurn: streamSelectedOpenPondChatTurn, localByokRuntimeState, providerSecretPaths });
 
   async function compactSession(
     sessionId: string,

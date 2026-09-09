@@ -32,6 +32,7 @@ import { hostedModelProjectTrainingSetup } from "./model-project-hosted-projecti
 import { publishModelHarnessSource, type ReleasedTrainingHarnessResolver } from "./model-harness-source-hosting.js";
 import { createModelLearningHostingService } from "./model-learning-hosting.js";
 import { createModelTasksetRunHostingService } from "./model-taskset-run-hosting.js";
+import { importHostedModelArtifacts } from "./hosted-model-artifact-import.js";
 import {
   canReplaceFromHosted,
   errorMessage,
@@ -365,7 +366,9 @@ export function createModelProjectHostingService(input: {
     );
     const pendingDetails = jobs.flatMap((job, index) => {
       const existing = existingJobs[index];
-      return existing?.metadata.hostedMetricsImportedForUpdatedAt === job.updatedAt
+      const artifactsPending = job.state === "completed" && job.canonicalAdapterArtifactId
+        && existing?.metadata.hostedServingArtifactsImportedForUpdatedAt !== job.updatedAt;
+      return existing?.metadata.hostedMetricsImportedForUpdatedAt === job.updatedAt && !artifactsPending
         ? []
         : [job];
     });
@@ -386,7 +389,7 @@ export function createModelProjectHostingService(input: {
       importedMetricCount += events.filter(
         (event) => event.type === "metric",
       ).length;
-      await input.store.saveTrainingJob(hostedTrainingJob(
+      const importedJob = await input.store.saveTrainingJob(hostedTrainingJob(
         project,
         hostedJob,
         access,
@@ -395,6 +398,10 @@ export function createModelProjectHostingService(input: {
       ));
       for (const event of events) {
         await input.store.saveTrainingJobEvent(event);
+      }
+      if (importedJob.status === "succeeded" && hostedJob.canonicalAdapterArtifactId) {
+        await importHostedModelArtifacts({ store: input.store, project, job: importedJob,
+          submission: hostedJob.publicSubmission, access, fetch: fetchImpl });
       }
     }
     return importedMetricCount;

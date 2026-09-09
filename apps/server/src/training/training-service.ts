@@ -119,6 +119,7 @@ export function createTrainingService(deps: {
   const hostedCandidateReviews = createHostedRunCandidateReviewService({ store: deps.store, resolveAccess: deps.resolveManagedTrainingAccess });
   const modelBindings = createTrainingModelBindingService({
     store: deps.store,
+    resolveManagedTrainingAccess: deps.resolveManagedTrainingAccess,
     deactivateManagedBinding: deps.deactivateManagedBinding,
     reactivateManagedBinding: deps.reactivateManagedBinding,
     activateManagedBinding: deps.activateManagedBinding,
