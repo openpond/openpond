@@ -544,6 +544,8 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       throw new Error("The managed Model Project is no longer available.");
     }
     const access = await this.resolveBoundAccess();
+    const selectedSource = files.find(file => file.path === "harness/source-package.json");
+    if (selectedSource) await this.trainingClient(access).publishHarnessSource(JSON.parse(Buffer.from(selectedSource.content, "base64").toString("utf8")));
     project = await this.syncProjectForSubmission(project, access);
     if (
       !project?.hosted ||
