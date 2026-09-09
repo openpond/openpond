@@ -108,3 +108,15 @@ Reward, combined Reward and task-format editors save incomplete work separately 
 Send `save_draft` with a stable `operationId`, the draft input and its `expectedRevision` (zero for a new draft). Retry the identical command after an uncertain response. Distinct edits against the same revision conflict rather than overwriting each other. List with `client.list("draft", { parentId: "reward", status: "draft", limit: 20 })`; the other target kinds are `definition` and `binding`.
 
 A draft's target and exact base release remain fixed. To publish, include `finalizeDraft: { draft: learningRef(savedDraft), targetKind: savedDraft.targetKind, release: learningRef(publishedRelease) }` in the `publish` or `publish_resources` command. The release and the draft's published status commit in one transaction; stale draft finalization rolls back publication. Archive unfinished work with `archive_draft` and its exact draft reference. Archived and published drafts cannot accept further edits.
+
+### Reviewed Work batches
+
+Task Definitions can pin `requiredOutputs` using the same output contracts as
+Taskset rows. Evidence grading and batch sealing include those outputs in the
+task hash. `prepareReviewedLearningBatch` preserves the Work environment,
+released tools, output contracts and private Reward binding. Supply exact input
+bytes in `assetBytes`, keyed by immutable asset ID; missing or changed bytes fail
+preparation. The returned `tasksetAssetBytes` map uses task-scoped paths and is
+passed to `buildTasksetTrainingBundle` or materialized beside the local Taskset.
+Input content participates in the existing privacy scan. File state is reset and
+cleaned up between attempts; a Work environment may hold state during an attempt.

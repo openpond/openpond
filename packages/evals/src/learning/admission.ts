@@ -87,6 +87,7 @@ export function taskRecordFromEvidence(evidence: TaskEvidence, definition: TaskD
     policyVisibleContext: { instructions: definition.instructions },
     privilegedContextRef: evidence.submission.evaluatorContext === null ? null : `task-evidence:${evidence.contentHash}`,
     artifactRefs: evidence.submission.assets, tags: [definition.category],
+    ...(definition.requiredOutputs ? { requiredOutputs: definition.requiredOutputs } : {}),
   });
 }
 

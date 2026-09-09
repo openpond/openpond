@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ImmutableAssetRefSchema, ImmutableReleaseRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash } from "@openpond/harness";
 
 import { RewardBindingSchema, RewardCompositionSchema, RewardReleaseRefSchema, RewardReleaseSchema } from "../rewards.js";
-import { TaskSplitSchema, TasksetReleaseContentSchema } from "../tasksets.js";
+import { TaskRecordSchema, TaskSplitSchema, TasksetReleaseContentSchema } from "../tasksets.js";
 import { assertBoundedTaskJson, validateTaskSchema } from "../task-schema.js";
 
 export const LearningJsonObjectSchema = z.record(z.string(), z.json());
@@ -21,6 +21,7 @@ export const TaskDefinitionContentSchema = z.object({
   familyNamespace: ReleaseIdSchema,
   inputSchema: z.record(z.string(), z.unknown()),
   outputSchema: z.record(z.string(), z.unknown()),
+  requiredOutputs: TaskRecordSchema.shape.requiredOutputs,
   rewardBinding: LearningRevisionRefSchema,
   harness: ImmutableReleaseRefSchema.nullable(),
   execution: TasksetReleaseContentSchema.pick({ policy: true, environment: true, environmentRelease: true, tools: true, capabilities: true, verifierSetRelease: true }).strict(),

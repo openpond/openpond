@@ -120,6 +120,7 @@ export function validateModelTasksetPackage(value: unknown): ModelTasksetPackage
     verifyLearningTextAsset(asset, reference);
   }
   for (const task of taskset.tasks) {
+    if (taskDefinition.requiredOutputs && !same(task.requiredOutputs, taskDefinition.requiredOutputs)) throw new Error(`Taskset outputs differ from its reviewed definition: ${task.id}.`);
     if (task.policyVisibleContext.instructions !== taskDefinition.instructions || !validateTaskValue(taskDefinition.inputSchema, task.input).valid ||
         (task.expectedOutput !== null && !validateTaskValue(taskDefinition.outputSchema, task.expectedOutput).valid)) throw new Error(`Taskset task differs from its declared format: ${task.id}.`);
     if (task.privilegedContextRef && !assets.some(asset => asset.id === task.privilegedContextRef && asset.asset.visibility === "host_private")) throw new Error(`Taskset private context is missing: ${task.id}.`);
