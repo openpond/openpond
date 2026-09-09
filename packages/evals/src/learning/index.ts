@@ -16,3 +16,6 @@ export * from "./iteration-reservation-contracts.js";
 export * from "./iteration-dispatch-contracts.js";
 export * from "./iteration-dispatch-worker.js";
 export * from "./iteration-candidate-decision.js";
+export * from "./schedule-contracts.js";
+export * from "./schedule-service.js";
+export * from "./schedule-worker.js";

@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "id": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "revision": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "scheduleId": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "policy": {
+      "$ref": "#/$defs/__schema3"
+    },
+    "scheduledAt": {
+      "$ref": "#/$defs/__schema5"
+    },
+    "coalescedThroughAt": {
+      "$ref": "#/$defs/__schema5"
+    },
+    "coalescedCount": {
+      "$ref": "#/$defs/__schema6"
+    },
+    "outcome": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "reason": {
+      "$ref": "#/$defs/__schema8"
+    },
+    "iteration": {
+      "$ref": "#/$defs/__schema9"
+    },
+    "createdAt": {
+      "$ref": "#/$defs/__schema5"
+    },
+    "contentHash": {
+      "$ref": "#/$defs/__schema4"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "revision",
+    "scheduleId",
+    "policy",
+    "scheduledAt",
+    "coalescedThroughAt",
+    "coalescedCount",
+    "outcome",
+    "reason",
+    "iteration",
+    "createdAt",
+    "contentHash"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "const": "openpond.learningScheduleFire.v1"
+    },
+    "__schema1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "__schema2": {
+      "type": "number",
+      "const": 1
+    },
+    "__schema3": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "contentHash",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "__schema4": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "__schema5": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "__schema6": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema7": {
+      "type": "string",
+      "enum": [
+        "reserved",
+        "waiting_for_data",
+        "waiting_for_review",
+        "skipped"
+      ]
+    },
+    "__schema8": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "active_iteration",
+            "cooldown",
+            "daily_budget"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema9": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "$id": "urn:openpond:learning:v1:schedule_fire",
+  "$comment": "Generated from @openpond/evals. Cross-resource identity, authorization, idempotency, admission, grading and split constraints are enforced by the shared domain service in addition to this structural schema."
+}

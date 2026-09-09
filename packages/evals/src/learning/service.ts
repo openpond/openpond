@@ -1,6 +1,7 @@
 import { cancelLearningIterationReservation } from "./iteration-reservation-cancellation.js";
 import { commandLearningIterationDispatch } from "./iteration-dispatch-commands.js";
 import { reserveLearningIteration } from "./iteration-reservation-service.js";
+import { synchronizeLearningSchedule } from "./schedule-service.js";
 import { requireCurrentLearningEvidence as currentEvidence, sealLearningBatch } from "./batch-service.js";
 import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft } from "./authoring-service.js";
 import { queueRewardCheck, cancelRewardCheck } from "./reward-check-service.js";
@@ -125,6 +126,7 @@ export function createLearningService(repository: LearningRepository, options: {
       }
     }
     await transaction.put(input.kind, resource as LearningResourceFor<typeof input.kind>, input.expectedRevision, input.kind === "policy" ? { parentId: input.content.modelProjectId } : undefined);
+    if (input.kind === "policy") await synchronizeLearningSchedule(transaction, LearningPolicySchema.parse(resource), now());
     return pointer(input.kind, resource);
   }
 
@@ -308,6 +310,9 @@ function authorizeRead(context: LearningServiceContext): void {
 }
 function authorize(context: LearningServiceContext, input: LearningCommand): void {
   if (!context.scope.trim() || !context.actor.id.trim()) throw new LearningDomainError("learning_scope_required", 400);
+  const publications = input.action === "publish" ? [input] : input.action === "publish_resources" ? input.resources : [];
+  if (context.actor.role !== "reviewer" && publications.some(value => value.kind === "policy" && value.content.enabled
+    && value.content.automation.train && value.content.trigger.kind === "schedule")) throw new LearningDomainError("learning_review_not_authorized", 403);
   if (context.actor.role === "source") {
     const sourceId = input.action === "submit_example" ? input.example.sourceId : input.action === "submit_feedback" ? input.feedback.sourceId : null;
     if (!sourceId || sourceId !== context.actor.sourceId) throw new LearningDomainError("learning_source_not_authorized", 403);

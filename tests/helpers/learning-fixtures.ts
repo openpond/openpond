@@ -8,8 +8,8 @@ import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/reward
 export const learningContext = { scope: "profile-a", actor: { id: "reviewer-a", role: "reviewer" as const } };
 export const learningNow = "2026-09-06T12:00:00.000Z";
 
-export async function learningFixture(repository: LearningRepository, options: { verifierSource?: string } = {}) {
-  const service = createLearningService(repository, { now: () => learningNow });
+export async function learningFixture(repository: LearningRepository, options: { verifierSource?: string; now?: () => string } = {}) {
+  const service = createLearningService(repository, { now: options.now ?? (() => learningNow) });
   let serial = 0;
   const command = (input: Record<string, unknown>) => service.command(learningContext, { operationId: `operation-${++serial}`, ...input });
   const verifier = options.verifierSource ? createLearningTextAsset({ text: options.verifierSource, path: "reward/verify.js", mediaType: "text/javascript", visibility: "host_private" }) : undefined;
