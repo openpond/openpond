@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
 import {
-  createLearningIterationWorker, createLearningService, LearningIterationSchema,
+  createLearningIterationWorker, createLearningService, LearningIterationSchema, reconcileLearningCandidateDecision,
   type LearningIterationExecutor, type LearningIterationExecutionContext, type LearningIterationObservation,
 } from "@openpond/evals/learning";
 import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
@@ -56,6 +56,35 @@ function provider() {
 }
 
 describe("durable iteration dispatch", () => {
+  // Reviews can arrive twice or out of order after another iteration starts.
+  // Reconciliation must retain exact evidence and never release that newer chain.
+  test("reconciles candidate decisions monotonically without clearing a newer iteration", async () => withTempDirectory("iteration-review-", async home => {
+    const store = new SqliteLearningStore(home);
+    try {
+      const f = await fixture(store); const p = provider();
+      const repository = store.learningRepository();
+      const worker = createLearningIterationWorker(repository, p.executor, { workerId: "review-worker", executionOwner: "hosted", now: f.now });
+      await worker.run(learningContext.scope, f.iteration.id);
+      p.complete(); f.advance(); await worker.run(learningContext.scope, f.iteration.id);
+      const observation = { scope: learningContext.scope, iterationId: f.iteration.id,
+        decision: { ...ref("decision-one"), revision: 1 }, outcome: "accepted" as const,
+        execution: ref("provider-job"), candidate: ref("candidate"), evaluation: ref("retained-evaluation"), receipt: ref("terminal-receipt") };
+      await expect(reconcileLearningCandidateDecision(repository, { ...observation, candidate: ref("other-candidate") })).rejects.toThrow("learning_candidate_decision_evidence_mismatch");
+      const accepted = await reconcileLearningCandidateDecision(repository, observation, { now: f.now });
+      expect(accepted).toMatchObject({ status: "accepted", candidateDecision: observation.decision });
+      expect((await f.service.list(learningContext, "chain")).items[0]?.activeIterationId).toBeNull();
+      expect(await reconcileLearningCandidateDecision(repository, observation)).toEqual(accepted);
+      await expect(reconcileLearningCandidateDecision(repository, { ...observation, outcome: "rejected" })).rejects.toThrow("learning_candidate_decision_revision_conflict");
+      const chain = (await f.service.list(learningContext, "chain")).items[0]!;
+      await repository.transaction(learningContext.scope, tx => tx.put("chain", { ...chain, revision: chain.revision + 1, activeIterationId: "newer-iteration", latestIterationId: "newer-iteration" }, chain.revision));
+      const rejected = await reconcileLearningCandidateDecision(repository, { ...observation, outcome: "rejected", decision: { ...ref("decision-two"), revision: 2 } }, { now: f.now });
+      expect(rejected.status).toBe("rejected");
+      expect(await reconcileLearningCandidateDecision(repository, observation)).toEqual(rejected);
+      expect((await f.service.list(learningContext, "chain")).items[0]?.activeIterationId).toBe("newer-iteration");
+      expect((await f.service.get(learningContext, "reservation", f.iteration.id)).budget).toMatchObject({ reservedSpendUsd: 0, settledSpendUsd: 0.5 });
+    } finally { await store.close(); }
+  }));
+
   // A provider can commit a Job before its reply is lost. Restart must recover
   // that Job and its exact request without rebuilding inputs or consuming again.
   test("recovers an ambiguous submission after reopening and settles only the terminal receipt", async () => withTempDirectory("iteration-dispatch-", async home => {
