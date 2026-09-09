@@ -1,4 +1,4 @@
-import { ApiRequestError } from "../../../api/api-client";
+import { executeHostedLearningCommand } from "../../../api/hosted-learning-command";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ModelProject } from "@openpond/contracts";
 import { learningRef, type LearningCommand } from "openpond-sdk/learning";
@@ -41,10 +41,11 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
   async function run(command: LearningCommand) {
     if (active.current) return;
     active.current = true; setBusy(true); setMutationError(null);
-    pending.current ??= command;
-    try { await client.command(pending.current); pending.current = null; setRevision(value => value + 1); }
+    try {
+      await executeHostedLearningCommand(client, pending, command, policy?.id);
+      setRevision(value => value + 1);
+    }
     catch (failure) {
-      if (failure instanceof ApiRequestError && failure.status >= 400 && failure.status < 500 && ![408, 429].includes(failure.status)) pending.current = null;
       setMutationError(failure instanceof Error ? failure.message : "Unable to update hosted learning.");
     }
     finally { active.current = false; setBusy(false); }
