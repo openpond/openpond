@@ -682,6 +682,7 @@ export function createTrainingService(deps: {
     prepareModelRun,
     startModelRun: portableModelRuns.start,
     modelRunStatus: portableModelRuns.status,
+    retryModelRunCollection: portableModelRuns.retryCollection,
     modelRunEvents: portableModelRuns.events,
     modelRunLogs: portableModelRuns.logs,
     modelRunArtifacts: portableModelRuns.artifacts,

@@ -231,9 +231,18 @@ export async function reconcilePortableModelRunLifecycle(input: {
   status: TrainingExecutionStatus;
   artifacts?: TrainingArtifacts | null;
   failure?: string | null;
+  retryArtifactCollection?: boolean;
 }): Promise<ModelRun> {
   const current = await requiredModelRun(input.store, input.modelRunId);
-  if (isTerminal(current.status)) return current;
+  const retryCollection = input.retryArtifactCollection === true
+    && current.status === "failed"
+    && input.job.metadata.phase === "artifact_collection_failed"
+    && input.status.state === "succeeded"
+    && input.artifacts;
+  if (isTerminal(current.status) && !retryCollection) return current;
+  const recoveryMetadata = retryCollection ? { artifactCollectionRecovery: {
+    previousFailure: input.job.error, recoveredAt: new Date().toISOString(),
+  } } : {};
   if (!isTerminal(input.status.state)) {
     const updated = await input.store.saveModelRun({
       ...current,
@@ -382,6 +391,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
         completedAt,
         updatedAt: completedAt,
       }),
+      retryCollection ? { recoverCollectionForJobId: input.job.id } : undefined,
     );
     await saveLifecycleJob(input, {
       status: "succeeded",
@@ -396,6 +406,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
         noLearningSignal: true,
         modelVersionId: current.modelVersionId,
         unchangedBaseModelVersionId: baseVersion.id,
+        ...recoveryMetadata,
       },
     });
     return terminal;
@@ -509,6 +520,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
       completedAt,
       updatedAt: completedAt,
     }),
+    retryCollection ? { recoverCollectionForJobId: input.job.id } : undefined,
   );
   await saveLifecycleJob(input, {
     status: "succeeded",
@@ -521,6 +533,7 @@ export async function reconcilePortableModelRunLifecycle(input: {
       phase: "complete",
       portableArtifactCount: persistedArtifacts.length,
       importedModelLineageId: lineage.id,
+      ...recoveryMetadata,
       adapterArtifactId: weights.id,
       adapterArtifactLineageId: lineage.id,
       modelVersionId: reservation.id,

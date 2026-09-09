@@ -8,6 +8,7 @@ export type ModelRunControlAction =
   | "model_run_logs"
   | "model_run_artifacts"
   | "cancel_model_run"
+  | "retry_model_run_collection"
   | "resume_model_run";
 
 const MODEL_RUN_CONTROL_ACTIONS = new Set<string>([
@@ -16,6 +17,7 @@ const MODEL_RUN_CONTROL_ACTIONS = new Set<string>([
   "model_run_logs",
   "model_run_artifacts",
   "cancel_model_run",
+  "retry_model_run_collection",
   "resume_model_run",
 ]);
 
@@ -33,6 +35,7 @@ export async function handleModelRunControl(input: {
     modelRunLogs(id: string): Promise<unknown> | unknown;
     modelRunArtifacts(id: string): Promise<unknown> | unknown;
     cancelModelRun(id: string): Promise<unknown> | unknown;
+    retryModelRunCollection(id: string): Promise<unknown> | unknown;
   };
   harnessRefinerBenchmarks?: {
     cancel(id: string): Promise<unknown> | unknown;
@@ -47,6 +50,10 @@ export async function handleModelRunControl(input: {
   if (input.action === "model_run_logs") return input.training.modelRunLogs(modelRunId);
   if (input.action === "model_run_artifacts") return input.training.modelRunArtifacts(modelRunId);
   const run = await input.loadRun(modelRunId);
+  if (input.action === "retry_model_run_collection") {
+    if (run?.kind !== "training") throw new Error("Only training runs can retry artifact collection.");
+    return input.training.retryModelRunCollection(modelRunId);
+  }
   if (input.action === "model_run_status") {
     return run?.kind === "evaluation"
       ? evaluationModelRunStatus(run)

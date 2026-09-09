@@ -8,6 +8,7 @@ const ACTIVE_RUN_STATUSES = new Set([
   "starting",
   "running",
   "reconciling",
+  "cancelling",
 ]);
 
 export function isActiveRunStatus(status: string): boolean {
@@ -21,6 +22,9 @@ export function resolveRunStatus({
   job: Pick<TrainingJob, "status"> | null;
   lifecycleRun: Pick<ModelRun, "status"> | null;
 }): string {
+  if (lifecycleRun?.status === "running" && (job?.status === "cancelling" || job?.status === "reconciling")) {
+    return job.status;
+  }
   return lifecycleRun?.status ?? job?.status ?? "not_run";
 }
 

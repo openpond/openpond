@@ -99,7 +99,7 @@ export function LabModelVersionDetailPage({
   onOpenConversation: (conversationId: string) => void;
 }) {
   const state = training.payload;
-  const [cancellation, setCancellation] = useState<{ runId: string; message: string } | null>(null);
+  const [runAction, setRunAction] = useState<{ runId: string; message: string } | null>(null);
   const jobs = useMemo(
     () => labModelJobs(workproduct, runs, state),
     [runs, state, workproduct]
@@ -239,6 +239,8 @@ export function LabModelVersionDetailPage({
     job: detail.detail?.job ?? selectedJob,
   });
   const runActive = isActiveRunStatus(currentRunStatus);
+  const collectionFailed = selectedLifecycleRun?.status === "failed"
+    && selectedJob?.metadata.phase === "artifact_collection_failed";
   const isGrpo = selectedMethod === "grpo";
   const rolloutProgress = managedRolloutProgress(selectedJob?.metadata);
   const optimizerStepsTarget =
@@ -342,20 +344,35 @@ export function LabModelVersionDetailPage({
         actions={runActive && (selectedLifecycleRun || selectedJob) ? (
           <button
             type="button"
-            className="secondary-button"
-            disabled={training.busyAction !== null}
+            className="training-button secondary"
+            disabled={training.busyAction !== null || currentRunStatus === "cancelling"}
             onClick={async () => {
               const runId = selectedLifecycleRun?.id ?? selectedJob!.id;
               const result = selectedLifecycleRun
                 ? await training.actions.cancelModelRun(selectedLifecycleRun.id)
                 : await training.actions.cancelJob(selectedJob!.id);
-              setCancellation({ runId, message: result
+              setRunAction({ runId, message: result
                 ? "Cancellation requested. Waiting for the training service to confirm."
                 : "Cancellation could not be requested. Try again." });
             }}
           >
-            {training.busyAction === "cancel-model-run" || training.busyAction === "cancel-job"
-              ? "Requesting cancellation…" : "Cancel run"}
+            {currentRunStatus === "cancelling" ? "Cancelling…"
+              : training.busyAction === "cancel-model-run" || training.busyAction === "cancel-job"
+                ? "Requesting cancellation…" : "Cancel run"}
+          </button>
+        ) : collectionFailed && selectedLifecycleRun ? (
+          <button
+            type="button"
+            className="training-button secondary"
+            disabled={training.busyAction !== null}
+            onClick={async () => {
+              const result = await training.actions.retryModelRunCollection(selectedLifecycleRun.id);
+              setRunAction({ runId: selectedLifecycleRun.id, message: result?.state === "succeeded"
+                ? "Outputs collected from the completed training job."
+                : "Collection failed. The training job and its outputs are retained." });
+            }}
+          >
+            {training.busyAction === "retry-model-run-collection" ? "Collecting…" : "Retry collection"}
           </button>
         ) : undefined}
         metrics={[
@@ -379,8 +396,8 @@ export function LabModelVersionDetailPage({
           },
         ]}
       />
-      {runActive && cancellation && cancellation.runId === (selectedLifecycleRun?.id ?? selectedJob?.id)
-        ? <p role="status">{cancellation.message}</p> : null}
+      {runAction && runAction.runId === (selectedLifecycleRun?.id ?? selectedJob?.id)
+        ? <p role="status">{runAction.message}</p> : null}
 
       <section className="labs-run-detail-tabs">
         <div

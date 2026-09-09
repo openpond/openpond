@@ -13,6 +13,7 @@ import type {
   TrainingBundleManifest,
   TrainingPreparedStart,
   TrainingPreparationPlan,
+  TrainingExecutionStatus,
   TrainingPlan,
   TrainingSourceRef,
   TrainingSourceEstimate,
@@ -869,6 +870,11 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     }>("start-prepared-training", "/start/prepared", body),
     startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; environmentPlacement?: "local" | "remote"; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
     cancelJob: (jobId: string) => mutate("cancel-job", `/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
+    retryModelRunCollection: (modelRunId: string) => mutate<TrainingExecutionStatus>(
+      "retry-model-run-collection",
+      `/model-runs/${encodeURIComponent(modelRunId)}/retry-collection`,
+      {},
+    ),
     cancelModelRun: (modelRunId: string) => mutate(
       "cancel-model-run",
       `/model-runs/${encodeURIComponent(modelRunId)}/cancel`,

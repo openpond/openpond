@@ -19,7 +19,10 @@ import {
   RewardModelRunSchema,
   RewardModelVersionSchema,
   RolloutTrajectoryReceiptSchema,
+  TrainingJobSchema,
 } from "@openpond/contracts";
+import { isArtifactCollectionRecoveryTransition, isCheckpointResumeTransition } from "./model-run-recovery-transitions.js";
+export { isCheckpointResumeTransition } from "./model-run-recovery-transitions.js";
 import type { PayloadRow } from "../types.js";
 import { SqliteLearningStore } from "./store-learning.js";
 
@@ -503,9 +506,20 @@ export class SqliteTrainingModelStore extends SqliteLearningStore {
     );
   }
 
-  async saveModelRun(runInput: ModelRun): Promise<ModelRun> {
+  async saveModelRun(runInput: ModelRun, options: { recoverCollectionForJobId?: string } = {}): Promise<ModelRun> {
     const modelRun = ModelRunSchema.parse(runInput);
     const existing = await this.getModelRun(modelRun.id);
+    if (existing && JSON.stringify(existing) === JSON.stringify(modelRun)) return existing;
+    let collectionRecovery = false;
+    if (options.recoverCollectionForJobId) {
+      const job = await this.getParsedPayload(
+        "SELECT payload FROM training_jobs WHERE id = ?",
+        [options.recoverCollectionForJobId],
+        TrainingJobSchema.parse,
+      );
+      collectionRecovery = Boolean(existing && job && isArtifactCollectionRecoveryTransition(existing, modelRun, job));
+      if (!collectionRecovery) throw new Error("Model Run collection recovery must preserve the failed Job's execution and lineage.");
+    }
     if (
       existing
       && (
@@ -524,6 +538,7 @@ export class SqliteTrainingModelStore extends SqliteLearningStore {
       && ["succeeded", "failed", "cancelled"].includes(existing.status)
       && JSON.stringify(existing) !== JSON.stringify(modelRun)
       && !isCheckpointResumeTransition(existing, modelRun)
+      && !collectionRecovery
     ) {
       throw new Error(`Terminal Model Run ${modelRun.id} is immutable.`);
     }
@@ -934,55 +949,4 @@ function validEntryRetryEvolution(
     : current.priorRunAttempts;
   return next.attemptOrdinal === current.attemptOrdinal + (hasAttempt ? 1 : 0)
     && JSON.stringify(next.priorRunAttempts) === JSON.stringify(expectedAttempts);
-}
-
-export function isCheckpointResumeTransition(
-  existing: ModelRun,
-  candidate: ModelRun,
-): boolean {
-  if (
-    existing.kind !== "evaluation"
-    || !["failed", "cancelled"].includes(existing.status)
-    || candidate.status !== "running"
-    || candidate.receipt !== null
-    || candidate.failure !== null
-    || candidate.completedAt !== null
-    || !existing.evaluation
-  ) {
-    return false;
-  }
-  const completedAdaptationAttempts = existing.evaluation.attemptPlan
-    .filter((item) => item.stage === "baseline" || item.stage === "adaptation")
-    .reduce((total, item) => total + item.attemptCount, 0);
-  const completedAllAttempts = existing.evaluation.attemptPlan.reduce(
-    (total, item) => total + item.attemptCount,
-    0,
-  );
-  const candidateAdaptationPlan = existing.evaluation.attemptPlan.find(
-    (item) => item.stage === "candidate_adaptation",
-  );
-  const completedCandidateAdaptationAttempts = completedAdaptationAttempts
-    + (candidateAdaptationPlan?.attemptCount ?? 0);
-  const checkpointIsDurable =
-    (existing.evaluationProgress?.stage === "refiner"
-      && existing.evaluationProgress.completedAttempts === completedAdaptationAttempts)
-    || (existing.evaluationProgress?.stage === "candidate_adaptation"
-      && existing.evaluationProgress.completedAttempts >= completedAdaptationAttempts
-      && existing.evaluationProgress.completedAttempts
-        <= completedCandidateAdaptationAttempts)
-    || (["candidate_adaptation", "candidate", "comparison"].includes(
-      existing.evaluationProgress?.stage ?? "",
-    )
-      && existing.evaluationProgress?.completedAttempts === completedAllAttempts);
-  if (!checkpointIsDurable || !existing.evaluationProgress?.accounting) {
-    return false;
-  }
-  return JSON.stringify({
-    ...existing,
-    status: "running",
-    receipt: null,
-    failure: null,
-    completedAt: null,
-    updatedAt: candidate.updatedAt,
-  }) === JSON.stringify(candidate);
 }
