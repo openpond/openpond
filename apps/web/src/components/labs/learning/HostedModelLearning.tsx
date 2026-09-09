@@ -69,8 +69,10 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
         <div className="labs-overview-decision-card" key={label}><small>{label}</small><strong>{count ?? "—"}</strong></div>)}</div>
       <p>{policy.trigger.kind === "schedule" ? `Checks every ${policy.trigger.intervalSeconds / 60} minutes` : "Manual training"}. At least {policy.admission.minimumApprovedExamples} approved new tasks are required.</p>
       {value?.schedule?.nextRunAt ? <p>Next check: {new Date(value.schedule.nextRunAt).toLocaleString()}</p> : null}
+      {value?.schedule?.state === "blocked" ? <LearningError error={value.schedule.lastError ?? "The schedule is blocked. Review learning settings before resuming."} /> : null}
       {value?.inspection?.blockers.length ? <ul>{value.inspection.blockers.map(item => <li key={item.code}>{item.message}</li>)}</ul> : null}
       {value?.iteration ? <p>Latest iteration: {value.iteration.status.replaceAll("_", " ")} · {value.iteration.id}</p> : null}
+      {value?.iteration?.failure ? <LearningError error={value.iteration.failure.message} /> : null}
       {value?.inspection ? <p>Reserved: ${value.inspection.budget.reservedSpendUsd.toFixed(4)} · Spent: ${value.inspection.budget.settledSpendUsd.toFixed(4)} · Daily limit: ${policy.limits.maxDailySpendUsd}</p> : null}
       {!readOnly ? <LearningActions>
         {policy.sources.map(source => <button key={source.id} type="button" className="training-button secondary" disabled={busy || Boolean(pending.current)} onClick={() => setReviewing({ policyId: policy.id, sourceId: source.id })}>Review {source.id}</button>)}
@@ -78,6 +80,7 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
           <button type="button" className="training-button" disabled={busy || !value?.inspection?.canReserve} onClick={() => void run({ action: "reserve_iteration", operationId: crypto.randomUUID(), policy: learningRef(policy), trigger: { kind: "manual", identity: crypto.randomUUID() } })}>Train on approved tasks</button>
           <button type="button" className="training-button secondary" disabled={busy} onClick={() => { const { contentHash: _hash, ...content } = policy; void run({ action: "publish", operationId: crypto.randomUUID(), kind: "policy", expectedRevision: policy.revision, content: { ...content, revision: policy.revision + 1, enabled: !policy.enabled } }); }}>{policy.enabled ? "Pause learning" : "Resume learning"}</button>
           {canCancel && value?.iteration ? <button type="button" className="training-button secondary" disabled={busy} onClick={() => void run({ action: "cancel_iteration", operationId: crypto.randomUUID(), iterationId: value.iteration!.id, expectedRevision: value.iteration!.revision })}>Cancel iteration</button> : null}
+          {value?.iteration && value.dispatch?.state === "blocked" ? <button type="button" className="training-button secondary" disabled={busy} onClick={() => void run({ action: "retry_iteration_dispatch", operationId: crypto.randomUUID(), iterationId: value.iteration!.id, expectedRevision: value.iteration!.revision })}>Retry iteration</button> : null}
         </>}
       </LearningActions> : null}
     </> : null}

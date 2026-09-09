@@ -8,10 +8,44 @@ import {
   parseModelProjectSaveRequest,
   HostedModelProjectSummarySchema,
 } from "../src/model-projects.js";
-import { hostedLearningPolicyReferences } from "../src/model-learning-policy.js";
+import { createHostedLearningPolicyContent, hostedLearningPolicyDefaults, hostedLearningPolicyReferences } from "../src/model-learning-policy.js";
+import { sealLearningContent } from "@openpond/evals/learning";
 
 const HASH = "a".repeat(64);
 const NOW = "2026-08-26T20:00:00.000Z";
+
+// Editing cadence must not silently follow newer Model weights, reset reviewed
+// limits or enable automatic acceptance. Both clients compile this same draft.
+it("preserves reviewed learning configuration until explicitly applied and rejects invalid admission", () => {
+  const ref = { id: "source", revision: 1, contentHash: HASH };
+  const project = HostedModelProjectSummarySchema.parse({ ...hostedProject(),
+    defaultBaseModel: { schemaVersion: "openpond.baseModelPreference.v1", modelId: "base-model", revision: "weights-one",
+      tokenizerRevision: null, chatTemplateHash: null, modelAssetId: null, source: "managed" },
+    trainingSetup: { ...hostedProject().trainingSetup, rewardBindingRef: ref,
+      evaluationTasksetRef: { id: "retained-taskset", revision: 1, contentHash: HASH } },
+  });
+  const initial = { project, previous: null, policyId: "policy", applyModelConfiguration: true,
+    sources: [ref], taskDefinition: ref, settings: hostedLearningPolicyDefaults(project, null) };
+  const previous = sealLearningContent(createHostedLearningPolicyContent(initial));
+  expect(previous.enabled).toBe(false);
+  expect(previous.admission.mode).toBe("human");
+  const changed = { ...project, etag: "b".repeat(64), trainingSetup: { ...project.trainingSetup,
+    baseModel: { ...project.defaultBaseModel!, revision: "weights-two" },
+    evaluationTasksetRef: { id: "new-retained", revision: 2, contentHash: "b".repeat(64) } } };
+  const draft = { ...initial, project: changed, previous, applyModelConfiguration: false,
+    settings: { ...hostedLearningPolicyDefaults(changed, previous), scheduled: true } };
+  const preserved = createHostedLearningPolicyContent(draft);
+  expect(preserved.trainingParent).toEqual(previous.trainingParent);
+  expect(preserved.training).toEqual(previous.training);
+  expect(preserved.limits).toEqual(previous.limits);
+  expect(preserved.automation).toEqual({ collect: false, train: true, accept: false, serve: false });
+  const applied = createHostedLearningPolicyContent({ ...draft, applyModelConfiguration: true });
+  expect(applied.trainingParent).not.toEqual(previous.trainingParent);
+  expect(applied.training.retentionEvaluation.id).toBe("new-retained");
+  expect(() => createHostedLearningPolicyContent({ ...draft, project: { ...changed, portableProjectId: "another-model" } })).toThrow("learning_policy_model_mismatch");
+  expect(() => createHostedLearningPolicyContent({ ...draft, settings: { ...draft.settings, humanReviewRequired: false } })).toThrow("qualification evidence");
+  expect(() => createHostedLearningPolicyContent({ ...draft, settings: { ...draft.settings, maxDailySpendUsd: 0.01 } })).toThrow("Daily spend");
+});
 
 // UI and execution-owner snapshots must pin the same reviewed configuration;
 // changing a Model's base revision or Harness selection cannot reuse its plan.

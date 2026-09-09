@@ -73,7 +73,7 @@ export function createModelLearningHostingService(input: {
         const policy = await ownedPolicy(client, project.portableProjectId, command.policy.id, command.policy.revision);
         if (policy.contentHash !== command.policy.contentHash) throw new Error("The selected policy revision changed.");
         if (command.trigger.kind !== "manual") throw new Error("Desktop can request only manual training; hosted timers own scheduled triggers.");
-      } else if (command.action === "cancel_iteration") {
+      } else if (command.action === "cancel_iteration" || command.action === "retry_iteration_dispatch") {
         const iteration = await client.get("iteration", command.iterationId);
         await ownedPolicy(client, project.portableProjectId, iteration.policy.id, iteration.policy.revision);
       } else throw new Error("Unsupported hosted Model learning operation.");
