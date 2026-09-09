@@ -131,3 +131,28 @@ Published fixtures live in `fixtures/training/v2`. Providers should:
 
 The package's `check` command validates schemas, fixtures, canonical hashes,
 the built entry points, and a clean npm-style consumer install.
+
+### Candidate review decisions
+
+`training.recordCandidateDecision(request)` records an explicit `accepted` or
+`rejected` review of one immutable adapter output. The request pins the team,
+Job, adapter, retained candidate evaluation and terminal execution receipt, plus
+a nonempty reason and idempotency key. `expectedDecision: null` means no prior
+review; a later review supplies the prior decision's `{ id, contentHash }`.
+The service must serialize this comparison with the write. The same idempotency
+key and payload returns the same record; conflicting payloads or a stale prior
+decision fail with a conflict rather than overwriting history.
+
+`training.candidateDecision({ teamId, jobId, artifact })` reads the latest review
+or null. Pass `{ decision: { id, contentHash } }` as the second argument to read
+a specific historical entry, and follow `request.expectedDecision` to traverse
+older reviews. Each result includes the authenticated actor, timestamp, revision
+and content hash. The SDK verifies the requested owner/artifact and, for writes,
+the entire submitted review. Hashes detect content changes; authorization comes
+from the authenticated hosted resource, not a detached signature.
+
+The endpoints are `GET` and `POST`
+`/v1/training/jobs/:job/candidates/:artifact/decision`; historical GET uses
+`?decisionId=...`. These contracts require candidate-decision service support.
+Acceptance and rejection retain the original training/evaluation receipts. They
+do not launch inference, change a serving binding, or bypass serving eligibility.
