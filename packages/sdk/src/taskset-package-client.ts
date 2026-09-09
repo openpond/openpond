@@ -12,7 +12,7 @@ const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const TasksetPackageModelConfigurationSchema = HostedModelProjectSyncSchema.pick({
   portableProjectId: true, name: true, objective: true, defaultBaseModel: true, defaultDestinationId: true,
   sourceRevision: true, sourceUpdatedAt: true,
-}).extend({ trainingSetup: HostedModelProjectTrainingSetupSchema.omit({ tasksetRef: true, rewardBindingRef: true, tasksetRelease: true, recipe: true }) }).strict();
+}).extend({ trainingSetup: HostedModelProjectTrainingSetupSchema.omit({ tasksetRef: true, rewardBindingRef: true, tasksetRelease: true }) }).strict();
 export const TasksetPackagePublicationSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetPackagePublication.v1"),
   operationId: IdSchema, modelProjectId: IdSchema, expectedProjectEtag: HashSchema.nullable(),
@@ -20,8 +20,13 @@ export const TasksetPackagePublicationSchema = z.object({
   buildIntent: z.enum(["demonstrations", "preferences", "verifiable_reward", "rubric", "discovery"]),
   methodHint: z.enum(["sft", "dpo", "grpo", "ppo"]).nullable(), package: TasksetPackageSchema,
   modelConfiguration: TasksetPackageModelConfigurationSchema.optional(),
+  evaluationPackage: TasksetPackageSchema.optional(),
   selection: z.enum(["select", "attach"]).optional(),
-}).strict().refine(value => value.selection !== "attach" || value.modelConfiguration === undefined, "Attachment-only publication cannot replace Model configuration.");
+}).strict().refine(value => value.selection !== "attach" || value.modelConfiguration === undefined, "Attachment-only publication cannot replace Model configuration.")
+  .refine(value => !value.evaluationPackage || (value.modelConfiguration !== undefined
+    && value.modelConfiguration.trainingSetup.evaluationTasksetRef != null
+    && contentHash(value.modelConfiguration.trainingSetup.evaluationTasksetRef) === contentHash(learningRef(value.evaluationPackage.taskset))),
+  "Evaluation package must match the selected immutable evaluation in Model configuration.");
 export const TasksetPackageReceiptSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetPackageReceipt.v1"),
   teamId: IdSchema, modelProjectId: IdSchema, operationId: IdSchema,
@@ -29,6 +34,7 @@ export const TasksetPackageReceiptSchema = z.object({
   hostedTasksetId: IdSchema, projectEtag: HashSchema,
   project: HostedModelProjectSummarySchema.optional(),
   selection: z.enum(["select", "attach"]).optional(),
+  evaluation: z.object({ taskset: TasksetCatalogReleaseRefSchema, packageHash: HashSchema, hostedTasksetId: IdSchema }).strict().optional(),
 }).strict();
 export const TasksetPackageReadbackSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetPackageReadback.v1"),
@@ -55,6 +61,7 @@ export class OpenPondTasksetPackageClient {
   async publish(input: TasksetPackagePublication, options: { signal?: AbortSignal } = {}): Promise<TasksetPackageReceipt> {
     const request = TasksetPackagePublicationSchema.parse(input);
     validateTasksetPackage(request.package);
+    if (request.evaluationPackage) validateTasksetPackage(request.evaluationPackage);
     const receipt = TasksetPackageReceiptSchema.parse(await this.#request("", "POST", request, options.signal));
     const release = request.package.taskset;
     if (receipt.teamId !== this.#options.teamId || receipt.modelProjectId !== request.modelProjectId || receipt.operationId !== request.operationId
@@ -62,6 +69,11 @@ export class OpenPondTasksetPackageClient {
       throw new OpenPondTasksetPackageError(502, "package_receipt_mismatch", "Taskset publication receipt did not match the requested package and owner.");
     }
     if (request.selection !== undefined && receipt.selection !== request.selection) throw new OpenPondTasksetPackageError(502, "package_receipt_mismatch", "Taskset publication did not retain its selection mode.");
+    if (request.evaluationPackage && (!receipt.evaluation
+      || receipt.evaluation.packageHash !== request.evaluationPackage.contentHash
+      || contentHash(receipt.evaluation.taskset) !== contentHash(learningRef(request.evaluationPackage.taskset)))) {
+      throw new OpenPondTasksetPackageError(502, "package_receipt_mismatch", "Taskset publication did not retain the complete selected evaluation package.");
+    }
     if (request.selection === "attach" && receipt.projectEtag !== request.expectedProjectEtag) throw new OpenPondTasksetPackageError(502, "package_receipt_mismatch", "Attaching a historical Taskset changed the Model configuration.");
     if (request.modelConfiguration) {
       const expected = request.modelConfiguration;
@@ -69,7 +81,7 @@ export class OpenPondTasksetPackageClient {
       const binding = tasksetPackageRewardBinding(request.package);
       const setup = HostedModelProjectTrainingSetupSchema.parse({ ...expected.trainingSetup, tasksetRef: learningRef(release),
         rewardBindingRef: binding ? learningRef(binding) : null,
-        tasksetRelease: null, recipe: null });
+        tasksetRelease: null });
       if (!project || project.teamId !== this.#options.teamId || project.etag !== receipt.projectEtag
         || ![project.id, project.portableProjectId].includes(request.modelProjectId)
         || project.portableProjectId !== expected.portableProjectId || project.name !== expected.name || project.objective !== expected.objective

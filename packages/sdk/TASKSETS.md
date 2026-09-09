@@ -245,3 +245,16 @@ Model revisions, publish/select the package, finalize the draft and retain the
 retry receipt. The client verifies response scope, revisions and file hashes;
 it never retries writes automatically. Hosts own authorization, durable storage,
 pagination, transaction isolation and idempotent recovery.
+
+### Publish a Model with retained evaluation
+
+When synchronizing a local Model, publish its complete evaluation Taskset alongside
+its training package using `evaluationPackage` and `modelConfiguration`. Set
+`modelConfiguration.trainingSetup.evaluationTasksetRef` to the evaluation package's
+portable Taskset release identity, not the local Taskset identity. The publication
+receipt includes `evaluation.taskset`, `evaluation.packageHash` and
+`evaluation.hostedTasksetId`; the SDK rejects a missing or mismatched receipt.
+
+The same configuration carries the saved recipe and limits. Publication does not
+run training or prove evaluation isolation, grader quality or training readiness.
+An attachment-only publication cannot change Model configuration.

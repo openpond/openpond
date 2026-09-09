@@ -186,3 +186,34 @@ it("requires the exact Model configuration in an atomic publication receipt", as
     await expect(client.publish(publication)).rejects.toMatchObject({ code: "package_receipt_mismatch" });
   }
 });
+
+// A Model must not report its evaluation as synchronized when only training
+// bytes were stored, or when the receipt identifies a different evaluation.
+it("binds the complete evaluation package to the selected reference and receipt", async () => {
+  const value = fixture();
+  const ref = learningRef(value.taskset);
+  const modelConfiguration = TasksetPackageModelConfigurationSchema.parse({ portableProjectId: "model-a", name: "Model", objective: null, defaultBaseModel: null, defaultDestinationId: null, trainingSetup: { evaluationTasksetRef: ref, recipe: { schemaVersion: "openpond.rftRecipe.v1", method: "grpo", parameterization: "lora", resourceLimits: { maxGpuSeconds: 1200 } } }, sourceRevision: 1, sourceUpdatedAt: "2026-09-09T00:00:00Z" });
+  const project = { ...modelConfiguration, id: "hosted-model", teamId: "team-a", revision: 1, etag: "a".repeat(64), createdAt: modelConfiguration.sourceUpdatedAt, updatedAt: modelConfiguration.sourceUpdatedAt,
+    trainingSetup: HostedModelProjectTrainingSetupSchema.parse({ ...modelConfiguration.trainingSetup, tasksetRef: ref, rewardBindingRef: null }) };
+  const expected = { taskset: ref, packageHash: value.contentHash, hostedTasksetId: "hosted-evaluation" };
+  let evaluation: unknown = expected;
+  let returnedProject: unknown = project;
+  let requests = 0;
+  const client = new OpenPondTasksetPackageClient({ baseUrl: "https://api.example.test", apiKey: "key", teamId: "team-a", fetch: async () => {
+    requests++;
+    return Response.json({ schemaVersion: "openpond.tasksetPackageReceipt.v1", teamId: "team-a", modelProjectId: "model-a", operationId: "evaluation-create", taskset: ref, packageHash: value.contentHash, hostedTasksetId: "hosted-training", projectEtag: project.etag, project: returnedProject, evaluation });
+  } });
+  const publication: TasksetPackagePublication = { schemaVersion: "openpond.tasksetPackagePublication.v1", operationId: "evaluation-create", modelProjectId: "model-a", expectedProjectEtag: null, name: "Training", description: "", buildIntent: "discovery", methodHint: null, package: value, evaluationPackage: value, modelConfiguration };
+  expect((await client.publish(publication)).evaluation).toEqual(expected);
+  for (const invalid of [undefined, { ...expected, packageHash: "b".repeat(64) }, { ...expected, taskset: { ...ref, id: "another-evaluation" } }]) {
+    evaluation = invalid;
+    await expect(client.publish(publication)).rejects.toMatchObject({ code: "package_receipt_mismatch" });
+  }
+  evaluation = expected;
+  returnedProject = { ...project, trainingSetup: { ...project.trainingSetup, recipe: null } };
+  await expect(client.publish(publication)).rejects.toMatchObject({ code: "package_receipt_mismatch" });
+  const before = requests;
+  await expect(client.publish({ ...publication, modelConfiguration: { ...modelConfiguration, trainingSetup: { ...modelConfiguration.trainingSetup, evaluationTasksetRef: { ...ref, contentHash: "c".repeat(64) } } } })).rejects.toThrow();
+  await expect(client.publish({ ...publication, modelConfiguration: undefined })).rejects.toThrow();
+  expect(requests).toBe(before);
+});
