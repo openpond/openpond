@@ -704,9 +704,9 @@ export const api = {
         options.includeEvaluation === false ? "false" : "true"
       }`
     ),
-  candidateReview: (connection: ClientConnection, modelId: string, refresh = false) => apiFetch<ManagedCandidateReview | null>(connection, `/v1/training/models/${encodeURIComponent(modelId)}/candidate-decision?refresh=${refresh}`),
-  recordCandidateReview: (connection: ClientConnection, modelId: string, review: TrainingCandidateDecisionRequest) => apiFetch<ManagedCandidateReview>(connection, `/v1/training/models/${encodeURIComponent(modelId)}/candidate-decision`, { method: "POST", body: JSON.stringify(review) }),
-  candidateReviewHistory: (connection: ClientConnection, modelId: string, decision: { id: string; contentHash: string }) => apiFetch<TrainingCandidateDecision>(connection, `/v1/training/models/${encodeURIComponent(modelId)}/candidate-decision-history?decisionId=${encodeURIComponent(decision.id)}&decisionHash=${decision.contentHash}`),
+  candidateReview: (connection: ClientConnection, id: string, refresh = false, scope: "models" | "jobs" = "models") => apiFetch<ManagedCandidateReview | null>(connection, `/v1/training/${scope}/${encodeURIComponent(id)}/candidate-decision?refresh=${refresh}`),
+  recordCandidateReview: (connection: ClientConnection, id: string, review: TrainingCandidateDecisionRequest, scope: "models" | "jobs" = "models") => apiFetch<ManagedCandidateReview>(connection, `/v1/training/${scope}/${encodeURIComponent(id)}/candidate-decision`, { method: "POST", body: JSON.stringify(review) }),
+  candidateReviewHistory: (connection: ClientConnection, id: string, decision: { id: string; contentHash: string }, scope: "models" | "jobs" = "models") => apiFetch<TrainingCandidateDecision>(connection, `/v1/training/${scope}/${encodeURIComponent(id)}/candidate-decision-history?decisionId=${encodeURIComponent(decision.id)}&decisionHash=${decision.contentHash}`),
   trainingEvaluationTasks: async (
     connection: ClientConnection,
     jobId: string,

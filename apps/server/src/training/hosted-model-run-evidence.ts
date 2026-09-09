@@ -54,5 +54,5 @@ export function createHostedModelRunEvidence(input: {
     }
     return page;
   }
-  return { refresh, evaluationTasks };
+  return { refresh, evaluationTasks, clientFor };
 }

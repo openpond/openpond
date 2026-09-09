@@ -608,6 +608,7 @@ export function LabModelVersionDetailPage({
                 </dl>
               ) : null}
               {selectedVersion && selectedJob?.destinationId === "openpond_managed" ? <ManagedCandidateReview key={selectedVersion.lineage.id} connection={connection} lineageId={selectedVersion.lineage.id} onSaved={training.refresh} /> : null}
+              {!selectedVersion && selectedJob?.metadata.source === "hosted_model_project_import" && selectedJob.status === "succeeded" ? <ManagedCandidateReview key={`candidate:${selectedJob.id}`} connection={connection} jobId={selectedJob.id} onSaved={training.refresh} /> : null}
               {selectedJob && managedEvidence?.evaluations.length ? (
                 <ManagedTrainingEvaluationResults key={selectedJob.id} connection={connection} jobId={selectedJob.id} evaluations={managedEvidence.evaluations} />
               ) : null}
