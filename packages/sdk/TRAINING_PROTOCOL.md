@@ -188,3 +188,10 @@ requests. A hosted iteration supplies its durable dispatch id as
 `idempotencyKey`; manual training retains its manifest-derived identity. The
 caller stages the returned `artifact` and creates the returned `submission`
 through the existing training client.
+
+Before approval, `withAuthoritativeRecipeHashes(taskset, recipe)` binds the
+selected Taskset and graders into the executable recipe. This is the same
+projection used by Desktop for GRPO, PPO and DPO, including GRPO optimizer
+semantics and bounded resource defaults. Validate the result with the applicable
+recipe contract, then retain that exact recipe through approval and submission.
+The shared `AdamwOptimizerConfigSchema` supplies the existing optimizer defaults.

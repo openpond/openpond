@@ -1,24 +1,12 @@
 import { z } from "zod";
+import { AdamwOptimizerConfigSchema } from "openpond-sdk/training-bundle";
+export { AdamwOptimizerConfigSchema } from "openpond-sdk/training-bundle";
 import { RewardModelRuntimeSchema } from "./model-lifecycle.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const HashSchema = z.string().trim().min(8).max(256);
 
 export const RftLossMethodSchema = z.enum(["grpo", "dapo", "gspo-token"]);
-
-export const AdamwOptimizerConfigSchema = z.object({
-  name: z.literal("adamw").default("adamw"),
-  weightDecay: z.number().nonnegative().max(1).default(0),
-  beta1: z.number().positive().lt(1).default(0.9),
-  beta2: z.number().positive().lt(1).default(0.999),
-  epsilon: z.number().positive().max(0.01).default(1e-8),
-}).strict().default({
-  name: "adamw",
-  weightDecay: 0,
-  beta1: 0.9,
-  beta2: 0.999,
-  epsilon: 1e-8,
-});
 
 export const TrainingModelRefSchema = z.object({
   id: IdSchema,
