@@ -1,12 +1,12 @@
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { z } from "zod";
-import { LearningBatchDatasetSourceRefSchema, type Taskset } from "@openpond/contracts";
-import { requireLearningRelease, requireLearningResource, learningRef } from "@openpond/evals/learning";
+import type { Taskset } from "@openpond/contracts";
+import { prepareReviewedLearningBatch } from "openpond-sdk/training-bundle";
+import { requireLearningRelease, requireLearningResource } from "@openpond/evals/learning";
 import { contentHash } from "@openpond/harness";
-import { buildTaskset, materializeLearningBatchTaskset } from "@openpond/taskset-sdk";
+import { buildTaskset } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
-import { scanAndRedactEvidence } from "./privacy.js";
 import { buildTasksetReadiness } from "./readiness.js";
 
 const PrepareLearningBatchSchema = z.object({ profileId: z.string().trim().min(1).max(240), batchId: z.string().trim().min(1).max(240) }).strict();
@@ -37,16 +37,7 @@ export async function prepareLocalLearningBatch(store: SqliteStore, storeDir: st
     if (existing.profileId !== input.profileId) throw new Error("Learning batch Taskset belongs to a different profile.");
     return ensureReadiness(existing);
   }
-  const scan = scanAndRedactEvidence(JSON.stringify({ tasks: snapshot.evidence.map((item) => item.submission), targets: snapshot.decisions.map((item) => item.approvedTarget), definition: snapshot.definition }));
-  if (scan.secretStatus !== "passed" || scan.piiStatus !== "passed") throw new Error(`Learning batch contains unresolved data findings (${scan.findings.join(", ")}). Correct the source examples and seal a revised batch before training.`);
-  const source = LearningBatchDatasetSourceRefSchema.parse({
-    schemaVersion: "openpond.learningBatchDatasetSource.v1", kind: "learning_batch", id: `batch-source-${snapshot.batch.contentHash.slice(0, 40)}`, profileId: input.profileId,
-    title: snapshot.definition.name, sourceHash: snapshot.batch.contentHash, occurredAt: snapshot.batch.sealedAt,
-    batch: learningRef(snapshot.batch), taskDefinition: snapshot.batch.taskDefinition, admittedBy: snapshot.batch.sealedBy,
-    licensingStatus: "approved", secretScanStatus: scan.secretStatus, piiScanStatus: scan.piiStatus,
-    metadata: { admission: "explicit_local_batch_review", privacyScanner: "openpond-evidence-v1", findings: scan.findings },
-  });
-  const { taskset, release, generatedFiles } = materializeLearningBatchTaskset({ ...snapshot, profileId: input.profileId, source });
+  const { taskset, release, generatedFiles } = prepareReviewedLearningBatch({ ...snapshot, profileId: input.profileId });
   const directory = path.join(storeDir, "training", "tasksets", taskset.id);
   await buildTaskset(taskset, directory, { generatedFiles });
   await writeFile(path.join(directory, "learning-taskset.release.json"), JSON.stringify(release), { encoding: "utf8", mode: 0o600 });

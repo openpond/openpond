@@ -1,5 +1,7 @@
 import { TasksetSchema, type GeneratedTaskFile } from "./taskset-authored-contracts.js";
 import type { GraderFixture, LearningSignalInventory, TasksetSourceRef } from "./taskset-draft-core.js";
+import { LearningBatchDatasetSourceRefSchema } from "./taskset-draft-dataset-sources.js";
+import { scanAndRedactEvidence } from "./training-privacy.js";
 import { compileTaskBatch, learningRef, taskBatchPackageMetadata, verifyLearningTextAsset, type LearningTextAsset, type RewardBinding, type RewardComposition, type RewardRelease, type TaskAdmissionDecision, type TaskBatch, type TaskDefinition, type TaskEvidence } from "@openpond/evals";
 import { computeTasksetHash } from "./taskset-authored-validation.js";
 import { contentHash } from "@openpond/harness";
@@ -66,4 +68,25 @@ function fixtureOutcome(grade: RewardComposition | null) {
   const outcome = grade.training.status === "not_configured" ? grade.evaluation : grade.training;
   if (outcome.status !== "scored") return null;
   return { passed: outcome.passed === true, rewardEligible: grade.training.status === "scored" };
+}
+
+/** Shared admission-to-training preparation. No caller may claim a passed
+ * privacy scan without executing the same checks over the pinned evidence.
+ */
+export function prepareReviewedLearningBatch(input: Omit<Parameters<typeof materializeLearningBatchTaskset>[0], "source"> & {
+  admissionContext?: "explicit_local_batch_review" | "explicit_hosted_batch_review";
+}) {
+  const scan = scanAndRedactEvidence(JSON.stringify({
+    tasks: input.evidence.map(item => item.submission), targets: input.decisions.map(item => item.approvedTarget), definition: input.definition,
+  }));
+  if (scan.secretStatus !== "passed" || scan.piiStatus !== "passed") throw new Error(`Learning batch contains unresolved data findings (${scan.findings.join(", ")}). Correct the source examples and seal a revised batch before training.`);
+  const source = LearningBatchDatasetSourceRefSchema.parse({
+    schemaVersion: "openpond.learningBatchDatasetSource.v1", kind: "learning_batch",
+    id: `batch-source-${input.batch.contentHash.slice(0, 40)}`, profileId: input.profileId,
+    title: input.definition.name, sourceHash: input.batch.contentHash, occurredAt: input.batch.sealedAt,
+    batch: learningRef(input.batch), taskDefinition: input.batch.taskDefinition, admittedBy: input.batch.sealedBy,
+    licensingStatus: "approved", secretScanStatus: scan.secretStatus, piiScanStatus: scan.piiStatus,
+    metadata: { admission: input.admissionContext ?? "explicit_local_batch_review", privacyScanner: "openpond-evidence-v1", findings: scan.findings },
+  });
+  return materializeLearningBatchTaskset({ ...input, source });
 }

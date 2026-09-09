@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { prepareManagedTrainingSubmission, ResolvedTrainingBundleManifestSchema } from "openpond-sdk/training-bundle";
 import path from "node:path";
 import {
   AdapterValidationReceiptSchema,
@@ -515,14 +516,9 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       "resolved-bundles",
       plan.manifest.resolvedBundleHash,
     );
-    const bundleManifest = JSON.parse(
+    const bundleManifest = ResolvedTrainingBundleManifestSchema.parse(JSON.parse(
       await this.readFileImpl(path.join(bundleDirectory, "bundle-manifest.json"), "utf8"),
-    ) as {
-      files: Array<{ path: string; sha256: string; sizeBytes: number }>;
-      contentHash: string;
-      datasetRelease: { id: string; contentHash: string };
-      evidenceSetRelease: { id: string; contentHash: string } | null;
-    };
+    ));
     if (bundleManifest.contentHash !== plan.manifest.resolvedBundleHash) {
       throw new Error("The managed resolved bundle changed before upload.");
     }
@@ -539,7 +535,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         };
       }),
     );
-    const { source: evaluationSource, reference: evaluation } = await resolvePreparedManagedTrainingEvaluationSource(
+    const { source: evaluationSource } = await resolvePreparedManagedTrainingEvaluationSource(
       files, trainingPlan.evaluationTasksetRef, validationSource.tasks);
     let project = await this.dependencies.store.getModelProject(
       trainingPlan.modelId,
@@ -561,129 +557,21 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     if (plan.recipe.method !== "grpo" || plan.maximumSpendUsd === null) {
       throw new Error("Managed Training V2 requires GRPO and an approved spend ceiling.");
     }
-    const baseModel = project.trainingSetup.baseModel;
-    if (
-      !baseModel ||
-      baseModel.modelId !== plan.manifest.model.source ||
-      baseModel.revision !== plan.manifest.model.revision ||
-      baseModel.tokenizerRevision !== plan.manifest.model.tokenizerRevision ||
-      baseModel.chatTemplateHash !== plan.manifest.model.chatTemplateHash
-    ) {
-      throw new Error("The synced Model Project base Model does not match the Run manifest.");
-    }
-    const portableSubmission = {
-      schemaVersion: "openpond.managedRlPortableSubmission.v1" as const,
-      sourceRunRef: `openpond:model-run:${plan.manifest.id}`,
-      name: `OpenPond Managed · ${trainingPlan.modelId}`.slice(0, 191),
-      idempotencyKey: `openpond-managed:${plan.manifest.contentHash}`.slice(0, 191),
-      modelProject: {
-        id: project.hosted.projectId,
-        portableProjectId: project.hosted.portableProjectId,
-      },
-      manifest: plan.manifest,
-      sourceTaskset: {
-        id: taskset.id,
-        revision: taskset.revision,
-        contentHash: taskset.contentHash,
-      },
-      modelImprovementQualification:
-        trainingPlan.modelImprovementQualification ?? null,
-      recipe: plan.recipe,
-      resolvedBundle: {
-        manifest: bundleManifest,
-        files,
-      },
-      validationTasks: evaluationSource.tasks,
-      validationAssets: evaluationSource.assets,
-    };
-    const client = this.trainingClient(access);
-    const stagedContent = {
-      schemaVersion: "openpond.trainingInputArtifactUpload.v2" as const,
-      kind: "portable_training_bundle" as const,
-      idempotencyKey: `stage:${plan.manifest.contentHash}`,
-      sourceManifest: {
-        id: plan.manifest.id,
-        contentHash: plan.manifest.contentHash,
-      },
-      payload: portableSubmission,
-    };
-    const staged = {
-      ...stagedContent,
-      contentHash: await trainingInputArtifactUploadHash(stagedContent),
-    };
-    await client.stageArtifact(staged);
     const learnedPreference = plan.recipe.reward.learnedPreference ?? null;
     const rewardSource = learnedPreference
       ? learnedRewardSource(learnedPreference)
       : await managedTrainingGradingSource(files);
-    const resumeFrom = continuationResumeFrom(plan.recipe);
-    const jobContent: Omit<TrainingJobSubmission, "contentHash"> = {
-      schemaVersion: "openpond.trainingJobSubmission.v2",
-      idempotencyKey: `openpond-training-v2:${plan.manifest.contentHash}`,
-      name: `OpenPond Managed · ${trainingPlan.modelId}`.slice(0, 200),
-      source: {
-        modelProject: {
-          id: project.hosted.projectId,
-          portableProjectId: project.hosted.portableProjectId,
-          revision: project.revision,
-          contentHash: project.hosted.etag,
-        },
-        harnessRunManifest: {
-          id: plan.manifest.id,
-          contentHash: plan.manifest.contentHash,
-        },
-        harnessRelease: plan.manifest.harnessRelease,
-        taskset: {
-          id: taskset.id,
-          revision: taskset.revision,
-          contentHash: taskset.contentHash,
-        },
-        tasksetRelease: {
-          id: taskset.id,
-          contentHash: taskset.contentHash,
-        },
-        dataset: bundleManifest.datasetRelease,
-        evaluation,
-        evidenceSets: bundleManifest.evidenceSetRelease
-          ? [bundleManifest.evidenceSetRelease]
-          : [],
-      },
-      job: {
-        kind: "policy_optimize",
-        baseModel,
-        recipe: plan.recipe,
-        rewardSource,
-        resumeFrom,
-      },
-      requestedCapabilities: [
-        { id: "managed_rl.policy.grpo", version: "1", required: true },
-        {
-          id: `managed_rl.rollouts.${plan.runtime.placement}`,
-          version: "1",
-          required: true,
-        },
-        ...(project.trainingSetup.managedGpuRequirement === "h100_hbm3"
-          ? [{ id: "managed_rl.gpu.h100_hbm3", version: "1", required: true }]
-          : []),
-      ],
-      placementObjective: project.trainingSetup.managedGpuPlacementObjective,
-      budget: {
-        maximumSpendUsd: plan.maximumSpendUsd,
-        maximumWallSeconds: Math.ceil(plan.recipe.resourceLimits.wallTimeMs / 1_000),
-      },
-      approval: {
-        approvalHash: plan.approvalHash,
-        approvedAt: plan.manifest.approval.approvedAt,
-        exportApproved: true,
-        maximumSpendUsd: plan.maximumSpendUsd,
-        retentionDays: trainingPlan.dataPolicy.retentionDays,
-        region: trainingPlan.dataPolicy.region,
-      },
-    };
-    const publicSubmission = {
-      ...jobContent,
-      contentHash: await trainingJobSubmissionHash(jobContent),
-    };
+    const { artifact, submission: publicSubmission } = await prepareManagedTrainingSubmission({
+      project, manifest: plan.manifest, recipe: plan.recipe,
+      taskset: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash },
+      bundleManifest, files, evaluationSource, rewardSource,
+      resumeFrom: continuationResumeFrom(plan.recipe),
+      modelImprovementQualification: trainingPlan.modelImprovementQualification ?? null,
+      approval: { approvalHash: plan.approvalHash, maximumSpendUsd: plan.maximumSpendUsd,
+        retentionDays: trainingPlan.dataPolicy.retentionDays, region: trainingPlan.dataPolicy.region },
+    });
+    const client = this.trainingClient(access);
+    await client.stageArtifact(artifact);
     const job = await client.createJob(publicSubmission);
     const ref = {
       runId: job.id,
