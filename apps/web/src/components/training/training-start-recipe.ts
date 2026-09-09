@@ -7,6 +7,7 @@ import {
   type BaseModelCandidate,
   type LearnedPreferenceRewardBinding,
   type RftLossMethod,
+  type RftRecipe,
   type Taskset,
   type TrainingCatalog,
   type TrainingDestinationId,
@@ -14,6 +15,7 @@ import {
 } from "@openpond/contracts";
 
 export function trainingRecipe(input: {
+  savedRecipe?: RftRecipe | null;
   method: string;
   taskset: Taskset;
   destinationId: TrainingDestinationId;
@@ -48,7 +50,7 @@ export function trainingRecipe(input: {
     30 * 60 * 1_000,
     (2 + input.maxSteps * 8) * 60 * 1_000,
   );
-  return {
+  const generated: RftRecipe = {
     schemaVersion: "openpond.rftRecipe.v1",
     method: "grpo",
     parameterization: "lora",
@@ -56,7 +58,7 @@ export function trainingRecipe(input: {
     dataset: {
       trainSplit: "train",
       validationSplit: "frozen_eval",
-      maxPromptTokens: 4_096,
+      maxPromptTokens: input.sequenceLength,
       maxExamples: input.trainingExamples,
       selectionStrategy: input.taskset.datasetArtifact
         ? "rft_easy_curriculum_v1"
@@ -114,6 +116,21 @@ export function trainingRecipe(input: {
       maxRollouts: Math.max(groupSize, input.maxSteps * groupSize),
       maxPayloadBytes: 1_000_000,
     },
+    policyOptimization: null,
+  };
+  const saved = input.savedRecipe;
+  if (!saved) return generated;
+  return {
+    ...saved,
+    baseModel: generated.baseModel,
+    dataset: { ...saved.dataset, maxExamples: input.trainingExamples, maxPromptTokens: input.sequenceLength },
+    lora: { ...saved.lora, rank: input.rank },
+    rollout: { ...saved.rollout, groupSize, concurrency: rolloutConcurrency, maxOutputTokens: input.rolloutMaxOutputTokens },
+    optimizer: { ...saved.optimizer, learningRate: input.learningRate, maxSteps: input.maxSteps },
+    loss: { ...saved.loss, method: input.rftLossMethod ?? saved.loss.method, klBeta: input.klBeta },
+    reward: generated.reward,
+    // Preparation derives execution semantics from the edited fields. Keep the
+    // caller's resource ceilings, including limits that have no form control.
     policyOptimization: null,
   };
 }

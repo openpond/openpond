@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  RftRecipeSchema,
   type BaseModelCandidate,
   type BaseModelPreference,
   type ModelRunPreset,
@@ -9,6 +10,7 @@ import {
   type TrainingDestinationId,
   type TrainingPreparedStart,
 } from "@openpond/contracts";
+import type { TrainingStartDialogProps } from "./training-start-types";
 import { recommendedSequenceLength } from "./training-start-defaults";
 import { defaultRftLossMethod } from "./training-start-recipe";
 import {
@@ -29,7 +31,16 @@ export function useTrainingStartForm(input: {
   taskset: Taskset;
   initialMethod?: "sft" | "dpo" | "grpo" | "ppo";
   runPreset: ModelRunPreset;
+  initialRecipe?: TrainingStartDialogProps["initialRecipe"];
+  initialApproval?: TrainingStartDialogProps["initialApproval"];
 }) {
+  const [saved] = useState(() => {
+    if (!input.initialRecipe || input.initialMethod !== "grpo") return { recipe: null, error: null };
+    const parsed = RftRecipeSchema.safeParse(input.initialRecipe);
+    return parsed.success ? { recipe: parsed.data, error: null }
+      : { recipe: null, error: "The saved training recipe is invalid. Review its configuration before running." };
+  });
+  const savedRecipe = saved.recipe;
   const trainingPath = input.taskset.readiness?.trainingPath ?? null;
   const primaryMethod =
     trainingPath?.primaryMethod ?? tasksetMethod(input.taskset);
@@ -82,7 +93,7 @@ export function useTrainingStartForm(input: {
     initialCandidate?.selectionKey ?? "",
   );
   const [maxSteps, setMaxSteps] = useState(() =>
-    quickTest && requestedInitialMethod !== "grpo"
+    savedRecipe?.optimizer.maxSteps ?? (quickTest && requestedInitialMethod !== "grpo"
       ? 1
       : requestedInitialMethod === "grpo"
         ? input.runPreset === "standard" ? 50 : 8
@@ -90,10 +101,10 @@ export function useTrainingStartForm(input: {
           ? input.runPreset === "standard" ? 100 : 4
           : requestedInitialMethod === "ppo"
             ? input.runPreset === "standard" ? 20 : 2
-            : input.runPreset === "standard" ? 100 : 2
+            : input.runPreset === "standard" ? 100 : 2)
   );
   const [trainingExamples, setTrainingExamples] = useState(() =>
-    Math.max(
+    savedRecipe?.dataset.maxExamples ?? Math.max(
       1,
       Math.min(
         availableTrainExamples,
@@ -115,24 +126,24 @@ export function useTrainingStartForm(input: {
     )
   );
   const [sequenceLength, setSequenceLength] = useState(() =>
-    recommendedSequenceLength(input.taskset)
+    savedRecipe?.dataset.maxPromptTokens ?? recommendedSequenceLength(input.taskset)
   );
-  const [rank, setRank] = useState(2);
+  const [rank, setRank] = useState(savedRecipe?.lora.rank ?? 2);
   const [learningRate, setLearningRate] = useState(() =>
-    defaultLearningRate(initialCandidate?.preference.modelId ?? "")
+    savedRecipe?.optimizer.learningRate ?? defaultLearningRate(initialCandidate?.preference.modelId ?? "")
   );
-  const [klBeta, setKlBeta] = useState<number | null>(0.01);
+  const [klBeta, setKlBeta] = useState<number | null>(savedRecipe ? savedRecipe.loss.klBeta : 0.01);
   const [exportApproved, setExportApproved] = useState(false);
   const [maximumCostUsd, setMaximumCostUsd] =
-    useState<number | null>(null);
-  const [retentionDays, setRetentionDays] = useState(7);
-  const [rolloutGroupSize, setRolloutGroupSize] = useState(8);
-  const [rolloutConcurrency, setRolloutConcurrency] = useState(4);
+    useState<number | null>(input.initialApproval?.maximumCostUsd ?? null);
+  const [retentionDays, setRetentionDays] = useState(input.initialApproval?.retentionDays ?? 7);
+  const [rolloutGroupSize, setRolloutGroupSize] = useState(savedRecipe?.rollout.groupSize ?? 8);
+  const [rolloutConcurrency, setRolloutConcurrency] = useState(savedRecipe?.rollout.concurrency ?? 4);
   const [rolloutMaxOutputTokens, setRolloutMaxOutputTokens] = useState(
-    DEFAULT_ROLLOUT_OUTPUT_TOKENS,
+    savedRecipe?.rollout.maxOutputTokens ?? DEFAULT_ROLLOUT_OUTPUT_TOKENS,
   );
   const [rftLossMethod, setRftLossMethod] = useState<RftLossMethod>(() =>
-    defaultRftLossMethod(input.taskset)
+    savedRecipe?.loss.method ?? defaultRftLossMethod(input.taskset)
   );
   const [method, setMethod] = useState<
     "sft" | "dpo" | "grpo" | "ppo"
@@ -144,6 +155,8 @@ export function useTrainingStartForm(input: {
   const [providerApprovalOpen, setProviderApprovalOpen] = useState(false);
 
   return {
+    savedRecipe,
+    savedRecipeError: saved.error,
     primaryMethod,
     bootstrap,
     methodOptions,

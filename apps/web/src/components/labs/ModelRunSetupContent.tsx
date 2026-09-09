@@ -252,6 +252,12 @@ export function ModelRunSetupContent({
               baseModelCandidates={baseModelCandidates}
               connection={connection}
               taskset={selectedTaskset}
+              evaluationTaskset={evaluationTasksets.find(taskset => taskset.id === setup.evaluationTasksetRef?.id
+                && taskset.profileId === selectedTaskset.profileId && taskset.revision === setup.evaluationTasksetRef.revision
+                && taskset.contentHash === setup.evaluationTasksetRef.contentHash) ?? null}
+              evaluationTasksetSelected={Boolean(setup.evaluationTasksetRef)}
+              initialRecipe={setup.recipe}
+              initialApproval={{ maximumCostUsd: setup.preferredMaximumSpendUsd, retentionDays: setup.preferredRetentionDays }}
               learnedPreferenceReward={learnedPreferenceReward}
               modelId={setup.projectId}
               destinations={destinations}

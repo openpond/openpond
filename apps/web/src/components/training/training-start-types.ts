@@ -3,6 +3,7 @@ import type {
   BaseModelCandidate,
   BaseModelPreference,
   LearnedPreferenceRewardBinding,
+  ModelProjectTrainingSetup,
   ModelRunPreset,
   Taskset,
   TrainingDestinationCapabilities,
@@ -23,6 +24,10 @@ export type TrainingStartDialogProps = {
   baseModelCandidates: BaseModelCandidate[];
   connection: ClientConnection | null;
   taskset: Taskset;
+  evaluationTaskset?: Taskset | null;
+  evaluationTasksetSelected?: boolean;
+  initialRecipe?: ModelProjectTrainingSetup["recipe"];
+  initialApproval?: Pick<TrainingStartApproval, "maximumCostUsd" | "retentionDays">;
   learnedPreferenceReward?: LearnedPreferenceRewardBinding | null;
   modelId?: string | null;
   destinations: TrainingDestinationCapabilities[];
