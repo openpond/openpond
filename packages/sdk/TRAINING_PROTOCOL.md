@@ -175,3 +175,16 @@ The same entry point exports `materializeLearningBatchTaskset`. It verifies a
 sealed learning batch and its evidence, admission decisions, Reward releases,
 and verifier assets, then returns the authored Taskset, portable release, and
 generated verifier files consumed by training preparation.
+
+`prepareReviewedLearningBatch` applies the shared evidence privacy scan before
+that projection. Both clients use it to construct training-source provenance
+from the actual scan and sealed admission decisions.
+
+`prepareManagedTrainingSubmission` constructs the staged portable artifact and
+public policy-optimization Job from the approved manifest, recipe, exact file
+inventory, held-out source and synchronized Model. It verifies the selected
+bytes and budget, copies its inputs before hashing, and performs no network
+requests. A hosted iteration supplies its durable dispatch id as
+`idempotencyKey`; manual training retains its manifest-derived identity. The
+caller stages the returned `artifact` and creates the returned `submission`
+through the existing training client.

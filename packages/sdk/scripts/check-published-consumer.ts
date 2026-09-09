@@ -82,6 +82,7 @@ async function main(): Promise<void> {
           'import { TrainingJobSubmissionSchema, TrainingCandidateDecisionSchema } from "openpond-sdk/training";',
           'import { buildTasksetTrainingBundle, materializeLearningBatchTaskset, HarnessRunManifestSchema, ResolvedTrainingBundleManifestSchema } from "openpond-sdk/training-bundle"; if (typeof materializeLearningBatchTaskset !== "function") throw new Error("Packed learning batch preparation is missing");',
           'if (typeof buildTasksetTrainingBundle !== "function" || HarnessRunManifestSchema.safeParse({}).success || ResolvedTrainingBundleManifestSchema.safeParse({}).success) throw new Error("Packed training bundle compiler is invalid");',
+          'import { prepareManagedTrainingSubmission, prepareReviewedLearningBatch, scanAndRedactEvidence } from "openpond-sdk/training-bundle"; if (typeof prepareManagedTrainingSubmission !== "function" || typeof prepareReviewedLearningBatch !== "function" || scanAndRedactEvidence("ordinary training text").secretStatus !== "passed") throw new Error("Packed managed preparation exports are missing");',
           'import { OpenPondLearningClient, OpenPondLearningError, LearningSourceSchema, TaskExampleSubmissionSchema, TaskEvidenceSchema, sealLearningContent, createSourceCredentialRequest, LearningSourceCredentialRequestSchema, LearningSourceConfigurationSchema, AuthoringDraftInputSchema, LearningCommandSchema } from "openpond-sdk/learning";',
           'if (!ModelProjectSchema || !TrainingJobSubmissionSchema || !TrainingCandidateDecisionSchema) process.exit(1);',
           'const catalog = new OpenPondModelStarterCatalogClient({ baseUrl: "https://consumer.invalid", apiKey: "test", teamId: "team", fetch: async () => Response.json({ items: [], nextCursor: null }) }); if ((await catalog.list()).items.length !== 0) throw new Error("Packed starter catalog transport failed");',
@@ -99,6 +100,7 @@ async function main(): Promise<void> {
       { cwd: consumer, stdio: "inherit" },
     );
     await writeFile(path.join(consumer, "verify-types.mts"), [
+      'import { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput } from "openpond-sdk/training-bundle"; declare const managedInput: ManagedTrainingPreparationInput; void prepareManagedTrainingSubmission(managedInput);',
       'import { buildTasksetTrainingBundle, type TasksetTrainingBundle } from "openpond-sdk/training-bundle"; declare const trainingInput: Parameters<typeof buildTasksetTrainingBundle>[0]; const trainingBundle: TasksetTrainingBundle = buildTasksetTrainingBundle(trainingInput); const trainingAssets: ReadonlyMap<string, Uint8Array> = trainingBundle.assets; void trainingAssets;',
       'import { OpenPondLearningClient, type TaskExampleSubmission, type LearningCommand } from "openpond-sdk/learning";',
       'import { type ModelTasksetDraftRequest, type TasksetDraftFileMutation, TasksetDraftFileMutationSchema } from "openpond-sdk/model-taskset-authoring";',

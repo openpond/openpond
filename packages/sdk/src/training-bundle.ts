@@ -9,7 +9,9 @@ import { resolvePortableTasksetRewardExecution, type TasksetRewardExecution } fr
 import { TRAINING_EVALUATION_SOURCE_PATH, TrainingEvaluationSourceSchema, assertTrainingEvaluationIsolation, type TrainingEvaluationSource } from "./training-evaluation-source.js";
 
 export * from "./training-bundle-contracts.js";
-export { materializeLearningBatchTaskset } from "./training-learning-batch.js";
+export { materializeLearningBatchTaskset, prepareReviewedLearningBatch } from "./training-learning-batch.js";
+export { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput, type TrainingPreparationFile } from "./managed-training-preparation.js";
+export { scanAndRedactEvidence, type EvidencePrivacyScan } from "./training-privacy.js";
 
 export type TasksetTrainingBundle = {
   manifest: HarnessRunManifest;
