@@ -67,15 +67,19 @@ describe("Model Project hosting", () => {
       (kind === "iteration" ? { policy: { id: "policy", revision: 1, contentHash: policy.contentHash } } : policy) as never);
     const command = vi.spyOn(OpenPondLearningClient.prototype, "command").mockResolvedValue({ resources: [] } as never);
     const cancel = { action: "cancel_iteration" as const, operationId: "cancel", iterationId: "iteration", expectedRevision: 1 };
+    const retry = { action: "retry_iteration_dispatch" as const, operationId: "retry", iterationId: "iteration", expectedRevision: 1 };
     try {
       await expect(service.command({ modelId: "model", profileId: "profile", command: cancel })).rejects.toThrow("does not belong");
+      await expect(service.command({ modelId: "model", profileId: "profile", command: retry })).rejects.toThrow("does not belong");
       expect(command).not.toHaveBeenCalled();
       policy.modelProjectId = "model";
       await service.command({ modelId: "model", profileId: "profile", command: cancel });
       expect(command).toHaveBeenCalledWith(cancel);
+      await service.command({ modelId: "model", profileId: "profile", command: retry });
+      expect(command).toHaveBeenCalledWith(retry);
       project.portableProjectId = "foreign";
       await expect(service.command({ modelId: "model", profileId: "profile", command: cancel })).rejects.toThrow("identity differs");
-      expect(command).toHaveBeenCalledTimes(1);
+      expect(command).toHaveBeenCalledTimes(2);
     } finally { get.mockRestore(); command.mockRestore(); }
   });
   test("discovers hosted projects and pulls a pristine definition without overwriting local work", async () => {

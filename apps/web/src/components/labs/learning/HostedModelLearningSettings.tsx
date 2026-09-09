@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { hostedLearningPolicyReferences, LearningPolicyContentSchema, learningRef, sameLearningRef,
+import { createHostedLearningPolicyContent, hostedLearningPolicyDefaults, learningRef, sameLearningRef,
   type LearningPolicy, type LearningRevisionRef, type LearningSource, type LearningCommand } from "openpond-sdk/learning";
 import type { HostedModelProjectSummary } from "openpond-sdk/model-projects";
 import { ApiRequestError } from "../../../api/api-client";
@@ -13,16 +13,17 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
   client: Client; project: HostedModelProjectSummary; policy: LearningPolicy | null; onClose: () => void;
 }) {
   const [id] = useState(() => policy?.id ?? `policy-${crypto.randomUUID()}`);
-  const [enabled, setEnabled] = useState(policy?.enabled ?? false);
-  const [scheduled, setScheduled] = useState(policy?.trigger.kind === "schedule");
+  const [defaults] = useState(() => hostedLearningPolicyDefaults(project, policy));
+  const [enabled, setEnabled] = useState(defaults.enabled);
+  const [scheduled, setScheduled] = useState(defaults.scheduled);
   const [applyModel, setApplyModel] = useState(!policy);
-  const [human, setHuman] = useState(policy?.admission.mode !== "qualified_automatic");
+  const [human, setHuman] = useState(defaults.humanReviewRequired);
   const [sources, setSources] = useState(policy?.sources ?? []);
   const [definition, setDefinition] = useState<LearningRevisionRef | null>(policy?.taskDefinition ?? null);
-  const [fields, setFields] = useState({ interval: String(policy?.trigger.kind === "schedule" ? policy.trigger.intervalSeconds / 60 : 1440), minimum: String(policy?.admission.minimumApprovedExamples ?? 8),
-    batch: String(policy?.limits.maxBatchExamples ?? 8), spend: String(policy?.limits.maxIterationSpendUsd ?? project.trainingSetup.preferredMaximumSpendUsd ?? 1),
-    daily: String(policy?.limits.maxDailySpendUsd ?? project.trainingSetup.preferredMaximumSpendUsd ?? 1), cooldown: String((policy?.limits.cooldownSeconds ?? 3600) / 60),
-    retries: String(policy?.limits.maxRetries ?? 0), backlog: String(policy?.limits.maxBacklogExamples ?? 1000) });
+  const [fields, setFields] = useState({ interval: String(defaults.intervalSeconds / 60), minimum: String(defaults.minimumApprovedExamples),
+    batch: String(defaults.maxBatchExamples), spend: String(defaults.maxIterationSpendUsd),
+    daily: String(defaults.maxDailySpendUsd), cooldown: String(defaults.cooldownSeconds / 60),
+    retries: String(defaults.maxRetries), backlog: String(defaults.maxBacklogExamples) });
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,19 +50,13 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
     try {
       if (!pending.current) {
         if (!definition || !sources.length || !binding) throw new Error("Select task sources and a Model Reward before saving.");
-        const refs = applyModel ? hostedLearningPolicyReferences(project) : null;
-        const { contentHash: _hash, ...previous } = policy ?? {} as LearningPolicy;
-        const content = LearningPolicyContentSchema.parse({ ...previous, schemaVersion: "openpond.learningPolicy.v1", id, revision: (policy?.revision ?? 0) + 1,
-          modelProjectId: project.portableProjectId, executionOwner: "hosted", enabled, sources, taskDefinition: definition, rewardBinding: binding,
-          admission: { mode: human ? "human" : "qualified_automatic", qualification: human ? null : policy?.admission.qualification ?? null, minimumApprovedExamples: Number(fields.minimum) },
-          trigger: scheduled ? { kind: "schedule", intervalSeconds: Number(fields.interval) * 60 } : { kind: "manual" },
-          trainingParent: refs?.trainingParent ?? policy?.trainingParent, teacher: policy?.teacher ?? null,
-          training: { method: applyModel ? project.trainingSetup.recipe?.method : policy?.training.method, recipe: refs?.recipe ?? policy?.training.recipe,
-            retentionEvaluation: refs?.retentionEvaluation ?? policy?.training.retentionEvaluation, replayBatches: policy?.training.replayBatches ?? [] },
-          limits: { maxIterationSpendUsd: Number(fields.spend), maxDailySpendUsd: Number(fields.daily), cooldownSeconds: Number(fields.cooldown) * 60,
-            maxRetries: Number(fields.retries), maxBatchExamples: Number(fields.batch), maxBacklogExamples: Number(fields.backlog) },
-          automation: { collect: false, train: scheduled, accept: false, serve: false },
-          acceptance: policy?.acceptance ?? { minimumScore: 0, maximumRetentionRegression: 0, requireImprovement: true, rollbackVersion: null },
+        const content = createHostedLearningPolicyContent({ project, previous: policy, policyId: id, applyModelConfiguration: applyModel,
+          sources, taskDefinition: definition, settings: {
+            enabled, scheduled, humanReviewRequired: human, intervalSeconds: Number(fields.interval) * 60,
+            minimumApprovedExamples: Number(fields.minimum), maxBatchExamples: Number(fields.batch),
+            maxIterationSpendUsd: Number(fields.spend), maxDailySpendUsd: Number(fields.daily),
+            cooldownSeconds: Number(fields.cooldown) * 60, maxRetries: Number(fields.retries), maxBacklogExamples: Number(fields.backlog),
+          },
         });
         pending.current = { action: "publish", kind: "policy", operationId: crypto.randomUUID(), expectedRevision: policy?.revision ?? 0, content };
       }
