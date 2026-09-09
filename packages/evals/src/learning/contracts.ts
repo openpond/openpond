@@ -208,6 +208,13 @@ export const LearningPolicyContentSchema = z.object({
   if (policy.limits.maxDailySpendUsd < policy.limits.maxIterationSpendUsd) context.addIssue({ code: "custom", path: ["limits"], message: "Daily spend must permit the iteration budget." });
 });
 export const LearningPolicySchema = LearningPolicyContentSchema.safeExtend({ contentHash: ReleaseHashSchema }).strict();
+export const LearningAcceptedParentSchema = z.object({
+  iterationId: ReleaseIdSchema,
+  iterationRevision: z.number().int().positive(),
+  candidate: ImmutableReleaseRefSchema,
+  decision: LearningRevisionRefSchema,
+  decidedAt: ReleaseTimestampSchema,
+}).strict();
 export const LearningIterationStatusSchema = z.enum(["waiting_for_data", "waiting_for_review", "ready", "dispatching", "training", "evaluating", "candidate_ready", "accepted", "rejected", "paused", "failed", "cancelling", "cancelled", "completed_without_candidate"]);
 export const LearningIterationSchema = z.object({
   schemaVersion: z.literal("openpond.learningIteration.v1"),
@@ -219,12 +226,14 @@ export const LearningIterationSchema = z.object({
   batch: LearningRevisionRefSchema.nullable(),
   sourceWatermarks: z.record(ReleaseIdSchema, z.number().int().nonnegative()),
   trainingParent: ImmutableReleaseRefSchema,
+  trainingParentSelection: LearningAcceptedParentSchema.nullable().optional(),
   teacher: ImmutableReleaseRefSchema.nullable(),
   upstreamEvent: ImmutableReleaseRefSchema.nullable(),
   trainingJob: ImmutableReleaseRefSchema.nullable(),
   evaluationJob: ImmutableReleaseRefSchema.nullable(),
   candidateVersion: ImmutableReleaseRefSchema.nullable(),
   candidateDecision: LearningRevisionRefSchema.nullable().default(null),
+  candidateDecisionAt: ReleaseTimestampSchema.nullable().optional(),
   dispatchId: ReleaseIdSchema,
   retryCount: z.number().int().nonnegative(),
   spendUsd: z.number().nonnegative(),

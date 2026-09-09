@@ -1,14 +1,16 @@
 import { z } from "zod";
-import { ImmutableReleaseRefSchema, ReleaseIdSchema } from "@openpond/harness";
+import { ImmutableReleaseRefSchema, ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
 import { LearningIterationSchema, LearningRevisionRefSchema } from "./contracts.js";
 import { LearningDomainError } from "./errors.js";
 import { LearningChainSchema } from "./iteration-reservation-contracts.js";
 import { requireLearningResource, type LearningRepository } from "./repository.js";
+import { latestAcceptedLearningParent } from "./iteration-training-parent.js";
 
 export const LearningCandidateDecisionObservationSchema = z.object({
   scope: ReleaseIdSchema,
   iterationId: ReleaseIdSchema,
   decision: LearningRevisionRefSchema,
+  decidedAt: ReleaseTimestampSchema,
   outcome: z.enum(["accepted", "rejected"]),
   execution: ImmutableReleaseRefSchema,
   candidate: ImmutableReleaseRefSchema,
@@ -37,17 +39,20 @@ export async function reconcileLearningCandidateDecision(repository: LearningRep
     const previous = iteration.candidateDecision;
     if (previous && input.decision.revision < previous.revision) return iteration;
     if (previous && input.decision.revision === previous.revision) {
-      if (!same(previous, input.decision) || iteration.status !== input.outcome)
+      if (!same(previous, input.decision) || iteration.status !== input.outcome
+        || (iteration.candidateDecisionAt != null && iteration.candidateDecisionAt !== input.decidedAt))
         throw new LearningDomainError("learning_candidate_decision_revision_conflict", 409);
-      return iteration;
+      if (iteration.candidateDecisionAt != null) return iteration;
     }
     const now = (options.now ?? (() => new Date().toISOString()))();
     const updated = LearningIterationSchema.parse({ ...iteration, revision: iteration.revision + 1,
-      candidateDecision: input.decision, status: input.outcome, updatedAt: now });
+      candidateDecision: input.decision, candidateDecisionAt: input.decidedAt, status: input.outcome, updatedAt: now });
     await tx.put("iteration", updated, iteration.revision, { parentId: dispatch.chainId, status: updated.status });
     const chain = await requireLearningResource(tx, "chain", dispatch.chainId);
-    if (chain.activeIterationId === iteration.id) await tx.put("chain", LearningChainSchema.parse({ ...chain,
-      revision: chain.revision + 1, activeIterationId: null, updatedAt: now }), chain.revision, { parentId: chain.modelProjectId });
+    const acceptedParent = await latestAcceptedLearningParent(tx, chain.id);
+    await tx.put("chain", LearningChainSchema.parse({ ...chain, acceptedParent,
+      revision: chain.revision + 1, activeIterationId: chain.activeIterationId === iteration.id ? null : chain.activeIterationId,
+      updatedAt: now }), chain.revision, { parentId: chain.modelProjectId });
     return updated;
   });
 }

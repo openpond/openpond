@@ -29,6 +29,13 @@ it("preserves reviewed learning configuration until explicitly applied and rejec
   const previous = sealLearningContent(createHostedLearningPolicyContent(initial));
   expect(previous.enabled).toBe(false);
   expect(previous.admission.mode).toBe("human");
+  for (const method of ["sft", "ppo"] as const) {
+    const unsupported = { ...initial, project: { ...project, trainingSetup: { ...project.trainingSetup,
+      recipe: { ...project.trainingSetup.recipe!, method } } } };
+    expect(createHostedLearningPolicyContent(unsupported).enabled).toBe(false);
+    expect(() => createHostedLearningPolicyContent({ ...unsupported,
+      settings: { ...unsupported.settings, enabled: true } })).toThrow("Hosted continual learning currently supports GRPO");
+  }
   const changed = { ...project, etag: "b".repeat(64), trainingSetup: { ...project.trainingSetup,
     baseModel: { ...project.defaultBaseModel!, revision: "weights-two" },
     evaluationTasksetRef: { id: "new-retained", revision: 2, contentHash: "b".repeat(64) } } };

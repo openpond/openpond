@@ -79,6 +79,24 @@ for untrusted schemas and deliberately rejects unsupported capabilities.
 
 ## Host responsibilities
 
+### Accepted checkpoints between iterations
+
+Candidate decisions are reconciled with their verified `decidedAt`, immutable
+decision reference, execution, evaluation and terminal receipt. The chain records
+the latest accepted candidate. New reservations capture its exact accepted
+iteration revision in `trainingParentSelection`; `trainingParent` becomes that
+candidate's artifact reference. Before the first acceptance, the configured base
+parent is used. A rejected candidate is removed from future parent selection;
+already reserved iterations keep their captured parent and original review.
+
+`inspectPolicy` returns the resolved next `trainingParent`, or a blocker when its
+accepted evidence or underlying model/method is incompatible. Execution owners
+must resolve the captured iteration revision, verify the team/Model-scoped
+terminal checkpoint and materialize it through their existing continuation
+adapter. The hosted adapter uses fresh optimizer state. Acceptance does not
+activate serving. Candidate decisions lacking verified timing must be reconciled
+from their retained provider receipts before another reservation can use them.
+
 ### Reward fixture checks
 
 Reward drafts may contain up to 50 named fixtures. JSON and numeric editor fields

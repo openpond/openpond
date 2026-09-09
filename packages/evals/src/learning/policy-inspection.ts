@@ -1,13 +1,14 @@
-import { ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
+import { ImmutableReleaseRefSchema, ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
 import { z } from "zod";
 
-import { LearningRevisionRefSchema, learningRef, sameLearningRef } from "./contracts.js";
+import { LearningAcceptedParentSchema, LearningRevisionRefSchema, learningRef, sameLearningRef } from "./contracts.js";
 import { prepareLearningBatch } from "./batch-service.js";
 import { LearningDomainError } from "./errors.js";
 import { readLearningIterationBudget } from "./iteration-budget.js";
 import { inspectIterationEligibility, learningChainId } from "./iteration-eligibility.js";
 import { LearningChainSchema, LearningEligibilityCountsSchema } from "./iteration-reservation-contracts.js";
 import { requireLearningRelease, requireLearningResource, type LearningTransaction } from "./repository.js";
+import { latestAcceptedLearningParent, resolveLearningTrainingParent } from "./iteration-training-parent.js";
 
 /** A scope-serialized snapshot of shared reservation readiness, not a Job guarantee.
  * No iteration, timer, batch, consumption or operation record is written. */
@@ -16,6 +17,7 @@ export const LearningPolicyInspectionResultSchema = z.object({
   modelProjectId: ReleaseIdSchema,
   inspectedAt: ReleaseTimestampSchema,
   chain: LearningChainSchema.nullable(),
+  trainingParent: z.object({ reference: ImmutableReleaseRefSchema, selection: LearningAcceptedParentSchema.nullable() }).strict().nullable().default(null),
   counts: LearningEligibilityCountsSchema.nullable(),
   minimumApprovedExamples: z.number().int().positive(),
   canReserve: z.boolean(),
@@ -67,8 +69,16 @@ export async function inspectLearningPolicy(transaction: LearningTransaction, re
     // must remain visible while the Model's settings and history can still load.
     block(error.code, error.message.slice(0, 20_000));
   }
+  let trainingParent: LearningPolicyInspectionResult["trainingParent"] = null;
+  try {
+    const resolved = await resolveLearningTrainingParent(transaction, policy, await latestAcceptedLearningParent(transaction, chainId, true));
+    trainingParent = { reference: resolved.trainingParent, selection: resolved.trainingParentSelection };
+  } catch (error) {
+    if (!(error instanceof LearningDomainError)) throw error;
+    block(error.code, error.message.slice(0, 20_000));
+  }
   return LearningPolicyInspectionResultSchema.parse({
-    policy: learningRef(policy), modelProjectId: policy.modelProjectId, inspectedAt: now, chain,
+    policy: learningRef(policy), modelProjectId: policy.modelProjectId, inspectedAt: now, chain, trainingParent,
     counts, minimumApprovedExamples: policy.admission.minimumApprovedExamples, canReserve: blockers.length === 0,
     blockers, cooldownUntil,
     budget: { ...budget, maximumIterationSpendUsd: policy.limits.maxIterationSpendUsd, maximumDailySpendUsd: policy.limits.maxDailySpendUsd },
