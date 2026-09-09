@@ -265,6 +265,16 @@ database, provider, credential, Electron, or UI dependencies. See
 limits, compatibility rules, provider routes, receipts, and the published
 conformance fixtures.
 
+`training.evaluationTasks(jobId, { id, contentHash }, { cursor, limit })`
+reads retained per-task outputs for a completed evaluation. Supply the evaluation
+output's immutable reference from `training.outputs(jobId)`, and follow
+`nextCursor` until it is null. Each page verifies the requested Job, evaluation,
+offset, canonical page hash, and each output's canonical JSON string hash. It
+contains policy-visible inputs, model outputs, and the originally recorded
+scores; it does not return worker training samples or private grading assets.
+These reports supplement the original terminal receipt. They do not rerun the
+model, regrade its output, or replace the receipt's identity.
+
 ## Development
 
 From the OpenPond monorepo:
