@@ -181,3 +181,40 @@ execution owner claims the iteration, it must persist an executing status before
 making a network submission; local reservation cancellation then refuses to
 release its budget. Submitted-job cancellation and cost settlement belong to the
 execution reconciler and require authoritative provider state.
+
+### Durable iteration dispatch
+
+`createLearningIterationWorker` claims one reserved iteration with a persisted,
+expiring lease and generation fence. It resolves the pinned policy and batch,
+asks a host executor to prepare a compute-free submission, and persists that
+exact protocol payload and hash before any provider submission. The preparation
+state is `dispatching`; only a provider observation establishes `training` or
+`evaluating`. A paused policy stops new submissions while existing executions
+continue to be observed.
+
+The executor must deduplicate `submit` by `dispatch.id`, verify observation
+identity and provider receipts, and use `reconcile` to recover an existing Job
+after a lost reply. An unreachable owner is an error, never proof of absence.
+Submission payloads contain immutable inputs, not credentials or temporary URLs.
+All provider calls occur outside repository transactions and have bounded
+request timeouts. Expired lease owners cannot write results over a newer claim.
+
+`cancel_iteration` persists cancellation intent and preserves a live lease.
+Before submission starts, cancellation can settle at zero spend locally. Once
+submission may have begun, the executor's cancellation must fence late submits
+under the same dispatch identity and return authoritative terminal cleanup,
+including when the original submission reply was lost. Merely aborting an HTTP
+request is insufficient. Reserved spend is retained through uncertainty and
+released only when terminal spend and cleanup are recorded atomically. Executors
+must enforce the configured bounds; settlement records actual spend without
+silently clipping a provider overrun.
+
+Consecutive transport/preparation failures exhaust the policy retry limit into
+a blocked dispatch without releasing its budget or consuming another batch.
+Reviewer-only `retry_iteration_dispatch` resumes that same dispatch; cancellation
+also remains available. A successful execution with an evaluated adapter becomes
+`candidate_ready`, retaining the active chain for explicit candidate review.
+A successful execution without an adapter becomes `completed_without_candidate`;
+it does not fabricate a version or an improvement. Provider adapters, timers,
+candidate-decision reconciliation and product controls must be connected by the
+host; this shared worker alone does not enable hosted scheduling.

@@ -23,6 +23,7 @@
         "waiting_for_data",
         "waiting_for_review",
         "ready",
+        "dispatching",
         "training",
         "evaluating",
         "candidate_ready",
@@ -31,7 +32,8 @@
         "paused",
         "failed",
         "cancelling",
-        "cancelled"
+        "cancelled",
+        "completed_without_candidate"
       ]
     },
     "triggerIdentity": {
