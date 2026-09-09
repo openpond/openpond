@@ -14,6 +14,11 @@ describe("Models page, scope and resource route boundary", () => {
       expect(changeModelsScope(original, "model B")).toEqual(modelsLocation(page, "model B"));
       expect(changeModelsScope(original, null)).toEqual(modelsLocation(page));
     }
+    const review = modelsLocation("evaluations", "model A", { collection: "review", sourceId: "source/A", resourceId: "evidence-a", after: "cursor-1" });
+    expect(modelsRouteFromLocation(new URL(modelsPath(review), "https://local.invalid"))).toEqual(review);
+    expect(changeModelsScope(review, "model B").sourceId).toBeUndefined();
+    expect(modelsRouteFromLocation({ pathname: "/models/evaluations/review", search: "?source=a&source=b" })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models/runs", search: "?source=a" })).toBeNull();
     const run = modelsLocation("runs", "model A", { collection: "series", resourceId: "series/with slash", detailTab: "entry:1", query: "recent", after: "cursor-1" });
     expect(modelsRouteFromLocation(new URL(modelsPath(run), "https://local.invalid"))).toEqual(run);
     expect(changeModelsScope(run, "model B")).toEqual(modelsLocation("runs", "model B", { collection: "series" }));
