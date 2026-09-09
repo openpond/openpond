@@ -1,0 +1,205 @@
+import { z } from "zod";
+import { contentHash } from "@openpond/harness";
+import type { Taskset } from "./taskset-authored-contracts.js";
+
+export const AdamwOptimizerConfigSchema = z.object({
+  name: z.literal("adamw").default("adamw"),
+  weightDecay: z.number().nonnegative().max(1).default(0),
+  beta1: z.number().positive().lt(1).default(0.9),
+  beta2: z.number().positive().lt(1).default(0.999),
+  epsilon: z.number().positive().max(0.01).default(1e-8),
+}).strict().default({
+  name: "adamw",
+  weightDecay: 0,
+  beta1: 0.9,
+  beta2: 0.999,
+  epsilon: 1e-8,
+});
+
+export function withAuthoritativeRecipeHashes(
+  taskset: Taskset,
+  recipe: unknown,
+): unknown {
+  if (!recipe || typeof recipe !== "object" || Array.isArray(recipe)) {
+    return recipe;
+  }
+  const candidate = recipe as Record<string, unknown>;
+  if (candidate.method === "dpo") {
+    const policyModel = record(candidate.policyModel);
+    const referenceModel = record(candidate.referenceModel);
+    const dataset = record(candidate.dataset);
+    const invalidationHash = contentHash({
+      tasksetHash: taskset.contentHash,
+      preferenceSignals: taskset.learningSignals.preferences.map((signal) => ({
+        id: signal.id,
+        artifactRef: signal.artifactRef,
+        prompt: signal.prompt,
+        chosen: signal.chosen,
+        rejected: signal.rejected,
+        approved: signal.approved,
+      })),
+      policyModel,
+      referenceModel,
+      dataset,
+    });
+    return {
+      ...candidate,
+      referenceLogprobs: {
+        cacheSchemaVersion: "openpond.dpoReferenceLogprobs.v1",
+        cacheKey: contentHash(["dpo-reference-logprobs", invalidationHash]),
+        invalidationHash,
+      },
+    };
+  }
+  if (candidate.method === "ppo") {
+    const policyOptimization = record(candidate.policyOptimization);
+    const policyModel = record(policyOptimization.policyModel);
+    const referenceModel = record(policyOptimization.referenceModel);
+    const optimizer = record(policyOptimization.optimizer);
+    const valueModel = record(optimizer.valueModel);
+    const dataset = record(policyOptimization.dataset);
+    const reward = record(policyOptimization.reward);
+    const policyHash = contentHash(policyModel);
+    const referenceHash = contentHash(referenceModel);
+    const valueModelHash = contentHash(valueModel);
+    return {
+      ...candidate,
+      policyOptimization: {
+        ...policyOptimization,
+        dataset: {
+          ...dataset,
+          tasksetId: taskset.id,
+          tasksetHash: taskset.contentHash,
+        },
+        reward: {
+          ...reward,
+          graderHash: contentHash(taskset.graders),
+        },
+      },
+      resume: {
+        ...record(candidate.resume),
+        policyHash,
+        referenceHash,
+        valueModelHash,
+      },
+    };
+  }
+  if (candidate.method !== "grpo") return recipe;
+  const reward =
+    candidate.reward
+    && typeof candidate.reward === "object"
+    && !Array.isArray(candidate.reward)
+      ? candidate.reward as Record<string, unknown>
+      : {};
+  const metadataToolContractHash =
+    taskset.environment.metadata.toolContractHash;
+  const authoritativeToolContractHash =
+    typeof metadataToolContractHash === "string"
+    && metadataToolContractHash.trim()
+      ? metadataToolContractHash
+      : reward.toolContractHash;
+  const baseModel = record(candidate.baseModel);
+  const dataset = record(candidate.dataset);
+  const rollout = record(candidate.rollout);
+  const optimizer = record(candidate.optimizer);
+  const loss = record(candidate.loss);
+  const resourceLimits = record(candidate.resourceLimits);
+  const maxExamples = positiveInteger(dataset.maxExamples, 1);
+  const groupSize = positiveInteger(rollout.groupSize, 2);
+  const maxOutputTokens = positiveInteger(rollout.maxOutputTokens, 1);
+  const maxPromptTokens = positiveInteger(dataset.maxPromptTokens, 1);
+  const maxSteps = positiveInteger(optimizer.maxSteps, 1);
+  const optimizerIterations = positiveInteger(optimizer.iterations, 2);
+  return {
+    ...candidate,
+    resourceLimits: {
+      ...resourceLimits,
+      maxGpuSeconds: resourceLimits.maxGpuSeconds ?? Math.min(
+        10_800,
+        Math.ceil(positiveInteger(resourceLimits.wallTimeMs, 180_000) / 1_000),
+      ),
+    },
+    reward: {
+      ...reward,
+      graderHash: contentHash(taskset.graders),
+      toolContractHash: authoritativeToolContractHash,
+    },
+    policyOptimization: {
+      schemaVersion: "openpond.policyOptimization.v1",
+      policyModel: baseModel,
+      referenceModel: baseModel,
+      dataset: {
+        tasksetId: taskset.id,
+        tasksetHash: taskset.contentHash,
+        split: "train",
+        selectionStrategy: dataset.selectionStrategy,
+        selectionSeed: rollout.seed,
+        maxExamples,
+      },
+      sampler: {
+        temperature: rollout.temperature,
+        topP: rollout.topP,
+        maxOutputTokens,
+        maxTurns: rollout.maxTurns,
+        concurrency: rollout.concurrency,
+      },
+      environment: {
+        id: reward.environmentId,
+        version: reward.environmentVersion,
+        toolContractHash: authoritativeToolContractHash,
+      },
+      reward: {
+        graderId: reward.graderId,
+        graderHash: contentHash(taskset.graders),
+        learnedPreference: reward.learnedPreference ?? null,
+      },
+      kl: {
+        coefficient: loss.klBeta ?? null,
+        referenceConstraint: "fixed_reference",
+      },
+      budgets: {
+        maxRollouts: positiveInteger(resourceLimits.maxRollouts, maxExamples * groupSize),
+        maxEnvironmentExecutions: positiveInteger(resourceLimits.maxRollouts, maxExamples * groupSize),
+        maxInputTokens: maxExamples * groupSize * maxPromptTokens,
+        maxOutputTokens: maxExamples * groupSize * maxOutputTokens,
+        maxOptimizerSteps: maxSteps * optimizerIterations,
+        wallTimeMs: positiveInteger(resourceLimits.wallTimeMs, 180_000),
+        maximumCostUsd: null,
+      },
+      checkpointEverySteps: 1,
+      seed: rollout.seed,
+      evaluationSplit: "frozen_eval",
+      optimizer: {
+        method: "grpo",
+        groupSize,
+        normalization: "group_standardized",
+        advantageEpsilon:
+          typeof optimizer.advantageEpsilon === "number"
+            ? optimizer.advantageEpsilon
+            : 1e-8,
+        loss: loss.method ?? "grpo",
+        clipRange: typeof optimizer.clipRange === "number" ? optimizer.clipRange : 0.2,
+        iterations: optimizerIterations,
+        microbatchSize: positiveInteger(optimizer.microbatchSize, 1),
+        gradientAccumulationSteps: positiveInteger(
+          optimizer.gradientAccumulationSteps,
+          1,
+        ),
+        adamw: AdamwOptimizerConfigSchema.parse(optimizer.adamw),
+      },
+    },
+  };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function positiveInteger(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : fallback;
+}
+

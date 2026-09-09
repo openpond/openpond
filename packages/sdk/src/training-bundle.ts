@@ -323,3 +323,5 @@ function addJsonAsset(
 function bytes(value: unknown): Uint8Array {
   return Buffer.from(canonicalJson(value), "utf8");
 }
+
+export { withAuthoritativeRecipeHashes, AdamwOptimizerConfigSchema } from "./training-recipe-binding.js";
