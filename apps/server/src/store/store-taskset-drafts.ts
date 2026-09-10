@@ -30,6 +30,8 @@ import type { ModelTasksetDraftRequest, TasksetPackage } from "openpond-sdk/task
 import { materializeModelTasksetDraftPublication } from "../training/model-taskset-draft-publication.js";
 import { TasksetDraftFileMutationSchema, type TasksetDraftFileMutation } from "openpond-sdk/model-taskset-authoring";
 import { listTasksetDraftFiles, readTasksetDraftFile, mutateTasksetDraftFile, withTasksetDraftLock } from "./taskset-draft-files.js";
+import { readCachedTasksetPackage } from "../training/taskset-package-files.js";
+import { importTasksetPackageInTransaction } from "./store-taskset-package-import.js";
 
 const TasksetDraftPointerSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftPointer.v1"),
@@ -258,6 +260,8 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
     await this.ready;
     const draft = TasksetDraftSchema.parse(input.draft);
     const taskset = TasksetSchema.parse(input.taskset);
+    const packageValue = draft.modelScope?.source?.authoringGraph === "bound" && typeof taskset.metadata.importedPackageHash === "string"
+      ? await readCachedTasksetPackage(this.home, taskset.metadata.importedPackageHash) : null;
     const write = this.writeQueue.then(() => withTasksetDraftLock(this.home, async () => {
       const row = this.database.get<PayloadRow>("SELECT payload FROM taskset_drafts WHERE id = ?", [draft.id]);
       if (!row) throw new Error("Taskset draft was deleted before publication.");
@@ -272,14 +276,17 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
       }
       if (pointer.revision !== draft.revision || taskset.metadata.sourcePackageHash !== input.packageHash) throw new Error("Taskset draft changed before publication. Refresh before publishing.");
       const preparedSource = pointer.modelScope?.source;
+      const publicationLineage = preparedSource?.authoringGraph === "bound" && taskset.metadata.modelTasksetDerivation && typeof taskset.metadata.modelTasksetDerivation === "object"
+        ? { ...taskset.metadata.modelTasksetDerivation, schemaVersion: preparedSource.lineage.schemaVersion } : taskset.metadata.modelTasksetAuthoring;
       if (preparedSource && (taskset.id !== preparedSource.tasksetId || taskset.revision !== preparedSource.tasksetRevision
-        || contentHash(taskset.metadata.modelTasksetAuthoring) !== contentHash(preparedSource.lineage))) throw new Error("Taskset publication differs from its retained source preparation.");
+        || contentHash(publicationLineage) !== contentHash(preparedSource.lineage))) throw new Error("Taskset publication differs from its retained source preparation.");
       const published = TasksetDraftSchema.parse({ ...draft, status: "published", revision: draft.revision + 1,
         publishedTasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash }, updatedAt: new Date().toISOString() });
       const next = TasksetDraftPointerSchema.parse({ ...pointer, status: published.status, revision: published.revision,
         publishedTasksetRef: published.publishedTasksetRef, updatedAt: published.updatedAt });
       saveTasksetRevision(this.database, taskset, () => {
-        selectTasksetDraftModel(this.database, draft, taskset);
+        if (packageValue) importTasksetPackageInTransaction(this.database, { package: packageValue, taskset, generatedFiles: [] });
+        selectTasksetDraftModel(this.database, draft, taskset, packageValue);
         const current = this.database.get<{ revision: number }>("SELECT revision FROM taskset_drafts WHERE id = ?", [draft.id]);
         if (current?.revision !== draft.revision) throw new Error("Taskset draft changed during publication.");
         this.database.run("UPDATE taskset_drafts SET status = ?, revision = ?, payload = ?, updated_at = ? WHERE id = ?",

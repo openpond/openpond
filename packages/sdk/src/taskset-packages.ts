@@ -1,4 +1,5 @@
 export * from "./taskset-package-contracts.js";
+export { bindOrdinaryModelTasksetReward } from "./model-ordinary-taskset-reward.js";
 export * from "./taskset-package-client.js";
 export * from "./taskset-package-learning.js";
 export * from "./model-batch-review.js";

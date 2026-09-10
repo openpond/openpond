@@ -5,7 +5,10 @@ import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { createTasksetPackage, decodeTasksetPackageFile, validateTasksetPackage, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "../src/taskset-packages.js";
 import { HostedModelProjectTrainingSetupSchema } from "../src/model-projects.js";
 import { prepareModelTasksetDraft, publishModelTasksetDraftPackage, ModelTasksetAuthoringSchema } from "../src/taskset-packages.js";
-import { learningRef } from "@openpond/evals/learning";
+import { createLearningTextAsset, learningRef, sealLearningContent } from "@openpond/evals/learning";
+import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
+import { bindOrdinaryModelTasksetReward } from "../src/taskset-packages.js";
+import { deriveModelTaskset } from "../src/model-taskset-derivation.js";
 import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
 import { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript-environment/node";
 import { resolveTasksetPackageExecution } from "../src/taskset-packages.js";
@@ -65,6 +68,44 @@ function fixture() {
   const taskset = bindTasksetExecutionReleases({ taskset: TasksetReleaseSchema.parse({ ...content, contentHash: contentHash(content) }), environment, verifierSet });
   return createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files });
 }
+
+// Selecting a reusable Reward must not rewrite requests, lose binary/private
+// assets, mutate shared history, or claim the old checker's qualification.
+it("binds ordinary packages while retaining exact task and execution data", () => {
+  const asset = createLearningTextAsset({ path: "graders/selected.js", mediaType: "application/javascript", visibility: "verifier", text: "export function verify() { return { score: 1, passed: true }; }" });
+  const reward = RewardReleaseSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardRelease.v1", id: "selected-reward", revision: 1, name: "Selected", description: "", implementation: { kind: "custom_verifier", verifierRef: asset.asset, exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" }, rawScore: { minimum: 0, maximum: 1 }, assets: [asset.asset] }));
+  const rewardBinding = RewardBindingSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardBinding.v1", id: "selected-binding", revision: 1, name: "Selected", description: "", sources: [{ graderId: "selected", reward: learningRef(reward), role: "training", normalization: { kind: "identity" }, weight: 1, required: true, hardGate: true, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }));
+  const owner = { scopeId: "profile-a", modelId: "model-a" };
+  for (const original of [fixture(), ordinaryToolTaskset()]) {
+    const { contentHash: _packageHash, ...packageContent } = original;
+    const { contentHash: _taskHash, ...taskContent } = original.taskset;
+    const source = createTasksetPackage({ ...packageContent, taskset: sealLearningContent({ ...taskContent,
+      metadata: { ...taskContent.metadata, ordinaryAuthoring: { instructions: "Follow each task request." }, qualification: { passed: true } },
+    }) });
+    const before = JSON.stringify(source);
+    const intent = { owner, source, rewardBinding, rewards: [reward], assets: [asset] };
+    const bound = bindOrdinaryModelTasksetReward(intent);
+    expect(bound).toEqual(bindOrdinaryModelTasksetReward(intent));
+    expect(bound.taskset.tasks).toEqual(source.taskset.tasks);
+    expect(bound.taskset.tools).toEqual(source.taskset.tools);
+    expect(bound.taskset.metrics).toEqual(source.taskset.metrics);
+    expect(bound.environment).toEqual(source.environment);
+    for (const file of source.files) expect(bound.files).toContainEqual(file);
+    expect(bound.modelResources?.instructionMode).toBe("per_task");
+    expect(bound.taskset.metadata.modelTasksetDerivation).toMatchObject({ owner, root: learningRef(source.taskset), parent: learningRef(source.taskset) });
+    expect(bound.taskset.metadata).not.toHaveProperty("qualification");
+    expect(bound.verifierSet.calibrationReceiptRefs).toEqual([]);
+    expect(bound.taskset.graders[0]?.id).toBe("selected");
+    const next = deriveModelTaskset({ ...intent, assets: bound.modelResources!.assets, source: { ...bound.modelResources!, taskset: bound.taskset, executionResources: { environment: bound.environment, verifierSet: bound.verifierSet } } });
+    expect(next.taskset.id).toBe(bound.taskset.id);
+    expect(next.taskset.revision).toBe(2);
+    expect(next.taskset.tasks).toEqual(source.taskset.tasks);
+    expect(bindOrdinaryModelTasksetReward({ ...intent, owner: { ...owner, modelId: "model-b" } }).taskset.id).not.toBe(bound.taskset.id);
+    expect(() => bindOrdinaryModelTasksetReward({ ...intent, assets: [] })).toThrow(/private asset/);
+    expect(() => bindOrdinaryModelTasksetReward({ ...intent, source: bound })).toThrow(/ordinary source/);
+    expect(JSON.stringify(source)).toBe(before);
+  }
+});
 
 // Editing an ordinary shared package must fork only the intended Model while
 // retaining exact binary/private dependencies and immutable source history.

@@ -9,7 +9,7 @@ export async function inspectModelTasksetDraftSource(deps: Dependencies, input: 
   if (!model || model.profileId !== input.profileId) throw new Error("Taskset draft Model was not found in this Profile.");
   if (model.revision !== input.expectedModelRevision) throw new Error("Model changed before draft inspection. Refresh before editing.");
   const source = await exportLocalModelTasksetPackage({ ...deps, profileId: input.profileId, modelId: input.modelId });
-  if (source.modelResources || source.learningResources) throw new Error("This Taskset requires its bound or reviewed authoring workflow.");
+  if (source.learningResources) throw new Error("Reviewed Tasksets require their reviewed authoring workflow.");
   return { modelId: model.id, expectedModelRevision: model.revision, sourcePackageHash: source.contentHash };
 }
 

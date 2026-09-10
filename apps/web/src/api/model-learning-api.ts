@@ -3,6 +3,7 @@ import { HostedModelProjectSummarySchema } from "openpond-sdk/model-projects";
 import { OpenPondLearningClient, LearningSourceSchema, TaskDefinitionSchema, LearningPolicySchema, LearningPolicyInspectionResultSchema, LearningScheduleSchema,
   LearningIterationSchema, LearningIterationDispatchSchema, LearningOperationResultSchema, type LearningCommand } from "openpond-sdk/learning";
 import { api, type ClientConnection } from "../api";
+import { connectionQueryScope, scopeLearningClient } from "../lib/query-scope";
 
 const OverviewSchema = z.object({
   project: HostedModelProjectSummarySchema,
@@ -17,13 +18,13 @@ export function createHostedModelLearningApi(connection: ClientConnection, model
   const path = `/models/${encodeURIComponent(modelId)}/hosted-learning`;
   return {
     reviewClient(policyId: string, sourceId: string) {
-      return new OpenPondLearningClient({ baseUrl: connection.serverUrl, apiKey: connection.token, scope: profileId, fetch: async (url, init) => {
+      return scopeLearningClient(new OpenPondLearningClient({ baseUrl: connection.serverUrl, apiKey: connection.token, scope: profileId, fetch: async (url, init) => {
         const endpoint = new URL(String(url)).pathname.split("/").at(-1);
         if (endpoint !== "read" && endpoint !== "commands") throw new Error("Unsupported hosted review operation.");
         return fetch(`${connection.serverUrl}/v1/training${path}/review?${new URLSearchParams({ profileId })}`, {
           ...init, body: JSON.stringify({ policyId, sourceId, endpoint, request: JSON.parse(String(init?.body)) }),
         });
-      } });
+      } }), ["learning", connectionQueryScope(connection), profileId, "hosted", modelId, policyId, sourceId]);
     },
     async sources(afterId?: string) {
       return SourcesSchema.parse(await api.trainingRequest<unknown>(connection, `${path}/sources?${new URLSearchParams({ profileId, ...(afterId ? { afterId } : {}) })}`, undefined, "GET"));

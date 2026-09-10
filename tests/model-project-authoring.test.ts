@@ -18,6 +18,71 @@ import { learningRef } from "@openpond/evals/learning";
 import { learningContext, learningFixture } from "./helpers/learning-fixtures";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export";
 import { prepareModelTrainingDefaults } from "openpond-sdk/model-starters";
+import { RewardBindingSchema } from "@openpond/evals/rewards";
+import type { TasksetDraft, Taskset } from "@openpond/contracts";
+import { createTrainingApi } from "../apps/server/src/training/training-api.js";
+
+// Reward selection on an ordinary collection must publish one isolated revision
+// even before base selection, retain held-out defaults and survive later edits.
+test("saves ordinary tasks with a selected Reward through immutable revisions", async () => withTempDirectory("model-ordinary-binding-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const fixture = await learningFixture(store.learningRepository(), { verifierSource: "export function verify() { return { score: 1, passed: true }; }" });
+    const draft = tasksetDraftFromTaskset(tasksetFixture());
+    draft.profileId = learningContext.scope;
+    draft.learningSignals.demonstrations = [];
+    draft.capabilities.compatibleMethods = ["none"];
+    draft.tasks = draft.tasks.map(task => ({ ...task, privilegedContextRef: null }));
+    const source = await store.upsertTaskset(publishTasksetDraft({ draft }));
+    const project = { id: "ordinary-binding", profileId: source.profileId, name: "Ordinary selected Reward", objective: null, defaultBaseModel: null, defaultDestinationId: null,
+      trainingSetup: { tasksetRef: learningRef(source), evaluationTasksetRef: learningRef(source), rewardBindingRef: learningRef(fixture.binding) } };
+    const request = await createModelProjectSaveRequest(project, 0);
+    const checked = await checkModelProjectConfiguration({ store, request, destinations: async () => [] });
+    expect(checked.findings.filter(finding => finding.code === "model_taskset_derivation_unavailable")).toEqual([]);
+    const saved = await store.saveModelProjectConfiguration(request);
+    expect(saved.trainingSetup.tasksetRef?.id).not.toBe(source.id);
+    expect(saved.trainingSetup.rewardBindingRef).toEqual(learningRef(fixture.binding));
+    expect(saved.trainingSetup.evaluationTasksetRef).toEqual(saved.trainingSetup.tasksetRef);
+    expect(saved.trainingSetup.recipe).toBeNull();
+    expect(await store.saveModelProjectConfiguration(request)).toEqual(saved);
+    const exported = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: project.profileId, modelId: project.id });
+    expect(exported.modelResources?.instructionMode).toBe("per_task");
+    expect(exported.modelResources?.rewardBinding).toEqual(fixture.binding);
+    const { contentHash: _bindingHash, ...bindingContent } = fixture.binding;
+    const replacement = RewardBindingSchema.parse((await fixture.command({ action: "publish", kind: "binding", expectedRevision: 1,
+      content: { ...bindingContent, revision: 2, sources: bindingContent.sources.map(source => ({ ...source, weight: 2 })) },
+    })).resources[0]);
+    const nextRequest = await createModelProjectSaveRequest({ ...project, trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(replacement) } }, saved.revision);
+    const next = await store.saveModelProjectConfiguration(nextRequest);
+    expect(next.trainingSetup.tasksetRef?.id).toBe(saved.trainingSetup.tasksetRef?.id);
+    expect(next.trainingSetup.tasksetRef?.revision).toBe(2);
+    expect(next.trainingSetup.evaluationTasksetRef).toEqual(next.trainingSetup.tasksetRef);
+    expect(await store.saveModelProjectConfiguration(request)).toEqual(saved);
+    expect(await store.getTasksetRevision(source.id, source.revision)).toEqual(source);
+    const nextExport = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: project.profileId, modelId: project.id });
+    expect(nextExport.taskset.tasks).toEqual(exported.taskset.tasks);
+    expect(nextExport.modelResources?.rewardBinding).toEqual(replacement);
+    const api = createTrainingApi({ store, storeDir: home, evaluation: { readiness: async () => undefined } } as never);
+    const initialized = await store.initializeModelTasksetDraft(project.profileId, { schemaVersion: "openpond.modelTasksetDraftRequest.v1",
+      operationId: "edit-bound-tasks", modelId: project.id, expectedModelRevision: next.revision, sourcePackageHash: nextExport.contentHash }, nextExport);
+    if (!initialized) throw new Error("Missing bound draft");
+    const edited = await store.saveTasksetDraft({ ...initialized, revision: initialized.revision + 1,
+      sourceRefs: initialized.sourceRefs.map(ref => ({ ...ref, licensingStatus: "approved", secretScanStatus: "passed", piiScanStatus: "passed" })),
+      tasks: initialized.tasks.map(task => ({ ...task, input: { ...task.input, prompt: "Use the revised task request." } })),
+    }, initialized.revision);
+    const published = await api.request("publish_taskset_draft", { draftId: edited.id }) as { draft: TasksetDraft; taskset: Taskset };
+    const afterTaskEdit = (await store.getModelProject(project.id))!;
+    expect(afterTaskEdit.trainingSetup.tasksetRef).toEqual(learningRef(published.taskset));
+    expect(afterTaskEdit.trainingSetup.rewardBindingRef).toEqual(learningRef(replacement));
+    expect(afterTaskEdit.trainingSetup.evaluationTasksetRef).toEqual(afterTaskEdit.trainingSetup.tasksetRef);
+    expect(published.taskset.revision).toBe(3);
+    const taskEditExport = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: project.profileId, modelId: project.id });
+    expect(taskEditExport.modelResources?.rewardBinding).toEqual(replacement);
+    expect(taskEditExport.taskset.tasks[0]?.input.prompt).toBe("Use the revised task request.");
+    expect(await api.request("publish_taskset_draft", { draftId: edited.id })).toMatchObject({ taskset: { contentHash: published.taskset.contentHash } });
+    expect(await store.saveModelProjectConfiguration(request)).toEqual(saved);
+  } finally { await store.close(); }
+}));
 
 // Editor-added graders must prepare the same exact recipe as the exported
 // package, without a separate binding, and retain an owner's settings on reopen.

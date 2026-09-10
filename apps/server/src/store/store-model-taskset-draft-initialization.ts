@@ -7,6 +7,7 @@ import { contentHash } from "@openpond/harness";
 import { learningRef, sameLearningRef } from "@openpond/evals/learning";
 import { hashTasksetDraftPackage, materializePortableTasksetRelease, tasksetDraftFromTaskset, writeTasksetDraftPackage } from "@openpond/taskset-sdk";
 import { ModelProjectSchema } from "openpond-sdk/model-projects";
+import { ModelTasksetDerivationSchema } from "openpond-sdk/model-starters";
 import { ModelTasksetAuthoringSchema, ModelTasksetDraftRequestSchema, decodeTasksetPackageFile, prepareModelTasksetDraft, type ModelTasksetDraftRequest, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { desktopTasksetRuntimeAdapterId } from "../training/portable-evals-adapter.js";
@@ -49,7 +50,8 @@ export async function prepareDraftInitialization(input: { db: OpenPondSqliteConn
   if (cachedHash ? cachedHash !== sourcePackage.contentHash : !sameLearningRef(learningRef(materializePortableTasksetRelease({ taskset: source, adapterId: desktopTasksetRuntimeAdapterId(source) }).tasksetRelease), learningRef(sourcePackage.taskset))) {
     throw new Error("Taskset draft package differs from its selected source.");
   }
-  const previous = ModelTasksetAuthoringSchema.safeParse(sourcePackage.taskset.metadata.modelTasksetAuthoring);
+  const previous = sourcePackage.modelResources ? ModelTasksetDerivationSchema.safeParse(sourcePackage.taskset.metadata.modelTasksetDerivation)
+    : ModelTasksetAuthoringSchema.safeParse(sourcePackage.taskset.metadata.modelTasksetAuthoring);
   const owner = linked && previous.success && previous.data.owner.modelId === model.id ? previous.data.owner : { scopeId: profileId, modelId: model.id };
   const preparation = prepareModelTasksetDraft({ request, owner, source: sourcePackage });
   const prepared = prepareTasksetDraftSource({ sourceDraft: tasksetDraftFromTaskset(source), source: sourcePackage, preparation, expectedModelRevision: request.expectedModelRevision });

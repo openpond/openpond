@@ -6,20 +6,20 @@ import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { computeTasksetHash, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
 import { ModelProjectSchema, ModelProjectVersionedRefSchema, OpenPondModelProjectApiError, parseModelProjectSaveRequest, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { createModelStarterExecutionAsset, deriveModelTaskset, ModelTasksetDerivationSchema, type ModelTasksetPackage } from "openpond-sdk/model-starters";
-import { createTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
+import { bindOrdinaryModelTasksetReward, createTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import { prepareImportedTasksetPackage, type PreparedImportedTasksetPackage } from "../training/taskset-package-import.js";
 import { canonicalJson } from "openpond-sdk/training";
 import { createModelTasksetExecutionResourcesAsset } from "openpond-sdk/model-starters";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { importStarterReleaseInTransaction } from "./store-starter-release-import.js";
-import { readModelTasksetSource } from "./store-model-taskset-source.js";
+import { readModelTasksetSource, readSelectedModelReward } from "./store-model-taskset-source.js";
 
 export interface PreparedModelTaskset {
   taskset: Taskset;
   generatedFiles: GeneratedTaskFile[];
   directoryId: string;
   source: Taskset;
-  sourcePackage: ModelTasksetPackage;
+  sourcePackage: ModelTasksetPackage | null;
   derived: ModelTasksetPackage;
   imported?: PreparedImportedTasksetPackage;
 }
@@ -56,6 +56,14 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
   }
   const bindingRef = source.metadata.rewardBinding === undefined ? null : ModelProjectVersionedRefSchema.parse(source.metadata.rewardBinding);
   if (bindingRef && sameLearningRef(bindingRef, project.trainingSetup.rewardBindingRef)) return null;
+  if (!bindingRef && completeSource && !completeSource.modelResources && !completeSource.learningResources) {
+    const selection = readSelectedModelReward(db, project.profileId, project.trainingSetup.rewardBindingRef);
+    const value = bindOrdinaryModelTasksetReward({ owner: { scopeId: project.profileId, modelId: project.id }, source: completeSource, ...selection });
+    const preparation = recordModelTasksetPreparation(db, request, persistPreparation);
+    const imported = prepareImportedTasksetPackage({ package: value, profileId: project.profileId, name: source.name, createdAt: preparation.created_at });
+    const derived = { ...value.modelResources!, taskset: value.taskset, executionResources: { environment: value.environment, verifierSet: value.verifierSet } };
+    return { taskset: imported.taskset, generatedFiles: imported.generatedFiles, directoryId: String(imported.taskset.environment.metadata.runtimeSourceTasksetId), source, sourcePackage: null, derived, imported };
+  }
   if (!bindingRef) fail(422, "model_taskset_derivation_unavailable", "This Taskset needs an authored task definition and Reward binding before its Reward can be changed.");
   const { sourcePackage, selectedBinding, selectedRewards, assets } = readModelTasksetSource(db, source, project.trainingSetup.rewardBindingRef, completeSource);
   const lineage = ModelTasksetDerivationSchema.safeParse(sourcePackage.taskset.metadata.modelTasksetDerivation);
@@ -71,10 +79,7 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
   });
   const owner = linked && lineage.success && lineage.data.owner.modelId === project.id ? lineage.data.owner : { scopeId: project.profileId, modelId: project.id };
   const derived = deriveModelTaskset({ owner, source: sourcePackage, rewardBinding: selectedBinding, rewards: selectedRewards, assets: [...assets.values()] });
-  const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
-  if (persistPreparation) db.run("INSERT OR IGNORE INTO model_project_taskset_preparations (profile_id, operation_id, request_hash, created_at, state) VALUES (?, ?, ?, ?, 'preparing')", [project.profileId, request.operationId, hash, new Date().toISOString()]);
-  const preparation = db.get<{ request_hash: string; created_at: string }>("SELECT request_hash, created_at FROM model_project_taskset_preparations WHERE profile_id = ? AND operation_id = ?", [project.profileId, request.operationId]) ?? { request_hash: hash, created_at: new Date().toISOString() };
-  if (preparation.request_hash !== hash) fail(409, "model_operation_conflict", "This save operation was already used with different Model configuration.");
+  const preparation = recordModelTasksetPreparation(db, request, persistPreparation);
   if (completeSource) {
     const files = new Map(completeSource.files.map(file => [file.asset.id, file]));
     for (const asset of derived.assets) files.set(asset.id, { asset: asset.asset, base64: Buffer.from(asset.text).toString("base64") });
@@ -111,6 +116,10 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
 export function commitPreparedModelTaskset(db: OpenPondSqliteConnection, request: ModelProjectSaveRequest, prepared: PreparedModelTaskset) {
   const scope = request.project.profileId;
   for (const packageValue of [prepared.sourcePackage, prepared.derived]) {
+    if (!packageValue) continue;
+    for (const asset of packageValue.assets) importStarterReleaseInTransaction(db, scope, "asset", asset);
+    for (const reward of packageValue.rewards) importStarterReleaseInTransaction(db, scope, "reward", reward);
+    importStarterReleaseInTransaction(db, scope, "binding", packageValue.rewardBinding);
     importStarterReleaseInTransaction(db, scope, "package", packageValue.taskset);
     importStarterReleaseInTransaction(db, scope, "definition", packageValue.taskDefinition);
     const resources = packageValue.executionResources ?? packageValue.execution;
@@ -124,6 +133,15 @@ export function commitPreparedModelTaskset(db: OpenPondSqliteConnection, request
   db.run("INSERT INTO tasksets (id, profile_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at", [taskset.id, scope, taskset.status, payload, taskset.createdAt, taskset.updatedAt]);
   db.run("INSERT INTO taskset_revisions (taskset_id, revision, content_hash, profile_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [taskset.id, taskset.revision, taskset.contentHash, scope, taskset.status, payload, taskset.createdAt, taskset.updatedAt]);
   db.run("UPDATE model_project_taskset_preparations SET state = 'committed' WHERE profile_id = ? AND operation_id = ?", [scope, request.operationId]);
+}
+
+function recordModelTasksetPreparation(db: OpenPondSqliteConnection, request: ModelProjectSaveRequest, persist: boolean) {
+  const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
+  const scope = request.project.profileId;
+  if (persist) db.run("INSERT OR IGNORE INTO model_project_taskset_preparations (profile_id, operation_id, request_hash, created_at, state) VALUES (?, ?, ?, ?, 'preparing')", [scope, request.operationId, hash, new Date().toISOString()]);
+  const preparation = db.get<{ request_hash: string; created_at: string }>("SELECT request_hash, created_at FROM model_project_taskset_preparations WHERE profile_id = ? AND operation_id = ?", [scope, request.operationId]) ?? { request_hash: hash, created_at: new Date().toISOString() };
+  if (preparation.request_hash !== hash) fail(409, "model_operation_conflict", "This save operation was already used with different Model configuration.");
+  return preparation;
 }
 
 function fail(status: number, code: string, message: string): never {

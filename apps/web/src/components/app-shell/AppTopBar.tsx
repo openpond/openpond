@@ -9,6 +9,7 @@ import type {
   WorkspaceToolResult,
 } from "@openpond/contracts";
 import { lazy, Suspense, useEffect, useState, type MouseEvent } from "react";
+import { PageChromeTitleTarget, PageChromeActionsTarget } from "./PageChrome";
 import {
   ArrowLeft,
   ChevronRight,
@@ -188,6 +189,7 @@ export function AppTopBar({
             <ArrowLeft size={16} />
           </button>
         ) : null}
+        <PageChromeTitleTarget>
         {breadcrumbs?.length ? (
           <nav className="titlebar-breadcrumbs" aria-label="Breadcrumb">
             {breadcrumbs.map((item, index) => {
@@ -221,9 +223,11 @@ export function AppTopBar({
             {workspaceName && <span>{workspaceName}</span>}
           </div>
         )}
+        </PageChromeTitleTarget>
       </div>
       {showRightControls && (
         <div className="titlebar-right">
+          <PageChromeActionsTarget className="page-chrome-actions" />
           <CollaborationHeaderActions
             activeView={collaborationView}
             onDiscoverCommunities={onDiscoverCommunities}

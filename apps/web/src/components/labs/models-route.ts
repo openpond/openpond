@@ -13,7 +13,7 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  "get-started": "Get started", models: "Models", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Evaluations", runs: "Runs", versions: "Versions", serving: "Serving",
+  "get-started": "Get started", models: "Models", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Runs", versions: "Versions", serving: "Serving",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
   tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
@@ -27,6 +27,7 @@ const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
 };
 
 export function modelsLocation(page: ModelsPage = "models", modelId: string | null = null, detail: Partial<Omit<ModelsRoute, "page" | "modelId">> = {}): ModelsRoute {
+  if (page === "evaluations" && detail.collection === "review") return modelsLocation("labeling", modelId, { ...detail, collection: "default" });
   return { page, modelId: page === "get-started" ? null : modelId, collection: page === "evaluations" ? "results" : "default", resourceId: null, detailTab: null, query: "", after: null, ...detail };
 }
 
@@ -36,8 +37,13 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   let parts: string[];
   try { parts = encoded.slice(1).map(decodeURIComponent); } catch { return null; }
   if (parts.some((part) => !part.trim() || part.length > 2_000 || part.includes("\u0000"))) return null;
-  const page = (parts.shift() ?? "models") as ModelsPage;
-  if (!MODELS_PAGES.includes(page) || (page === "models" && (encoded.length > 1 || parts.length))) return null;
+  const pathModelId = parts[0] && !MODELS_PAGES.includes(parts[0] as ModelsPage) ? parts.shift()! : null;
+  if (pathModelId && (pathModelId.length > 500 || ["projects", "scorers"].includes(pathModelId))) return null;
+  if (parts[0] === "runs" && parts[1] === "evaluations") parts.splice(0, 2, "evaluations", "results");
+  if (parts[0] === "runs" && parts[1] === "comparisons") parts.splice(0, 2, "evaluations", "comparisons");
+  const pageSegment = parts.shift();
+  const page = (pageSegment ?? "models") as ModelsPage;
+  if (!MODELS_PAGES.includes(page) || pageSegment === "models" || (pathModelId && page === "get-started")) return null;
   let collection: ModelsCollection = page === "evaluations" ? "results" : "default";
   if (collections[page]?.includes(parts[0] as ModelsCollection)) collection = parts.shift() as ModelsCollection;
   else if (page === "evaluations" && parts.length) return null;
@@ -57,7 +63,9 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   if ([...query.keys()].some((key) => !["model", "q", "after", "source"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
   const sourceId = query.get("source");
   if (sourceId !== null && ((page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
-  const modelId = query.get("model");
+  const legacyModelId = query.get("model");
+  if (pathModelId && legacyModelId && pathModelId !== legacyModelId) return null;
+  const modelId = pathModelId ?? legacyModelId;
   if (page === "get-started" && query.size !== 0) return null;
   const search = query.get("q") ?? "";
   const after = query.get("after");
@@ -67,12 +75,16 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
 
 export function modelsPath(route: ModelsRoute): string {
   const parts = ["/models"];
-  if (route.page !== "models") parts.push(route.page);
-  if (route.collection !== "default") parts.push(route.collection);
+  if (route.modelId) parts.push(encodeURIComponent(route.modelId));
+  if (route.page === "evaluations" && route.collection === "review") return modelsPath(modelsLocation("labeling", route.modelId, { collection: "default", resourceId: route.resourceId, sourceId: route.sourceId, query: route.query, after: route.after }));
+  if (route.page === "evaluations") parts.push("runs", route.collection === "comparisons" ? "comparisons" : "evaluations");
+  else {
+    if (route.page !== "models") parts.push(route.page);
+    if (route.collection !== "default") parts.push(route.collection);
+  }
   if (route.resourceId) parts.push(encodeURIComponent(route.resourceId));
   if (route.resourceId && route.detailTab) parts.push(encodeURIComponent(route.detailTab));
   const query = new URLSearchParams();
-  if (route.modelId) query.set("model", route.modelId);
   if (route.query) query.set("q", route.query);
   if (route.after) query.set("after", route.after);
   if ((route.page === "labeling" || (route.page === "evaluations" && route.collection === "review")) && route.sourceId) query.set("source", route.sourceId);

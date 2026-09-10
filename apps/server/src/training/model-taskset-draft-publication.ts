@@ -1,10 +1,11 @@
 import { TasksetSchema, type Taskset } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
+import path from "node:path";
 import { computeTasksetHash, hashTasksetDraftPackage, materializePortableTasksetRelease } from "@openpond/taskset-sdk";
-import { decodeTasksetPackageFile, publishModelTasksetDraftPackage, type ModelTasksetDraftPreparation } from "openpond-sdk/taskset-packages";
+import { decodeTasksetPackageFile, prepareImportedTasksetPackage, publishModelTasksetDraftPackage, type ModelTasksetDraftPreparation } from "openpond-sdk/taskset-packages";
 import { AuthoredTasksetFileInventorySchema } from "./authored-taskset-files.js";
 import { captureLocalTasksetPackage } from "./taskset-package-capture.js";
-import { cacheTasksetPackage } from "./taskset-package-files.js";
+import { cacheTasksetPackage, materializeImportedTasksetPackage, readCachedTasksetPackage } from "./taskset-package-files.js";
 import { desktopTasksetRuntimeAdapterId } from "./portable-evals-adapter.js";
 import { materializeImmutableTasksetPackage } from "./model-starter-package-files.js";
 import { verifyPublishedTasksetAssets } from "./taskset-package-assets.js";
@@ -19,7 +20,16 @@ export async function materializeModelTasksetDraftPublication(input: {
     content: { schemaVersion: "openpond.tasksetPackage.v1", taskset: releases.tasksetRelease, environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease },
     sources: AuthoredTasksetFileInventorySchema.parse(input.taskset.metadata.portableFileInventory ?? []),
   });
-  const compiled = publishModelTasksetDraftPackage({ preparation: input.preparation, edited });
+  const source = input.preparation.authoringGraph === "bound" ? await readCachedTasksetPackage(input.home, input.preparation.sourcePackageHash) : undefined;
+  const compiled = publishModelTasksetDraftPackage({ preparation: input.preparation, edited, source });
+  if (compiled.modelResources) {
+    const imported = prepareImportedTasksetPackage({ package: compiled, profileId: input.taskset.profileId, name: input.taskset.name, createdAt: input.taskset.createdAt });
+    const projected = TasksetSchema.parse({ ...imported.taskset, authoringProvenance: input.taskset.authoringProvenance,
+      metadata: { ...imported.taskset.metadata, sourcePackageHash: input.taskset.metadata.sourcePackageHash } });
+    const taskset = TasksetSchema.parse({ ...projected, contentHash: computeTasksetHash(projected) });
+    await materializeImportedTasksetPackage({ home: input.home, ...imported, taskset });
+    return { taskset, directory: path.join(input.home, "training", "tasksets", String(taskset.environment.metadata.runtimeSourceTasksetId)) };
+  }
   const previousInventory = AuthoredTasksetFileInventorySchema.parse(input.taskset.metadata.portableFileInventory ?? []);
   const inventory = compiled.files.map(file => ({ asset: file.asset,
     sourcePath: previousInventory.find(previous => previous.asset.id === file.asset.id)?.sourcePath ?? file.asset.path,

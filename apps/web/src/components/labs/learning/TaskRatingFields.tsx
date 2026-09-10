@@ -1,7 +1,7 @@
 import { TaskRatingSchema, type TaskRating } from "openpond-sdk/learning";
 
 export function emptyTaskRating(): TaskRating {
-  return { schemaVersion: "openpond.taskRating.v1", criteria: "", scale: { minimum: 0, maximum: 5 }, score: 3, evidence: "", explanation: "" };
+  return { schemaVersion: "openpond.taskRating.v1", criteria: "", scale: { minimum: 1, maximum: 5 }, score: 3, evidence: "", explanation: "" };
 }
 
 export function TaskRatingFields({ value, onChange }: { value: TaskRating; onChange: (value: TaskRating) => void }) {

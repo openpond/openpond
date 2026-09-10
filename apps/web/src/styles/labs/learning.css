@@ -113,3 +113,15 @@
 .learning-list details > ul { list-style: none; padding: 0; }
 .learning-list details > ul > li { padding-block: 10px; }
 .learning-list pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+
+.learning-review-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); align-items: start; gap: 20px; }
+.learning-review-content, .learning-review-sidebar { display: grid; gap: 16px; min-width: 0; }
+.learning-workspace .learning-review-surface { margin: 0; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); min-width: 0; }
+.learning-review-surface .learning-value { margin: 0; }
+.learning-review-surface .learning-value + .learning-value { margin-top: 20px; }
+.learning-review-surface fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.learning-review-surface legend { font-weight: 600; font-size: 15px; }
+.learning-review-surface h2 { font-size: 15px; font-weight: 600; }
+.learning-review-surface textarea { font-family: inherit; }
+.learning-workspace label.learning-inline-choice { display: flex; flex-direction: row; gap: 8px; align-items: center; }
+@media (max-width: 1000px) { .learning-review-layout { grid-template-columns: 1fr; } }

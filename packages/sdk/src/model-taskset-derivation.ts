@@ -26,6 +26,7 @@ export const ModelTasksetPackageSchema = z.object({
   assets: z.array(LearningTextAssetSchema).max(1_000),
   executionResources: ModelTasksetExecutionResourcesSchema.optional(),
   execution: ModelStarterExecutionSchema.optional(),
+  instructionMode: z.literal("per_task").optional(),
 }).strict();
 export type ModelTasksetPackage = z.infer<typeof ModelTasksetPackageSchema>;
 
@@ -42,8 +43,22 @@ export function deriveModelTaskset(input: {
   rewards: z.infer<typeof RewardReleaseSchema>[];
   assets: z.infer<typeof LearningTextAssetSchema>[];
 }): ModelTasksetPackage {
+  return compileModelTasksetReward({ ...input, source: validateModelTasksetPackage(input.source) });
+}
+
+/** Internal compiler shared by validated bound and ordinary source admission.
+ * The source Taskset is always the real parent, never a synthetic bound copy. */
+export function compileModelTasksetReward(input: {
+  owner: z.input<typeof OwnerSchema>;
+  source: Pick<ModelTasksetPackage, "taskset" | "taskDefinition" | "executionResources" | "execution" | "instructionMode">;
+  rewardBinding: z.infer<typeof RewardBindingSchema>;
+  rewards: z.infer<typeof RewardReleaseSchema>[];
+  assets: z.infer<typeof LearningTextAssetSchema>[];
+  edits?: Pick<ModelTasksetPackage, "taskset" | "taskDefinition" | "executionResources" | "execution">;
+}): ModelTasksetPackage {
   const owner = OwnerSchema.parse(input.owner);
-  const source = validateModelTasksetPackage(input.source);
+  const source = input.source;
+  const edited = input.edits ?? source;
   const previous = source.taskset.metadata.modelTasksetDerivation === undefined ? null : ModelTasksetDerivationSchema.parse(source.taskset.metadata.modelTasksetDerivation);
   if (previous && source.taskset.id !== identity(previous.owner, previous.root)) throw new Error("Derived Taskset identity differs from its ownership lineage.");
   const owned = previous && same(previous.owner, owner);
@@ -54,25 +69,25 @@ export function deriveModelTaskset(input: {
   const rewards = input.rewards.map(reward => RewardReleaseSchema.parse(reward));
   const graders = compileBoundGraders(rewardBinding, rewards);
   if (rewardBinding.recipeRef) throw new Error("Resolve the Reward recipe into one standalone binding before deriving a Taskset.");
-  const policy = { ...source.taskset.policy, hiddenGraderRefs: graders.filter(grader => grader.privileged).map(grader => grader.id) };
-  const previousResources = source.executionResources ?? source.execution;
+  const policy = { ...edited.taskset.policy, hiddenGraderRefs: graders.filter(grader => grader.privileged).map(grader => grader.id) };
+  const previousResources = edited.executionResources ?? edited.execution;
   const environment = previousResources?.environment ?? createEnvironmentRelease({
     schemaVersion: "openpond.environmentRelease.v1", id: `${id}-environment`, revision: 1,
-    contract: source.taskset.environment, actionSchemaRef: null, observationSchemaRef: null, stateSchemaRef: null,
+    contract: edited.taskset.environment, actionSchemaRef: null, observationSchemaRef: null, stateSchemaRef: null,
     artifactCollection: { maxArtifacts: 100_000, maxTotalBytes: 250_000_000 }, adapterConformanceHashes: {}, metadata: {},
   });
   const verifierSet = createVerifierSetRelease({
     schemaVersion: "openpond.verifierSetRelease.v1", id: `${id}-verifiers`, revision, graders,
-    isolation: previousResources?.verifierSet.isolation ?? { processBoundary: "isolated_process", networkPolicy: "none", defaultTimeoutMs: Math.min(source.taskset.environment.defaultTimeoutMs, 300_000) },
+    isolation: previousResources?.verifierSet.isolation ?? { processBoundary: "isolated_process", networkPolicy: "none", defaultTimeoutMs: Math.min(edited.taskset.environment.defaultTimeoutMs, 300_000) },
     calibrationReceiptRefs: [], metadata: previousResources ? { sourceVerifierSet: learningRef(previousResources.verifierSet) } : {},
   });
   const executionResources = { environment, verifierSet };
-  const execution = source.execution ? { ...source.execution, verifierSet } : undefined;
-  const { contentHash: _taskHash, ...taskContent } = source.taskset;
-  const { contentHash: _definitionHash, ...definitionContent } = source.taskDefinition;
+  const execution = edited.execution ? { ...edited.execution, verifierSet } : undefined;
+  const { contentHash: _taskHash, ...taskContent } = edited.taskset;
+  const { contentHash: _definitionHash, ...definitionContent } = edited.taskDefinition;
   const taskExecution = { ...definitionContent.execution, policy, environmentRelease: { id: environment.id, contentHash: environment.contentHash }, verifierSetRelease: { id: verifierSet.id, contentHash: verifierSet.contentHash } };
   const taskDefinition = TaskDefinitionSchema.parse(sealLearningContent({ ...definitionContent, id: `${id}-definition`, revision, rewardBinding: learningRef(rewardBinding), execution: taskExecution }));
-  const authoring = source.taskset.metadata.starterAuthoring;
+  const authoring = source.taskset.metadata.starterAuthoring ?? source.taskset.metadata.ordinaryAuthoring;
   const graderFixtures = authoring && typeof authoring === "object" && !Array.isArray(authoring) && "graderFixtures" in authoring ? authoring.graderFixtures : undefined;
   // Keep provenance through exact lineage. Source package qualifications and
   // privacy attestations describe different bytes and must not be copied.
@@ -82,10 +97,11 @@ export function deriveModelTaskset(input: {
       starter: { taskDefinition: learningRef(taskDefinition), rewardBinding: learningRef(rewardBinding) },
       rewardExecution: { binding: rewardBinding, rewards },
       ...(graderFixtures === undefined ? {} : { starterAuthoring: { graderFixtures } }),
+      ...(edited.taskset.metadata.environmentResources === undefined ? {} : { environmentResources: edited.taskset.metadata.environmentResources }),
       modelTasksetDerivation: { schemaVersion: "openpond.modelTasksetDerivation.v1", owner, root, parent: learningRef(source.taskset) },
     },
   }));
-  return validateModelTasksetPackage({ taskset, taskDefinition, rewardBinding, rewards, assets: input.assets, executionResources, ...(execution ? { execution } : {}) });
+  return validateModelTasksetPackage({ taskset, taskDefinition, rewardBinding, rewards, assets: input.assets, executionResources, ...(execution ? { execution } : {}), ...(source.instructionMode ? { instructionMode: source.instructionMode } : {}) });
 }
 
 export function validateModelTasksetPackage(value: unknown): ModelTasksetPackage {
@@ -121,7 +137,7 @@ export function validateModelTasksetPackage(value: unknown): ModelTasksetPackage
   }
   for (const task of taskset.tasks) {
     if (taskDefinition.requiredOutputs && !same(task.requiredOutputs, taskDefinition.requiredOutputs)) throw new Error(`Taskset outputs differ from its reviewed definition: ${task.id}.`);
-    if (task.policyVisibleContext.instructions !== taskDefinition.instructions || !validateTaskValue(taskDefinition.inputSchema, task.input).valid ||
+    if ((result.instructionMode !== "per_task" && task.policyVisibleContext.instructions !== taskDefinition.instructions) || !validateTaskValue(taskDefinition.inputSchema, task.input).valid ||
         (task.expectedOutput !== null && !validateTaskValue(taskDefinition.outputSchema, task.expectedOutput).valid)) throw new Error(`Taskset task differs from its declared format: ${task.id}.`);
     if (task.privilegedContextRef && !assets.some(asset => asset.id === task.privilegedContextRef && asset.asset.visibility === "host_private")) throw new Error(`Taskset private context is missing: ${task.id}.`);
   }

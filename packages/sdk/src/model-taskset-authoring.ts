@@ -7,6 +7,8 @@ import { assertModelTasksetAuthoring, modelAuthoredTasksetId } from "./model-tas
 import { createTasksetPackage, validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
 import { createTasksetPackageExecutionFile, resolveTasksetPackageExecution } from "./taskset-package-execution.js";
 import { modelStarterExecutionAssetId } from "./model-starter-execution.js";
+import { deriveModelTaskset } from "./model-taskset-derivation.js";
+import { publishBoundModelTasksetDraftPackage } from "./model-bound-taskset-authoring.js";
 
 export * from "./model-taskset-authoring-contracts.js";
 
@@ -15,8 +17,19 @@ export * from "./model-taskset-authoring-contracts.js";
 export function prepareModelTasksetDraft(input: { request: ModelTasksetDraftRequest; owner: { scopeId: string; modelId: string }; source: TasksetPackage }): ModelTasksetDraftPreparation {
   const request = ModelTasksetDraftRequestSchema.parse(input.request);
   const owner = ModelTasksetAuthoringOwnerSchema.parse(input.owner);
-  const source = requireOrdinaryPackage(input.source);
+  const source = validateTasksetPackage(input.source);
+  if (source.learningResources) throw new Error("Reviewed Tasksets require their reviewed authoring workflow.");
   if (source.contentHash !== request.sourcePackageHash) throw new Error("Taskset draft source package changed.");
+  if (source.modelResources) {
+    const derived = deriveModelTaskset({ owner, source: { ...source.modelResources, taskset: source.taskset, executionResources: { environment: source.environment, verifierSet: source.verifierSet } },
+      rewardBinding: source.modelResources.rewardBinding, rewards: source.modelResources.rewards, assets: source.modelResources.assets });
+    const lineage = derived.taskset.metadata.modelTasksetDerivation as { owner: typeof owner; root: ReturnType<typeof learningRef>; parent: ReturnType<typeof learningRef> };
+    return ModelTasksetDraftPreparationSchema.parse({ schemaVersion: "openpond.modelTasksetDraftPreparation.v1",
+      draftId: `model-taskset-draft-${contentHash({ owner, operationId: request.operationId })}`, requestHash: contentHash(request),
+      sourcePackageHash: source.contentHash, sourceTasksetRef: learningRef(source.taskset), tasksetId: derived.taskset.id,
+      tasksetRevision: derived.taskset.revision, lineage: { ...lineage, schemaVersion: "openpond.modelTasksetAuthoring.v1" }, authoringGraph: "bound",
+    });
+  }
   const previous = assertModelTasksetAuthoring(source.taskset);
   const owned = previous && contentHash(previous.owner) === contentHash(owner);
   const root = owned ? previous.root : learningRef(source.taskset);
@@ -31,9 +44,13 @@ export function prepareModelTasksetDraft(input: { request: ModelTasksetDraftRequ
 
 /** The edited package already carries exact file bytes and execution releases.
  * Seal the owned revision without copying qualification for different bytes. */
-export function publishModelTasksetDraftPackage(input: { preparation: ModelTasksetDraftPreparation; edited: TasksetPackage }): TasksetPackage {
+export function publishModelTasksetDraftPackage(input: { preparation: ModelTasksetDraftPreparation; edited: TasksetPackage; source?: TasksetPackage }): TasksetPackage {
   const prepared = ModelTasksetDraftPreparationSchema.parse(input.preparation);
   if (!sameLearningRef(prepared.sourceTasksetRef, prepared.lineage.parent)) throw new Error("Taskset draft preparation differs from its source lineage.");
+  if (prepared.authoringGraph === "bound") {
+    if (!input.source) throw new Error("Bound Taskset authoring requires its retained source package.");
+    return publishBoundModelTasksetDraftPackage({ preparation: prepared, source: input.source, edited: input.edited });
+  }
   const edited = requireOrdinaryPackage(input.edited);
   const { contentHash: _verifierHash, ...verifierContent } = edited.verifierSet;
   const verifierSet = createVerifierSetRelease({ ...verifierContent, id: `${prepared.tasksetId}-verifiers`, revision: prepared.tasksetRevision,

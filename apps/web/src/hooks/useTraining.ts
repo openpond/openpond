@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { connectionQueryScope } from "../lib/query-scope";
 import { modelBatchReviewActions } from "./model-batch-review-actions";
 import { tasksetDraftActions } from "./taskset-draft-actions";
 import type {
@@ -112,45 +114,34 @@ const IDLE_TRAINING_POLL_INTERVAL_MS = 30_000;
 
 export function useTraining(input: { connection: ClientConnection | null; profileId: string }) {
   const { connection, profileId } = input;
-  const [payload, setPayload] = useState<TrainingStateResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const queries = useQueryClient();
+  const connectionScope = connectionQueryScope(connection);
+  const queryKey = useMemo(() => ["training", connectionScope, profileId] as const, [connectionScope, profileId]);
+  const queryFn = useCallback(async () => TrainingStateResponseSchema.parse(await api.trainingState(connection!, profileId)), [connection, profileId]);
+  const stateQuery = useQuery({ queryKey, queryFn, enabled: Boolean(connection) });
+  const payload = stateQuery.data ?? null;
+  const loading = Boolean(connection) && stateQuery.isPending;
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const refreshInFlightRef = useRef<Promise<TrainingStateResponse | null> | null>(null);
   const activityRevisionRef = useRef<string | null>(null);
+  activityRevisionRef.current = payload?.activityRevision ?? null;
 
-  const refresh = useCallback((): Promise<TrainingStateResponse | null> => {
-    if (!connection) return Promise.resolve(null);
-    if (refreshInFlightRef.current) return refreshInFlightRef.current;
-    setLoading(true);
-    const request = api.trainingState(connection, profileId)
-      .then((next) => {
-        const normalized = TrainingStateResponseSchema.parse(next);
-        activityRevisionRef.current = normalized.activityRevision ?? null;
-        setPayload(normalized);
-        setError(null);
-        return normalized;
-      })
-      .catch((caught) => {
-        setError(message(caught));
-        return null;
-      })
-      .finally(() => {
-        if (refreshInFlightRef.current !== request) return;
-        refreshInFlightRef.current = null;
-        setLoading(false);
-      });
-    refreshInFlightRef.current = request;
-    return request;
-  }, [connection, profileId]);
+  const refresh = useCallback(async (): Promise<TrainingStateResponse | null> => {
+    if (!connection) return null;
+    try {
+      const next = await queries.fetchQuery({ queryKey, queryFn, staleTime: 0 });
+      setError(null);
+      return next;
+    } catch (caught) { setError(message(caught)); return null; }
+  }, [connection, queries, queryKey, queryFn]);
 
   const refreshAfterMutation = useCallback(async (): Promise<TrainingStateResponse | null> => {
-    // A background activity poll can already be reading the pre-mutation
-    // projection. Let that request settle, then fetch again so a successful
-    // mutation cannot leave the UI showing the old hosted sync state.
-    if (refreshInFlightRef.current) await refreshInFlightRef.current;
+    // A pre-mutation read must not overwrite the newly committed projection.
+    await queries.cancelQueries({ queryKey, exact: true });
+    await queries.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+    await queries.invalidateQueries({ queryKey: ["task-inventory", connectionScope, profileId] });
     return refresh();
-  }, [refresh]);
+  }, [queries, queryKey, connectionScope, profileId, refresh]);
 
   const mutate = useCallback(async <T,>(key: string, path: string, body: unknown, method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST", options: { silent?: boolean } = {}): Promise<T | null> => {
     if (!connection) return null;
@@ -166,11 +157,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     } finally { if (!options.silent) setBusyAction(null); }
   }, [connection, refreshAfterMutation]);
 
-  useEffect(() => {
-    activityRevisionRef.current = null;
-    if (!connection) { setPayload(null); return; }
-    void refresh();
-  }, [connection, profileId, refresh]);
 
   const hasActiveWork = payload
     ? [
@@ -952,7 +938,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     finally { setBusyAction(null); }
   }
 
-  return { connection, payload, loading, busyAction, error, refresh, actions };
+  return { connection, payload, loading, busyAction, error: error ?? stateQuery.error?.message ?? null, refresh, actions };
 }
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error); }

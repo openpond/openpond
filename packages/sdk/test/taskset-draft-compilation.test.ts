@@ -4,6 +4,49 @@ import { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript
 import { prepareImportedTasksetPackage, prepareModelTasksetDraft, prepareTasksetDraftSource, materializeTasksetDraftWorkspace, compileModelTasksetDraftWorkspace, resolveTasksetPackageExecution } from "../src/taskset-packages.js";
 import { createTasksetDraftWorkspace, tasksetDraftFromTaskset, saveTasksetDraftWorkspaceDocument, saveTasksetDraftWorkspaceFile, readTasksetDraftWorkspaceFile } from "../src/taskset-drafts.js";
 import { ordinaryToolTaskset } from "./fixtures/ordinary-tool-taskset.js";
+import { createLearningTextAsset, learningRef, sealLearningContent } from "@openpond/evals/learning";
+import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
+import { bindOrdinaryModelTasksetReward, createTasksetPackage } from "../src/taskset-packages.js";
+
+// Editing source-bound tasks must retain the native Reward and private runtime,
+// create an owned revision and reject scorer changes or substituted parents.
+it("publishes bound task edits with exact Reward and source lineage", () => {
+  const ordinary = ordinaryToolTaskset();
+  const { contentHash: _hash, ...content } = ordinary.taskset;
+  const { contentHash: _packageHash, ...packageContent } = ordinary;
+  const original = createTasksetPackage({ ...packageContent, taskset: sealLearningContent({ ...content,
+    metadata: { ...content.metadata, ordinaryAuthoring: { ...content.metadata.ordinaryAuthoring as object, instructions: "Inspect the task's public value." } } }) });
+  const asset = createLearningTextAsset({ path: "reward/check.js", mediaType: "application/javascript", visibility: "verifier", text: "export function verify() { return { score: 1, passed: true }; }" });
+  const reward = RewardReleaseSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardRelease.v1", id: "task-edit-reward", revision: 1, name: "Outcome", description: "", implementation: { kind: "custom_verifier", verifierRef: asset.asset, exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" }, rawScore: { minimum: 0, maximum: 1 }, assets: [asset.asset] }));
+  const binding = RewardBindingSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardBinding.v1", id: "task-edit-binding", revision: 1, sources: [{ graderId: "outcome", reward: learningRef(reward), role: "training", normalization: { kind: "identity" }, weight: 1, required: true, hardGate: true, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }));
+  const owner = { scopeId: "workspace", modelId: "bound-edit-model" };
+  const source = bindOrdinaryModelTasksetReward({ owner, source: original, rewardBinding: binding, rewards: [reward], assets: [asset] });
+  const before = JSON.stringify(source);
+  const now = "2026-09-10T12:00:00.000Z";
+  const preparation = prepareModelTasksetDraft({ owner, source, request: { schemaVersion: "openpond.modelTasksetDraftRequest.v1", operationId: "edit-bound", modelId: owner.modelId, expectedModelRevision: 1, sourcePackageHash: source.contentHash } });
+  expect(preparation).toMatchObject({ authoringGraph: "bound", tasksetId: source.taskset.id, tasksetRevision: 2 });
+  const projection = prepareImportedTasksetPackage({ package: source, profileId: owner.scopeId, name: "Bound task", createdAt: now });
+  const initialized = prepareTasksetDraftSource({ source, preparation, expectedModelRevision: 1, sourceDraft: tasksetDraftFromTaskset(projection.taskset, now) });
+  let workspace = materializeTasksetDraftWorkspace({ source, initialized });
+  workspace = saveTasksetDraftWorkspaceDocument({ workspace, now, expectedDraftRevision: workspace.draft.revision, draft: { ...workspace.draft,
+    sourceRefs: workspace.draft.sourceRefs.map(ref => ({ ...ref, licensingStatus: "approved", secretScanStatus: "passed", piiScanStatus: "passed" })),
+    tasks: workspace.draft.tasks.map(task => ({ ...task, input: { prompt: "Inspect the value and explain the result." } })),
+  } });
+  const compile = (current = workspace, retained = source) => compileModelTasksetDraftWorkspace({ workspace: current, preparation, source: retained, now, adapterId: "test-bound-edit" });
+  const published = compile();
+  expect(published.modelResources?.rewardBinding).toEqual(binding);
+  expect(published.modelResources?.rewards).toEqual([reward]);
+  expect(published.taskset.tasks[0]?.input).toEqual({ prompt: "Inspect the value and explain the result." });
+  expect(published.taskset.tasks[0]?.privilegedContextRef).toBe(source.taskset.tasks[0]?.privilegedContextRef);
+  expect(published.taskset.metadata.modelTasksetDerivation).toMatchObject({ owner, parent: learningRef(source.taskset) });
+  expect(published.environment).toEqual(source.environment);
+  expect(published).toEqual(compile());
+  expect(() => compile(workspace, original)).toThrow(/bound|Bound/);
+  const changedGrader = saveTasksetDraftWorkspaceDocument({ workspace, now, expectedDraftRevision: workspace.draft.revision,
+    draft: { ...workspace.draft, graders: workspace.draft.graders.map(grader => ({ ...grader, weight: 2 })) } });
+  expect(() => compile(changedGrader)).toThrow(/saved Reward/);
+  expect(JSON.stringify(source)).toBe(before);
+});
 
 // Hosted snapshots must compile through the same authoring engine as local
 // files, execute changed private code and retain the exact previous revision.

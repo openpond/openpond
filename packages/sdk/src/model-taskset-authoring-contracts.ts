@@ -33,6 +33,7 @@ export const ModelTasksetDraftPreparationSchema = z.object({
   tasksetId: IdSchema,
   tasksetRevision: z.number().int().positive(),
   lineage: ModelTasksetAuthoringSchema,
+  authoringGraph: z.literal("bound").optional(),
 }).strict();
 export type ModelTasksetDraftPreparation = z.infer<typeof ModelTasksetDraftPreparationSchema>;
 

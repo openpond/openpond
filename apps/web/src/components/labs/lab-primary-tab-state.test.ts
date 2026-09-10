@@ -5,11 +5,13 @@ import {
 } from "./lab-primary-tab-state";
 
 describe("Models page, scope and resource route boundary", () => {
-  // Regression: scope was encoded as a separate page tree, and changing models discarded the active page.
+  // Changing model scope must retain the active page while clearing its old detail.
   it("round-trips every page and retains compatible views while clearing the previous model's detail", () => {
     for (const page of MODELS_PAGES) {
       const original = modelsLocation(page, "model A");
       const url = new URL(modelsPath(original), "https://local.invalid");
+      expect(url.searchParams.has("model")).toBe(false);
+      if (page !== "get-started") expect(url.pathname).toContain("/models/model%20A");
       expect(modelsRouteFromLocation(url)).toEqual(original);
       expect(changeModelsScope(original, "model B")).toEqual(modelsLocation(page, "model B"));
       expect(changeModelsScope(original, null)).toEqual(modelsLocation(page));
@@ -33,7 +35,9 @@ describe("Models page, scope and resource route boundary", () => {
     }
     expect(modelsRouteFromLocation({ pathname: "/models/runs/new/model-a", search: "?model=model-a" })).toEqual(modelsLocation("runs", "model-a", { collection: "new", resourceId: "model-a" }));
     expect(modelsRouteFromLocation({ pathname: "/models/tasksets/drafts/draft-a" })).toEqual(modelsLocation("tasksets", null, { collection: "drafts", resourceId: "draft-a" }));
-    for (const pathname of ["/models/get-started/private-model", "/models/project-a/tasksets", "/models/projects/project-a", "/models/scorers", "/models/runs/new", "/models/versions/version-a/lineage", "/models/evaluations/not-a-view/anything", "/models/tasksets/t/graders", "/models/tasksets/%ZZ"]) expect(modelsRouteFromLocation({ pathname })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models/project-a/tasksets" })).toEqual(modelsLocation("tasksets", "project-a"));
+    expect(modelsRouteFromLocation({ pathname: "/models/project-a/tasks", search: "?model=other" })).toBeNull();
+    for (const pathname of ["/models/get-started/private-model", "/models/projects/project-a", "/models/scorers", "/models/runs/new", "/models/versions/version-a/lineage", "/models/evaluations/not-a-view/anything", "/models/tasksets/t/graders", "/models/tasksets/%ZZ"]) expect(modelsRouteFromLocation({ pathname })).toBeNull();
     for (const search of ["?model=a", "?q=invoice", "?after=old-workspace-cursor"]) {
       expect(modelsRouteFromLocation({ pathname: "/models/get-started", search })).toBeNull();
     }

@@ -61,7 +61,7 @@ export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, valu
   if (!reviewedBinding) assertReward(db, request);
   const tasksetBinding = reviewedBinding ? learningRef(reviewedBinding)
     : selectedTaskset?.metadata.rewardBinding === undefined ? null : ModelProjectVersionedRefSchema.parse(selectedTaskset.metadata.rewardBinding);
-  if (tasksetBinding && project.trainingSetup.rewardBindingRef && !sameLearningRef(tasksetBinding, project.trainingSetup.rewardBindingRef) && !prepared) fail(409, "model_taskset_preparation_required", "Changing this Reward requires publishing its model-owned Taskset revision.");
+  if (selectedTaskset && project.trainingSetup.rewardBindingRef && (!tasksetBinding || !sameLearningRef(tasksetBinding, project.trainingSetup.rewardBindingRef)) && !prepared) fail(409, "model_taskset_preparation_required", "Changing this Reward requires publishing its model-owned Taskset revision.");
   if (prepared) {
     if (!project.trainingSetup.tasksetRef || !sameLearningRef(project.trainingSetup.tasksetRef, learningRef(prepared.source)) ||
         !project.trainingSetup.rewardBindingRef || !sameLearningRef(project.trainingSetup.rewardBindingRef, learningRef(prepared.derived.rewardBinding))) fail(409, "model_taskset_preparation_changed", "The prepared Taskset differs from the selected configuration.");
@@ -72,7 +72,9 @@ export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, valu
     baseModel: project.trainingSetup.baseModel ?? project.defaultBaseModel,
     method: project.trainingSetup.method ?? (selectedTaskset?.authoringProvenance.buildIntent === "verifiable_reward" ? "grpo" : selectedTaskset?.authoringProvenance.buildIntent === "demonstrations" ? "sft" : null),
     ...(tasksetBinding ? { rewardBindingRef: tasksetBinding } : {}),
-    ...(prepared ? { rewardBindingRef: learningRef(prepared.derived.rewardBinding), tasksetRef: learningRef(prepared.taskset), tasksetRelease: null, recipe: null } : {}),
+    ...(prepared ? { rewardBindingRef: learningRef(prepared.derived.rewardBinding), tasksetRef: learningRef(prepared.taskset), tasksetRelease: null, recipe: null,
+      ...(project.trainingSetup.evaluationTasksetRef && sameLearningRef(project.trainingSetup.evaluationTasksetRef, learningRef(prepared.source)) ? { evaluationTasksetRef: learningRef(prepared.taskset) } : {}),
+    } : {}),
   });
   const defaultsPackage = prepared?.derived ?? sourcePackage ?? (selectedTaskset && !reviewedBinding && trainingSetup.rewardBindingRef
     && selectedTaskset.metadata.taskDefinition !== undefined && selectedTaskset.metadata.rewardBinding !== undefined
