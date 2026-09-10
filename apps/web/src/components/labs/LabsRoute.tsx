@@ -1,7 +1,7 @@
 import { LabComparisonSeriesCreateDialog } from "./LabComparisonSeriesCreateDialog";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LearnedPreferenceRewardBinding, TasksetDraft } from "@openpond/contracts";
-import { appendTaskIntake } from "openpond-sdk/taskset-drafts";
+import { appendTaskIntake, taskIntakeSourceFiles } from "openpond-sdk/taskset-drafts";
 import { learningRef, type TaskBatch } from "openpond-sdk/learning";
 import { api } from "../../api";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
@@ -59,7 +59,7 @@ export function LabsRoute(props: LabsRouteProps) {
   const savedModelId = useRef<string | null>(null);
   const [importSource, setImportSource] = useState<"source" | DatasetCreateSource | null>(null);
   const intakeBusy = useRef(false);
-  const intakeDraft = useRef<TasksetDraft | null>(null);
+  const intakeDraft = useRef<{ previewHash: string; draft: TasksetDraft } | null>(null);
   const [runTarget, setRunTarget] = useState<{ tasksetId?: string; reward?: LearnedPreferenceRewardBinding | null } | null>(null);
   const [selectedRunTarget, setSelectedRunTarget] = useState("");
   const workspaceKey = JSON.stringify([profileView.connection?.serverUrl ?? null, profileId, training.settingsPreferences.defaultTeamId ?? null, props.account?.apiBaseUrl ?? null, props.account?.activeProfile?.handle ?? null]);
@@ -275,12 +275,28 @@ export function LabsRoute(props: LabsRouteProps) {
     {importSource === "upload" || importSource === "hermes" || importSource === "openclaw" ? <AppDialog ariaLabel="Import tasks" className="labs-rename-dialog labs-model-create-dialog" backdropClassName="labs-rename-backdrop" onClose={() => { if (!intakeBusy.current) setImportSource(null); }}>
       <TaskIntakeForm client={learningClient} initialFormat={importSource === "upload" ? "json" : importSource} onBusyChange={busy => { intakeBusy.current = busy; }} onBack={() => setImportSource("source")}
         onImported={sourceId => { if (priorWorkspace.current !== workspaceKey) return; setImportSource(null); open(modelsLocation("labeling", route?.modelId ?? null, { sourceId })); }}
-        onTasks={async ({ preview, recordIds, name, signal }) => {
-          const draft = intakeDraft.current ?? await training.training.actions.createTasksetDraft(name, route?.modelId);
+        onTasks={async ({ preview, files, recordIds, name, signal }) => {
+          const retainedFiles = taskIntakeSourceFiles(preview, files);
+          let draft = (intakeDraft.current?.previewHash === preview.contentHash ? intakeDraft.current.draft : null) ?? await training.training.actions.createTasksetDraft(name, route?.modelId);
           if (!draft) throw new Error("Could not create the imported task draft.");
           signal.throwIfAborted();
           if (priorWorkspace.current !== workspaceKey) throw new Error("The active workspace changed. Reopen the import in the intended workspace.");
-          intakeDraft.current = draft;
+          intakeDraft.current = { previewHash: preview.contentHash, draft };
+          const inventory = await training.training.actions.tasksetDraftFiles(draft.id);
+          if (!inventory) throw new Error("Could not inspect the imported draft files.");
+          for (const file of retainedFiles) {
+            signal.throwIfAborted();
+            if (inventory.files.some(existing => existing.path === file.path)) {
+              const existing = await training.training.actions.tasksetDraftFile(draft.id, file.path);
+              if (!existing || existing.file.contentHash !== file.contentHash) throw new Error("A retained import file changed. Import will not overwrite it.");
+              continue;
+            }
+            const updated = await training.training.actions.saveTasksetDraftFile({ draftId: draft.id, expectedDraftRevision: draft.revision,
+              path: file.path, expectedFileHash: null, content: file.content });
+            if (!updated) throw new Error("Could not retain an import source file. Retry to continue this draft.");
+            draft = updated; intakeDraft.current = { previewHash: preview.contentHash, draft: updated };
+          }
+          signal.throwIfAborted();
           const saved = await training.training.actions.saveTasksetDraft(appendTaskIntake(draft, preview, recordIds));
           if (!saved) throw new Error("The task draft could not be saved. Retry to continue this draft.");
           signal.throwIfAborted();

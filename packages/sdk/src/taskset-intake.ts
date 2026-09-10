@@ -1,6 +1,19 @@
 import { contentHash } from "@openpond/harness";
-import { TaskIntakePreviewSchema, type TaskIntakePreview } from "@openpond/evals/learning";
+import { previewTaskIntake, TaskIntakePreviewSchema, type TaskIntakePreview, type TaskIntakeFile } from "@openpond/evals/learning";
 import { TaskDataDraftSchema, TasksetDraftSchema, type TasksetDraft } from "./taskset-draft-document.js";
+import { createTasksetDraftFile } from "./taskset-draft-files.js";
+
+/** Retained source files are unreferenced private assets during publication.
+ * A manifest preserves upload filenames without granting them filesystem paths. */
+export function taskIntakeSourceFiles(preview: TaskIntakePreview, files: TaskIntakeFile[]) {
+  if (previewTaskIntake({ format: preview.format, files }).contentHash !== preview.contentHash) throw new Error("The source files differ from the import preview.");
+  const directory = `private/intake/${preview.contentHash}`;
+  const sources = files.map((file, index) => ({ file, path: `${directory}/${String(index).padStart(4, "0")}.txt` }));
+  const manifest = { schemaVersion: "openpond.taskIntakeSources.v1", format: preview.format, previewHash: preview.contentHash,
+    files: sources.map(({ file, path }) => ({ originalPath: file.path, retainedPath: path })) };
+  return [...sources.map(({ file, path }) => createTasksetDraftFile(path, new TextEncoder().encode(file.text))),
+    createTasksetDraftFile(`${directory}/manifest.json`, new TextEncoder().encode(JSON.stringify(manifest)))];
+}
 
 /** Raw history stays in Labeling until its task and runtime are reviewed. */
 export function appendTaskIntake(draft: TasksetDraft, raw: TaskIntakePreview, recordIds: string[]): TasksetDraft {
