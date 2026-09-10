@@ -5,6 +5,7 @@ import { ImmutableAssetRefSchema, ImmutableReleaseRefSchema, ReleaseHashSchema, 
 import { RewardBindingSchema, RewardCompositionSchema, RewardReleaseRefSchema, RewardReleaseSchema } from "../rewards.js";
 import { TaskRecordSchema, TaskSplitSchema, TasksetReleaseContentSchema } from "../tasksets.js";
 import { assertBoundedTaskJson, validateTaskSchema } from "../task-schema.js";
+import { JudgeCallReservationSchema } from "./judge-budget.js";
 
 export const LearningJsonObjectSchema = z.record(z.string(), z.json());
 export const LearningRevisionRefSchema = RewardReleaseRefSchema;
@@ -279,6 +280,8 @@ export const TaskGradeRunSchema = z.object({
   attemptCount: z.number().int().nonnegative(),
   timeoutMs: z.number().int().min(100).max(300_000),
   maximumSpendUsd: z.number().nonnegative().max(1_000),
+  judgeCalls: z.array(JudgeCallReservationSchema).max(10_000).optional(),
+  requestedBy: ReleaseIdSchema.optional(),
   failure: z.string().max(20_000).nullable(),
   createdAt: ReleaseTimestampSchema,
   updatedAt: ReleaseTimestampSchema,

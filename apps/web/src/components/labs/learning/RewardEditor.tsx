@@ -63,7 +63,8 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
     });
   }
   const persistence = useAuthoringDraft(authoringDraft);
-  const checkRequest = useRef<{ draftHash: string; operationId: string } | null>(null);
+  const [checkBudget, setCheckBudget] = useState("0");
+  const checkRequest = useRef<{ requestKey: string; operationId: string } | null>(null);
   const draftInput = () => ({ targetKind: "reward" as const, targetId: id, baseRelease: reward ? learningRef(reward) : null, fields: draft });
   async function saveDraft() {
     const result = await runAction("save", api => persistence.save(api, draftInput()));
@@ -78,6 +79,16 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
       const { reward: release, assets } = compileRewardAuthoring({ id, fields: draft, base: reward });
       const { contentHash: _hash, ...content } = release;
       const storedDraft = await persistence.save(api, draftInput());
+      if (draft.kind === "model_judge" && release.implementation.kind === "model_judge" && release.implementation.calibrationStatus !== "passed") {
+        const checks = await api.list("reward_check", { parentId: id, status: "completed", limit: 100 });
+        const check = checks.items.find(check => check.matchesExpectations && check.draft.id === storedDraft.id
+          && check.draft.revision === storedDraft.revision && check.draft.contentHash === storedDraft.contentHash);
+        if (check) {
+          const response = await api.command({ action: "publish_checked_reward", operationId: `calibrate:${check.id}:${check.revision}`,
+            draft: learningRef(storedDraft), checkId: check.id, checkRevision: check.revision });
+          return RewardReleaseSchema.parse(response.resources.find(resource => resource.schemaVersion === "openpond.rewardRelease.v1"));
+        }
+      }
       const finalizeDraft = persistence.finalization(storedDraft, release);
       const operationId = `reward:${release.contentHash}`;
       const response = await api.command({ action: "publish_resources", operationId, finalizeDraft, resources: [
@@ -95,9 +106,12 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
       compileRewardAuthoring({ id, fields: draft, base: reward });
       const record = await persistence.save(api, draftInput());
       setSaved(JSON.stringify(draft));
-      const request = checkRequest.current?.draftHash === record.contentHash ? checkRequest.current : { draftHash: record.contentHash, operationId: crypto.randomUUID() };
+      const maximumSpendUsd = draft.kind === "model_judge" ? Number(checkBudget) : 0;
+      if (!Number.isFinite(maximumSpendUsd) || maximumSpendUsd < 0 || maximumSpendUsd > 1000) throw new Error("Enter a fixture cost limit between $0 and $1,000.");
+      const requestKey = JSON.stringify([record.contentHash, maximumSpendUsd]);
+      const request = checkRequest.current?.requestKey === requestKey ? checkRequest.current : { requestKey, operationId: crypto.randomUUID() };
       checkRequest.current = request;
-      const response = await api.command({ action: "queue_reward_check", operationId: request.operationId, draft: learningRef(record), timeoutMs: 300_000, maximumSpendUsd: 0 });
+      const response = await api.command({ action: "queue_reward_check", operationId: request.operationId, draft: learningRef(record), timeoutMs: 300_000, maximumSpendUsd });
       const result = RewardCheckRunSchema.parse(response.resources[0]);
       checkRequest.current = null;
       return result;
@@ -127,6 +141,8 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
     {draft.kind === "human" ? <label>Reviewer role<input value={draft.reviewerRole} onChange={(event) => patch({ reviewerRole: event.target.value })} /></label> : null}
     {draft.kind === "learned_model" ? <><label>Model version<input value={draft.learnedId} onChange={(event) => patch({ learnedId: event.target.value })} /></label><label>Model version content hash<input value={draft.learnedHash} onChange={(event) => patch({ learnedHash: event.target.value })} /></label><LearningJsonField label="Model input contract" value={draft.inputContract} onChange={(inputContract) => patch({ inputContract })} /><label>Raw score minimum<input type="number" value={draft.minimum} onChange={(event) => patch({ minimum: event.target.value })} /></label><label>Raw score maximum<input type="number" value={draft.maximum} onChange={(event) => patch({ maximum: event.target.value })} /></label></> : null}
     <RewardFixturesEditor fixtures={draft.fixtures ?? []} onChange={fixtures => patch({ fixtures })} />
+    {draft.kind === "model_judge" ? <p>Check a passing and a failing example before publishing a calibrated judge. Publishing without a matching check keeps the judge pending.</p> : null}
+    {draft.kind === "model_judge" ? <label>Maximum fixture cost (USD)<input type="number" min={0} max={1000} step="0.01" value={checkBudget} onChange={event => setCheckBudget(event.target.value)} /><small>Total limit for this fixture check. A provider request starts only when its maximum charge fits the remaining limit.</small></label> : null}
     <RewardCheckHistory client={client} targetId={id} draft={persistence.record?.targetKind === "reward" ? persistence.record : null} unchanged={JSON.stringify(draft) === JSON.stringify(persistence.record?.fields)} busy={mutation.busy || !draft.fixtures?.length} onCheck={checkFixtures} checking={pendingAction === "check"} />
     <LearningActions><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void saveDraft(); }}>{pendingAction === "save" ? "Saving draft…" : "Save draft"}</button><button type="button" className="training-button" disabled={mutation.busy || !draft.name.trim()} onClick={async () => { const result = await save(); if (result) { guard.allowNextNavigation(); onSaved(result); } }}>{pendingAction === "publish" ? "Publishing…" : `Publish release ${revision + 1}`}</button></LearningActions>
     {guard.dialog}

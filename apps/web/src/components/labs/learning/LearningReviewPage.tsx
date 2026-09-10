@@ -33,6 +33,7 @@ function EvidenceReview({ client, evidence, onBack, onBatches, onChanged }: { cl
   const grades = useLearningResources(client, "grade", { parentId: evidence.id, limit: 30, ...(gradeAfter ? { afterId: gradeAfter } : {}) }, true);
   const decisions = useLearningResources(client, "decision", { parentId: evidence.id, limit: 1 });
   const [target, setTarget] = useState("{}");
+  const [gradeBudget, setGradeBudget] = useState("0");
   const [observedGradeId, setObservedGradeId] = useState("");
   const [targetGradeId, setTargetGradeId] = useState("");
   const observedReceipt = useLearningResource(client, "grade", observedGradeId || null, undefined, true);
@@ -60,7 +61,7 @@ function EvidenceReview({ client, evidence, onBack, onBatches, onChanged }: { cl
     return Boolean(result);
   }
   async function grade(output: "observed" | "proposed_target") {
-    const result = await mutation.run(async (api) => TaskGradeRunSchema.parse((await api.command({ action: "queue_grade", operationId: learningOperationId(), evidence: learningRef(evidence), target: output, proposedTarget: output === "observed" ? null : parseLearningObject(target), timeoutMs: 30_000, maximumSpendUsd: 0 })).resources[0]));
+    const result = await mutation.run(async (api) => TaskGradeRunSchema.parse((await api.command({ action: "queue_grade", operationId: learningOperationId(), evidence: learningRef(evidence), target: output, proposedTarget: output === "observed" ? null : parseLearningObject(target), timeoutMs: 30_000, maximumSpendUsd: Number(gradeBudget) })).resources[0]));
     if (result) { setQueued((previous) => [...previous, result]); (output === "observed" ? setObservedGradeId : setTargetGradeId)(result.id); grades.refresh(); }
   }
   async function review(disposition: "approved" | "rejected" | "pending", approveTarget: boolean) {
@@ -75,6 +76,7 @@ function EvidenceReview({ client, evidence, onBack, onBatches, onChanged }: { cl
     {currentDecision ? <LearningValue label="Current decision" value={{ task: currentDecision.taskAdmissibility, observedResponse: currentDecision.observedQuality, supervisedTarget: currentDecision.targetApproval, reviewer: currentDecision.actor.id, note: currentDecision.note }} /> : <p>No decision exists for this evidence revision.</p>}
     <div className="learning-evidence-columns"><LearningValue label="Task input" value={evidence.submission.input} /><LearningValue label="Observed response" value={evidence.submission.observedOutput} /><LearningValue label="Expected answer (evaluator only)" value={evidence.submission.expected} /></div>
     <details><summary>Provenance and private evaluator context</summary><LearningValue label="Evaluator context" value={evidence.submission.evaluatorContext} /><LearningValue label="Provenance" value={{ source: evidence.source, ...evidence.submission.provenance, supersedes: evidence.supersedes }} /></details>
+    <label>Maximum grading cost (USD)<input type="number" min={0} max={1000} step="0.01" value={gradeBudget} onChange={event => setGradeBudget(event.target.value)} /><small>Limit for each grading run. Use $0 for checks that do not call a model.</small></label>
     <LearningActions><button type="button" className="training-button secondary" disabled={mutation.busy || !inspection?.taskReady || !evidence.submission.observedOutput} onClick={() => { void grade("observed"); }}>Grade observed response</button></LearningActions>
     <LearningJsonField label="Proposed supervised target" hint="Write the response the model should learn. It must pass its own grader run before you can approve it." value={target} onChange={(value) => { setTarget(value); setTargetGradeId(""); }} />
     <button type="button" className="training-button secondary" disabled={mutation.busy || !inspection?.taskReady} onClick={() => { void grade("proposed_target"); }}>Grade proposed target</button>

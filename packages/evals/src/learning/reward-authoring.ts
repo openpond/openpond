@@ -23,6 +23,7 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
   const fixtureAsset = fields.fixtures?.length ? createLearningTextAsset({ text: JSON.stringify(fields.fixtures), path: "reward-fixtures.json", mediaType: "application/json", visibility: "verifier" }) : null;
   let asset: LearningTextAsset | null = null;
   let implementation: RewardRelease["implementation"];
+  let calibrationCheckRef: RewardRelease["calibrationCheckRef"];
   if (fields.kind === "custom_verifier") {
     asset = createLearningTextAsset({ text: fields.code, path: "verifier.mjs", mediaType: "application/javascript", visibility: "verifier" });
     implementation = { kind: fields.kind, verifierRef: asset.asset, exportName: fields.exportName, timeoutMs: authoringNumber(fields.timeout, "Time limit"), networkPolicy: "none" };
@@ -39,6 +40,7 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
         && previous.model?.revision === model.revision && (previous.temperature ?? 0) === temperature
         && base?.fixtureSetRef?.contentHash === fixtureAsset?.asset.contentHash;
       implementation = { kind: fields.kind, rubricRef: asset.asset, model, temperature, calibrationStatus: unchanged ? previous.calibrationStatus : "pending" };
+      if (unchanged) calibrationCheckRef = base?.calibrationCheckRef;
     }
   } else if (fields.kind === "learned_model") {
     parseRewardAuthoringObject(fields.inputContract, "Model input contract");
@@ -55,6 +57,7 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
     name: fields.name, description: fields.description, implementation,
     rawScore: fields.kind === "learned_model" ? { minimum: authoringNumber(fields.minimum, "Minimum score"), maximum: authoringNumber(fields.maximum, "Maximum score") } : { minimum: 0, maximum: 1 },
     assets: assets.map(value => value.asset), ...(fixtureAsset ? { fixtureSetRef: fixtureAsset.asset } : {}),
+    ...(calibrationCheckRef ? { calibrationCheckRef } : {}),
   });
   return { reward, assets };
 }

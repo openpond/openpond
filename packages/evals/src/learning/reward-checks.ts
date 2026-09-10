@@ -7,6 +7,7 @@ import { LearningJsonObjectSchema, LearningRevisionRefSchema, learningRef } from
 import { authoringNumber, compileRewardAuthoring, parseRewardAuthoringObject } from "./reward-authoring.js";
 import type { AuthoringDraftFor, RewardFixtureAuthoringFields } from "./authoring.js";
 import { LearningDomainError } from "./errors.js";
+import { JudgeCallReservationSchema } from "./judge-budget.js";
 
 export const RewardFixtureSchema = z.object({
   id: ReleaseIdSchema, name: z.string().trim().min(1).max(500),
@@ -37,6 +38,8 @@ export const RewardCheckRunSchema = z.object({
   runtime: RewardCheckRuntimeSchema.nullable(), results: z.array(RewardFixtureCheckResultSchema).max(50),
   matchesExpectations: z.boolean().nullable(), failure: z.string().max(20_000).nullable(),
   timeoutMs: z.number().int().min(100).max(300_000), maximumSpendUsd: z.number().nonnegative().max(1_000),
+  judgeCalls: z.array(JudgeCallReservationSchema).max(1_000).optional(),
+  requestedBy: ReleaseIdSchema.optional(),
   leaseOwner: ReleaseIdSchema.nullable(), leaseExpiresAt: ReleaseTimestampSchema.nullable(), attemptCount: z.number().int().nonnegative(),
   createdAt: ReleaseTimestampSchema, updatedAt: ReleaseTimestampSchema,
 }).strict();
@@ -79,7 +82,7 @@ export async function executeRewardFixture(input: {
   }, [input.reward]);
   const composition = await executeRewardBinding({ binding, rewards: [input.reward], task,
     evidence: { output: fixture.output, artifactRefs: fixture.artifactRefs, runtimeEventRefs: fixture.runtimeEventRefs, infrastructureError: fixture.infrastructureError },
-    signal: input.signal, customVerifier: input.customVerifier, modelJudge: input.modelJudge,
+    signal: input.signal, customVerifier: input.customVerifier, modelJudge: input.modelJudge, purpose: "fixture_calibration",
   });
   return composition.results[0]!;
 }

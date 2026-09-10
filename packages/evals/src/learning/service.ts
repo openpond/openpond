@@ -4,7 +4,8 @@ import { reserveLearningIteration } from "./iteration-reservation-service.js";
 import { synchronizeLearningSchedule } from "./schedule-service.js";
 import { inspectLearningPolicy } from "./policy-inspection.js";
 import { requireCurrentLearningEvidence as currentEvidence, sealLearningBatch } from "./batch-service.js";
-import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft } from "./authoring-service.js";
+import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft, currentDraft } from "./authoring-service.js";
+import { assertRewardCalibration, qualifyRewardCheck } from "./reward-calibration.js";
 import { queueRewardCheck, cancelRewardCheck } from "./reward-check-service.js";
 import { LearningDomainError } from "./errors.js";
 import { contentHash } from "@openpond/harness";
@@ -42,12 +43,32 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       let pointers: LearningResourcePointer[];
       switch (input.action) {
+        case "publish_checked_reward": {
+          const draft = await currentDraft(transaction, input.draft);
+          if (draft.targetKind !== "reward") throw new LearningDomainError("reward_calibration_draft_kind_invalid", 422);
+          const base = draft.baseRelease ? await requireLearningRelease(transaction, "reward", draft.baseRelease) : null;
+          const check = await requireLearningResource(transaction, "reward_check", input.checkId, input.checkRevision);
+          const qualified = qualifyRewardCheck(draft, base, check);
+          const { contentHash: _rewardHash, ...content } = qualified.reward;
+          const publication = { action: "publish_resources" as const, operationId: input.operationId,
+            finalizeDraft: { draft: input.draft, targetKind: "reward" as const, release: learningRef(qualified.reward) },
+            resources: [
+              ...qualified.assets.map(({ contentHash: _assetHash, ...content }) => ({ kind: "asset" as const, expectedRevision: 0, content })),
+              { kind: "reward" as const, expectedRevision: base?.revision ?? 0, content },
+            ],
+          };
+          pointers = [];
+          for (const resource of publication.resources) pointers.push(await publish(transaction, { ...resource, action: "publish", operationId: input.operationId }));
+          const finalized = await finalizeAuthoringDraft(transaction, publication, pointers, now());
+          if (finalized) pointers.push(finalized);
+          break;
+        }
         case "import_intake": pointers = await importTaskIntake(transaction, input, now(), submit); break;
         case "cancel_iteration":
         case "retry_iteration_dispatch": pointers = await commandLearningIterationDispatch(transaction, input, now()); break;
         case "cancel_iteration_reservation": pointers = await cancelLearningIterationReservation(transaction, input, now()); break;
         case "reserve_iteration": pointers = await reserveLearningIteration(transaction, input, context.actor.id, now()); break;
-        case "queue_reward_check": pointers = [await queueRewardCheck(transaction, input, operationId, now())]; break;
+        case "queue_reward_check": pointers = [await queueRewardCheck(transaction, input, operationId, now(), context.actor.id)]; break;
         case "cancel_reward_check": pointers = [await cancelRewardCheck(transaction, input, now())]; break;
         case "save_draft": pointers = [await saveAuthoringDraft(transaction, input, now())]; break;
         case "archive_draft": pointers = [await archiveAuthoringDraft(transaction, input.draft, now())]; break;
@@ -61,7 +82,7 @@ export function createLearningService(repository: LearningRepository, options: {
         case "submit_feedback": pointers = [await feedback(transaction, input, context.actor)]; break;
         case "apply_correction": pointers = await correct(transaction, input, context.actor.id); break;
         case "resolve_feedback": pointers = [await resolveFeedback(transaction, input, context.actor.id)]; break;
-        case "queue_grade": pointers = [await queueGrade(transaction, input, operationId)]; break;
+        case "queue_grade": pointers = [await queueGrade(transaction, input, operationId, context.actor.id)]; break;
         case "cancel_grade": pointers = [await cancelGrade(transaction, input)]; break;
         case "review": pointers = [await review(transaction, input, context.actor.id)]; break;
         case "seal_batch": pointers = await sealLearningBatch(transaction, input, context.actor.id, now()); break;
@@ -87,6 +108,7 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       case "reward": {
         resource = createRewardRelease(input.content);
+        await assertRewardCalibration(transaction, resource);
         const implementation = input.content.implementation;
         const references = [
           ...input.content.assets,
@@ -230,7 +252,7 @@ export function createLearningService(repository: LearningRepository, options: {
     return pointer("feedback", resolved);
   }
 
-  async function queueGrade(transaction: LearningTransaction, input: Extract<LearningCommand, { action: "queue_grade" }>, operationId: string): Promise<LearningResourcePointer> {
+  async function queueGrade(transaction: LearningTransaction, input: Extract<LearningCommand, { action: "queue_grade" }>, operationId: string, requestedBy: string): Promise<LearningResourcePointer> {
     const evidence = await currentEvidence(transaction, input.evidence);
     const definition = await requireLearningRelease(transaction, "definition", evidence.submission.taskDefinition);
     if (!inspectTaskEvidence(evidence, definition).taskReady) throw new LearningDomainError("task_evidence_not_ready", 422);
@@ -241,7 +263,7 @@ export function createLearningService(repository: LearningRepository, options: {
       schemaVersion: "openpond.taskGradeRun.v1", id: `grade-${operationId}`, revision: 1,
       evidence: learningRef(evidence), binding: definition.rewardBinding, target: input.target, output,
       status: "queued", composition: null, leaseOwner: null, leaseExpiresAt: null, attemptCount: 0,
-      timeoutMs: input.timeoutMs, maximumSpendUsd: input.maximumSpendUsd, failure: null, createdAt: now(), updatedAt: now(),
+      timeoutMs: input.timeoutMs, maximumSpendUsd: input.maximumSpendUsd, requestedBy, failure: null, createdAt: now(), updatedAt: now(),
     });
     await transaction.put("grade", grade, 0, { parentId: evidence.id, status: grade.status });
     return pointer("grade", grade);

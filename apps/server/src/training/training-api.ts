@@ -1,3 +1,4 @@
+import type { TrainingApiDependencies } from "./training-api-dependencies.js";
 import { handleManagedCandidateReviewAction, isManagedCandidateReviewAction } from "./training-api-candidate-review.js";
 import { createTaskInventoryService, taskInventoryRequest } from "./task-inventory-service.js";
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
@@ -41,19 +42,8 @@ import {
   publishTasksetDraft,
 } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
-import type { createTaskCreatorService } from "./task-creator.js";
-import type { createTaskEvaluationService } from "./evaluation-service.js";
-import type { createTaskMinerService } from "./task-miner.js";
-import type { createTrainingService } from "./training-service.js";
 import { MANAGED_REWARD_MODEL_PROFILE, managedSyntheticRewardSmokeRecipe } from "./managed-reward-model-recipes.js";
 import { versionModelProjectOntoManagedRlBase } from "./managed-rl-base-profile.js";
-import type { createTrainingChatSearchService } from "./training-chat-search.js";
-import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
-import type { createDatasetImportService } from "./dataset-imports/import-service.js";
-import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
-import type { createHarnessRefinerBenchmarkService } from "./harness-refiner-benchmark-service.js";
-import type { createPreferenceComparisonService } from "./preference-comparison-service.js";
-import type { createModelProjectHostingService } from "./model-project-hosting.js";
 import { isModelProjectHostingAction, runModelProjectHostingAction } from "./training-api-model-project-hosting-actions.js";
 import { handleTrainingRunRead, isTrainingRunReadAction } from "./training-api-run-reads.js";
 import { managedStructuredOutputContract, preferenceCalibrationSourceHash } from "./managed-rl-calibration.js";
@@ -114,7 +104,6 @@ import { prepareLocalLearningBatch } from "./learning-batch-preparation.js";
 import { beginLocalModelBatchReview, inspectLocalModelBatchReview } from "./model-batch-review.js";
 import { publishTasksetToHostedProject } from "./training-api-hosted-tasksets.js";
 import { checkModelProjectConfiguration } from "./model-project-configuration-check.js";
-import type { createModelStarterRuntime } from "./model-starter-runtime.js";
 import {
   boundedInteger,
   optionalComparisonEntryRef,
@@ -130,37 +119,13 @@ import {
   trainingMethodHint,
 } from "./training-api-taskset-inputs.js";
 
-type TaskCreator = ReturnType<typeof createTaskCreatorService>;
-type TaskMiner = ReturnType<typeof createTaskMinerService>;
-type Evaluation = ReturnType<typeof createTaskEvaluationService>;
-type Training = ReturnType<typeof createTrainingService>;
-type StartedTrainingResult = Awaited<ReturnType<Training["start"]>>;
-type TrainingChatSearch = ReturnType<typeof createTrainingChatSearchService>;
-type DatasetArtifacts = ReturnType<typeof createDatasetArtifactService>;
-type DatasetImports = ReturnType<typeof createDatasetImportService>;
-type BenchmarkTasksets = ReturnType<typeof createBenchmarkTasksetService>;
-type HarnessRefinerBenchmarks = ReturnType<typeof createHarnessRefinerBenchmarkService>;
-type PreferenceComparisons = ReturnType<typeof createPreferenceComparisonService>;
+type TaskCreator = TrainingApiDependencies["taskCreator"];
+type StartedTrainingResult = Awaited<ReturnType<TrainingApiDependencies["training"]["start"]>>;
+type PreferenceComparisons = NonNullable<TrainingApiDependencies["preferenceComparisons"]>;
 
-export function createTrainingApi(deps: {
-  store: SqliteStore;
-  storeDir: string;
-  taskCreator: TaskCreator;
-  taskMiner: TaskMiner;
-  evaluation: Evaluation;
-  training: Training;
-  chatSearch: TrainingChatSearch;
-  datasetArtifacts: DatasetArtifacts;
-  datasetImports: DatasetImports;
-  benchmarkTasksets: BenchmarkTasksets;
-  harnessRefinerBenchmarks?: HarnessRefinerBenchmarks;
-  preferenceComparisons?: PreferenceComparisons;
-  modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
-  modelStarters?: ReturnType<typeof createModelStarterRuntime>;
-  modelStream?: import("./taskset-work-attempt-runner.js").TasksetWorkModelStream;
-}) {
+export function createTrainingApi(deps: TrainingApiDependencies) {
   let learning: ReturnType<typeof createLocalLearningRuntime> | undefined;
-  const learningRuntime = () => learning ??= createLocalLearningRuntime(deps.store);
+  const learningRuntime = () => learning ??= createLocalLearningRuntime(deps.store, { judgeProvider: deps.judgeProvider });
   const taskInventory = createTaskInventoryService(deps.store, deps.datasetArtifacts);
   const {
     series: comparisonSeries,

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   createLearningService, createTaskGradeWorker, createRewardCheckWorker,
   LearningCommandRequestSchema, LearningReadRequestSchema, type TaskGradeExecutor,
-  assertLearningRequestJson,
+  assertLearningRequestJson, type BoundJudgeProvider,
 } from "@openpond/evals/learning";
 import type { SqliteLearningStore } from "../store/store-learning.js";
 import { createLocalTaskGradeExecutor } from "./learning-grade-executor.js";
@@ -12,12 +12,13 @@ import { LearningDomainError } from "@openpond/evals/learning";
 
 export function createLocalLearningRuntime(store: SqliteLearningStore, options: {
   executor?: TaskGradeExecutor;
+  judgeProvider?: BoundJudgeProvider;
   onError?: (error: unknown) => void;
 } = {}) {
   const repository = store.learningRepository();
   const service = createLearningService(repository);
-  const worker = createTaskGradeWorker(repository, options.executor ?? createLocalTaskGradeExecutor(repository), { workerId: `local-${randomUUID()}` });
-  const rewardChecks = createRewardCheckWorker(repository, createLocalRewardCheckExecutor(), { workerId: `local-reward-check-${randomUUID()}` });
+  const worker = createTaskGradeWorker(repository, options.executor ?? createLocalTaskGradeExecutor(repository, options.judgeProvider), { workerId: `local-${randomUUID()}` });
+  const rewardChecks = createRewardCheckWorker(repository, createLocalRewardCheckExecutor(repository, options.judgeProvider), { workerId: `local-reward-check-${randomUUID()}` });
   let interval: ReturnType<typeof setInterval> | null = null;
   let draining: Promise<void> | null = null;
   let closed = false;

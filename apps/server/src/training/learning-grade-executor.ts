@@ -1,20 +1,34 @@
 import {
   requireLearningResource, taskAttemptEvidence, taskRecordFromEvidence, verifyLearningTextAsset,
-  type LearningRepository, type TaskGradeExecutor,
+  createBoundModelJudgeRunner, createBudgetedJudgeExecutor, createTaskGradeJudgeBudgetStore,
+  type BoundJudgeProvider, type LearningRepository, type TaskGradeExecutor,
 } from "@openpond/evals/learning";
+import { contentHash } from "@openpond/harness";
 import { executeRewardBinding } from "@openpond/evals/rewards";
 import type { AttemptEvidence, GraderSpec, TaskRecord } from "@openpond/evals";
 import { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-verifier/node";
+import { createLearningHostedJudgeProvider } from "./learning-hosted-judge-provider.js";
 
-export function createLocalTaskGradeExecutor(repository: LearningRepository): TaskGradeExecutor {
+export function createLocalTaskGradeExecutor(repository: LearningRepository, provider: BoundJudgeProvider = createLearningHostedJudgeProvider()): TaskGradeExecutor {
   return {
     execute(input) {
       if (input.definition.execution.environment.entrypoint === "openpond.javascript-environment.v1") throw new Error("Tool Tasksets require grading an owner-recorded environment attempt.");
+      const budget = createTaskGradeJudgeBudgetStore({ repository, scope: input.scope, run: input.run });
       return executeRewardBinding({
         binding: input.binding, rewards: input.rewards,
         task: taskRecordFromEvidence(input.evidence, input.definition),
         evidence: taskAttemptEvidence(input.evidence, input.run.output),
         signal: input.signal,
+        modelJudge: createBoundModelJudgeRunner({
+          readRubric: reference => repository.transaction(input.scope, async tx => verifyLearningTextAsset(
+            await requireLearningResource(tx, "asset", reference.id, 1), reference)),
+          async executeBudgeted(request, signal) {
+            const prepared = await provider.prepare(request, { scope: input.scope, run: input.run });
+            const execute = createBudgetedJudgeExecutor({ store: budget, maximumCharge: () => prepared.maximumChargeUsd,
+              dispatch: (_request, signal) => prepared.dispatch(signal) });
+            return execute(`grade-${contentHash(request)}`, request, signal);
+          },
+        }),
         customVerifier: async ({ grader, task, evidence }) => {
           const result = await executeLocalLearningVerifier({ repository, scope: input.scope, grader, task, evidence,
             evaluatorContext: input.evidence.submission.evaluatorContext, timeoutMs: input.run.timeoutMs, signal: input.signal });
@@ -26,9 +40,11 @@ export function createLocalTaskGradeExecutor(repository: LearningRepository): Ta
         },
       });
     },
-    // The worker wrapper settles only after termination; an exited local process
-    // also destroys every worker. No remote allocation survives cancellation.
-    async cancel() { return true; },
+    async cancel({ scope, run }) {
+      const current = await repository.transaction(scope, tx => requireLearningResource(tx, "grade", run.id));
+      if (current.judgeCalls?.some(call => call.status === "reserved")) return false;
+      return provider.cancel({ scope, run: current });
+    },
   };
 }
 

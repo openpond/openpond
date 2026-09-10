@@ -5,7 +5,10 @@ import { readModelStarterCache, writeModelStarterCache } from "./model-starter-c
 
 const CATEGORY_LABELS: Record<ModelStarter["category"], string> = { extraction: "Extract structured data", support: "Customer support", operations: "Operations", knowledge: "Knowledge", coding: "Code", writing: "Writing", classification: "Classification" };
 
-export function ModelStarterCatalog({ actions, cacheScope, onSelect }: { actions: ReturnType<typeof useTraining>["actions"]; cacheScope: string | null; onSelect: (preview: ModelStarterPreview) => void }) {
+export function ModelStarterCatalog({ actions, cacheScope, onSelect, onImport, onCreate }: {
+  actions: ReturnType<typeof useTraining>["actions"]; cacheScope: string | null; onSelect: (preview: ModelStarterPreview) => void;
+  onImport: (source: "hermes" | "openclaw") => void; onCreate: () => void;
+}) {
   const [afterId, setAfterId] = useState<string | undefined>();
   const [loaded, setLoaded] = useState<{ scope: string | null; afterId: string | undefined; page: ModelStarterPage } | null>(null);
   const cached = useMemo(() => {
@@ -51,6 +54,11 @@ export function ModelStarterCatalog({ actions, cacheScope, onSelect }: { actions
   const categories = [...new Set(page?.items.map(starter => starter.category) ?? [])];
   return <section className="model-starter-catalog" aria-label="Get started">
     <header><h2>Get started</h2><p>Start with published tasks and quality checks, then make the model your own.</p></header>
+    <div className="model-starter-cards model-starter-intake">
+      <article><h3>Import from Hermes</h3><p>Review sessions and turn useful attempts into tasks and feedback.</p><button className="training-button secondary" type="button" disabled={selectedId !== null} onClick={() => onImport("hermes")}>Import sessions</button></article>
+      <article><h3>Import from OpenClaw</h3><p>Bring trajectory exports into the same task and labeling workspace.</p><button className="training-button secondary" type="button" disabled={selectedId !== null} onClick={() => onImport("openclaw")}>Import trajectories</button></article>
+      <article><h3>Create your own</h3><p>Choose or create tasks and a Reward for the model you want to train.</p><button className="training-button secondary" type="button" disabled={selectedId !== null} onClick={onCreate}>Create model</button></article>
+    </div>
     {error ? <div role="alert"><p>{page ? `Showing saved starters. ${error}` : error}</p><button type="button" onClick={() => setRefresh(value => value + 1)}>Retry</button></div> : !page ? <p role="status">Loading starters…</p> : refreshing ? <p role="status">Refreshing starters…</p> : null}
     {categories.map(category => <section className="model-starter-category" key={category} aria-label={CATEGORY_LABELS[category]}>
       <h3>{CATEGORY_LABELS[category]}</h3>
