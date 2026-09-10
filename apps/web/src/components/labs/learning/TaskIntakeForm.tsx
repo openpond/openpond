@@ -20,7 +20,9 @@ export function TaskIntakeForm({ client, initialFormat = "json", onTasks, onImpo
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const activeRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => activeRequest.current?.abort(), []);
+  const busyCallback = useRef(onBusyChange);
+  busyCallback.current = onBusyChange;
+  useEffect(() => () => { activeRequest.current?.abort(); busyCallback.current(false); }, []);
   const records = preview?.records.filter(record => selected.has(record.id)) ?? [];
   const labeling = records.some(record => record.kind === "attempt" || record.needsContext);
   function pending(value: boolean) { setBusy(value); onBusyChange(value); }
@@ -60,7 +62,7 @@ export function TaskIntakeForm({ client, initialFormat = "json", onTasks, onImpo
       }
       controller.signal.throwIfAborted();
       onImported(sourceId);
-    } catch (error) { setError(error instanceof Error ? error.message : "Import failed. Retry the same selection to resume without duplicates."); }
+    } catch (error) { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Import failed. Retry the same selection to resume without duplicates."); }
     finally { if (!controller.signal.aborted) pending(false); }
   }
   return <fieldset disabled={busy} className="learning-workspace">
