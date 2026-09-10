@@ -15,6 +15,7 @@ import { assertLearningContentHash, learningRef, sameLearningRef } from "@openpo
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { commitPreparedModelTaskset, reviewedTasksetRewardBinding, type PreparedModelTaskset } from "./store-model-taskset-derivation.js";
+import { readModelTasksetSource } from "./store-model-taskset-source.js";
 
 type PayloadRow = { payload: string };
 
@@ -67,10 +68,14 @@ export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, valu
   }
   const timestamp = new Date().toISOString();
   const trainingSetup = ModelProjectTrainingSetupSchema.parse({ ...project.trainingSetup,
+    baseModel: project.trainingSetup.baseModel ?? project.defaultBaseModel,
+    method: project.trainingSetup.method ?? (selectedTaskset?.authoringProvenance.buildIntent === "verifiable_reward" ? "grpo" : selectedTaskset?.authoringProvenance.buildIntent === "demonstrations" ? "sft" : null),
     ...(tasksetBinding ? { rewardBindingRef: tasksetBinding } : {}),
     ...(prepared ? { rewardBindingRef: learningRef(prepared.derived.rewardBinding), tasksetRef: learningRef(prepared.taskset), tasksetRelease: null, recipe: null } : {}),
   });
-  const defaultsPackage = prepared?.derived ?? sourcePackage;
+  const defaultsPackage = prepared?.derived ?? sourcePackage ?? (selectedTaskset && !reviewedBinding && trainingSetup.rewardBindingRef
+    && selectedTaskset.metadata.taskDefinition !== undefined && selectedTaskset.metadata.rewardBinding !== undefined
+    ? readModelTasksetSource(db, selectedTaskset, trainingSetup.rewardBindingRef).sourcePackage : undefined);
   const saved = ModelProjectSchema.parse({
     ...existing,
     ...project,
