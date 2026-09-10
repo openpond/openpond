@@ -267,3 +267,24 @@ publication lifecycle. It must not add example tasks or a judge rubric.
 `compileModelTasksetDraftWorkspace` accepts `preparation: null` only when the
 owned draft has no source preparation. Compilation pins the saved timestamp so
 validation and publication produce the same package hash.
+
+## Individual task inventory
+
+`openpond-sdk/taskset-drafts` exports `TaskInventoryQuerySchema`,
+`TaskInventoryItemSchema`, `TaskInventoryPageSchema`, and the corresponding
+types. The inventory presents individual tasks; collections remain revisioned
+authoring and filtering boundaries. Public descriptions and scoring summaries
+are separate from private detail readbacks.
+
+The local runtime exposes `GET /v1/training/tasks` and
+`GET /v1/training/tasks/detail`, scoped by `profileId` and optional `projectId`.
+Use `tasksetId`, `taskId`, `draftId`, `split`, and `query` to narrow a view. Pages
+contain at most 100 rows. Pass `nextCursor` back as `after`; a cursor is rejected
+when its filters, Profile, Model, or indexed source versions change. A detail
+request requires `tasksetId` and `taskId`; include `draftId` for draft tasks.
+
+Local indexes are rebuilt from saved source bytes per content hash, including
+Parquet collections through the dataset reader. Search never examines private
+answers. Draft edits invalidate the index, and a published release remains
+separate from its draft. No task listing, editing, or labeling operation starts
+a training job.

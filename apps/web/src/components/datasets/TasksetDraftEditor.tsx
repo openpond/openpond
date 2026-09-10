@@ -5,28 +5,26 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ChatModelRef,
   GraderSpec,
-  TaskDataDraft,
   TasksetDraft,
 } from "@openpond/contracts";
 
 import type { useTraining } from "../../hooks/useTraining";
 import {
   EditorSection,
-  EmptyState,
   Field,
   JsonArrayField,
   JsonObjectFileImport,
   JsonObjectField,
 } from "./TasksetDraftEditorPrimitives";
 import { TasksetDraftValidationStatus } from "./TasksetDraftValidationStatus";
-import { TasksetSplitBuilder } from "./TasksetSplitBuilder";
+import { TaskDraftTasks } from "./TaskDraftTasks";
 import { useDraftNavigation } from "../labs/useDraftNavigation";
+import { AppDialog } from "../dialogs/AppDialog";
 import {
   TASKSET_DRAFT_SECTIONS,
   draftValidationIssues,
   newGrader,
   newOutputContractGrader,
-  newTask,
   parseStringArray,
   starterFixtures,
   type TasksetDraftSection,
@@ -55,7 +53,7 @@ export function TasksetDraftEditor({
   const [draft, setDraft] = useState<TasksetDraft | null>(() =>
     training.payload?.tasksetDrafts.find((candidate) => candidate.id === draftId) ?? null
   );
-  const [section, setSection] = useState<TasksetDraftSection>("overview");
+  const [section, setSection] = useState<TasksetDraftSection | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(training.payload?.tasksetDrafts.find((candidate) => candidate.id === draftId) ?? null));
   const [notice, setNotice] = useState<string | null>(null);
   const [validationOpen, setValidationOpen] = useState(false);
@@ -147,7 +145,7 @@ export function TasksetDraftEditor({
     );
   }
 
-  const readOnly = draft.status === "published";
+  const readOnly = draft.status === "published" || busy;
   const update = (next: TasksetDraft) => {
     setNotice(null);
     setDraft({ ...next, updatedAt: new Date().toISOString() });
@@ -247,35 +245,32 @@ export function TasksetDraftEditor({
         </section>
       ) : null}
 
-      <nav className="taskset-draft-tabs" aria-label="Taskset draft sections">
-        {TASKSET_DRAFT_SECTIONS.map((candidate) => (
+      <div className="model-build-actions" aria-label="Collection settings">
+        {TASKSET_DRAFT_SECTIONS.filter(candidate => candidate.id !== "scenarios" && candidate.id !== "output").map((candidate) => (
           <button
-            className={section === candidate.id ? "active" : undefined}
+            className="training-button secondary"
             key={candidate.id}
             type="button"
             onClick={() => setSection(candidate.id)}
           >
-            {candidate.label}
-            {candidate.id === "scenarios" ? ` (${draft.tasks.length})` : ""}
+            {candidate.id === "overview" ? "Collection settings" : candidate.id === "environment" ? "Custom execution" : candidate.id === "review" ? "Labeling settings" : candidate.label}
             {candidate.id === "rewards" ? ` (${draft.graders.length})` : ""}
           </button>
         ))}
-      </nav>
+      </div>
 
       {draftNavigation.dialog}
       <div className="taskset-draft-body">
         {validationOpen ? <TasksetDraftValidationStatus draft={draft} issues={issues} /> : null}
+        <TaskDraftTasks draft={draft} disabled={readOnly} onChange={update} />
+      </div>
+      {section ? <AppDialog ariaLabel="Collection settings" className="labs-rename-dialog labs-model-create-dialog taskset-draft-settings-dialog" backdropClassName="labs-rename-backdrop" onClose={() => setSection(null)}>
+        <button className="training-button secondary" type="button" onClick={() => setSection(null)}>Done</button>
         {section === "overview" ? (
           <OverviewSection draft={draft} disabled={readOnly} onChange={update} />
         ) : null}
-        {section === "scenarios" ? (
-          <ScenariosSection draft={draft} disabled={readOnly} onChange={update} />
-        ) : null}
         {section === "environment" ? (
-          <EnvironmentSection draft={draft} disabled={readOnly} onChange={update} />
-        ) : null}
-        {section === "output" ? (
-          <OutputSection draft={draft} disabled={readOnly} onChange={update} />
+          <><EnvironmentSection draft={draft} disabled={readOnly} onChange={update} /><OutputSection draft={draft} disabled={readOnly} onChange={update} /></>
         ) : null}
         {section === "rewards" ? (
           <>
@@ -294,7 +289,7 @@ export function TasksetDraftEditor({
         {section === "review" ? (
           <ReviewSection draft={draft} disabled={readOnly} onChange={update} />
         ) : null}
-      </div>
+      </AppDialog> : null}
       {fileEditor ? <TasksetDraftFilesEditor draft={draft} initialFiles={fileEditor} training={training} onClose={() => setFileEditor(null)} onSaved={(saved, message = "File saved.") => {
         setDraft(saved); setSavedSnapshot(JSON.stringify(saved)); setNotice(message);
       }} /> : null}
@@ -362,126 +357,6 @@ function OverviewSection({ draft, disabled, onChange }: SectionProps) {
         <div><dt>Training</dt><dd>Selected and validated when a run is created</dd></div>
         <div><dt>Taskset ID</dt><dd>{draft.id}</dd></div>
       </dl>
-    </EditorSection>
-  );
-}
-
-function ScenariosSection({ draft, disabled, onChange }: SectionProps) {
-  const updateTask = (index: number, task: TaskDataDraft) => onChange({
-    ...draft,
-    tasks: draft.tasks.map((candidate, candidateIndex) =>
-      candidateIndex === index ? task : candidate
-    ),
-  });
-  return (
-    <EditorSection
-      title="Scenarios"
-      description="A scenario is one executable instruction and split assignment. It may reference shared Environment resources without defining or duplicating them."
-      action={
-        <button
-          className="training-button secondary"
-          disabled={disabled}
-          type="button"
-          onClick={() => onChange({ ...draft, tasks: [...draft.tasks, newTask()] })}
-        >
-          Add scenario
-        </button>
-      }
-    >
-      <TasksetSplitBuilder
-        disabled={disabled}
-        objective={draft.objective}
-        onCreate={(tasks) => onChange({ ...draft, tasks: [...draft.tasks, ...tasks] })}
-      />
-      {draft.tasks.length === 0 ? (
-        <EmptyState>Add a first scenario when you are ready. The empty Taskset can be saved first.</EmptyState>
-      ) : null}
-      <div className="taskset-draft-card-list">
-        {draft.tasks.map((task, index) => (
-          <article className="taskset-draft-card" key={task.id}>
-            <header>
-              <strong>Scenario {index + 1}</strong>
-              <button
-                className="training-text-button danger"
-                disabled={disabled}
-                type="button"
-                onClick={() => onChange({
-                  ...draft,
-                  tasks: draft.tasks.filter((_, candidateIndex) => candidateIndex !== index),
-                  graderFixtures: draft.graderFixtures.filter((fixture) => fixture.taskId !== task.id),
-                })}
-              >
-                Remove
-              </button>
-            </header>
-            <div className="taskset-draft-field-grid three">
-              <Field label="ID">
-                <input
-                  disabled={disabled}
-                  value={task.id}
-                  onChange={(event) => updateTask(index, { ...task, id: event.target.value })}
-                />
-              </Field>
-              <Field label="Split">
-                <select
-                  disabled={disabled}
-                  value={task.split}
-                  onChange={(event) => updateTask(index, {
-                    ...task,
-                    split: event.target.value as TaskDataDraft["split"],
-                  })}
-                >
-                  <option value="train">Train</option>
-                  <option value="validation">Validation</option>
-                  <option value="test">Test</option>
-                  <option value="frozen_eval">Frozen eval</option>
-                </select>
-              </Field>
-              <Field label="Cluster key">
-                <input
-                  disabled={disabled}
-                  value={task.clusterKey}
-                  onChange={(event) => updateTask(index, { ...task, clusterKey: event.target.value })}
-                />
-              </Field>
-            </div>
-            <div className="taskset-draft-field-grid">
-              <JsonObjectField
-                disabled={disabled}
-                label="Input JSON"
-                value={task.input}
-                onChange={(input) => updateTask(index, { ...task, input: input ?? {} })}
-              />
-              <JsonObjectField
-                disabled={disabled}
-                label="Reference output JSON (optional)"
-                nullable
-                value={task.expectedOutput}
-                onChange={(expectedOutput) => updateTask(index, { ...task, expectedOutput })}
-              />
-            </div>
-            <JsonArrayField
-              disabled={disabled}
-              label="Asset references JSON"
-              value={task.assets ?? []}
-              onChange={(assets) => updateTask(index, {
-                ...task,
-                assets: assets as TaskDataDraft["assets"],
-              })}
-            />
-            <Field label="Environment resource IDs (comma-separated)">
-              <input
-                disabled={disabled}
-                value={(task.resourceRefs ?? []).join(", ")}
-                onChange={(event) => updateTask(index, {
-                  ...task,
-                  resourceRefs: parseStringArray(event.target.value),
-                })}
-              />
-            </Field>
-          </article>
-        ))}
-      </div>
     </EditorSection>
   );
 }

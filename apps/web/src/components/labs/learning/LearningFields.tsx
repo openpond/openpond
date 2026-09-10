@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { LearningJsonObjectSchema } from "openpond-sdk/learning";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
+import { ReadableTaskValue } from "../ReadableTaskValue";
 
 export function parseLearningObject(text: string) {
   const value: unknown = JSON.parse(text);
@@ -14,5 +15,5 @@ export function LearningError({ error }: { error: string | null }) { return erro
 export function LearningPager({ after, next, onPage }: { after?: string | null; next?: string | null; onPage: (cursor: string | null) => void }) {
   return after || next ? <div className="model-build-actions">{after ? <button type="button" className="training-button secondary" onClick={() => onPage(null)}>First page</button> : null}{next ? <button type="button" className="training-button secondary" onClick={() => onPage(next)}>Next page</button> : null}</div> : null;
 }
-export function LearningValue({ label, value }: { label: string; value: unknown }) { return <div className="learning-value"><h3>{label}</h3><pre>{JSON.stringify(value, null, 2) ?? "Not provided"}</pre></div>; }
+export function LearningValue({ label, value }: { label: string; value: unknown }) { return <div className="learning-value"><h3>{label}</h3><ReadableTaskValue value={value} /></div>; }
 export function LearningActions({ children }: { children: ReactNode }) { return <div className="model-build-actions">{children}</div>; }

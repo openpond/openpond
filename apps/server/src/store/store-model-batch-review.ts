@@ -3,11 +3,11 @@ import { TasksetSchema } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import { ModelProjectSchema } from "openpond-sdk/model-projects";
 import { beginModelBatchReview, findModelBatchReview, ModelBatchReviewRequestSchema, type ModelBatchReviewRequest, type TasksetPackage } from "openpond-sdk/taskset-packages";
-import { SqliteTasksetDraftStore } from "./store-taskset-drafts.js";
+import { SqliteTaskInventoryStore } from "./store-task-inventory.js";
 import { createLearningTransaction } from "./store-learning.js";
 
 /** Review creation and Model edits serialize on the same SQLite write queue. */
-export class SqliteModelBatchReviewStore extends SqliteTasksetDraftStore {
+export class SqliteModelBatchReviewStore extends SqliteTaskInventoryStore {
   async findModelBatchReview(scope: string, raw: ModelBatchReviewRequest) {
     return this.modelBatchReviewTransaction(scope, raw);
   }

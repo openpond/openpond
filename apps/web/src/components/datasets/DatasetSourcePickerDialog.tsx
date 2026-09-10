@@ -7,8 +7,8 @@ export type DatasetCreateSource = "build" | "huggingface" | "upload";
 const SOURCES = [
   {
     id: "build" as const,
-    title: "Build",
-    description: "Create from a purpose, conversations, or both.",
+    title: "Create your own",
+    description: "Write tasks and save a collection before configuring its reward.",
     icon: Boxes,
     available: true,
   },
@@ -40,12 +40,12 @@ export function DatasetSourcePickerDialog({
 
   return (
     <AppDialog
-      ariaLabel="New Taskset"
+      ariaLabel="Add tasks"
       className="training-dialog training-run-dialog training-run-start-step"
       onClose={onClose}
     >
         <div className="training-dialog-header">
-          <h2>New Taskset</h2>
+          <h2>Add tasks</h2>
           <button
             aria-label="Close"
             className="training-icon-button"
@@ -58,8 +58,7 @@ export function DatasetSourcePickerDialog({
         <div className="training-run-step-heading">
           <h3>Choose a source</h3>
           <p>
-            Every source becomes an immutable OpenPond Taskset with
-            Parquet-backed Data.
+            Create tasks or import a collection, then review its inputs and scoring.
           </p>
         </div>
         <div

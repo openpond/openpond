@@ -1,4 +1,4 @@
-export const MODELS_PAGES = ["get-started", "models", "tasksets", "rewards", "evaluations", "runs", "versions", "serving"] as const;
+export const MODELS_PAGES = ["get-started", "models", "tasks", "tasksets", "labeling", "rewards", "evaluations", "runs", "versions", "serving"] as const;
 export type ModelsPage = (typeof MODELS_PAGES)[number];
 export type ModelsCollection = "default" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers" | "combined";
 export interface ModelsRoute {
@@ -13,10 +13,10 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  "get-started": "Get started", models: "Models", tasksets: "Tasksets", rewards: "Rewards", evaluations: "Evaluations", runs: "Runs", versions: "Versions", serving: "Serving",
+  "get-started": "Get started", models: "Models", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Evaluations", runs: "Runs", versions: "Versions", serving: "Serving",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
-  tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
+  tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
 };
 const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
   tasksets: ["overview", "tasks", "reward", "attempts", "releases"],
@@ -56,7 +56,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const query = new URLSearchParams(input.search ?? "");
   if ([...query.keys()].some((key) => !["model", "q", "after", "source"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
   const sourceId = query.get("source");
-  if (sourceId !== null && (page !== "evaluations" || collection !== "review" || !sourceId.trim() || sourceId.length > 500)) return null;
+  if (sourceId !== null && ((page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
   const modelId = query.get("model");
   if (page === "get-started" && query.size !== 0) return null;
   const search = query.get("q") ?? "";
@@ -75,7 +75,7 @@ export function modelsPath(route: ModelsRoute): string {
   if (route.modelId) query.set("model", route.modelId);
   if (route.query) query.set("q", route.query);
   if (route.after) query.set("after", route.after);
-  if (route.page === "evaluations" && route.collection === "review" && route.sourceId) query.set("source", route.sourceId);
+  if ((route.page === "labeling" || (route.page === "evaluations" && route.collection === "review")) && route.sourceId) query.set("source", route.sourceId);
   return `${parts.join("/")}${query.size ? `?${query}` : ""}`;
 }
 
