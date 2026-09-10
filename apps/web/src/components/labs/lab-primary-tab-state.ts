@@ -136,7 +136,8 @@ async function onPopState() {
 }
 function startListening() {
   if (listening || typeof window === "undefined") return;
-  acceptedPath = locationPath();
+  const initialRoute = desktopRouteFromLocation(window.location);
+  acceptedPath = initialRoute ? desktopPath(initialRoute) : locationPath();
   acceptedIndex = typeof window.history.state?.openpondNavigationIndex === "number" ? window.history.state.openpondNavigationIndex : 0;
   window.history.replaceState(historyState(acceptedIndex), "", acceptedPath);
   window.addEventListener("popstate", onPopState);

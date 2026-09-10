@@ -6,7 +6,7 @@ import { validateTasksetDraftWorkspace, decodeTasksetDraftWorkspaceFile, type Ta
 import { renderTasksetDraftManifests } from "./taskset-draft-manifests.js";
 import { AuthoredTasksetFileInventorySchema, isGeneratedTasksetPublicationFilePath, prepareAuthoredTasksetSource } from "./taskset-authored-files.js";
 import { materializePortableTasksetRelease } from "./taskset-authored-portable-release.js";
-import { createTasksetPackage } from "./taskset-package-contracts.js";
+import { createTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
 
 /** Use the same validation, file pinning and release projection as Desktop.
  * Compilation neither executes models/graders nor selects the resulting release.
@@ -16,6 +16,7 @@ export function compileModelTasksetDraftWorkspace(input: {
   preparation: ModelTasksetDraftPreparation | null;
   adapterId: string;
   now: string;
+  source?: TasksetPackage;
 }) {
   const workspace = validateTasksetDraftWorkspace(input.workspace);
   const preparation = input.preparation === null ? null : ModelTasksetDraftPreparationSchema.parse(input.preparation);
@@ -41,5 +42,5 @@ export function compileModelTasksetDraftWorkspace(input: {
       return { asset: entry.asset, base64: Buffer.from(bytes).toString("base64") };
     }),
   });
-  return preparation ? publishModelTasksetDraftPackage({ preparation, edited }) : edited;
+  return preparation ? publishModelTasksetDraftPackage({ preparation, edited, source: input.source }) : edited;
 }

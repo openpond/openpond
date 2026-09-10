@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PageChromeContent } from "../app-shell/PageChrome";
 
 export type ModelProjectPageMetric = {
   label: string;
@@ -17,13 +18,24 @@ export function ModelProjectPageHeader({
   metrics = [],
 }: {
   title: string;
-  description: string;
+  description?: string;
   status?: ReactNode;
   actions?: ReactNode;
   layout?: "default" | "toolbar";
   metrics?: ModelProjectPageMetric[];
 }) {
-  return (
+  const metricContent = metrics.length ? (
+        <dl className="model-project-page-metrics">
+          {metrics.map((metric) => (
+            <div key={metric.label}>
+              <dt>{metric.label}</dt>
+              <dd>{metric.onSelect ? <button aria-label={metric.ariaLabel} className="model-project-page-metric-link" type="button" onClick={metric.onSelect}>{metric.value}</button> : metric.value}</dd>
+              {metric.hint ? <small>{metric.hint}</small> : null}
+            </div>
+          ))}
+        </dl>
+      ) : null;
+  return <PageChromeContent title={<h1>{title}</h1>} actions={<>{status}{actions}</>} fallback={
     <header className={`model-project-page-header model-project-page-header-${layout}`}>
       <div className="model-project-page-heading">
         <div>
@@ -35,30 +47,7 @@ export function ModelProjectPageHeader({
         </div>
         {actions ? <div className="model-project-page-actions">{actions}</div> : null}
       </div>
-      {metrics.length ? (
-        <dl className="model-project-page-metrics">
-          {metrics.map((metric) => (
-            <div
-              key={metric.label}
-            >
-              <dt>{metric.label}</dt>
-              <dd>
-                {metric.onSelect ? (
-                  <button
-                    aria-label={metric.ariaLabel}
-                    className="model-project-page-metric-link"
-                    type="button"
-                    onClick={metric.onSelect}
-                  >
-                    {metric.value}
-                  </button>
-                ) : metric.value}
-              </dd>
-              {metric.hint ? <small>{metric.hint}</small> : null}
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      {metricContent}
     </header>
-  );
+  }>{metricContent}</PageChromeContent>;
 }

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { connectionQueryScope } from "../../lib/query-scope";
 import type { TrainingStateResponse } from "@openpond/contracts";
-import type { TaskInventoryItem, TaskInventoryPage } from "openpond-sdk/taskset-drafts";
+import type { TaskInventoryItem } from "openpond-sdk/taskset-drafts";
 import type { useTraining } from "../../hooks/useTraining";
 import { AppDialog } from "../dialogs/AppDialog";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
@@ -18,20 +20,13 @@ export function LabTasksPage({ state, training, modelId, collectionId, query, af
   const [split, setSplit] = useState<"train" | "validation" | "test" | "frozen_eval" | "">("");
   const [selected, setSelected] = useState<TaskInventoryItem | null>(null);
   const [draftsOpen, setDraftsOpen] = useState(false);
-  const [result, setResult] = useState<{ key: string; page: TaskInventoryPage | null; error: string | null } | null>(null);
   const request = { projectId: modelId ?? undefined, tasksetId: collectionId ?? undefined, query, after: after ?? undefined, split: split || undefined };
-  const key = JSON.stringify(request);
-  const load = training.actions.taskInventory;
-  useEffect(() => {
-    let active = true;
-    void load(JSON.parse(key)).then(page => { if (active) setResult({ key, page, error: null }); }).catch(error => { if (active) setResult({ key, page: null, error: error instanceof Error ? error.message : "Tasks could not be loaded." }); });
-    return () => { active = false; };
-  }, [key, load, state?.tasksetDrafts, state?.tasksets]);
-  const current = result?.key === key ? result : null;
+  const result = useQuery({ queryKey: ["task-inventory", connectionQueryScope(training.connection), state?.profileId, "list", request],
+    enabled: Boolean(training.connection && state), queryFn: () => training.actions.taskInventory(request) });
+  const current = result.data ? { page: result.data, error: null } : result.error ? { page: null, error: result.error.message } : null;
   const drafts = state?.tasksetDrafts.filter(draft => draft.profileId === state.profileId && draft.status !== "published" && (!modelId || draft.modelScope?.modelId === modelId)) ?? [];
   return <div className="labs-flat-body labs-resource-page">
-    <ModelProjectPageHeader title="Tasks" description="Inspect what the model is asked to do and how its answer is scored." />
-    <div className="model-build-actions"><button className="training-button" type="button" onClick={onAdd}>Add tasks</button><button className="training-button secondary" type="button" onClick={() => setDraftsOpen(true)}>Saved drafts</button></div>
+    <ModelProjectPageHeader title="Tasks" description="" actions={<><button className="training-button secondary" type="button" onClick={() => setDraftsOpen(true)}>Saved drafts</button><button className="training-button" type="button" onClick={onAdd}>Add tasks</button></>} />
     <div className="labs-workproduct-toolbar"><label className="labs-search"><span className="sr-only">Search tasks</span><input placeholder="Search tasks" value={query} onChange={event => { setSelected(null); onSearch(event.target.value); }} /></label>
       <label>Split<select value={split} onChange={event => { setSelected(null); setSplit(event.target.value as typeof split); onPage(null); }}><option value="">All splits</option><option value="train">Training</option><option value="validation">Validation</option><option value="test">Test</option><option value="frozen_eval">Held-out evaluation</option></select></label>
       {collectionId ? <button className="training-button secondary" type="button" onClick={() => onCollection(null)}>Clear collection filter</button> : null}
@@ -48,17 +43,15 @@ export function LabTasksPage({ state, training, modelId, collectionId, query, af
 }
 
 function TaskDetail({ item, modelId, state, training, onClose, onOpenDraft }: { item: TaskInventoryItem; modelId: string | null; state: TrainingStateResponse | null; training: ReturnType<typeof useTraining>; onClose: () => void; onOpenDraft: (id: string) => void }) {
-  const [detail, setDetail] = useState<Awaited<ReturnType<typeof training.actions.taskInventoryDetail>> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const load = training.actions.taskInventoryDetail;
-  useEffect(() => {
-    let active = true;
-    void load({ projectId: modelId ?? undefined, tasksetId: item.tasksetId, draftId: item.draftId ?? undefined, taskId: item.taskId }).then(result => {
+  const request = { projectId: modelId ?? undefined, tasksetId: item.tasksetId, draftId: item.draftId ?? undefined, taskId: item.taskId };
+  const result = useQuery({ queryKey: ["task-inventory", connectionQueryScope(training.connection), state?.profileId, "detail", request, item.tasksetHash],
+    enabled: Boolean(training.connection && state), queryFn: async () => {
+      const result = await training.actions.taskInventoryDetail(request);
       if (result.item.tasksetHash !== item.tasksetHash) throw new Error("This task changed. Reopen it from the updated list.");
-      if (active) setDetail(result);
-    }).catch(error => { if (active) setError(error instanceof Error ? error.message : "Task could not be opened."); });
-    return () => { active = false; };
-  }, [item.draftId, item.taskId, item.tasksetHash, item.tasksetId, load, modelId]);
+      return result;
+    } });
+  const detail = result.data ?? null;
+  const error = result.error?.message ?? null;
   const model = state?.modelProjects.find(model => model.id === modelId);
   return <AppDialog ariaLabel="Task details" className="labs-rename-dialog labs-model-create-dialog" backdropClassName="labs-rename-backdrop" onClose={onClose}>
     <header><div><h2>{item.title}</h2><p>{item.tasksetName} · revision {item.tasksetRevision}</p></div><button className="training-button secondary" type="button" onClick={onClose}>Close</button></header>

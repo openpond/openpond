@@ -5,6 +5,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { PageChromeBoundary } from "../app-shell/PageChrome";
 
 const dialogStack: symbol[] = [];
 const inertOwners = new WeakMap<HTMLElement, { count: number; ariaHidden: string | null; inert: boolean }>();
@@ -122,7 +123,7 @@ export function AppDialog({
         onKeyDown={handleDialogKeyDown}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        {children}
+        <PageChromeBoundary>{children}</PageChromeBoundary>
       </section>
     </div>
   );

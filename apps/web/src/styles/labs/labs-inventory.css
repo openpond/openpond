@@ -510,3 +510,9 @@
 .model-training-settings label { display: grid; gap: 8px; }
 .labs-model-taskset-dialog > .taskset-draft-focused-editor { padding: 0; }
 .taskset-draft-focused-editor > footer { margin-top: 24px; justify-content: flex-end; }
+.page-chrome-title-target { min-width: 0; }
+.page-chrome-title-target:has(> .page-chrome-title) > .page-chrome-fallback { display: none; }
+.page-chrome-title h1 { margin: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-chrome-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.page-chrome-actions:empty { display: none; }
+.page-chrome-actions .training-button { min-height: 30px; padding: 6px 12px; font-size: 12px; }

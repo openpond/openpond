@@ -9,6 +9,7 @@ import { CloudSetupDialog } from "../workspace/CloudSetupDialog";
 import { AppLazyPanels, AppSettingsRoute } from "./AppLazyPanels";
 import { AppToast as AppToastView } from "./AppToast";
 import { AppTopBar } from "./AppTopBar";
+import { PageChromeProvider } from "./PageChrome";
 import type { MainPaneProps } from "./main-pane-types";
 import { ProjectConfirmDialog } from "./ProjectConfirmDialog";
 import { RenderCommitBoundary } from "../../lib/render-commit-metrics";
@@ -41,6 +42,7 @@ export function AppShellController({
   toast,
 }: AppShellControllerProps) {
   return (
+    <PageChromeProvider>
     <div className={className} style={style}>
       <RenderCommitBoundary id="sidebar">
         <Sidebar {...sidebar} />
@@ -62,6 +64,7 @@ export function AppShellController({
       <AppLazyPanels {...lazyPanels} />
       <AppToastView {...toast} />
     </div>
+    </PageChromeProvider>
   );
 }
 

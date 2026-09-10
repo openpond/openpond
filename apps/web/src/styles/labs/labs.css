@@ -972,8 +972,8 @@
 .model-starter-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 12px; }
 .model-starter-cards article { align-content: start; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
 .model-starter-cards article > button { justify-self: start; margin-top: 8px; }
-.model-starter-intake { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
-.model-starter-intake article { padding: 12px 0; border: 0; border-radius: 0; background: none; grid-template-rows: auto 1fr auto; }
+.model-starter-intake { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.model-starter-intake article { padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); grid-template-rows: auto 1fr auto; }
 @media (max-width: 760px) { .model-starter-intake { grid-template-columns: 1fr; gap: 12px; } }
 .model-starter-catalog nav { display: flex; gap: 8px; }
 .model-setup-checked { display: flex; align-items: center; gap: 8px; color: var(--success, #22834b); }

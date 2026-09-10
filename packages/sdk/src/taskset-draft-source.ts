@@ -22,7 +22,8 @@ export function prepareTasksetDraftSource(input: { sourceDraft: TasksetDraft; so
   const original = TasksetDraftSchema.parse(input.sourceDraft);
   const preparation = ModelTasksetDraftPreparationSchema.parse(input.preparation);
   if (source.contentHash !== preparation.sourcePackageHash || !sameLearningRef(learningRef(source.taskset), preparation.sourceTasksetRef)) throw new Error("Taskset draft preparation differs from its source package.");
-  if (source.modelResources || source.learningResources) throw new Error("This Taskset requires its bound or reviewed authoring workflow.");
+  if (source.learningResources) throw new Error("Reviewed Tasksets require their reviewed authoring workflow.");
+  if (Boolean(source.modelResources) !== (preparation.authoringGraph === "bound")) throw new Error("Taskset draft authoring graph differs from its source.");
   const inventory = AuthoredTasksetFileInventorySchema.parse(original.metadata.portableFileInventory ?? []);
   const sourcePath = (relative: string) => isManagedTasksetDraftFilePath(relative)
     ? `source-artifacts/${source.contentHash}/${contentHash(relative)}/${relative.split("/").at(-1)!}` : relative;
@@ -42,11 +43,15 @@ export function prepareTasksetDraftSource(input: { sourceDraft: TasksetDraft; so
     }
     return { assetId: file.asset.id, paths: [...paths].map(sourcePath) };
   });
+  const metadata = { ...original.metadata };
+  if (source.modelResources) for (const key of ["taskDefinition", "rewardBinding", "rewardExecution", "derivedPortableMetadata", "modelTasksetDerivation", "importedPackageHash"]) delete metadata[key];
   const draft = TasksetDraftSchema.parse({ ...original, id: preparation.draftId, revision: 1, status: "draft",
+    graders: original.graders.map(grader => ({ ...grader, metadata: { ...grader.metadata,
+      portableGrader: source.taskset.graders.find(candidate => candidate.id === grader.id) } })),
     environment: { ...original.environment, metadata: { ...original.environment.metadata, portableExecutionResources: { environment: source.environment } } },
     modelScope: { modelId: preparation.lineage.owner.modelId, expectedModelRevision: input.expectedModelRevision, source: preparation },
     publishedTasksetRef: preparation.tasksetRevision > 1 ? preparation.sourceTasksetRef : null,
-    metadata: { ...original.metadata, modelTasksetAuthoring: preparation.lineage,
+    metadata: { ...metadata, modelTasksetAuthoring: preparation.lineage,
       portableFileInventory: inventory.map(entry => ({ ...entry, sourcePath: sourcePath(entry.sourcePath), asset: { ...entry.asset,
         id: isManagedTasksetDraftFilePath(entry.sourcePath) ? `source-artifact-${contentHash({ packageHash: source.contentHash, assetId: entry.asset.id })}` : entry.asset.id,
         path: sourcePath(entry.asset.path) } })) },

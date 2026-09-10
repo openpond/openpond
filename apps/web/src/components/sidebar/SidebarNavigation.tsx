@@ -132,12 +132,12 @@ export function SidebarNavigation({
               onChange={(id) => void selectModelProject(id)}
             />
           </div>
-          {MODELS_PAGES.filter(page => page !== "tasksets").map((page) => {
+          {MODELS_PAGES.filter(page => page !== "tasksets" && page !== "evaluations").map((page) => {
             const Icon = { "get-started": Boxes, models: Activity, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
             return (
               <button
-                className={`nav-command ${view === "labs" && activePage === page ? "active" : ""}`}
-                aria-current={view === "labs" && activePage === page ? "page" : undefined}
+                className={`nav-command ${view === "labs" && (activePage === page || (page === "runs" && activePage === "evaluations")) ? "active" : ""}`}
+                aria-current={view === "labs" && (activePage === page || (page === "runs" && activePage === "evaluations")) ? "page" : undefined}
                 key={page}
                 type="button"
                 onClick={() => void selectModelsPage(page)}

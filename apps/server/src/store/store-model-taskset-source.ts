@@ -9,6 +9,28 @@ import type { TasksetPackage } from "openpond-sdk/taskset-packages";
 import { canonicalJson } from "openpond-sdk/training";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 
+export function readSelectedModelReward(db: OpenPondSqliteConnection, scope: string, reference: NonNullable<ModelProjectSaveRequest["project"]["trainingSetup"]["rewardBindingRef"]>) {
+  function read<K extends "binding" | "reward" | "asset">(kind: K, ref: { id: string; revision: number; contentHash?: string }): LearningResourceFor<K> {
+    const row = db.get<{ payload: string }>("SELECT payload FROM learning_revisions WHERE scope = ? AND kind = ? AND id = ? AND revision = ?", [scope, kind, ref.id, ref.revision]);
+    if (!row) fail(404, "model_reward_unavailable", `The exact ${kind} resource is unavailable in this Profile.`);
+    const resource = learningResourceSchemas[kind].parse(JSON.parse(row.payload));
+    assertLearningContentHash(resource);
+    if (ref.contentHash && resource.contentHash !== ref.contentHash) fail(409, "model_reward_changed", "The selected resource does not match its immutable content hash.");
+    return resource as LearningResourceFor<K>;
+  }
+  const rewardBinding = read("binding", reference);
+  const rewards = [...new Map(rewardBinding.sources.map(source => [canonicalJson(source.reward), read("reward", source.reward)])).values()];
+  const assets = new Map<string, LearningTextAsset>();
+  for (const reward of rewards) {
+    const implementation = reward.implementation;
+    for (const ref of [...reward.assets, ...("verifierRef" in implementation ? [implementation.verifierRef] : []), ...("rubricRef" in implementation ? [implementation.rubricRef] : []), ...("inputContract" in implementation ? [implementation.inputContract] : [])]) {
+      if (!assets.has(ref.id)) assets.set(ref.id, read("asset", { id: ref.id, revision: 1 }));
+      verifyLearningTextAsset(assets.get(ref.id)!, ref);
+    }
+  }
+  return { rewardBinding, rewards, assets: [...assets.values()] };
+}
+
 /** The caller authorizes this exact Taskset in its serialized save transaction. */
 export function readModelTasksetSource(db: OpenPondSqliteConnection, source: Taskset, selectedRewardRef: NonNullable<ModelProjectSaveRequest["project"]["trainingSetup"]["rewardBindingRef"]>, completeSource?: TasksetPackage) {
   const bindingRef = ModelProjectVersionedRefSchema.parse(source.metadata.rewardBinding);
@@ -29,7 +51,7 @@ export function readModelTasksetSource(db: OpenPondSqliteConnection, source: Tas
   if (source.metadata.rewardExecution !== undefined && canonicalJson(source.metadata.rewardExecution) !== canonicalJson({ binding: rewardBinding, rewards })) fail(409, "model_taskset_rewards_changed", "Taskset embedded Rewards differ from their immutable binding.");
   const selectedBinding = read("binding", selectedRewardRef);
   const selectedRewards = [...new Map(selectedBinding.sources.map(check => [canonicalJson(check.reward), read("reward", check.reward)])).values()];
-  const assets = new Map<string, LearningTextAsset>();
+  const assets = new Map<string, LearningTextAsset>((completeSource?.modelResources?.assets ?? []).map(asset => [asset.id, asset]));
   const addAsset = (id: string) => { if (!assets.has(id)) assets.set(id, read("asset", { id, revision: 1 })); };
   for (const reward of [...rewards, ...selectedRewards]) {
     const implementation = reward.implementation;

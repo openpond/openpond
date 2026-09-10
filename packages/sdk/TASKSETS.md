@@ -186,10 +186,26 @@ reseals the environment before publication, while historical revisions keep
 their original executable files.
 
 These pure helpers require the host to persist draft files and commit publication,
-Model selection and retry receipts atomically. Bound Reward packages and reviewed
-batches use their respective authoring graphs and are rejected by this ordinary
-package compiler. Draft persistence, HTTP operations and editor controls are host
-integration work.
+Model selection and retry receipts atomically. Bound Reward packages use the same
+draft workflow with `authoringGraph: "bound"` in their retained preparation.
+Pass the original `source` package to `publishModelTasksetDraftPackage` or
+`compileModelTasksetDraftWorkspace` for these drafts. Task edits preserve the
+exact saved Reward, task format and private dependency graph; changing graders
+requires publishing/selecting a Reward through its own editor. Unchanged
+environment execution retains its release. Publication creates an owned revision
+and clears package qualification; it never changes the original source. Reviewed
+batches still require their review/regrading workflow.
+
+`bindOrdinaryModelTasksetReward({ owner, source, rewardBinding, rewards, assets })`
+prepares a complete model-owned package when a user selects a saved Reward for an
+ordinary collection. The source must include collection instructions. This keeps
+task envelopes, per-task output contracts, binary files, private context and tools
+intact. Its model resources explicitly declare `instructionMode: "per_task"` so
+task-specific context is preserved independently of the collection instruction.
+The selected Reward's private assets must resolve exactly. Hosts commit the new
+package and Model selection with their CAS and retry receipt, regenerate stale
+recipes, and advance an evaluation selection that referred to the edited source.
+An independently selected evaluation package remains pinned.
 
 ## Shared draft documents and compilation
 

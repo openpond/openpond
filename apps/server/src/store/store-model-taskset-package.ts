@@ -29,7 +29,7 @@ export async function loadModelTasksetPackage(db: OpenPondSqliteConnection, home
     const setup = request.project.trainingSetup;
     const base = setup.baseModel ?? request.project.defaultBaseModel;
     const method = setup.method ?? (taskset.authoringProvenance.buildIntent === "verifiable_reward" ? "grpo" : null);
-    if (method !== "grpo" || setup.recipe || !base?.revision || !base.tokenizerRevision || !base.chatTemplateHash) return undefined;
+    if (!setup.rewardBindingRef && (method !== "grpo" || setup.recipe || !base?.revision || !base.tokenizerRevision || !base.chatTemplateHash)) return undefined;
     if (computeTasksetHash(taskset) !== ref.contentHash) throw new Error("Selected Taskset differs from its immutable content hash.");
     const releases = materializePortableTasksetRelease({ taskset, adapterId: desktopTasksetRuntimeAdapterId(taskset) });
     return captureAuthoredModelTasksetPackage({ storeDir: home, taskset,
