@@ -1,4 +1,5 @@
 import { handleManagedCandidateReviewAction, isManagedCandidateReviewAction } from "./training-api-candidate-review.js";
+import { createTaskInventoryService } from "./task-inventory-service.js";
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
 import { requireReleasedTaskset } from "./local-taskset-release.js";
 import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
@@ -160,6 +161,7 @@ export function createTrainingApi(deps: {
 }) {
   let learning: ReturnType<typeof createLocalLearningRuntime> | undefined;
   const learningRuntime = () => learning ??= createLocalLearningRuntime(deps.store);
+  const taskInventory = createTaskInventoryService(deps.store, deps.datasetArtifacts);
   const {
     series: comparisonSeries,
     evaluations: comparisonEvaluations,
@@ -177,6 +179,14 @@ export function createTrainingApi(deps: {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<unknown> {
     const input = record(payload);
+    if (action === "task_inventory" || action === "task_inventory_detail") {
+      if (!requestUrl) throw new Error("Task query is missing its URL.");
+      const params = requestUrl.searchParams;
+      const query = { projectId: params.get("projectId") ?? undefined, tasksetId: params.get("tasksetId") ?? undefined, draftId: params.get("draftId") ?? undefined, taskId: params.get("taskId") ?? undefined,
+        query: params.get("query") ?? "", split: params.get("split") ?? undefined, after: params.get("after") ?? undefined, limit: Number(params.get("limit") ?? 30) };
+      const profileId = requiredString(params.get("profileId"), "profileId");
+      return action === "task_inventory" ? taskInventory.list(profileId, query) : taskInventory.detail(profileId, query);
+    }
     if (action === "model_starter_catalog" || action === "model_starter_preview" || action === "check_model_starter" || action === "create_model_from_starter") {
       if (!deps.modelStarters) throw new Error("The model starter runtime is unavailable.");
       if (action === "model_starter_catalog") return deps.modelStarters.list(input);

@@ -11,6 +11,7 @@ import { DatasetSourcePickerDialog, type DatasetCreateSource } from "../datasets
 import { HuggingFaceDatasetImportDialog } from "../datasets/HuggingFaceDatasetImportDialog";
 import { TasksetDraftEditor } from "../datasets/TasksetDraftEditor";
 import { LabDatasetsPage, type TasksetDetailTab } from "./LabDatasetsPage";
+import { LabTasksPage } from "./LabTasksPage";
 import { LabEvaluationsPage, type EvaluationDetailTab } from "./LabEvaluationsPage";
 import { LabHumanReviewsPage } from "./LabHumanReviewsPage";
 import { LabScoringPage } from "./LabScoringPage";
@@ -106,15 +107,15 @@ export function LabsRoute(props: LabsRouteProps) {
   useEffect(() => {
     if (!route) { props.onDetailOpenChange(null); return; }
     const label = MODELS_PAGE_LABELS[route.page];
-    const kind = route.page === "tasksets" ? "dataset" : route.page === "rewards" ? "scoring" : route.page === "evaluations" ? "evaluation" : "model";
+    const kind = route.page === "tasksets" || route.page === "tasks" ? "dataset" : route.page === "rewards" ? "scoring" : route.page === "evaluations" || route.page === "labeling" ? "evaluation" : "model";
     props.onDetailOpenChange({ kind, kindLabel: label, kindOnSelect: () => { void navigateModelsRoute(modelsLocation(route.page, route.modelId)); }, workproductLabel: selected?.name ?? (route.modelId ? "Unavailable model" : null), segments: route.resourceId ? [{ label: route.resourceId }, ...(route.detailTab ? [{ label: route.detailTab }] : [])] : [] });
   }, [route, selected?.name, props.onDetailOpenChange]);
 
   const open = (next: ModelsRoute) => { void navigateModelsRoute(next); };
   const toast = (message: string, tone: "success" | "info" | "error" = "info") => profileView.onToast?.(message, tone) ?? 0;
-  const openTaskset = (id: string | null) => open(modelsLocation("tasksets", route?.modelId ?? null, { resourceId: id }));
+  const openTaskset = (id: string | null) => open(modelsLocation("tasks", route?.modelId ?? null, { resourceId: id }));
   function openTasksetChat(taskset?: { id: string; name: string; objective: string } | null) {
-    const returnTo = route ? modelsPath(route) : "/models/tasksets";
+    const returnTo = route ? modelsPath(route) : "/models/tasks";
     profileView.onSkillCommand?.(`$openpond-taskset-authoring ${taskset ? `Improve the ${taskset.name} Taskset (${taskset.id}).` : "Create a Taskset."} Save through the Taskset draft/publication operations and return to ${returnTo}.`, "openpond");
   }
   function modelConfiguration(input: LabModelCreateInput) {
@@ -193,6 +194,12 @@ export function LabsRoute(props: LabsRouteProps) {
       onOpenProviderSettings={training.onOpenProviderSettings}
       renderDatasetBuilder={(onCreated, onUseExisting) => <TasksetDraftEditor defaultModel={training.defaultModel} modelProjectId={target.id} training={training.training} onBack={onUseExisting} onOpenChat={openTasksetChat} onPublished={onCreated} onUseExistingTaskset={onUseExisting} />}
     />;
+  } else if (route.page === "tasks") {
+    page = route.collection === "drafts" ? <TasksetDraftEditor key={`${workspaceKey}:${route.resourceId}`} draftId={route.resourceId} defaultModel={training.defaultModel} modelProjectId={route.modelId} training={training.training} onBack={() => openTaskset(null)} onOpenChat={openTasksetChat} onPublished={openTaskset} />
+      : <LabTasksPage key={`${workspaceKey}:${route.modelId ?? "all"}`} state={state} training={training.training} modelId={route.modelId} collectionId={route.resourceId} query={route.query} after={route.after}
+        onSearch={query => open({ ...route, query, after: null })} onPage={after => open({ ...route, after })} onCollection={resourceId => open({ ...route, resourceId, after: null })} onAdd={() => setImportSource("source")} onOpenDraft={id => open(modelsLocation("tasks", route.modelId, { collection: "drafts", resourceId: id }))} />;
+  } else if (route.page === "labeling") {
+    page = <LearningReviewPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} sourceId={route.sourceId} onClearSource={() => open({ ...route, sourceId: null, resourceId: null, after: null })} onSelect={id => open(modelsResourceLocation(route, id))} onPage={after => open({ ...route, after })} onBatches={() => open(modelsLocation("tasksets", route.modelId, { collection: "batches" }))} />;
   } else if (route.page === "tasksets") {
     page = <><ModelsLocalViews route={route} views={[["default", "Tasksets"], ["formats", "Task formats"], ["batches", "Approved batches"]]} />{route.collection === "formats" ? <LearningTaskFormatsPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} onReview={(id) => open(modelsLocation("evaluations", route.modelId, { collection: "review", resourceId: id }))} /> : route.collection === "batches" ? <LearningBatchesPage key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} onSelect={(id) => open(modelsResourceLocation(route, id))} onPage={(after) => open({ ...route, after })} onAttach={route.modelId ? attachBatch : undefined} onTrain={async (batch) => { const taskset = await training.training.actions.prepareLearningBatch(batch.id); if (!taskset) throw new Error("The batch could not be prepared. Check the training error for details."); startRun(taskset.id); }} /> : route.collection === "drafts" ? <TasksetDraftEditor
       key={`${workspaceKey}:${route.resourceId}`} draftId={route.resourceId} defaultModel={training.defaultModel} modelProjectId={route.modelId}
@@ -248,14 +255,14 @@ export function LabsRoute(props: LabsRouteProps) {
       <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }
-  const tab: LabPrimaryTab = (route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" ? "evals" : route?.page ?? "overview";
+  const tab: LabPrimaryTab = (route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page ?? "overview";
   return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
     {hostedRefreshError ? <p role="status">{hostedRefreshError}</p> : null}
     {page}
     {comparisonCreateOpen && scopedState ? <LabComparisonSeriesCreateDialog busy={Boolean(training.training.busyAction)} profileId={scopedState.profileId} state={scopedState} onClose={() => setComparisonCreateOpen(false)} onCreate={async (series) => { const saved = await training.training.actions.saveComparisonSeries(series); if (!saved) return false; setComparisonCreateOpen(false); open(modelsLocation("runs", route?.modelId ?? null, { collection: "series", resourceId: saved.id })); return true; }} /> : null}
     {modelCreateOpen ? <LabModelCreateDialog key={`${workspaceKey}:${editingModelId ?? starterPreview?.starter.contentHash ?? "new"}`} starter={starterPreview ? { preview: starterPreview, profileId } : null} project={state?.modelProjects.find((project) => project.id === editingModelId) ?? null} tasksets={labModelTasksets(state).filter((taskset) => taskset.profileId === profileId)} learningClient={learningClient} baseModelCandidates={state?.baseModelCandidates ?? []} busy={training.training.busyAction === "save-model-project" || training.training.busyAction === "create-model-from-starter"} initialName={nextModelName(state?.modelProjects ?? [])} onClose={() => setModelCreateOpen(false)} onCheck={(input) => input.starterRequest ? training.training.actions.checkModelStarter(input.starterRequest) : training.training.actions.checkModelProject(modelConfiguration(input), input.expectedRevision)} onCreate={createModel} onSaved={() => { setModelCreateOpen(false); setEditingModelId(null); setStarterPreview(null); open(modelsLocation("models", savedModelId.current)); }} onManageModels={training.onOpenTrainingSettings} renderTasksetBuilder={(onPublished, onClose) => <TasksetDraftEditor defaultModel={training.defaultModel} training={training.training} onBack={onClose} onPublished={onPublished} />} /> : null}
     {importSource === "source" ? <DatasetSourcePickerDialog onClose={() => setImportSource(null)} onSelect={async (source) => {
-      if (source === "build") { const draft = await training.training.actions.createTasksetDraft("", route?.modelId); if (!draft) return; setImportSource(null); open(modelsLocation("tasksets", route?.modelId ?? null, { collection: "drafts", resourceId: draft.id })); }
+      if (source === "build") { const draft = await training.training.actions.createTasksetDraft("", route?.modelId); if (!draft) return; setImportSource(null); open(modelsLocation("tasks", route?.modelId ?? null, { collection: "drafts", resourceId: draft.id })); }
       else setImportSource(source);
     }} /> : null}
     {importSource === "huggingface" ? <HuggingFaceDatasetImportDialog onBack={() => setImportSource("source")} onClose={() => setImportSource(null)} onImported={async (id) => { setImportSource(null); await training.training.refresh(); openTaskset(id); }} onOpenDatasetStorageSettings={training.onOpenDatasetStorageSettings} training={training.training} /> : null}

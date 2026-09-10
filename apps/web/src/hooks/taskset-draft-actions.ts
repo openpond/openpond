@@ -1,11 +1,25 @@
 import type { Taskset, TasksetDraft } from "@openpond/contracts";
+import { TaskDataRecordSchema } from "@openpond/contracts";
+import { TaskInventoryQuerySchema, TaskInventoryPageSchema, TaskInventoryItemSchema, type TaskInventoryQuery } from "openpond-sdk/taskset-drafts";
 import type { ModelTasksetDraftRequest, TasksetDraftFile, TasksetDraftFileInfo, TasksetDraftFileMutation } from "openpond-sdk/model-taskset-authoring";
 import { api, type ClientConnection } from "../api";
 
 type DraftMutation = <T>(key: string, path: string, body: unknown, method?: "POST" | "PUT" | "PATCH" | "DELETE") => Promise<T | null>;
 
 export function tasksetDraftActions(connection: ClientConnection | null, profileId: string, mutate: DraftMutation, onError: (error: unknown) => void) {
+  async function inventory(path: string, input: Partial<TaskInventoryQuery>) {
+    if (!connection) throw new Error("Connect to OpenPond to load tasks.");
+    const query = TaskInventoryQuerySchema.parse(input);
+    const params = new URLSearchParams({ profileId });
+    for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
+    return api.trainingRequest<unknown>(connection, `${path}?${params}`, {}, "GET");
+  }
   return {
+    taskInventory: async (input: Partial<TaskInventoryQuery> = {}) => TaskInventoryPageSchema.parse(await inventory("/tasks", input)),
+    taskInventoryDetail: async (input: Partial<TaskInventoryQuery>) => {
+      const value = await inventory("/tasks/detail", input) as { item: unknown; task: unknown };
+      return { item: TaskInventoryItemSchema.parse(value.item), task: TaskDataRecordSchema.parse(value.task) };
+    },
     tasksetDraftFiles: async (draftId: string) => {
       if (!connection) return null;
       try { return await api.trainingRequest<{ draftRevision: number; files: TasksetDraftFileInfo[] }>(connection, `/taskset-drafts/${encodeURIComponent(draftId)}/files?${new URLSearchParams({ profileId })}`, {}, "GET"); }

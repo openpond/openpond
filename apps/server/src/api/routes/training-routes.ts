@@ -160,6 +160,10 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     sendBinary(response, 200, Buffer.from(result.content, "utf8"), "application/vnd.openpond.training-bundle+json");
     return true;
   }
+  if (request.method === "GET" && ["/v1/training/tasks", "/v1/training/tasks/detail"].includes(requestUrl.pathname)) {
+    sendJson(response, 200, await deps.trainingPayload(requestUrl.pathname.endsWith("/detail") ? "task_inventory_detail" : "task_inventory", {}, requestUrl));
+    return true;
+  }
   const routes: Array<{ method: string; path: string; action: string; status?: number }> = [
     { method: "POST", path: "/v1/training/sources", action: "add_source", status: 201 },
     { method: "POST", path: "/v1/training/sources/batch", action: "add_sources", status: 201 },
