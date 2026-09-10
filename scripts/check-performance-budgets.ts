@@ -85,11 +85,12 @@ export type StartupMetrics =
     };
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
-  // Model training settings and focused draft editors measured 16,861,238 bytes
-  // total and 454,479 initial bytes (2026-09-10), up 2,421 total bytes from
-  // the preceding build. Allow 4 KiB for this UI addition;
+  // Scoped Models/Learning query caching and workspace UI measured 16,897,245
+  // total and 455,393 initial bytes (2026-09-10), up 36,007 total bytes.
+  // The newly shared React Query runtime measures 33,051 minified bytes with
+  // React externalized. Allow 36 KiB for this measured feature addition;
   // initial-load, single-asset, and startup limits remain independently enforced.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 84 * 1024,
+  maxTotalJsBytes: 16 * 1024 * 1024 + 120 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
