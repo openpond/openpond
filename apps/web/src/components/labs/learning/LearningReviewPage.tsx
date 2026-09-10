@@ -11,7 +11,7 @@ export function LearningReviewPage({ client, selectedId, after, sourceId = null,
   const [reviewState, setReviewState] = useState<"inbox" | "reviewed">("inbox");
   const evidence = useLearningResources(client, "evidence", { reviewState, ...(sourceId ? { parentId: sourceId } : {}), limit: 30, ...(after ? { afterId: after } : {}) });
   const source = useLearningResource(client, "source", sourceId);
-  if (selectedId) return <EvidenceLoader key={selectedId} client={client} id={selectedId} sourceId={sourceId} onBack={() => onSelect(null)} onBatches={onBatches} />;
+  if (selectedId) return <EvidenceLoader key={selectedId} client={client} id={selectedId} sourceId={sourceId} onBack={() => { evidence.refresh(); onSelect(null); }} onBatches={onBatches} />;
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     <ModelProjectPageHeader title="Labeling" description={sourceId ? `Reviewing tasks from ${source.resource?.name ?? sourceId}.` : "Label observed responses, propose corrections, and approve tasks independently. Examples are shared across Models in this workspace."} actions={onBatches ? <button type="button" className="training-button secondary" onClick={onBatches}>Approved batches</button> : undefined} />
     {sourceId && onClearSource ? <button type="button" className="training-button secondary" onClick={onClearSource}>All workspace examples</button> : null}

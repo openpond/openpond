@@ -11,6 +11,7 @@ import { LearningActions, LearningError, LearningJsonField } from "./LearningFie
 import { useLearningMutation, useLearningResource } from "./useLearningResources";
 import { RewardFixturesEditor } from "./RewardFixturesEditor";
 import { RewardCheckHistory } from "./RewardCheckHistory";
+import { TaskRatingDetails } from "./TaskRatingFields";
 
 type Kind = RewardRelease["implementation"]["kind"];
 const KINDS: Array<{ value: Kind; label: string }> = [
@@ -106,6 +107,7 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     <ModelProjectPageHeader title={reward ? "Edit Reward" : "New Reward"} description="Save the grader and its source as an immutable release. Task formats keep the release they selected." />
     <LearningError error={mutation.error} />
+    {fromLabel ? <section><h2>Retained label</h2><p>Attempt {fromLabel.evidence.submission.exampleId} · revision {fromLabel.evidence.revision}. {fromLabel.feedback.submittedBy ? `Submitted by ${fromLabel.feedback.submittedBy.id} (${fromLabel.feedback.submittedBy.role}).` : "Submitter not recorded."}</p><TaskRatingDetails value={fromLabel.feedback.submission.value} /><p>The fixture is an editable copy. The original label remains unchanged.</p></section> : null}
     {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
     <label>Description (optional)<textarea maxLength={10_000} value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>
