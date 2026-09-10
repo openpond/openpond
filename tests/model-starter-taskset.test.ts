@@ -442,6 +442,7 @@ it("creates a starter with a required human review without fabricating review ev
 
 // A GRPO import must execute the pinned Reward and keep held-out tasks out of
 // training signals without treating authored fixtures as execution receipts.
+// Custom saves must reuse that graph even without an imported package cache.
 it("prepares verifier-based GRPO from approved training tasks and preserves private evaluation splits", async () => {
   const input = await starterInput();
   const { contentHash: _oldHash, ...content } = input.package.starter;
@@ -458,6 +459,22 @@ it("prepares verifier-based GRPO from approved training tasks and preserves priv
   expect(prepared.generatedFiles[0]!.content).toBe(input.package.assets[0]!.text);
   expect(prepared.taskset.tasks.filter(task => task.split === "frozen_eval")).toHaveLength(20);
   expect(prepared.taskset.readiness).toBeNull();
+  await withTempDirectory("authored-training-defaults-", async home => {
+    const store = new SqliteStore(home);
+    try {
+      const model = await store.saveModelStarterCreation({ ...configured, approvedTrainingTaskIds });
+      const local = await store.getTasksetRevision(model.trainingSetup.tasksetRef!.id, model.trainingSetup.tasksetRef!.revision);
+      expect(local!.metadata.importedPackageHash).toBeUndefined();
+      const custom = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({
+        id: "custom-authored", profileId: model.profileId, name: "Custom authored", objective: null,
+        defaultBaseModel: { ...request.startingModel, revision: "pinned-model", tokenizerRevision: "pinned-tokenizer", chatTemplateHash: "a".repeat(64) },
+        defaultDestinationId: null, trainingSetup: { tasksetRef: model.trainingSetup.tasksetRef, rewardBindingRef: model.trainingSetup.rewardBindingRef },
+      }, 0));
+      expect(custom.trainingSetup.method).toBe("grpo");
+      expect(custom.trainingSetup.evaluationTasksetRef).toEqual(model.trainingSetup.tasksetRef);
+      expect(custom.trainingSetup.recipe).toMatchObject({ method: "grpo", baseModel: { revision: "pinned-model" }, optimizer: { maxSteps: 8 } });
+    } finally { await store.close(); }
+  });
 });
 
 async function starterInput(metrics?: TasksetRelease["metrics"]) {
