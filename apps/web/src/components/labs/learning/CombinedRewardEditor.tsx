@@ -1,14 +1,14 @@
-import { useState } from "react";
+import { useImperativeHandle, useState, type Ref } from "react";
 import { learningRef, type AuthoringDraftFor } from "openpond-sdk/learning";
 import { useAuthoringDraft } from "./useAuthoringDraft";
 import { RewardBindingContentSchema, RewardBindingSchema, sealLearningContent, type OpenPondLearningClient, type RewardBinding, type RewardBindingSource } from "openpond-sdk/learning";
 import { ModelProjectPageHeader } from "../ModelProjectPageHeader";
-import { useDraftNavigation } from "../useDraftNavigation";
+import { useDraftNavigation, type DraftEditorHandle } from "../useDraftNavigation";
 import { LearningActions, LearningError } from "./LearningFields";
 import { RewardBindingFields } from "./RewardBindingFields";
 import { useLearningMutation } from "./useLearningResources";
 
-export function CombinedRewardEditor({ client, binding, authoringDraft, onSaved, onClose }: { authoringDraft?: AuthoringDraftFor<"binding">; client: OpenPondLearningClient | null; binding: RewardBinding | null; onSaved: (binding: RewardBinding) => void; onClose: () => void }) {
+export function CombinedRewardEditor({ client, binding, authoringDraft, onSaved, onClose, closeRef }: { closeRef?: Ref<DraftEditorHandle>; authoringDraft?: AuthoringDraftFor<"binding">; client: OpenPondLearningClient | null; binding: RewardBinding | null; onSaved: (binding: RewardBinding) => void; onClose: () => void }) {
   const [id] = useState(() => authoringDraft?.targetId ?? binding?.id ?? `recipe-${crypto.randomUUID()}`);
   const initial = { name: binding?.name ?? "", description: binding?.description ?? "", sources: binding?.sources ?? [] as RewardBindingSource[] };
   const [draft, setDraft] = useState(authoringDraft?.fields ?? initial);
@@ -34,6 +34,7 @@ export function CombinedRewardEditor({ client, binding, authoringDraft, onSaved,
     return result;
   }
   const guard = useDraftNavigation({ name: "combined Reward", dirty: saved !== JSON.stringify(draft), busy: mutation.busy, save: saveDraft });
+  useImperativeHandle(closeRef, () => ({ requestClose: () => { void guard.requestLeave(onClose); } }));
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     <ModelProjectPageHeader title={binding ? "Edit combined Reward" : "New combined Reward"} description="Publish a reusable combination. Task formats copy these defaults into their own binding; existing formats keep their selected releases." />
     <LearningError error={mutation.error} />

@@ -85,11 +85,11 @@ export type StartupMetrics =
     };
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
-  // Shared task/history intake measured 16,852,427 bytes total and 454,479
-  // initial bytes (2026-09-09). The import UI and bounded parsers add a 16 KiB
-  // allowance to the previous review-flow budget;
+  // Model training settings and focused draft editors measured 16,861,238 bytes
+  // total and 454,479 initial bytes (2026-09-10), up 2,421 total bytes from
+  // the preceding build. Allow 4 KiB for this UI addition;
   // initial-load, single-asset, and startup limits remain independently enforced.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 80 * 1024,
+  maxTotalJsBytes: 16 * 1024 * 1024 + 84 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };

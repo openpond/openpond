@@ -1,7 +1,7 @@
 import { TasksetDraftMetricsSection } from "./TasksetDraftMetricsSection";
 import { TasksetDraftFilesEditor } from "./TasksetDraftFilesEditor";
 import type { TasksetDraftFileInfo } from "openpond-sdk/model-taskset-authoring";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import type {
   ChatModelRef,
   GraderSpec,
@@ -19,7 +19,6 @@ import {
 import { TasksetDraftValidationStatus } from "./TasksetDraftValidationStatus";
 import { TaskDraftTasks } from "./TaskDraftTasks";
 import { useDraftNavigation } from "../labs/useDraftNavigation";
-import { AppDialog } from "../dialogs/AppDialog";
 import {
   TASKSET_DRAFT_SECTIONS,
   draftValidationIssues,
@@ -30,6 +29,8 @@ import {
   type TasksetDraftSection,
 } from "./taskset-draft-editor-helpers";
 
+export interface TasksetDraftEditorHandle { requestClose: () => void }
+
 export function TasksetDraftEditor({
   draftId,
   defaultModel,
@@ -39,6 +40,7 @@ export function TasksetDraftEditor({
   onPublished,
   onUseExistingTaskset,
   modelProjectId,
+  closeRef,
 }: {
   draftId?: string | null;
   defaultModel: ChatModelRef;
@@ -48,12 +50,14 @@ export function TasksetDraftEditor({
   onPublished: (tasksetId: string) => void;
   onUseExistingTaskset?: () => void;
   modelProjectId?: string | null;
+  closeRef?: Ref<TasksetDraftEditorHandle>;
 }) {
   const [localDraftId, setLocalDraftId] = useState(draftId ?? null);
   const [draft, setDraft] = useState<TasksetDraft | null>(() =>
     training.payload?.tasksetDrafts.find((candidate) => candidate.id === draftId) ?? null
   );
   const [section, setSection] = useState<TasksetDraftSection | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(training.payload?.tasksetDrafts.find((candidate) => candidate.id === draftId) ?? null));
   const [notice, setNotice] = useState<string | null>(null);
   const [validationOpen, setValidationOpen] = useState(false);
@@ -101,6 +105,12 @@ export function TasksetDraftEditor({
   const modelChanged = Boolean(owningModel && owningModel.revision !== draft?.modelScope?.expectedModelRevision);
   const busy = training.busyAction?.includes("taskset-draft") ?? false;
   const draftNavigation = useDraftNavigation({ dirty: draft !== null && draft.status !== "published" && JSON.stringify(draft) !== savedSnapshot, busy, name: "Taskset draft", save: async () => Boolean(await save()) });
+  useImperativeHandle(closeRef, () => ({ requestClose: () => {
+    if (busy) return;
+    if (section) setSection(null);
+    else if (selectedTaskId) setSelectedTaskId(null);
+    else void draftNavigation.requestLeave(() => { draftNavigation.allowNextNavigation(); onBack(); });
+  } }));
 
   async function save(): Promise<TasksetDraft | null> {
     if (!draft || draft.status === "published") return draft;
@@ -150,6 +160,37 @@ export function TasksetDraftEditor({
     setNotice(null);
     setDraft({ ...next, updatedAt: new Date().toISOString() });
   };
+
+  const taskEditor = <TaskDraftTasks draft={draft} disabled={readOnly} onChange={update} selectedId={selectedTaskId} onSelect={setSelectedTaskId} />;
+  if (selectedTaskId || section) return <main className="taskset-draft-editor taskset-draft-focused-editor" aria-label="Taskset draft editor">
+    {selectedTaskId ? taskEditor : <>
+        {section === "overview" ? (
+          <OverviewSection draft={draft} disabled={readOnly} onChange={update} />
+        ) : null}
+        {section === "environment" ? (
+          <><EnvironmentSection draft={draft} disabled={readOnly} onChange={update} /><OutputSection draft={draft} disabled={readOnly} onChange={update} /></>
+        ) : null}
+        {section === "rewards" ? (
+          <>
+            <GradingSection
+              draft={draft}
+              defaultModel={defaultModel}
+              disabled={readOnly}
+              onChange={update}
+            />
+            <details className="taskset-draft-advanced">
+              <summary>Advanced metrics</summary>
+              <TasksetDraftMetricsSection draft={draft} disabled={readOnly} onChange={update} />
+            </details>
+          </>
+        ) : null}
+        {section === "review" ? (
+          <ReviewSection draft={draft} disabled={readOnly} onChange={update} />
+        ) : null}
+      <footer className="model-build-actions"><button className="training-button" type="button" onClick={() => setSection(null)}>Done</button></footer>
+    </>}
+    {draftNavigation.dialog}
+  </main>;
 
   return (
     <main className="taskset-draft-editor" aria-label="Taskset draft editor">
@@ -262,34 +303,9 @@ export function TasksetDraftEditor({
       {draftNavigation.dialog}
       <div className="taskset-draft-body">
         {validationOpen ? <TasksetDraftValidationStatus draft={draft} issues={issues} /> : null}
-        <TaskDraftTasks draft={draft} disabled={readOnly} onChange={update} />
+        {taskEditor}
       </div>
-      {section ? <AppDialog ariaLabel="Collection settings" className="labs-rename-dialog labs-model-create-dialog taskset-draft-settings-dialog" backdropClassName="labs-rename-backdrop" onClose={() => setSection(null)}>
-        <button className="training-button secondary" type="button" onClick={() => setSection(null)}>Done</button>
-        {section === "overview" ? (
-          <OverviewSection draft={draft} disabled={readOnly} onChange={update} />
-        ) : null}
-        {section === "environment" ? (
-          <><EnvironmentSection draft={draft} disabled={readOnly} onChange={update} /><OutputSection draft={draft} disabled={readOnly} onChange={update} /></>
-        ) : null}
-        {section === "rewards" ? (
-          <>
-            <GradingSection
-              draft={draft}
-              defaultModel={defaultModel}
-              disabled={readOnly}
-              onChange={update}
-            />
-            <details className="taskset-draft-advanced">
-              <summary>Advanced metrics</summary>
-              <TasksetDraftMetricsSection draft={draft} disabled={readOnly} onChange={update} />
-            </details>
-          </>
-        ) : null}
-        {section === "review" ? (
-          <ReviewSection draft={draft} disabled={readOnly} onChange={update} />
-        ) : null}
-      </AppDialog> : null}
+
       {fileEditor ? <TasksetDraftFilesEditor draft={draft} initialFiles={fileEditor} training={training} onClose={() => setFileEditor(null)} onSaved={(saved, message = "File saved.") => {
         setDraft(saved); setSavedSnapshot(JSON.stringify(saved)); setNotice(message);
       }} /> : null}
