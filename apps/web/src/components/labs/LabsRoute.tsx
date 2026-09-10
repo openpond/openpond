@@ -275,13 +275,15 @@ export function LabsRoute(props: LabsRouteProps) {
     {importSource === "upload" || importSource === "hermes" || importSource === "openclaw" ? <AppDialog ariaLabel="Import tasks" className="labs-rename-dialog labs-model-create-dialog" backdropClassName="labs-rename-backdrop" onClose={() => { if (!intakeBusy.current) setImportSource(null); }}>
       <TaskIntakeForm client={learningClient} initialFormat={importSource === "upload" ? "json" : importSource} onBusyChange={busy => { intakeBusy.current = busy; }} onBack={() => setImportSource("source")}
         onImported={sourceId => { if (priorWorkspace.current !== workspaceKey) return; setImportSource(null); open(modelsLocation("labeling", route?.modelId ?? null, { sourceId })); }}
-        onTasks={async ({ preview, recordIds, name }) => {
+        onTasks={async ({ preview, recordIds, name, signal }) => {
           const draft = intakeDraft.current ?? await training.training.actions.createTasksetDraft(name, route?.modelId);
           if (!draft) throw new Error("Could not create the imported task draft.");
+          signal.throwIfAborted();
           if (priorWorkspace.current !== workspaceKey) throw new Error("The active workspace changed. Reopen the import in the intended workspace.");
           intakeDraft.current = draft;
           const saved = await training.training.actions.saveTasksetDraft(appendTaskIntake(draft, preview, recordIds));
           if (!saved) throw new Error("The task draft could not be saved. Retry to continue this draft.");
+          signal.throwIfAborted();
           if (priorWorkspace.current !== workspaceKey) return;
           intakeDraft.current = null; setImportSource(null); open(modelsLocation("tasks", route?.modelId ?? null, { collection: "drafts", resourceId: saved.id }));
         }} />

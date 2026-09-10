@@ -4,7 +4,7 @@ import { previewTaskIntake, TASK_INTAKE_LIMITS, LearningSourceSchema, type OpenP
   type TaskIntakeFile, type TaskIntakeFormat, type TaskIntakePreview } from "openpond-sdk/learning";
 import { LearningError } from "./LearningFields";
 
-export type TaskIntakeSelection = { preview: TaskIntakePreview; files: TaskIntakeFile[]; recordIds: string[]; name: string };
+export type TaskIntakeSelection = { preview: TaskIntakePreview; files: TaskIntakeFile[]; recordIds: string[]; name: string; signal: AbortSignal };
 export function TaskIntakeForm({ client, initialFormat = "json", onTasks, onImported, onBack, onBusyChange }: {
   client: OpenPondLearningClient | null; initialFormat?: TaskIntakeFormat;
   onTasks: (input: TaskIntakeSelection) => Promise<void>; onImported: (sourceId: string) => void;
@@ -47,7 +47,7 @@ export function TaskIntakeForm({ client, initialFormat = "json", onTasks, onImpo
     activeRequest.current = controller;
     try {
       const recordIds = records.map(record => record.id);
-      if (!labeling) { await onTasks({ preview, files, recordIds, name }); return; }
+      if (!labeling) { await onTasks({ preview, files, recordIds, name, signal: controller.signal }); return; }
       if (!client) throw new Error("Connect to this workspace before importing attempts.");
       let sourceId = "";
       for (let offset = 0; offset < recordIds.length; offset += 90) {
