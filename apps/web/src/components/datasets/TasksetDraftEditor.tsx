@@ -643,7 +643,7 @@ function GradingSection({
   return (
     <EditorSection
       title="Rewards"
-      description="Add the deterministic and subjective signals that define success. Reward aggregation, fixtures, and custom grader settings remain available under Advanced."
+      description="Add and configure the checks that define success. Expand fixture checks to test them against retained examples."
     >
       <div className="taskset-draft-inline-actions">
         <button
@@ -662,8 +662,6 @@ function GradingSection({
         <button className="training-button secondary" disabled={disabled} type="button" onClick={() => addGrader("human")}>Human</button>
         <button className="training-button secondary" disabled={disabled} type="button" onClick={() => addGrader("custom_verifier")}>Custom verifier</button>
       </div>
-      <details className="taskset-draft-advanced">
-        <summary>Advanced grader configuration</summary>
       <div className="taskset-draft-card-list">
         {draft.graders.map((grader, index) => (
           <article className="taskset-draft-card" key={grader.id}>
@@ -710,6 +708,8 @@ function GradingSection({
           </article>
         ))}
       </div>
+      <details className="taskset-draft-advanced">
+        <summary>Reward fixture checks</summary>
       <div className="taskset-draft-fixture-summary">
         <div>
           <strong>{draft.graderFixtures.length} fixtures</strong>
