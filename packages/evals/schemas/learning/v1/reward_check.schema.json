@@ -118,6 +118,9 @@
         "$ref": "#/$defs/__schema6"
       }
     },
+    "requestedBy": {
+      "$ref": "#/$defs/__schema0"
+    },
     "leaseOwner": {
       "anyOf": [
         {

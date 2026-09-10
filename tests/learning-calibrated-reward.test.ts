@@ -21,8 +21,9 @@ test("checked judges publish exact calibration evidence and grade bound examples
       let calls = 0;
       const provider: BoundJudgeProvider = {
         async cancel() { return true; },
-        async prepare(request) {
+        async prepare(request, context) {
           expect(request).toMatchObject({ providerId: "openpond", modelId: "judge", temperature: 0 });
+          expect(context).toMatchObject({ scope: learningContext.scope, run: { requestedBy: learningContext.actor.id } });
           return { maximumChargeUsd: 0.004, async dispatch() {
             calls++;
             const passed = JSON.parse(request.data).attempt.output.answer === "yes";

@@ -39,6 +39,7 @@ export const RewardCheckRunSchema = z.object({
   matchesExpectations: z.boolean().nullable(), failure: z.string().max(20_000).nullable(),
   timeoutMs: z.number().int().min(100).max(300_000), maximumSpendUsd: z.number().nonnegative().max(1_000),
   judgeCalls: z.array(JudgeCallReservationSchema).max(1_000).optional(),
+  requestedBy: ReleaseIdSchema.optional(),
   leaseOwner: ReleaseIdSchema.nullable(), leaseExpiresAt: ReleaseTimestampSchema.nullable(), attemptCount: z.number().int().nonnegative(),
   createdAt: ReleaseTimestampSchema, updatedAt: ReleaseTimestampSchema,
 }).strict();

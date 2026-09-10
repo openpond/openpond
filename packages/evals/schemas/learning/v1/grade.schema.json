@@ -217,6 +217,9 @@
         "$ref": "#/$defs/__schema7"
       }
     },
+    "requestedBy": {
+      "$ref": "#/$defs/__schema0"
+    },
     "failure": {
       "anyOf": [
         {

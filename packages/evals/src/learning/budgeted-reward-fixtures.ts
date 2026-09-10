@@ -12,7 +12,7 @@ import type { RewardFixtureExecutor } from "./reward-check-worker.js";
 export interface BoundJudgeProvider {
   /** Resolve exact model configuration and a conservative charge ceiling without
    * performing inference. dispatch settles after the provider request closes. */
-  prepare(request: BoundJudgeRequest): Promise<{ maximumChargeUsd: number; dispatch(signal?: AbortSignal): Promise<BoundJudgeResponse> }>;
+  prepare(request: BoundJudgeRequest, context?: { scope: string; run: Pick<RewardCheckRun, "id" | "requestedBy"> }): Promise<{ maximumChargeUsd: number; dispatch(signal?: AbortSignal): Promise<BoundJudgeResponse> }>;
   cancel(input: { scope: string; run: Pick<RewardCheckRun, "id" | "judgeCalls"> }): Promise<boolean>;
 }
 
@@ -36,7 +36,7 @@ export function createBudgetedRewardFixtureExecutor(options: {
           return verifyLearningTextAsset(asset, reference);
         },
         async executeBudgeted(request, signal) {
-          const prepared = await options.provider.prepare(request);
+          const prepared = await options.provider.prepare(request, { scope: input.scope, run: input.run });
           const execute = createBudgetedJudgeExecutor({ store: budget, maximumCharge: () => prepared.maximumChargeUsd, dispatch: (_request, signal) => prepared.dispatch(signal) });
           return execute(`fixture-${contentHash([input.fixture, input.reward.contentHash])}`, request, signal);
         },

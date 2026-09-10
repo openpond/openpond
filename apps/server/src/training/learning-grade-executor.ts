@@ -23,7 +23,7 @@ export function createLocalTaskGradeExecutor(repository: LearningRepository, pro
           readRubric: reference => repository.transaction(input.scope, async tx => verifyLearningTextAsset(
             await requireLearningResource(tx, "asset", reference.id, 1), reference)),
           async executeBudgeted(request, signal) {
-            const prepared = await provider.prepare(request);
+            const prepared = await provider.prepare(request, { scope: input.scope, run: input.run });
             const execute = createBudgetedJudgeExecutor({ store: budget, maximumCharge: () => prepared.maximumChargeUsd,
               dispatch: (_request, signal) => prepared.dispatch(signal) });
             return execute(`grade-${contentHash(request)}`, request, signal);
