@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { learningRef } from "@openpond/evals/learning";
-import { ModelProjectSchema, createModelProjectSaveRequest } from "openpond-sdk/model-projects";
-import { createModelStarterExecutionAsset, createModelTasksetExecutionResourcesAsset, parseModelStarterCreationRequest, validateResolvedModelStarter, type ModelStarterCreationRequest } from "openpond-sdk/model-starters";
+import { ModelProjectSchema, ModelProjectTrainingSetupSchema, createModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { createModelStarterExecutionAsset, createModelTasksetExecutionResourcesAsset, parseModelStarterCreationRequest, prepareModelTrainingDefaults, validateResolvedModelStarter, type ModelStarterCreationRequest } from "openpond-sdk/model-starters";
 import { canonicalJson } from "openpond-sdk/training";
 import { prepareModelStarterTaskset } from "../training/model-starter-taskset.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
@@ -29,7 +29,10 @@ export async function commitModelStarterCreation(db: OpenPondSqliteConnection, i
   const modelRequest = await createModelProjectSaveRequest({
     id: request.modelId, profileId: request.profileId, name: request.name, objective: resolved.taskDefinition.instructions,
     defaultBaseModel: request.startingModel, defaultDestinationId: null,
-    trainingSetup: { tasksetRef: learningRef(taskset), rewardBindingRef: learningRef(effective.rewardBinding), baseModel: request.startingModel, method: request.method, managedRolloutPlacement: "remote" },
+    trainingSetup: prepareModelTrainingDefaults({ package: effective, setup: ModelProjectTrainingSetupSchema.parse({
+      tasksetRef: learningRef(taskset), rewardBindingRef: learningRef(effective.rewardBinding),
+      baseModel: request.startingModel, method: request.method, managedRolloutPlacement: "remote",
+    }) }),
   }, 0);
   db.exec("BEGIN IMMEDIATE");
   try {

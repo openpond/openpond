@@ -8,6 +8,8 @@ import { OpenPondModelStarterCatalogClient } from "../src/model-starter-catalog.
 import { deriveModelTaskset } from "../src/model-taskset-derivation.js";
 import { createModelTasksetExecutionResourcesAsset, resolveModelTasksetExecutionResourcesAsset } from "../src/model-taskset-resources.js";
 import { createTasksetPackage } from "../src/taskset-packages.js";
+import { prepareModelTrainingDefaults } from "../src/model-training-defaults.js";
+import { ModelProjectTrainingSetupSchema } from "../src/model-projects.js";
 
 function fixture(visibility: "verifier" | "policy" = "verifier") {
   const asset = createLearningTextAsset({ text: "export function verify({ output, expectedOutput }) { const passed = output.answer === expectedOutput.answer; return { score: Number(passed), passed, feedback: 'Exact answer' }; }", path: "verifier.mjs", mediaType: "application/javascript", visibility });
@@ -52,6 +54,29 @@ function reseal(value: Record<string, unknown> & { contentHash: string }) {
   const { contentHash: _old, ...content } = value;
   value.contentHash = sealLearningContent(content).contentHash;
 }
+
+// Creation must carry exact source resources into Run setup without replacing
+// an edited recipe or selecting unrelated retained evaluation material.
+it("prepares source-bound training defaults and preserves explicit Run settings", () => {
+  const { starter: _starter, ...source } = fixture();
+  const selected = deriveModelTaskset({ owner: { scopeId: "team", modelId: "model" }, source,
+    rewardBinding: source.rewardBinding, rewards: source.rewards, assets: source.assets });
+  const setup = ModelProjectTrainingSetupSchema.parse({ tasksetRef: learningRef(selected.taskset),
+    rewardBindingRef: learningRef(selected.rewardBinding), method: "grpo",
+    baseModel: { ...fixture().starter.startingModel, revision: "model-revision", tokenizerRevision: "tokenizer-revision", chatTemplateHash: "a".repeat(64) } });
+  const result = prepareModelTrainingDefaults({ setup, package: selected });
+  expect(result.evaluationTasksetRef).toEqual(setup.tasksetRef);
+  expect(result.recipe?.reward).toMatchObject({ environmentId: selected.executionResources!.environment.id,
+    environmentVersion: String(selected.executionResources!.environment.revision), graderId: "answer" });
+  expect(result.recipe?.baseModel).toMatchObject({ revision: "model-revision", tokenizerRevision: "tokenizer-revision" });
+  expect(result.recipe?.dataset).toMatchObject({ maxExamples: 1, validationSplit: "frozen_eval" });
+  const edited = { ...result, recipe: { ...result.recipe!, optimizer: { maxSteps: 3 } },
+    evaluationTasksetRef: { id: "retained", revision: 2, contentHash: "b".repeat(64) } };
+  expect(prepareModelTrainingDefaults({ setup: edited, package: selected })).toEqual(edited);
+  expect(prepareModelTrainingDefaults({ setup: { ...setup, tasksetRef: null }, package: selected }).recipe).toBeNull();
+  expect(prepareModelTrainingDefaults({ setup: { ...setup, tasksetRef: { ...setup.tasksetRef!, revision: 99 } }, package: selected }).recipe).toBeNull();
+  expect(setup.recipe).toBeNull();
+});
 
 // A Reward edit must fork a shared package once, retain the model's identity
 // for later revisions, and never mutate another model's pinned source bytes.
