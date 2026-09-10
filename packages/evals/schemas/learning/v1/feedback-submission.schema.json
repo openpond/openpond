@@ -3,59 +3,34 @@
   "type": "object",
   "properties": {
     "schemaVersion": {
-      "type": "string",
-      "const": "openpond.taskFeedback.v1"
+      "$ref": "#/$defs/__schema0"
     },
     "sourceId": {
-      "$ref": "#/$defs/__schema0"
+      "$ref": "#/$defs/__schema1"
     },
     "idempotencyKey": {
-      "$ref": "#/$defs/__schema0"
+      "$ref": "#/$defs/__schema1"
     },
     "exampleId": {
-      "$ref": "#/$defs/__schema0"
+      "$ref": "#/$defs/__schema1"
     },
     "attemptId": {
-      "$ref": "#/$defs/__schema0"
+      "$ref": "#/$defs/__schema1"
     },
     "expectedEvidenceHash": {
-      "anyOf": [
-        {
-          "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "$ref": "#/$defs/__schema2"
     },
     "occurredAt": {
-      "type": "string",
-      "format": "date-time",
-      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+      "$ref": "#/$defs/__schema3"
     },
     "kind": {
-      "type": "string",
-      "enum": [
-        "outcome",
-        "target_correction",
-        "ground_truth_correction",
-        "input_correction",
-        "family_resolution"
-      ]
+      "$ref": "#/$defs/__schema4"
     },
     "value": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/__schema1"
-      }
+      "$ref": "#/$defs/__schema5"
     },
     "note": {
-      "type": "string",
-      "maxLength": 20000
+      "$ref": "#/$defs/__schema7"
     }
   },
   "required": [
@@ -74,10 +49,49 @@
   "$defs": {
     "__schema0": {
       "type": "string",
+      "const": "openpond.taskFeedback.v1"
+    },
+    "__schema1": {
+      "type": "string",
       "minLength": 1,
       "maxLength": 240
     },
-    "__schema1": {
+    "__schema2": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema3": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "__schema4": {
+      "type": "string",
+      "enum": [
+        "outcome",
+        "target_correction",
+        "ground_truth_correction",
+        "input_correction",
+        "family_resolution"
+      ]
+    },
+    "__schema5": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema6"
+      }
+    },
+    "__schema6": {
       "anyOf": [
         {
           "type": "string"
@@ -94,7 +108,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema1"
+            "$ref": "#/$defs/__schema6"
           }
         },
         {
@@ -103,10 +117,14 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema1"
+            "$ref": "#/$defs/__schema6"
           }
         }
       ]
+    },
+    "__schema7": {
+      "type": "string",
+      "maxLength": 20000
     }
   },
   "$id": "urn:openpond:learning:v1:feedback-submission",

@@ -13,8 +13,7 @@
       "type": "object",
       "properties": {
         "schemaVersion": {
-          "type": "string",
-          "const": "openpond.taskFeedback.v1"
+          "$ref": "#/$defs/__schema1"
         },
         "sourceId": {
           "$ref": "#/$defs/__schema0"
@@ -29,40 +28,19 @@
           "$ref": "#/$defs/__schema0"
         },
         "expectedEvidenceHash": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/__schema1"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "occurredAt": {
           "$ref": "#/$defs/__schema2"
         },
+        "occurredAt": {
+          "$ref": "#/$defs/__schema4"
+        },
         "kind": {
-          "type": "string",
-          "enum": [
-            "outcome",
-            "target_correction",
-            "ground_truth_correction",
-            "input_correction",
-            "family_resolution"
-          ]
+          "$ref": "#/$defs/__schema5"
         },
         "value": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/__schema3"
-          }
+          "$ref": "#/$defs/__schema6"
         },
         "note": {
-          "type": "string",
-          "maxLength": 20000
+          "$ref": "#/$defs/__schema8"
         }
       },
       "required": [
@@ -92,7 +70,7 @@
     "evidence": {
       "anyOf": [
         {
-          "$ref": "#/$defs/__schema4"
+          "$ref": "#/$defs/__schema9"
         },
         {
           "type": "null"
@@ -100,12 +78,52 @@
       ]
     },
     "createdAt": {
-      "$ref": "#/$defs/__schema2"
+      "$ref": "#/$defs/__schema4"
     },
     "revision": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
+    },
+    "submittedBy": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "editor",
+                "reviewer",
+                "source"
+              ]
+            },
+            "sourceId": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema0"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "role",
+            "sourceId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "review": {
       "default": null,
@@ -119,7 +137,7 @@
             "decision": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/__schema4"
+                  "$ref": "#/$defs/__schema9"
                 },
                 {
                   "type": "null"
@@ -131,7 +149,7 @@
               "maxLength": 20000
             },
             "resolvedAt": {
-              "$ref": "#/$defs/__schema2"
+              "$ref": "#/$defs/__schema4"
             }
           },
           "required": [
@@ -156,6 +174,7 @@
     "evidence",
     "createdAt",
     "revision",
+    "submittedBy",
     "review"
   ],
   "additionalProperties": false,
@@ -167,14 +186,47 @@
     },
     "__schema1": {
       "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
+      "const": "openpond.taskFeedback.v1"
     },
     "__schema2": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema3"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema3": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "__schema4": {
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
     },
-    "__schema3": {
+    "__schema5": {
+      "type": "string",
+      "enum": [
+        "outcome",
+        "target_correction",
+        "ground_truth_correction",
+        "input_correction",
+        "family_resolution"
+      ]
+    },
+    "__schema6": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema7"
+      }
+    },
+    "__schema7": {
       "anyOf": [
         {
           "type": "string"
@@ -191,7 +243,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema3"
+            "$ref": "#/$defs/__schema7"
           }
         },
         {
@@ -200,19 +252,23 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema3"
+            "$ref": "#/$defs/__schema7"
           }
         }
       ]
     },
-    "__schema4": {
+    "__schema8": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "__schema9": {
       "type": "object",
       "properties": {
         "id": {
           "$ref": "#/$defs/__schema0"
         },
         "contentHash": {
-          "$ref": "#/$defs/__schema1"
+          "$ref": "#/$defs/__schema3"
         },
         "revision": {
           "type": "integer",

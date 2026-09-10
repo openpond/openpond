@@ -106,6 +106,20 @@ export const TaskEvidenceContentSchema = z.object({
 }).strict();
 export const TaskEvidenceSchema = TaskEvidenceContentSchema.extend({ contentHash: ReleaseHashSchema }).strict();
 
+/** A retained judgment of this exact attempt, separate from task admission. */
+export const TaskRatingSchema = z.object({
+  schemaVersion: z.literal("openpond.taskRating.v1"),
+  criteria: z.string().trim().min(1).max(20_000),
+  scale: z.object({ minimum: z.number().finite(), maximum: z.number().finite() }).strict(),
+  score: z.number().finite(),
+  evidence: z.string().max(20_000),
+  explanation: z.string().max(20_000),
+}).strict().superRefine((rating, context) => {
+  if (rating.scale.minimum >= rating.scale.maximum) context.addIssue({ code: "custom", path: ["scale"], message: "The score scale must have an increasing range." });
+  if (rating.score < rating.scale.minimum || rating.score > rating.scale.maximum) context.addIssue({ code: "custom", path: ["score"], message: "The score must be within its declared scale." });
+});
+export type TaskRating = z.infer<typeof TaskRatingSchema>;
+
 export const TaskFeedbackSubmissionSchema = z.object({
   schemaVersion: z.literal("openpond.taskFeedback.v1"),
   sourceId: ReleaseIdSchema,
@@ -117,7 +131,13 @@ export const TaskFeedbackSubmissionSchema = z.object({
   kind: z.enum(["outcome", "target_correction", "ground_truth_correction", "input_correction", "family_resolution"]),
   value: LearningJsonObjectSchema,
   note: z.string().max(20_000),
-}).strict();
+}).strict().superRefine((submission, context) => {
+  if (submission.value.schemaVersion !== "openpond.taskRating.v1") return;
+  if (submission.expectedEvidenceHash === null) context.addIssue({ code: "custom", path: ["expectedEvidenceHash"], message: "A rating must identify the exact evidence revision." });
+  if (submission.kind !== "outcome") context.addIssue({ code: "custom", path: ["kind"], message: "Ratings must be submitted as outcomes." });
+  const rating = TaskRatingSchema.safeParse(submission.value);
+  if (!rating.success) for (const issue of rating.error.issues) context.addIssue({ code: "custom", path: ["value", ...issue.path], message: issue.message });
+});
 export const TaskFeedbackSchema = z.object({
   schemaVersion: z.literal("openpond.taskFeedbackRecord.v1"),
   id: ReleaseIdSchema,
@@ -126,6 +146,7 @@ export const TaskFeedbackSchema = z.object({
   evidence: LearningRevisionRefSchema.nullable(),
   createdAt: ReleaseTimestampSchema,
   revision: z.number().int().positive(),
+  submittedBy: z.object({ id: ReleaseIdSchema, role: z.enum(["editor", "reviewer", "source"]), sourceId: ReleaseIdSchema.nullable() }).strict().nullable().default(null),
   review: z.object({ actorId: ReleaseIdSchema, decision: LearningRevisionRefSchema.nullable(), note: z.string().max(20_000), resolvedAt: ReleaseTimestampSchema }).strict().nullable().default(null),
 }).strict();
 

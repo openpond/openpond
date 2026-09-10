@@ -74,6 +74,15 @@ export function createLearningTransaction(db: OpenPondSqliteConnection, scope: s
       if (!Number.isFinite(limit)) throw new Error("learning_query_limit_invalid");
       const filters = ["current.scope = ?", "current.kind = ?"];
       const params: unknown[] = [scope, kind];
+      if (query.reviewState !== undefined) {
+        if (kind !== "evidence") throw new Error("learning_review_filter_requires_evidence");
+        const reviewed = `EXISTS (SELECT 1 FROM learning_resources decision
+          JOIN learning_revisions decision_history USING (scope, kind, id, revision)
+          WHERE decision.scope = current.scope AND decision.kind = 'decision'
+          AND decision.parent_id = current.id AND decision.status IN ('approved', 'rejected')
+          AND json_extract(decision_history.payload, '$.evidence.contentHash') = json_extract(history.payload, '$.contentHash'))`;
+        filters.push(query.reviewState === "reviewed" ? reviewed : `NOT ${reviewed}`);
+      }
       for (const [column, value] of [["parent_id", query.parentId], ["status", query.status]] as const) {
         if (value !== undefined) { filters.push(`current.${column} = ?`); params.push(value); }
       }

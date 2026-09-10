@@ -94,6 +94,13 @@
           "minLength": 1,
           "maxLength": 200
         },
+        "reviewState": {
+          "type": "string",
+          "enum": [
+            "inbox",
+            "reviewed"
+          ]
+        },
         "afterId": {
           "$ref": "#/$defs/__schema0"
         },
