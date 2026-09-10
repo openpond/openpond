@@ -62,6 +62,13 @@
         "$ref": "#/$defs/__schema1"
       }
     },
+    "contextRequirements": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema3"
+      }
+    },
     "rewardBinding": {
       "type": "object",
       "properties": {
@@ -186,7 +193,7 @@
               "maxItems": 5,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema3"
+                "$ref": "#/$defs/__schema4"
               }
             },
             "networkPolicy": {
@@ -235,14 +242,14 @@
           "maxItems": 200,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema4"
+            "$ref": "#/$defs/__schema5"
           }
         },
         "capabilities": {
           "maxItems": 200,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema5"
+            "$ref": "#/$defs/__schema6"
           }
         },
         "verifierSetRelease": {
@@ -398,6 +405,11 @@
     },
     "__schema3": {
       "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "__schema4": {
+      "type": "string",
       "enum": [
         "create",
         "reset",
@@ -406,7 +418,7 @@
         "destroy"
       ]
     },
-    "__schema4": {
+    "__schema5": {
       "type": "object",
       "properties": {
         "name": {
@@ -453,7 +465,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema5": {
+    "__schema6": {
       "type": "object",
       "properties": {
         "id": {
@@ -467,7 +479,7 @@
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema6"
+            "$ref": "#/$defs/__schema7"
           }
         },
         "portability": {
@@ -488,7 +500,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema6": {
+    "__schema7": {
       "type": "string",
       "minLength": 1,
       "maxLength": 500

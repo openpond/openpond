@@ -3,6 +3,7 @@ import {
   createBuiltinTaskGradeExecutor, createTaskGradeWorker, learningRef, sealLearningContent, rewardFixtureFromRating, rewardAuthoringFields, AuthoringDraftSchema,
   TaskAdmissionDecisionSchema, TaskEvidenceSchema, TaskFeedbackSchema, taskBatchPackageMetadata,
   type TaskGradeExecutor,
+  createLearningService, previewTaskIntake, LearningSourceSchema,
 } from "@openpond/evals/learning";
 import { TasksetReleaseSchema, policyTaskView } from "@openpond/evals/tasksets";
 import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
@@ -26,6 +27,33 @@ const withStore = (run: (store: SqliteLearningStore, home: string) => Promise<vo
 });
 
 describe("durable task intake and admission", () => {
+  // A retried import must retain one source/attempt identity across owners,
+  // reject a changed preview, and keep unconfigured history out of training.
+  test("imports reviewed previews durably without fabricating a scorer or admission", async () => withStore(async store => {
+    const service = createLearningService(store.learningRepository());
+    const input = { format: "hermes" as const, files: [{ path: "session.jsonl", text: JSON.stringify({ id: "session", messages: [
+      { id: 1, role: "user", content: "Use the tool" }, { id: 2, role: "assistant", content: "Recorded response" },
+    ] }) }] };
+    const preview = previewTaskIntake(input);
+    const command = { ...input, action: "import_intake", operationId: "import", name: "Imported session", expectedPreviewHash: preview.contentHash, recordIds: preview.records.map(record => record.id) };
+    const first = await service.command(learningContext, command);
+    const source = LearningSourceSchema.parse(first.resources[0]);
+    const evidence = TaskEvidenceSchema.parse(first.resources[1]);
+    const retry = await service.command({ ...learningContext, actor: { id: "another-editor", role: "editor" } }, { ...command, operationId: "retry" });
+    expect(retry.resources).toEqual(first.resources);
+    expect((await service.list(learningContext, "evidence", { parentId: source.id })).items).toHaveLength(1);
+    expect((await service.list({ ...learningContext, scope: "another-workspace" }, "evidence")).items).toEqual([]);
+    await expect(service.command(learningContext, { ...command, operationId: "changed", files: [{ path: "session.jsonl", text: input.files[0]!.text + "\n" }] })).rejects.toMatchObject({ code: "task_intake_preview_changed" });
+    await expect(service.command({ ...learningContext, actor: { id: "producer", role: "source", sourceId: source.id } }, { ...command, operationId: "producer" })).rejects.toMatchObject({ code: "learning_source_not_authorized" });
+    const definition = await service.get(learningContext, "definition", source.taskDefinition.id);
+    expect((await service.get(learningContext, "binding", definition.rewardBinding.id)).sources).toEqual([]);
+    expect((await service.inspectEvidence(learningContext, learningRef(evidence))).inspection).toMatchObject({ evidenceValidity: "valid", taskReady: false });
+    expect((await service.list(learningContext, "decision")).items).toEqual([]);
+    expect(evidence.submission.evaluatorContext).toMatchObject({ intake: { needsContext: true, timestampOrigin: "import_time" } });
+    expect(evidence.submission.assets.every(asset => asset.visibility === "host_private")).toBe(true);
+    const raw = await service.get(learningContext, "asset", evidence.submission.assets[0]!.id);
+    expect(raw.text).toBe(input.files[0]!.text);
+  }));
   // A Model package must retain the reviewed batch's authoring graph, not
   // merely enough task rows to execute its current grader.
   test("exports an attached approved batch with its exact definition and Reward binding", async () => withTrainingStore(async ({ store, directory }) => {

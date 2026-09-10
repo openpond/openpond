@@ -28,6 +28,7 @@ export function inspectTaskEvidence(evidence: TaskEvidence, definition: TaskDefi
     issues.push(...expected.issues.map((issue) => ({ ...issue, path: `/expected${issue.path}` })));
   }
   const evidenceValidity = issues.length ? "invalid" : "valid";
+  for (const requirement of definition.contextRequirements ?? []) issues.push({ path: "/taskDefinition/contextRequirements", code: "context_required", message: requirement });
   if (!example.familyKey) issues.push({ path: "/familyKey", code: "family_unresolved", message: "Resolve the source family before admitting this task." });
   return { evidenceValidity, taskReady: issues.length === 0, observedOutputValid: example.observedOutput === null ? null : validateTaskValue(definition.outputSchema, example.observedOutput).valid, issues };
 }
@@ -131,6 +132,7 @@ export function taskFamilyReservations(evidence: TaskEvidence, definition: TaskD
 export function sealTaskBatch(input: { id: string; definition: TaskDefinition; binding: RewardBinding; rewards: RewardRelease[]; purpose: TaskBatch["purpose"]; evidence: TaskEvidence[]; decisions: TaskAdmissionDecision[]; priorSplits: TaskFamilySplit[]; actorId: string; now: string }): TaskBatch {
   const definition = TaskDefinitionSchema.parse(input.definition);
   assertLearningContentHash(definition);
+  if (definition.contextRequirements?.length) throw new LearningDomainError("task_context_not_configured", 422, definition.contextRequirements.join(" "));
   if (!sameLearningRef(definition.rewardBinding, learningRef(input.binding))) throw new LearningDomainError("task_definition_reward_binding_mismatch", 422);
   resolveBoundRewards(input.binding, input.rewards);
   if (input.purpose === "reward_training" && !input.binding.sources.some((source) => source.role === "training" && source.weight > 0)) throw new LearningDomainError("training_reward_not_configured", 422);

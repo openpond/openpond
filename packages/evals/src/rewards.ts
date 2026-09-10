@@ -59,12 +59,14 @@ export const RewardBindingContentSchema = z.object({
   name: z.string().trim().min(1).max(500).optional(),
   description: z.string().max(10_000).optional(),
   recipeRef: RewardReleaseRefSchema.optional(),
-  sources: z.array(RewardBindingSourceSchema).min(1).max(100),
+  // An empty binding retains attempts before a scorer is chosen. Admission
+  // still requires a positively weighted training source for reward training.
+  sources: z.array(RewardBindingSourceSchema).max(100),
   aggregation: z.literal("weighted_mean"),
   unscorable: z.literal("exclude_optional_require_all_required"),
 }).strict().superRefine((binding, context) => {
   if (new Set(binding.sources.map((source) => source.graderId)).size !== binding.sources.length) context.addIssue({ code: "custom", path: ["sources"], message: "Bound grader identities must be unique." });
-  if (!binding.sources.some((source) => source.weight > 0)) context.addIssue({ code: "custom", path: ["sources"], message: "A binding needs at least one positively weighted source." });
+  if (binding.sources.length && !binding.sources.some((source) => source.weight > 0)) context.addIssue({ code: "custom", path: ["sources"], message: "A configured binding needs at least one positively weighted source." });
   for (const [index, source] of binding.sources.entries()) {
     if (source.hardGate && !source.required) context.addIssue({ code: "custom", path: ["sources", index], message: "A hard gate must be required." });
     if (source.normalization.kind === "linear" && source.normalization.minimum >= source.normalization.maximum) context.addIssue({ code: "custom", path: ["sources", index, "normalization"], message: "Linear normalization requires minimum < maximum." });
@@ -88,7 +90,7 @@ export const RewardCompositionContentSchema = z.object({
   binding: RewardReleaseRefSchema,
   taskHash: ReleaseHashSchema,
   outputHash: ReleaseHashSchema,
-  results: z.array(BoundRewardResultSchema).min(1).max(100),
+  results: z.array(BoundRewardResultSchema).max(100),
   training: z.object({ status: z.enum(["scored", "unscorable", "not_configured"]), score: z.number().min(0).max(1).nullable(), passed: z.boolean().nullable() }).strict(),
   evaluation: z.object({ status: z.enum(["scored", "unscorable", "not_configured"]), score: z.number().min(0).max(1).nullable(), passed: z.boolean().nullable() }).strict(),
 }).strict();

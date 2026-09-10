@@ -28,6 +28,32 @@ and approval operations still validate their authoritative inputs independently.
 
 ## Data flow
 
+### File and agent-history intake
+
+`previewTaskIntake({ format, files })` validates JSON, JSONL, CSV, Hermes native
+session JSONL, or an OpenClaw trajectory folder. Each file has a relative `path`
+and its UTF-8 `text`. Previews report invalid rows separately and retain stable
+source, attempt, family and split identities. Treat imported labels as source
+metadata until a reviewer creates authenticated feedback.
+
+For recorded attempts, submit `import_intake` with the same files and format,
+`expectedPreviewHash`, a collection `name`, and up to 90 selected `recordIds`.
+The owner reparses the files, verifies the preview hash, retains source text in
+private assets and deduplicates retries. Source-producer credentials cannot use
+this workspace import operation. Inputs are limited to 100 files, 5 MiB and
+1,000 preview records; callers can submit selection chunks with stable operation
+IDs. Histories remain in Labeling with unresolved context requirements, and an
+empty Reward binding reports `not_configured`. They cannot be admitted or sealed
+for training until their context and Reward configuration are resolved.
+
+Plain task records can be added to a draft with
+`appendTaskIntake(draft, preview, recordIds)` from `openpond-sdk/taskset-drafts`.
+This preserves private references and source metadata, rejects attempts and
+unresolved histories, and rejects cross-split family or identical-input overlap.
+Repeating identical tasks is idempotent; imports never overwrite edited tasks.
+
+### Reviewed task lifecycle
+
 1. Publish a Reward, then a binding, task definition and source. Use
    `publish_resources` to publish dependent resources atomically. Pin an existing
    release by `{ id, revision, contentHash }`; edits create the next revision with

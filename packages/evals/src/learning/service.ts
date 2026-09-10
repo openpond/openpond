@@ -18,6 +18,7 @@ import { LearningConflictError, learningEvidenceId, learningOperationId, require
 import { validateSourceSubmission } from "./admission.js";
 import { LearningTextAssetSchema, verifyLearningTextAsset } from "./assets.js";
 import { LearningRevisionRefSchema } from "./contracts.js";
+import { importTaskIntake } from "./intake-service.js";
 
 export type LearningActor = { id: string; role: "editor" | "reviewer" | "source"; sourceId?: string };
 export type LearningServiceContext = { scope: string; actor: LearningActor };
@@ -41,6 +42,7 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       let pointers: LearningResourcePointer[];
       switch (input.action) {
+        case "import_intake": pointers = await importTaskIntake(transaction, input, now(), submit); break;
         case "cancel_iteration":
         case "retry_iteration_dispatch": pointers = await commandLearningIterationDispatch(transaction, input, now()); break;
         case "cancel_iteration_reservation": pointers = await cancelLearningIterationReservation(transaction, input, now()); break;
