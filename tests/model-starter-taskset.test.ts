@@ -24,7 +24,7 @@ import { materializePortableTasksetRelease, computeTasksetHash, hashTasksetDraft
 import { buildTasksetTrainingBundle } from "@openpond/training-sdk";
 import { resolveTasksetTrainingReward, resolveManagedTasksetReward } from "../apps/server/src/training/taskset-reward-binding.js";
 import { requireReleasedTaskset } from "../apps/server/src/training/local-taskset-release.js";
-import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
+import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders, createRewardRelease } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema, type TasksetRelease } from "@openpond/evals/tasksets";
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
 import { createModelProjectSaveRequest, ModelProjectSchema, HostedModelProjectSummarySchema, type HostedModelProjectSummary, type ModelProject } from "openpond-sdk/model-projects";
@@ -251,7 +251,7 @@ it("pulls complete private packages atomically and exports their exact bytes aft
 }));
 
 // A valid release reference alone must never admit missing or altered private code.
-it("exports verified private Reward assets separately from policy task assets", async () => withTempDirectory("starter-private-export-", async home => {
+it.each(["code", "judge"] as const)("exports verified private %s Reward assets separately from policy task assets", async rewardKind => withTempDirectory("starter-private-export-", async home => {
   const store = new SqliteStore(home);
   try {
     const input = await starterInput();
@@ -261,9 +261,20 @@ it("exports verified private Reward assets separately from policy task assets", 
     await expect(resolveManagedTasksetReward(store, trainingOnly, { placement: "remote", hasLearnedPreferenceReward: false }))
       .rejects.toThrow("evaluation Reward source");
     const { contentHash: _oldBindingHash, ...bindingContent } = input.package.rewardBinding;
+    const rubric = createLearningTextAsset({ text: "Private invoice rubric: require the exact invoice identifier.", path: "invoice-rubric.txt", mediaType: "text/plain", visibility: "verifier" });
+    const calibrationFixtures = createLearningTextAsset({ path: "reward-fixtures.json", mediaType: "application/json", visibility: "verifier",
+      text: JSON.stringify([{ id: "invoice-positive", name: "Matching invoice", input: "{}", output: '{"invoice":"123"}', expectedOutput: '{"invoice":"123"}', evaluatorContext: "{}", artifactRefs: [], runtimeEventRefs: [], infrastructureError: "", expectedStatus: "scored", minimumScore: "1", maximumScore: "1", expectedPassed: "true" }]) });
+    const judgeReward = createRewardRelease({ schemaVersion: "openpond.rewardRelease.v1", id: "invoice-judge", revision: 1, name: "Invoice judge", description: "Check invoice identity",
+      implementation: { kind: "model_judge", rubricRef: rubric.asset, calibrationStatus: "passed", model: { providerId: "openpond", modelId: "deepseek-v4-flash", revision: null }, temperature: 0 }, rawScore: { minimum: 0, maximum: 1 }, assets: [rubric.asset, calibrationFixtures.asset],
+      fixtureSetRef: calibrationFixtures.asset, calibrationCheckRef: { id: "invoice-check", revision: 1, contentHash: "c".repeat(64) } });
+    const selectedAssets = rewardKind === "judge" ? [rubric] : input.package.assets;
+    const sources = bindingContent.sources.map(source => rewardKind === "judge" ? { ...source, reward: learningRef(judgeReward) } : source);
     const binding = RewardBindingSchema.parse(sealLearningContent({ ...bindingContent, id: "managed-validation-binding",
-      sources: [...bindingContent.sources, ...bindingContent.sources.map(source => ({ ...source, graderId: `${source.graderId}-evaluation`, role: "evaluation" }))] }));
-    await store.learningRepository().transaction(saved.profileId, async tx => { await tx.put("binding", binding, 0); });
+      sources: [...sources, ...sources.map(source => ({ ...source, graderId: `${source.graderId}-evaluation`, role: "evaluation" }))] }));
+    await store.learningRepository().transaction(saved.profileId, async tx => {
+      if (rewardKind === "judge") { await tx.put("asset", rubric, 0); await tx.put("asset", calibrationFixtures, 0); await tx.put("reward", judgeReward, 0); }
+      await tx.put("binding", binding, 0);
+    });
     saved = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: saved.id, profileId: saved.profileId,
       name: saved.name, objective: saved.objective, defaultBaseModel: saved.defaultBaseModel, defaultDestinationId: saved.defaultDestinationId,
       trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(binding) } }, saved.revision));
@@ -297,8 +308,8 @@ it("exports verified private Reward assets separately from policy task assets", 
     });
     const bundle = build();
     const privateFile = JSON.parse(new TextDecoder().decode(bundle.assets.get("reward-binding.json")));
-    expect(privateFile).toEqual({ kind: "reward_binding_v1", ...resolved.rewardExecution, assets: input.package.assets });
-    expect(new TextDecoder().decode(bundle.assets.get("dataset/train.json"))).not.toContain(JSON.stringify(input.package.assets[0]!.text).slice(1, -1));
+    expect(privateFile).toEqual({ kind: "reward_binding_v1", ...resolved.rewardExecution, assets: selectedAssets });
+    expect(new TextDecoder().decode(bundle.assets.get("dataset/train.json"))).not.toContain(JSON.stringify(selectedAssets[0]!.text).slice(1, -1));
     expect(bundle.resolvedBundleManifest.files.some(file => file.path === "reward-binding.json")).toBe(true);
     expect(() => build([])).toThrow("private verifier asset");
     expect(() => build(resolved.verifierAssets.map(asset => ({ ...asset, text: `${asset.text}\n// changed` })))).toThrow();
