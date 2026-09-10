@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { AppDialog } from "../dialogs/AppDialog";
 import { registerDesktopNavigationGuard } from "./lab-primary-tab-state";
 
+export interface DraftEditorHandle { requestClose: () => void }
+
 /** One draft-exit decision is shared by sidebar, scope picker, Settings and browser history. */
 export function useDraftNavigation(input: { dirty: boolean; busy?: boolean; name: string; save?: () => Promise<boolean>; onLeave?: () => void }) {
   const current = useRef(input);

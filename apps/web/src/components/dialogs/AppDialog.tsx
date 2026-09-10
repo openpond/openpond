@@ -15,6 +15,7 @@ const FOCUSABLE_SELECTOR = [
   "input:not([disabled])",
   "select:not([disabled])",
   "textarea:not([disabled])",
+  "summary",
   "[tabindex]:not([tabindex='-1'])",
   "[contenteditable='true']",
 ].join(",");
@@ -130,7 +131,7 @@ export function AppDialog({
 function focusableElements(root: HTMLElement | null): HTMLElement[] {
   if (!root) return [];
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-    .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true" && element.getClientRects().length > 0);
 }
 
 function trapTabFocus(event: KeyboardEvent, dialog: HTMLElement | null): void {

@@ -36,12 +36,17 @@ it("preserves one draft decision and its original history destination", async ()
     await routes.navigateModelsRoute(routes.modelsLocation("tasksets"));
     await routes.navigateModelsRoute(routes.modelsLocation("models"));
     await routes.navigateModelsRoute(routes.modelsLocation("get-started"));
+    // A clean parent closes its panel on leave. It must not unmount the active
+    // child editor before that child's pending/declined decision is respected.
+    const closeParent = vi.fn(() => true);
+    const unregisterParent = routes.registerDesktopNavigationGuard(closeParent);
     let resolveDecision: (allowed: boolean) => void = () => { throw new Error("No pending decision"); };
     const destinations: string[] = [];
     const unregister = routes.registerDesktopNavigationGuard(path => new Promise(resolve => { destinations.push(path); resolveDecision = resolve; }));
     history.go(-1);
     await settle();
     expect(window.location.pathname).toBe("/models/get-started");
+    expect(closeParent).not.toHaveBeenCalled();
     history.go(-1);
     await settle();
     expect(destinations).toEqual(["/models"]);
@@ -49,6 +54,7 @@ it("preserves one draft decision and its original history destination", async ()
     resolveDecision(false);
     await settle();
     expect(window.location.pathname).toBe("/models/get-started");
+    expect(closeParent).not.toHaveBeenCalled();
     history.go(-1);
     await settle();
     history.go(-1);
@@ -57,6 +63,8 @@ it("preserves one draft decision and its original history destination", async ()
     await settle();
     expect(destinations).toEqual(["/models", "/models"]);
     expect(window.location.pathname).toBe("/models");
+    expect(closeParent).toHaveBeenCalledTimes(1);
     unregister();
+    unregisterParent();
   } finally { vi.unstubAllGlobals(); }
 });

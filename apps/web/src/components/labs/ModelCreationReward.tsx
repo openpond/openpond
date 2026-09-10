@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type Ref } from "react";
 import type { ModelProject, Taskset } from "@openpond/contracts";
 import { learningRef, RewardBindingContentSchema, RewardBindingSchema, sealLearningContent, type RewardRelease, type OpenPondLearningClient } from "openpond-sdk/learning";
-import { AppDialog } from "../dialogs/AppDialog";
+import type { DraftEditorHandle } from "./useDraftNavigation";
 import { RewardEditor } from "./learning/RewardEditor";
 import { CombinedRewardEditor } from "./learning/CombinedRewardEditor";
 import { rewardBindingSource } from "./learning/RewardBindingFields";
@@ -36,9 +36,12 @@ function StarterReward({ starter }: { starter: ModelStarterPreview }) {
   </section>;
 }
 
-function EditableModelCreationReward({ client, taskset, bindingRef, onChange }: { client: OpenPondLearningClient | null; taskset: Taskset | null; bindingRef: ModelProject["trainingSetup"]["rewardBindingRef"]; onChange: (value: ModelProject["trainingSetup"]["rewardBindingRef"]) => void; starter?: ModelStarterPreview }) {
+function EditableModelCreationReward({ client, taskset, bindingRef, onChange, editor, onEditorChange: setEditor, closeRef }: {
+  client: OpenPondLearningClient | null; taskset: Taskset | null; bindingRef: ModelProject["trainingSetup"]["rewardBindingRef"];
+  onChange: (value: ModelProject["trainingSetup"]["rewardBindingRef"]) => void; starter?: ModelStarterPreview;
+  editor: "reward" | "combined" | null; onEditorChange: (editor: "reward" | "combined" | null) => void; closeRef?: Ref<DraftEditorHandle>;
+}) {
   const [after, setAfter] = useState<string | null>(null);
-  const [editor, setEditor] = useState<"reward" | "combined" | null>(null);
   const bindings = useLearningResources(client, "binding", { limit: 30, ...(after ? { afterId: after } : {}) });
   const selected = useLearningResource(client, "binding", bindingRef?.id ?? null, bindingRef?.revision);
   const mutation = useLearningMutation(client);
@@ -51,6 +54,10 @@ function EditableModelCreationReward({ client, taskset, bindingRef, onChange }: 
     });
     if (binding) { onChange(learningRef(binding)); setEditor(null); bindings.refresh(); }
   }
+  if (editor) return <section className="learning-workspace model-creation-reward-editor">
+      {editor === "reward" ? <RewardEditor closeRef={closeRef} client={client} reward={null} onClose={() => setEditor(null)} onSaved={(reward) => { void useReward(reward); }} /> : <CombinedRewardEditor closeRef={closeRef} client={client} binding={null} onClose={() => setEditor(null)} onSaved={(binding) => { onChange(learningRef(binding)); setEditor(null); bindings.refresh(); }} />}
+      <LearningError error={mutation.error} />
+  </section>;
   return <section className="learning-workspace model-creation-reward">
     <h3>Reward</h3><p>Choose or create quality checks now. You can import tasks later; their format must support the selected checks.</p>
     <LearningError error={bindings.error ?? selected.error ?? mutation.error} />
@@ -63,9 +70,6 @@ function EditableModelCreationReward({ client, taskset, bindingRef, onChange }: 
     <button type="button" className="training-button secondary" onClick={() => setEditor("combined")}>Combine Rewards</button>
     {selected.resource ? <RewardBindingSummary client={client} binding={selected.resource} /> : null}
     {!bindingRef && taskset ? <TasksetRewardPreview client={client} taskset={taskset} /> : null}
-    {editor ? <AppDialog ariaLabel={editor === "reward" ? "Create Reward" : "Combine Rewards"} className="labs-rename-dialog labs-model-taskset-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled onClose={() => undefined}>
-      {editor === "reward" ? <RewardEditor client={client} reward={null} onClose={() => setEditor(null)} onSaved={(reward) => { void useReward(reward); }} /> : <CombinedRewardEditor client={client} binding={null} onClose={() => setEditor(null)} onSaved={(binding) => { onChange(learningRef(binding)); setEditor(null); bindings.refresh(); }} />}
-      <LearningError error={mutation.error} />
-    </AppDialog> : null}
+
   </section>;
 }

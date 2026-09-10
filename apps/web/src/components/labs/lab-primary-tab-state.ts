@@ -90,7 +90,9 @@ function notify() {
 async function permit(path: string): Promise<boolean> {
   if (deciding) return false;
   deciding = true;
-  try { for (const guard of guards) if (!await guard(path)) return false; return true; }
+  // A later editor may be inside an earlier one. Ask it first so a clean
+  // parent's onLeave cannot unmount a child with unsaved changes.
+  try { for (const guard of [...guards].reverse()) if (!await guard(path)) return false; return true; }
   finally { deciding = false; }
 }
 function historyState(index: number) { return { ...window.history.state, openpondNavigationIndex: index }; }

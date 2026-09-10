@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import { learningRef, rewardFixtureFromRating, TaskRatingSchema, type TaskEvidence, type TaskFeedback, type AuthoringDraftFor } from "openpond-sdk/learning";
 import { useAuthoringDraft } from "./useAuthoringDraft";
 import {
@@ -6,7 +6,7 @@ import {
   type LearningTextAsset, type OpenPondLearningClient, type RewardRelease,
 } from "openpond-sdk/learning";
 import { ModelProjectPageHeader } from "../ModelProjectPageHeader";
-import { useDraftNavigation } from "../useDraftNavigation";
+import { useDraftNavigation, type DraftEditorHandle } from "../useDraftNavigation";
 import { LearningActions, LearningError, LearningJsonField } from "./LearningFields";
 import { useLearningMutation, useLearningResource } from "./useLearningResources";
 import { RewardFixturesEditor } from "./RewardFixturesEditor";
@@ -26,7 +26,7 @@ const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "human", label: "Human review rubric" },
 ];
 
-export function RewardEditor(props: { fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
+export function RewardEditor(props: { closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
   const implementation = props.reward?.implementation;
   const assetId = implementation && "verifierRef" in implementation ? implementation.verifierRef.id
     : implementation && "rubricRef" in implementation ? implementation.rubricRef.id
@@ -37,7 +37,8 @@ export function RewardEditor(props: { fromLabel?: { evidence: TaskEvidence; feed
   return <RewardEditorForm {...props} sourceAsset={asset.resource} fixtureAsset={fixtures.resource} />;
 }
 
-function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose }: {
+function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose, closeRef }: {
+  closeRef?: Ref<DraftEditorHandle>;
   fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback };
   authoringDraft?: AuthoringDraftFor<"reward">;
   client: OpenPondLearningClient | null; reward: RewardRelease | null; sourceAsset: LearningTextAsset | null; fixtureAsset: LearningTextAsset | null;
@@ -118,6 +119,7 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
     });
   }
   const guard = useDraftNavigation({ name: "Reward", dirty: JSON.stringify(draft) !== saved, busy: mutation.busy, save: saveDraft });
+  useImperativeHandle(closeRef, () => ({ requestClose: () => { void guard.requestLeave(onClose); } }));
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     <ModelProjectPageHeader title={reward ? "Edit Reward" : "New Reward"} description="Save the grader and its source as an immutable release. Task formats keep the release they selected." />
     <LearningError error={mutation.error} />
