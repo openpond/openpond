@@ -10,6 +10,7 @@ import {
 } from "openpond-sdk/model-projects";
 import { canonicalJson } from "openpond-sdk/training";
 import { prepareModelTrainingDefaults, type ModelTasksetPackage } from "openpond-sdk/model-starters";
+import type { TasksetPackage } from "openpond-sdk/taskset-packages";
 import { TasksetSchema } from "@openpond/contracts";
 import { assertLearningContentHash, learningRef, sameLearningRef } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
@@ -32,7 +33,7 @@ export function findModelProjectSave(db: OpenPondSqliteConnection, value: ModelP
 }
 
 /** Called inside the store's write queue; no await can split the SQLite transaction. */
-export function commitModelProjectSave(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest, prepared?: PreparedModelTaskset | null, sourcePackage?: ModelTasksetPackage): ModelProject {
+export function commitModelProjectSave(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest, prepared?: PreparedModelTaskset | null, sourcePackage?: ModelTasksetPackage | TasksetPackage): ModelProject {
   db.exec("BEGIN IMMEDIATE");
   try {
     const saved = saveModelProjectInTransaction(db, value, prepared, sourcePackage);
@@ -45,7 +46,7 @@ export function commitModelProjectSave(db: OpenPondSqliteConnection, value: Mode
 }
 
 /** The caller owns the transaction and write queue. */
-export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest, prepared?: PreparedModelTaskset | null, sourcePackage?: ModelTasksetPackage): ModelProject {
+export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest, prepared?: PreparedModelTaskset | null, sourcePackage?: ModelTasksetPackage | TasksetPackage): ModelProject {
   const request = parseModelProjectSaveRequest(value);
   const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
   const { project, operationId, expectedRevision } = request;

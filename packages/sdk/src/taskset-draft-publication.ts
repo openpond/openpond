@@ -96,10 +96,13 @@ export function publishTasksetDraft(input: {
       ...task.metadata,
     },
   }));
-  const authoredMethod = draft.capabilities.compatibleMethods.find(
+  const explicitMethod = draft.capabilities.compatibleMethods.find(
     (method) => method !== "none" && method !== "retrieval",
   ) ?? null;
   const buildIntent = buildIntentForDraft(draft);
+  const rewardGraders = draft.graders.filter(grader => grader.rewardEligible && grader.weight > 0 && grader.kind !== "human");
+  const inferRewardMethod = explicitMethod === null && buildIntent === "verifiable_reward" && rewardGraders.length > 0;
+  const authoredMethod = explicitMethod ?? (inferRewardMethod ? "grpo" : null);
   const taskset = TasksetSchema.parse({
     schemaVersion: "openpond.taskset.v1",
     id: tasksetId,
@@ -117,7 +120,8 @@ export function publishTasksetDraft(input: {
     datasetArtifact: draft.datasetArtifact ?? null,
     policy: draft.policy,
     environment: draft.environment,
-    capabilities: draft.capabilities,
+    capabilities: inferRewardMethod ? { ...draft.capabilities, compatibleMethods: ["grpo"],
+      rewardKinds: [...new Set(rewardGraders.map(grader => grader.kind === "model_judge" ? "model_judge" : "deterministic"))] } : draft.capabilities,
     metrics: draft.metrics,
     tasks,
     graders: draft.graders,
@@ -219,6 +223,8 @@ function buildIntentForDraft(draft: TasksetDraft): DatasetBuildIntent {
   if (draft.learningSignals.preferences.length) return "preferences";
   if (draft.learningSignals.rewards.length) return "verifiable_reward";
   if (draft.learningSignals.labels.length) return "rubric";
+  if (!draft.capabilities.compatibleMethods.some(method => method !== "none" && method !== "retrieval")
+    && draft.graders.some(grader => grader.rewardEligible && grader.weight > 0 && grader.kind !== "human")) return "verifiable_reward";
   return "demonstrations";
 }
 

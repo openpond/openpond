@@ -432,6 +432,7 @@ function validateCapabilities(
     taskset
     && (taskset.capabilities.compatibleMethods.includes("grpo") || taskset.capabilities.compatibleMethods.includes("ppo"))
     && !taskset.learningSignals.rewards.some((reward) => reward.executable)
+    && !taskset.graders.some(grader => grader.rewardEligible && grader.weight > 0 && grader.kind !== "human")
   ) {
     issues.push({ code: "online_reward_not_executable", severity: "error", message: "GRPO/PPO compatibility requires an executable scalar reward.", path: "learningSignals.rewards" });
   }

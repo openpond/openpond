@@ -86,7 +86,7 @@ export class SqliteModelConfigurationStore extends SqliteModelBatchReviewStore {
       return commitModelProjectSave(this.db, request, prepared, sourcePackage?.modelResources ? {
         ...sourcePackage.modelResources, taskset: sourcePackage.taskset,
         executionResources: { environment: sourcePackage.environment, verifierSet: sourcePackage.verifierSet },
-      } : undefined);
+      } : sourcePackage);
     });
     this.writeQueue = operation.then(() => undefined, () => undefined);
     return operation;
