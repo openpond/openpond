@@ -27,7 +27,8 @@ export async function resolveTasksetTrainingReward(store: SqliteStore, taskset: 
   const rewardExecution = await resolveTasksetRewardBinding(store, taskset);
   if (!rewardExecution) return { rewardExecution: undefined, verifierAssets: [] };
   const references = compileBoundGraders(rewardExecution.binding, rewardExecution.rewards)
-    .flatMap(grader => grader.kind === "custom_verifier" ? [grader.verifierRef] : []);
+    .flatMap(grader => grader.kind === "custom_verifier" ? [grader.verifierRef]
+      : grader.kind === "model_judge" ? [grader.rubricRef] : []);
   const imported = taskset.metadata.learning === undefined ? undefined : await readImportedLearningTasksetPackage(storeDir, taskset);
   if (imported) {
     const verifierAssets = [...new Map(references.map(reference => {
@@ -63,7 +64,7 @@ export async function resolveManagedTasksetReward(store: SqliteStore, taskset: T
   }
   if (options.placement !== "remote" || taskset.environment.kind === "work"
     || taskset.capabilities.requiresState || taskset.capabilities.requiresTools
-    || graders.some(grader => grader.kind === "human" || grader.kind === "model_judge")
+    || graders.some(grader => grader.kind === "human" || (grader.kind === "model_judge" && (!grader.model || grader.calibrationStatus !== "passed")))
     || taskset.tasks.some(task => task.privilegedContextRef !== null)
     || !resolved.rewardExecution.binding.sources.some(source => source.role === "training" && source.weight > 0)
     || options.hasLearnedPreferenceReward) {
