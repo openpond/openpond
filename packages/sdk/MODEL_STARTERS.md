@@ -33,6 +33,8 @@ const request = await createModelStarterCreationRequest({
 
 Prepare the request on final confirmation and retain it for transport retries. The server must authorize the profile, resolve trusted catalog content, materialize immutable files and atomically save resources, model configuration and the original retry receipt. A stable operation ID alone does not implement server idempotency. Creation starts no model call or training job.
 
+`prepareModelTrainingDefaults({ setup, package })` fills missing Run settings from a validated model Taskset package. It selects retained evaluation when the collection has validation or frozen-evaluation tasks, and prepares a GRPO recipe when the starting model and execution resources are pinned. Existing recipes and explicit evaluation selections are preserved. Hosts apply it after selecting the model-owned Taskset and Reward. These saved settings do not authorize execution: Run review still validates the exact task populations, runtime support and approved budget.
+
 Evidence references are nullable pointers to actual verifier, baseline, training and evaluation results. Publication and package integrity do not qualify a starter or imply improvement. Continuous learning is a separate model workflow mode; it is not a starter category or comparison-run type.
 
 The repository's invoice-extraction example authors 80 original synthetic text tasks and executes its verifier fixtures. Its baseline, training, evaluation and full product qualification remain pending. The local server includes preparation, atomic persistence and file-materialization adapters; catalog publication, route wiring and Desktop Get Started integration are separate delivery steps.

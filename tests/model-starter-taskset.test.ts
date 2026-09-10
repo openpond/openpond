@@ -299,7 +299,7 @@ it.each(["code", "judge"] as const)("exports verified private %s Reward assets s
     const hash = "a".repeat(64);
     const build = (verifierAssets = resolved.verifierAssets) => buildTasksetTrainingBundle({
       taskset, rewardExecution: resolved.rewardExecution, verifierAssets,
-      modelProject: { ...saved, trainingSetup: { ...saved.trainingSetup, recipe: sftRecipeFixture(), baseModel: { ...input.request.startingModel, revision: "pinned-model", tokenizerRevision: "pinned-tokenizer", chatTemplateHash: hash } } },
+      modelProject: { ...saved, trainingSetup: { ...saved.trainingSetup, evaluationTasksetRef: null, recipe: sftRecipeFixture(), baseModel: { ...input.request.startingModel, revision: "pinned-model", tokenizerRevision: "pinned-tokenizer", chatTemplateHash: hash } } },
       modelRunId: "starter-private-export", runtime: { adapterId: "local-harness", placement: "local", capabilityReceipt: hash, runtimeVersion: "1", dataPlane: null },
       compute: { adapterId: "openpond-managed", kind: "local", deviceOrPool: "cpu", capabilityReceipt: hash, provider: null },
       engine: { adapterId: "local-training-worker", workerVersion: "1", workerImageDigest: null, upstreamRevision: "test", capabilityReceipt: hash },

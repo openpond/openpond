@@ -71,7 +71,8 @@ export class SqliteModelConfigurationStore extends SqliteModelBatchReviewStore {
       if (!this.db) throw new Error("Model save failed because the local store is closed.");
       const previous = findModelProjectSave(this.db, request);
       if (previous) return previous;
-      const prepared = prepareModelTasksetSave(this.db, request, true, await loadModelTasksetPackage(this.db, this.home, request));
+      const sourcePackage = await loadModelTasksetPackage(this.db, this.home, request);
+      const prepared = prepareModelTasksetSave(this.db, request, true, sourcePackage);
       if (prepared?.imported) {
         await materializeImportedTasksetPackage({ home: this.home, ...prepared.imported });
       } else if (prepared) {
@@ -82,7 +83,10 @@ export class SqliteModelConfigurationStore extends SqliteModelBatchReviewStore {
         });
         this.db.run("UPDATE model_project_taskset_preparations SET state = 'materialized' WHERE profile_id = ? AND operation_id = ?", [request.project.profileId, request.operationId]);
       }
-      return commitModelProjectSave(this.db, request, prepared);
+      return commitModelProjectSave(this.db, request, prepared, sourcePackage?.modelResources ? {
+        ...sourcePackage.modelResources, taskset: sourcePackage.taskset,
+        executionResources: { environment: sourcePackage.environment, verifierSet: sourcePackage.verifierSet },
+      } : undefined);
     });
     this.writeQueue = operation.then(() => undefined, () => undefined);
     return operation;

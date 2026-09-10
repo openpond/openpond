@@ -11,6 +11,7 @@ import { ModelStarterExecutionSchema, validateModelStarterExecution } from "./mo
 export { ModelStarterExecutionSchema, ModelStarterEnvironmentAttemptSchema, verifyModelStarterEnvironmentAttempt, ModelStarterToolFixtureScriptSchema, createModelStarterExecutionAsset, modelStarterExecutionAssetId, resolveModelStarterExecutionAsset, type ModelStarterExecution, type ModelStarterExecutionContext } from "./model-starter-execution.js";
 export { ModelTasksetDerivationSchema, ModelTasksetPackageSchema, deriveModelTaskset, validateModelTasksetPackage, type ModelTasksetPackage } from "./model-taskset-derivation.js";
 export { ModelTasksetExecutionResourcesSchema, createModelTasksetExecutionResourcesAsset, modelTasksetExecutionResourcesAssetId, resolveModelTasksetExecutionResourcesAsset } from "./model-taskset-resources.js";
+export { prepareModelTrainingDefaults } from "./model-training-defaults.js";
 
 const IdSchema = z.string().trim().min(1).max(500);
 const RefSchema = ModelProjectVersionedRefSchema;
