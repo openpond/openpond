@@ -27,7 +27,6 @@
       "$ref": "#/$defs/__schema1"
     },
     "sources": {
-      "minItems": 1,
       "maxItems": 100,
       "type": "array",
       "items": {

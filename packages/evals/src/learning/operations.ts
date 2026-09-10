@@ -6,8 +6,13 @@ import { LearningJsonObjectSchema, LearningRevisionRefSchema, LearningSourceCont
 import { RewardBindingContentSchema, RewardReleaseContentSchema } from "../rewards.js";
 import { AuthoringDraftInputSchema, AuthoringDraftFinalizationSchema } from "./authoring.js";
 import { LearningTextAssetContentSchema } from "./assets.js";
+import { TaskIntakeFileSchema, TaskIntakeFormatSchema } from "./intake-contracts.js";
 
 const command = z.object({ operationId: ReleaseIdSchema });
+export const ImportTaskIntakeCommandSchema = command.extend({ action: z.literal("import_intake"), format: TaskIntakeFormatSchema,
+  files: z.array(TaskIntakeFileSchema).min(1).max(100), expectedPreviewHash: z.string().length(64),
+  name: z.string().trim().min(1).max(500), recordIds: z.array(z.string().min(1).max(200)).min(1).max(90),
+}).strict();
 const publish = command.extend({ action: z.literal("publish"), expectedRevision: z.number().int().nonnegative(), finalizeDraft: AuthoringDraftFinalizationSchema.optional() });
 export const PublishLearningResourceCommandSchema = z.discriminatedUnion("kind", [
   publish.extend({ kind: z.literal("asset"), content: LearningTextAssetContentSchema }).strict(),
@@ -47,6 +52,6 @@ export const CancelLearningIterationReservationCommandSchema = command.extend({ 
 export const CancelLearningIterationCommandSchema = command.extend({ action: z.literal("cancel_iteration"), iterationId: ReleaseIdSchema, expectedRevision: z.number().int().positive() }).strict();
 export const RetryLearningIterationDispatchCommandSchema = command.extend({ action: z.literal("retry_iteration_dispatch"), iterationId: ReleaseIdSchema, expectedRevision: z.number().int().positive() }).strict();
 
-export const LearningCommandSchema = z.union([CancelLearningIterationCommandSchema, RetryLearningIterationDispatchCommandSchema, CancelLearningIterationReservationCommandSchema, ReserveLearningIterationCommandSchema, QueueRewardCheckCommandSchema, CancelRewardCheckCommandSchema, SaveAuthoringDraftCommandSchema, ArchiveAuthoringDraftCommandSchema,PublishLearningResourceCommandSchema, PublishLearningResourcesCommandSchema, SubmitTaskExampleCommandSchema, SubmitTaskFeedbackCommandSchema, ApplyTaskCorrectionCommandSchema, ResolveTaskFeedbackCommandSchema, QueueTaskGradeCommandSchema, ReviewTaskEvidenceCommandSchema, SealTaskBatchCommandSchema, CancelTaskGradeCommandSchema]);
+export const LearningCommandSchema = z.union([ImportTaskIntakeCommandSchema, CancelLearningIterationCommandSchema, RetryLearningIterationDispatchCommandSchema, CancelLearningIterationReservationCommandSchema, ReserveLearningIterationCommandSchema, QueueRewardCheckCommandSchema, CancelRewardCheckCommandSchema, SaveAuthoringDraftCommandSchema, ArchiveAuthoringDraftCommandSchema,PublishLearningResourceCommandSchema, PublishLearningResourcesCommandSchema, SubmitTaskExampleCommandSchema, SubmitTaskFeedbackCommandSchema, ApplyTaskCorrectionCommandSchema, ResolveTaskFeedbackCommandSchema, QueueTaskGradeCommandSchema, ReviewTaskEvidenceCommandSchema, SealTaskBatchCommandSchema, CancelTaskGradeCommandSchema]);
 export type LearningCommand = z.infer<typeof LearningCommandSchema>;
 export type PublishLearningResourceCommand = z.infer<typeof PublishLearningResourceCommandSchema>;

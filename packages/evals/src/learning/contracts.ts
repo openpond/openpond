@@ -22,6 +22,7 @@ export const TaskDefinitionContentSchema = z.object({
   inputSchema: z.record(z.string(), z.unknown()),
   outputSchema: z.record(z.string(), z.unknown()),
   requiredOutputs: TaskRecordSchema.shape.requiredOutputs,
+  contextRequirements: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
   rewardBinding: LearningRevisionRefSchema,
   harness: ImmutableReleaseRefSchema.nullable(),
   execution: TasksetReleaseContentSchema.pick({ policy: true, environment: true, environmentRelease: true, tools: true, capabilities: true, verifierSetRelease: true }).strict(),

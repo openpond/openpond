@@ -14,3 +14,4 @@ export * from "./taskset-draft-manifests.js";
 export * from "./taskset-draft-api-contracts.js";
 export { OpenPondTasksetDraftClient, OpenPondTasksetDraftError } from "./taskset-draft-client.js";
 export * from "./task-inventory.js";
+export * from "./taskset-intake.js";

@@ -240,7 +240,6 @@
           "$ref": "#/$defs/__schema2"
         },
         "results": {
-          "minItems": 1,
           "maxItems": 100,
           "type": "array",
           "items": {

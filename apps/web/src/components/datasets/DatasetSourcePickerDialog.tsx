@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Boxes, DownloadCloud, UploadCloud, X } from "../icons";
 import { AppDialog } from "../dialogs/AppDialog";
 
-export type DatasetCreateSource = "build" | "huggingface" | "upload";
+export type DatasetCreateSource = "build" | "huggingface" | "upload" | "hermes" | "openclaw";
 
 const SOURCES = [
   {
@@ -22,10 +22,12 @@ const SOURCES = [
   {
     id: "upload" as const,
     title: "Upload file",
-    description: "JSON, JSONL, CSV, and Parquet import is coming next.",
+    description: "Preview JSON, JSONL or CSV tasks before saving.",
     icon: UploadCloud,
-    available: false,
+    available: true,
   },
+  { id: "hermes" as const, title: "Import from Hermes", description: "Retain exported sessions and review their recorded attempts.", icon: UploadCloud, available: true },
+  { id: "openclaw" as const, title: "Import from OpenClaw", description: "Preview a trajectory folder with its messages and context.", icon: UploadCloud, available: true },
 ];
 
 export function DatasetSourcePickerDialog({
