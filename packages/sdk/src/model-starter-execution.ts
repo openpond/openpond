@@ -8,13 +8,13 @@ import { canonicalJson } from "./protocol.js";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
-export const ModelStarterEnvironmentAttemptSchema = z.object({
+export const ModelStarterEnvironmentAttemptSchema = /* @__PURE__ */ (() => z.object({
   schemaVersion: z.literal("openpond.javascriptEnvironmentAttempt.v1"), taskId: z.string(),
   status: z.enum(["completed", "budget_exhausted", "cancelled", "timed_out", "policy_failure", "environment_failure"]),
   output: z.string().nullable(), collected: z.boolean(), environmentCleanupComplete: z.boolean(),
   snapshot: z.object({ definition: ModelProjectVersionedRefSchema, inputHash: HashSchema, seed: z.number().int(), initialStateHash: HashSchema, finalStateHash: HashSchema, state: z.record(z.string(), z.unknown()), events: z.array(z.record(z.string(), z.unknown())) }).strict().nullable(),
   messages: z.array(z.unknown()), error: z.string().nullable(), contentHash: HashSchema,
-}).strict();
+}).strict())();
 
 /** Validate an owner-recorded runtime artifact against the admitted task.
  * Provenance/ownership of the artifact remains the execution host's concern. */

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { contentHash, sha256, type ImmutableAssetRef } from "@openpond/harness";
 import { ModelJudgeReceiptSchema, type ModelJudgeRunner } from "../graders.js";
 
-const JudgmentSchema = z.object({ score: z.number().finite().min(0).max(1), passed: z.boolean(), feedback: z.string().min(1).max(20_000) }).strict();
+const JudgmentSchema = /* @__PURE__ */ (() => z.object({ score: z.number().finite().min(0).max(1), passed: z.boolean(), feedback: z.string().min(1).max(20_000) }).strict())();
 
 export interface BoundJudgeRequest {
   providerId: string;

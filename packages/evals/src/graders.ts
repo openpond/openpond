@@ -146,11 +146,11 @@ export function aggregateGraderScores(input: {
     gradingStatus: !input.graders.length && !infrastructure ? "not_configured" : score === null ? "unscorable" : "scored" });
 }
 
-export const TaskGradeSchema = GradeSummarySchema.extend({
+export const TaskGradeSchema = /* @__PURE__ */ (() => GradeSummarySchema.extend({
   schemaVersion: z.literal("openpond.taskGrade.v1"),
   taskHash: ReleaseHashSchema, evidenceHash: ReleaseHashSchema, graderSetHash: ReleaseHashSchema,
   components: z.array(GraderEvidenceSchema).max(1_000), contentHash: ReleaseHashSchema,
-}).strict();
+}).strict())();
 export type TaskGrade = z.infer<typeof TaskGradeSchema>;
 
 export async function gradeTaskEvidence(input: Parameters<typeof gradeEvidence>[0]): Promise<TaskGrade> {

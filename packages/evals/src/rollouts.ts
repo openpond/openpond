@@ -144,7 +144,7 @@ export const CanonicalRolloutRecordSchema = z.object({
   contentHash: ReleaseHashSchema,
 }).strict().superRefine(validateCanonicalRolloutRecord);
 
-export const RolloutQualificationSchema = z.object({
+export const RolloutQualificationSchema = /* @__PURE__ */ (() => z.object({
   schemaVersion: z.literal("openpond.rolloutQualification.v1"),
   rolloutCount: z.number().int().nonnegative(),
   scoredCount: z.number().int().nonnegative(),
@@ -156,7 +156,7 @@ export const RolloutQualificationSchema = z.object({
   distinctRewardCount: z.number().int().nonnegative(),
   eligibleForRl: z.boolean(),
   reasons: z.array(z.string().trim().min(1).max(1_000)).max(100),
-}).strict();
+}).strict())();
 
 export function createCanonicalRolloutRecord(input: {
   id: string;
