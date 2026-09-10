@@ -40,7 +40,7 @@ test("Reward fixtures execute exact private draft inputs and retain independent 
       await store.close();
       store = new SqliteLearningStore(home);
       service = createLearningService(store.learningRepository());
-      const execution = createLocalRewardCheckExecutor();
+      const execution = createLocalRewardCheckExecutor(store.learningRepository());
       let executions = 0;
       const executor = { ...execution, execute: (input: Parameters<typeof execution.execute>[0]) => { executions++; return execution.execute(input); } };
       const worker = createRewardCheckWorker(store.learningRepository(), executor, { workerId: "restarted-owner" });
@@ -55,6 +55,18 @@ test("Reward fixtures execute exact private draft inputs and retain independent 
       expect(checked.runtime?.packageVersion).toBeTruthy();
       expect(await worker.run(learningContext.scope, queued.id)).toEqual(checked);
       expect(await service.get(learningContext, "reward_check", checked.id)).toEqual(checked);
+      // Model the durable state after an owner saves one result and disappears.
+      // Recovery must not rerun (and potentially pay for) that settled fixture.
+      await store.learningRepository().transaction(learningContext.scope, async tx => {
+        const interrupted = RewardCheckRunSchema.parse({ ...checked, revision: checked.revision + 1, status: "running", leaseOwner: "lost-owner",
+          leaseExpiresAt: "2000-01-01T00:00:00.000Z", results: checked.results.slice(0, 1), matchesExpectations: null });
+        await tx.put("reward_check", interrupted, checked.revision, { parentId: checked.reward.id, status: "running" });
+      });
+      const beforeRecovery = executions;
+      const recovered = await worker.run(learningContext.scope, checked.id);
+      expect(recovered.status).toBe("completed");
+      expect(recovered.results).toEqual(checked.results);
+      expect(executions - beforeRecovery).toBe(2);
       for (const kind of ["reward", "asset", "definition", "source", "evidence", "grade"] as const) expect((await service.list(learningContext, kind)).items).toHaveLength(0);
 
       const second = RewardCheckRunSchema.parse((await command({ action: "queue_reward_check", draft: learningRef(updated) })).resources[0]);
@@ -73,7 +85,7 @@ test("Reward fixtures execute exact private draft inputs and retain independent 
       const source = await service.get(learningContext, "asset", published.implementation.kind === "custom_verifier" ? published.implementation.verifierRef.id : "missing");
       const fixtureAsset = await service.get(learningContext, "asset", published.fixtureSetRef!.id);
       expect(rewardAuthoringFields(published, source, fixtureAsset).fixtures).toEqual(updatedFields.fixtures);
-      expect(await service.get(learningContext, "reward_check", checked.id)).toEqual(checked);
+      expect(await service.get(learningContext, "reward_check", checked.id)).toEqual(recovered);
     } finally { await store.close(); }
   });
 });
@@ -96,7 +108,7 @@ test("Reward check cancellation terminates isolated work and malformed fixture d
       expect((await service.list(learningContext, "reward_check")).items).toHaveLength(0);
       const saved = AuthoringDraftSchema.parse((await command({ action: "save_draft", expectedRevision: 1, draft: { ...input, fields: { ...fields, fixtures: [fixture("runaway", "{}", "1")] } } })).resources[0]);
       const queued = RewardCheckRunSchema.parse((await command({ action: "queue_reward_check", draft: learningRef(saved) })).resources[0]);
-      const execution = createLocalRewardCheckExecutor();
+      const execution = createLocalRewardCheckExecutor(store.learningRepository());
       let started!: () => void;
       const ready = new Promise<void>(resolve => { started = resolve; });
       let settled = false;

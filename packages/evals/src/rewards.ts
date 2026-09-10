@@ -2,7 +2,7 @@ import { LearningDomainError } from "./learning/errors.js";
 import { z } from "zod";
 import { ImmutableAssetRefSchema, ImmutableReleaseRefSchema, ReleaseHashSchema, ReleaseIdSchema, contentHash } from "@openpond/harness";
 
-import { gradeEvidence, type AttemptEvidence, type CustomVerifierRunner, type ModelJudgeRunner } from "./graders.js";
+import { gradeEvidence, GraderEvidenceSchema, type AttemptEvidence, type CustomVerifierRunner, type ModelJudgeRunner } from "./graders.js";
 import { CustomVerifierGraderSpecSchema, DeterministicGraderSpecSchema, GraderSpecSchema, HumanGraderSpecSchema, ModelJudgeGraderSpecSchema, type GraderSpec, type TaskRecord } from "./tasksets.js";
 import { assertBoundedTaskJson, validateTaskSchema } from "./task-schema.js";
 
@@ -25,6 +25,7 @@ export const RewardReleaseContentSchema = z.object({
   rawScore: z.object({ minimum: z.number().finite(), maximum: z.number().finite() }).strict(),
   assets: z.array(ImmutableAssetRefSchema).max(1_000),
   fixtureSetRef: ImmutableAssetRefSchema.optional(),
+  calibrationCheckRef: ImmutableReleaseRefSchema.extend({ revision: z.number().int().positive() }).optional(),
 }).strict().superRefine((reward, context) => {
   if (reward.fixtureSetRef && (reward.fixtureSetRef.visibility !== "verifier" || !reward.assets.some(asset => contentHash(asset) === contentHash(reward.fixtureSetRef)))) context.addIssue({ code: "custom", path: ["fixtureSetRef"], message: "Reward fixtures must be included as a private verifier asset." });
   if (reward.rawScore.minimum >= reward.rawScore.maximum) context.addIssue({ code: "custom", path: ["rawScore"], message: "A raw score contract requires minimum < maximum." });
@@ -83,6 +84,7 @@ export const BoundRewardResultSchema = z.object({
   normalizedScore: z.number().min(0).max(1).nullable(),
   passed: z.boolean().nullable(),
   evidenceHashes: z.array(ReleaseHashSchema).max(1_000),
+  graderEvidence: GraderEvidenceSchema.optional(),
   message: z.string().max(20_000).nullable(),
 }).strict();
 export const RewardCompositionContentSchema = z.object({
@@ -147,8 +149,10 @@ export async function executeRewardBinding(input: {
   customVerifier?: CustomVerifierRunner;
   learnedReward?: LearnedRewardRunner;
   signal?: AbortSignal;
+  purpose?: "grading" | "fixture_calibration";
 }): Promise<RewardComposition> {
   const resolved = resolveBoundRewards(input.binding, input.rewards);
+  if (input.purpose === "fixture_calibration" && resolved.some(({ source }) => source.role !== "evaluation")) throw new LearningDomainError("reward_calibration_requires_evaluation_binding");
   const results: BoundRewardResult[] = [];
   for (const { source, reward } of resolved) {
     input.signal?.throwIfAborted();
@@ -164,9 +168,9 @@ export async function executeRewardBinding(input: {
           Object.assign(result, { status: "scored", ...scored });
         }
       } else {
-        const [evidence] = await gradeEvidence({ task: input.task, evidence: input.evidence, graders: [compileSource(source, reward)], modelJudge: input.modelJudge, customVerifier: input.customVerifier });
+        const [evidence] = await gradeEvidence({ task: input.task, evidence: input.evidence, graders: [compileSource(source, reward)], modelJudge: input.modelJudge, customVerifier: input.customVerifier, purpose: input.purpose, signal: input.signal });
         if (!evidence) throw new LearningDomainError("reward_evidence_missing");
-        Object.assign(result, { status: evidence.score === null ? "unavailable" : "scored", rawScore: evidence.score, passed: evidence.score === null ? null : evidence.passed, evidenceHashes: [evidence.contentHash], message: evidence.feedback.join("\n") });
+        Object.assign(result, { status: evidence.score === null ? "unavailable" : "scored", rawScore: evidence.score, passed: evidence.score === null ? null : evidence.passed, evidenceHashes: [evidence.contentHash], graderEvidence: evidence, message: evidence.feedback.join("\n") });
       }
       if (result.status === "scored") {
         if (result.rawScore === null || !Number.isFinite(result.rawScore) || result.rawScore < reward.rawScore.minimum || result.rawScore > reward.rawScore.maximum) throw new LearningDomainError("reward_raw_score_outside_contract");
@@ -191,6 +195,12 @@ export function composeBoundRewards(input: { binding: RewardBinding; taskHash: s
   for (const source of binding.sources) {
     const result = results.find((candidate) => candidate.graderId === source.graderId);
     if (!result || contentHash(result.reward) !== contentHash(source.reward) || result.role !== source.role) throw new LearningDomainError("reward_result_binding_mismatch");
+    if (result.graderEvidence) {
+      const { contentHash: evidenceHash, ...body } = result.graderEvidence;
+      if (contentHash(body) !== evidenceHash || !result.evidenceHashes.includes(evidenceHash)
+        || body.graderId !== source.graderId || body.graderVersion !== String(source.reward.revision)) throw new LearningDomainError("reward_grader_evidence_mismatch");
+      if (result.status === "scored" && (body.score !== result.rawScore || body.passed !== result.passed)) throw new LearningDomainError("reward_grader_evidence_score_mismatch");
+    }
     if ((result.status === "scored") !== (result.rawScore !== null && result.normalizedScore !== null && result.passed !== null)) throw new LearningDomainError("reward_result_score_state_invalid");
     if (result.status !== "scored" && (result.rawScore !== null || result.normalizedScore !== null || result.passed !== null)) throw new LearningDomainError("unscorable_reward_contains_score");
     if (result.status === "scored") {

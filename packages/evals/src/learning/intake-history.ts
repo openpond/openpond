@@ -3,6 +3,7 @@ import { contentHash } from "@openpond/harness";
 import { assertBoundedTaskJson } from "../task-schema.js";
 import { LearningJsonObjectSchema } from "./contracts.js";
 import { intakeDate, intakeId, TASK_INTAKE_LIMITS, TaskIntakeRecordSchema, type TaskIntakeFile, type TaskIntakeRecord } from "./intake-contracts.js";
+import { structuredIntakeText } from "./intake-text.js";
 
 const messageSchema = z.object({ role: z.string().min(1), content: z.json().nullable().optional() }).catchall(z.json());
 const hermesSchema = z.object({ id: z.string().min(1), messages: z.array(messageSchema).min(1).max(TASK_INTAKE_LIMITS.messages),
@@ -33,7 +34,7 @@ export function parseOpenClawBundle(files: TaskIntakeFile[]): TaskIntakeRecord[]
   const read = (path: string) => {
     const file = files.find(file => file.path === path);
     if (!file) throw new Error(`OpenClaw bundle is missing ${path}.`);
-    return file.text;
+    return structuredIntakeText(file.text);
   };
   const manifest = manifestSchema.parse(JSON.parse(read("manifest.json")));
   const branch = branchSchema.parse(JSON.parse(read("session-branch.json")));

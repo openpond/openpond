@@ -26,7 +26,7 @@ export function createRewardCheckWorker(repository: LearningRepository, executor
       const claimed = RewardCheckRunSchema.parse({ ...current, revision: current.revision + 1,
         status: current.status === "cancelling" ? "cancelling" : "running", runtime: current.status === "cancelling" ? current.runtime : runtime,
         leaseOwner: options.workerId, leaseExpiresAt: new Date(Date.parse(now()) + current.timeoutMs + 30_000).toISOString(),
-        attemptCount: current.attemptCount + 1, results: current.status === "cancelling" ? current.results : [], matchesExpectations: null, failure: null, updatedAt: now(),
+        attemptCount: current.attemptCount + 1, results: current.results, matchesExpectations: null, failure: null, updatedAt: now(),
       });
       await tx.put("reward_check", claimed, current.revision, { parentId: claimed.reward.id, status: claimed.status });
       return { acquired: true as const, run: claimed };
@@ -50,8 +50,15 @@ export function createRewardCheckWorker(repository: LearningRepository, executor
       });
       for (const fixture of compiled.fixtures) {
         controller.signal.throwIfAborted();
+        const previous = claim.run.results.find(result => result.fixture.id === fixture.id);
+        if (previous) {
+          if (previous.fixture.contentHash !== contentHash(fixture) || !sameLearningRef(previous.result.reward, claim.run.reward)
+            || previous.result.graderId !== compiled.reward.id || previous.result.role !== "evaluation") throw new Error("reward_check_retained_fixture_mismatch");
+          continue;
+        }
         const result = BoundRewardResultSchema.parse(await executor.execute({ ...compiled, scope, run: claim.run, fixture, signal: controller.signal }));
-        controller.signal.throwIfAborted();
+        // Retain a settled execution before observing cancellation. Its provider
+        // cost and evidence already exist even if no more fixtures should run.
         if (result.graderId !== compiled.reward.id || !sameLearningRef(result.reward, claim.run.reward) || result.role !== "evaluation") throw new Error("reward_check_result_identity_mismatch");
         const retained = await repository.transaction(scope, async tx => {
           const current = await requireLearningResource(tx, "reward_check", checkId);

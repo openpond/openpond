@@ -143,6 +143,12 @@ runtime/package identity and settles only after cleanup. The isolated adapter ru
 portable deterministic checks and authored JavaScript with the supplied interpreter.
 Human review remains pending; missing judge/learned-model adapters remain unavailable.
 No fixture result implicitly calibrates a judge or qualifies a training runtime.
+`publish_checked_reward` explicitly publishes the exact saved judge draft after a
+completed check covers both passing and failing examples. The service revalidates
+fixture hashes and persisted provider receipts, records `calibrationCheckRef`, and
+closes the draft in the same transaction. Generic publication cannot manufacture
+a passed calibration or reuse that check after changing the model, temperature,
+rubric or fixtures. Metadata-only edits may retain the same calibration evidence.
 Per-fixture results distinguish a scored rejection, unavailable grading and grader
 failure, and record whether each outcome matched its authored expectation.
 
@@ -150,6 +156,15 @@ Checks are indexed by Reward ID, retain their original draft reference and remai
 readable after publication. Editing source or fixtures must mark prior checks as
 historical. `cancel_reward_check` requests cancellation with revision concurrency;
 the worker publishes terminal cancellation only after execution-owner cleanup.
+
+`createBudgetedRewardFixtureExecutor` and `createTaskGradeJudgeBudgetStore` retain
+judge calls in the owning run. Reserve the full charge ceiling before dispatch;
+late settlement survives cancellation and expired ownership. Missing/partial
+usage leaves the full reservation committed, and an uncertain request cannot be
+retried under the same call identity. Hosts inject a `BoundJudgeProvider` that
+prepares without inference and dispatches once. The local OpenPond transport uses
+catalog pricing/context limits, exact model IDs and bounded output; it rejects
+revision pins because OpChat does not currently expose revision enforcement.
 
 ### Source and execution ownership
 

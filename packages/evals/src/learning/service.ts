@@ -4,7 +4,8 @@ import { reserveLearningIteration } from "./iteration-reservation-service.js";
 import { synchronizeLearningSchedule } from "./schedule-service.js";
 import { inspectLearningPolicy } from "./policy-inspection.js";
 import { requireCurrentLearningEvidence as currentEvidence, sealLearningBatch } from "./batch-service.js";
-import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft } from "./authoring-service.js";
+import { saveAuthoringDraft, archiveAuthoringDraft, finalizeAuthoringDraft, currentDraft } from "./authoring-service.js";
+import { assertRewardCalibration, qualifyRewardCheck } from "./reward-calibration.js";
 import { queueRewardCheck, cancelRewardCheck } from "./reward-check-service.js";
 import { LearningDomainError } from "./errors.js";
 import { contentHash } from "@openpond/harness";
@@ -42,6 +43,26 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       let pointers: LearningResourcePointer[];
       switch (input.action) {
+        case "publish_checked_reward": {
+          const draft = await currentDraft(transaction, input.draft);
+          if (draft.targetKind !== "reward") throw new LearningDomainError("reward_calibration_draft_kind_invalid", 422);
+          const base = draft.baseRelease ? await requireLearningRelease(transaction, "reward", draft.baseRelease) : null;
+          const check = await requireLearningResource(transaction, "reward_check", input.checkId, input.checkRevision);
+          const qualified = qualifyRewardCheck(draft, base, check);
+          const { contentHash: _rewardHash, ...content } = qualified.reward;
+          const publication = { action: "publish_resources" as const, operationId: input.operationId,
+            finalizeDraft: { draft: input.draft, targetKind: "reward" as const, release: learningRef(qualified.reward) },
+            resources: [
+              ...qualified.assets.map(({ contentHash: _assetHash, ...content }) => ({ kind: "asset" as const, expectedRevision: 0, content })),
+              { kind: "reward" as const, expectedRevision: base?.revision ?? 0, content },
+            ],
+          };
+          pointers = [];
+          for (const resource of publication.resources) pointers.push(await publish(transaction, { ...resource, action: "publish", operationId: input.operationId }));
+          const finalized = await finalizeAuthoringDraft(transaction, publication, pointers, now());
+          if (finalized) pointers.push(finalized);
+          break;
+        }
         case "import_intake": pointers = await importTaskIntake(transaction, input, now(), submit); break;
         case "cancel_iteration":
         case "retry_iteration_dispatch": pointers = await commandLearningIterationDispatch(transaction, input, now()); break;
@@ -87,6 +108,7 @@ export function createLearningService(repository: LearningRepository, options: {
       }
       case "reward": {
         resource = createRewardRelease(input.content);
+        await assertRewardCalibration(transaction, resource);
         const implementation = input.content.implementation;
         const references = [
           ...input.content.assets,

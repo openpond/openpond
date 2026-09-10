@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { contentHash } from "@openpond/harness";
-import { previewTaskIntake, TASK_INTAKE_LIMITS, LearningSourceSchema, type OpenPondLearningClient,
+import { decodeTaskIntakeText, previewTaskIntake, TASK_INTAKE_LIMITS, LearningSourceSchema, type OpenPondLearningClient,
   type TaskIntakeFile, type TaskIntakeFormat, type TaskIntakePreview } from "openpond-sdk/learning";
 import { LearningError } from "./LearningFields";
 
@@ -34,7 +34,7 @@ export function TaskIntakeForm({ client, initialFormat = "json", onTasks, onImpo
     try {
       const incoming = Array.from(list);
       if (incoming.length > TASK_INTAKE_LIMITS.files || incoming.reduce((bytes, file) => bytes + file.size, 0) > TASK_INTAKE_LIMITS.bytes) throw new Error("Choose at most 100 files totaling 5 MiB.");
-      const next = await Promise.all(incoming.map(async file => ({ path: file.webkitRelativePath ? file.webkitRelativePath.split("/").slice(1).join("/") : file.name, text: await file.text() })));
+      const next = await Promise.all(incoming.map(async file => ({ path: file.webkitRelativePath ? file.webkitRelativePath.split("/").slice(1).join("/") : file.name, text: decodeTaskIntakeText(new Uint8Array(await file.arrayBuffer())) })));
       controller.signal.throwIfAborted();
       const result = previewTaskIntake({ format, files: next });
       setFiles(next); setPreview(result); setSelected(new Set(result.records.map(record => record.id))); setPage(0);

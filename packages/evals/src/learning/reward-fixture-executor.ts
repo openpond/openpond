@@ -2,17 +2,21 @@ import type { executeJavaScriptVerifier } from "../javascript-verifier.js";
 import { verifyLearningTextAsset } from "./assets.js";
 import { executeRewardFixture, type RewardCheckRuntime } from "./reward-checks.js";
 import type { RewardFixtureExecutor } from "./reward-check-worker.js";
+import type { ModelJudgeRunner } from "../graders.js";
 
 /** The supplied interpreter must settle only after its worker/process exits. */
 export function createIsolatedRewardFixtureExecutor(options: {
   runtime: RewardCheckRuntime;
   executeJavaScript: typeof executeJavaScriptVerifier;
+  createModelJudge?: (input: Parameters<RewardFixtureExecutor["execute"]>[0]) => Promise<ModelJudgeRunner>;
+  cancelModelJudge?: RewardFixtureExecutor["cancel"];
 }): RewardFixtureExecutor {
   return {
     runtime: options.runtime,
-    execute(input) {
+    async execute(input) {
       return executeRewardFixture({
         reward: input.reward, fixture: input.fixture, signal: input.signal,
+        modelJudge: input.reward.implementation.kind === "model_judge" ? await options.createModelJudge?.(input) : undefined,
         customVerifier: async ({ grader, task, evidence }) => {
           const asset = input.assets.find(asset => asset.id === grader.verifierRef.id);
           if (!asset) throw new Error("reward_check_source_missing");
@@ -29,6 +33,6 @@ export function createIsolatedRewardFixtureExecutor(options: {
       });
     },
     // No remote allocation; executeJavaScript's settlement contract confirms cleanup.
-    async cancel() { return true; },
+    async cancel(input) { return options.createModelJudge ? options.cancelModelJudge?.(input) ?? false : true; },
   };
 }

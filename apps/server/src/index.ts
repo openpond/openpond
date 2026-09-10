@@ -198,6 +198,7 @@ import { createManagedAdapterSyncService } from "./training/managed-adapter-sync
 import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
 import { createManagedAdapterHostedChatStream } from "./training/managed-adapter-chat-stream.js";
 import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
+import { createLearningHostedJudgeProvider } from "./training/learning-hosted-judge-provider.js";
 import {
   listManagedAdapterProviderModels,
   withManagedAdapterProviderModels,
@@ -767,6 +768,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       return { ...await resolveHostedApiAccess(), teamId };
     } }),
     modelStream: trainingModelStream,
+    judgeProvider: createLearningHostedJudgeProvider({ stream: streamOpenPondHostedChatTurn }),
   });
   const trainingPayload = trainingApi.request;
   trainingApi.learning.start();

@@ -1,6 +1,22 @@
 import { expect, it } from "vitest";
-import { previewTaskIntake } from "../src/learning/intake.js";
+import { decodeTaskIntakeText, previewTaskIntake } from "../src/learning/intake.js";
 import { TASK_INTAKE_LIMITS } from "../src/learning/intake-contracts.js";
+
+// Import must retain source bytes instead of silently normalizing an encoding
+// marker or corrupting invalid UTF-8 before its provenance hash is computed.
+it("preserves UTF-8 bytes while accepting a file BOM and rejecting invalid encoding", () => {
+  for (const format of ["json", "jsonl", "csv"] as const) {
+    const plain = format === "csv" ? 'instruction\n"Say café 🦆"' : JSON.stringify({ instruction: "Say café 🦆" });
+    const bytes = new TextEncoder().encode(`\uFEFF${plain}`);
+    const text = decodeTaskIntakeText(bytes);
+    expect(new TextEncoder().encode(text)).toEqual(bytes);
+    const preview = previewTaskIntake({ format, files: [{ path: `tasks.${format}`, text }] });
+    expect(preview.issues).toEqual([]);
+    expect(preview.records[0]?.input).toEqual({ instruction: "Say café 🦆" });
+    expect(preview.contentHash).not.toBe(previewTaskIntake({ format, files: [{ path: `tasks.${format}`, text: plain }] }).contentHash);
+  }
+  expect(() => decodeTaskIntakeText(new Uint8Array([0xc3, 0x28]))).toThrow("valid UTF-8");
+});
 
 // Portable imports must preserve private references, source identities and
 // incomplete context without silently turning imported labels into approval.

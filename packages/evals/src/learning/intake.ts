@@ -4,6 +4,8 @@ import { assertBoundedTaskJson } from "../task-schema.js";
 import { TaskSplitSchema } from "../tasksets.js";
 import { LearningJsonObjectSchema } from "./contracts.js";
 import { parseTaskIntakeCsv } from "./intake-csv.js";
+import { structuredIntakeText } from "./intake-text.js";
+export { decodeTaskIntakeText } from "./intake-text.js";
 import { parseHermesSession, parseOpenClawBundle } from "./intake-history.js";
 import { intakeDate, intakeId, TASK_INTAKE_LIMITS, TaskIntakeFileSchema, TaskIntakeFormatSchema, TaskIntakeRecordSchema,
   TaskIntakePreviewSchema, type TaskIntakeFile, type TaskIntakeFormat, type TaskIntakePreview, type TaskIntakeRecord } from "./intake-contracts.js";
@@ -56,15 +58,16 @@ export function previewTaskIntake(input: { format: TaskIntakeFormat; files: Task
   }
   if (format === "openclaw") attempt("manifest.json", null, () => parseOpenClawBundle(files));
   else for (const file of files) {
+    const text = structuredIntakeText(file.text);
     if (format === "jsonl" || format === "hermes") {
-      for (const [index, line] of file.text.split(/\r?\n/u).entries()) {
+      for (const [index, line] of text.split(/\r?\n/u).entries()) {
         if (!line.trim()) continue;
         if (issues.length >= TASK_INTAKE_LIMITS.records) break;
         attempt(file.path, index + 1, () => format === "hermes" ? parseHermesSession(JSON.parse(line)) : [normalizeTask(JSON.parse(line))]);
       }
     } else {
       let values: unknown[];
-      try { const value: unknown = format === "csv" ? parseTaskIntakeCsv(file.text) : JSON.parse(file.text); values = Array.isArray(value) ? value : [value]; }
+      try { const value: unknown = format === "csv" ? parseTaskIntakeCsv(text) : JSON.parse(text); values = Array.isArray(value) ? value : [value]; }
       catch (error) { attempt(file.path, null, () => { throw error; }); continue; }
       if (values.length > TASK_INTAKE_LIMITS.records) { attempt(file.path, null, () => { throw new Error("Import exceeds the 1,000-record limit."); }); continue; }
       values.forEach((value, index) => attempt(file.path, index + (format === "csv" ? 2 : 1), () => [normalizeTask(value)]));
