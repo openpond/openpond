@@ -625,6 +625,37 @@
             "false",
             "any"
           ]
+        },
+        "sourceLabel": {
+          "type": "object",
+          "properties": {
+            "evidence": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "feedback": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "revision": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "evidence",
+            "feedback"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

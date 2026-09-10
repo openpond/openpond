@@ -25,6 +25,7 @@ export function RewardFixturesEditor({ fixtures, onChange }: { fixtures: RewardF
     {selected ? <AppDialog ariaLabel="Edit Reward fixture" className="labs-rename-dialog labs-model-taskset-dialog learning-editor-dialog" backdropClassName="labs-rename-backdrop" onClose={() => setSelectedId(null)}>
       <div className="labs-flat-body labs-resource-page learning-workspace">
         <h2>Edit fixture</h2><p>Changes belong to this Reward draft. Use Save draft to retain unfinished input.</p>
+        {selected.sourceLabel ? <p>Adapted from label {selected.sourceLabel.feedback.id} · revision {selected.sourceLabel.feedback.revision}, attempt {selected.sourceLabel.evidence.id} · revision {selected.sourceLabel.evidence.revision}. Editing this fixture does not change that retained label.</p> : null}
         <label>Name<input maxLength={500} value={selected.name} onChange={event => patch({ name: event.target.value })} /></label>
         <LearningJsonField label="Task input" value={selected.input} onChange={input => patch({ input })} />
         <LearningJsonField label="Example output" value={selected.output} onChange={output => patch({ output })} />

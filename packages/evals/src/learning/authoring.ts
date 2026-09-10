@@ -11,6 +11,7 @@ export const RewardFixtureAuthoringFieldsSchema = z.object({
   infrastructureError: z.string().max(20_000),
   expectedStatus: z.enum(["scored", "pending", "unavailable", "failed"]),
   minimumScore: z.string(), maximumScore: z.string(), expectedPassed: z.enum(["true", "false", "any"]),
+  sourceLabel: z.object({ evidence: LearningRevisionRefSchema, feedback: z.object({ id: ReleaseIdSchema, revision: z.number().int().positive() }).strict() }).strict().optional(),
 }).strict();
 export type RewardFixtureAuthoringFields = z.infer<typeof RewardFixtureAuthoringFieldsSchema>;
 

@@ -56,7 +56,7 @@ export function createLearningService(repository: LearningRepository, options: {
           break;
         }
         case "submit_example": pointers = [await submit(transaction, input)]; break;
-        case "submit_feedback": pointers = [await feedback(transaction, input)]; break;
+        case "submit_feedback": pointers = [await feedback(transaction, input, context.actor)]; break;
         case "apply_correction": pointers = await correct(transaction, input, context.actor.id); break;
         case "resolve_feedback": pointers = [await resolveFeedback(transaction, input, context.actor.id)]; break;
         case "queue_grade": pointers = [await queueGrade(transaction, input, operationId)]; break;
@@ -160,15 +160,17 @@ export function createLearningService(repository: LearningRepository, options: {
     return pointer("evidence", evidence);
   }
 
-  async function feedback(transaction: LearningTransaction, input: Extract<LearningCommand, { action: "submit_feedback" }>): Promise<LearningResourcePointer> {
+  async function feedback(transaction: LearningTransaction, input: Extract<LearningCommand, { action: "submit_feedback" }>, actor: LearningActor): Promise<LearningResourcePointer> {
     const source = await requireLearningResource(transaction, "source", input.feedback.sourceId);
     if (!source.enabled) throw new LearningDomainError("learning_source_disabled", 409);
     const evidenceId = learningEvidenceId(source.id, input.feedback.exampleId, input.feedback.attemptId);
     const evidence = await transaction.get("evidence", evidenceId);
+    if (input.feedback.value.schemaVersion === "openpond.taskRating.v1" && (!evidence || evidence.contentHash !== input.feedback.expectedEvidenceHash || !evidence.submission.observedOutput)) throw new LearningDomainError("task_rating_evidence_stale", 409, "Open the current observed response before submitting a rating.");
     const record = TaskFeedbackSchema.parse({
       schemaVersion: "openpond.taskFeedbackRecord.v1", id: `feedback-${contentHash([source.id, input.feedback.idempotencyKey])}`,
       submission: input.feedback, status: evidence ? "pending_review" : "pending_example",
       evidence: evidence ? learningRef(evidence) : null, createdAt: now(), revision: 1,
+      submittedBy: { id: actor.id, role: actor.role, sourceId: actor.sourceId ?? null },
     });
     await transaction.put("feedback", record, 0, { parentId: evidenceId, status: record.status });
     return pointer("feedback", record);
@@ -296,6 +298,7 @@ export function createLearningService(repository: LearningRepository, options: {
     },
     async list<K extends LearningResourceKind>(context: LearningServiceContext, kind: K, query: Partial<LearningResourceQuery> = {}): Promise<LearningResourcePage<K>> {
       authorizeRead(context);
+      if (query.reviewState !== undefined && (kind !== "evidence" || !["inbox", "reviewed"].includes(query.reviewState))) throw new LearningDomainError("learning_review_filter_invalid", 400);
       const limit = Math.max(1, Math.min(100, Math.trunc(query.limit ?? 50)));
       return repository.transaction(context.scope, (transaction) => transaction.list(kind, { ...query, limit }));
     },

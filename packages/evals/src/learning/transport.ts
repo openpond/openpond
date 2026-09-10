@@ -18,7 +18,7 @@ export const LearningReadRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("inspect_policy"), scope: ReleaseIdSchema, policy: LearningRevisionRefSchema }).strict(),
   z.object({ action: z.literal("inspect_evidence"), scope: ReleaseIdSchema, evidence: LearningRevisionRefSchema }).strict(),
   z.object({ action: z.literal("get"), scope: ReleaseIdSchema, kind: LearningResourceKindSchema, id: ReleaseIdSchema, revision: z.number().int().positive().optional() }).strict(),
-  z.object({ action: z.literal("list"), scope: ReleaseIdSchema, kind: LearningResourceKindSchema, parentId: ReleaseIdSchema.optional(), status: z.string().min(1).max(200).optional(), afterId: ReleaseIdSchema.optional(), limit: z.number().int().min(1).max(100).default(50) }).strict(),
+  z.object({ action: z.literal("list"), scope: ReleaseIdSchema, kind: LearningResourceKindSchema, parentId: ReleaseIdSchema.optional(), status: z.string().min(1).max(200).optional(), reviewState: z.enum(["inbox", "reviewed"]).optional(), afterId: ReleaseIdSchema.optional(), limit: z.number().int().min(1).max(100).default(50) }).strict(),
 ]);
 export const TaskEvidenceInspectionResultSchema = z.object({
   evidence: LearningRevisionRefSchema,

@@ -2,7 +2,7 @@ import { assertBoundedTaskJson } from "../task-schema.js";
 import { AuthoringDraftSchema, type AuthoringDraftInput } from "./authoring.js";
 import { LearningDomainError } from "./errors.js";
 import { learningRef, sameLearningRef, sealLearningContent, type LearningRevisionRef } from "./contracts.js";
-import { requireLearningRelease, type LearningResourcePointer, type LearningTransaction } from "./repository.js";
+import { requireLearningRelease, requireLearningResource, type LearningResourcePointer, type LearningTransaction } from "./repository.js";
 import type { LearningCommand } from "./operations.js";
 
 export async function saveAuthoringDraft(tx: LearningTransaction, input: { draft: AuthoringDraftInput; expectedRevision: number }, now: string) {
@@ -13,6 +13,13 @@ export async function saveAuthoringDraft(tx: LearningTransaction, input: { draft
   if (input.draft.baseRelease) {
     if (input.draft.baseRelease.id !== input.draft.targetId) throw new LearningDomainError("authoring_draft_base_mismatch", 422);
     await requireLearningRelease(tx, input.draft.targetKind, input.draft.baseRelease);
+  }
+  if (input.draft.targetKind === "reward") for (const fixture of input.draft.fields.fixtures ?? []) {
+    if (!fixture.sourceLabel) continue;
+    const { evidence, feedback } = fixture.sourceLabel;
+    await requireLearningRelease(tx, "evidence", evidence);
+    const label = await requireLearningResource(tx, "feedback", feedback.id, feedback.revision);
+    if (!label.evidence || !sameLearningRef(label.evidence, evidence)) throw new LearningDomainError("reward_fixture_label_mismatch", 422);
   }
   const draft = AuthoringDraftSchema.parse(sealLearningContent({ ...input.draft, schemaVersion: "openpond.authoringDraft.v1", revision: input.expectedRevision + 1, status: "draft", publishedRelease: null, createdAt: previous?.createdAt ?? now, updatedAt: now }));
   await tx.put("draft", draft, input.expectedRevision, { parentId: draft.targetKind, status: draft.status });

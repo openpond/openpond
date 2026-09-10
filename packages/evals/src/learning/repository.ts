@@ -31,7 +31,7 @@ export type LearningStoredResource = LearningResourceFor<LearningResourceKind>;
 
 export type LearningResourcePointer = { kind: LearningResourceKind; id: string; revision: number };
 export type LearningOperationReceipt = { requestHash: string; resources: LearningResourcePointer[] };
-export type LearningResourceQuery = { parentId?: string; status?: string; afterId?: string; limit: number };
+export type LearningResourceQuery = { parentId?: string; status?: string; reviewState?: "inbox" | "reviewed"; afterId?: string; limit: number };
 export type LearningResourcePage<K extends LearningResourceKind> = { items: LearningResourceFor<K>[]; nextCursor: string | null };
 
 /** Transactions must serialize mutations within a scope and roll back atomically. */

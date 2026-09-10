@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { learningRef, type AuthoringDraftFor } from "openpond-sdk/learning";
+import { learningRef, rewardFixtureFromRating, TaskRatingSchema, type TaskEvidence, type TaskFeedback, type AuthoringDraftFor } from "openpond-sdk/learning";
 import { useAuthoringDraft } from "./useAuthoringDraft";
 import {
   compileRewardAuthoring, compileRewardFixtures, rewardAuthoringFields, RewardCheckRunSchema, RewardReleaseSchema,
@@ -11,6 +11,7 @@ import { LearningActions, LearningError, LearningJsonField } from "./LearningFie
 import { useLearningMutation, useLearningResource } from "./useLearningResources";
 import { RewardFixturesEditor } from "./RewardFixturesEditor";
 import { RewardCheckHistory } from "./RewardCheckHistory";
+import { TaskRatingDetails } from "./TaskRatingFields";
 
 type Kind = RewardRelease["implementation"]["kind"];
 const KINDS: Array<{ value: Kind; label: string }> = [
@@ -25,7 +26,7 @@ const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "human", label: "Human review rubric" },
 ];
 
-export function RewardEditor(props: { authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
+export function RewardEditor(props: { fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
   const implementation = props.reward?.implementation;
   const assetId = implementation && "verifierRef" in implementation ? implementation.verifierRef.id
     : implementation && "rubricRef" in implementation ? implementation.rubricRef.id
@@ -36,13 +37,20 @@ export function RewardEditor(props: { authoringDraft?: AuthoringDraftFor<"reward
   return <RewardEditorForm {...props} sourceAsset={asset.resource} fixtureAsset={fixtures.resource} />;
 }
 
-function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoringDraft, onSaved, onClose }: {
+function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose }: {
+  fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback };
   authoringDraft?: AuthoringDraftFor<"reward">;
   client: OpenPondLearningClient | null; reward: RewardRelease | null; sourceAsset: LearningTextAsset | null; fixtureAsset: LearningTextAsset | null;
   onSaved: (reward: RewardRelease) => void; onClose: () => void;
 }) {
   const [id] = useState(() => authoringDraft?.targetId ?? reward?.id ?? `reward-${crypto.randomUUID()}`);
-  const [initial] = useState(() => rewardAuthoringFields(reward, sourceAsset, fixtureAsset));
+  const [initial] = useState(() => {
+    const fields = rewardAuthoringFields(reward, sourceAsset, fixtureAsset);
+    if (!fromLabel) return fields;
+    const fixture = rewardFixtureFromRating(fromLabel.evidence, fromLabel.feedback, reward?.rawScore);
+    const rating = TaskRatingSchema.parse(fromLabel.feedback.submission.value);
+    return { ...fields, ...(!reward ? { name: `Reward for ${fromLabel.evidence.submission.exampleId}`, kind: "model_judge" as const, rubric: rating.criteria } : {}), fixtures: [...(fields.fixtures ?? []).filter(item => item.id !== fixture.id), fixture] };
+  });
   const [draft, setDraft] = useState(authoringDraft?.fields ?? initial);
   const [saved, setSaved] = useState(JSON.stringify(authoringDraft?.fields ?? initial));
   const [revision, setRevision] = useState(reward?.revision ?? 0);
@@ -99,6 +107,7 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     <ModelProjectPageHeader title={reward ? "Edit Reward" : "New Reward"} description="Save the grader and its source as an immutable release. Task formats keep the release they selected." />
     <LearningError error={mutation.error} />
+    {fromLabel ? <section><h2>Retained label</h2><p>Attempt {fromLabel.evidence.submission.exampleId} · revision {fromLabel.evidence.revision}. {fromLabel.feedback.submittedBy ? `Submitted by ${fromLabel.feedback.submittedBy.id} (${fromLabel.feedback.submittedBy.role}).` : "Submitter not recorded."}</p><TaskRatingDetails value={fromLabel.feedback.submission.value} /><p>The fixture is an editable copy. The original label remains unchanged.</p></section> : null}
     {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
     <label>Description (optional)<textarea maxLength={10_000} value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>

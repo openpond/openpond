@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  createBuiltinTaskGradeExecutor, createTaskGradeWorker, learningRef, sealLearningContent,
+  createBuiltinTaskGradeExecutor, createTaskGradeWorker, learningRef, sealLearningContent, rewardFixtureFromRating, rewardAuthoringFields, AuthoringDraftSchema,
   TaskAdmissionDecisionSchema, TaskEvidenceSchema, TaskFeedbackSchema, taskBatchPackageMetadata,
   type TaskGradeExecutor,
 } from "@openpond/evals/learning";
@@ -182,6 +182,7 @@ describe("durable task intake and admission", () => {
     const fixture = await learningFixture(store.learningRepository());
     const feedback = TaskFeedbackSchema.parse((await fixture.command({ action: "submit_feedback", feedback: { schemaVersion: "openpond.taskFeedback.v1", sourceId: fixture.source.id, idempotencyKey: "feedback-1", exampleId: fixture.example.exampleId, attemptId: fixture.example.attemptId, expectedEvidenceHash: null, occurredAt: learningNow, kind: "ground_truth_correction", value: { answer: "corrected truth" }, note: "Verified source" } })).resources[0]);
     expect(feedback.status).toBe("pending_example");
+    expect(feedback.submittedBy).toEqual({ ...learningContext.actor, sourceId: null });
     const evidence = await fixture.submit();
     const results = await Promise.allSettled([1, 2].map(() => fixture.command({ action: "apply_correction", feedbackId: feedback.id, evidence: learningRef(evidence) })));
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
@@ -191,8 +192,60 @@ describe("durable task intake and admission", () => {
     expect(revised.submission.expected).toEqual({ answer: "corrected truth" });
     expect(revised.submission.observedOutput).toEqual(evidence.submission.observedOutput);
     expect(await fixture.service.get(learningContext, "evidence", evidence.id, 1)).toEqual(evidence);
+    expect((await fixture.service.get(learningContext, "feedback", feedback.id)).submittedBy).toEqual(feedback.submittedBy);
     expect(await fixture.submit()).toEqual(evidence);
     await expect(fixture.queueGrade(evidence)).rejects.toThrow("task_evidence_revision_stale");
+  }));
+
+  // Ratings must retain the authenticated producer and cannot approve evidence or forge a reviewer.
+  test("retains bounded ratings separately from admission and authenticates their producer", async () => withStore(async (store) => {
+    const fixture = await learningFixture(store.learningRepository());
+    const evidence = await fixture.submit();
+    const feedback = { schemaVersion: "openpond.taskFeedback.v1", sourceId: fixture.source.id, idempotencyKey: "rating-1", exampleId: evidence.submission.exampleId, attemptId: evidence.submission.attemptId, expectedEvidenceHash: evidence.contentHash, occurredAt: learningNow, kind: "outcome", value: { schemaVersion: "openpond.taskRating.v1", criteria: "Answers the question correctly", scale: { minimum: 0, maximum: 5 }, score: 2, evidence: "The answer differs from the reference.", explanation: "Incorrect answer with a useful rationale." }, note: "" };
+    await expect(fixture.command({ action: "submit_feedback", feedback: { ...feedback, value: { ...feedback.value, score: 6 } } })).rejects.toThrow();
+    await expect(fixture.command({ action: "submit_feedback", feedback: { ...feedback, expectedEvidenceHash: "f".repeat(64) } })).rejects.toThrow("Open the current observed response");
+    await expect(fixture.command({ action: "submit_feedback", feedback: { ...feedback, submittedBy: { id: "forged", role: "reviewer", sourceId: null } } })).rejects.toThrow();
+    const actor = { id: "import-producer", role: "source" as const, sourceId: fixture.source.id };
+    const result = await fixture.service.command({ ...learningContext, actor }, { action: "submit_feedback", operationId: "source-rating", feedback });
+    const rating = TaskFeedbackSchema.parse(result.resources[0]);
+    expect(rating.submittedBy).toEqual(actor);
+    expect(rating.submission.value).toEqual(feedback.value);
+    expect(rating.evidence).toEqual(learningRef(evidence));
+    expect((await fixture.service.list(learningContext, "decision", { parentId: evidence.id })).items).toEqual([]);
+    const checkFixture = rewardFixtureFromRating(evidence, rating);
+    expect(checkFixture.minimumScore).toBe("0.4");
+    expect(checkFixture.expectedPassed).toBe("any");
+    const draft = { id: "rating-reward-draft", targetId: "rating-reward", targetKind: "reward", baseRelease: null, editorVersion: "openpond.modelsEditor.v1", fields: { ...rewardAuthoringFields(null, null), fixtures: [checkFixture] } };
+    const saved = AuthoringDraftSchema.parse((await fixture.command({ action: "save_draft", expectedRevision: 0, draft })).resources[0]);
+    expect(saved.targetKind === "reward" && saved.fields.fixtures?.[0].sourceLabel).toEqual(checkFixture.sourceLabel);
+    expect((await fixture.service.get(learningContext, "feedback", rating.id)).submission.value).toEqual(feedback.value);
+    await expect(fixture.service.command({ ...learningContext, scope: "foreign" }, { action: "save_draft", operationId: "foreign-label", expectedRevision: 0, draft })).rejects.toThrow("evidence:");
+  }));
+
+  // Queue filters must precede pagination, and a correction must return a previously reviewed task to the inbox.
+  test("paginates current evidence review state without trusting decisions for older revisions", async () => withStore(async (store) => {
+    const fixture = await learningFixture(store.learningRepository());
+    const evidence = await Promise.all(Array.from({ length: 7 }, (_, index) => fixture.submit({ exampleId: `queue-${index}`, idempotencyKey: `queue-${index}` })));
+    const reviewed = evidence.slice(0, 4);
+    for (const item of reviewed) await fixture.command({ action: "review", evidence: learningRef(item), expectedRevision: 0, disposition: "rejected", targetApproval: "rejected", approvedTarget: null, observedGradeId: null, targetGradeId: null, note: "Reviewed" });
+    const collect = async (reviewState: "inbox" | "reviewed") => {
+      const ids: string[] = [];
+      let afterId: string | undefined;
+      do {
+        const page = await fixture.service.list(learningContext, "evidence", { reviewState, parentId: fixture.source.id, limit: 2, ...(afterId ? { afterId } : {}) });
+        ids.push(...page.items.map(item => item.id));
+        afterId = page.nextCursor ?? undefined;
+      } while (afterId);
+      return ids.sort();
+    };
+    expect(await collect("reviewed")).toEqual(reviewed.map(item => item.id).sort());
+    expect(await collect("inbox")).toEqual(evidence.slice(4).map(item => item.id).sort());
+    const item = reviewed[0];
+    const correction = TaskFeedbackSchema.parse((await fixture.command({ action: "submit_feedback", feedback: { schemaVersion: "openpond.taskFeedback.v1", sourceId: fixture.source.id, idempotencyKey: "queue-correction", exampleId: item.submission.exampleId, attemptId: item.submission.attemptId, expectedEvidenceHash: item.contentHash, occurredAt: learningNow, kind: "ground_truth_correction", value: { answer: "revised" }, note: "Reference corrected" } })).resources[0]);
+    await fixture.command({ action: "apply_correction", feedbackId: correction.id, evidence: learningRef(item) });
+    expect(await collect("reviewed")).toEqual(reviewed.slice(1).map(item => item.id).sort());
+    expect(await collect("inbox")).toContain(item.id);
+    expect((await fixture.service.list({ ...learningContext, scope: "other-profile" }, "evidence", { reviewState: "reviewed" })).items).toEqual([]);
   }));
 
   // Regression: renaming a family must not let identical held-out inputs enter training.
