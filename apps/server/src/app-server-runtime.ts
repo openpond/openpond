@@ -52,6 +52,7 @@ import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-ex
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { loadPersonalizationSettings } from "./openpond/personalization.js";
 import { createHostedSavedWork } from "./openpond/saved-work.js";
+import { executeHostedTasksetAction } from "./openpond/hosted-tasksets.js";
 import { createProjectActionRunPayload } from "./project-actions/project-action-payload.js";
 import {
   createScriptedOpenPondChatStream,
@@ -71,6 +72,10 @@ import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
 import { createLocalHarnessEvaluationReviewModelStream } from "./harness/local-harness-evaluation-review-model.js";
 import { createLocalHarnessTasksetReviewControl } from "./harness/local-harness-taskset-review.js";
+import {
+  loadTasksetAuthoringProfileSkill,
+  readTasksetAuthoringProfileSkill,
+} from "./training/task-authoring-skill.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
@@ -310,6 +315,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     executeWorkspaceTool: workspace.executeWorkspaceTool,
     executeOpenPondCommand: commandAccess.executeCommand,
     executeProjectAction: projectActionRunPayload,
+    executeDatasetBuilderAction: executeHostedTasksetAction,
     loadOpenPondProfileState,
     ...createProfileTurnDependencies(),
     loadOpenPondProfileLibrary,
@@ -319,12 +325,18 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
     harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }),
-    loadBuiltInOpenPondSkills: loadBundledAuthoringSkills,
+    loadBuiltInOpenPondSkills: async () => [
+      await loadTasksetAuthoringProfileSkill(),
+      ...(await loadBundledAuthoringSkills()),
+    ],
     readBuiltInOpenPondSkill: async (name) => {
-      if (!isBundledAuthoringSkillName(name)) {
-        throw new Error(`Built-in OpenPond skill not found: ${name}`);
+      if (name === "openpond-taskset-authoring") {
+        return readTasksetAuthoringProfileSkill();
       }
-      return readBundledAuthoringProfileSkill(name);
+      if (isBundledAuthoringSkillName(name)) {
+        return readBundledAuthoringProfileSkill(name);
+      }
+      throw new Error(`Built-in OpenPond skill not found: ${name}`);
     },
     executeWebSearch: createWebSearchExecutorFromEnv(),
     createScheduledWork: createHostedSavedWork,

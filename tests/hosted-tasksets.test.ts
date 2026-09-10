@@ -1,0 +1,87 @@
+import { describe, expect, test } from "vitest";
+
+import type { Session } from "@openpond/contracts";
+
+import { executeHostedTasksetAction } from "../apps/server/src/openpond/hosted-tasksets.js";
+
+function session(overrides: Partial<Session> = {}): Session {
+  return {
+    id: "session_test",
+    experience: "work",
+    provider: "openpond",
+    title: "Hosted Work",
+    appId: null,
+    appName: null,
+    workspaceKind: "sandbox",
+    workspaceId: "sandbox_test",
+    metadata: {
+      hostConversationId: "conv_test1",
+      hostSandboxId: "sandbox_test",
+    },
+    cwd: null,
+    codexThreadId: null,
+    createdAt: "2026-09-10T00:00:00.000Z",
+    updatedAt: "2026-09-10T00:00:00.000Z",
+    status: "active",
+    pinned: false,
+    archived: false,
+    order: 0,
+    ...overrides,
+  };
+}
+
+describe("hosted Taskset client", () => {
+  test("sends a stable scoped action to the public API", async () => {
+    const calls: unknown[] = [];
+    const request = async (input: {
+      path: string;
+      method?: "GET" | "POST" | "PATCH" | "DELETE";
+      body?: Record<string, unknown>;
+    }) => {
+      calls.push(input);
+      return { ok: true };
+    };
+    const input = {
+      session: session(),
+      provider: "openpond" as const,
+      model: "accounts/fireworks/models/deepseek-v4-flash",
+      action: "start" as const,
+      payload: {
+        objective: "Build a Taskset",
+        sourceIds: ["source_1"],
+      },
+      request,
+    };
+
+    await executeHostedTasksetAction(input);
+    await executeHostedTasksetAction(input);
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toEqual(calls[1]);
+    expect(calls[0]).toMatchObject({
+      path: "/hosted-tasksets/actions",
+      method: "POST",
+      body: {
+        action: "start",
+        objective: "Build a Taskset",
+        sourceReferenceIds: ["source_1"],
+      },
+    });
+    expect(
+      (calls[0] as { body: { clientRequestId: string } }).body.clientRequestId,
+    ).toMatch(/^session_test:[a-f0-9]{32}$/);
+  });
+
+  test("rejects a session whose sandbox metadata does not match its workspace", async () => {
+    await expect(
+      executeHostedTasksetAction({
+        session: session({ workspaceId: "sandbox_forged" }),
+        provider: "openpond",
+        model: "model_test",
+        action: "status",
+        payload: {},
+        request: async () => ({ ok: true }),
+      }),
+    ).rejects.toThrow("bound Work workspace");
+  });
+});
