@@ -4,6 +4,23 @@ import type { SqliteStore } from "../store/store.js";
 import type { LocalTaskInventorySource } from "../store/store-task-inventory.js";
 import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
 
+export function taskInventoryRequest(url: URL | undefined) {
+  if (!url) throw new Error("Task query is missing its URL.");
+  const params = url.searchParams;
+  const profileId = params.get("profileId")?.trim();
+  if (!profileId) throw new Error("profileId is required.");
+  return { profileId, query: {
+    projectId: params.get("projectId") ?? undefined,
+    tasksetId: params.get("tasksetId") ?? undefined,
+    draftId: params.get("draftId") ?? undefined,
+    taskId: params.get("taskId") ?? undefined,
+    query: params.get("query") ?? "",
+    split: params.get("split") ?? undefined,
+    after: params.get("after") ?? undefined,
+    limit: Number(params.get("limit") ?? 30),
+  } };
+}
+
 /** Index saved bytes once per source hash; requests only return bounded rows. */
 export function createTaskInventoryService(store: SqliteStore, artifacts: ReturnType<typeof createDatasetArtifactService>) {
   const indexing = new Map<string, Promise<void>>();
