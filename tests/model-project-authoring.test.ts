@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { TrainingPreparationPlanSchema } from "@openpond/contracts";
 import { TrainingAdapterRegistry, TrainingDestinationRegistry } from "@openpond/training-sdk";
-import { computeTasksetHash, sha256 } from "@openpond/taskset-sdk";
+import { computeTasksetHash, sha256, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
 import { createModelProjectSaveRequest, ModelProjectTrainingSetupSchema } from "openpond-sdk/model-projects";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { withTempDirectory } from "./helpers/temp-directory";
@@ -16,6 +16,40 @@ import { compileDesktopHarnessContext } from "../apps/server/src/training/portab
 import { checkModelProjectConfiguration } from "../apps/server/src/training/model-project-configuration-check";
 import { learningRef } from "@openpond/evals/learning";
 import { learningContext, learningFixture } from "./helpers/learning-fixtures";
+import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export";
+import { prepareModelTrainingDefaults } from "openpond-sdk/model-starters";
+
+// Editor-added graders must prepare the same exact recipe as the exported
+// package, without a separate binding, and retain an owner's settings on reopen.
+test("prepares ordinary editor-authored reward tasks and preserves edited defaults", async () => withTempDirectory("model-native-defaults-", async home => {
+  const store = new SqliteStore(home);
+  try {
+    const draft = tasksetDraftFromTaskset(tasksetFixture());
+    draft.learningSignals.demonstrations = [];
+    draft.tasks = draft.tasks.map(task => ({ ...task, privilegedContextRef: null }));
+    draft.capabilities.compatibleMethods = ["none"];
+    const taskset = await store.upsertTaskset(publishTasksetDraft({ draft }));
+    expect(taskset.authoringProvenance.buildIntent).toBe("verifiable_reward");
+    expect(taskset.capabilities).toMatchObject({ compatibleMethods: ["grpo"], rewardKinds: ["deterministic"] });
+    const project = { id: "native-defaults", profileId: taskset.profileId, name: "Native reward model", objective: null,
+      defaultDestinationId: null, defaultBaseModel: { schemaVersion: "openpond.baseModelPreference.v1" as const,
+        modelId: "base", revision: "weights", tokenizerRevision: "tokenizer", chatTemplateHash: "a".repeat(64),
+        source: "managed" as const, modelAssetId: null }, trainingSetup: { tasksetRef: learningRef(taskset) } };
+    const request = await createModelProjectSaveRequest(project, 0);
+    const saved = await store.saveModelProjectConfiguration(request);
+    expect(saved.trainingSetup.rewardBindingRef).toBeFalsy();
+    expect(saved.trainingSetup).toMatchObject({ method: "grpo",
+      evaluationTasksetRef: learningRef(taskset), recipe: { optimizer: { maxSteps: 8 }, reward: { graderId: "expected_output" } } });
+    expect(await store.saveModelProjectConfiguration(request)).toEqual(saved);
+    const portable = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: project.profileId, modelId: project.id });
+    expect(prepareModelTrainingDefaults({ package: portable, setup: { ...saved.trainingSetup, recipe: null } })).toEqual(saved.trainingSetup);
+    expect(prepareModelTrainingDefaults({ package: portable, setup: { ...saved.trainingSetup, recipe: null,
+      tasksetRef: { ...learningRef(taskset), contentHash: "f".repeat(64) } } }).recipe).toBeNull();
+    const edited = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ ...project,
+      trainingSetup: { ...saved.trainingSetup, recipe: { ...saved.trainingSetup.recipe!, optimizer: { maxSteps: 3 } } } }, saved.revision));
+    expect((await store.getModelProject(edited.id))?.trainingSetup.recipe?.optimizer).toMatchObject({ maxSteps: 3 });
+  } finally { await store.close(); }
+}));
 
 // A Reward chosen before tasks must survive saving, while a forged or foreign
 // immutable reference must be rejected by the save boundary without a UI check.

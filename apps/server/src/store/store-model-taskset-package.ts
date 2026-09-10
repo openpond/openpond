@@ -1,12 +1,15 @@
 import path from "node:path";
 import { TasksetSchema } from "@openpond/contracts";
+import { materializePortableTasksetRelease, computeTasksetHash } from "@openpond/taskset-sdk";
 import { ModelProjectSchema, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { readCachedTasksetPackage } from "../training/taskset-package-files.js";
 import { captureLocalTasksetPackage, tasksetPackageInlineAssetIds } from "../training/taskset-package-capture.js";
 import { tasksetPackageDirectoryId } from "../training/taskset-package-path.js";
+import { desktopTasksetRuntimeAdapterId } from "../training/portable-evals-adapter.js";
+import { captureAuthoredModelTasksetPackage } from "../training/model-taskset-package-capture.js";
 
-/** Verify the current imported bytes before deriving a new immutable revision. */
+/** Verify selected package bytes before deriving a revision or training defaults. */
 export async function loadModelTasksetPackage(db: OpenPondSqliteConnection, home: string, request: ModelProjectSaveRequest) {
   const ref = request.project.trainingSetup.tasksetRef;
   if (!ref) return undefined;
@@ -21,7 +24,19 @@ export async function loadModelTasksetPackage(db: OpenPondSqliteConnection, home
   if (model && (model.profileId !== request.project.profileId || model.revision !== request.expectedRevision)) return undefined;
   const linked = model?.hosted?.tasksets.find(link => link.localTasksetId === taskset.id && link.localTasksetHash === taskset.contentHash);
   const hash = typeof taskset.metadata.importedPackageHash === "string" ? taskset.metadata.importedPackageHash : linked?.packageHash;
-  if (!hash) return undefined;
+  if (!hash) {
+    if (taskset.metadata.learning !== undefined || taskset.metadata.taskDefinition !== undefined || taskset.metadata.rewardBinding !== undefined) return undefined;
+    const setup = request.project.trainingSetup;
+    const base = setup.baseModel ?? request.project.defaultBaseModel;
+    const method = setup.method ?? (taskset.authoringProvenance.buildIntent === "verifiable_reward" ? "grpo" : null);
+    if (method !== "grpo" || setup.recipe || !base?.revision || !base.tokenizerRevision || !base.chatTemplateHash) return undefined;
+    if (computeTasksetHash(taskset) !== ref.contentHash) throw new Error("Selected Taskset differs from its immutable content hash.");
+    const releases = materializePortableTasksetRelease({ taskset, adapterId: desktopTasksetRuntimeAdapterId(taskset) });
+    return captureAuthoredModelTasksetPackage({ storeDir: home, taskset,
+      content: { schemaVersion: "openpond.tasksetPackage.v1", taskset: releases.tasksetRelease,
+        environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease },
+    });
+  }
   const cached = await readCachedTasksetPackage(home, hash);
   if (cached.taskset.id !== (linked?.releaseId ?? ref.id) || cached.taskset.revision !== (linked?.releaseRevision ?? ref.revision)) throw new Error("Cached package differs from its selected Taskset revision.");
   const { files, contentHash: _hash, ...content } = cached;

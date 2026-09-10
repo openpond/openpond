@@ -2,6 +2,7 @@ import { contentHash } from "@openpond/harness";
 import { compileBoundGraders } from "@openpond/evals/rewards";
 import { validateModelTasksetPackage } from "./model-taskset-derivation.js";
 import { ModelProjectTrainingSetupSchema, type ModelProjectTrainingSetup } from "./model-projects.js";
+import { validateTasksetPackage } from "./taskset-package-contracts.js";
 
 /** Saved defaults do not authorize execution. The Run review still owns the
  * budget, runtime admission and exact training/evaluation population checks. */
@@ -10,8 +11,17 @@ export function prepareModelTrainingDefaults(input: {
   package: unknown;
 }): ModelProjectTrainingSetup {
   const setup = ModelProjectTrainingSetupSchema.parse(input.setup);
-  const source = validateModelTasksetPackage(input.package);
-  if (setup.tasksetRef?.id !== source.taskset.id || setup.tasksetRef.revision !== source.taskset.revision) return setup;
+  const portable = typeof input.package === "object" && input.package !== null
+    && "schemaVersion" in input.package && input.package.schemaVersion === "openpond.tasksetPackage.v1"
+    ? validateTasksetPackage(input.package) : null;
+  const bound = portable ? null : validateModelTasksetPackage(input.package);
+  const source = portable ?? bound!;
+  const ref = setup.tasksetRef;
+  const selected = ref && ref.revision === source.taskset.revision && (portable
+    ? (ref.id === portable.taskset.id && ref.contentHash === portable.taskset.contentHash)
+      || (ref.id === portable.taskset.metadata.sourceTasksetId && ref.contentHash === portable.taskset.metadata.sourceTasksetHash)
+    : ref.id === source.taskset.id);
+  if (!selected) return setup;
   if (!setup.evaluationTasksetRef && source.taskset.tasks.some(task => task.split === "frozen_eval" || task.split === "validation")) {
     setup.evaluationTasksetRef = setup.tasksetRef;
   }
@@ -19,9 +29,9 @@ export function prepareModelTrainingDefaults(input: {
   if (setup.method !== "grpo" || setup.recipe || !base?.revision
     || !base.tokenizerRevision || !base.chatTemplateHash) return setup;
   const training = source.taskset.tasks.filter(task => task.split === "train");
-  const graders = compileBoundGraders(source.rewardBinding, source.rewards);
-  const grader = graders.find(candidate => candidate.rewardEligible);
-  const environment = source.executionResources?.environment ?? source.execution?.environment;
+  const graders = portable ? portable.taskset.graders : compileBoundGraders(bound!.rewardBinding, bound!.rewards);
+  const grader = graders.find(candidate => candidate.rewardEligible && candidate.weight > 0);
+  const environment = portable?.environment ?? bound?.executionResources?.environment ?? bound?.execution?.environment;
   if (!training.length || !grader || !environment) return setup;
   const groupSize = 8;
   const maxSteps = 8;

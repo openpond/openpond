@@ -29,7 +29,7 @@ export async function captureLocalTasksetPackage(input: {
   sources: ReadonlyArray<{ asset: ImmutableAssetRef; sourcePath: string }>;
   fileOrder?: readonly string[];
 }): Promise<TasksetPackage> {
-  const root = await realpath(input.root);
+  const root = input.sources.length ? await realpath(input.root) : path.resolve(input.root);
   const files: TasksetPackage["files"] = [];
   const identities = new Set<string>();
   let encodedBytes = 0;
