@@ -165,6 +165,7 @@ export function createLearningService(repository: LearningRepository, options: {
     if (!source.enabled) throw new LearningDomainError("learning_source_disabled", 409);
     const evidenceId = learningEvidenceId(source.id, input.feedback.exampleId, input.feedback.attemptId);
     const evidence = await transaction.get("evidence", evidenceId);
+    if (input.feedback.value.schemaVersion === "openpond.taskRating.v1" && (!evidence || evidence.contentHash !== input.feedback.expectedEvidenceHash || !evidence.submission.observedOutput)) throw new LearningDomainError("task_rating_evidence_stale", 409, "Open the current observed response before submitting a rating.");
     const record = TaskFeedbackSchema.parse({
       schemaVersion: "openpond.taskFeedbackRecord.v1", id: `feedback-${contentHash([source.id, input.feedback.idempotencyKey])}`,
       submission: input.feedback, status: evidence ? "pending_review" : "pending_example",

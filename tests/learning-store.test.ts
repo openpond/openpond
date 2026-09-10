@@ -203,6 +203,7 @@ describe("durable task intake and admission", () => {
     const evidence = await fixture.submit();
     const feedback = { schemaVersion: "openpond.taskFeedback.v1", sourceId: fixture.source.id, idempotencyKey: "rating-1", exampleId: evidence.submission.exampleId, attemptId: evidence.submission.attemptId, expectedEvidenceHash: evidence.contentHash, occurredAt: learningNow, kind: "outcome", value: { schemaVersion: "openpond.taskRating.v1", criteria: "Answers the question correctly", scale: { minimum: 0, maximum: 5 }, score: 2, evidence: "The answer differs from the reference.", explanation: "Incorrect answer with a useful rationale." }, note: "" };
     await expect(fixture.command({ action: "submit_feedback", feedback: { ...feedback, value: { ...feedback.value, score: 6 } } })).rejects.toThrow();
+    await expect(fixture.command({ action: "submit_feedback", feedback: { ...feedback, expectedEvidenceHash: "f".repeat(64) } })).rejects.toThrow("Open the current observed response");
     await expect(fixture.command({ action: "submit_feedback", feedback: { ...feedback, submittedBy: { id: "forged", role: "reviewer", sourceId: null } } })).rejects.toThrow();
     const actor = { id: "import-producer", role: "source" as const, sourceId: fixture.source.id };
     const result = await fixture.service.command({ ...learningContext, actor }, { action: "submit_feedback", operationId: "source-rating", feedback });
