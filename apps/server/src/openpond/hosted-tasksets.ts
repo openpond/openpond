@@ -59,6 +59,7 @@ export async function executeHostedTasksetAction(input: {
     split: input.payload.split,
     taskLimit: input.payload.taskLimit,
     attemptsPerTask: input.payload.attemptsPerTask,
+    maximumSpendUsd: input.payload.maximumSpendUsd,
     message: input.payload.message,
     answers: input.payload.answers,
   });

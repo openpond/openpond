@@ -34,7 +34,7 @@ function session(overrides: Partial<Session> = {}): Session {
 
 describe("hosted Taskset client", () => {
   // The client worked directly while the real Work experience filtered its tool out.
-  test("allows Work to dispatch a grader audit while keeping Taskset tools out of Chat", async () => {
+  test("dispatches Work checks with their judge cap and rejects limits that would be ignored", async () => {
     const calls: unknown[] = [];
     const definitions = createDatasetBuilderModelToolDefinitions((context, action, payload) =>
       executeHostedTasksetAction({
@@ -52,24 +52,38 @@ describe("hosted Taskset client", () => {
     const audit = filterModelToolsForExperience(session(), definitions)
       .find((definition) => definition.name === "openpond_dataset_test");
     expect(audit).toBeDefined();
-    const result = await audit!.execute({
+    const context: Parameters<NonNullable<typeof audit>["execute"]>[0] = {
       session: session(),
       turnId: "turn_test",
       turnPermissions: {},
       provider: "openpond",
       model: "model_test",
       callId: "audit_once",
-      args: { action: "audit_graders", tasksetId: "taskset_test", split: "train", taskLimit: 1, attemptsPerTask: 1 },
+      args: { action: "audit_graders", tasksetId: "taskset_test", split: "train", taskLimit: 1, attemptsPerTask: 1, maximumSpendUsd: 0 },
       signal: new AbortController().signal,
       workspaceDiffBaseline: null,
       mentionedApps: [],
       userPrompt: "Audit the published Taskset's graders once.",
       turnMetadata: {},
-    });
+    };
+    const result = await audit!.execute(context);
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ path: "/hosted-tasksets/actions", method: "POST",
-      body: { action: "audit_graders", tasksetId: "taskset_test", split: "train", taskLimit: 1, attemptsPerTask: 1 } });
+      body: { action: "audit_graders", tasksetId: "taskset_test", split: "train", taskLimit: 1, attemptsPerTask: 1, maximumSpendUsd: 0 } });
+    await audit!.execute({ ...context, callId: "calibrate_once", args: {
+      action: "calibrate_judges", tasksetId: "taskset_test", maximumSpendUsd: 0.05,
+    } });
+    expect(calls[1]).toMatchObject({ body: { action: "calibrate_judges", maximumSpendUsd: 0.05 } });
+    // Silently stripping a cap, including explicit zero, could permit unbounded
+    // judging. Local Taskset calibration does not implement this hosted ledger.
+    for (const maximumSpendUsd of [-1, Number.NaN, "0.05"]) {
+      await expect(audit!.execute({ ...context, args: { ...context.args, maximumSpendUsd } }))
+        .rejects.toThrow("finite nonnegative number");
+    }
+    await expect(audit!.execute({ ...context, session: session({ workspaceKind: "local", metadata: {} }) }))
+      .rejects.toThrow("only in hosted Work");
+    expect(calls).toHaveLength(2);
   });
 
   test("sends a stable scoped action to the public API", async () => {
