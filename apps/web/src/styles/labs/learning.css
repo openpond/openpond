@@ -90,7 +90,7 @@
 .learning-bound-source small { overflow-wrap: anywhere; }
 @media (max-width: 650px) { .learning-binding-grid { grid-template-columns: 1fr; } }
 
-.learning-editor-dialog { width: min(760px, calc(100vw - 48px)); }
+.learning-editor-dialog { width: min(760px, calc(100vw - 48px)); border: 1px solid var(--border); border-radius: 12px; background: var(--panel); box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42); }
 .learning-editor-dialog > .learning-workspace { width: 100%; padding: 0; gap: 20px; }
 .learning-editor-dialog .learning-workspace label { margin-block: 0; }
 .learning-editor-dialog .model-project-page-header { border-bottom: 0; padding-bottom: 0; }
@@ -119,9 +119,28 @@
 .learning-workspace .learning-review-surface { margin: 0; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); min-width: 0; }
 .learning-review-surface .learning-value { margin: 0; }
 .learning-review-surface .learning-value + .learning-value { margin-top: 20px; }
-.learning-review-surface fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.learning-review-surface fieldset { display: grid; gap: 12px; margin: 12px 0; padding: 0; border: 0; min-width: 0; }
 .learning-review-surface legend { font-weight: 600; font-size: 15px; }
 .learning-review-surface h2 { font-size: 15px; font-weight: 600; }
 .learning-review-surface textarea { font-family: inherit; }
 .learning-workspace label.learning-inline-choice { display: flex; flex-direction: row; gap: 8px; align-items: center; }
+.learning-inline-choice input[type="checkbox"] { flex: none; width: 14px; height: 14px; margin: 0; }
 @media (max-width: 1000px) { .learning-review-layout { grid-template-columns: 1fr; } }
+
+.learning-review-dialog { width: min(1152px, calc(100vw - 48px)); max-height: 88dvh; overflow-y: auto; padding: 24px; }
+.learning-review-dialog.learning-review-full-page { width: 100vw; max-width: none; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+.learning-review-full-backdrop { padding: 0; }
+.learning-review-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.learning-review-heading h2 { font-size: 18px; font-weight: 600; }
+.learning-review-heading .model-build-actions { margin: 0; flex-wrap: wrap; }
+.learning-review-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.learning-workspace .learning-review-filters label { margin: 0; min-width: 180px; }
+.learning-review-filters label:nth-child(2) { flex: 1; }
+.learning-rating-scale { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.learning-conversation { margin: 12px 0; padding: 0; list-style: none; }
+.learning-conversation > li { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.learning-conversation h3 { margin-bottom: 8px; text-transform: capitalize; }
+.learning-message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.learning-help { color: var(--muted); font-size: 13px; }
+.learning-review-surface pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+@media (max-width: 650px) { .learning-review-dialog { width: calc(100vw - 16px); padding: 16px; } }

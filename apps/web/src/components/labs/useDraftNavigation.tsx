@@ -50,5 +50,9 @@ export function useDraftNavigation(input: { dirty: boolean; busy?: boolean; name
       }}>{saving ? "Saving…" : "Save and continue"}</button> : null}
     </div>
   </AppDialog> : null;
-  return { dialog, allowNextNavigation() { allowNext.current = true; }, async requestLeave(action: () => void) { if (await beforeLeave()) action(); } };
+  return { dialog, allowNextNavigation() { allowNext.current = true; }, async requestLeave(action: () => void) {
+    if (!await beforeLeave()) return;
+    allowNext.current = true;
+    try { action(); } finally { queueMicrotask(() => { allowNext.current = false; }); }
+  } };
 }

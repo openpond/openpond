@@ -1,5 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
+import { connectionQueryScope } from "../../../lib/query-scope";
 import { executeHostedLearningCommand } from "../../../api/hosted-learning-command";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import type { ModelProject } from "@openpond/contracts";
 import { learningRef, type LearningCommand } from "openpond-sdk/learning";
 import type { ClientConnection } from "../../../api";
@@ -15,35 +17,23 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
   const [reviewing, setReviewing] = useState<{ policyId: string; sourceId: string } | null>(null);
   const [policyId, setPolicyId] = useState<string | undefined>();
   const [afterId, setAfterId] = useState<string | undefined>();
-  const [revision, setRevision] = useState(0);
-  const key = `${policyId ?? ""}:${afterId ?? ""}`;
-  const [state, setState] = useState<{ client: typeof client; key: string; value: HostedModelLearningOverview } | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef<LearningCommand | null>(null);
   const active = useRef(false);
-  useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    async function read() {
-      try {
-        const value = await client.overview({ policyId, afterId });
-        if (!stopped) { setState({ client, key, value }); setError(null); }
-      } catch (failure) { if (!stopped) setError(failure instanceof Error ? failure.message : "Unable to read hosted learning."); }
-      if (!stopped) timer = setTimeout(() => { void read(); }, 10_000);
-    }
-    void read();
-    return () => { stopped = true; clearTimeout(timer); };
-  }, [client, policyId, afterId, key, revision]);
-  const value = state?.client === client && state.key === key ? state.value : null;
+  const overview = useQuery({
+    queryKey: ["hosted-model-learning", connectionQueryScope(connection), model.profileId, model.id, model.hosted?.teamId, model.hosted?.apiOrigin, policyId ?? "", afterId ?? ""],
+    queryFn: () => client.overview({ policyId, afterId }), staleTime: 60_000, refetchInterval: 10_000,
+  });
+  const value = overview.data ?? null;
+  const error = overview.error?.message ?? null;
   const policy = value?.policy;
   async function run(command: LearningCommand) {
     if (active.current) return;
     active.current = true; setBusy(true); setMutationError(null);
     try {
       await executeHostedLearningCommand(client, pending, command, policy?.id);
-      setRevision(value => value + 1);
+      void overview.refetch();
     }
     catch (failure) {
       setMutationError(failure instanceof Error ? failure.message : "Unable to update hosted learning.");
@@ -52,8 +42,8 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
   }
   const canCancel = value?.iteration && value.inspection?.chain?.activeIterationId === value.iteration.id
     && ["ready", "dispatching", "training", "evaluating", "failed"].includes(value.iteration.status) && value.dispatch?.state !== "settled";
-  if (editing) return <Suspense fallback={<p>Opening learning settings…</p>}><Settings client={client} project={editing.project} policy={editing.policy} onClose={() => { setEditing(null); setRevision(value => value + 1); }} /></Suspense>;
-  if (reviewing) return <Suspense fallback={<p>Opening hosted review…</p>}><Review api={client} {...reviewing} onBack={() => { setReviewing(null); setRevision(value => value + 1); }} /></Suspense>;
+  if (editing) return <Suspense fallback={<p>Opening learning settings…</p>}><Settings client={client} project={editing.project} policy={editing.policy} onClose={() => { setEditing(null); void overview.refetch(); }} /></Suspense>;
+  if (reviewing) return <Suspense fallback={<p>Opening hosted review…</p>}><Review api={client} {...reviewing} onBack={() => { setReviewing(null); void overview.refetch(); }} /></Suspense>;
   return <section className="training-detail-section" aria-label="Hosted continual learning">
     <h2>Continual learning</h2><p>Hosted learning continues while Desktop is closed.</p>
     <LearningError error={mutationError ?? error} />
@@ -67,7 +57,8 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
       <p>{policy.enabled ? "Enabled" : "Paused"} · {policy.admission.mode === "human" ? "Human review required" : "Qualified automatic admission"}</p>
       <div className="labs-overview-decision-grid">{[["Ready to train", value?.inspection?.counts?.eligible], ["Awaiting review", value?.inspection?.counts?.awaitingReview], ["Already used", value?.inspection?.counts?.consumed]].map(([label, count]) =>
         <div className="labs-overview-decision-card" key={label}><small>{label}</small><strong>{count ?? "—"}</strong></div>)}</div>
-      <p>{policy.trigger.kind === "schedule" ? `Checks every ${policy.trigger.intervalSeconds / 60} minutes` : "Manual training"}. At least {policy.admission.minimumApprovedExamples} approved new tasks are required.</p>
+      <p>{policy.trigger.kind === "schedule" ? `Checks every ${policy.trigger.intervalSeconds / 60} minutes` : "Manual training"}. {value?.inspection?.counts?.eligible ?? "—"} / {policy.admission.minimumApprovedExamples} new eligible examples ready. Each update uses at most {policy.limits.maxBatchExamples} examples.</p>
+      {policy.trigger.kind === "schedule" ? <p>Checks wait until enough new eligible examples are ready. This interval does not set a local nightly time.</p> : null}
       {value?.schedule?.nextRunAt ? <p>Next check: {new Date(value.schedule.nextRunAt).toLocaleString()}</p> : null}
       {value?.schedule?.state === "blocked" ? <LearningError error={value.schedule.lastError ?? "The schedule is blocked. Review learning settings before resuming."} /> : null}
       {value?.inspection?.blockers.length ? <ul>{value.inspection.blockers.map(item => <li key={item.code}>{item.message}</li>)}</ul> : null}

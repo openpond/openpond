@@ -5,7 +5,8 @@ import { AuthoringDraftList } from "./AuthoringDraftList";
 import { AuthoringDraftEditor } from "./AuthoringDraftEditor";
 import type { OpenPondLearningClient, RewardRelease } from "openpond-sdk/learning";
 import { ModelProjectPageHeader } from "../ModelProjectPageHeader";
-import { LearningActions, LearningError, LearningPager, LearningValue } from "./LearningFields";
+import { LearningActions, LearningError, LearningPager } from "./LearningFields";
+import { RewardImplementationDetails } from "./RewardImplementationDetails";
 import { useLearningResource, useLearningResources } from "./useLearningResources";
 import { RewardEditor } from "./RewardEditor";
 import { RewardCheckHistory } from "./RewardCheckHistory";
@@ -23,7 +24,7 @@ export function LearningRewardsPage({ client, selectedId, after, onSelect, onPag
     <LearningError error={resources.error ?? selected.error} />
     {entry ? <>
       <LearningActions><button className="training-button secondary" type="button" onClick={() => onSelect(null)}>All Rewards</button><button className="training-button" type="button" onClick={() => setEditing(entry)}>Edit as next release</button></LearningActions>
-      <p>{entry.description}</p><p>Release {entry.revision} · {entry.contentHash}</p><LearningValue label="Grader implementation" value={entry.implementation} /><LearningValue label="Raw score contract" value={entry.rawScore} />
+      <p>{entry.description}</p><RewardImplementationDetails client={client} reward={entry} />
       <p>Edit this Reward to add fixtures and check its source against example outputs.</p>
       <RewardCheckHistory key={entry.id} client={client} targetId={entry.id} draft={null} published={entry} unchanged={false} busy={false} />
     </> : selectedId ? <div role="status"><p>{selected.error ? "This Reward is unavailable." : "Loading Reward…"}</p><button type="button" className="training-button secondary" onClick={() => onSelect(null)}>All Rewards</button></div> : <>
