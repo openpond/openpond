@@ -9,12 +9,19 @@ type HostedTasksetRequest = typeof requestOpenPondPublicApi;
 
 export async function executeHostedTasksetAction(input: {
   session: Session;
+  turnId: string;
+  callId: string;
+  signal: AbortSignal;
   provider: ChatProvider;
   model: string;
   action: OpenPondDatasetBuilderAction;
   payload: Record<string, unknown>;
   request?: HostedTasksetRequest;
 }): Promise<Record<string, unknown>> {
+  input.signal.throwIfAborted();
+  if (!input.turnId.trim() || !input.callId.trim()) {
+    throw new Error("Hosted Taskset actions require their originating turn and tool call.");
+  }
   const conversationId = stringValue(input.session.metadata?.hostConversationId);
   const sandboxId = stringValue(input.session.metadata?.hostSandboxId);
   if (
@@ -55,30 +62,28 @@ export async function executeHostedTasksetAction(input: {
     message: input.payload.message,
     answers: input.payload.answers,
   });
-  return (input.request ?? requestOpenPondPublicApi)({
+  const result = await (input.request ?? requestOpenPondPublicApi)({
     path: "/hosted-tasksets/actions",
     method: "POST",
     body,
+    signal: input.signal,
+    ...(["audit_graders", "calibrate_judges", "baseline", "readiness"].includes(input.action)
+      ? { timeoutMs: 15 * 60 * 1000 }
+      : {}),
   });
+  input.signal.throwIfAborted();
+  return result;
 }
 
 function actionRequestId(input: {
   session: Session;
-  provider: ChatProvider;
-  model: string;
-  action: OpenPondDatasetBuilderAction;
-  payload: Record<string, unknown>;
+  turnId: string;
+  callId: string;
 }): string {
+  // Identical arguments in a later user turn are a new operation. Only a replay
+  // of this exact tool call keeps the same admission identity.
   const digest = createHash("sha256")
-    .update(
-      stableStringify({
-        sessionId: input.session.id,
-        provider: input.provider,
-        model: input.model,
-        action: input.action,
-        payload: input.payload,
-      }),
-    )
+    .update(JSON.stringify([input.session.id, input.turnId, input.callId]))
     .digest("hex")
     .slice(0, 32);
   return `${input.session.id}:${digest}`.slice(0, 191);
@@ -90,17 +95,6 @@ function compact(
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined),
   );
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
 }
 
 function stringValue(value: unknown): string | null {

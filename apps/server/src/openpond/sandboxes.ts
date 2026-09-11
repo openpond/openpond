@@ -1372,6 +1372,7 @@ async function requestSandboxPublicApiRoot(params: {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<Record<string, unknown>> {
   const response = await apiFetch(
     sandboxPublicApiRootUrl(params.sandboxApiUrl),
@@ -1379,6 +1380,7 @@ async function requestSandboxPublicApiRoot(params: {
     params.path,
     {
       method: params.method ?? "GET",
+      signal: params.signal,
       ...(params.body ? { body: JSON.stringify(params.body) } : {}),
       ...(params.timeoutMs !== undefined
         ? { timeoutMs: params.timeoutMs }
@@ -1403,6 +1405,8 @@ export async function requestOpenPondPublicApi(params: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<Record<string, unknown>> {
   const { apiKey, sandboxApiUrl } = await resolveSandboxClient();
   return requestSandboxPublicApiRoot({

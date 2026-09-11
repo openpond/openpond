@@ -39,6 +39,9 @@ describe("hosted Taskset client", () => {
     const definitions = createDatasetBuilderModelToolDefinitions((context, action, payload) =>
       executeHostedTasksetAction({
         session: context.session,
+        turnId: context.turnId,
+        callId: context.callId,
+        signal: context.signal,
         provider: context.provider,
         model: context.model,
         action,
@@ -81,6 +84,9 @@ describe("hosted Taskset client", () => {
     };
     const input = {
       session: session(),
+      turnId: "turn_test",
+      callId: "design_once",
+      signal: new AbortController().signal,
       provider: "openpond" as const,
       model: "accounts/fireworks/models/deepseek-v4-flash",
       action: "start" as const,
@@ -114,6 +120,9 @@ describe("hosted Taskset client", () => {
     await expect(
       executeHostedTasksetAction({
         session: session({ workspaceId: "sandbox_forged" }),
+        turnId: "turn_test",
+        callId: "status_once",
+        signal: new AbortController().signal,
         provider: "openpond",
         model: "model_test",
         action: "status",
@@ -121,5 +130,44 @@ describe("hosted Taskset client", () => {
         request: async () => ({ ok: true }),
       }),
     ).rejects.toThrow("bound Work workspace");
+  });
+
+  // Payload hashing previously reused an old saved audit in a later user turn.
+  test("keeps retries stable and distinguishes new calls while carrying cancellation and a bounded check deadline", async () => {
+    const calls: Array<{ body?: Record<string, unknown>; signal?: AbortSignal; timeoutMs?: number }> = [];
+    const controller = new AbortController();
+    const input = {
+      session: session(), turnId: "turn_one", callId: "call_one", signal: controller.signal,
+      provider: "openpond" as const, model: "model_test", action: "audit_graders" as const,
+      payload: { tasksetId: "taskset_test", taskLimit: 1 },
+      request: async (request: (typeof calls)[number]) => { calls.push(request); return { ok: true }; },
+    };
+    await executeHostedTasksetAction(input);
+    await executeHostedTasksetAction(input);
+    await executeHostedTasksetAction({ ...input, turnId: "turn_two" });
+    await executeHostedTasksetAction({ ...input, callId: "call_two" });
+    await executeHostedTasksetAction({ ...input, payload: { ...input.payload, taskLimit: 2 } });
+    const ids = calls.map(call => call.body?.clientRequestId);
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[2]).not.toBe(ids[0]);
+    expect(ids[3]).not.toBe(ids[0]);
+    // The API can reject changed inputs under one operation instead of admitting
+    // another potentially paid execution with a different request hash.
+    expect(ids[4]).toBe(ids[0]);
+    expect(calls[4]?.body?.taskLimit).toBe(2);
+    expect(calls[0]?.timeoutMs).toBe(900_000);
+    expect(calls[0]?.signal).toBe(controller.signal);
+    controller.abort(new Error("cancelled before dispatch"));
+    await expect(executeHostedTasksetAction(input)).rejects.toThrow("cancelled before dispatch");
+    expect(calls).toHaveLength(5);
+    const duringResponse = new AbortController();
+    await expect(executeHostedTasksetAction({
+      ...input,
+      signal: duringResponse.signal,
+      request: async () => {
+        duringResponse.abort(new Error("cancelled during response"));
+        return { ok: true };
+      },
+    })).rejects.toThrow("cancelled during response");
   });
 });

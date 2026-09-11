@@ -372,6 +372,9 @@ export type TurnRunnerDependencies = {
   executeProjectAction?: (payload: unknown) => Promise<unknown>;
   executeDatasetBuilderAction?: (input: {
     session: Session;
+    turnId: string;
+    callId: string;
+    signal: AbortSignal;
     provider: ChatProvider;
     model: string;
     action: OpenPondDatasetBuilderAction;
