@@ -442,6 +442,8 @@ it("creates a starter with a required human review without fabricating review ev
 
 // A GRPO import must execute the pinned Reward and keep held-out tasks out of
 // training signals without treating authored fixtures as execution receipts.
+// Private reference values may be checker arguments, not approved answers;
+// task admission must not silently create supervised demonstrations from them.
 // Custom saves must reuse that graph even without an imported package cache.
 it("prepares verifier-based GRPO from approved training tasks and preserves private evaluation splits", async () => {
   const input = await starterInput();
@@ -455,6 +457,8 @@ it("prepares verifier-based GRPO from approved training tasks and preserves priv
   expect(prepared.taskset.capabilities.compatibleMethods).toEqual(["grpo"]);
   expect(prepared.taskset.learningSignals.rewards.map(reward => reward.taskId)).toEqual(approvedTrainingTaskIds);
   expect(prepared.taskset.learningSignals.rewards.every(reward => reward.executable)).toBe(true);
+  expect(prepared.taskset.learningSignals.demonstrations).toEqual([]);
+  expect(prepared.taskset.capabilities.supportedSignals).toEqual(["reward"]);
   expect(prepared.taskset.graders[0]!.kind).toBe("custom_verifier");
   expect(prepared.generatedFiles[0]!.content).toBe(input.package.assets[0]!.text);
   expect(prepared.taskset.tasks.filter(task => task.split === "frozen_eval")).toHaveLength(20);
