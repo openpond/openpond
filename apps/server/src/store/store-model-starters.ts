@@ -22,6 +22,7 @@ export function findModelStarterCreation(db: OpenPondSqliteConnection, value: Mo
  * before invoking this commit; no filesystem, network or training runs in it. */
 export async function commitModelStarterCreation(db: OpenPondSqliteConnection, input: ModelStarterCommitInput) {
   const request = parseModelStarterCreationRequest(input.request);
+  if (request.learning) throw new Error("Create this Model in a hosted workspace to enable continual learning.");
   const previous = findModelStarterCreation(db, request);
   if (previous) return previous;
   const { taskset, resources: effective } = prepareModelStarterTaskset(input);

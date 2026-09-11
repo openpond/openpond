@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ModelInitialLearningSchema } from "./model-learning-intent.js";
 import { TasksetReleaseSchema, assertTasksetRelease } from "@openpond/evals/tasksets";
 import { LearningTextAssetSchema, TaskDefinitionSchema, learningRef, sameLearningRef, sealLearningContent } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
@@ -93,6 +94,7 @@ export const ModelStarterCreationIntentSchema = z.object({
   startingModel: ModelProjectBaseModelSchema,
   method: ModelProjectTrainingMethodSchema,
   rewardBindingRef: RefSchema.nullable().optional(),
+  learning: ModelInitialLearningSchema.optional(),
 }).strict();
 export const ModelStarterCreationRequestSchema = ModelStarterCreationIntentSchema.extend({
   schemaVersion: z.literal("openpond.modelStarterCreation.v1"),

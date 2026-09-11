@@ -4,6 +4,8 @@ import { LearningDomainError } from "./errors.js";
 import { reserveLearningIteration } from "./iteration-reservation-service.js";
 import { LearningScheduleFireSchema, LearningScheduleSchema, type LearningSchedule, type LearningScheduleFire } from "./schedule-contracts.js";
 import { requireLearningRelease, requireLearningResource, type LearningRepository } from "./repository.js";
+import { inspectIterationEligibility } from "./iteration-eligibility.js";
+import { coalesceNightlyOccurrences } from "./nightly-schedule.js";
 
 const skipReasons = new Map<string, NonNullable<LearningScheduleFire["reason"]>>([
   ["learning_iteration_active", "active_iteration"], ["learning_iteration_cooldown", "cooldown"],
@@ -31,19 +33,32 @@ export function createLearningScheduleWorker(repository: LearningRepository, opt
         attempt = { schedule, maxRetries: 0 };
         const policy = await requireLearningRelease(tx, "policy", schedule.policy);
         attempt.maxRetries = policy.limits.maxRetries;
-        if (policy.executionOwner !== schedule.executionOwner || policy.trigger.kind !== "schedule"
-          || policy.trigger.intervalSeconds !== schedule.intervalSeconds) throw new LearningDomainError("learning_schedule_policy_mismatch", 409);
+        const matches = policy.trigger.kind === "nightly" ? schedule.intervalSeconds === null && schedule.calendar?.localTime === policy.trigger.localTime && schedule.calendar.timeZone === policy.trigger.timeZone
+          : policy.trigger.kind === "schedule" ? schedule.calendar === null && policy.trigger.intervalSeconds === schedule.intervalSeconds
+          : policy.trigger.kind === "approved_count" && schedule.calendar === null && schedule.intervalSeconds === 60;
+        if (policy.executionOwner !== schedule.executionOwner || !matches) throw new LearningDomainError("learning_schedule_policy_mismatch", 409);
         const scheduledAt = schedule.nextRunAt;
-        const interval = schedule.intervalSeconds! * 1_000;
+        const interval = (schedule.intervalSeconds ?? 86_400) * 1_000;
         const due = Date.parse(scheduledAt);
         const coalescedCount = Math.floor((time - due) / interval);
+        const occurrence = schedule.calendar ? coalesceNightlyOccurrences(schedule.calendar, scheduledAt, timestamp) : {
+          coalescedCount, coalescedThroughAt: new Date(due + coalescedCount * interval).toISOString(), nextRunAt: new Date(due + (coalescedCount + 1) * interval).toISOString(),
+        };
+        // Below-threshold count checks advance their timer without filling the
+        // Model's history with empty iterations or consuming any evidence.
+        if (policy.trigger.kind === "approved_count" && (await inspectIterationEligibility(tx, policy)).counts.eligible < policy.admission.minimumApprovedExamples) {
+          const updated = LearningScheduleSchema.parse({ ...schedule, revision: schedule.revision + 1, nextRunAt: occurrence.nextRunAt,
+            consecutiveFailures: 0, nextAttemptAt: null, lastError: null, updatedAt: timestamp });
+          await tx.put("schedule", updated, schedule.revision, { parentId: schedule.modelProjectId, status: updated.state });
+          return updated;
+        }
         const id = `schedule-fire-${contentHash([schedule.id, scheduledAt])}`;
         let outcome: LearningScheduleFire["outcome"] = "skipped";
         let reason: LearningScheduleFire["reason"] = null;
         let iteration: LearningScheduleFire["iteration"] = null;
         try {
           const pointers = await reserveLearningIteration(tx, { action: "reserve_iteration", operationId: id,
-            policy: schedule.policy, trigger: { kind: "schedule", scheduledAt } }, actorId, timestamp);
+            policy: schedule.policy, trigger: policy.trigger.kind === "approved_count" ? { kind: "approved_count", checkedAt: scheduledAt } : { kind: "schedule", scheduledAt } }, actorId, timestamp);
           const pointer = pointers.find(value => value.kind === "iteration");
           if (!pointer) throw new LearningDomainError("learning_schedule_reservation_missing", 409);
           const reservation = await requireLearningResource(tx, "reservation", pointer.id);
@@ -58,12 +73,12 @@ export function createLearningScheduleWorker(repository: LearningRepository, opt
         }
         const fire = LearningScheduleFireSchema.parse(sealLearningContent({
           schemaVersion: "openpond.learningScheduleFire.v1", id, revision: 1, scheduleId,
-          policy: schedule.policy, scheduledAt, coalescedThroughAt: new Date(due + coalescedCount * interval).toISOString(),
-          coalescedCount, outcome, reason, iteration, createdAt: timestamp,
+          policy: schedule.policy, scheduledAt, coalescedThroughAt: occurrence.coalescedThroughAt,
+          coalescedCount: occurrence.coalescedCount, outcome, reason, iteration, createdAt: timestamp,
         }));
         await tx.put("schedule_fire", fire, 0, { parentId: schedule.id, status: outcome });
         const updated = LearningScheduleSchema.parse({ ...schedule, revision: schedule.revision + 1,
-          nextRunAt: new Date(due + (coalescedCount + 1) * interval).toISOString(), lastFire: learningRef(fire),
+          nextRunAt: occurrence.nextRunAt, lastFire: learningRef(fire),
           consecutiveFailures: 0, nextAttemptAt: null, lastError: null, updatedAt: timestamp });
         await tx.put("schedule", updated, schedule.revision, { parentId: schedule.modelProjectId, status: updated.state });
         return updated;

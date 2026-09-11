@@ -79,6 +79,11 @@ it("builds stable Model save requests and bounds untrusted recipe JSON", async (
   const request = await createModelProjectSaveRequest(editable, 0);
   expect(await createModelProjectSaveRequest({ ...editable }, 0)).toEqual(request);
   expect((await createModelProjectSaveRequest({ ...editable, name: "Two" }, 0)).operationId).not.toBe(request.operationId);
+  const learning = { mode: "nightly" as const, minimumTasks: 10, localTime: "20:00", timeZone: "America/New_York", maximumSpendUsd: 1, maximumDailySpendUsd: 1 };
+  const scheduled = await createModelProjectSaveRequest(editable, 0, learning);
+  expect(scheduled.operationId).not.toBe(request.operationId);
+  expect((await createModelProjectSaveRequest(editable, 0, { ...learning, localTime: "21:00" })).operationId).not.toBe(scheduled.operationId);
+  await expect(createModelProjectSaveRequest(editable, 1, learning)).rejects.toThrow("existing Model");
   expect(() => parseModelProjectSaveRequest({ ...request, project: { ...request.project, hosted: null } })).toThrow();
   let nested: unknown = {};
   for (let index = 0; index < 60; index++) nested = { child: nested };

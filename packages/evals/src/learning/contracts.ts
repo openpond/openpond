@@ -6,6 +6,7 @@ import { RewardBindingSchema, RewardCompositionSchema, RewardReleaseRefSchema, R
 import { TaskRecordSchema, TaskSplitSchema, TasksetReleaseContentSchema } from "../tasksets.js";
 import { assertBoundedTaskJson, validateTaskSchema } from "../task-schema.js";
 import { JudgeCallReservationSchema } from "./judge-budget.js";
+import { NightlyScheduleSchema } from "./nightly-schedule.js";
 
 export const LearningJsonObjectSchema = z.record(z.string(), z.json());
 export const LearningRevisionRefSchema = RewardReleaseRefSchema;
@@ -214,6 +215,7 @@ export const LearningPolicyContentSchema = z.object({
     z.object({ kind: z.literal("manual") }).strict(),
     z.object({ kind: z.literal("approved_count") }).strict(),
     z.object({ kind: z.literal("schedule"), intervalSeconds: z.number().int().min(60).max(31_536_000) }).strict(),
+    NightlyScheduleSchema.extend({ kind: z.literal("nightly") }).strict(),
     z.object({ kind: z.literal("upstream_accepted"), modelProjectId: ReleaseIdSchema }).strict(),
   ]),
   trainingParent: ImmutableReleaseRefSchema,

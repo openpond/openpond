@@ -16,7 +16,8 @@ type ReserveCommand = Extract<LearningCommand, { action: "reserve_iteration" }>;
 export async function reserveLearningIteration(transaction: LearningTransaction, input: ReserveCommand, actorId: string, now: string): Promise<LearningResourcePointer[]> {
   const policy = await requireLearningRelease(transaction, "policy", input.policy);
   const chainId = learningChainId(policy.modelProjectId);
-  const trigger = input.trigger.kind === "schedule" ? { ...input.trigger, scheduledAt: new Date(input.trigger.scheduledAt).toISOString() } : input.trigger;
+  const trigger = input.trigger.kind === "schedule" ? { ...input.trigger, scheduledAt: new Date(input.trigger.scheduledAt).toISOString() }
+    : input.trigger.kind === "approved_count" ? { ...input.trigger, checkedAt: new Date(input.trigger.checkedAt).toISOString() } : input.trigger;
   const triggerIdentity = contentHash([input.policy.id, trigger]);
   const id = `iteration-${contentHash([chainId, triggerIdentity])}`;
   const requestHash = contentHash({ policy: input.policy, trigger });
@@ -31,8 +32,12 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
   if (!policy.enabled) throw new LearningDomainError("learning_policy_paused", 409);
   if (policy.automation.accept || policy.automation.serve) throw new LearningDomainError("learning_automatic_acceptance_not_available", 422);
   if (input.trigger.kind === "schedule") {
-    if (policy.trigger.kind !== "schedule" || !policy.automation.train) throw new LearningDomainError("learning_schedule_not_enabled", 409);
+    if (!["schedule", "nightly"].includes(policy.trigger.kind) || !policy.automation.train) throw new LearningDomainError("learning_schedule_not_enabled", 409);
     if (Date.parse(input.trigger.scheduledAt) > Date.parse(now)) throw new LearningDomainError("learning_schedule_not_due", 409);
+  }
+  if (input.trigger.kind === "approved_count") {
+    if (policy.trigger.kind !== "approved_count" || !policy.automation.train) throw new LearningDomainError("learning_count_trigger_not_enabled", 409);
+    if (Date.parse(input.trigger.checkedAt) > Date.parse(now)) throw new LearningDomainError("learning_count_trigger_not_due", 409);
   }
   const chain = await transaction.get("chain", chainId);
   if (chain?.activeIterationId) throw new LearningDomainError("learning_iteration_active", 409, chain.activeIterationId);
@@ -41,6 +46,7 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
   }
   const eligibility = await inspectIterationEligibility(transaction, policy);
   const ready = eligibility.counts.eligible >= policy.admission.minimumApprovedExamples;
+  if (input.trigger.kind === "approved_count" && !ready) throw new LearningDomainError("learning_count_threshold_not_met", 409);
   const status = ready ? "ready" : eligibility.counts.awaitingReview > 0 ? "waiting_for_review" : "waiting_for_data";
   const pointers: LearningResourcePointer[] = [];
   const acceptedParent = await latestAcceptedLearningParent(transaction, chainId, true);

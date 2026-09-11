@@ -57,7 +57,7 @@ export function createModelLearningHostingService(input: {
       const optional = async <T>(read: () => Promise<T>): Promise<T | null> => {
         try { return await read(); } catch (error) { if (error && typeof error === "object" && "status" in error && error.status === 404) return null; throw error; }
       };
-      const schedule = policy.trigger.kind === "schedule" ? await optional(() => client.get("schedule", learningScheduleId(policy.id))) : null;
+      const schedule = ["schedule", "nightly", "approved_count"].includes(policy.trigger.kind) ? await optional(() => client.get("schedule", learningScheduleId(policy.id))) : null;
       const iteration = inspection.chain?.latestIterationId ? await client.get("iteration", inspection.chain.latestIterationId) : null;
       if (iteration) await ownedPolicy(client, project.portableProjectId, iteration.policy.id, iteration.policy.revision);
       const dispatch = iteration ? (await client.list("dispatch", { parentId: iteration.id, limit: 1 })).items[0] ?? null : null;

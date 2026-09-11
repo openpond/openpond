@@ -29,4 +29,6 @@ export { resolveLearningTrainingParent } from "./iteration-training-parent.js";
 export * from "./schedule-contracts.js";
 export * from "./schedule-service.js";
 export * from "./schedule-worker.js";
+export * from "./nightly-schedule.js";
 export * from "./policy-inspection.js";
+export * from "./task-queue-inspection.js";

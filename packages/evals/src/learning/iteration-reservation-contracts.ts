@@ -6,6 +6,7 @@ import { LearningAcceptedParentSchema, LearningRevisionRefSchema } from "./contr
 export const LearningIterationTriggerSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("manual"), identity: ReleaseIdSchema }).strict(),
   z.object({ kind: z.literal("schedule"), scheduledAt: ReleaseTimestampSchema }).strict(),
+  z.object({ kind: z.literal("approved_count"), checkedAt: ReleaseTimestampSchema }).strict(),
 ]);
 
 /** Stable across policy edits: a Model owns one learning chain in its scope. */
