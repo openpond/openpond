@@ -13,7 +13,7 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  "get-started": "Get started", models: "Models", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Runs", versions: "Versions", serving: "Serving",
+  "get-started": "Get started", models: "Models", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Graders", evaluations: "Runs", runs: "Runs", versions: "Versions", serving: "Serving",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
   tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],

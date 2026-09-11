@@ -17,7 +17,7 @@ export function useLearningClient(connection: ClientConnection | null, scope: st
 
 export function useLearningResources<K extends LearningResourceKind>(client: OpenPondLearningClient | null, kind: K, query: Partial<LearningResourceQuery> = {}, poll = false) {
   const result = useQuery({ queryKey: [...learningQueryScope(client), "list", kind, query], enabled: Boolean(client),
-    queryFn: ({ signal }) => client!.list(kind, query, { signal }), refetchInterval: current => poll && (kind !== "grade" || !current.state.data || current.state.data.items.some(entry => "status" in entry && ["queued", "running", "cancelling"].includes(String(entry.status)))) ? 2_000 : false });
+    queryFn: ({ signal }) => client!.list(kind, query, { signal }), refetchInterval: current => poll && (kind !== "grade" || !current.state.data || current.state.data.items.some(entry => "status" in entry && ["queued", "running", "cancelling"].includes(String(entry.status)))) ? (kind === "grade" ? 2_000 : 10_000) : false });
   const refresh = useCallback(() => { void result.refetch(); }, [result.refetch]);
   return { page: result.data ?? null, error: result.error?.message ?? null, loading: Boolean(client) && result.isPending, refresh };
 }
@@ -45,9 +45,32 @@ export function useLearningMutation(client: OpenPondLearningClient | null) {
 
 export function useLearningResource<K extends LearningResourceKind>(client: OpenPondLearningClient | null, kind: K, id: string | null, revision?: number, poll = false) {
   const result = useQuery({ queryKey: [...learningQueryScope(client), "resource", kind, id, revision ?? "latest"], enabled: Boolean(client && id),
-    queryFn: ({ signal }) => client!.get(kind, id!, revision, { signal }), refetchInterval: current => poll && (kind !== "grade" || !current.state.data || ("status" in current.state.data && ["queued", "running", "cancelling"].includes(String(current.state.data.status)))) ? 2_000 : false });
+    queryFn: ({ signal }) => client!.get(kind, id!, revision, { signal }), refetchInterval: current => poll && (kind !== "grade" || !current.state.data || ("status" in current.state.data && ["queued", "running", "cancelling"].includes(String(current.state.data.status)))) ? (kind === "grade" ? 2_000 : 10_000) : false });
   const refresh = useCallback(() => { void result.refetch(); }, [result.refetch]);
   return { resource: result.data ?? null, error: result.error?.message ?? null, refresh };
 }
 
 export function learningOperationId() { return crypto.randomUUID(); }
+
+/** Reusable catalogs are searched as a whole; attempts keep their paginated query. */
+export function useLearningCatalog<K extends "reward" | "binding" | "policy">(client: OpenPondLearningClient | null, kind: K) {
+  const result = useQuery({
+    queryKey: [...learningQueryScope(client), kind, "catalog"],
+    enabled: Boolean(client),
+    queryFn: async ({ signal }) => {
+      const first = await client!.list(kind, { limit: 100 }, { signal });
+      const items = [...first.items];
+      let afterId = first.nextCursor;
+      const seen = new Set<string>();
+      while (afterId) {
+        if (seen.has(afterId)) throw new Error("Unable to load the complete catalog: pagination did not advance.");
+        seen.add(afterId);
+        const page = await client!.list(kind, { limit: 100, afterId }, { signal });
+        items.push(...page.items);
+        afterId = page.nextCursor;
+      }
+      return items;
+    },
+  });
+  return { items: result.data ?? [], loading: result.isLoading, error: result.error?.message ?? null, refresh: () => { void result.refetch(); } };
+}

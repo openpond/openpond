@@ -20,3 +20,8 @@ export function RewardImplementationDetails({ client, reward }: { client: Learni
     <details><summary>Exact release and score contract</summary><LearningValue label="Release" value={{ id: reward.id, revision: reward.revision, contentHash: reward.contentHash }} /><LearningValue label="Implementation" value={implementation} /><LearningValue label="Score contract" value={reward.rawScore} /></details>
   </section>;
 }
+
+export function graderImplementationLabel(reward: RewardRelease): string {
+  const labels: Record<RewardRelease["implementation"]["kind"], string> = { custom_verifier: "Code verifier", model_judge: "LLM judge", human: "Human review", learned_model: "Reward model", state: "Exact fields", content: "Text answer", schema: "Output schema", artifact: "Artifact reference", runtime_event: "Runtime events" };
+  return labels[reward.implementation.kind];
+}

@@ -591,6 +591,8 @@ export function LabWorkproductDetail({
           </Suspense>
         ) : workproduct.kind === "model" ? (
           <>
+            {modelSection === "overview" && connection && modelProject?.hosted ? <HostedModelLearning key={`${connection.serverUrl}:${modelProject.profileId}:${modelProject.id}:${modelProject.hosted.teamId}:${modelProject.hosted.apiOrigin}`} connection={connection} model={modelProject} readOnly={readOnlyModel} /> : null}
+            {modelSection === "overview" && modelProject && !modelProject.hosted ? <section className="models-learning-overview"><h2>Continual learning</h2><p>Use approved feedback and corrected answers in future updates. Connect this model to a hosted team to configure task sources, the minimum new examples, an update interval and spending limits.</p></section> : null}
             {modelSection === "overview" ? (
               <LabModelProjectOverview
                 actions={modelProject ? (
@@ -634,7 +636,6 @@ export function LabWorkproductDetail({
                 versions={modelVersions}
               />
             ) : null}
-            {modelSection === "overview" && connection && modelProject?.hosted ? <HostedModelLearning key={`${connection.serverUrl}:${modelProject.profileId}:${modelProject.id}:${modelProject.hosted.teamId}:${modelProject.hosted.apiOrigin}`} connection={connection} model={modelProject} readOnly={readOnlyModel} /> : null}
             {modelSection === "training" || modelSection === "evals" ? (
               <LabModelRunsPage
                 runs={runs}

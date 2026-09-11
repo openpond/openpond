@@ -516,3 +516,15 @@
 .page-chrome-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .page-chrome-actions:empty { display: none; }
 .page-chrome-actions .training-button { min-height: 30px; padding: 6px 12px; font-size: 12px; }
+
+/* Shared Models catalog and header controls. */
+.models-page-search { width: clamp(96px, 18vw, 240px); min-width: 0; }
+.models-page-search input { width: 100%; min-width: 0; height: 32px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; }
+.page-chrome-actions { min-width: 0; }
+.labs-models-table .labs-workproduct-link span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.labs-flat-body .training-data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.labs-flat-body .training-data-table th { padding: 12px 16px; text-align: left; color: var(--muted); font-weight: 400; font-size: 12px; border-bottom: 1px solid var(--border); }
+.labs-flat-body .training-data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.models-learning-overview { padding: 20px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; }
+.models-catalog-description { color: var(--muted); font-size: 13px; }
+.model-create-learning { display: grid; gap: 12px; }

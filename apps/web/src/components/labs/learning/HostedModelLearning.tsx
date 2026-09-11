@@ -21,8 +21,9 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
   const [busy, setBusy] = useState(false);
   const pending = useRef<LearningCommand | null>(null);
   const active = useRef(false);
+  const queryScope = ["hosted-model-learning", connectionQueryScope(connection), model.profileId, model.id, model.hosted?.teamId, model.hosted?.apiOrigin];
   const overview = useQuery({
-    queryKey: ["hosted-model-learning", connectionQueryScope(connection), model.profileId, model.id, model.hosted?.teamId, model.hosted?.apiOrigin, policyId ?? "", afterId ?? ""],
+    queryKey: [...queryScope, policyId ?? "", afterId ?? ""],
     queryFn: () => client.overview({ policyId, afterId }), staleTime: 60_000, refetchInterval: 10_000,
   });
   const value = overview.data ?? null;
@@ -42,14 +43,14 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
   }
   const canCancel = value?.iteration && value.inspection?.chain?.activeIterationId === value.iteration.id
     && ["ready", "dispatching", "training", "evaluating", "failed"].includes(value.iteration.status) && value.dispatch?.state !== "settled";
-  if (editing) return <Suspense fallback={<p>Opening learning settings…</p>}><Settings client={client} project={editing.project} policy={editing.policy} onClose={() => { setEditing(null); void overview.refetch(); }} /></Suspense>;
+  if (editing) return <Suspense fallback={<p>Opening learning settings…</p>}><Settings queryScope={queryScope} client={client} project={editing.project} policy={editing.policy} onClose={() => { setEditing(null); void overview.refetch(); }} /></Suspense>;
   if (reviewing) return <Suspense fallback={<p>Opening hosted review…</p>}><Review api={client} {...reviewing} onBack={() => { setReviewing(null); void overview.refetch(); }} /></Suspense>;
-  return <section className="training-detail-section" aria-label="Hosted continual learning">
-    <h2>Continual learning</h2><p>Hosted learning continues while Desktop is closed.</p>
+  return <section className="training-detail-section models-learning-overview" aria-label="Hosted continual learning">
+    <h2>Continual learning</h2><p>Use approved feedback and corrected answers in future updates. Set the minimum new examples, update schedule and spending limits here. Hosted learning continues while Desktop is closed.</p>
     <LearningError error={mutationError ?? error} />
     {!readOnly && value ? <button type="button" className="training-button secondary" disabled={busy || Boolean(pending.current)} onClick={() => setEditing({ project: value.project, policy: value.policy })}>{value.policy ? "Learning settings" : "Configure learning"}</button> : null}
     {!value && !error ? <p>Loading hosted learning…</p> : null}
-    {value?.policies.items.length === 0 ? <p>No hosted learning policy on this page.</p> : null}
+    {value?.policies.items.length === 0 ? <p>Continual learning is not configured.</p> : null}
     {value && value.policies.items.length > 1 ? <label>Learning policy<select value={policyId ?? ""} disabled={busy || Boolean(pending.current)} onChange={event => setPolicyId(event.target.value || undefined)}>
       <option value="">Select a policy</option>{value.policies.items.map(item => <option key={item.id} value={item.id}>{item.id} · {item.enabled ? "Enabled" : "Paused"}</option>)}
     </select></label> : null}

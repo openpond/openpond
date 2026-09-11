@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { createHostedLearningPolicyContent, hostedLearningPolicyDefaults, learningRef, sameLearningRef,
   type LearningPolicy, type LearningRevisionRef, type LearningSource, type LearningCommand } from "openpond-sdk/learning";
 import type { HostedModelProjectSummary } from "openpond-sdk/model-projects";
 import { ApiRequestError } from "../../../api/api-client";
-import type { createHostedModelLearningApi, HostedModelLearningSources } from "../../../api/model-learning-api";
+import type { createHostedModelLearningApi } from "../../../api/model-learning-api";
 import { AppDialog } from "../../dialogs/AppDialog";
 import { useDraftNavigation } from "../useDraftNavigation";
 import { LearningError, LearningPager } from "./LearningFields";
 
 type Client = ReturnType<typeof createHostedModelLearningApi>;
-export function HostedModelLearningSettings({ client, project, policy, onClose }: {
-  client: Client; project: HostedModelProjectSummary; policy: LearningPolicy | null; onClose: () => void;
+export function HostedModelLearningSettings({ client, project, policy, queryScope, onClose }: {
+  client: Client; queryScope: QueryKey; project: HostedModelProjectSummary; policy: LearningPolicy | null; onClose: () => void;
 }) {
   const [id] = useState(() => policy?.id ?? `policy-${crypto.randomUUID()}`);
   const [defaults] = useState(() => hostedLearningPolicyDefaults(project, policy));
@@ -28,16 +29,11 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [after, setAfter] = useState<string | undefined>();
-  const [catalog, setCatalog] = useState<{ after?: string; data: HostedModelLearningSources } | null>(null);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const catalog = useQuery({ queryKey: [...queryScope, "sources", after ?? ""], queryFn: () => client.sources(after) });
+  const catalogError = catalog.error?.message ?? null;
   const pending = useRef<LearningCommand | null>(null);
   const active = useRef(false);
-  useEffect(() => {
-    let stopped = false;
-    void client.sources(after).then(data => { if (!stopped) { setCatalog({ after, data }); setCatalogError(null); } }, failure => { if (!stopped) setCatalogError(failure instanceof Error ? failure.message : String(failure)); });
-    return () => { stopped = true; };
-  }, [client, after]);
-  const current = catalog && catalog.after === after ? catalog.data : null;
+  const current = catalog.data ?? null;
   const binding = applyModel ? project.trainingSetup.rewardBindingRef : policy?.rewardBinding;
   function select(source: LearningSource) {
     const selected = sources.some(ref => ref.id === source.id);
@@ -49,7 +45,7 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
     active.current = true; setBusy(true); setError(null);
     try {
       if (!pending.current) {
-        if (!definition || !sources.length || !binding) throw new Error("Select task sources and a Model Reward before saving.");
+        if (!definition || !sources.length || !binding) throw new Error("Select task sources and a Model grader before saving.");
         const content = createHostedLearningPolicyContent({ project, previous: policy, policyId: id, applyModelConfiguration: applyModel,
           sources, taskDefinition: definition, settings: {
             enabled, scheduled, humanReviewRequired: human, intervalSeconds: Number(fields.interval) * 60,

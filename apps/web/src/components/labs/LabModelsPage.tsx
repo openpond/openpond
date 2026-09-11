@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   CreateImproveRun,
   TrainingStateResponse,
 } from "@openpond/contracts";
 
-import { Search } from "../icons";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { connectionQueryScope } from "../../lib/query-scope";
+import { ModelsPageSearch } from "./ModelsPageSearch";
 import { DropdownSelect } from "../DropdownSelect";
 import type { useTraining } from "../../hooks/useTraining";
 import type { HostedModelProjectCatalog } from "../../hooks/hosted-model-project-types";
@@ -33,6 +35,7 @@ export function LabModelsPage({
   onSelect,
   onUseModel,
   onConfigure,
+  onCreate,
 }: {
   activeProfileId: string;
   hostedScope: string | null;
@@ -53,14 +56,21 @@ export function LabModelsPage({
   onOpened: (id: string) => void;
   onUseModel: (modelId: string) => void;
   onConfigure: (modelId: string) => void;
+  onCreate: () => void;
 }) {
   const listHostedModelProjects = training.actions.listHostedModelProjects;
   const opening = useRef(false);
   const [profileId, setProfileId] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [hostedResult, setHostedResult] = useState<{ scope: string; catalog: HostedModelProjectCatalog } | null>(null);
-  const hostedCatalog = hostedResult?.scope === hostedScope ? hostedResult.catalog : null;
+  const queries = useQueryClient();
+  const hostedKey = ["hosted-model-projects", connectionQueryScope(training.connection), activeProfileId, hostedScope];
+  const hostedResult = useQuery({ queryKey: hostedKey, enabled: Boolean(hostedScope), queryFn: async () => {
+    const catalog = await listHostedModelProjects({ refresh: true, silent: true });
+    if (!catalog) throw new Error("Unable to load hosted Models.");
+    return catalog;
+  } });
+  const hostedCatalog = hostedResult.data ?? null;
   const comparableRunCount = state?.modelRuns.filter(
     (run) => run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1",
   ).length ?? 0;
@@ -133,26 +143,7 @@ export function LabModelsPage({
   const emptyMessage = rows.length
     ? "No Models match this Profile or search."
     : "No local or hosted Model Projects were found.";
-  const loadingHosted =
-    training.busyAction === "list-hosted-model-projects";
-
-  useEffect(() => {
-    if (!hostedScope) return;
-    let cancelled = false;
-    void (async () => {
-      const cached = await listHostedModelProjects();
-      if (!cancelled && cached) setHostedResult({ scope: hostedScope, catalog: cached });
-      if (!cached?.cached) return;
-      const refreshed = await listHostedModelProjects({
-        refresh: true,
-        silent: true,
-      });
-      if (!cancelled && refreshed) setHostedResult({ scope: hostedScope, catalog: refreshed });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [listHostedModelProjects, hostedScope]);
+  const loadingHosted = Boolean(hostedScope) && hostedResult.isPending;
 
   async function pullHostedProject(
     item: HostedModelProjectCatalog["projects"][number],
@@ -168,7 +159,7 @@ export function LabModelsPage({
       result.importedMetricCount,
     );
     const catalog = await listHostedModelProjects({ silent: true });
-    if (catalog && hostedScope) setHostedResult({ scope: hostedScope, catalog });
+    if (catalog && hostedScope) queries.setQueryData(hostedKey, catalog);
   }
 
   async function selectModel(key: string) {
@@ -187,30 +178,19 @@ export function LabModelsPage({
       <ModelProjectPageHeader
         title="Models"
         description="Compose Tasksets and scorers, run training and evaluations, and manage deployable Model Versions."
-        metrics={[
-          { label: "Projects", value: rows.length },
-          {
-            label: "Hosted",
-            value: hostedCatalog?.projects.length ?? "—",
-            hint: hostedCatalog ? `Team ${hostedCatalog.teamId}` : hostedScope ? "Loading active team" : "Sign in to load hosted models",
-          },
-          { label: "Evaluation receipts", value: comparableRunCount },
-          { label: "Profiles", value: profileIds.length },
-        ]}
+        actions={<><ModelsPageSearch label="Search Models" value={query} onSearch={value => { setQuery(value); setPage(1); }} />
+          <button
+            className="training-button secondary"
+            disabled={comparableRunCount < 1}
+            type="button"
+            onClick={onCompare}
+          >
+            Compare runs
+          </button>
+          <button className="training-button" type="button" onClick={onCreate}>Create model</button></>}
       />
+      {hostedResult.error ? <p role="alert">{hostedResult.error.message}</p> : null}
       <div className="labs-workproduct-toolbar">
-        <label className="labs-search">
-          <Search size={14} />
-          <input
-            aria-label="Search Models"
-            placeholder="Search Models"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
         <div className="labs-model-toolbar-actions">
           <DropdownSelect
             className="labs-model-profile-filter"
@@ -228,14 +208,6 @@ export function LabModelsPage({
               setPage(1);
             }}
           />
-          <button
-            className="training-button secondary"
-            disabled={comparableRunCount < 1}
-            type="button"
-            onClick={onCompare}
-          >
-            Compare runs
-          </button>
         </div>
       </div>
       <ModelsTable

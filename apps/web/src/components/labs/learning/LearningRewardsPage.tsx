@@ -1,39 +1,49 @@
-import { AppDialog } from "../../dialogs/AppDialog";
 import { useState } from "react";
-import type { AuthoringDraft } from "openpond-sdk/learning";
+import { type AuthoringDraft, type RewardRelease } from "openpond-sdk/learning";
+
+import { ModelsPageSearch } from "../ModelsPageSearch";
+import type { OpenPondLearningClient as LearningClient } from "openpond-sdk/learning";
 import { AuthoringDraftList } from "./AuthoringDraftList";
 import { AuthoringDraftEditor } from "./AuthoringDraftEditor";
-import type { OpenPondLearningClient, RewardRelease } from "openpond-sdk/learning";
 import { ModelProjectPageHeader } from "../ModelProjectPageHeader";
-import { LearningActions, LearningError, LearningPager } from "./LearningFields";
-import { RewardImplementationDetails } from "./RewardImplementationDetails";
-import { useLearningResource, useLearningResources } from "./useLearningResources";
+import { LearningError, LearningPager } from "./LearningFields";
+import { RewardImplementationDetails, graderImplementationLabel } from "./RewardImplementationDetails";
+import { useLearningCatalog, useLearningResource } from "./useLearningResources";
 import { RewardEditor } from "./RewardEditor";
+import { LearningEditorDialog } from "./LearningEditorDialog";
 import { RewardCheckHistory } from "./RewardCheckHistory";
 
-export function LearningRewardsPage({ client, selectedId, after, onSelect, onPage }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (after: string | null) => void }) {
-  const resources = useLearningResources(client, "reward", { limit: 30, ...(after ? { afterId: after } : {}) });
+export function LearningRewardsPage({ client, selectedId, after, onSelect, onPage }: { client: LearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (after: string | null) => void }) {
+  const resources = useLearningCatalog(client, "reward");
+  const [search, setSearch] = useState("");
+  const [kind, setKind] = useState("");
   const [resuming, setResuming] = useState<AuthoringDraft | null>(null);
   const [editing, setEditing] = useState<RewardRelease | "new" | null>(null);
   const selected = useLearningResource(client, "reward", selectedId);
-  const entry = selected.resource ?? resources.page?.items.find((item) => item.id === selectedId) ?? null;
-
-
+  const entry = selected.resource ?? resources.items.find(item => item.id === selectedId) ?? null;
+  const query = search.toLowerCase();
+  const matches = resources.items.filter(reward => (!kind || reward.implementation.kind === kind) && (!query || [reward.name, reward.description, graderImplementationLabel(reward)].some(value => value.toLowerCase().includes(query))));
+  const start = after ? Math.max(0, matches.findIndex(item => item.id === after) + 1) : 0;
+  const rows = matches.slice(start, start + 30);
+  const next = start + rows.length < matches.length ? rows.at(-1)?.id : null;
+  const kinds = [...new Map(resources.items.map(reward => [reward.implementation.kind, graderImplementationLabel(reward)])).entries()];
   return <div className="labs-flat-body labs-resource-page learning-workspace">
-    <ModelProjectPageHeader title={entry?.name ?? "Rewards"} description="Publish reusable graders. Task formats bind exact releases, weights, and training or evaluation roles." actions={<button type="button" className="training-button" onClick={() => setEditing("new")}>New Reward</button>} />
+    <ModelProjectPageHeader title={entry?.name ?? "Graders"} actions={entry ? <><button type="button" className="training-button secondary" onClick={() => onSelect(null)}>All graders</button><button type="button" className="training-button" onClick={() => setEditing(entry)}>Edit grader</button></> : <><ModelsPageSearch label="Search graders" value={search} onSearch={value => { setSearch(value); onPage(null); }} /><button type="button" className="training-button" onClick={() => setEditing("new")}>New grader</button></>} />
     <LearningError error={resources.error ?? selected.error} />
     {entry ? <>
-      <LearningActions><button className="training-button secondary" type="button" onClick={() => onSelect(null)}>All Rewards</button><button className="training-button" type="button" onClick={() => setEditing(entry)}>Edit as next release</button></LearningActions>
-      <p>{entry.description}</p><RewardImplementationDetails client={client} reward={entry} />
-      <p>Edit this Reward to add fixtures and check its source against example outputs.</p>
-      <RewardCheckHistory key={entry.id} client={client} targetId={entry.id} draft={null} published={entry} unchanged={false} busy={false} />
-    </> : selectedId ? <div role="status"><p>{selected.error ? "This Reward is unavailable." : "Loading Reward…"}</p><button type="button" className="training-button secondary" onClick={() => onSelect(null)}>All Rewards</button></div> : <>
-      <AuthoringDraftList client={client} targetKind="reward" onResume={setResuming} />
-      <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Reward</th><th>Implementation</th><th>Release</th><th>Raw score</th></tr></thead><tbody>{resources.page?.items.map((reward) => <tr key={reward.id}><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(reward.id)}><strong>{reward.name}</strong><small>{reward.description}</small></button></td><td>{reward.implementation.kind}</td><td>{reward.revision}</td><td>{reward.rawScore.minimum}–{reward.rawScore.maximum}</td></tr>)}</tbody></table></div>
-      {resources.loading ? <p role="status">Loading Rewards…</p> : !resources.page?.items.length ? <p>No reusable Rewards have been published in this workspace.</p> : null}
-      <LearningPager after={after} next={resources.page?.nextCursor} onPage={onPage} />
+      <p className="models-catalog-description">{entry.description}</p>
+      <RewardImplementationDetails client={client} reward={entry} />
+      <details><summary>Check history</summary><RewardCheckHistory client={client} targetId={entry.id} draft={null} published={entry} unchanged={false} busy={false} /></details>
+    </> : selectedId ? <p role="status">{selected.error ? "This grader is unavailable." : "Loading grader…"}</p> : <>
+      <div className="labs-workproduct-toolbar"><p className="models-catalog-description">Published graders in this workspace{resources.loading ? "" : ` · ${matches.length}`}. Models and task formats can reuse them.</p>
+        <select aria-label="Grader type" value={kind} onChange={event => { setKind(event.target.value); onPage(null); }}><option value="">All types</option>{kinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+      </div>
+      <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Grader</th><th>Type</th><th>Version</th><th>Score range</th></tr></thead><tbody>{rows.map(reward => <tr key={reward.id}><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(reward.id)}><strong>{reward.name}</strong>{reward.description ? <small>{reward.description}</small> : null}</button></td><td>{graderImplementationLabel(reward)}</td><td>{reward.revision}</td><td>{reward.rawScore.minimum}–{reward.rawScore.maximum}</td></tr>)}</tbody></table></div>
+      {resources.loading ? <p role="status">Loading graders…</p> : !rows.length ? <p>{search || kind ? "No graders match this view." : "No graders have been published in this workspace."}</p> : null}
+      <LearningPager after={after} next={next} onPage={onPage} />
+      <details><summary>Saved drafts</summary><AuthoringDraftList client={client} targetKind="reward" onResume={setResuming} /></details>
     </>}
-    {resuming ? <AppDialog ariaLabel="Resume Reward" className="labs-rename-dialog labs-model-taskset-dialog learning-editor-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled onClose={() => undefined}><AuthoringDraftEditor key={resuming.id} client={client} draft={resuming} onClose={() => setResuming(null)} onPublished={id => { setResuming(null); selected.refresh(); resources.refresh(); onSelect(id); }} /></AppDialog> : null}
-    {editing ? <AppDialog ariaLabel="Reward" className="labs-rename-dialog labs-model-taskset-dialog learning-editor-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled onClose={() => undefined}><RewardEditor key={editing === "new" ? "new" : `${editing.id}:${editing.revision}`} client={client} reward={editing === "new" ? null : editing} onSaved={(reward) => { setEditing(null); selected.refresh(); resources.refresh(); onSelect(reward.id); }} onClose={() => setEditing(null)} /></AppDialog> : null}
+    {resuming ? <LearningEditorDialog title="Resume grader" onClose={() => setResuming(null)}><AuthoringDraftEditor key={resuming.id} client={client} draft={resuming} onClose={() => setResuming(null)} onPublished={id => { setResuming(null); selected.refresh(); resources.refresh(); onSelect(id); }} /></LearningEditorDialog> : null}
+    {editing ? <LearningEditorDialog title={editing === "new" ? "New grader" : "Edit grader"} onClose={() => setEditing(null)}><RewardEditor key={editing === "new" ? "new" : `${editing.id}:${editing.revision}`} client={client} reward={editing === "new" ? null : editing} onSaved={reward => { setEditing(null); selected.refresh(); resources.refresh(); onSelect(reward.id); }} onClose={() => setEditing(null)} /></LearningEditorDialog> : null}
   </div>;
 }
