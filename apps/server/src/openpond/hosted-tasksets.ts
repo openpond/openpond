@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type { ChatProvider, Session } from "@openpond/contracts";
 
@@ -59,20 +60,46 @@ export async function executeHostedTasksetAction(input: {
     split: input.payload.split,
     taskLimit: input.payload.taskLimit,
     attemptsPerTask: input.payload.attemptsPerTask,
+    maximumSpendUsd: input.payload.maximumSpendUsd,
     message: input.payload.message,
     answers: input.payload.answers,
   });
-  const result = await (input.request ?? requestOpenPondPublicApi)({
-    path: "/hosted-tasksets/actions",
-    method: "POST",
-    body,
-    signal: input.signal,
-    ...(["audit_graders", "calibrate_judges", "baseline", "readiness"].includes(input.action)
-      ? { timeoutMs: 15 * 60 * 1000 }
-      : {}),
-  });
-  input.signal.throwIfAborted();
-  return result;
+  const request = input.request ?? requestOpenPondPublicApi;
+  const isCheck = ["audit_graders", "calibrate_judges", "baseline", "readiness"].includes(input.action);
+  const signal = isCheck ? AbortSignal.any([input.signal, AbortSignal.timeout(15 * 60 * 1000)]) : input.signal;
+  let operationId: string | null = null;
+  try {
+    for (;;) {
+      signal.throwIfAborted();
+      const result = await request({ path: "/hosted-tasksets/actions", method: "POST", body, signal,
+        ...(isCheck ? { timeoutMs: 30_000 } : {}),
+      });
+      signal.throwIfAborted();
+      const operation = result.result;
+      if (!isCheck || !operation || typeof operation !== "object" || Array.isArray(operation)
+        || !("schemaVersion" in operation) || operation.schemaVersion !== "openpond.hostedTasksetOperation.v1") return result;
+      const status = "status" in operation ? operation.status : null;
+      const id = "id" in operation ? operation.id : null;
+      const retryAfterMs = "retryAfterMs" in operation ? operation.retryAfterMs : null;
+      if ((status !== "queued" && status !== "running") || typeof id !== "string" || !id
+        || typeof retryAfterMs !== "number" || !Number.isFinite(retryAfterMs) || retryAfterMs < 1)
+        throw new Error("Hosted Taskset check returned an invalid operation status.");
+      if (operationId !== null && operationId !== id) throw new Error("Hosted Taskset check operation identity changed while polling.");
+      operationId = id;
+      // Repeating the exact immutable request only retrieves its admitted
+      // operation. Execution belongs to the server's durable worker.
+      await delay(Math.min(retryAfterMs, 5000), undefined, { signal });
+    }
+  } catch (error) {
+    if (isCheck && signal.aborted) {
+      // The request may have been admitted even if its response was lost.
+      // Cancel by the same identity using a fresh, bounded transport signal.
+      await request({ path: "/hosted-tasksets/actions", method: "POST", body: { ...body, cancelCheck: true },
+        timeoutMs: 10_000, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+      signal.throwIfAborted();
+    }
+    throw error;
+  }
 }
 
 function actionRequestId(input: {

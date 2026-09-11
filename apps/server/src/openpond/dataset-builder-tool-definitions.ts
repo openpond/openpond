@@ -149,11 +149,26 @@ export function createDatasetBuilderModelToolDefinitions(
           },
           taskLimit: { type: "integer", minimum: 1, maximum: 100 },
           attemptsPerTask: { type: "integer", minimum: 1, maximum: 16 },
+          maximumSpendUsd: {
+            type: "number",
+            minimum: 0,
+            description:
+              "Hosted Work only: maximum total judge spend in USD for this check, using the user's approved budget. Omitted or zero forbids paid judge calls. Calibration uses authored fixtures and does not publish a calibrated Reward or start training.",
+          },
         },
         required: ["action", "tasksetId"],
       },
-      execute: async (context) =>
-        datasetBuilderToolResult(
+      execute: async (context) => {
+        const maximumSpendUsd = context.args.maximumSpendUsd;
+        if (maximumSpendUsd !== undefined) {
+          if (typeof maximumSpendUsd !== "number" || !Number.isFinite(maximumSpendUsd) || maximumSpendUsd < 0) {
+            throw new Error("maximumSpendUsd must be a finite nonnegative number.");
+          }
+          if (context.session.workspaceKind !== "sandbox" || !context.session.metadata?.hostConversationId) {
+            throw new Error("A Dataset judge spend limit is supported only in hosted Work.");
+          }
+        }
+        return datasetBuilderToolResult(
           context.callId,
           "openpond_dataset_test",
           await runDatasetBuilder(
@@ -161,7 +176,8 @@ export function createDatasetBuilderModelToolDefinitions(
             datasetTestAction(context.args.action),
             context.args,
           ),
-        ),
+        );
+      },
     },
   ];
 }
