@@ -1,5 +1,6 @@
+import type { OpenPondLearningClient } from "openpond-sdk/learning";
 import { useState } from "react";
-import { learningRef, sameLearningRef, type AuthoringDraftFor, type LearningRevisionRef, type OpenPondLearningClient, type RewardCheckRun } from "openpond-sdk/learning";
+import { learningRef, sameLearningRef, type AuthoringDraftFor, type LearningRevisionRef, type RewardCheckRun } from "openpond-sdk/learning";
 import { LearningActions, LearningError } from "./LearningFields";
 import { useLearningMutation, useLearningResource, useLearningResources } from "./useLearningResources";
 
@@ -27,16 +28,15 @@ export function RewardCheckHistory({ client, targetId, draft, published, unchang
     <LearningError error={history.error ?? started.error ?? mutation.error} />
     {onCheck ? <LearningActions><button type="button" className="training-button secondary" disabled={busy || mutation.busy || Boolean(currentCheckRunning)} onClick={() => { void run(); }}>{checking ? "Queuing check…" : currentCheckRunning ? "Checking fixtures…" : "Check fixtures"}</button></LearningActions> : null}
     {history.loading && !history.page ? <p role="status">Loading checks…</p> : null}
-    {!rows.length && !history.loading ? <p>No checks recorded for this Reward.</p> : null}
-    <ul className="learning-list">{rows.map(check => {
+    <div className="models-table-wrap"><table className="models-data-table"><thead><tr><th>Result</th><th>Checked version</th><th>Time</th><th>Details</th></tr></thead><tbody>{rows.map(check => {
       const current = draft && unchanged && sameLearningRef(check.draft, learningRef(draft));
-      return <li key={check.id}><div>
+      return <tr key={check.id}><td>
         <strong>{check.status === "completed" ? check.matchesExpectations ? "All fixtures matched" : "Fixture mismatch" : check.status}</strong>
-        <p>{current ? "Current saved draft" : published && sameLearningRef(published, check.reward) ? `Published release ${published.revision}` : `Earlier draft revision ${check.draft.revision}`} · {new Date(check.createdAt).toLocaleString()}</p>
         {check.failure ? <p role="status">{check.failure}</p> : null}
+      </td><td>{current ? "Current saved draft" : published && sameLearningRef(published, check.reward) ? `Published release ${published.revision}` : `Draft revision ${check.draft.revision}`}</td><td>{new Date(check.createdAt).toLocaleString()}</td><td>
         <RewardCheckDetails client={client} check={check} />
-      </div>{!readOnly && ["queued", "running"].includes(check.status) ? <button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void cancel(check); }}>Cancel check</button> : null}</li>;
-    })}</ul>
+      {!readOnly && ["queued", "running"].includes(check.status) ? <button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void cancel(check); }}>Cancel check</button> : null}</td></tr>;
+    })}{!rows.length && !history.loading ? <tr><td colSpan={4} className="text-muted-foreground">No checks recorded.</td></tr> : null}</tbody></table></div>
     {history.page?.nextCursor ? <button type="button" className="training-button secondary" onClick={() => setCursor(history.page!.nextCursor!)}>More checks</button> : null}
     {cursor ? <button type="button" className="training-button secondary" onClick={() => setCursor(undefined)}>First page</button> : null}
   </section>;

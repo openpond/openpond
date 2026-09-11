@@ -33,6 +33,10 @@ export function createModelLearningHostingService(input: {
     return policy;
   }
   return {
+    async taskQueue(value: Scope & { workspace: boolean }) {
+      const { client, project } = await scoped(value);
+      return client.inspectTaskQueue(value.workspace ? null : project.portableProjectId);
+    },
     async review(value: Scope & { request: unknown }) {
       const request = HostedLearningReviewRequestSchema.parse(value.request);
       const { client, project } = await scoped(value);

@@ -63,14 +63,14 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     sendJson(response, 200, await deps.trainingPayload("activity", {}, requestUrl));
     return true;
   }
-  const hostedLearning = /^\/v1\/training\/models\/([^/]+)\/hosted-learning(\/sources|\/review)?$/.exec(requestUrl.pathname);
-  if (hostedLearning && (request.method === "GET" && hostedLearning[2] !== "/review" || request.method === "POST" && hostedLearning[2] !== "/sources")) {
+  const hostedLearning = /^\/v1\/training\/models\/([^/]+)\/hosted-learning(\/sources|\/review|\/task-queue)?$/.exec(requestUrl.pathname);
+  if (hostedLearning && (request.method === "GET" && hostedLearning[2] !== "/review" || request.method === "POST" && !(["/sources", "/task-queue"].includes(hostedLearning[2] ?? "")))) {
     const scope = { modelId: decodeURIComponent(hostedLearning[1]!), profileId: requestUrl.searchParams.get("profileId") };
     try {
       const payload = request.method === "POST"
         ? { ...scope, command: await readJson(request, { maxBytes: 524_288 }) }
-        : { ...scope, policyId: requestUrl.searchParams.get("policyId"), afterId: requestUrl.searchParams.get("afterId") };
-      const result = await deps.trainingPayload(hostedLearning[2] === "/review" ? "hosted_model_learning_review" : request.method === "POST" ? "hosted_model_learning_command" : hostedLearning[2] ? "hosted_model_learning_sources" : "hosted_model_learning", payload, requestUrl);
+        : { ...scope, workspace: requestUrl.searchParams.get("workspace") === "true", policyId: requestUrl.searchParams.get("policyId"), afterId: requestUrl.searchParams.get("afterId") };
+      const result = await deps.trainingPayload(hostedLearning[2] === "/task-queue" ? "hosted_model_task_queue" : hostedLearning[2] === "/review" ? "hosted_model_learning_review" : request.method === "POST" ? "hosted_model_learning_command" : hostedLearning[2] ? "hosted_model_learning_sources" : "hosted_model_learning", payload, requestUrl);
       response.setHeader("Cache-Control", "no-store");
       sendJson(response, 200, result);
     } catch (error) {

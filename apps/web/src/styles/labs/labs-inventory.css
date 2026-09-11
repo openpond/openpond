@@ -528,3 +528,36 @@
 .models-learning-overview { padding: 20px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; }
 .models-catalog-description { color: var(--muted); font-size: 13px; }
 .model-create-learning { display: grid; gap: 12px; }
+
+/* Models inventories and detail sections share the same table treatment. */
+.labs-view :is(.training-data-table, .models-data-table),
+.learning-workspace :is(.training-data-table, .models-data-table),
+.models-learning-overview .training-data-table,
+.labs-model-overview .training-data-table {
+  width: 100%; border: 1px solid var(--border); border-collapse: collapse; font-size: 13px;
+}
+.labs-view :is(.training-data-table, .models-data-table) :is(th, td),
+.learning-workspace :is(.training-data-table, .models-data-table) :is(th, td),
+.models-learning-overview .training-data-table :is(th, td),
+.labs-model-overview .training-data-table :is(th, td) {
+  border-bottom: 1px solid var(--border); padding: 12px 16px; text-align: left; vertical-align: top;
+}
+.models-data-table th { color: var(--muted); font-size: 12px; font-weight: 500; }
+.models-table-wrap { width: 100%; overflow-x: auto; }
+.models-learning-overview { padding: 0; border: 0; border-radius: 0; margin-bottom: 24px; }
+.models-learning-overview h2, .labs-model-overview section > h2 { margin: 0 0 12px; font-size: 15px; }
+.models-learning-overview > .training-button { margin-bottom: 12px; }
+.training-button.review-status { color: #18181b; background: #fff; border: 1px solid #d4d4d8; }
+.training-button.reviewed-status { color: #fff; background: #18181b; border: 1px solid #18181b; }
+.model-settings-section { display: grid; gap: 20px; min-width: 0; }
+.model-settings-section > label, .model-settings-section > form > fieldset { display: grid; gap: 8px; }
+.model-settings-page { display: grid; gap: 36px; }
+.model-settings-page .model-create-fields { gap: 36px; }
+.labs-model-create-dialog .model-create-fields { min-height: 340px; }
+.model-settings-section h2 { margin: 0; font-size: 16px; }
+.model-settings-page footer { display: flex; gap: 8px; margin-top: 24px; }
+.continual-learning-fields { display: grid; gap: 16px; }
+.continual-learning-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.model-create-learning { min-height: 150px; display: grid; align-content: start; gap: 12px; }
+.pending-training-tasks-icon { position: relative; display: inline-flex; }
+.pending-training-tasks-badge { position: absolute; top: -6px; right: -8px; min-width: 14px; height: 14px; padding: 0 3px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: white; color: #18181b; font-size: 9px; font-weight: 600; line-height: 1; }

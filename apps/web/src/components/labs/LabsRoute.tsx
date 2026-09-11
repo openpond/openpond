@@ -13,6 +13,7 @@ import { HuggingFaceDatasetImportDialog } from "../datasets/HuggingFaceDatasetIm
 import { TasksetDraftEditor } from "../datasets/TasksetDraftEditor";
 import { TaskIntakeForm } from "./learning/TaskIntakeForm";
 import { LabDatasetsPage, type TasksetDetailTab } from "./LabDatasetsPage";
+import { HostedModelLearning } from "./learning/HostedModelLearning";
 import { LabTasksPage } from "./LabTasksPage";
 import { LabEvaluationsPage, type EvaluationDetailTab } from "./LabEvaluationsPage";
 import { LabHumanReviewsPage } from "./LabHumanReviewsPage";
@@ -200,9 +201,12 @@ export function LabsRoute(props: LabsRouteProps) {
       onOpenProviderSettings={training.onOpenProviderSettings}
       renderDatasetBuilder={(onCreated, onUseExisting) => <TasksetDraftEditor defaultModel={training.defaultModel} modelProjectId={target.id} training={training.training} onBack={onUseExisting} onOpenChat={openTasksetChat} onPublished={onCreated} onUseExistingTaskset={onUseExisting} />}
     />;
+  } else if (route.page === "settings") {
+    const project = state?.modelProjects.find(project => project.id === route.modelId);
+    page = project ? <LabModelCreateDialog key={`${workspaceKey}:${project.id}:settings`} presentation="page" project={project} tasksets={labModelTasksets(state).filter(taskset => taskset.profileId === profileId)} learningClient={learningClient} baseModelCandidates={state?.baseModelCandidates ?? []} busy={training.training.busyAction === "save-model-project"} initialName={project.name} onClose={() => open(modelsLocation("models", project.id))} onCheck={input => training.training.actions.checkModelProject(modelConfiguration(input), input.expectedRevision)} onCreate={createModel} onSaved={() => toast("Settings saved.", "success")} onManageModels={training.onOpenTrainingSettings} renderTasksetBuilder={(onPublished, onClose, closeRef) => <TasksetDraftEditor closeRef={closeRef} defaultModel={training.defaultModel} training={training.training} onBack={onClose} onPublished={onPublished} />} learningSettings={project.hosted && profileView.connection ? <HostedModelLearning connection={profileView.connection} model={project} readOnly={false} mode="settings" /> : <section><h2>Continual learning</h2><p>Connect this model to a hosted team from the model page to configure continual learning.</p></section>} /> : unavailable("This model is unavailable.");
   } else if (route.page === "tasks") {
     page = route.collection === "drafts" ? <TasksetDraftEditor key={`${workspaceKey}:${route.resourceId}`} draftId={route.resourceId} defaultModel={training.defaultModel} modelProjectId={route.modelId} training={training.training} onBack={() => openTaskset(null)} onOpenChat={openTasksetChat} onPublished={openTaskset} />
-      : <LabTasksPage key={`${workspaceKey}:${route.modelId ?? "all"}`} state={state} training={training.training} modelId={route.modelId} collectionId={route.resourceId} query={route.query} after={route.after}
+      : <LabTasksPage key={`${workspaceKey}:${route.modelId ?? "all"}`} state={state} training={training.training} modelId={route.modelId} client={learningClient} collectionId={state?.tasksets.some(item => item.id === route.resourceId) ? route.resourceId : null} reviewId={state?.tasksets.some(item => item.id === route.resourceId) ? null : route.resourceId} sourceId={route.sourceId} onReview={id => open(modelsResourceLocation(route, id))} onClearSource={() => open({ ...route, sourceId: null, resourceId: null, after: null })} onReward={id => open(modelsLocation("rewards", route.modelId, { collection: "combined", resourceId: id }))} query={route.query} after={route.after}
         onSearch={query => open({ ...route, query, after: null })} onPage={after => open({ ...route, after })} onCollection={resourceId => open({ ...route, resourceId, after: null })} onAdd={() => setImportSource("source")} onOpenDraft={id => open(modelsLocation("tasks", route.modelId, { collection: "drafts", resourceId: id }))} />;
   } else if (route.page === "labeling") {
     page = <LearningReviewPage onReward={id => open(modelsLocation("rewards", route.modelId, { collection: "combined", resourceId: id }))} key={workspaceKey} client={learningClient} selectedId={route.resourceId} after={route.after} sourceId={route.sourceId} onClearSource={() => open({ ...route, sourceId: null, resourceId: null, after: null })} onSelect={id => open(modelsResourceLocation(route, id))} onPage={after => open({ ...route, after })} onBatches={() => open(modelsLocation("tasksets", route.modelId, { collection: "batches" }))} />;
@@ -244,7 +248,7 @@ export function LabsRoute(props: LabsRouteProps) {
     page = <LabModelsPage onCreate={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }} activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} hostedApiOrigin={props.account?.apiBaseUrl ?? null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
       onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
       onOpened={(id) => open(modelsLocation("models", id))}
-      onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}
+      onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={id => open(modelsLocation("settings", id))}
     />;
   } else if ((route.page === "runs" || (route.page === "versions" && !route.modelId)) && !route.resourceId) {
     page = <>
@@ -260,7 +264,7 @@ export function LabsRoute(props: LabsRouteProps) {
       <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }
-  const tab: LabPrimaryTab = (route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page ?? "overview";
+  const tab: LabPrimaryTab = (route?.page === "models" || route?.page === "settings" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page ?? "overview";
   return <LabsView activeTab={tab} showHeader={false} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
     {hostedRefreshError ? <p role="status">{hostedRefreshError}</p> : null}
     {route && (route.page === "runs" || route.page === "evaluations") ? <ModelsRunViews route={route} /> : null}

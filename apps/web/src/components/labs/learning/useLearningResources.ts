@@ -53,19 +53,19 @@ export function useLearningResource<K extends LearningResourceKind>(client: Open
 export function learningOperationId() { return crypto.randomUUID(); }
 
 /** Reusable catalogs are searched as a whole; attempts keep their paginated query. */
-export function useLearningCatalog<K extends "reward" | "binding" | "policy">(client: OpenPondLearningClient | null, kind: K) {
+export function useLearningCatalog<K extends LearningResourceKind>(client: OpenPondLearningClient | null, kind: K, query: Partial<LearningResourceQuery> = {}) {
   const result = useQuery({
-    queryKey: [...learningQueryScope(client), kind, "catalog"],
+    queryKey: [...learningQueryScope(client), kind, "catalog", query],
     enabled: Boolean(client),
     queryFn: async ({ signal }) => {
-      const first = await client!.list(kind, { limit: 100 }, { signal });
+      const first = await client!.list(kind, { ...query, limit: 100 }, { signal });
       const items = [...first.items];
       let afterId = first.nextCursor;
       const seen = new Set<string>();
       while (afterId) {
         if (seen.has(afterId)) throw new Error("Unable to load the complete catalog: pagination did not advance.");
         seen.add(afterId);
-        const page = await client!.list(kind, { limit: 100, afterId }, { signal });
+        const page = await client!.list(kind, { ...query, limit: 100, afterId }, { signal });
         items.push(...page.items);
         afterId = page.nextCursor;
       }

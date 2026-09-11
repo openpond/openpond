@@ -1,12 +1,12 @@
-import { useState, type Ref } from "react";
+import { type Ref } from "react";
 import type { ModelProject, Taskset } from "@openpond/contracts";
 import { learningRef, RewardBindingContentSchema, RewardBindingSchema, sealLearningContent, type RewardRelease, type OpenPondLearningClient } from "openpond-sdk/learning";
 import type { DraftEditorHandle } from "./useDraftNavigation";
 import { RewardEditor } from "./learning/RewardEditor";
 import { CombinedRewardEditor } from "./learning/CombinedRewardEditor";
 import { rewardBindingSource } from "./learning/RewardBindingFields";
-import { LearningError, LearningPager } from "./learning/LearningFields";
-import { useLearningMutation, useLearningResource, useLearningResources } from "./learning/useLearningResources";
+import { LearningError } from "./learning/LearningFields";
+import { useLearningMutation, useLearningResource, useLearningCatalog } from "./learning/useLearningResources";
 import { RewardBindingSummary } from "./learning/RewardBindingSummary";
 import type { ModelStarterPreview } from "../../hooks/useTraining";
 
@@ -41,8 +41,7 @@ function EditableModelCreationReward({ client, taskset, bindingRef, onChange, ed
   onChange: (value: ModelProject["trainingSetup"]["rewardBindingRef"]) => void; starter?: ModelStarterPreview;
   editor: "reward" | "combined" | null; onEditorChange: (editor: "reward" | "combined" | null) => void; closeRef?: Ref<DraftEditorHandle>;
 }) {
-  const [after, setAfter] = useState<string | null>(null);
-  const bindings = useLearningResources(client, "binding", { limit: 30, ...(after ? { afterId: after } : {}) });
+  const bindings = useLearningCatalog(client, "binding");
   const selected = useLearningResource(client, "binding", bindingRef?.id ?? null, bindingRef?.revision);
   const mutation = useLearningMutation(client);
   async function useReward(reward: RewardRelease) {
@@ -61,13 +60,11 @@ function EditableModelCreationReward({ client, taskset, bindingRef, onChange, ed
   return <section className="learning-workspace model-creation-reward">
     <h3>Grader</h3><p>Choose or create quality checks now. You can import tasks later; their format must support the selected checks.</p>
     <LearningError error={bindings.error ?? selected.error ?? mutation.error} />
-    <div className="labs-model-create-select-row"><select aria-label="Grader" value={bindingRef ? `${bindingRef.id}:${bindingRef.revision}` : ""} onChange={(event) => { const binding = bindings.page?.items.find((item) => `${item.id}:${item.revision}` === event.target.value); onChange(binding ? learningRef(binding) : null); }}>
+    <div className="labs-model-create-select-row"><select aria-label="Grader" value={bindingRef ? `${bindingRef.id}:${bindingRef.revision}` : ""} onChange={(event) => { const binding = bindings.items.find((item) => `${item.id}:${item.revision}` === event.target.value); onChange(binding ? learningRef(binding) : null); }}>
       <option value="">{taskset ? "Use Taskset grader" : "Choose later"}</option>
-      {bindingRef && !bindings.page?.items.some((item) => item.id === bindingRef.id && item.revision === bindingRef.revision) ? <option value={`${bindingRef.id}:${bindingRef.revision}`}>{selected.resource?.name || bindingRef.id} · release {bindingRef.revision}</option> : null}
-      {bindings.page?.items.map((binding) => <option key={binding.id} value={`${binding.id}:${binding.revision}`}>{binding.name || binding.id} · release {binding.revision}</option>)}
+      {bindingRef && !bindings.items.some((item) => item.id === bindingRef.id && item.revision === bindingRef.revision) ? <option value={`${bindingRef.id}:${bindingRef.revision}`}>{selected.resource?.name || bindingRef.id} · release {bindingRef.revision}</option> : null}
+      {bindings.items.map((binding) => <option key={binding.id} value={`${binding.id}:${binding.revision}`}>{binding.name || binding.id} · release {binding.revision}</option>)}
     </select><button type="button" className="labs-model-create-add" aria-label="Create grader" onClick={() => setEditor("reward")}>+</button></div>
-    <LearningPager after={after} next={bindings.page?.nextCursor} onPage={setAfter} />
-    <button type="button" className="training-button secondary" onClick={() => setEditor("combined")}>Combine graders</button>
     {selected.resource ? <RewardBindingSummary client={client} binding={selected.resource} /> : null}
     {!bindingRef && taskset ? <TasksetRewardPreview client={client} taskset={taskset} /> : null}
 

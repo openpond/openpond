@@ -1,3 +1,5 @@
+import type { ClientConnection } from "../../api";
+import { PendingTrainingTasksIcon } from "../labs/PendingTrainingTasksIcon";
 import { type Dispatch, type SetStateAction } from "react";
 import type {
   Experience,
@@ -36,6 +38,7 @@ import {
 } from "../labs/lab-primary-tab-state";
 
 type SidebarDestinationProps = {
+  connection?: ClientConnection | null; profileId?: string | null;
   experience?: Experience;
   productArea?: ProductArea;
   setSectionMenuOpen: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
@@ -52,6 +55,7 @@ type SidebarDestinationProps = {
 };
 
 export function SidebarNavigation({
+  connection = null, profileId = null,
   experience = "work",
   productArea = "chat",
   beginNewChat,
@@ -132,9 +136,9 @@ export function SidebarNavigation({
               onChange={(id) => void selectModelProject(id)}
             />
           </div>
-          {MODELS_PAGES.filter(page => !["tasksets", "evaluations", "versions", "serving"].includes(page)).map((page) => {
-            const Icon = { "get-started": Boxes, models: Activity, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
-            const selected = view === "labs" && (activePage === page || (page === "runs" && activePage === "evaluations") || (page === "models" && ["versions", "serving"].includes(activePage)) || (page === "tasks" && activePage === "tasksets"));
+          {MODELS_PAGES.filter(page => !["settings", "tasksets", "labeling", "evaluations", "versions", "serving"].includes(page)).map((page) => {
+            const Icon = { "get-started": Boxes, models: Activity, settings: Activity, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
+            const selected = view === "labs" && (activePage === page || (page === "runs" && activePage === "evaluations") || (page === "models" && ["settings", "versions", "serving"].includes(activePage)) || (page === "tasks" && activePage === "tasksets"));
             return (
               <button
                 className={`nav-command ${selected ? "active" : ""}`}
@@ -143,7 +147,7 @@ export function SidebarNavigation({
                 type="button"
                 onClick={() => void selectModelsPage(page)}
               >
-                <Icon size={16} />
+                <>{page === "tasks" ? <PendingTrainingTasksIcon connection={connection} profileId={profileId} modelId={selectedModelProjectId} models={modelProjects} /> : <Icon size={16} />}</>
                 <span>{MODELS_PAGE_LABELS[page]}</span>
                 {page === "runs" && selectedTrainingActivity ? <span className="sidebar-running-dot" aria-label={selectedTrainingActivity.label} /> : null}
               </button>
