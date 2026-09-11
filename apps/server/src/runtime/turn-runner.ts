@@ -762,6 +762,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             runDatasetBuilder: (context, action, input) =>
               executeDatasetBuilderAction({
                 session: context.session,
+                turnId: context.turnId,
+                callId: context.callId,
+                signal: context.signal,
                 provider: context.provider,
                 model: context.model,
                 action,
