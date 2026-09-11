@@ -251,7 +251,7 @@ it("pulls complete private packages atomically and exports their exact bytes aft
 }));
 
 // A valid release reference alone must never admit missing or altered private code.
-it.each(["code", "judge"] as const)("exports verified private %s Reward assets separately from policy task assets", async rewardKind => withTempDirectory("starter-private-export-", async home => {
+it.each(["code", "process", "judge"] as const)("exports verified private %s Reward assets separately from policy task assets", async rewardKind => withTempDirectory("starter-private-export-", async home => {
   const store = new SqliteStore(home);
   try {
     const input = await starterInput();
@@ -268,11 +268,16 @@ it.each(["code", "judge"] as const)("exports verified private %s Reward assets s
       implementation: { kind: "model_judge", rubricRef: rubric.asset, calibrationStatus: "passed", model: { providerId: "openpond", modelId: "deepseek-v4-flash", revision: null }, temperature: 0 }, rawScore: { minimum: 0, maximum: 1 }, assets: [rubric.asset, calibrationFixtures.asset],
       fixtureSetRef: calibrationFixtures.asset, calibrationCheckRef: { id: "invoice-check", revision: 1, contentHash: "c".repeat(64) } });
     const selectedAssets = rewardKind === "judge" ? [rubric] : input.package.assets;
-    const sources = bindingContent.sources.map(source => rewardKind === "judge" ? { ...source, reward: learningRef(judgeReward) } : source);
+    const { contentHash: _codeHash, ...codeContent } = input.package.rewards[0]!;
+    if (codeContent.implementation.kind !== "custom_verifier") throw new Error("Expected a fixture code verifier.");
+    const processReward = createRewardRelease({ ...codeContent, id: "invoice-process", implementation: { ...codeContent.implementation, runtime: "sandbox_process" } });
+    const selectedReward = rewardKind === "judge" ? judgeReward : rewardKind === "process" ? processReward : null;
+    const sources = bindingContent.sources.map(source => selectedReward ? { ...source, reward: learningRef(selectedReward) } : source);
     const binding = RewardBindingSchema.parse(sealLearningContent({ ...bindingContent, id: "managed-validation-binding",
       sources: [...sources, ...sources.map(source => ({ ...source, graderId: `${source.graderId}-evaluation`, role: "evaluation" }))] }));
     await store.learningRepository().transaction(saved.profileId, async tx => {
       if (rewardKind === "judge") { await tx.put("asset", rubric, 0); await tx.put("asset", calibrationFixtures, 0); await tx.put("reward", judgeReward, 0); }
+      if (rewardKind === "process") await tx.put("reward", processReward, 0);
       await tx.put("binding", binding, 0);
     });
     saved = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({ id: saved.id, profileId: saved.profileId,
@@ -280,9 +285,13 @@ it.each(["code", "judge"] as const)("exports verified private %s Reward assets s
       trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(binding) } }, saved.revision));
     const taskset = (await store.getTasksetRevision(saved.trainingSetup.tasksetRef!.id, saved.trainingSetup.tasksetRef!.revision))!;
     const resolved = await resolveTasksetTrainingReward(store, taskset);
-    expect(await resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: false })).toEqual(resolved);
-    await expect(resolveManagedTasksetReward(store, taskset, { placement: "local", hasLearnedPreferenceReward: false })).rejects.toThrow("additional managed execution adapter");
-    await expect(resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: true })).rejects.toThrow("additional managed execution adapter");
+    if (rewardKind === "process") {
+      await expect(resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: false })).rejects.toThrow("qualified isolated sandbox");
+    } else {
+      expect(await resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: false })).toEqual(resolved);
+      await expect(resolveManagedTasksetReward(store, taskset, { placement: "local", hasLearnedPreferenceReward: false })).rejects.toThrow("additional managed execution adapter");
+      await expect(resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: true })).rejects.toThrow("additional managed execution adapter");
+    }
     const previouslySaved = { ...taskset, metadata: { ...taskset.metadata } };
     delete previouslySaved.metadata.rewardExecution;
     previouslySaved.contentHash = computeTasksetHash(previouslySaved);
@@ -309,6 +318,11 @@ it.each(["code", "judge"] as const)("exports verified private %s Reward assets s
     const bundle = build();
     const privateFile = JSON.parse(new TextDecoder().decode(bundle.assets.get("reward-binding.json")));
     expect(privateFile).toEqual({ kind: "reward_binding_v1", ...resolved.rewardExecution, assets: selectedAssets });
+    if (rewardKind === "process") {
+      expect(taskset.graders.every(grader => grader.kind === "custom_verifier" && grader.runtime === "sandbox_process")).toBe(true);
+      expect(privateFile.rewards[0].implementation.runtime).toBe("sandbox_process");
+      expect(published.graders.every(grader => grader.kind === "custom_verifier" && grader.runtime === "sandbox_process")).toBe(true);
+    }
     expect(new TextDecoder().decode(bundle.assets.get("dataset/train.json"))).not.toContain(JSON.stringify(selectedAssets[0]!.text).slice(1, -1));
     expect(bundle.resolvedBundleManifest.files.some(file => file.path === "reward-binding.json")).toBe(true);
     expect(() => build([])).toThrow("private verifier asset");

@@ -2441,6 +2441,13 @@
               "type": "string",
               "const": "custom_verifier"
             },
+            "runtime": {
+              "type": "string",
+              "enum": [
+                "isolated_javascript",
+                "sandbox_process"
+              ]
+            },
             "verifierRef": {
               "$ref": "#/$defs/__schema21"
             },

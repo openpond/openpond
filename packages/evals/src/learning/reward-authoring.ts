@@ -26,7 +26,8 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
   let calibrationCheckRef: RewardRelease["calibrationCheckRef"];
   if (fields.kind === "custom_verifier") {
     asset = createLearningTextAsset({ text: fields.code, path: "verifier.mjs", mediaType: "application/javascript", visibility: "verifier" });
-    implementation = { kind: fields.kind, verifierRef: asset.asset, exportName: fields.exportName, timeoutMs: authoringNumber(fields.timeout, "Time limit"), networkPolicy: "none" };
+    implementation = { kind: fields.kind, verifierRef: asset.asset, exportName: fields.exportName, timeoutMs: authoringNumber(fields.timeout, "Time limit"), networkPolicy: "none",
+      ...(base?.implementation.kind === "custom_verifier" && base.implementation.runtime !== undefined ? { runtime: base.implementation.runtime } : {}) };
   } else if (fields.kind === "model_judge" || fields.kind === "human") {
     if (!fields.rubric.trim()) throw new LearningDomainError("reward_rubric_required", 422, "Write the rubric before checking or publishing this Reward.");
     asset = createLearningTextAsset({ text: fields.rubric, path: "rubric.md", mediaType: "text/markdown", visibility: "verifier" });

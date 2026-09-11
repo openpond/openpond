@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { createLearningTextAsset, learningRef, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
+import { compileRewardAuthoring, createLearningTextAsset, learningRef, rewardAuthoringFields, sealLearningContent, TaskDefinitionSchema } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { ModelStarterExecutionSchema, createModelStarterExecutionAsset, modelStarterExecutionAssetId, resolveModelStarterExecutionAsset } from "../src/model-starter-execution.js";
@@ -54,6 +54,34 @@ function reseal(value: Record<string, unknown> & { contentHash: string }) {
   const { contentHash: _old, ...content } = value;
   value.contentHash = sealLearningContent(content).contentHash;
 }
+
+// Native checker adapters must retain their required runtime through Model
+// creation and Reward rebinding as part of the exact immutable Reward.
+it("preserves the Reward verifier runtime through Model creation and rebinding", () => {
+  const { starter: _starter, ...source } = fixture();
+  Object.assign(source.rewards[0]!.implementation, { runtime: "sandbox_process" });
+  reseal(source.rewards[0]!);
+  source.rewardBinding.sources[0]!.reward = learningRef(source.rewards[0]!);
+  reseal(source.rewardBinding);
+  source.taskDefinition.rewardBinding = learningRef(source.rewardBinding);
+  reseal(source.taskDefinition);
+  source.taskset.graders = compileBoundGraders(source.rewardBinding, source.rewards);
+  reseal(source.taskset);
+  const rewardBinding = structuredClone(source.rewardBinding);
+  rewardBinding.sources[0]!.graderId = "renamed-answer";
+  reseal(rewardBinding);
+  const intent = { owner: { scopeId: "team", modelId: "model" }, source,
+    rewardBinding, rewards: source.rewards, assets: source.assets };
+  const derived = deriveModelTaskset(intent);
+  expect(derived.taskset.graders[0]).toMatchObject({ id: "renamed-answer", runtime: "sandbox_process" });
+  expect(derived.rewards[0]).toEqual(source.rewards[0]);
+  const edited = compileRewardAuthoring({ id: source.rewards[0]!.id, base: source.rewards[0]!,
+    fields: { ...rewardAuthoringFields(source.rewards[0]!, source.assets[0]!), name: "Renamed verifier" } });
+  expect(edited.reward.implementation).toMatchObject({ runtime: "sandbox_process" });
+  const replacement = fixture();
+  expect(deriveModelTaskset({ ...intent, rewardBinding: replacement.rewardBinding, rewards: replacement.rewards })
+    .taskset.graders[0]).not.toHaveProperty("runtime");
+});
 
 // Creation must carry exact source resources into Run setup without replacing
 // an edited recipe or selecting unrelated retained evaluation material.

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChatModelRefSchema } from "@openpond/harness/models";
+import { CustomVerifierRuntimeSchema } from "@openpond/evals/tasksets";
 import { DatasetSplitSchema } from "./taskset-draft-dataset-artifacts.js";
 import { ExternalDatasetSourceRefSchema } from "./taskset-draft-dataset-sources.js";
 import { HarnessActionBindingSchema } from "./taskset-draft-harness-actions.js";
@@ -306,6 +307,7 @@ export const HumanGraderSpecSchema = GraderBaseSchema.extend({
 
 export const CustomVerifierGraderSpecSchema = GraderBaseSchema.extend({
   kind: z.literal("custom_verifier"),
+  runtime: CustomVerifierRuntimeSchema.optional(),
   module: z.string().trim().min(1).max(1_000)
     .refine(safeRelativeFilePath, "Custom verifier modules must use a safe relative path."),
   exportName: CodeIdentifierSchema,
