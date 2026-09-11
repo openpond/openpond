@@ -58,8 +58,11 @@ export const ModelJudgeGraderSpecSchema = GraderBaseSchema.extend({
   model: z.object({ providerId: ReleaseIdSchema, modelId: ReleaseIdSchema, revision: z.string().trim().min(1).max(500).nullable() }).strict().optional(),
   temperature: z.number().min(0).max(2).optional(),
 }).strict();
+export const CustomVerifierRuntimeSchema = z.enum(["isolated_javascript", "sandbox_process"]);
 export const CustomVerifierGraderSpecSchema = GraderBaseSchema.extend({
   kind: z.literal("custom_verifier"),
+  // Omission retains the original isolated-JavaScript contract and hash.
+  runtime: CustomVerifierRuntimeSchema.optional(),
   verifierRef: ImmutableAssetRefSchema,
   exportName: z.string().trim().min(1).max(240).optional(),
   timeoutMs: z.number().int().positive().max(300_000),

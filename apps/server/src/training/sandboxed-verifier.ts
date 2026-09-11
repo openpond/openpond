@@ -24,7 +24,7 @@ export async function runSandboxedVerifier(input: {
   }
   const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   return executeJavaScriptVerifierInWorker({
-    source, exportName: input.grader.exportName, timeoutMs: input.grader.timeoutMs, signal: input.signal,
+    source, exportName: input.grader.exportName, runtime: input.grader.runtime, timeoutMs: input.grader.timeoutMs, signal: input.signal,
     value: {
       task: input.task, attempt: input.attempt, input: input.task.input,
       expectedOutput: input.task.expectedOutput, output: input.attempt.output,

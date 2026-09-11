@@ -22,7 +22,7 @@ export function createIsolatedRewardFixtureExecutor(options: {
           if (!asset) throw new Error("reward_check_source_missing");
           const source = verifyLearningTextAsset(asset, grader.verifierRef);
           const result = await options.executeJavaScript({
-            source, exportName: grader.exportName, signal: input.signal,
+            source, exportName: grader.exportName, runtime: grader.runtime, signal: input.signal,
             timeoutMs: Math.min(grader.timeoutMs, input.run.timeoutMs),
             value: { task, attempt: evidence, input: task.input, output: evidence.output, expectedOutput: task.expectedOutput,
               evaluatorContext: input.fixture.evaluatorContext, infrastructureError: evidence.infrastructureError ?? null },

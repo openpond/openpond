@@ -57,7 +57,7 @@ export async function executeLocalLearningVerifier(input: {
     await requireLearningResource(transaction, "asset", input.grader.verifierRef.id, 1), input.grader.verifierRef,
   ));
   return executeJavaScriptVerifierInWorker({
-    source, exportName: input.grader.exportName, timeoutMs: Math.min(input.grader.timeoutMs, input.timeoutMs ?? input.grader.timeoutMs), signal: input.signal,
+    source, exportName: input.grader.exportName, runtime: input.grader.runtime, timeoutMs: Math.min(input.grader.timeoutMs, input.timeoutMs ?? input.grader.timeoutMs), signal: input.signal,
     value: { task: input.task, attempt: input.evidence, input: input.task.input, output: input.evidence.output,
       expectedOutput: input.task.expectedOutput, evaluatorContext: input.evaluatorContext, infrastructureError: input.evidence.infrastructureError ?? null },
   });

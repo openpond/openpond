@@ -354,6 +354,7 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
     return {
       ...base,
       kind: "custom_verifier",
+      ...(grader.runtime === undefined ? {} : { runtime: grader.runtime }),
       verifierRef: ImmutableAssetRefSchema.parse(grader.metadata.portableVerifierRef),
       timeoutMs: grader.timeoutMs,
       ...(preserveDefault ? {} : { exportName: grader.exportName }),

@@ -32,6 +32,19 @@ runtime processes.
 
 ## Compatibility policy
 
+Custom verifiers may declare `runtime: "sandbox_process"` when their private
+module needs filesystem or subprocess access. The requirement belongs to the
+immutable Reward implementation and compiled grader, so Model derivation,
+Reward rebinding, reviewed learning batches and training export retain it.
+Omitting `runtime` keeps the original isolated JavaScript behavior and hashes.
+
+A runtime declaration grants no execution permission. The host must use a
+quiescent sandbox with network egress blocked, keep the verifier private from
+the policy, enforce its deadline, stop its process group and complete cleanup
+before accepting a result. Isolated JavaScript executors reject a declared
+process runtime; callers must pass the grader's `runtime` to those executors.
+Declaring the runtime does not qualify a source package or its dependencies.
+
 - Schema versions are literal and independent from package semver.
 - `openpond.harnessRunManifest.v1` and `openpond.taskAttempt.v1` remain accepted
   host persistence formats during migration, but are not emitted as new public

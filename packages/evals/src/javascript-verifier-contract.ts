@@ -7,3 +7,7 @@ export const JavaScriptVerifierResultSchema = z.object({
   evidenceRefs: z.array(z.string().max(240)).max(1_000).default([]),
 }).strict();
 export type JavaScriptVerifierResult = z.infer<typeof JavaScriptVerifierResultSchema>;
+/** A process checker must never silently execute under different semantics. */
+export function assertIsolatedVerifierRuntime(runtime?: "isolated_javascript" | "sandbox_process"): void {
+  if (runtime === "sandbox_process") throw new Error("verifier_sandbox_process_required");
+}
