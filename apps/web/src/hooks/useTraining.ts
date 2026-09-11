@@ -140,6 +140,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     await queries.cancelQueries({ queryKey, exact: true });
     await queries.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
     await queries.invalidateQueries({ queryKey: ["task-inventory", connectionScope, profileId] });
+    await queries.invalidateQueries({ queryKey: ["hosted-model-projects", connectionScope, profileId] });
     return refresh();
   }, [queries, queryKey, connectionScope, profileId, refresh]);
 

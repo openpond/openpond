@@ -7,7 +7,7 @@ export function emptyTaskRating(): TaskRating {
 export function TaskRatingFields({ value, onChange }: { value: TaskRating; onChange: (value: TaskRating) => void }) {
   return <fieldset><legend>Rate this response</legend>
     <label>Criteria<textarea value={value.criteria} placeholder="What makes this response good?" maxLength={20_000} onChange={event => onChange({ ...value, criteria: event.target.value })} /></label>
-    <div className="learning-evidence-columns">
+    <div className="learning-rating-scale">
       <label>Lowest score<input type="number" step="any" value={Number.isFinite(value.scale.minimum) ? value.scale.minimum : ""} onChange={event => onChange({ ...value, scale: { ...value.scale, minimum: event.target.valueAsNumber } })} /></label>
       <label>Highest score<input type="number" step="any" value={Number.isFinite(value.scale.maximum) ? value.scale.maximum : ""} onChange={event => onChange({ ...value, scale: { ...value.scale, maximum: event.target.valueAsNumber } })} /></label>
       <label>Score<input type="number" min={Number.isFinite(value.scale.minimum) ? value.scale.minimum : undefined} max={Number.isFinite(value.scale.maximum) ? value.scale.maximum : undefined} step="any" value={Number.isFinite(value.score) ? value.score : ""} onChange={event => onChange({ ...value, score: event.target.valueAsNumber })} /></label>

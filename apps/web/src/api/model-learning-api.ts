@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { HostedModelProjectSummarySchema } from "openpond-sdk/model-projects";
-import { OpenPondLearningClient, LearningSourceSchema, TaskDefinitionSchema, LearningPolicySchema, LearningPolicyInspectionResultSchema, LearningScheduleSchema,
+import { OpenPondLearningClient, LearningTaskQueueInspectionSchema, LearningSourceSchema, TaskDefinitionSchema, LearningPolicySchema, LearningPolicyInspectionResultSchema, LearningScheduleSchema,
   LearningIterationSchema, LearningIterationDispatchSchema, LearningOperationResultSchema, type LearningCommand } from "openpond-sdk/learning";
 import { api, type ClientConnection } from "../api";
 import { connectionQueryScope, scopeLearningClient } from "../lib/query-scope";
@@ -25,6 +25,9 @@ export function createHostedModelLearningApi(connection: ClientConnection, model
           ...init, body: JSON.stringify({ policyId, sourceId, endpoint, request: JSON.parse(String(init?.body)) }),
         });
       } }), ["learning", connectionQueryScope(connection), profileId, "hosted", modelId, policyId, sourceId]);
+    },
+    async taskQueue(workspace = false) {
+      return LearningTaskQueueInspectionSchema.parse(await api.trainingRequest<unknown>(connection, `${path}/task-queue?${new URLSearchParams({ profileId, workspace: String(workspace) })}`, undefined, "GET"));
     },
     async sources(afterId?: string) {
       return SourcesSchema.parse(await api.trainingRequest<unknown>(connection, `${path}/sources?${new URLSearchParams({ profileId, ...(afterId ? { afterId } : {}) })}`, undefined, "GET"));

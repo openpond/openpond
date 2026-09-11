@@ -88,7 +88,7 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
 
-      <SidebarNavigation
+      <SidebarNavigation connection={props.connection} profileId={props.profile?.activeProfile ?? "default"}
         productArea={productArea}
         experience={experience}
         beginNewChat={beginNewChat}

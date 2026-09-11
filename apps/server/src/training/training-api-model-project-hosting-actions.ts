@@ -2,9 +2,10 @@ import { LearningCommandSchema } from "openpond-sdk/learning";
 import type { createModelProjectHostingService } from "./model-project-hosting.js";
 
 type ModelProjectHosting = ReturnType<typeof createModelProjectHostingService>;
-type HostingAction = "open_hosted_model_project" | "hosted_model_learning_review" | "hosted_model_learning_sources" | "hosted_model_learning" | "hosted_model_learning_command" | "hosted_model_projects" | "pull_hosted_model_project" | "sync_model_project" | "hosted_taskset_runs" | "hosted_taskset_run" | "cancel_hosted_taskset_run" | "hosted_taskset_run_result";
+type HostingAction = "hosted_model_task_queue" | "open_hosted_model_project" | "hosted_model_learning_review" | "hosted_model_learning_sources" | "hosted_model_learning" | "hosted_model_learning_command" | "hosted_model_projects" | "pull_hosted_model_project" | "sync_model_project" | "hosted_taskset_runs" | "hosted_taskset_run" | "cancel_hosted_taskset_run" | "hosted_taskset_run_result";
 
 const hostingActions = new Set<string>([
+  "hosted_model_task_queue",
   "open_hosted_model_project",
   "hosted_model_learning_review",
   "hosted_model_learning_sources",
@@ -23,6 +24,7 @@ export async function runModelProjectHostingAction(
   input: Record<string, unknown>,
 ): Promise<unknown> {
   if (!service) throw new Error(`Hosted Model Project ${actionLabel(action)} is unavailable.`);
+  if (action === "hosted_model_task_queue") return service.learning.taskQueue({ modelId: requiredString(input.modelId, "modelId"), profileId: requiredString(input.profileId, "profileId"), workspace: input.workspace === true });
   if (action === "open_hosted_model_project") return service.openProject({ hostedProjectId: requiredString(input.hostedProjectId, "hostedProjectId"), profileId: requiredString(input.profileId, "profileId"), teamId: requiredString(input.teamId, "teamId"), apiOrigin: requiredString(input.apiOrigin, "apiOrigin") });
   if (action === "hosted_model_learning" || action === "hosted_model_learning_command" || action === "hosted_model_learning_sources" || action === "hosted_model_learning_review") {
     const scope = { modelId: requiredString(input.modelId, "modelId"), profileId: requiredString(input.profileId, "profileId") };
