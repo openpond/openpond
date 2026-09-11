@@ -285,9 +285,13 @@ it.each(["code", "process", "judge"] as const)("exports verified private %s Rewa
       trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(binding) } }, saved.revision));
     const taskset = (await store.getTasksetRevision(saved.trainingSetup.tasksetRef!.id, saved.trainingSetup.tasksetRef!.revision))!;
     const resolved = await resolveTasksetTrainingReward(store, taskset);
-    expect(await resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: false })).toEqual(resolved);
-    await expect(resolveManagedTasksetReward(store, taskset, { placement: "local", hasLearnedPreferenceReward: false })).rejects.toThrow("additional managed execution adapter");
-    await expect(resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: true })).rejects.toThrow("additional managed execution adapter");
+    if (rewardKind === "process") {
+      await expect(resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: false })).rejects.toThrow("qualified isolated sandbox");
+    } else {
+      expect(await resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: false })).toEqual(resolved);
+      await expect(resolveManagedTasksetReward(store, taskset, { placement: "local", hasLearnedPreferenceReward: false })).rejects.toThrow("additional managed execution adapter");
+      await expect(resolveManagedTasksetReward(store, taskset, { placement: "remote", hasLearnedPreferenceReward: true })).rejects.toThrow("additional managed execution adapter");
+    }
     const previouslySaved = { ...taskset, metadata: { ...taskset.metadata } };
     delete previouslySaved.metadata.rewardExecution;
     previouslySaved.contentHash = computeTasksetHash(previouslySaved);

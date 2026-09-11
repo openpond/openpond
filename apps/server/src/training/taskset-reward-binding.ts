@@ -62,6 +62,9 @@ export async function resolveManagedTasksetReward(store: SqliteStore, taskset: T
   if (!resolved.rewardExecution.binding.sources.some(source => source.role === "evaluation" && source.weight > 0)) {
     throw new Error("Managed training requires a positively weighted evaluation Reward source for retained validation.");
   }
+  if (graders.some(grader => grader.kind === "custom_verifier" && grader.runtime === "sandbox_process")) {
+    throw new Error("Managed preparation requires a qualified isolated sandbox for process verifiers.");
+  }
   if (options.placement !== "remote" || taskset.environment.kind === "work"
     || taskset.capabilities.requiresState || taskset.capabilities.requiresTools
     || graders.some(grader => grader.kind === "human" || (grader.kind === "model_judge" && (!grader.model || grader.calibrationStatus !== "passed")))
