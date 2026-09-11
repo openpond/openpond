@@ -6,6 +6,34 @@
       "properties": {
         "action": {
           "type": "string",
+          "const": "inspect_task_queue"
+        },
+        "scope": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "modelProjectId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema0"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "action",
+        "scope",
+        "modelProjectId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
           "const": "inspect_policy"
         },
         "scope": {

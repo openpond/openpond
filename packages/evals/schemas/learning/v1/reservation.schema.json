@@ -77,6 +77,23 @@
             "scheduledAt"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "approved_count"
+            },
+            "checkedAt": {
+              "$ref": "#/$defs/__schema2"
+            }
+          },
+          "required": [
+            "kind",
+            "checkedAt"
+          ],
+          "additionalProperties": false
         }
       ]
     },

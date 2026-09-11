@@ -32,6 +32,7 @@ export async function checkModelProjectConfiguration(input: {
   const findings: ModelProjectConfigurationCheck["findings"] = [];
   const deferred: ModelProjectConfigurationCheck["deferred"] = [];
   const error = (code: string, message: string, field: string) => findings.push({ code, message, field, severity: "error" });
+  if (request.learning) error("model_learning_hosted_required", "Create this Model in a hosted workspace to enable continual learning.", "learning");
   const existing = await input.store.getModelProject(project.id);
   if (existing && existing.profileId !== project.profileId) {
     error("model_not_found", "Model is not available in this Profile.", "id");

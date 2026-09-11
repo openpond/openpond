@@ -1,7 +1,28 @@
-import { LearningDomainError, LearningPolicyContentSchema, type LearningPolicy, type LearningRevisionRef } from "@openpond/evals/learning";
+import { LearningDomainError, LearningPolicyContentSchema, LearningSourceContentSchema, learningRef, sameLearningRef, sealLearningContent, type TaskDefinition, type LearningPolicy, type LearningRevisionRef } from "@openpond/evals/learning";
 import { contentHash } from "@openpond/harness";
 
 import type { HostedModelProjectSummary } from "./model-projects.js";
+import { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
+
+/** Compile the simple creation choice into exact source and policy releases.
+ * Hosts commit these with the new Model and its idempotency receipt. */
+export function initialHostedModelLearning(input: { project: HostedModelProjectSummary; definition: TaskDefinition; learning: ModelInitialLearning }) {
+  const learning = ModelInitialLearningSchema.parse(input.learning);
+  const { project, definition } = input;
+  if (!project.trainingSetup.rewardBindingRef || !sameLearningRef(definition.rewardBinding, project.trainingSetup.rewardBindingRef)) throw new LearningDomainError("learning_policy_binding_mismatch", 422, "The task format must use the Model's selected grader.");
+  const source = LearningSourceContentSchema.parse({ schemaVersion: "openpond.learningSource.v1", id: `model-source-${contentHash([project.portableProjectId, learningRef(definition)])}`,
+    revision: 1, name: `${project.name} tasks`, kind: "direct", taskDefinition: learningRef(definition), enabled: true,
+    allowedSplits: ["train", "validation", "test", "frozen_eval"], mapping: null, adapterVersion: null });
+  const policy = createHostedLearningPolicyContent({ project, previous: null, policyId: `model-policy-${contentHash(project.portableProjectId)}`,
+    applyModelConfiguration: true, sources: [learningRef(sealLearningContent(source))], taskDefinition: learningRef(definition),
+    settings: { ...hostedLearningPolicyDefaults(project, null), enabled: true, scheduled: true,
+      trigger: learning.mode === "nightly" ? { kind: "nightly", localTime: learning.localTime, timeZone: learning.timeZone } : { kind: "approved_count" },
+      minimumApprovedExamples: learning.minimumTasks, maxBatchExamples: learning.minimumTasks,
+      maxIterationSpendUsd: learning.maximumSpendUsd, maxDailySpendUsd: learning.maximumDailySpendUsd,
+      cooldownSeconds: 0, maxBacklogExamples: Math.max(1_000, learning.minimumTasks * 10),
+    } });
+  return { source, policy };
+}
 
 /** Shared starting values for both Model clients. Existing policies retain
  * their exact limits; opening settings must never silently increase spending. */
@@ -9,11 +30,11 @@ export function hostedLearningPolicyDefaults(project: HostedModelProjectSummary,
   const maximumSpend = policy?.limits.maxIterationSpendUsd ?? project.trainingSetup.preferredMaximumSpendUsd ?? 1;
   return {
     enabled: policy?.enabled ?? false,
-    scheduled: policy?.trigger.kind === "schedule",
+    scheduled: Boolean(policy && ["schedule", "nightly", "approved_count"].includes(policy.trigger.kind)),
     intervalSeconds: policy?.trigger.kind === "schedule" ? policy.trigger.intervalSeconds : 86_400,
     humanReviewRequired: policy?.admission.mode !== "qualified_automatic",
-    minimumApprovedExamples: policy?.admission.minimumApprovedExamples ?? 8,
-    maxBatchExamples: policy?.limits.maxBatchExamples ?? 8,
+    minimumApprovedExamples: policy?.admission.minimumApprovedExamples ?? 10,
+    maxBatchExamples: policy?.limits.maxBatchExamples ?? 10,
     maxIterationSpendUsd: maximumSpend,
     maxDailySpendUsd: policy?.limits.maxDailySpendUsd ?? maximumSpend,
     cooldownSeconds: policy?.limits.cooldownSeconds ?? 3_600,
@@ -26,6 +47,7 @@ export interface HostedLearningPolicySettings {
   enabled: boolean;
   scheduled: boolean;
   intervalSeconds: number;
+  trigger?: Exclude<LearningPolicy["trigger"], { kind: "upstream_accepted" }>;
   humanReviewRequired: boolean;
   minimumApprovedExamples: number;
   maxBatchExamples: number;
@@ -55,6 +77,7 @@ export function createHostedLearningPolicyContent(input: {
   const applyModel = input.applyModelConfiguration || !previous;
   const refs = applyModel ? hostedLearningPolicyReferences(project) : null;
   const method = applyModel ? project.trainingSetup.recipe?.method : previous?.training.method;
+  const trigger = settings.trigger ?? (settings.scheduled ? { kind: "schedule" as const, intervalSeconds: settings.intervalSeconds } : { kind: "manual" as const });
   if (settings.enabled && method !== "grpo") {
     throw new LearningDomainError("learning_training_method_unsupported", 422, "Hosted continual learning currently supports GRPO.");
   }
@@ -66,7 +89,7 @@ export function createHostedLearningPolicyContent(input: {
     admission: { mode: settings.humanReviewRequired ? "human" : "qualified_automatic",
       qualification: settings.humanReviewRequired ? null : previous?.admission.qualification ?? null,
       minimumApprovedExamples: settings.minimumApprovedExamples },
-    trigger: settings.scheduled ? { kind: "schedule", intervalSeconds: settings.intervalSeconds } : { kind: "manual" },
+    trigger,
     trainingParent: refs?.trainingParent ?? previous?.trainingParent,
     teacher: previous?.teacher ?? null,
     training: { method, recipe: refs?.recipe ?? previous?.training.recipe,
@@ -75,7 +98,7 @@ export function createHostedLearningPolicyContent(input: {
     limits: { maxIterationSpendUsd: settings.maxIterationSpendUsd, maxDailySpendUsd: settings.maxDailySpendUsd,
       cooldownSeconds: settings.cooldownSeconds, maxRetries: settings.maxRetries,
       maxBatchExamples: settings.maxBatchExamples, maxBacklogExamples: settings.maxBacklogExamples },
-    automation: { collect: false, train: settings.scheduled, accept: false, serve: false },
+    automation: { collect: false, train: trigger.kind !== "manual", accept: false, serve: false },
     acceptance: previous?.acceptance ?? { minimumScore: 0, maximumRetentionRegression: 0, requireImprovement: true, rollbackVersion: null },
   });
 }

@@ -9,6 +9,8 @@ import { assertRewardCalibration, qualifyRewardCheck } from "./reward-calibratio
 import { queueRewardCheck, cancelRewardCheck } from "./reward-check-service.js";
 import { LearningDomainError } from "./errors.js";
 import { contentHash } from "@openpond/harness";
+import { inspectLearningTaskQueue } from "./task-queue-inspection.js";
+import { LearningReadRequestSchema } from "./transport.js";
 
 import { createRewardBinding, createRewardRelease, type RewardComposition } from "../rewards.js";
 import { assertBoundedTaskJson, validateTaskValue } from "../task-schema.js";
@@ -302,6 +304,12 @@ export function createLearningService(repository: LearningRepository, options: {
 
   return {
     command,
+    async inspectTaskQueue(context: LearningServiceContext, modelProjectId: string | null = null) {
+      authorizeRead(context);
+      const input = LearningReadRequestSchema.parse({ action: "inspect_task_queue", scope: context.scope, modelProjectId });
+      if (input.action !== "inspect_task_queue") throw new LearningDomainError("learning_request_invalid", 400);
+      return repository.transaction(context.scope, transaction => inspectLearningTaskQueue(transaction, input.modelProjectId, now()));
+    },
     async inspectPolicy(context: LearningServiceContext, reference: LearningRevisionRef) {
       authorizeRead(context);
       const ref = LearningRevisionRefSchema.parse(reference);
@@ -345,7 +353,7 @@ function authorize(context: LearningServiceContext, input: LearningCommand): voi
   if (!context.scope.trim() || !context.actor.id.trim()) throw new LearningDomainError("learning_scope_required", 400);
   const publications = input.action === "publish" ? [input] : input.action === "publish_resources" ? input.resources : [];
   if (context.actor.role !== "reviewer" && publications.some(value => value.kind === "policy" && value.content.enabled
-    && value.content.automation.train && value.content.trigger.kind === "schedule")) throw new LearningDomainError("learning_review_not_authorized", 403);
+    && value.content.automation.train && value.content.trigger.kind !== "manual")) throw new LearningDomainError("learning_review_not_authorized", 403);
   if (context.actor.role === "source") {
     const sourceId = input.action === "submit_example" ? input.example.sourceId : input.action === "submit_feedback" ? input.feedback.sourceId : null;
     if (!sourceId || sourceId !== context.actor.sourceId) throw new LearningDomainError("learning_source_not_authorized", 403);

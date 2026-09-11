@@ -48,6 +48,7 @@ export function commitModelProjectSave(db: OpenPondSqliteConnection, value: Mode
 /** The caller owns the transaction and write queue. */
 export function saveModelProjectInTransaction(db: OpenPondSqliteConnection, value: ModelProjectSaveRequest, prepared?: PreparedModelTaskset | null, sourcePackage?: ModelTasksetPackage | TasksetPackage): ModelProject {
   const request = parseModelProjectSaveRequest(value);
+  if (request.learning) fail(422, "model_learning_hosted_required", "Create this Model in a hosted workspace to enable continual learning.");
   const hash = createHash("sha256").update(canonicalJson(request)).digest("hex");
   const { project, operationId, expectedRevision } = request;
   const prior = findModelProjectSave(db, request);

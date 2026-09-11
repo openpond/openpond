@@ -120,3 +120,21 @@ preparation. The returned `tasksetAssetBytes` map uses task-scoped paths and is
 passed to `buildTasksetTrainingBundle` or materialized beside the local Taskset.
 Input content participates in the existing privacy scan. File state is reset and
 cleaned up between attempts; a Work environment may hold state during an attempt.
+
+### Simple continual-learning creation
+
+Hosted creation can pass `learning` to `createModelProjectSaveRequest` as its
+third argument, or in `createModelStarterCreationRequest`. The intent contains
+`mode` (`nightly` or `approved_count`), `minimumTasks`, `localTime`, `timeZone`,
+`maximumSpendUsd` and `maximumDailySpendUsd`. It participates in the operation
+hash. The hosted owner commits the Model, exact task source, enabled policy and
+receipt together; a failed policy cannot leave a partially created Model.
+Local creation rejects this hosted intent. Existing Models edit the authoritative
+policy with Learning commands instead of resubmitting creation preferences.
+
+`createHostedLearningPolicyContent` accepts an explicit `settings.trigger` for
+nightly, task-count, interval or manual policies. New settings default to ten
+tasks; existing policy limits remain unchanged. Candidates still require explicit
+acceptance and serving selection. `learning.inspectTaskQueue(modelProjectId?)`
+returns the shared eligible, unconsumed task count, or explicit issues when the
+count cannot be determined.

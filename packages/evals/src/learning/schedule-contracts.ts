@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
 import { LearningRevisionRefSchema } from "./contracts.js";
+import { NightlyScheduleSchema } from "./nightly-schedule.js";
 
 /** The durable timer is operational state; every fire retains its own policy. */
 export const LearningScheduleSchema = z.object({
@@ -12,6 +13,7 @@ export const LearningScheduleSchema = z.object({
   executionOwner: z.enum(["local", "hosted"]),
   state: z.enum(["scheduled", "disabled", "blocked"]),
   intervalSeconds: z.number().int().min(60).max(31_536_000).nullable(),
+  calendar: NightlyScheduleSchema.nullable().default(null),
   nextRunAt: ReleaseTimestampSchema.nullable(),
   lastFire: LearningRevisionRefSchema.nullable(),
   consecutiveFailures: z.number().int().nonnegative(),
@@ -20,10 +22,11 @@ export const LearningScheduleSchema = z.object({
   createdAt: ReleaseTimestampSchema,
   updatedAt: ReleaseTimestampSchema,
 }).strict().superRefine((value, context) => {
-  if (value.state !== "disabled" && (!value.intervalSeconds || !value.nextRunAt))
+  if (value.state !== "disabled" && ((!value.intervalSeconds && !value.calendar) || !value.nextRunAt))
     context.addIssue({ code: "custom", path: ["nextRunAt"], message: "An active timer must retain its cadence and due time." });
   if (value.state === "disabled" && value.nextRunAt)
     context.addIssue({ code: "custom", path: ["nextRunAt"], message: "A disabled timer cannot have a pending occurrence." });
+  if (value.intervalSeconds && value.calendar) context.addIssue({ code: "custom", path: ["calendar"], message: "A timer uses either an interval or a nightly calendar." });
 });
 
 /** Immutable occurrence evidence survives timer edits and coalesced downtime. */

@@ -339,3 +339,23 @@ Taskset output paths, media types, schema references and size bounds. Evidence
 conversion copies them into every task before grading or sealing a batch, so a
 changed output contract requires a new definition and new matching evidence and
 review receipts. Definitions without this field retain their existing hashes.
+
+## Nightly and task-count triggers
+
+Policies may use `trigger: { kind: "nightly", localTime: "20:00", timeZone:
+"America/New_York" }`. The durable timer computes the next local date in that
+IANA timezone. DST repeats use the earlier occurrence once; missing local times
+advance by the DST gap. Calendar edits recompute the due time; unchanged calendars
+retain it. Existing `schedule` policies retain elapsed-interval semantics.
+
+`trigger: { kind: "approved_count" }` uses `admission.minimumApprovedExamples`
+as its threshold and checks once per minute. Below-threshold checks advance the
+timer without creating iterations or fire records. Once ready, the same atomic
+reservation, consumption, budget, cooldown and execution-owner checks apply.
+Both new automatic triggers require reviewer authorization to enable.
+
+`service.inspectTaskQueue(context, modelProjectId?)` is a read-only snapshot of
+unique eligible, unconsumed training attempts across current policies. It
+deduplicates shared sources and excludes held-out family reservations. Paused
+policies retain pending tasks. An invalid policy yields a null count and explicit
+issues rather than a misleading zero. Source credentials cannot read the queue.

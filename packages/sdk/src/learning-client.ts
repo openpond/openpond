@@ -3,6 +3,7 @@ import {
   LearningCommandRequestSchema, LearningOperationResultSchema, LearningReadRequestSchema,
   TaskEvidenceInspectionResultSchema, sameLearningRef, type LearningRevisionRef,
   LearningPolicyInspectionResultSchema,
+  LearningTaskQueueInspectionSchema,
   assertLearningRequestJson,
   learningResourceSchemas, type LearningCommand, type LearningOperationResult,
   type LearningResourceFor, type LearningResourceKind, type LearningResourcePage,
@@ -68,6 +69,14 @@ export class OpenPondLearningClient {
     const request = LearningReadRequestSchema.parse({ action: "inspect_evidence", scope: this.#options.scope, evidence });
     const result = TaskEvidenceInspectionResultSchema.parse(await this.#request("read", request, options));
     if (!sameLearningRef(result.evidence, evidence)) throw new OpenPondLearningError(502, "evidence_identity_mismatch", "Inspection did not match the requested evidence release.", null);
+    return result;
+  }
+
+  /** Read current shared eligibility and budget without reserving or launching work. */
+  async inspectTaskQueue(modelProjectId: string | null = null, options: LearningRequestOptions = {}) {
+    const request = LearningReadRequestSchema.parse({ action: "inspect_task_queue", scope: this.#options.scope, modelProjectId });
+    const result = LearningTaskQueueInspectionSchema.parse(await this.#request("read", request, options));
+    if (result.modelProjectId !== modelProjectId) throw new OpenPondLearningError(502, "model_identity_mismatch", "Task queue did not match the requested Model.", null);
     return result;
   }
 
