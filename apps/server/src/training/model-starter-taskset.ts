@@ -3,8 +3,9 @@ import { learningRef, sameLearningRef, verifyLearningTextAsset } from "@openpond
 import { computeTasksetHash, createTasksetDraft, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft } from "@openpond/taskset-sdk";
 import { deriveModelTaskset, ModelStarterToolFixtureScriptSchema, validateModelStarterCreation, type ModelStarterCreationRequest, type ModelTasksetPackage } from "openpond-sdk/model-starters";
 
-/** Trusted catalog publication supplies authored fixtures and reviewed training
- * targets. These inputs are not accepted from the final model-creation request.
+/** Trusted catalog publication supplies authored fixtures and approved training
+ * tasks. SFT also requires reviewed target answers; GRPO references stay grader
+ * inputs. These inputs are not accepted from the final model-creation request.
  * Fixture expectations remain authored assertions until readiness executes them. */
 export function prepareModelStarterTaskset(input: {
   request: ModelStarterCreationRequest;
@@ -29,9 +30,10 @@ export function prepareModelStarterTaskset(input: {
   if (approved.size !== input.approvedTrainingTaskIds.length) throw new Error("Starter training approvals must be unique.");
   for (const id of approved) {
     const task = release.tasks.find(task => task.id === id);
-    if (!task || task.split !== "train" || task.expectedOutput === null) throw new Error(`Starter approval must reference a training task with a target: ${id}.`);
+    if (!task || task.split !== "train") throw new Error(`Starter approval must reference a training task: ${id}.`);
+    if (request.method === "sft" && task.expectedOutput === null) throw new Error(`SFT starter approval requires a reviewed target: ${id}.`);
   }
-  if (request.method === "grpo" && release.tasks.some(task => task.split === "train" && !approved.has(task.id))) throw new Error("GRPO starter preparation requires approval of every training task's reference target.");
+  if (request.method === "grpo" && release.tasks.some(task => task.split === "train" && !approved.has(task.id))) throw new Error("GRPO starter preparation requires approval of every training task.");
   for (const fixture of input.fixtures) {
     if (!release.tasks.some(task => task.id === fixture.taskId)) throw new Error(`Starter fixture references an unknown task: ${fixture.taskId}.`);
     if (toolEnvironment && !fixture.infrastructureError) ModelStarterToolFixtureScriptSchema.parse(fixture.metadata.toolScript);
@@ -54,7 +56,7 @@ export function prepareModelStarterTaskset(input: {
     policy: release.policy,
     environment: { ...draft.environment, kind: toolEnvironment ? "agent" : "chat", entrypoint: release.environment.entrypoint, stateful: release.environment.stateful, toolNames: release.tools.map(tool => tool.name), deterministicSeeds: release.environment.deterministicSeeds, defaultTimeoutMs: release.environment.defaultTimeoutMs, networkPolicy: release.environment.networkPolicy, metadata: { portableEnvironment: release.environment, portableTools: release.tools, ...(resources.executionResources ? { portableExecutionResources: resources.executionResources } : resources.execution ? { portableExecutionResources: { environment: resources.execution.environment, verifierSet: resources.execution.verifierSet } } : {}) } },
     output: { mode: "structured_json", jsonSchema: taskDefinition.outputSchema, renderer: null },
-    capabilities: { ...draft.capabilities, taskKind: toolEnvironment ? "single_agent" : "chat", requiresTools: toolEnvironment, requiresState: toolEnvironment, supportedSignals: request.method === "grpo" ? ["demonstration", "reward"] : ["demonstration"], compatibleMethods: [request.method], rewardKinds: [...new Set(release.graders.map(grader => grader.kind === "human" ? "human" : grader.kind === "model_judge" ? "model_judge" : "deterministic"))], requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"] },
+    capabilities: { ...draft.capabilities, taskKind: toolEnvironment ? "single_agent" : "chat", requiresTools: toolEnvironment, requiresState: toolEnvironment, supportedSignals: request.method === "grpo" ? ["reward"] : ["demonstration"], compatibleMethods: [request.method], rewardKinds: [...new Set(release.graders.map(grader => grader.kind === "human" ? "human" : grader.kind === "model_judge" ? "model_judge" : "deterministic"))], requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"] },
     tasks: release.tasks.map(({ artifactRefs: _artifacts, ...task }) => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [input.source.id], metadata: { exampleOrigin: "curated_starter", starter: learningRef(starter), portableTaskRecord: { ...task, artifactRefs: [] } } })),
     graders: projectLearningBatchGraders(rewardBinding, rewards, assets),
     graderFixtures: input.fixtures,
@@ -63,10 +65,10 @@ export function prepareModelStarterTaskset(input: {
       rules: [{ id: rewardBinding.id, points: 1, condition: "Execute the published Reward binding with its declared normalization, weights and required gates." }],
       otherwisePoints: 0, executable: true, approved: true, confidence: 1, sourceRefs: [input.source.id], artifactRef: rewardBinding.id,
       metadata: { starter: learningRef(starter), rewardBinding: learningRef(rewardBinding), approvalOrigin: "catalog_publication" },
-    })) : [], demonstrations: release.tasks.filter(task => approved.has(task.id)).map(task => ({
+    })) : [], demonstrations: request.method === "sft" ? release.tasks.filter(task => approved.has(task.id)).map(task => ({
       kind: "demonstration", id: `starter-target-${task.id}`, taskId: task.id, sourceRefs: [input.source.id], artifactRef: release.id,
       approved: true, confidence: 1, prompt: null, response: JSON.stringify(task.expectedOutput), metadata: { starter: learningRef(starter), approvalOrigin: "catalog_publication" },
-    })) },
+    })) : [] },
     metadata: { starter: learningRef(starter), starterTasksetRelease: learningRef(release), taskDefinition: learningRef(taskDefinition), rewardBinding: learningRef(rewardBinding), rewardExecution: { binding: rewardBinding, rewards }, portableCapabilities: release.capabilities, derivedPortableMetadata: release.metadata, modelTasksetDerivation: release.metadata.modelTasksetDerivation },
   });
   const taskset = publishTasksetDraft({ draft: authored, now: input.createdAt, tasksetId, sourcePackageHash: release.contentHash });

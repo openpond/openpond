@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { gradeAttempt } from "../packages/taskset-sdk/src";
 import { runSandboxedVerifier } from "../apps/server/src/training/sandboxed-verifier";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service";
-import { buildTaskset } from "../packages/taskset-sdk/src";
+import { buildTaskset, computeTasksetHash } from "../packages/taskset-sdk/src";
 import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tasksetPackageDirectoryId } from "../apps/server/src/training/taskset-package-path.js";
@@ -131,9 +131,12 @@ describe("grader execution", () => {
     expect(await store.getTaskset(taskset.id)).toMatchObject({ revision: taskset.revision, graders: [{ calibrationStatus: "pending", rewardEligible: false }] });
   }));
 
-  test("calibrates model judges on declared fixtures before enabling reward", async () => withTrainingStore(async ({ store, directory }) => {
+  // Matching pass flags cannot calibrate a judge that misses the authored score.
+  test.each([1, 0.75])("checks score expectation %s before enabling calibrated reward", async (expectedScore) => withTrainingStore(async ({ store, directory }) => {
     const judge = { id: "judge", version: "1", label: "Judge", kind: "model_judge" as const, weight: 1, hardGate: true, rewardEligible: false, privileged: true, rubric: "Match the expected outcome", judge: { providerId: "openpond", modelId: "judge-v1" }, calibrationFixtureRefs: ["fixture_positive", "fixture_negative", "fixture_boundary", "fixture_adversarial", "fixture_prompt", "fixture_infra"], calibrationStatus: "pending" as const, temperature: 0, metadata: { requestedRewardEligible: true } };
     const taskset = tasksetFixture({ graders: [judge] });
+    taskset.graderFixtures.find(fixture => fixture.id === "fixture_positive")!.metadata.expectedScore = expectedScore;
+    taskset.contentHash = computeTasksetHash(taskset);
     const profileSource = path.join(directory, "profile");
     await buildTaskset(taskset, path.join(profileSource, "tasksets", taskset.id));
     const originalDirectory = path.join(directory, "training", "tasksets", taskset.id);
@@ -143,7 +146,7 @@ describe("grader execution", () => {
     await store.upsertTaskset(taskset);
     const service = createTaskEvaluationService({ store, storeDir: directory, loadProfileState: async () => ({ mode: "local", sourcePath: profileSource } as any), modelJudge: async ({ attempt }) => { const passed = attempt.output.text === "Goodbye friend"; return { score: passed ? 1 : 0, passed, feedback: passed ? "matched" : "did not match" }; } });
     const calibrated = await service.calibrateModelJudges(taskset.id);
-    expect(calibrated.passed).toBe(true);
+    expect(calibrated.passed).toBe(expectedScore === 1);
     expect(calibrated.taskset).toMatchObject({
       revision: taskset.revision + 1,
       metadata: {
@@ -153,7 +156,7 @@ describe("grader execution", () => {
         },
       },
     });
-    expect(calibrated.taskset.graders[0]).toMatchObject({ kind: "model_judge", calibrationStatus: "passed", rewardEligible: true, metadata: { calibrationEvidenceHash: expect.any(String), calibrationAccuracy: 1 } });
+    expect(calibrated.taskset.graders[0]).toMatchObject({ kind: "model_judge", calibrationStatus: expectedScore === 1 ? "passed" : "failed", rewardEligible: expectedScore === 1, metadata: { calibrationEvidenceHash: expect.any(String), calibrationAccuracy: expectedScore === 1 ? 1 : 5 / 6 } });
     expect(calibrated.taskset.contentHash).not.toBe(taskset.contentHash);
     const calibratedDirectory = path.join(directory, "training", "tasksets", tasksetPackageDirectoryId(calibrated.taskset));
     expect(calibratedDirectory).not.toBe(originalDirectory);
