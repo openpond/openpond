@@ -48,6 +48,7 @@ import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
 import { verifyPublishedTasksetAssets } from "./taskset-package-assets.js";
 import { assertLocalTasksetMetric, captureTasksetMetricSource } from "./taskset-metric-source.js";
 import { persistBenchmarkComparison } from "./benchmark-comparison-history.js";
+import { fixtureScoreMatches, parseExpectedFixtureScore } from "./fixture-score-expectation.js";
 
 type AuditFixtureInput = {
   label:
@@ -61,6 +62,7 @@ type AuditFixtureInput = {
   attempt: unknown;
   expectedPassed?: boolean;
   expectedRewardEligible?: boolean;
+  expectedScore?: number | null;
 };
 
 export function createTaskEvaluationService(deps: {
@@ -358,6 +360,7 @@ export function createTaskEvaluationService(deps: {
     const fixtures = input.fixtures?.length
       ? input.fixtures.map((fixture, index) => ({
           ...fixture,
+          expectedScore: parseExpectedFixtureScore(fixture.expectedScore),
           id: `external_fixture_${index}`,
         }))
       : taskset.graderFixtures.map((fixture, index) => ({
@@ -366,6 +369,7 @@ export function createTaskEvaluationService(deps: {
           taskId: fixture.taskId,
           expectedPassed: fixture.expectedPassed,
           expectedRewardEligible: fixture.expectedRewardEligible,
+          expectedScore: parseExpectedFixtureScore(fixture.metadata.expectedScore),
           attempt: fixtureAttempt(taskset.id, fixture, index),
         }));
     const results = [];
@@ -396,12 +400,14 @@ export function createTaskEvaluationService(deps: {
         label: fixture.label,
         expectedPassed: fixture.expectedPassed,
         expectedRewardEligible: fixture.expectedRewardEligible,
+        expectedScore: fixture.expectedScore,
         result,
       });
     }
 
     const failures = results.filter(
-      ({ label, expectedPassed, expectedRewardEligible, result }) => {
+      ({ label, expectedPassed, expectedRewardEligible, expectedScore, result }) => {
+        if (!fixtureScoreMatches(expectedScore, result.score)) return true;
         if (label === "infrastructure_failure" && result.score !== null) {
           return true;
         }
@@ -450,7 +456,8 @@ export function createTaskEvaluationService(deps: {
       label: failure.label,
       gradeId: failure.result.id,
       reason:
-        `Expected passed=${String(failure.expectedPassed)} and `
+        (failure.expectedScore === undefined ? "" : `Expected score=${String(failure.expectedScore)}; received score=${String(failure.result.score)}. `)
+        + `Expected passed=${String(failure.expectedPassed)} and `
         + `rewardEligible=${String(failure.expectedRewardEligible)}; received `
         + `passed=${String(failure.result.passed)} and `
         + `rewardEligible=${String(failure.result.rewardEligible)}.`,
@@ -521,6 +528,7 @@ export function createTaskEvaluationService(deps: {
       );
       const results = [];
       for (const [index, fixture] of fixtures.entries()) {
+        const expectedScore = parseExpectedFixtureScore(fixture.metadata.expectedScore);
         const task = await findTask(
           taskset,
           fixture.taskId,
@@ -532,15 +540,17 @@ export function createTaskEvaluationService(deps: {
           results.push({
             fixtureId: fixture.id,
             expectedPassed: fixture.expectedPassed,
+            expectedScore,
             passed: result.passed,
             score: result.score,
             feedback: result.feedback,
-            matched: result.passed === fixture.expectedPassed,
+            matched: result.passed === fixture.expectedPassed && fixtureScoreMatches(expectedScore, result.score),
           });
         } catch (error) {
           results.push({
             fixtureId: fixture.id,
             expectedPassed: fixture.expectedPassed,
+            expectedScore,
             passed: false,
             score: 0,
             feedback: error instanceof Error ? error.message : String(error),

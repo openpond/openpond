@@ -136,5 +136,13 @@ test("retains private code, source roles and normalization through prepared batc
     expect(rows).not.toContain("never show to policy");
     expect(rows).not.toContain("Private cost check");
     expect(await evaluation.auditFixtures({ tasksetId: taskset.id })).toMatchObject({ passed: true });
+    // Equal pass flags must not hide a different fractional reward. This uses
+    // the real private verifier and persisted audit, not a mocked score matcher.
+    const scoreAudit = await evaluation.auditFixtures({ tasksetId: taskset.id, fixtures: [
+      { label: "boundary", taskId: task.id, attempt: { ...attempt, id: "fractional-match" }, expectedPassed: grade.passed, expectedRewardEligible: true, expectedScore: 0.75 },
+      { label: "boundary", taskId: task.id, attempt: { ...attempt, id: "fractional-mismatch" }, expectedPassed: grade.passed, expectedRewardEligible: true, expectedScore: 0.5 },
+    ] });
+    expect(scoreAudit.passed).toBe(false);
+    expect(scoreAudit.report.failures).toMatchObject([{ fixtureId: "external_fixture_1" }]);
   } finally { await store.close(); }
 }));
