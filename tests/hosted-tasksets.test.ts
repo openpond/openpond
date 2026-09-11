@@ -169,8 +169,8 @@ describe("hosted Taskset client", () => {
     // another potentially paid execution with a different request hash.
     expect(ids[4]).toBe(ids[0]);
     expect(calls[4]?.body?.taskLimit).toBe(2);
-    expect(calls[0]?.timeoutMs).toBe(900_000);
-    expect(calls[0]?.signal).toBe(controller.signal);
+    expect(calls[0]?.timeoutMs).toBe(30_000);
+    expect(calls[0]?.signal?.aborted).toBe(false);
     controller.abort(new Error("cancelled before dispatch"));
     await expect(executeHostedTasksetAction(input)).rejects.toThrow("cancelled before dispatch");
     expect(calls).toHaveLength(5);
@@ -183,5 +183,45 @@ describe("hosted Taskset client", () => {
         return { ok: true };
       },
     })).rejects.toThrow("cancelled during response");
+  });
+
+  // A long HTTP request was cut off by the public edge while the backend kept
+  // staging files. Polling must never become a second grading operation.
+  test("polls one durable identity and returns its stored result", async () => {
+    const calls: Array<{ body?: Record<string, unknown>; timeoutMs?: number }> = [];
+    const saved = { ok: true, action: "audit_graders", result: { id: "saved_check", result: { valid: true } } };
+    const result = await executeHostedTasksetAction({
+      session: session(), turnId: "turn_poll", callId: "call_poll", signal: new AbortController().signal,
+      provider: "openpond", model: "model_test", action: "audit_graders", payload: { tasksetId: "taskset_test", maximumSpendUsd: 0 },
+      request: async request => {
+        calls.push(request);
+        return calls.length < 3 ? { ok: true, result: { schemaVersion: "openpond.hostedTasksetOperation.v1", id: "operation_one",
+          status: calls.length === 1 ? "queued" : "running", retryAfterMs: 1 } } : saved;
+      },
+    });
+    expect(result).toEqual(saved);
+    expect(calls).toHaveLength(3);
+    expect(calls.every(call => JSON.stringify(call.body) === JSON.stringify(calls[0]!.body))).toBe(true);
+    expect(calls.every(call => call.timeoutMs === 30_000)).toBe(true);
+  });
+
+  test("cancels a waiting operation by the same identity without resubmitting work", async () => {
+    const cancellation = new AbortController();
+    const bodies: Array<Record<string, unknown> | undefined> = [];
+    await expect(executeHostedTasksetAction({
+      session: session(), turnId: "turn_cancel", callId: "call_cancel", signal: cancellation.signal,
+      provider: "openpond", model: "model_test", action: "calibrate_judges", payload: { tasksetId: "taskset_test", maximumSpendUsd: 0.01 },
+      request: async request => {
+        bodies.push(request.body);
+        if (request.body?.cancelCheck) {
+          expect(request.signal?.aborted).toBe(false);
+          return { ok: true };
+        }
+        setTimeout(() => cancellation.abort(new Error("user cancelled check")), 5);
+        return { ok: true, result: { schemaVersion: "openpond.hostedTasksetOperation.v1", id: "operation_cancel", status: "running", retryAfterMs: 1000 } };
+      },
+    })).rejects.toThrow("user cancelled check");
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toEqual({ ...bodies[0], cancelCheck: true });
   });
 });
