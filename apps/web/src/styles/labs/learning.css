@@ -129,7 +129,7 @@
 
 .learning-review-dialog { width: min(1152px, calc(100vw - 48px)); max-height: 88dvh; overflow-y: auto; padding: 24px; }
 .learning-review-dialog.learning-review-full-page { width: 100vw; max-width: none; height: 100dvh; max-height: 100dvh; border-radius: 0; }
-.learning-review-full-backdrop { padding: 0; }
+.labs-rename-backdrop.learning-review-full-backdrop { padding: 0; }
 .learning-review-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .learning-review-heading h2 { font-size: 18px; font-weight: 600; }
 .learning-review-heading .model-build-actions { margin: 0; flex-wrap: wrap; }
