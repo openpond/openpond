@@ -62,7 +62,7 @@ export async function executeHostedTasksetAction(input: {
     message: input.payload.message,
     answers: input.payload.answers,
   });
-  return (input.request ?? requestOpenPondPublicApi)({
+  const result = await (input.request ?? requestOpenPondPublicApi)({
     path: "/hosted-tasksets/actions",
     method: "POST",
     body,
@@ -71,6 +71,8 @@ export async function executeHostedTasksetAction(input: {
       ? { timeoutMs: 15 * 60 * 1000 }
       : {}),
   });
+  input.signal.throwIfAborted();
+  return result;
 }
 
 function actionRequestId(input: {

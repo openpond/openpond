@@ -160,5 +160,14 @@ describe("hosted Taskset client", () => {
     controller.abort(new Error("cancelled before dispatch"));
     await expect(executeHostedTasksetAction(input)).rejects.toThrow("cancelled before dispatch");
     expect(calls).toHaveLength(5);
+    const duringResponse = new AbortController();
+    await expect(executeHostedTasksetAction({
+      ...input,
+      signal: duringResponse.signal,
+      request: async () => {
+        duringResponse.abort(new Error("cancelled during response"));
+        return { ok: true };
+      },
+    })).rejects.toThrow("cancelled during response");
   });
 });
