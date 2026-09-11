@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
+export { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 
 import {
@@ -189,7 +191,10 @@ export const ModelProjectSaveRequestSchema = z.object({
   operationId: IdSchema,
   expectedRevision: z.number().int().nonnegative(),
   project: ModelProjectEditableSchema,
-}).strict();
+  learning: ModelInitialLearningSchema.optional(),
+}).strict().superRefine((value, context) => {
+  if (value.learning && value.expectedRevision !== 0) context.addIssue({ code: "custom", path: ["learning"], message: "Use learning settings to edit an existing Model's policy." });
+});
 
 export type ModelProjectSaveRequest = z.infer<typeof ModelProjectSaveRequestSchema>;
 
@@ -218,7 +223,7 @@ export const ModelProjectBaseModelCandidateSchema = z.object({
 
 export async function modelProjectConfigurationHash(request: ModelProjectSaveRequest): Promise<string> {
   const parsed = parseModelProjectSaveRequest(request);
-  return canonicalSha256({ project: parsed.project, expectedRevision: parsed.expectedRevision });
+  return canonicalSha256({ project: parsed.project, expectedRevision: parsed.expectedRevision, ...(parsed.learning ? { learning: parsed.learning } : {}) });
 }
 
 export function parseModelProjectSaveRequest(value: unknown): ModelProjectSaveRequest {
@@ -237,16 +242,19 @@ export function parseModelProjectSaveRequest(value: unknown): ModelProjectSaveRe
 export async function createModelProjectSaveRequest(
   project: z.input<typeof ModelProjectEditableSchema>,
   expectedRevision: number,
+  learning?: ModelInitialLearning,
 ): Promise<ModelProjectSaveRequest> {
   assertBoundedTaskJson(project, MODEL_PROJECT_SYNC_MAX_BYTES);
   const editable = ModelProjectEditableSchema.parse(project);
   assertCanonicalPayloadSize(editable, MODEL_PROJECT_SYNC_MAX_BYTES, "Model configuration");
-  const hash = await canonicalSha256({ project: editable, expectedRevision });
+  const initialLearning = learning ? ModelInitialLearningSchema.parse(learning) : undefined;
+  const hash = await canonicalSha256({ project: editable, expectedRevision, ...(initialLearning ? { learning: initialLearning } : {}) });
   return parseModelProjectSaveRequest({
     schemaVersion: "openpond.modelProjectSave.v1",
     operationId: `model-save:${hash}`,
     expectedRevision,
     project: editable,
+    ...(initialLearning ? { learning: initialLearning } : {}),
   });
 }
 

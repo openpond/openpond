@@ -26,26 +26,29 @@
     "intervalSeconds": {
       "$ref": "#/$defs/__schema6"
     },
-    "nextRunAt": {
+    "calendar": {
       "$ref": "#/$defs/__schema7"
     },
-    "lastFire": {
-      "$ref": "#/$defs/__schema9"
+    "nextRunAt": {
+      "$ref": "#/$defs/__schema8"
     },
-    "consecutiveFailures": {
+    "lastFire": {
       "$ref": "#/$defs/__schema10"
     },
-    "nextAttemptAt": {
+    "consecutiveFailures": {
       "$ref": "#/$defs/__schema11"
     },
-    "lastError": {
+    "nextAttemptAt": {
       "$ref": "#/$defs/__schema12"
     },
+    "lastError": {
+      "$ref": "#/$defs/__schema13"
+    },
     "createdAt": {
-      "$ref": "#/$defs/__schema8"
+      "$ref": "#/$defs/__schema9"
     },
     "updatedAt": {
-      "$ref": "#/$defs/__schema8"
+      "$ref": "#/$defs/__schema9"
     }
   },
   "required": [
@@ -57,6 +60,7 @@
     "executionOwner",
     "state",
     "intervalSeconds",
+    "calendar",
     "nextRunAt",
     "lastFire",
     "consecutiveFailures",
@@ -132,9 +136,26 @@
       ]
     },
     "__schema7": {
+      "default": null,
       "anyOf": [
         {
-          "$ref": "#/$defs/__schema8"
+          "type": "object",
+          "properties": {
+            "localTime": {
+              "type": "string",
+              "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+            },
+            "timeZone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "localTime",
+            "timeZone"
+          ],
+          "additionalProperties": false
         },
         {
           "type": "null"
@@ -142,11 +163,21 @@
       ]
     },
     "__schema8": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema9"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema9": {
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
     },
-    "__schema9": {
+    "__schema10": {
       "anyOf": [
         {
           "$ref": "#/$defs/__schema3"
@@ -156,22 +187,22 @@
         }
       ]
     },
-    "__schema10": {
+    "__schema11": {
       "type": "integer",
       "minimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema11": {
+    "__schema12": {
       "anyOf": [
         {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema9"
         },
         {
           "type": "null"
         }
       ]
     },
-    "__schema12": {
+    "__schema13": {
       "anyOf": [
         {
           "type": "string",

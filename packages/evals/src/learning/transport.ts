@@ -15,6 +15,7 @@ export function assertLearningRequestJson(raw: unknown): void {
 /** Scope selection is never authorization; each host resolves its authenticated owner. */
 export const LearningCommandRequestSchema = z.object({ scope: ReleaseIdSchema, command: LearningCommandSchema }).strict();
 export const LearningReadRequestSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("inspect_task_queue"), scope: ReleaseIdSchema, modelProjectId: ReleaseIdSchema.nullable() }).strict(),
   z.object({ action: z.literal("inspect_policy"), scope: ReleaseIdSchema, policy: LearningRevisionRefSchema }).strict(),
   z.object({ action: z.literal("inspect_evidence"), scope: ReleaseIdSchema, evidence: LearningRevisionRefSchema }).strict(),
   z.object({ action: z.literal("get"), scope: ReleaseIdSchema, kind: LearningResourceKindSchema, id: ReleaseIdSchema, revision: z.number().int().positive().optional() }).strict(),

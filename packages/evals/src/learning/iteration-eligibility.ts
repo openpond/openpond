@@ -14,7 +14,7 @@ export function learningConsumptionId(chainId: string, evidence: TaskEvidence): 
   return `consumption-${contentHash([chainId, evidence.id, evidence.revision])}`;
 }
 
-export async function inspectIterationEligibility(transaction: LearningTransaction, policy: LearningPolicy) {
+export async function inspectIterationEligibility(transaction: LearningTransaction, policy: LearningPolicy, options: { collectEligible?: boolean } = {}) {
   // These are the methods supported by the approved-batch materializer.
   const purpose: TaskBatch["purpose"] = policy.training.method === "sft" ? "supervised_training" : "reward_training";
   if (!["sft", "grpo", "ppo"].includes(policy.training.method)) {
@@ -27,6 +27,7 @@ export async function inspectIterationEligibility(transaction: LearningTransacti
   if (!sameLearningRef(definition.rewardBinding, policy.rewardBinding)) throw new LearningDomainError("learning_policy_binding_mismatch", 422);
   const counts: LearningIterationReservation["counts"] = { eligible: 0, awaitingReview: 0, excluded: 0, consumed: 0 };
   const selected: { evidence: TaskEvidence; decision: TaskAdmissionDecision }[] = [];
+  const eligibleEvidence: ReturnType<typeof learningRef>[] = [];
   const chainId = learningChainId(policy.modelProjectId);
   const seen = new Set<string>();
   let backlog = 0;
@@ -63,10 +64,11 @@ export async function inspectIterationEligibility(transaction: LearningTransacti
           continue;
         }
         counts.eligible += 1;
+        if (options.collectEligible) eligibleEvidence.push(learningRef(evidence));
         if (selected.length < policy.limits.maxBatchExamples) selected.push({ evidence, decision });
       }
       afterId = page.nextCursor ?? undefined;
     } while (afterId);
   }
-  return { counts, selected, purpose };
+  return { counts, selected, purpose, eligibleEvidence };
 }

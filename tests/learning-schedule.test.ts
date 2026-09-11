@@ -75,6 +75,11 @@ describe("durable learning schedule fires", () => {
       const editor = { ...learningContext, actor: { id: "editor", role: "editor" as const } };
       await expect(f.service.command(editor, { action: "publish", operationId: "editor-timer", ...publication })).rejects.toThrow("learning_review_not_authorized");
       await expect(f.service.command(editor, { action: "publish_resources", operationId: "editor-timer-batch", resources: [publication] })).rejects.toThrow("learning_review_not_authorized");
+      for (const trigger of [{ kind: "nightly", localTime: "20:00", timeZone: "America/New_York" }, { kind: "approved_count" }] as const) {
+        const scheduled = { ...publication, content: { ...publication.content, trigger } };
+        await expect(f.service.command(editor, { action: "publish", operationId: `editor-${trigger.kind}`, ...scheduled })).rejects.toThrow("learning_review_not_authorized");
+        await expect(f.service.command(editor, { action: "publish_resources", operationId: `editor-batch-${trigger.kind}`, resources: [scheduled] })).rejects.toThrow("learning_review_not_authorized");
+      }
       time.advance(hour / 2);
       const original = policy;
       policy = await f.publishPolicy(policy, { limits: { ...policy.limits, maxRetries: 2 } });

@@ -225,6 +225,23 @@
                     "scheduledAt"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "approved_count"
+                    },
+                    "checkedAt": {
+                      "$ref": "#/$defs/__schema5"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "checkedAt"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -3029,6 +3046,30 @@
           "required": [
             "kind",
             "intervalSeconds"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "localTime": {
+              "type": "string",
+              "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+            },
+            "timeZone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "kind": {
+              "type": "string",
+              "const": "nightly"
+            }
+          },
+          "required": [
+            "localTime",
+            "timeZone",
+            "kind"
           ],
           "additionalProperties": false
         },
