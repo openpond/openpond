@@ -85,12 +85,11 @@ export type StartupMetrics =
     };
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
-  // Scoped Models/Learning query caching and workspace UI measured 16,897,245
-  // total and 455,393 initial bytes (2026-09-10), up 36,007 total bytes.
-  // The newly shared React Query runtime measures 33,051 minified bytes with
-  // React externalized. Allow 36 KiB for this measured feature addition;
-  // initial-load, single-asset, and startup limits remain independently enforced.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 120 * 1024,
+  // Source review and bound-Reward editing controls measured 16,903,007 total
+  // bytes, up 3,818 from v0.2.5's 16,899,189 (2026-09-13). Initial assets remain
+  // 455,393 bytes. Add 4 KiB for this measured feature addition; initial-load,
+  // single-asset, and startup limits remain independently enforced.
+  maxTotalJsBytes: 16 * 1024 * 1024 + 124 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
