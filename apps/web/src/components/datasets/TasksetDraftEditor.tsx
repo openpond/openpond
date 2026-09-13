@@ -18,6 +18,7 @@ import {
 } from "./TasksetDraftEditorPrimitives";
 import { TasksetDraftValidationStatus } from "./TasksetDraftValidationStatus";
 import { TaskDraftTasks } from "./TaskDraftTasks";
+import { TaskDraftSourceReview } from "./TaskDraftSourceReview";
 import { useDraftNavigation } from "../labs/useDraftNavigation";
 import {
   TASKSET_DRAFT_SECTIONS,
@@ -61,6 +62,7 @@ export function TasksetDraftEditor({
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(training.payload?.tasksetDrafts.find((candidate) => candidate.id === draftId) ?? null));
   const [notice, setNotice] = useState<string | null>(null);
   const [validationOpen, setValidationOpen] = useState(false);
+  const [sourceReviewOpen, setSourceReviewOpen] = useState(false);
   const [fileEditor, setFileEditor] = useState<TasksetDraftFileInfo[] | null>(null);
   const [workspace, setWorkspace] = useState<{
     draftId: string;
@@ -287,6 +289,7 @@ export function TasksetDraftEditor({
       ) : null}
 
       <div className="model-build-actions" aria-label="Collection settings">
+        {draft.sourceRefs.length ? <button className="training-button secondary" type="button" disabled={readOnly} onClick={() => setSourceReviewOpen(true)}>Review sources ({draft.sourceRefs.filter(source => source.secretScanStatus !== "passed" || source.piiScanStatus !== "passed" || source.licensingStatus !== "approved").length} pending)</button> : null}
         {TASKSET_DRAFT_SECTIONS.filter(candidate => candidate.id !== "scenarios" && candidate.id !== "output").map((candidate) => (
           <button
             className="training-button secondary"
@@ -301,6 +304,7 @@ export function TasksetDraftEditor({
       </div>
 
       {draftNavigation.dialog}
+      {sourceReviewOpen ? <TaskDraftSourceReview draft={draft} onApply={sourceRefs => update({ ...draft, sourceRefs })} onClose={() => setSourceReviewOpen(false)} /> : null}
       <div className="taskset-draft-body">
         {validationOpen ? <TasksetDraftValidationStatus draft={draft} issues={issues} /> : null}
         {taskEditor}
@@ -646,6 +650,7 @@ function GradingSection({
   disabled,
   onChange,
 }: SectionProps & { defaultModel: ChatModelRef }) {
+  const gradersLocked = disabled || draft.modelScope?.source?.authoringGraph === "bound";
   const addGrader = (kind: Parameters<typeof newGrader>[0]) => onChange({
     ...draft,
     graders: [...draft.graders, newGrader(kind, defaultModel)],
@@ -661,10 +666,11 @@ function GradingSection({
       title="Rewards"
       description="Add and configure the checks that define success. Expand fixture checks to test them against retained examples."
     >
+      {draft.modelScope?.source?.authoringGraph === "bound" ? <p>This collection uses a saved Reward. Change its grader from Model settings.</p> : null}
       <div className="taskset-draft-inline-actions">
         <button
           className="training-button secondary"
-          disabled={disabled || draft.output.mode !== "structured_json" || !draft.output.jsonSchema}
+          disabled={gradersLocked || draft.output.mode !== "structured_json" || !draft.output.jsonSchema}
           type="button"
           onClick={() => onChange({
             ...draft,
@@ -673,10 +679,10 @@ function GradingSection({
         >
           Output validator
         </button>
-        <button className="training-button secondary" disabled={disabled} type="button" onClick={() => addGrader("expected_text")}>Expected text</button>
-        <button className="training-button secondary" disabled={disabled} type="button" onClick={() => addGrader("model_judge")}>Model judge</button>
-        <button className="training-button secondary" disabled={disabled} type="button" onClick={() => addGrader("human")}>Human</button>
-        <button className="training-button secondary" disabled={disabled} type="button" onClick={() => addGrader("custom_verifier")}>Custom verifier</button>
+        <button className="training-button secondary" disabled={gradersLocked} type="button" onClick={() => addGrader("expected_text")}>Expected text</button>
+        <button className="training-button secondary" disabled={gradersLocked} type="button" onClick={() => addGrader("model_judge")}>Model judge</button>
+        <button className="training-button secondary" disabled={gradersLocked} type="button" onClick={() => addGrader("human")}>Human</button>
+        <button className="training-button secondary" disabled={gradersLocked} type="button" onClick={() => addGrader("custom_verifier")}>Custom verifier</button>
       </div>
       <div className="taskset-draft-card-list">
         {draft.graders.map((grader, index) => (
@@ -685,7 +691,7 @@ function GradingSection({
               <strong>{grader.kind.replaceAll("_", " ")}</strong>
               <button
                 className="training-text-button danger"
-                disabled={disabled}
+                disabled={gradersLocked}
                 type="button"
                 onClick={() => onChange({
                   ...draft,
@@ -697,27 +703,27 @@ function GradingSection({
             </header>
             <div className="taskset-draft-field-grid">
               <Field label="Label">
-                <input disabled={disabled} value={grader.label} onChange={(event) => updateGrader(index, { ...grader, label: event.target.value })} />
+                <input disabled={gradersLocked} value={grader.label} onChange={(event) => updateGrader(index, { ...grader, label: event.target.value })} />
               </Field>
               <Field label="Weight">
-                <input disabled={disabled} min={0} step="0.1" type="number" value={grader.weight} onChange={(event) => updateGrader(index, { ...grader, weight: Number(event.target.value) })} />
+                <input disabled={gradersLocked} min={0} step="0.1" type="number" value={grader.weight} onChange={(event) => updateGrader(index, { ...grader, weight: Number(event.target.value) })} />
               </Field>
             </div>
             {grader.kind === "model_judge" || grader.kind === "human" ? (
               <Field label="Rubric">
-                <textarea disabled={disabled} rows={5} value={grader.rubric} onChange={(event) => updateGrader(index, { ...grader, rubric: event.target.value })} />
+                <textarea disabled={gradersLocked} rows={5} value={grader.rubric} onChange={(event) => updateGrader(index, { ...grader, rubric: event.target.value })} />
               </Field>
             ) : null}
             {grader.kind === "content" || grader.kind === "schema" || grader.kind === "file" || grader.kind === "diff" || grader.kind === "test" || grader.kind === "runtime_event" || grader.kind === "state" ? (
-              <JsonObjectField disabled={disabled} label="Grader config JSON" value={grader.config} onChange={(config) => updateGrader(index, { ...grader, config: config ?? {} })} />
+              <JsonObjectField disabled={gradersLocked} label="Grader config JSON" value={grader.config} onChange={(config) => updateGrader(index, { ...grader, config: config ?? {} })} />
             ) : null}
             {grader.kind === "custom_verifier" ? (
               <div className="taskset-draft-field-grid">
                 <Field label="Module">
-                  <input disabled={disabled} value={grader.module} onChange={(event) => updateGrader(index, { ...grader, module: event.target.value })} />
+                  <input disabled={gradersLocked} value={grader.module} onChange={(event) => updateGrader(index, { ...grader, module: event.target.value })} />
                 </Field>
                 <Field label="Export">
-                  <input disabled={disabled} value={grader.exportName} onChange={(event) => updateGrader(index, { ...grader, exportName: event.target.value })} />
+                  <input disabled={gradersLocked} value={grader.exportName} onChange={(event) => updateGrader(index, { ...grader, exportName: event.target.value })} />
                 </Field>
               </div>
             ) : null}
