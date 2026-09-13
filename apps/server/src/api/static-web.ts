@@ -139,6 +139,9 @@ async function sendIndex({
   token: string;
 }): Promise<void> {
   let html = await fs.readFile(indexPath, "utf8");
+  // The same build uses relative assets for Electron. HTTP routes can be
+  // arbitrarily deep, so resolve shell assets from the web root when served.
+  html = html.replace(/\b(src|href)(\s*=\s*)(["'])\.\/([^"']*)\3/g, "$1$2$3/$4$3");
   const nonce = randomBytes(18).toString("base64url");
   if (isLoopbackHost(requestUrl.hostname)) {
     const connectionScript = `<script nonce="${nonce}">window.__OPENPOND_WEB_CONNECTION__=${escapeScriptJson(
