@@ -710,7 +710,7 @@ export class OpenPondSandboxInstanceClient {
       this.sandboxApiUrl,
       this.apiKey,
       path,
-      this.customEndpoint ? { ...init, useEnvironmentApiKey: false, redirect: "error" } : init
+      this.customEndpoint ? { ...init, explicitBearerAuth: true, redirect: "error" } : init
     );
     return readApiJson<T>(response, "Sandbox request");
   }
@@ -720,7 +720,7 @@ export class OpenPondSandboxInstanceClient {
     init: ApiFetchOptions = {}
   ): Promise<T> {
     const response = await apiFetch(this.apiRootUrl, this.apiKey, path,
-      this.customEndpoint ? { ...init, useEnvironmentApiKey: false, redirect: "error" } : init);
+      this.customEndpoint ? { ...init, explicitBearerAuth: true, redirect: "error" } : init);
     return readApiJson<T>(response, "OpenPond API request");
   }
 }
