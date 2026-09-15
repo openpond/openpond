@@ -40,6 +40,13 @@ function sandbox(state: SandboxRecord["state"] = "running"): SandboxRecord {
 }
 
 describe("OpenPondWorkClient", () => {
+  test("cleanup accepts an already-deleted guest but preserves authorization failures", async () => {
+    const get = vi.fn().mockRejectedValueOnce(new OpenPondApiError(404, null, "get"))
+      .mockRejectedValueOnce(new OpenPondApiError(403, null, "get"));
+    const work = new OpenPondWorkClient({ apiKey: "test", apiBaseUrl: "https://api.example", chatApiBaseUrl: "https://api.example/opchat/v1", sandboxes: { get } as unknown as OpenPondSandboxClient });
+    await expect(work.deleteSandbox("deleted")).resolves.toBeUndefined();
+    await expect(work.deleteSandbox("forbidden")).rejects.toMatchObject({ status: 403 });
+  });
   test("creates a sandbox, executes model tool calls, and returns the final text", async () => {
     const record = sandbox();
     const longCommand = `printf '%s' '${"x".repeat(5_414)}' > outputs/report.txt`;

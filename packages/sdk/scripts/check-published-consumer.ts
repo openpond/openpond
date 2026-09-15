@@ -103,6 +103,9 @@ async function main(): Promise<void> {
       { cwd: consumer, stdio: "inherit" },
     );
     await writeFile(path.join(consumer, "verify-types.mts"), [
+      'import { createOpenPondClient } from "openpond-sdk"; const workClient = createOpenPondClient({ sandbox: { endpoint: "https://runtime.invalid", apiKey: "runtime" }, model: { endpoint: "https://model.invalid/v1", apiKey: "model", model: "test" } });',
+      'type NotAny<T> = 0 extends (1 & T) ? false : true; const sandboxTypesSurvivePacking: NotAny<Awaited<ReturnType<typeof workClient.sandboxes.get>>> = true; void sandboxTypesSurvivePacking;',
+      'const sandboxId: Promise<string> = workClient.sandboxes.get("id").then(record => record.id); void sandboxId;',
       'import { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput } from "openpond-sdk/training-bundle"; declare const managedInput: ManagedTrainingPreparationInput; void prepareManagedTrainingSubmission(managedInput);',
       'import { createPolicyHarnessContext } from "openpond-sdk/training-bundle"; const policyContext = createPolicyHarnessContext({ sourceRelease: null }); const policyHash: string = policyContext.harnessRelease.contentHash; void policyHash;',
       'import { buildTasksetTrainingBundle, type TasksetTrainingBundle } from "openpond-sdk/training-bundle"; declare const trainingInput: Parameters<typeof buildTasksetTrainingBundle>[0]; const trainingBundle: TasksetTrainingBundle = buildTasksetTrainingBundle(trainingInput); const trainingAssets: ReadonlyMap<string, Uint8Array> = trainingBundle.assets; void trainingAssets;',

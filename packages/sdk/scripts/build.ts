@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdir, rm } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,6 +51,26 @@ await build({
 });
 
 await run(process.execPath, [createRequire(import.meta.url).resolve("typescript/bin/tsc"), "--build", "tsconfig.build.json", "--force"]);
+
+// The cloud implementation is bundled, not an installable runtime dependency.
+// Resolve its declarations within the emitted package so independent consumers
+// retain real sandbox types instead of unresolved imports becoming `any`.
+const declarations = path.join(dist, "types");
+for (const entry of await readdir(declarations, { recursive: true })) {
+  if (!entry.endsWith(".d.ts")) continue;
+  const file = path.join(declarations, entry);
+  let source = await readFile(file, "utf8");
+  for (const match of [...source.matchAll(/(["'])@openpond\/cloud\/([^"']+)\1/g)]) {
+    const target = path.join(declarations, "packages/cloud/src", match[2]);
+    let resolved = `${target}.d.ts`;
+    try { await access(resolved); }
+    catch { resolved = path.join(target, "index.d.ts"); await access(resolved); }
+    let relative = path.relative(path.dirname(file), resolved).split(path.sep).join("/").replace(/\.d\.ts$/, ".js");
+    if (!relative.startsWith(".")) relative = `./${relative}`;
+    source = source.replaceAll(match[0], JSON.stringify(relative));
+  }
+  await writeFile(file, source);
+}
 
 function run(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {

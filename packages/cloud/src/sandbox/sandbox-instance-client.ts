@@ -82,9 +82,11 @@ export class OpenPondSandboxInstanceClient {
   readonly apiKey: string;
   readonly apiRootUrl: string;
   readonly sandboxApiUrl: string;
+  readonly customEndpoint: boolean;
 
   constructor(options: OpenPondSandboxClientOptions) {
     this.apiKey = options.apiKey;
+    this.customEndpoint = options.customEndpoint ?? false;
     this.sandboxApiUrl = normalizeSandboxApiUrl(
       options.sandboxApiUrl ?? options.baseUrl ?? DEFAULT_OPENPOND_API_BASE_URL
     );
@@ -97,6 +99,7 @@ export class OpenPondSandboxInstanceClient {
   ): Promise<SandboxRecord> {
     return this.request<SandboxCreateResponse>("", {
       method: "POST",
+      ...(this.customEndpoint ? { timeoutMs: 180_000 } : {}),
       headers: asyncRequestHeaders(options),
       body: JSON.stringify(input),
     }).then((payload) => payload.sandbox);
@@ -702,12 +705,12 @@ export class OpenPondSandboxInstanceClient {
     );
   }
 
-  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async request<T>(path: string, init: ApiFetchOptions = {}): Promise<T> {
     const response = await apiFetch(
       this.sandboxApiUrl,
       this.apiKey,
       path,
-      init
+      this.customEndpoint ? { ...init, useEnvironmentApiKey: false, redirect: "error" } : init
     );
     return readApiJson<T>(response, "Sandbox request");
   }
@@ -716,7 +719,8 @@ export class OpenPondSandboxInstanceClient {
     path: string,
     init: ApiFetchOptions = {}
   ): Promise<T> {
-    const response = await apiFetch(this.apiRootUrl, this.apiKey, path, init);
+    const response = await apiFetch(this.apiRootUrl, this.apiKey, path,
+      this.customEndpoint ? { ...init, useEnvironmentApiKey: false, redirect: "error" } : init);
     return readApiJson<T>(response, "OpenPond API request");
   }
 }
