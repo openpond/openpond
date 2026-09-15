@@ -10,6 +10,7 @@ import { OpenPondProfileActionsClient } from "./profile-actions.js";
 import { OpenPondWorkflowsClient } from "./workflows.js";
 import type { OpenPondClientOptions } from "./types.js";
 import { OpenPondLearningClient } from "./learning-client.js";
+import { configuredEndpoint, configuredKey } from "./work-sandbox.js";
 
 export class OpenPondClient {
   readonly sandboxes: OpenPondSandboxClient;
@@ -20,23 +21,37 @@ export class OpenPondClient {
   readonly learning: (scope: string) => OpenPondLearningClient;
 
   constructor(options: OpenPondClientOptions) {
-    const apiKey = options.apiKey.trim();
-    if (!apiKey) throw new Error("OpenPond API key is required");
+    const apiKey = options.apiKey?.trim() ?? "";
+    if (!apiKey && (!options.sandbox || !options.model))
+      throw new Error("OpenPond API key is required when using a default sandbox or model");
+    const sandbox = options.sandbox ? {
+      ...options.sandbox,
+      endpoint: configuredEndpoint(options.sandbox.endpoint, "Sandbox endpoint"),
+      apiKey: configuredKey(options.sandbox.apiKey, "Sandbox API key"),
+    } : undefined;
+    const model = options.model ? {
+      endpoint: configuredEndpoint(options.model.endpoint, "Model endpoint"),
+      apiKey: configuredKey(options.model.apiKey, "Model API key"),
+      model: configuredKey(options.model.model, "Model ID"),
+    } : undefined;
 
     const apiBaseUrl = options.baseUrl?.trim() || "https://api.openpond.ai";
     this.learning = (scope) => new OpenPondLearningClient({ apiKey, baseUrl: apiBaseUrl, scope });
     this.sandboxes = createOpenPondSandboxClient({
-      apiKey,
+      apiKey: sandbox?.apiKey ?? apiKey,
       baseUrl: apiBaseUrl,
-      sandboxApiUrl: options.sandboxApiUrl,
+      sandboxApiUrl: sandbox?.endpoint ?? options.sandboxApiUrl,
     });
     this.work = new OpenPondWorkClient({
-      apiKey,
+      apiKey: model?.apiKey ?? apiKey,
       apiBaseUrl,
       chatApiBaseUrl:
-        options.chatApiUrl?.trim() ||
+        model?.endpoint || options.chatApiUrl?.trim() ||
         resolveOpChatApiBaseUrl({ apiBaseUrl, env: {} }),
       sandboxes: this.sandboxes,
+      sandboxConfig: sandbox,
+      defaultModel: model?.model,
+      customModel: Boolean(model),
     });
     this.workflows = new OpenPondWorkflowsClient({ apiKey, apiBaseUrl });
     this.actions = new OpenPondProjectActionsClient({ apiKey, apiBaseUrl });

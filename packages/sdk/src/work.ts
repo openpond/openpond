@@ -1,11 +1,13 @@
 import { OpenPondApiError } from "@openpond/cloud/api/core";
 import {
-  sendHostedChatTurn,
   type HostedChatMessage,
   type HostedChatTool,
   type HostedChatToolCall,
 } from "@openpond/cloud/hosted-chat";
 import type { OpenPondSandboxClient } from "@openpond/cloud/sandbox/client";
+import { workSandbox, type WorkSandbox } from "./work-sandbox.js";
+import type { OpenPondClientOptions } from "./types.js";
+import { workModelTurn } from "./work-model.js";
 import type {
   SandboxFileDownloadResponse,
   SandboxFileEntry,
@@ -112,6 +114,8 @@ export type OpenPondWorkEvent =
 
 export type OpenPondWorkRunInput = {
   prompt: string;
+  /** Durable caller-generated UUID for recovering a BYOC create after an app restart. */
+  requestId?: string;
   /** Reuse this sandbox to continue work in an existing conversation. */
   sandboxId?: string;
   /** Repository cloned when a new sandbox is created. */
@@ -149,19 +153,26 @@ type WorkClientInput = {
   apiBaseUrl: string;
   chatApiBaseUrl: string;
   sandboxes: OpenPondSandboxClient;
+  sandboxConfig?: OpenPondClientOptions["sandbox"];
+  defaultModel?: string;
+  customModel?: boolean;
 };
 
 export class OpenPondWorkClient {
   readonly #apiKey: string;
   readonly #apiBaseUrl: string;
   readonly #chatApiBaseUrl: string;
-  readonly #sandboxes: OpenPondSandboxClient;
+  readonly #sandboxes: WorkSandbox;
+  readonly #defaultModel: string;
+  readonly #customModel: boolean;
 
   constructor(input: WorkClientInput) {
     this.#apiKey = input.apiKey;
     this.#apiBaseUrl = input.apiBaseUrl;
     this.#chatApiBaseUrl = input.chatApiBaseUrl;
-    this.#sandboxes = input.sandboxes;
+    this.#sandboxes = workSandbox(input.sandboxes, input.sandboxConfig);
+    this.#defaultModel = input.defaultModel ?? DEFAULT_MODEL;
+    this.#customModel = input.customModel ?? false;
   }
 
   async run(input: OpenPondWorkRunInput): Promise<OpenPondWorkRunResult> {
@@ -199,10 +210,10 @@ export class OpenPondWorkClient {
       for (let step = 1; step <= maxSteps; step += 1) {
         input.signal?.throwIfAborted();
         await emit({ type: "status", message: `Thinking · step ${step}` });
-        const completion = await sendHostedChatTurn({
+        const completion = await workModelTurn({
           apiBaseUrl: this.#chatApiBaseUrl,
           token: this.#apiKey,
-          model: input.model?.trim() || DEFAULT_MODEL,
+          model: input.model?.trim() || this.#defaultModel,
           messages,
           tools: WORK_TOOLS,
           toolChoice: "auto",
@@ -213,7 +224,7 @@ export class OpenPondWorkClient {
             apiBaseUrl: this.#apiBaseUrl,
             ...input.metadata,
           },
-        });
+        }, this.#customModel);
         const choice = completion.choices?.[0];
         const assistantText = choice?.message?.content?.trim() ?? "";
         const toolCalls = choice?.message?.tool_calls ?? [];
@@ -244,6 +255,7 @@ export class OpenPondWorkClient {
         }
 
         for (const [index, toolCall] of toolCalls.entries()) {
+          input.signal?.throwIfAborted();
           const result = await this.#executeTool(
             sandbox.id,
             toolCall,
@@ -354,7 +366,7 @@ export class OpenPondWorkClient {
             error: message,
           });
           if ((input.cleanup ?? "keep") !== "keep") {
-            await this.#cleanupSandbox(sandboxId, "stop", lifecycle, emit);
+            await this.#preserveFailedOutputs(sandboxId, lifecycle, emit);
           }
           throw error;
         }
@@ -364,7 +376,7 @@ export class OpenPondWorkClient {
       lifecycle.persistence.status = "failed";
       lifecycle.persistence.error =
         "Deleting a Work sandbox with outputs requires persistOutput or discardOutputs: true";
-      await this.#cleanupSandbox(sandboxId, "stop", lifecycle, emit);
+      await this.#preserveFailedOutputs(sandboxId, lifecycle, emit);
       throw new Error(lifecycle.persistence.error);
     } else {
       lifecycle.persistence.status = "not_requested";
@@ -376,6 +388,23 @@ export class OpenPondWorkClient {
       lifecycle,
       emit,
     );
+  }
+
+  async #preserveFailedOutputs(
+    sandboxId: string,
+    lifecycle: OpenPondWorkLifecycle,
+    emit: (event: OpenPondWorkEvent) => void | Promise<void>,
+  ) {
+    if (this.#sandboxes.supportsResume) {
+      await this.#cleanupSandbox(sandboxId, "stop", lifecycle, emit);
+      return;
+    }
+    // A fresh-only runtime cannot restart a stopped guest to recover files.
+    // Keep it available for the application's durable persistence retry.
+    lifecycle.cleanup.status = "pending";
+    lifecycle.cleanup.finalSandboxState = "running";
+    lifecycle.cleanup.error = "Output persistence must be retried before guest deletion";
+    await emit({ type: "cleanup", policy: lifecycle.cleanupPolicy, status: "pending", sandboxState: "running", error: lifecycle.cleanup.error });
   }
 
   async #cleanupSandbox(
@@ -468,24 +497,7 @@ export class OpenPondWorkClient {
       return ready;
     }
 
-    const budgetUsd = input.budgetUsd?.trim() || "1.00";
-    const created = await this.#sandboxes.create(
-      {
-        ...(input.repo?.trim() ? { repo: input.repo.trim() } : {}),
-        runtimeProfileId: "openpond-work-v1",
-        resources: { cpu: 2, memoryGb: 4, diskGb: 16 },
-        budget: { maxUsd: budgetUsd },
-        quotas: {
-          maxSpendUsd: budgetUsd,
-          maxDurationSeconds: 3600,
-          idleTimeoutSeconds: 900,
-          maxCommands: 200,
-          maxOpenPorts: 4,
-        },
-        metadata: { source: "openpond-sdk-work", ...input.metadata },
-      },
-      { async: true },
-    );
+    const created = await this.#sandboxes.createWork(input);
     return this.#waitUntilRunning(created.id, input.signal);
   }
 
@@ -619,7 +631,7 @@ function initialLifecycle(
 }
 
 function lazyOutputDownload(
-  sandboxes: OpenPondSandboxClient,
+  sandboxes: WorkSandbox,
   sandboxId: string,
   output: OpenPondWorkOutput,
 ): () => Promise<SandboxFileDownloadResponse> {
