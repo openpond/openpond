@@ -61,6 +61,8 @@ export type SandboxSmokeSummary = {
 };
 
 export type OpenPondSandboxClientOptions = {
+  /** Custom services receive only their explicit credential and reject redirects. */
+  customEndpoint?: boolean;
   baseUrl?: string;
   sandboxApiUrl?: string;
   apiKey: string;

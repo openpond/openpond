@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createOpenPondClient } from "../src/index.js";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("Work destination and credential boundaries", () => {
   // A generic endpoint must not be rewritten to OpChat or receive another
   // service's key. This exercises the public client through actual HTTP calls.
   test("custom Work uses only its configured destinations and keys", async () => {
+    vi.stubEnv("OPENPOND_API_KEY", "opk_hosted_secret_must_not_escape");
     const calls: Array<{ url: string; key: string | null; body: any }> = [];
     let turns = 0;
     const sandbox = { id: "sb_custom", state: "running", logs: [] };
@@ -14,6 +15,8 @@ describe("Work destination and credential boundaries", () => {
       const url = String(input);
       const body = init?.body ? JSON.parse(String(init.body)) : null;
       const key = new Headers(init?.headers).get("authorization");
+      expect(new Headers(init?.headers).get("openpond-api-key")).toBeNull();
+      expect(init?.redirect).toBe("error");
       calls.push({ url, key, body });
       if (url.startsWith("https://model.example/v1/")) {
         expect(url).toBe("https://model.example/v1/chat/completions");

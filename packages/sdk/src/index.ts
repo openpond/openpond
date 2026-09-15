@@ -41,6 +41,7 @@ export class OpenPondClient {
       apiKey: sandbox?.apiKey ?? apiKey,
       baseUrl: apiBaseUrl,
       sandboxApiUrl: sandbox?.endpoint ?? options.sandboxApiUrl,
+      customEndpoint: Boolean(sandbox),
     });
     this.work = new OpenPondWorkClient({
       apiKey: model?.apiKey ?? apiKey,

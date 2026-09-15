@@ -284,9 +284,15 @@ export class OpenPondWorkClient {
   }
 
   async deleteSandbox(sandboxId: string): Promise<void> {
-    const sandbox = await this.#sandboxes.get(sandboxId);
-    if (sandbox.state === "deleted") return;
-    await this.#sandboxes.delete(sandboxId);
+    try {
+      const sandbox = await this.#sandboxes.get(sandboxId);
+      if (sandbox.state === "deleted") return;
+      await this.#sandboxes.delete(sandboxId);
+    } catch (error) {
+      // Deletion may have finished before the response or app was interrupted.
+      if (error instanceof OpenPondApiError && error.status === 404) return;
+      throw error;
+    }
   }
 
   async #stageInputs(
