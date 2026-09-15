@@ -611,7 +611,9 @@ function systemPrompt(sandboxId: string, hasInputs: boolean): string {
     `The active sandbox is ${sandboxId}.`,
     ...(hasInputs
       ? [
-          `Caller-provided durable files are staged under ${WORK_INPUT_DIRECTORY}; structured metadata is in ${WORK_INPUT_MANIFEST}.`,
+          `The authoritative saved files for this turn are staged under /workspace/${WORK_INPUT_DIRECTORY}; their manifest is /workspace/${WORK_INPUT_MANIFEST}.`,
+          "Before revising a previous output, read its staged file and manifest. Copy the staged input into the output directory before editing it; previous output paths may not exist in this sandbox.",
+          "Preserve the actual file bytes. Never reconstruct a saved file from the conversation or claim to have preserved it without reading the staged input.",
         ]
       : []),
     "Use run_command to inspect the workspace, edit files, and validate your work.",
