@@ -28,13 +28,13 @@ describe("Work destination and credential boundaries", () => {
         } : { content: "Done" } }] });
       }
       expect(url.startsWith("https://runtime.example/api/sandboxes")).toBe(true);
-      expect(key).toBe("Bearer runtime-key");
+      expect(key).toBe("Bearer opk_runtime-key");
       if (url.endsWith("/exec")) return Response.json({ sandbox, command: { status: "succeeded", output: "proof", exitCode: 0 } });
       if (url.includes("list=1")) return Response.json({ sandbox, files: [] });
       return Response.json({ sandbox: { ...sandbox, ...(init?.method === "DELETE" ? { state: "deleted" } : {}) } });
     });
     const client = createOpenPondClient({
-      sandbox: { endpoint: "https://runtime.example", apiKey: "runtime-key" },
+      sandbox: { endpoint: "https://runtime.example", apiKey: "opk_runtime-key" },
       model: { endpoint: "https://model.example/v1", apiKey: "model-key", model: "customer-model" },
     });
     await expect(client.work.run({ prompt: "Make proof", cleanup: "delete" })).resolves.toMatchObject({ text: "Done", lifecycle: { cleanup: { status: "complete" } } });
