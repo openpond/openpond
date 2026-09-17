@@ -49,7 +49,9 @@ async function fixture(timeoutMs = 5_000) {
     });
     await store.selectHarnessWorkspace({ ownerKind: "personal", ownerId: "desktop-personal", workspaceId: "embedded", updatedAt: new Date().toISOString() });
   } finally { await store.close(); }
-  return { storeDir, workspaceDir: path.join(root, "work") };
+  return { storeDir: path.join(root, "runtime"), workspaceDir: path.join(root, "work"),
+    harness: { sourceDirectory: localHarnessWorkspacePaths(storeDir, "seed").source,
+      workspaceId: "application-fixture", name: "Application fixture" } };
 }
 
 async function start(options: OpenPondAppServerOptions) {
@@ -211,4 +213,23 @@ test.each(["timeout", "output limit"])("bounds custom tool %s", async kind => {
   expect(await server.runtime.turnStart({ threadId, input: { prompt: "Run fixture" } }))
     .toMatchObject({ turn: { status: "completed" } });
   if (kind === "timeout") expect(handlerSignal?.aborted).toBe(true);
+});
+
+// A deployment cannot silently mutate the trusted release used by an existing home.
+test("rejects changed bootstrap source and leaves the runtime home reopenable", async () => {
+  const paths = await fixture();
+  const options: OpenPondAppServerOptions = { ...paths, embedding: {
+    allowedTools: [], authorizeTool: async () => {},
+  }, streamOpenPondHostedChatTurn: async function* () {} };
+  const server = await createOpenPondAppServer(options);
+  await server.close();
+  const manifestPath = path.join(paths.harness.sourceDirectory, "harness.json");
+  const original = await readFile(manifestPath, "utf8");
+  const manifest = JSON.parse(original);
+  manifest.toolDeclarations[0].description = "Changed declaration";
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await expect(createOpenPondAppServer(options)).rejects.toThrow(/source changed/);
+  await writeFile(manifestPath, original);
+  const reopened = await createOpenPondAppServer(options);
+  await reopened.close();
 });

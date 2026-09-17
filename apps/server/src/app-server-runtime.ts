@@ -31,6 +31,7 @@ import {
   resolveSelectedLocalHarnessRelease,
 } from "./harness/local-harness-selection.js";
 import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-runtime.js";
+import { importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
 import {
   ensureLocalHarnessRunOverlay,
   loadLocalHarnessRuntimeForAgentRun,
@@ -111,6 +112,8 @@ export type OpenPondAppServerOptions = {
   maxHostedWorkspaceToolRounds?: number;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
   sandboxRequest?: AppServerSandboxRequest;
+  /** Trusted source directory containing harness.json and declared assets. Immutable per workspace ID. */
+  harness?: { sourceDirectory: string; workspaceId: string; name: string };
   /** Explicit embedding enables native-only, allowlisted tools and disables hosted services by default. */
   embedding?: AppServerEmbeddingOptions;
   services?: AppServerServiceOptions;
@@ -211,6 +214,16 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     logger,
   });
 
+  if (options.harness) {
+    await importLocalHarnessWorkspaceSource({
+      store, storeDir, sourceDir: options.harness.sourceDirectory,
+      id: options.harness.workspaceId, name: options.harness.name, ownerId: "desktop-personal",
+    });
+    await store.selectHarnessWorkspace({
+      ownerKind: "personal", ownerId: "desktop-personal",
+      workspaceId: options.harness.workspaceId, updatedAt: now(),
+    });
+  }
   await ensureSelectedLocalHarnessWorkspace({
     store,
     storeDir,
