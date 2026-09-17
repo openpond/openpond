@@ -85,6 +85,37 @@ export async function importProfileIntoLocalHarnessWorkspace(input: {
   });
 }
 
+/** Install a trusted, immutable source snapshot without exposing persistence internals. */
+export async function importLocalHarnessWorkspaceSource(input: {
+  store: SqliteStore; storeDir: string; sourceDir: string;
+  id: string; ownerId: string; name: string;
+}): Promise<void> {
+  const compiled = await compileLocalHarnessSource({ workspaceId: input.id, sourceDir: input.sourceDir });
+  const existing = await input.store.getHarnessWorkspace(input.id);
+  if (existing) {
+    const release = existing.currentChannel.release
+      ? await input.store.getHarnessReleaseRecord(existing.currentChannel.release.contentHash)
+      : null;
+    if (existing.ownerScope.id !== input.ownerId || existing.sourceRevision !== compiled.sourceRevision ||
+        release?.harnessRelease.contentHash !== compiled.harnessRelease.contentHash) {
+      throw new Error("Configured Harness source changed; use a new workspace ID for the new release.");
+    }
+    return;
+  }
+  await createLocalHarnessWorkspaceFromInitializer({
+    ...input,
+    initializeSource: async sourceDir => {
+      await fs.mkdir(sourceDir, { recursive: true });
+      await fs.writeFile(path.join(sourceDir, HARNESS_SOURCE_MANIFEST), canonicalJson(compiled.manifest));
+      for (const file of compiled.sourceFiles) {
+        const destination = path.join(sourceDir, file.path);
+        await fs.mkdir(path.dirname(destination), { recursive: true });
+        await fs.writeFile(destination, file.bytes);
+      }
+    },
+  });
+}
+
 export async function forkLocalHarnessWorkspaceFromRelease(input: {
   store: SqliteStore;
   storeDir: string;

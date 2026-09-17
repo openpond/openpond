@@ -23,6 +23,11 @@ declare function lookupAuthorizedWeek(input: {
 const server = await createOpenPondAppServer({
   storeDir: "/var/lib/customer-work/runtime",
   workspaceDir: "/var/lib/customer-work/workspace",
+  harness: {
+    sourceDirectory: "/opt/customer-work/harness",
+    workspaceId: "customer-work-v1",
+    name: "Customer Work",
+  },
   streamOpenPondHostedChatTurn: modelStream,
   sandboxRequest: privateSandbox,
   embedding: {
@@ -48,7 +53,9 @@ const server = await createOpenPondAppServer({
 // await server.close();
 ```
 
-Select and release the application's Harness through the existing Harness workflow before starting Work. Its `toolDeclarations` describe `lookup_week`, including description, side-effect class, timeout and input schema. Generate that schema with `z.toJSONSchema(weekInput, { target: "draft-7" })`; the existing Harness compiler records its content hash. Instructions and Skills continue to come from the admitted Harness. Credentials and executable bindings stay in application code, outside Harness content.
+The optional `harness` constructor setting installs and selects a trusted authored source directory containing `harness.json` and its declared assets. It uses the existing compiler, release store and immutable snapshots. Reopening the same home accepts identical source; changed source requires a new `workspaceId` and fails explicitly otherwise. Existing threads retain their admitted release. Keep the deployment source read-only and outside model control. Without this option, selection follows the existing Harness workflow.
+
+Its `toolDeclarations` describe `lookup_week`, including description, side-effect class, timeout and input schema. Generate that schema with `z.toJSONSchema(weekInput, { target: "draft-7" })`; the existing Harness compiler records its content hash. Instructions and Skills continue to come from the admitted Harness. Credentials and executable bindings stay in application code, outside Harness content.
 
 Start threads with `provider: "openpond"`, `experience: "work"` and the model ID understood by the injected model adapter. The provider ID selects this runtime path; the adapter determines the actual inference endpoint. Embedded mode rejects other provider paths and legacy create/improve runs, which do not use this tool admission boundary. For remote sandbox tools, attach the thread to the application's sandbox using `workspaceKind: "sandbox"` and `workspaceId`.
 
