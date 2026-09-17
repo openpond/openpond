@@ -189,6 +189,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "4.1.10",
+    "dts-bundle-generator": "9.5.1",
     "electron": "43.1.1",
     "electron-builder": "^26.0.12",
     "esbuild": "0.28.1",

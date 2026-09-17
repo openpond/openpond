@@ -20,7 +20,7 @@
     "build:cli": "tsx ../../scripts/build/bundle-cli.ts cli",
     "build:package": "tsx ../../scripts/build/bundle-cli.ts package",
     "build:local-assets": "node scripts/stage-local-assets.mjs",
-    "build:types": "tsc --project tsconfig.package.json && node scripts/flatten-types.mjs",
+    "build:types": "tsc --project tsconfig.package.json && node scripts/flatten-types.mjs && tsx ../../scripts/build/app-server-types.ts",
     "docs:commands": "tsx scripts/generate-command-reference.mjs",
     "lint": "pnpm run typecheck",
     "typecheck": "tsc --noEmit --project tsconfig.json",
@@ -59,6 +59,10 @@
     "./sandbox-template": {
       "import": "./dist/sandbox-template/manifest.js",
       "types": "./dist/sandbox-template/manifest.d.ts"
+    },
+    "./app-server": {
+      "types": "./dist/app-server.d.ts",
+      "import": "./dist/app-server.js"
     }
   },
   "dependencies": {

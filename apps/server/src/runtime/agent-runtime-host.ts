@@ -21,6 +21,8 @@ import { z } from "zod";
 
 export function createAgentRuntimePorts(deps: {
   placement?: AgentProtocolCapabilities["placement"];
+  connectedAppProviders?: AgentProtocolCapabilities["connectedAppProviders"];
+  featureOverrides?: Partial<AgentProtocolCapabilities["features"]>;
   createSession(payload: unknown): Promise<Session>;
   getSession(sessionId: string): Promise<Session>;
   turnsForSession(sessionId: string): Promise<Turn[]>;
@@ -85,8 +87,9 @@ export function createAgentRuntimePorts(deps: {
         harnessReview: true,
         refinerProfiles: true,
         immutableRefinerAdmission: true,
+        ...deps.featureOverrides,
       },
-      connectedAppProviders: [...CONNECTED_APP_PROVIDER_ORDER],
+      connectedAppProviders: deps.connectedAppProviders ?? [...CONNECTED_APP_PROVIDER_ORDER],
       tools: recordedTools,
       toolCatalogHash: recordedHash,
     };

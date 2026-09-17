@@ -10,6 +10,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/agent-app-server-rpc.test.ts",
   "tests/app-preferences.test.ts",
   "tests/app-server-lean-composition.test.ts",
+  "tests/app-server-embedding.test.ts",
   "tests/bootstrap-event-window.test.ts",
   "tests/browser-control-queue.test.ts",
   "tests/byok-turn-runner-profile-tools.test.ts",

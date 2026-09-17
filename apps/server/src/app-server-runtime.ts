@@ -19,6 +19,7 @@ import {
   readProfileSkill,
 } from "@openpond/cloud";
 import { createLogger } from "@openpond/logging";
+import { contentHash } from "@openpond/harness";
 import {
   getBundledRuntimeVersion,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
@@ -89,6 +90,18 @@ import {
 import { SqliteStore } from "./store/store.js";
 import { event, now } from "./utils.js";
 
+import {
+  createEmbeddingToolResolver,
+  type AppServerEmbeddingOptions,
+  type AppServerServiceOptions,
+  type AppServerWorkLifecycle,
+} from "./runtime/app-server-embedding.js";
+
+export type { AppServerEmbeddingOptions, AppServerServiceOptions, AppServerToolBinding, AppServerHarnessToolContext } from "./runtime/app-server-embedding.js";
+export { runAppServerJsonl } from "@openpond/app-server";
+export { AGENT_PROTOCOL_VERSION } from "@openpond/agent-runtime";
+export type { AppServerSandboxRequest } from "./runtime/app-server-sandbox-tools.js";
+
 const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
 
 export type OpenPondAppServerOptions = {
@@ -98,6 +111,11 @@ export type OpenPondAppServerOptions = {
   maxHostedWorkspaceToolRounds?: number;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
   sandboxRequest?: AppServerSandboxRequest;
+  /** Explicit embedding enables native-only, allowlisted tools and disables hosted services by default. */
+  embedding?: AppServerEmbeddingOptions;
+  services?: AppServerServiceOptions;
+  workInputsForSession?: AppServerWorkLifecycle["workInputsForSession"];
+  finalizeWorkTurn?: AppServerWorkLifecycle["finalizeWorkTurn"];
 };
 
 export type OpenPondAppServerInstance = AppServerInstance & {
@@ -141,6 +159,20 @@ export async function createOpenPondAppServer(options: OpenPondAppServerOptions 
 }
 async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<OpenPondAppServerInstance> {
   const storeDir = path.resolve(options.storeDir ?? appDataDir());
+  const embedded = Boolean(options.embedding);
+  if (embedded && !options.streamOpenPondHostedChatTurn) {
+    throw new Error("Embedded Work requires an explicit model-stream adapter.");
+  }
+  const services = options.services ?? {};
+  const webSearch = selectService(services.webSearch, embedded, createWebSearchExecutorFromEnv);
+  const scheduling = selectService(services.scheduling, embedded, () => createHostedSavedWork);
+  const connectedApps = selectService(services.connectedApps, embedded, () => ({
+    execute: createCloudConnectedAppToolExecutor(), list: listAppServerIntegrationConnections,
+  }));
+  const tasksets = selectService(services.tasksets, embedded, () => executeHostedTasksetAction);
+  const backgroundReview = services.backgroundReview ?? !embedded;
+  // A model-tool adapter does not configure the separate local evaluation workflow.
+  const harnessEvaluationEnabled = !embedded && Boolean(tasksets);
   await initializeHome(storeDir);
   await initializeRefinerProfile(storeDir);
   const workspaceDir = path.resolve(options.workspaceDir ?? process.cwd());
@@ -221,8 +253,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   });
   const createSessionWithAutoTitle: typeof createSession = async (payload) => {
     const prompt = autoTitlePromptFromPayload(payload);
-    const session = await createSession(withPendingAutoTitle(payload));
-    if (prompt) sessionTitleService.schedule(session.id, prompt);
+    const session = await createSession(embedded ? payload : withPendingAutoTitle(payload));
+    if (prompt && !embedded) sessionTitleService.schedule(session.id, prompt);
     return session;
   };
   const workspace = createAppServerWorkspace({
@@ -230,9 +262,11 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     logger,
     getSession,
     appendRuntimeEvent,
-    sandboxRequest: options.sandboxRequest,
+    sandboxRequest: options.sandboxRequest ?? (embedded ? async () => {
+      throw new Error("Sandbox execution is not configured in this app-server deployment.");
+    } : undefined),
   });
-  const harnessTasksetReview = await createLocalHarnessTasksetReviewControl({
+  const harnessTasksetReview = harnessEvaluationEnabled ? await createLocalHarnessTasksetReviewControl({
     store,
     storeDir,
     evaluationRuntime: {
@@ -255,7 +289,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
           : null;
       },
     },
-  });
+  }) : undefined;
   const upsertApproval = async (approval: Approval): Promise<void> => {
     await store.upsertApproval(approval);
   };
@@ -263,10 +297,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     upsertApproval,
     appendRuntimeEvent,
   });
-  const projectActionRunPayload = createProjectActionRunPayload({
+  const projectActionRunPayload = selectService(services.projectActions, embedded, () => createProjectActionRunPayload({
     appendRuntimeEvent,
     resolveProjectRoot: async () => null,
-  });
+  }));
   const safeUpsertModelUsageRecord = async (
     record: ModelUsageRecord,
   ): Promise<void> => {
@@ -278,18 +312,33 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       ).catch(() => undefined);
     }
   };
-  const harnessImprovement = createLocalHarnessImprovementRuntime({
+  const harnessImprovement = backgroundReview ? createLocalHarnessImprovementRuntime({
     store,
     storeDir,
     queue: turnFollowUpQueue,
     streamOpenPondHostedChatTurn,
     appendRuntimeEvent,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
-  });
-  await harnessImprovement.reconcilePending();
+  }) : undefined;
+  await harnessImprovement?.reconcilePending();
 
   const turnRunner = createTurnRunner({
     storageHome: storeDir,
+    workInputsForSession: options.workInputsForSession,
+    finalizeWorkTurn: options.finalizeWorkTurn,
+    resolveModelTools: options.embedding ? createEmbeddingToolResolver(options.embedding, async (turnId, bindings) => {
+      const turn = await store.getTurn(turnId);
+      if (!turn) throw new Error("Embedded turn is unavailable.");
+      const session = await getSession(turn.sessionId);
+      const previous = session.metadata?.embeddingToolBindings;
+      const admittedBindings = [...bindings].sort((a, b) => a.name.localeCompare(b.name));
+      if (previous !== undefined && contentHash(previous) !== contentHash(admittedBindings)) {
+        throw new Error("Embedded tool bindings changed; start a new thread.");
+      }
+      await updateSession(session.id, { metadata: { ...session.metadata, embeddingToolBindings: admittedBindings } });
+      await store.updateTurn(turnId, current => ({ ...current, metadata: { ...current.metadata, toolBindings: admittedBindings } }));
+    }) : undefined,
+    ...(embedded ? { hostedToolFlags: { toolMode: "native" as const, nativeToolTransport: true, nativeToolProviderDenylist: [], textToolFallback: false } } : {}),
     attachmentRootDir: path.join(storeDir, "attachments"),
     store,
     createSession,
@@ -315,16 +364,18 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     executeWorkspaceTool: workspace.executeWorkspaceTool,
     executeOpenPondCommand: commandAccess.executeCommand,
     executeProjectAction: projectActionRunPayload,
-    executeDatasetBuilderAction: executeHostedTasksetAction,
+    executeDatasetBuilderAction: tasksets,
     loadOpenPondProfileState,
     ...createProfileTurnDependencies(),
+    ...(embedded || services.profileActions === false ? { executeProfileSkillCommand: undefined } : {}),
     loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
     loadSelectedHarnessRuntime: (session) =>
       loadLocalHarnessRuntimeForAgentRun(store, session.id),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
-    harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }),
+    harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }).filter(tool =>
+      backgroundReview || !["refiner_profile_inspect", "refiner_profile_update", "refine_request", "refine_status"].includes(tool.name)),
     loadBuiltInOpenPondSkills: async () => [
       await loadTasksetAuthoringProfileSkill(),
       ...(await loadBundledAuthoringSkills()),
@@ -338,10 +389,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       }
       throw new Error(`Built-in OpenPond skill not found: ${name}`);
     },
-    executeWebSearch: createWebSearchExecutorFromEnv(),
-    createScheduledWork: createHostedSavedWork,
-    executeConnectedAppTool: createCloudConnectedAppToolExecutor(),
-    listIntegrationConnections: listAppServerIntegrationConnections,
+    executeWebSearch: webSearch,
+    createScheduledWork: scheduling,
+    executeConnectedAppTool: connectedApps?.execute,
+    listIntegrationConnections: connectedApps?.list,
     loadPersonalizationSoul: async () =>
       (await loadPersonalizationSettings(store, storeDir)).soul,
     loadAppPreferences: async () => (await readPreferences(storeDir)).preferences,
@@ -391,6 +442,18 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",
+      connectedAppProviders: connectedApps ? undefined : [],
+      featureOverrides: {
+        harnessBackgroundReview: backgroundReview,
+        harnessProposalReview: backgroundReview,
+        harnessReview: harnessEvaluationEnabled,
+        harnessEvaluationReview: harnessEvaluationEnabled,
+        harnessEvaluationReviewAcceptance: harnessEvaluationEnabled,
+        harnessEvaluationTasksetMaterialization: harnessEvaluationEnabled,
+        harnessEvaluationBaseline: harnessEvaluationEnabled,
+        refinerProfiles: backgroundReview,
+        immutableRefinerAdmission: backgroundReview,
+      },
       createSession: createSessionWithAutoTitle,
       getSession,
       turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
@@ -402,18 +465,18 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       interruptSessionTurn: turnRunner.interruptSessionTurn,
       resolveApproval,
       inspectHarness: () => localHarnessHistoryPayload(store),
-      reviewHarnessProposal: harnessSettings.reviewHarnessProposalPayload,
-      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({
+      reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),
+      reviewHarness: guardService(harnessEvaluationEnabled, "Harness evaluation", (request) => reviewSelectedLocalHarnessEvaluation({
         store,
         request,
         stream: harnessEvaluationReviewStream,
         continuation: { storeDir, stream: harnessEvaluationReviewStream },
-      }),
-      acceptHarnessEvaluationReview: harnessTasksetReview.acceptEvaluationReview,
+      })),
+      acceptHarnessEvaluationReview: guardService(harnessEvaluationEnabled, "Tasksets", request => harnessTasksetReview!.acceptEvaluationReview(request)),
       materializeHarnessEvaluationTaskset:
-        harnessTasksetReview.materializeEvaluationTaskset,
+        guardService(harnessEvaluationEnabled, "Tasksets", request => harnessTasksetReview!.materializeEvaluationTaskset(request)),
       runHarnessEvaluationBaseline:
-        harnessTasksetReview.runEvaluationBaseline,
+        guardService(harnessEvaluationEnabled, "Tasksets", request => harnessTasksetReview!.runEvaluationBaseline(request)),
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release
@@ -429,13 +492,13 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
             };
       },
       updateHarnessBackgroundReview:
-        harnessSettings.updateHarnessBackgroundReviewPayload,
+        guardService(backgroundReview, "Background review", harnessSettings.updateHarnessBackgroundReviewPayload),
       diffHarness: harnessSettings.harnessDiffPayload,
       rollbackHarness: harnessSettings.rollbackHarnessPayload,
-      inspectRefiner: () => inspectRefinerProfile(storeDir),
-      updateRefiner: (payload) => updateRefinerProfile(storeDir, payload),
-      activateRefiner: (payload) => activateRefinerRelease(storeDir, payload),
-      rollbackRefiner: (payload) => rollbackRefinerRelease(storeDir, payload),
+      inspectRefiner: guardService(backgroundReview, "Refiner", () => inspectRefinerProfile(storeDir)),
+      updateRefiner: guardService(backgroundReview, "Refiner", (payload) => updateRefinerProfile(storeDir, payload)),
+      activateRefiner: guardService(backgroundReview, "Refiner", (payload) => activateRefinerRelease(storeDir, payload)),
+      rollbackRefiner: guardService(backgroundReview, "Refiner", (payload) => rollbackRefinerRelease(storeDir, payload)),
       subscribeRuntimeEvents,
       observeRuntimeOperation: (runtimeEvent) => {
         logger.info("agent runtime operation", runtimeEvent);
@@ -454,16 +517,20 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       await logger.flush();
     },
   });
+  const composition = APP_SERVER_COMPOSITION.filter(service =>
+    (service !== "web_search" || Boolean(webSearch)) &&
+    (service !== "connected_apps" || Boolean(connectedApps)) &&
+    (service !== "refiner" || backgroundReview));
   logger.info("app-server ready", {
     storePath: store.storePath,
     workspaceDir,
-    composition: APP_SERVER_COMPOSITION,
+    composition,
   });
   return {
     ...instance,
     storePath: store.storePath,
     workspaceDir,
-    composition: APP_SERVER_COMPOSITION,
+    composition,
   };
 }
 
@@ -503,4 +570,17 @@ function runtimeDiagnostic(
       model: record.model,
     },
   });
+}
+
+function selectService<T>(override: T | false | undefined, embedded: boolean, defaultService: () => T): T | undefined {
+  if (override === false) return undefined;
+  if (override !== undefined) return override;
+  return embedded ? undefined : defaultService();
+}
+
+function guardService<A extends unknown[], R>(enabled: boolean, name: string, handler: (...args: A) => Promise<R>) {
+  return async (...args: A): Promise<R> => {
+    if (!enabled) throw new Error(`${name} is disabled in this app-server deployment.`);
+    return handler(...args);
+  };
 }

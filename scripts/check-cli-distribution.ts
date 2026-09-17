@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 
 import { runProcessCommand } from "../apps/cli/src/process-runner";
+import { checkAppServerDistribution } from "./check-app-server-distribution.js";
 
 type PackResult = {
   version: string;
@@ -62,6 +63,8 @@ async function checkNpmPackage() {
   const fileMap = new Map(result.files.map((file) => [file.path, file.size]));
   enforceRequiredFiles(fileMap, [
     "dist/cli.js",
+    "dist/app-server.js",
+    "dist/app-server.d.ts",
     "dist/web/index.html",
     "LICENSE",
     "README.md",
@@ -85,6 +88,18 @@ async function checkNpmPackage() {
     }
   }
   const audit = await checkNpmAudit(consumer);
+  const appServer = await checkAppServerDistribution({ root, consumer, command });
+  const packageProof = {
+    tarballSha256,
+    packedBytes: result.size,
+    unpackedBytes: result.unpackedSize,
+    fileCount: result.entryCount,
+    entryBytes: fileMap.get("dist/cli.js"),
+    auditStatus: audit.status,
+    auditVulnerabilities: audit.vulnerabilities,
+    appServer,
+  };
+  if (process.argv.includes("--app-server-only")) return packageProof;
   const cli = path.join(consumer, "node_modules", "openpond", "dist", "cli.js");
   const runtime = await checkRunnableDistribution("node", [cli]);
   const installed = await checkInstalledEntrypoints({
@@ -94,13 +109,7 @@ async function checkNpmPackage() {
   });
   const ephemeral = await checkEphemeralEntrypoints(tarballPath, result.version);
   return {
-    tarballSha256,
-    packedBytes: result.size,
-    unpackedBytes: result.unpackedSize,
-    fileCount: result.entryCount,
-    entryBytes: fileMap.get("dist/cli.js"),
-    auditStatus: audit.status,
-    auditVulnerabilities: audit.vulnerabilities,
+    ...packageProof,
     installed,
     ephemeral,
     ...runtime,

@@ -8,6 +8,7 @@ export async function bundleCli(surface: CliBundleSurface = "all"): Promise<void
   const entryPoints: Record<string, string> = {};
   if (surface === "all" || surface === "cli") entryPoints.cli = fromRoot("apps", "cli", "src", "cli", "main.ts");
   if (surface === "all" || surface === "package") {
+    entryPoints["app-server"] = fromRoot("apps", "cli", "src", "app-server.ts");
     entryPoints.index = fromRoot("apps", "cli", "src", "index.ts");
     entryPoints["sandbox-template/manifest"] = fromRoot("apps", "cli", "src", "sandbox-template", "manifest.ts");
   }

@@ -91,6 +91,7 @@ type PrepareHostedProviderRequest = ReturnType<
 >["prepareHostedProviderRequest"];
 
 export function createHostedToolLoopRuntime(deps: {
+  resolveModelTools?: TurnRunnerDependencies["resolveModelTools"];
   hostedToolFlags: HostedToolRolloutFlags;
   assertExecutionAllowed?: (turnId: string) => Promise<void>;
   nativeToolsEnabledForProvider(provider: ChatProvider): boolean;
@@ -186,6 +187,8 @@ export function createHostedToolLoopRuntime(deps: {
   const store = { runtimeEventsForSession: deps.runtimeEventsForSession };
   const getSession = deps.getSession;
   async function runHostedToolLoop(params: {
+    harness?: import("@openpond/harness").HarnessRelease | null;
+    harnessDeclarations?: import("@openpond/harness").ToolDeclaration[];
     session: Session;
     turn: Turn;
     turnPermissions: SubagentTurnPermissions;
@@ -234,7 +237,7 @@ export function createHostedToolLoopRuntime(deps: {
       params.turn,
       deps.getTaskset
     );
-    const nativeToolDefinitions = nativeToolsEnabledForProvider(params.provider)
+    let nativeToolDefinitions = nativeToolsEnabledForProvider(params.provider)
       ? filterModelToolsForExperience(
           session,
           enabledModelToolDefinitions(
@@ -265,6 +268,14 @@ export function createHostedToolLoopRuntime(deps: {
           )
         )
       : [];
+    if (deps.resolveModelTools) {
+      if (!nativeToolsEnabledForProvider(params.provider)) throw new Error("Embedded Work requires native tool transport.");
+      nativeToolDefinitions = await deps.resolveModelTools({
+        session: params.session, turn: params.turn, signal: params.signal,
+        harness: params.harness ?? null, declarations: params.harnessDeclarations ?? [],
+        tools: nativeToolDefinitions,
+      });
+    }
     const effectiveToolCatalog = createAgentToolCatalogProjection(
       nativeToolDefinitions.map((definition) => ({
         name: definition.name,
