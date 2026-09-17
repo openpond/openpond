@@ -506,6 +506,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     throwIfInterrupted,
   });
   const { runHostedToolLoop } = createHostedToolLoopRuntime({
+    resolveModelTools: deps.resolveModelTools,
     assertExecutionAllowed: (turnId) => assertTurnConfiguration(deps.storageHome, turnId),
     hostedToolFlags,
     nativeToolsEnabledForProvider,
@@ -875,6 +876,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.modelRef?.providerId ??
       session.modelRef?.providerId ??
       session.provider;
+    if (deps.resolveModelTools && (requestedProvider !== "openpond" || input.createImproveRun)) {
+      throw new Error("Embedded Work requires the configured model adapter and native tool loop.");
+    }
     if (requestedProvider === "codex" && !sessionUsesRepositoryWork(session)) {
       throw new Error("The Codex provider requires repository-aware Work.");
     }
@@ -1293,6 +1297,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           systemPrompt
         );
         session = await runHostedToolLoop({
+          harness: selectedHarness?.release.harnessRelease,
+          harnessDeclarations: [
+            ...(selectedHarness?.release.agentSnapshot?.toolDeclarations ?? []),
+            ...(selectedHarness?.release.harnessRelease.tools ?? []),
+          ],
           appPreferences,
           session,
           turn,
@@ -1451,6 +1460,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           systemPrompt
         );
         session = await runHostedToolLoop({
+          harness: selectedHarness?.release.harnessRelease,
+          harnessDeclarations: [
+            ...(selectedHarness?.release.agentSnapshot?.toolDeclarations ?? []),
+            ...(selectedHarness?.release.harnessRelease.tools ?? []),
+          ],
           appPreferences,
           streamCompactionChatTurn: streamByokCompactionChatTurn,
           session,

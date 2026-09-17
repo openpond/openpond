@@ -1,4 +1,5 @@
-import type { RuntimeEvent, WorkspaceToolRequest } from "@openpond/contracts";
+import type { RuntimeEvent, Session, SubagentRoleSettings, WorkspaceToolRequest } from "@openpond/contracts";
+import { recordFromUnknown } from "../turns/value-utils.js";
 
 export const RESOURCE_TEXT_FALLBACK_ACTIONS = new Set<
   WorkspaceToolRequest["action"]
@@ -35,3 +36,35 @@ export const READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS = new Set<
 export const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<
   RuntimeEvent["name"]
 >(["subagent.message"]);
+
+export function subagentWorkspaceToolPolicyBlocker(
+  session: Session,
+  request: WorkspaceToolRequest
+): string | null {
+  const policy = subagentToolPolicyForSession(session);
+  if (policy !== "read_only") return null;
+  if (READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS.has(request.action))
+    return null;
+  return [
+    `Workspace action ${request.action} is blocked by the read_only subagent tool policy.`,
+    "Use read/search/status/diff tools only, or report that this child assignment needs a write-capable isolated workspace.",
+  ].join(" ");
+}
+
+function subagentToolPolicyForSession(
+  session: Session
+): SubagentRoleSettings["toolPolicy"] | null {
+  if (!session.subagentRunId) return null;
+  const subagent = recordFromUnknown(
+    recordFromUnknown(session.metadata)?.subagent
+  );
+  const toolPolicy =
+    typeof subagent?.toolPolicy === "string" ? subagent.toolPolicy : null;
+  if (
+    toolPolicy === "read_only" ||
+    toolPolicy === "workspace_write" ||
+    toolPolicy === "full_tools"
+  )
+    return toolPolicy;
+  return "read_only";
+}

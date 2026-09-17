@@ -393,6 +393,7 @@ export type TurnRunnerDependencies = {
     workspace: import("@openpond/contracts").HarnessWorkspace;
     release: {
       harnessRelease: import("@openpond/harness").HarnessRelease;
+      agentSnapshot?: import("@openpond/harness").AgentSnapshot;
     };
     instructionContext: string;
     skillRuntime: import("../hosted-turn/native-tools-runtime.js").ProfileSkillRuntime;
@@ -403,6 +404,7 @@ export type TurnRunnerDependencies = {
     harnessRelease: import("@openpond/harness").ImmutableReleaseRef;
     admittedAt: string;
   }) => Promise<import("@openpond/contracts").HarnessRunOverlay>;
+  resolveModelTools?: import("../app-server-embedding.js").ResolveAppServerModelTools;
   harnessModelTools?: import("../../openpond/model-tool-registry.js").ModelToolDefinition[];
   loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;
   readBuiltInOpenPondSkill?: (name: string) => Promise<ProfileSkillReadResult>;

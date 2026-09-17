@@ -2,6 +2,8 @@
 
 OpenPond CLI
 
+The `openpond/app-server` entry point supports embedding the full Work runtime with application tool bindings, service controls and persistence callbacks. See the [embedding guide](https://github.com/openpond/openpond/blob/master/docs/public/app-server-embedding.md).
+
 The generated [command reference](./docs/command-reference.md) is the authoritative command and option inventory.
 
 Launch the complete local web app without installing it globally:
