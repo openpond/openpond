@@ -12,7 +12,6 @@ import {
   type Taskset,
   type Turn,
   type WorkspaceDiffSummary,
-  type WorkspaceToolRequest,
 } from "@openpond/contracts";
 import {
   createAgentToolCatalogProjection,
@@ -60,9 +59,6 @@ import type {
   TurnRunnerDependencies,
 } from "../turns/ports.js";
 import { isTerminalOneShotTurn } from "../turns/request-context.js";
-import {
-  recordFromUnknown,
-} from "../turns/value-utils.js";
 import { normalizeMentionedSandboxToolRequest } from "../create-pipeline/snapshots.js";
 import {
   filterModelToolsForExperience,
@@ -70,7 +66,7 @@ import {
 } from "../experience-policy.js";
 import { hostedTrainingHarnessRound } from "./training-harness-round.js";
 import {
-  READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS,
+  subagentWorkspaceToolPolicyBlocker,
   RESOURCE_TEXT_FALLBACK_ACTIONS,
 } from "./tool-loop-action-policy.js";
 import { subagentModelAsideMessages } from "./tool-loop-subagent-asides.js";
@@ -910,38 +906,6 @@ export function createHostedToolLoopRuntime(deps: {
         return session;
       },
     });
-  }
-
-  function subagentWorkspaceToolPolicyBlocker(
-    session: Session,
-    request: WorkspaceToolRequest
-  ): string | null {
-    const policy = subagentToolPolicyForSession(session);
-    if (policy !== "read_only") return null;
-    if (READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS.has(request.action))
-      return null;
-    return [
-      `Workspace action ${request.action} is blocked by the read_only subagent tool policy.`,
-      "Use read/search/status/diff tools only, or report that this child assignment needs a write-capable isolated workspace.",
-    ].join(" ");
-  }
-
-  function subagentToolPolicyForSession(
-    session: Session
-  ): SubagentRoleSettings["toolPolicy"] | null {
-    if (!session.subagentRunId) return null;
-    const subagent = recordFromUnknown(
-      recordFromUnknown(session.metadata)?.subagent
-    );
-    const toolPolicy =
-      typeof subagent?.toolPolicy === "string" ? subagent.toolPolicy : null;
-    if (
-      toolPolicy === "read_only" ||
-      toolPolicy === "workspace_write" ||
-      toolPolicy === "full_tools"
-    )
-      return toolPolicy;
-    return "read_only";
   }
 
   function workspaceToolCorrectionMessage(
