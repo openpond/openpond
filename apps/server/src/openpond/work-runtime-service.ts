@@ -94,6 +94,10 @@ export function createWorkRuntimeService(deps: {
             attachToSession: true,
             command: WORK_LAYOUT_COMMAND,
             visibility: "private",
+            networkPolicy: {
+              internetEgress: "block",
+              allowedHosts: [],
+            },
             reuseDefaultRuntime: false,
             markDefaultRuntime: false,
             runtime: {

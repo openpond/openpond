@@ -274,6 +274,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     workspaceDir,
     logger,
     getSession,
+    updateSession,
     appendRuntimeEvent,
     sandboxRequest: options.sandboxRequest ?? (embedded ? async () => {
       throw new Error("Sandbox execution is not configured in this app-server deployment.");
