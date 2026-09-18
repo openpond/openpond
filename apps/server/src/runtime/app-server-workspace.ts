@@ -33,6 +33,10 @@ export function createAppServerWorkspace(input: {
   workspaceDir: string;
   logger: AppServerWorkspaceLogger;
   getSession(sessionId: string): Promise<Session>;
+  updateSession(
+    sessionId: string,
+    patch: Partial<Session>,
+  ): Promise<Session>;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
   sandboxRequest?: AppServerSandboxRequest;
 }) {
@@ -122,6 +126,17 @@ export function createAppServerWorkspace(input: {
           session,
           request,
           sandboxRequest: input.sandboxRequest ?? sandboxRequestPayload,
+          attachSandbox: async ({ sandboxId, sandbox }) => {
+            await input.updateSession(session.id, {
+              appId: null,
+              appName: null,
+              workspaceKind: "sandbox",
+              workspaceId: sandboxId,
+              workspaceName:
+                optionalString(sandbox.name) || "Hosted Work",
+              cwd: null,
+            });
+          },
         });
         if (!result) {
           throw new Error(
@@ -228,6 +243,10 @@ export function createAppServerWorkspace(input: {
     workspaceDiffBaseline,
     workspaceForSession,
   };
+}
+
+function optionalString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function workspaceApp(repoPath: string, updatedAt: string): OpenPondApp {

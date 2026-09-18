@@ -14,6 +14,7 @@ export type AppServerSandboxRequest = (
 ) => Promise<unknown>;
 
 const REMOTE_SANDBOX_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
+  "sandbox_create",
   "sandbox_status",
   "sandbox_start",
   "sandbox_list_files",
@@ -28,28 +29,51 @@ const REMOTE_SANDBOX_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
   "sandbox_exec",
   "sandbox_open_port",
   "sandbox_snapshot_create",
+  "sandbox_stop",
 ]);
 
 export async function executeAppServerSandboxTool(input: {
   session: Session;
   request: WorkspaceToolRequest;
   sandboxRequest: AppServerSandboxRequest;
+  attachSandbox?: (input: {
+    sandboxId: string;
+    sandbox: Record<string, unknown>;
+  }) => Promise<void>;
 }): Promise<WorkspaceToolResult | null> {
   if (!REMOTE_SANDBOX_ACTIONS.has(input.request.action)) return null;
-  if (input.session.workspaceKind !== "sandbox" || !input.session.workspaceId) {
+  const action = input.request.action;
+  if (
+    action !== "sandbox_create" &&
+    (input.session.workspaceKind !== "sandbox" || !input.session.workspaceId)
+  ) {
     throw new Error("The hosted Work task is not attached to a sandbox.");
   }
 
   const args = input.request.args ?? {};
-  const sandboxId = input.session.workspaceId;
+  const sandboxId = input.session.workspaceId ?? "";
   const requestedSandboxId = optionalString(args.sandboxId);
   if (requestedSandboxId && requestedSandboxId !== sandboxId) {
     throw new Error("Hosted Work cannot target a different sandbox.");
   }
 
-  const action = input.request.action;
   let data: unknown;
-  if (action === "sandbox_status") {
+  if (action === "sandbox_create") {
+    data = await createRemoteSandbox({
+      args,
+      session: input.session,
+      sandboxRequest: input.sandboxRequest,
+    });
+    const createdSandbox = asRecord(asRecord(data).sandbox);
+    const createdSandboxId = optionalString(createdSandbox.id);
+    if (!createdSandboxId) {
+      throw new Error("Sandbox create response did not include a sandbox id.");
+    }
+    await input.attachSandbox?.({
+      sandboxId: createdSandboxId,
+      sandbox: createdSandbox,
+    });
+  } else if (action === "sandbox_status") {
     data = await input.sandboxRequest({ type: "get", sandboxId });
   } else if (action === "sandbox_start") {
     data = await input.sandboxRequest({ type: "start", sandboxId });
@@ -160,20 +184,134 @@ export async function executeAppServerSandboxTool(input: {
         autoStart: true,
       },
     });
-  } else {
+  } else if (action === "sandbox_snapshot_create") {
     data = await input.sandboxRequest({
       type: "snapshot_create",
       sandboxId,
       payload: { name: requiredString(args.name, "name") },
+    });
+  } else {
+    data = await input.sandboxRequest({
+      type: "stop",
+      sandboxId,
+      failOnUnpreservedChanges: false,
     });
   }
 
   return WorkspaceToolResultSchema.parse({
     ok: true,
     action,
-    output: `${action} completed in the attached Work sandbox.`,
+    output:
+      action === "sandbox_create"
+        ? `Active sandbox workspace: ${optionalString(asRecord(asRecord(data).sandbox).id)}`
+        : `${action} completed in the attached Work sandbox.`,
     data,
   });
+}
+
+async function createRemoteSandbox(input: {
+  args: Record<string, unknown>;
+  session: Session;
+  sandboxRequest: AppServerSandboxRequest;
+}): Promise<Record<string, unknown>> {
+  const requestedRuntime = asRecord(input.args.runtime);
+  const requestedRuntimeId = optionalString(requestedRuntime.runtimeId);
+  const teamId =
+    optionalString(input.args.teamId) || optionalString(input.session.cloudTeamId);
+  const projectId =
+    optionalString(input.args.projectId) ||
+    optionalString(input.session.cloudProjectId);
+  const agentId = optionalString(input.args.agentId);
+  const workflowMode =
+    optionalString(input.args.workflowMode) ||
+    optionalString(requestedRuntime.workflowMode) ||
+    (projectId || agentId ? "feature" : "attempt");
+  const promotionPolicy =
+    optionalString(input.args.runtimePromotionPolicy) ||
+    optionalString(requestedRuntime.promotionPolicy) ||
+    (projectId || agentId ? "manual" : "none");
+  const runtimeCreate = { ...requestedRuntime };
+  delete runtimeCreate.runtimeId;
+
+  let runtimePayload: Record<string, unknown> = {};
+  let runtimeId = requestedRuntimeId;
+  if (!runtimeId) {
+    runtimePayload = asRecord(
+      await input.sandboxRequest({
+        type: "sandbox_runtime_create",
+        payload: {
+          ...runtimeCreate,
+          ...(teamId ? { teamId } : {}),
+          ...(projectId ? { projectId } : {}),
+          ...(agentId ? { agentId } : {}),
+          workflowMode,
+          promotionPolicy,
+          metadata: {
+            source: "openpond-app-server-work",
+            ...asRecord(requestedRuntime.metadata),
+          },
+        },
+      }),
+    );
+    runtimeId = optionalString(asRecord(runtimePayload.runtime).id);
+    if (!runtimeId) {
+      throw new Error("Sandbox runtime create response did not include a runtime id.");
+    }
+  }
+
+  const sandboxPayload = asRecord(
+    await input.sandboxRequest(
+      requestedRuntimeId
+        ? {
+            type: "sandbox_runtime_resume",
+            runtimeId,
+            payload: remoteSandboxCreatePayload(input.args, {
+              teamId,
+              projectId,
+              agentId,
+            }),
+          }
+        : {
+            type: "sandbox_runtime_sandbox_create",
+            runtimeId,
+            payload: remoteSandboxCreatePayload(input.args, {
+              teamId,
+              projectId,
+              agentId,
+            }),
+          },
+    ),
+  );
+  return {
+    ...runtimePayload,
+    ...sandboxPayload,
+    runtime: sandboxPayload.runtime ?? runtimePayload.runtime,
+  };
+}
+
+function remoteSandboxCreatePayload(
+  args: Record<string, unknown>,
+  scope: { teamId: string; projectId: string; agentId: string },
+): Record<string, unknown> {
+  return {
+    ...(scope.teamId ? { teamId: scope.teamId } : {}),
+    ...(scope.projectId ? { projectId: scope.projectId } : {}),
+    ...(scope.agentId ? { agentId: scope.agentId } : {}),
+    ...(optionalString(args.repo) ? { repo: optionalString(args.repo) } : {}),
+    ...(optionalString(args.command)
+      ? { command: optionalString(args.command) }
+      : {}),
+    visibility: optionalString(args.visibility) || "private",
+    resources: asRecord(args.resources),
+    budget: asRecord(args.budget),
+    quotas: asRecord(args.quotas),
+    networkPolicy: asRecord(args.networkPolicy),
+    ...(Array.isArray(args.volumes) ? { volumes: args.volumes } : {}),
+    metadata: {
+      source: "openpond-app-server-work",
+      ...asRecord(args.metadata),
+    },
+  };
 }
 
 async function editRemoteSandboxFile(input: {
