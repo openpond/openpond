@@ -33,7 +33,7 @@ export function RewardEditor(props: { closeRef?: Ref<DraftEditorHandle>; fromLab
     : implementation && "inputContract" in implementation ? implementation.inputContract.id : null;
   const asset = useLearningResource(props.client, "asset", assetId, 1);
   const fixtures = useLearningResource(props.client, "asset", props.reward?.fixtureSetRef?.id ?? null, 1);
-  if ((assetId && !asset.resource) || (props.reward?.fixtureSetRef && !fixtures.resource)) return <div className="labs-flat-body labs-resource-page learning-workspace"><LearningError error={asset.error ?? fixtures.error} /><p role="status">{asset.error || fixtures.error ? "Reward source is unavailable. Reload its exact release to edit it." : "Loading Reward source…"}</p><button type="button" className="training-button secondary" onClick={props.onClose}>Back</button></div>;
+  if ((assetId && !asset.resource) || (props.reward?.fixtureSetRef && !fixtures.resource)) return <div className="labs-flat-body labs-resource-page learning-workspace"><LearningError error={asset.error ?? fixtures.error} /><p role="status">{asset.error || fixtures.error ? "Grader source is unavailable. Reload its exact release to edit it." : "Loading Grader source…"}</p><button type="button" className="training-button secondary" onClick={props.onClose}>Back</button></div>;
   return <RewardEditorForm {...props} sourceAsset={asset.resource} fixtureAsset={fixtures.resource} />;
 }
 
@@ -118,16 +118,16 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
       return result;
     });
   }
-  const guard = useDraftNavigation({ name: "Reward", dirty: JSON.stringify(draft) !== saved, busy: mutation.busy, save: saveDraft });
+  const guard = useDraftNavigation({ name: "Grader", dirty: JSON.stringify(draft) !== saved, busy: mutation.busy, save: saveDraft });
   useImperativeHandle(closeRef, () => ({ requestClose: () => { void guard.requestLeave(onClose); } }));
   return <div className="labs-flat-body labs-resource-page learning-workspace">
-    <ModelProjectPageHeader title={reward ? "Edit Reward" : "New Reward"} description="Save the grader and its source as an immutable release. Task formats keep the release they selected." />
+    <ModelProjectPageHeader title={reward ? "Edit grader" : "New grader"} description="Save the grader and its source as an immutable release. Task formats keep the release they selected." />
     <LearningError error={mutation.error} />
     {fromLabel ? <section><h2>Retained label</h2><p>Attempt {fromLabel.evidence.submission.exampleId} · revision {fromLabel.evidence.revision}. {fromLabel.feedback.submittedBy ? `Submitted by ${fromLabel.feedback.submittedBy.id} (${fromLabel.feedback.submittedBy.role}).` : "Submitter not recorded."}</p><TaskRatingDetails value={fromLabel.feedback.submission.value} /><p>The fixture is an editable copy. The original label remains unchanged.</p></section> : null}
     {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
     <label>Description (optional)<textarea maxLength={10_000} value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>
-    <label>Reward type<select value={draft.kind} onChange={(event) => patch({ kind: event.target.value as Kind })}>{KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></label>
+    <label>Grader type<select value={draft.kind} onChange={(event) => patch({ kind: event.target.value as Kind })}>{KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></label>
     {draft.kind === "custom_verifier" ? <>
       <LearningJsonField label="JavaScript source" value={draft.code} onChange={(code) => patch({ code })} hint="Export a function returning score (0–1), passed, and feedback. It receives input, output, expectedOutput and evaluatorContext. Files, network and imports are unavailable." />
       <label>Function export<input value={draft.exportName} onChange={(event) => patch({ exportName: event.target.value })} /></label>

@@ -66,7 +66,7 @@ export function TaskIntakeForm({ client, initialFormat = "json", onTasks, onImpo
     finally { if (!controller.signal.aborted) pending(false); }
   }
   return <fieldset disabled={busy} className="learning-workspace">
-    <h2>Import tasks and histories</h2><p>Preview supported files before saving. Imported attempts go to Labeling; task instructions become a saved draft.</p>
+    <h2>Import tasks and histories</h2><p>Preview supported files before saving. Imported attempts go to Tasks; task instructions become a saved draft.</p>
     <LearningError error={error} />
     <label>Source format<select value={format} onChange={event => { setFormat(event.target.value as TaskIntakeFormat); setPreview(null); setFiles([]); setSelected(new Set()); setProgress(0); }}>
       <option value="json">JSON tasks</option><option value="jsonl">JSONL tasks</option><option value="csv">CSV tasks</option><option value="hermes">Hermes native session JSONL</option><option value="openclaw">OpenClaw trajectory folder</option>
@@ -83,10 +83,10 @@ export function TaskIntakeForm({ client, initialFormat = "json", onTasks, onImpo
         {record.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
       </li>)}</ul>
       {preview.records.length > 20 ? <nav aria-label="Import preview pages"><button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {Math.ceil(preview.records.length / 20)}</span><button type="button" disabled={(page + 1) * 20 >= preview.records.length} onClick={() => setPage(page + 1)}>Next</button></nav> : null}
-      <p>{records.length} selected. {labeling ? "These records will wait in Labeling for context review and Reward selection." : "Tasks will be saved as a draft. References remain evaluator-only."}</p>
+      <p>{records.length} selected. {labeling ? "These records will wait in Tasks for context review and Reward selection." : "Tasks will be saved as a draft. References remain evaluator-only."}</p>
     </> : null}
     {progress ? <p role="status">{progress} records saved. A retry resumes the same import.</p> : null}
-    <div className="learning-actions"><button type="button" className="training-button secondary" onClick={onBack}>Back</button><button type="button" className="training-button" disabled={!name.trim() || !records.length} onClick={() => { void save(); }}>{busy ? "Importing…" : labeling ? "Import for labeling" : "Import tasks"}</button></div>
+    <div className="learning-actions"><button type="button" className="training-button secondary" onClick={onBack}>Back</button><button type="button" className="training-button" disabled={!name.trim() || !records.length} onClick={() => { void save(); }}>{busy ? "Importing…" : labeling ? "Import for review" : "Import tasks"}</button></div>
   </fieldset>;
 }
 

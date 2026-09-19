@@ -1,4 +1,4 @@
-export const MODELS_PAGES = ["get-started", "models", "tasks", "tasksets", "labeling", "rewards", "evaluations", "runs", "versions", "serving"] as const;
+export const MODELS_PAGES = ["get-started", "models", "settings", "tasks", "tasksets", "labeling", "rewards", "evaluations", "runs", "versions", "serving"] as const;
 export type ModelsPage = (typeof MODELS_PAGES)[number];
 export type ModelsCollection = "default" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers" | "combined";
 export interface ModelsRoute {
@@ -13,7 +13,7 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  "get-started": "Get started", models: "Models", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Runs", versions: "Versions", serving: "Serving",
+  "get-started": "Get started", models: "Models", settings: "Settings", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Graders", evaluations: "Runs", runs: "Runs", versions: "Versions", serving: "Serving",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
   tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
@@ -27,6 +27,7 @@ const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
 };
 
 export function modelsLocation(page: ModelsPage = "models", modelId: string | null = null, detail: Partial<Omit<ModelsRoute, "page" | "modelId">> = {}): ModelsRoute {
+  if (page === "labeling") return modelsLocation("tasks", modelId, detail);
   if (page === "evaluations" && detail.collection === "review") return modelsLocation("labeling", modelId, { ...detail, collection: "default" });
   return { page, modelId: page === "get-started" ? null : modelId, collection: page === "evaluations" ? "results" : "default", resourceId: null, detailTab: null, query: "", after: null, ...detail };
 }
@@ -59,10 +60,11 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
     if (detailTab) return null;
   } else if (detailTab && !detailTabs[page]?.includes(detailTab)) return null;
   if (page === "serving" && detailTab) return null;
+  if (page === "settings" && (!pathModelId || resourceId || detailTab)) return null;
   const query = new URLSearchParams(input.search ?? "");
   if ([...query.keys()].some((key) => !["model", "q", "after", "source"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
   const sourceId = query.get("source");
-  if (sourceId !== null && ((page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
+  if (sourceId !== null && ((page !== "tasks" && page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
   const legacyModelId = query.get("model");
   if (pathModelId && legacyModelId && pathModelId !== legacyModelId) return null;
   const modelId = pathModelId ?? legacyModelId;
@@ -74,6 +76,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
 }
 
 export function modelsPath(route: ModelsRoute): string {
+  if (route.page === "labeling") return modelsPath({ ...route, page: "tasks" });
   const parts = ["/models"];
   if (route.modelId) parts.push(encodeURIComponent(route.modelId));
   if (route.page === "evaluations" && route.collection === "review") return modelsPath(modelsLocation("labeling", route.modelId, { collection: "default", resourceId: route.resourceId, sourceId: route.sourceId, query: route.query, after: route.after }));
@@ -87,11 +90,12 @@ export function modelsPath(route: ModelsRoute): string {
   const query = new URLSearchParams();
   if (route.query) query.set("q", route.query);
   if (route.after) query.set("after", route.after);
-  if ((route.page === "labeling" || (route.page === "evaluations" && route.collection === "review")) && route.sourceId) query.set("source", route.sourceId);
+  if ((route.page === "tasks" || (route.page === "evaluations" && route.collection === "review")) && route.sourceId) query.set("source", route.sourceId);
   return `${parts.join("/")}${query.size ? `?${query}` : ""}`;
 }
 
 export function changeModelsScope(route: ModelsRoute, modelId: string | null): ModelsRoute {
+  if (route.page === "settings" && !modelId) return modelsLocation("models");
   return modelsLocation(route.page, modelId, { collection: route.collection === "new" || route.collection === "drafts" ? "default" : route.collection });
 }
 

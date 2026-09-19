@@ -1,21 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { createHostedLearningPolicyContent, hostedLearningPolicyDefaults, learningRef, sameLearningRef,
   type LearningPolicy, type LearningRevisionRef, type LearningSource, type LearningCommand } from "openpond-sdk/learning";
 import type { HostedModelProjectSummary } from "openpond-sdk/model-projects";
 import { ApiRequestError } from "../../../api/api-client";
-import type { createHostedModelLearningApi, HostedModelLearningSources } from "../../../api/model-learning-api";
+import type { createHostedModelLearningApi } from "../../../api/model-learning-api";
 import { AppDialog } from "../../dialogs/AppDialog";
 import { useDraftNavigation } from "../useDraftNavigation";
-import { LearningError, LearningPager } from "./LearningFields";
+import { ContinualLearningFields, type ContinualLearningFieldsValue } from "./ContinualLearningFields";
+import { LearningError } from "./LearningFields";
 
 type Client = ReturnType<typeof createHostedModelLearningApi>;
-export function HostedModelLearningSettings({ client, project, policy, onClose }: {
-  client: Client; project: HostedModelProjectSummary; policy: LearningPolicy | null; onClose: () => void;
+export function HostedModelLearningSettings({ client, project, policy, queryScope, onClose, inline = false }: {
+  inline?: boolean; client: Client; queryScope: QueryKey; project: HostedModelProjectSummary; policy: LearningPolicy | null; onClose: () => void;
 }) {
   const [id] = useState(() => policy?.id ?? `policy-${crypto.randomUUID()}`);
   const [defaults] = useState(() => hostedLearningPolicyDefaults(project, policy));
-  const [enabled, setEnabled] = useState(defaults.enabled);
-  const [scheduled, setScheduled] = useState(defaults.scheduled);
+  const [enabled, setEnabled] = useState(defaults.enabled && policy?.trigger.kind !== "manual");
+  const scheduled = defaults.scheduled;
+  const [mode, setMode] = useState<ContinualLearningFieldsValue["mode"]>(policy?.trigger.kind === "approved_count" ? "approved_count" : policy?.trigger.kind === "schedule" ? "interval" : "nightly");
+  const [localTime, setLocalTime] = useState(policy?.trigger.kind === "nightly" ? policy.trigger.localTime : "20:00");
+  const [timeZone, setTimeZone] = useState(policy?.trigger.kind === "nightly" ? policy.trigger.timeZone : Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [applyModel, setApplyModel] = useState(!policy);
   const [human, setHuman] = useState(defaults.humanReviewRequired);
   const [sources, setSources] = useState(policy?.sources ?? []);
@@ -27,17 +32,17 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [after, setAfter] = useState<string | undefined>();
-  const [catalog, setCatalog] = useState<{ after?: string; data: HostedModelLearningSources } | null>(null);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const catalog = useQuery({ queryKey: [...queryScope, "sources", "catalog"], queryFn: async () => {
+    const first = await client.sources();
+    const sources = [...first.sources.items], definitions = [...first.definitions];
+    let after = first.sources.nextCursor; const seen = new Set<string>();
+    while (after) { if (seen.has(after)) throw new Error("Source pagination did not advance."); seen.add(after); const page = await client.sources(after); sources.push(...page.sources.items); definitions.push(...page.definitions); after = page.sources.nextCursor; }
+    return { sources: { items: sources, nextCursor: null }, definitions };
+  } });
+  const catalogError = catalog.error?.message ?? null;
   const pending = useRef<LearningCommand | null>(null);
   const active = useRef(false);
-  useEffect(() => {
-    let stopped = false;
-    void client.sources(after).then(data => { if (!stopped) { setCatalog({ after, data }); setCatalogError(null); } }, failure => { if (!stopped) setCatalogError(failure instanceof Error ? failure.message : String(failure)); });
-    return () => { stopped = true; };
-  }, [client, after]);
-  const current = catalog && catalog.after === after ? catalog.data : null;
+  const current = catalog.data ?? null;
   const binding = applyModel ? project.trainingSetup.rewardBindingRef : policy?.rewardBinding;
   function select(source: LearningSource) {
     const selected = sources.some(ref => ref.id === source.id);
@@ -49,10 +54,10 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
     active.current = true; setBusy(true); setError(null);
     try {
       if (!pending.current) {
-        if (!definition || !sources.length || !binding) throw new Error("Select task sources and a Model Reward before saving.");
+        if (!definition || !sources.length || !binding) throw new Error("Select task sources and a Model grader before saving.");
         const content = createHostedLearningPolicyContent({ project, previous: policy, policyId: id, applyModelConfiguration: applyModel,
           sources, taskDefinition: definition, settings: {
-            enabled, scheduled, humanReviewRequired: human, intervalSeconds: Number(fields.interval) * 60,
+            enabled: policy?.trigger.kind === "manual" && !enabled ? policy.enabled : enabled, scheduled, humanReviewRequired: human, trigger: policy?.trigger.kind === "manual" && !enabled ? { kind: "manual" } : mode === "nightly" ? { kind: "nightly", localTime, timeZone } : mode === "approved_count" ? { kind: "approved_count" } : { kind: "schedule", intervalSeconds: Number(fields.interval) * 60 }, intervalSeconds: Number(fields.interval) * 60,
             minimumApprovedExamples: Number(fields.minimum), maxBatchExamples: Number(fields.batch),
             maxIterationSpendUsd: Number(fields.spend), maxDailySpendUsd: Number(fields.daily),
             cooldownSeconds: Number(fields.cooldown) * 60, maxRetries: Number(fields.retries), maxBacklogExamples: Number(fields.backlog),
@@ -67,12 +72,12 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
     } finally { active.current = false; setBusy(false); }
   }
   const guard = useDraftNavigation({ name: "learning settings", dirty, busy, save });
-  return <><AppDialog ariaLabel="Continual learning settings" className="labs-rename-dialog learning-workspace hosted-learning-settings" backdropClassName="labs-rename-backdrop" dismissDisabled={busy} onClose={() => { void guard.requestLeave(onClose); }}>
-    <h2>Continual learning settings</h2><p>Train {project.name} from approved tasks. Acceptance and serving remain separate decisions.</p>
+  const content = <>
+    <h2>Continual learning</h2><p>Train {project.name} from new approved tasks. Candidate acceptance stays a separate decision.</p>
     <LearningError error={error ?? catalogError} />
-    <form onSubmit={async event => { event.preventDefault(); if (await save()) { guard.allowNextNavigation(); onClose(); } }}>
+    <form onSubmit={async event => { event.preventDefault(); if (await save()) { if (!inline) guard.allowNextNavigation(); onClose(); } }}>
       <fieldset disabled={busy || Boolean(pending.current)} onChange={() => setDirty(true)}>
-        <label><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} /> Enable learning</label>
+        <ContinualLearningFields value={{ enabled, mode, minimumTasks: fields.minimum, localTime, timeZone }} onChange={value => { setEnabled(value.enabled); setMode(value.mode); setLocalTime(value.localTime); setTimeZone(value.timeZone); setFields(current => ({ ...current, minimum: value.minimumTasks, batch: String(Math.max(Number(current.batch) || 0, Number(value.minimumTasks) || 0)) })); setDirty(true); }} />
         <label><input type="checkbox" checked={human} disabled={human} onChange={() => setHuman(true)} /> Human review required</label>
         <p>New policies require human review. Qualified automatic admission cannot be configured here yet.</p>
         {policy ? <label><input type="checkbox" checked={applyModel} onChange={event => setApplyModel(event.target.checked)} /> Use the Model’s current training configuration</label> : null}
@@ -85,13 +90,12 @@ export function HostedModelLearningSettings({ client, project, policy, onClose }
               {selected && selected.revision !== source.revision ? <small>Using saved revision {selected.revision}; clear and reselect to update.</small> : !compatible ? <small>Different task format or Reward.</small> : null}</label>;
           })}
           <p>{sources.length} sources selected. <button type="button" onClick={() => { setSources([]); setDefinition(null); setDirty(true); }}>Clear selection</button></p>
-          <LearningPager after={after} next={current?.sources.nextCursor} onPage={value => setAfter(value ?? undefined)} />
         </fieldset>
-        <label><input type="checkbox" checked={scheduled} onChange={event => setScheduled(event.target.checked)} /> Schedule training</label>
-        {(Object.keys(fields) as Array<keyof typeof fields>).filter(key => key !== "interval" || scheduled).map(key => <label key={key}>{({ interval: "Check interval (minutes)", minimum: "Minimum approved examples", batch: "Maximum examples per batch", spend: "Maximum spend per iteration ($)", daily: "Maximum daily spend ($)", cooldown: "Cooldown (minutes)", retries: "Automatic retries", backlog: "Maximum backlog" })[key]}
+        {(Object.keys(fields) as Array<keyof typeof fields>).filter(key => key !== "minimum" && (key !== "interval" || mode === "interval")).map(key => <label key={key}>{({ interval: "Check interval (minutes)", minimum: "Minimum approved examples", batch: "Maximum examples per batch", spend: "Maximum spend per iteration ($)", daily: "Maximum daily spend ($)", cooldown: "Cooldown (minutes)", retries: "Automatic retries", backlog: "Maximum backlog" })[key]}
           <input type="number" value={fields[key]} min="0" step={key === "spend" || key === "daily" ? "0.01" : "1"} onChange={event => setFields(value => ({ ...value, [key]: event.target.value }))} /></label>)}
       </fieldset>
       <div className="model-build-actions"><button type="submit" className="training-button" disabled={busy}>{busy ? "Saving…" : pending.current ? "Retry save" : "Save settings"}</button><button type="button" className="training-button secondary" disabled={busy} onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button></div>
     </form>
-  </AppDialog>{guard.dialog}</>;
+  </>;
+  return <>{inline ? <section className="learning-workspace model-settings-section">{content}</section> : <AppDialog ariaLabel="Continual learning settings" className="labs-rename-dialog learning-workspace hosted-learning-settings" backdropClassName="labs-rename-backdrop" dismissDisabled={busy} onClose={() => { void guard.requestLeave(onClose); }}>{content}</AppDialog>}{guard.dialog}</>;
 }
