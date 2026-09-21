@@ -930,7 +930,7 @@ button.activity-artifact-name:focus-visible {
   transform: translateX(-50%);
   border: 0;
   border-radius: 999px;
-  background: transparent;
+  background: var(--panel);
 }
 
 .new-experience-option {
