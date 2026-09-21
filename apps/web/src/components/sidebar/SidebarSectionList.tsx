@@ -532,15 +532,17 @@ export function SidebarSectionList({
     target: HTMLElement,
   ) {
     if (typeof window === "undefined") return;
+    const folderName = isSidebarTaskPinned(session) ? projectLabelForSession(session) : null;
     setActiveTaskDetail({
       descriptionId: `sidebar-task-detail-${session.id}`,
       sessionId: session.id,
       title: session.title,
       updatedAt: session.updatedAt,
+      folderName,
       style: sidebarTaskDetailPosition(target.getBoundingClientRect(), {
         width: window.innerWidth,
         height: window.innerHeight,
-      }),
+      }, Boolean(folderName)),
     });
   }
 

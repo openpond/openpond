@@ -1144,6 +1144,27 @@
   line-height: 15px;
 }
 
+.sidebar-task-detail-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: #929292;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.sidebar-task-detail-folder svg {
+  flex-shrink: 0;
+}
+
+.sidebar-task-detail-folder span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-task-title[data-overflowing="true"]:hover .sidebar-task-title-text {
   width: max-content;
   max-width: none;
