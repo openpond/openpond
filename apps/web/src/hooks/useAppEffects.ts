@@ -225,6 +225,7 @@ export function useRuntimeEvents({
       () => {
         clearDisconnectTimer();
         clearEventStreamError();
+        window.dispatchEvent(new Event("openpond-runtime-connected"));
       },
       { afterSequence },
     );

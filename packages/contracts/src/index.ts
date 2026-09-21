@@ -91,3 +91,4 @@ export {
   type RunManifest as PortableRunManifest,
   type TasksetRelease,
 } from "@openpond/evals";
+export * from "./task-inbox.js";

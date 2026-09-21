@@ -30,6 +30,7 @@ export type OpenPondSubagentStartToolInput = {
 };
 
 export type OpenPondSubagentToolResult = {
+  taskInputId?: string;
   runId: string;
   childSessionId: string | null;
   roleId: string;
@@ -54,6 +55,7 @@ export type OpenPondSubagentStatusToolResult = {
 };
 
 export type OpenPondSubagentJoinToolInput = {
+  inputId?: string | null;
   runId: string;
 };
 
@@ -250,6 +252,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
             minLength: 1,
             description: "Subagent run id to join or inspect.",
           },
+          inputId: { type: "string", description: "The taskInputId from a follow-up receipt; waits for that new assignment instead of an older completion." },
         },
         required: ["runId"],
       },
@@ -326,7 +329,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     definitions.push({
       name: "openpond_subagent_send_message",
       description:
-        "Send a typed runtime-mediated message to a sibling child run or role under the same parent chat, or from a child session back to the parent chat. From a child session, use this for blockers, decision requests, important findings, or final handoffs that should return control to the main agent.",
+        "Send a typed runtime-mediated message to a sibling child run or role under the same parent chat, or from a child session back to the parent chat. From a child session, use this for blockers, decision requests, important findings, or handoffs. Messages do not restart an idle recipient; use an explicit follow-up to request more work.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -334,12 +337,12 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           toRunId: {
             type: "string",
             minLength: 1,
-            description: "Specific child run id to receive the message. From a child session, omit target fields or use the parent session id to send to the parent chat and wake the main agent when idle.",
+            description: "Specific child run id to receive the message. From a child session, omit target fields or use the parent session id to send to the parent inbox. A matching message wait wakes; an idle parent stays idle.",
           },
           toRole: {
             type: "string",
             minLength: 1,
-            description: "Role id to receive the message when no exact run id is known. From a child session, omit target fields or use parent to send to the parent chat and wake the main agent when idle.",
+            description: "Role id to receive the message when no exact run id is known. From a child session, omit target fields or use parent to send to the parent inbox. A matching message wait wakes; an idle parent stays idle.",
           },
           kind: {
             type: "string",
@@ -349,7 +352,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           priority: {
             type: "string",
             enum: ["normal", "interrupt"],
-            description: "Use interrupt only when the receiver should see this steering at the next safe boundary instead of ordinary mailbox priority.",
+            description: "Use interrupt for an urgent coordination update. Delivery remains at a safe model boundary and never stops the turn or grants permission to restart idle work.",
           },
           body: {
             type: "string",
@@ -448,7 +451,7 @@ function subagentStatusToolInput(args: Record<string, unknown>): OpenPondSubagen
 }
 
 function subagentJoinToolInput(args: Record<string, unknown>): OpenPondSubagentJoinToolInput {
-  return { runId: stringArg(args, "runId") };
+  return { runId: stringArg(args, "runId"), inputId: optionalStringArg(args, "inputId") };
 }
 
 function subagentCancelToolInput(args: Record<string, unknown>): OpenPondSubagentCancelToolInput {

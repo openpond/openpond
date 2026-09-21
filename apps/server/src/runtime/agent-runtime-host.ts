@@ -18,6 +18,8 @@ import {
   type Turn,
 } from "@openpond/contracts";
 import { z } from "zod";
+import { TaskInputMutationSchema } from "@openpond/contracts";
+import type { TurnRunner } from "./turns/ports.js";
 
 export function createAgentRuntimePorts(deps: {
   placement?: AgentProtocolCapabilities["placement"];
@@ -28,6 +30,10 @@ export function createAgentRuntimePorts(deps: {
   turnsForSession(sessionId: string): Promise<Turn[]>;
   runtimeEventsForSession(sessionId: string): Promise<RuntimeEvent[]>;
   sendTurn(sessionId: string, payload: unknown): Promise<Turn>;
+  steerSessionTurn: TurnRunner["steerSessionTurn"];
+  readTaskInbox: TurnRunner["readTaskInbox"];
+  queueTaskInput: TurnRunner["queueTaskInput"];
+  updateTaskInput: TurnRunner["updateTaskInput"];
   isSessionTurnActive(sessionId: string): boolean;
   waitForSessionTurnSettlement(sessionId: string): Promise<void>;
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
@@ -70,6 +76,8 @@ export function createAgentRuntimePorts(deps: {
       features: {
         streamingEvents: true,
         interruption: true,
+        activeTurnSteering: true,
+        durableTaskInbox: true,
         approvals: true,
         userInput: true,
         compaction: true,
@@ -102,6 +110,10 @@ export function createAgentRuntimePorts(deps: {
     listTurns: deps.turnsForSession,
     listEvents: deps.runtimeEventsForSession,
     startTurn: deps.sendTurn,
+    steerTurn: deps.steerSessionTurn,
+    readTaskInbox: deps.readTaskInbox,
+    queueTaskInput: deps.queueTaskInput,
+    updateTaskInput: (sessionId: string, inputId: string, input: unknown) => deps.updateTaskInput(sessionId, inputId, TaskInputMutationSchema.parse(input)),
     isTurnActive: deps.isSessionTurnActive,
     waitForTurnSettlement: deps.waitForSessionTurnSettlement,
     interruptTurn: deps.interruptSessionTurn,

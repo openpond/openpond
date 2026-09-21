@@ -1,5 +1,6 @@
 import {
   ChatAttachmentSummarySchema,
+  TaskInputSchema,
   CreateImproveRunSchema,
   SessionUserQuestionResolutionSchema,
   SessionUserQuestionSchema,
@@ -40,9 +41,19 @@ export function buildCachedChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
 export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
+  const displayedTaskInputIds = new Set<string>();
   const pendingSourcesByTurnId = new Map<string, ChatMessage["sources"]>();
 
   for (const item of items) {
+    if (item.name === "task.input") {
+      const parsed = TaskInputSchema.safeParse(asRecord(item.data)?.input);
+      if (parsed.success && parsed.data.senderKind === "user" && parsed.data.kind === "steer" && !displayedTaskInputIds.has(parsed.data.id)) {
+        displayedTaskInputIds.add(parsed.data.id);
+        messages.push({ id: `task-input:${parsed.data.id}`, role: "user", content: parsed.data.body,
+          timestamp: item.timestamp, turnId: parsed.data.turnId ?? undefined });
+      }
+      continue;
+    }
     if (item.name === "turn.started") {
       settleRunningActivityGroups(messages, item);
       removeSupersededSteerInterruption(messages, item);

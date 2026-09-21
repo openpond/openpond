@@ -1787,6 +1787,8 @@ export function MainPane({
                 busy={turnRunning}
                 running={turnRunning}
                 steerActiveResponses={appPreferences.steerActiveResponses}
+                taskSessionId={liveSessionId}
+                taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey
@@ -1881,6 +1883,8 @@ export function MainPane({
                 busy={turnRunning}
                 running={turnRunning}
                 steerActiveResponses={appPreferences.steerActiveResponses}
+                taskSessionId={liveSessionId}
+                taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey

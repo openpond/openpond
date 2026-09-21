@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 export type BackgroundWorkStatus = "queued" | "running" | "completed" | "failed";
 
@@ -27,6 +28,7 @@ export type BackgroundWorkerQueue = {
   drain: () => Promise<void>;
   receipts: () => BackgroundWorkReceipt[];
   pendingReceipts: () => BackgroundWorkReceipt[];
+  yieldWhileWaiting: <T>(work: () => Promise<T>) => Promise<T>;
 };
 
 export type ServerWorkQueueId =
@@ -60,11 +62,27 @@ export function createBackgroundWorkerQueue(options: {
   queueId: string;
   logger?: QueueLogger;
   maxRetainedReceipts?: number;
+  concurrency?: number;
+  keyForJob?: (metadata: Record<string, unknown>) => string | null;
 }): BackgroundWorkerQueue {
   const maxRetainedReceipts = options.maxRetainedReceipts ?? MAX_RETAINED_RECEIPTS;
   const pending = new Map<string, BackgroundWorkReceipt>();
   const retained: BackgroundWorkReceipt[] = [];
-  let tail = Promise.resolve();
+  const concurrency = Math.max(1, Math.trunc(options.concurrency ?? 1));
+  const context = new AsyncLocalStorage<{ release(): void; reacquire(): Promise<void> }>();
+  const ready: Array<{ key: string | null; resume: boolean; start(): void }> = [];
+  const activeKeys = new Set<string>();
+  let active = 0;
+  function pump(): void {
+    while (active < concurrency) {
+      const index = ready.findIndex((job) => job.resume || !job.key || !activeKeys.has(job.key));
+      if (index < 0) return;
+      const job = ready.splice(index, 1)[0]!;
+      active += 1;
+      if (job.key) activeKeys.add(job.key);
+      job.start();
+    }
+  }
 
   function enqueue(
     job: {
@@ -86,11 +104,18 @@ export function createBackgroundWorkerQueue(options: {
       done: Promise.resolve(null as unknown as BackgroundWorkReceipt),
     };
 
+    const key = options.keyForJob?.(receipt.metadata) ?? null;
+    let held = false;
+    const release = () => { if (held) { held = false; active -= 1; pump(); } };
+    const reacquire = () => new Promise<void>((resolve) => {
+      ready.push({ key, resume: true, start: () => { held = true; resolve(); } });
+      pump();
+    });
     const run = async (): Promise<BackgroundWorkReceipt> => {
       receipt.status = "running";
       receipt.startedAt = new Date().toISOString();
       try {
-        await work();
+        await context.run({ release, reacquire }, work);
         receipt.status = "completed";
       } catch (error) {
         receipt.status = "failed";
@@ -106,17 +131,18 @@ export function createBackgroundWorkerQueue(options: {
         pending.delete(receipt.id);
         retained.push(receipt);
         while (retained.length > maxRetainedReceipts) retained.shift();
+        if (key) activeKeys.delete(key);
+        release();
       }
       return receipt;
     };
 
-    const done = tail.then(run, run);
+    const done = new Promise<BackgroundWorkReceipt>((resolve) => {
+      ready.push({ key, resume: false, start: () => { held = true; void run().then(resolve); } });
+    });
     receipt.done = done;
     pending.set(receipt.id, receipt);
-    tail = done.then(
-      () => undefined,
-      () => undefined,
-    );
+    queueMicrotask(pump);
     return receipt;
   }
 
@@ -132,11 +158,22 @@ export function createBackgroundWorkerQueue(options: {
     drain,
     receipts: () => [...retained, ...pending.values()],
     pendingReceipts: () => [...pending.values()],
+    yieldWhileWaiting: async <T>(work: () => Promise<T>): Promise<T> => {
+      const slot = context.getStore();
+      if (!slot) return work();
+      slot.release();
+      try { return await work(); }
+      finally { await slot.reacquire(); }
+    },
   };
 }
 
 export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
-  const turnFollowUp = createBackgroundWorkerQueue({ queueId: "turn-follow-up", logger });
+  const taskQueueOptions = { concurrency: 8, keyForJob: (metadata: Record<string, unknown>) => {
+    const key = metadata.sessionId ?? metadata.childSessionId ?? metadata.parentSessionId;
+    return typeof key === "string" ? key : null;
+  } };
+  const turnFollowUp = createBackgroundWorkerQueue({ queueId: "turn-follow-up", logger, ...taskQueueOptions });
   const checkpointDiff = createBackgroundWorkerQueue({ queueId: "checkpoint-diff", logger });
   const providerRuntimeIngestion = createBackgroundWorkerQueue({
     queueId: "provider-runtime-ingestion",
@@ -150,8 +187,9 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
     queueId: "chat-workflow",
     logger,
   });
-  const subagent = createBackgroundWorkerQueue({ queueId: "subagent", logger });
-  const subagentLifecycle = createBackgroundWorkerQueue({ queueId: "subagent-lifecycle", logger });
+  const subagent = createBackgroundWorkerQueue({ queueId: "subagent", logger, ...taskQueueOptions,
+    keyForJob: (metadata) => typeof metadata.runId === "string" ? metadata.runId : null });
+  const subagentLifecycle = createBackgroundWorkerQueue({ queueId: "subagent-lifecycle", logger, ...taskQueueOptions });
   const byId: Record<ServerWorkQueueId, BackgroundWorkerQueue> = {
     "turn-follow-up": turnFollowUp,
     "checkpoint-diff": checkpointDiff,

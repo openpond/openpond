@@ -597,7 +597,6 @@ export function TeamAgentConversationPanel(
           contextWindowStatus={props.contextWindowStatus}
           busy={props.busy || running}
           running={running}
-          interruptRunningTurnBeforeSteer={false}
           submissionScopeKey={`team-agent:${conversation.conversationId}`}
           showProjectFooter={false}
           connection={props.connection}

@@ -8,3 +8,4 @@ export * from "./provider-loop.js";
 export * from "./service.js";
 export * from "./snapshots.js";
 export * from "./tools.js";
+export * from "./task-signals.js";

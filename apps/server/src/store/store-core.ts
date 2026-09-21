@@ -58,6 +58,7 @@ import { TRAINING_TABLES_SQL } from "./store-training-base-schema.js";
 import { LEARNING_TABLES_SQL } from "./store-learning-schema.js";
 import { MODEL_PROJECT_AUTHORING_TABLES_SQL } from "./store-model-project-authoring-schema.js";
 import { pruneMigrationBackups } from "./store-backup-retention.js";
+import { TASK_INBOX_SCHEMA_SQL } from "./store-task-inbox-schema.js";
 
 type UserVersionRow = { user_version: number };
 type QuickCheckRow = { quick_check: string };
@@ -70,6 +71,9 @@ export type SqliteStoreCoreOptions = {
 };
 
 export class SqliteStoreCore {
+  async createTaskInboxTables(): Promise<void> {
+    await this.exec(TASK_INBOX_SCHEMA_SQL);
+  }
   async createLearningTables(): Promise<void> {
     await this.exec(LEARNING_TABLES_SQL);
   }

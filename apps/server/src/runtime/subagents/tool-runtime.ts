@@ -1,3 +1,4 @@
+import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
 import { randomUUID } from "node:crypto";
 import {
   SubagentLifecycleActionRequestSchema,
@@ -10,6 +11,7 @@ import {
   type SubagentRoleSettings,
   type SubagentRun,
   type Turn,
+  type TaskInput,
 } from "@openpond/contracts";
 import type {
   OpenPondSubagentCancelToolInput,
@@ -64,6 +66,7 @@ type PreparedIsolation = {
 };
 
 export function createSubagentToolRuntime(deps: {
+  inbox: TaskInboxRuntime;
   requireSubagentDeps(): {
     createSession(input: Record<string, unknown>): Promise<Session>;
     queue: BackgroundWorkerQueue;
@@ -120,7 +123,7 @@ export function createSubagentToolRuntime(deps: {
     context: ModelToolExecutionContext;
     run: SubagentRun;
     body: string;
-  }): Promise<void>;
+  }): Promise<TaskInput>;
   archiveSubagentChildSession(input: {
     parentSession: Session;
     parentTurnId?: string | null;
@@ -134,8 +137,8 @@ export function createSubagentToolRuntime(deps: {
     sessionArchive: Record<string, unknown> | null
   ): string;
 }) {
+  const inbox = deps.inbox;
   const SUBAGENT_JOIN_WAIT_MS = 60_000;
-  const SUBAGENT_JOIN_POLL_MS = 250;
   const workspaceWriteStartReservations = new Set<string>();
   const requireSubagentDeps = deps.requireSubagentDeps;
   const loadAppPreferences = deps.loadAppPreferences;
@@ -436,14 +439,10 @@ export function createSubagentToolRuntime(deps: {
     let run = await deps.getRun(input.runId);
     if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
     assertSubagentRunAccessible(context.session, run);
-    const deadline = Date.now() + SUBAGENT_JOIN_WAIT_MS;
-    while (
-      (run.status === "queued" || run.status === "running") &&
-      Date.now() < deadline
-    ) {
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, SUBAGENT_JOIN_POLL_MS)
-      );
+    if ((input.inputId || run.status === "queued" || run.status === "running") && run.childSessionId) {
+      await inbox.wait({ sessionId: context.session.id, turnId: context.turnId,
+        callId: context.callId, targetSessionId: run.childSessionId, targetInputId: input.inputId ?? undefined,
+        timeoutMs: SUBAGENT_JOIN_WAIT_MS, signal: context.signal });
       run = (await deps.getRun(input.runId)) ?? run;
     }
     if (run.status !== "queued" && run.status !== "running") {
@@ -466,7 +465,7 @@ export function createSubagentToolRuntime(deps: {
       run.status === "completed"
         ? "Child completed; use its final result or inspect the child conversation."
         : run.status === "queued" || run.status === "running"
-        ? "Child is still running after the wait window. End this turn and let its automatic completion notification continue the parent; do not poll, sleep, or interrupt it for status."
+        ? "Child is still running. Do independent work, or wait again when blocked. Its completion report will arrive in the task inbox."
         : `Child ended with status ${run.status}; inspect its result before deciding the next action.`
     );
   }
@@ -594,84 +593,8 @@ export function createSubagentToolRuntime(deps: {
       );
     }
 
-    await queueSubagentFollowupMessage({ context, run, body: input.message });
-    if (run.status === "queued" || run.status === "running") {
-      return subagentToolResultFromRun(
-        run,
-        "Follow-up delivered to the running child and will be read at the next safe model boundary."
-      );
-    }
-
-    const preferences = await loadAppPreferences();
-    const role = preferences.subagents.roles.find(
-      (candidate) => candidate.id === run.roleId
-    );
-    if (!role?.enabled)
-      throw new Error(`Subagent role ${run.roleId} is not enabled.`);
-    const childSession = await getSession(run.childSessionId);
-    const parentSession =
-      run.parentSessionId === context.session.id
-        ? context.session
-        : await getSession(run.parentSessionId);
-    const queuedAt = now();
-    const queued = SubagentRunSchema.parse({
-      ...run,
-      status: "queued",
-      completedAt: null,
-      error: null,
-      report: null,
-      progress: SubagentProgressSchema.parse({
-        ...run.progress,
-        phase: "orient",
-        latestMeaningfulActivity:
-          "Follow-up task queued in the existing child conversation.",
-        currentBlocker: null,
-        updatedAt: queuedAt,
-      }),
-      metadata: {
-        ...run.metadata,
-        completionConsumedByParent: null,
-        followup: {
-          queuedAt,
-          requestedBySessionId: context.session.id,
-          requestedByTurnId: context.turnId,
-        },
-      },
-    });
-    await runtime.upsertRun(queued);
-    const childTurnPermissions = subagentChildTurnPermissions(
-      context.turnPermissions,
-      role
-    );
-    runtime.queue.enqueue(
-      {
-        label: `${role.id} follow-up: ${input.message.slice(0, 72)}`,
-        metadata: {
-          runId: run.id,
-          childSessionId: childSession.id,
-          parentSessionId: parentSession.id,
-          followup: true,
-        },
-      },
-      () =>
-        runSubagentChildTurn({
-          run: queued,
-          role,
-          childSession,
-          parentSession,
-          parentTurnId: context.turnId,
-          contextPack:
-            typeof run.metadata?.context === "string"
-              ? run.metadata.context
-              : null,
-          childTurnPermissions,
-          initialPrompt: input.message,
-        })
-    );
-    return subagentToolResultFromRun(
-      queued,
-      "Follow-up turn queued in the existing child conversation."
-    );
+    const receipt = await queueSubagentFollowupMessage({ context, run, body: input.message });
+    return { ...subagentToolResultFromRun(run, "Follow-up saved in the task inbox. Pass taskInputId as inputId when joining this assignment."), taskInputId: receipt.id };
   }
 
   async function runSubagentLifecycleAction(

@@ -1,3 +1,4 @@
+import { createComposerTaskSubmission } from "./composer-task-submission";
 import {
   lazy,
   Suspense,
@@ -12,6 +13,7 @@ import {
 } from "react";
 import {
   CHAT_ATTACHMENT_LIMITS,
+  type RuntimeEvent,
   type ChatAttachment,
   type OpenPondApp,
   type TeamChatMember,
@@ -54,7 +56,8 @@ import {
 import { insertVoiceTranscript } from "../../lib/voice-text";
 import { deliverVoiceTranscript } from "../../lib/voice-transcript-delivery";
 import { requestVoiceInputSubmit } from "../../lib/voice-transcription-job";
-import { STEER_INTERRUPTION_REASON } from "../../lib/steer-interruption";
+import { useTaskInbox } from "../../hooks/useTaskInbox";
+import { TaskInboxPanel } from "./TaskInboxPanel";
 import {
   ComposerPinnedWorkspaceContext,
   ComposerProjectTargetControl,
@@ -145,6 +148,7 @@ const SUBMIT_ISSUE_COMMAND = COMPOSER_SLASH_COMMANDS.find(
 ) as ComposerSlashCommand;
 
 const EMPTY_STEER_DRAFTS: ComposerSteerDraft[] = [];
+const EMPTY_TASK_EVENTS: readonly RuntimeEvent[] = [];
 
 export function Composer({
   experience = "development",
@@ -166,7 +170,8 @@ export function Composer({
   createImproveRuntime = null,
   busy,
   running = busy,
-  interruptRunningTurnBeforeSteer = true,
+  taskSessionId = null,
+  taskEvents = EMPTY_TASK_EVENTS,
   steerActiveResponses = false,
   submissionScopeKey = "default",
   getCurrentSubmissionScopeKey,
@@ -208,6 +213,7 @@ export function Composer({
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
+  const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -224,6 +230,7 @@ export function Composer({
     initialRequestedAction?.requestId ?? 0
   );
   const submittingScopeKeysRef = useRef<Set<string>>(new Set());
+  const taskInputSubmissionScopesRef = useRef<Set<string>>(new Set());
   const [cursorIndex, setCursorIndex] = useState(prompt.length);
   const cursorIndexRef = useRef(cursorIndex);
   cursorIndexRef.current = cursorIndex;
@@ -410,7 +417,7 @@ export function Composer({
   const sendTooltip = serializingAttachments
     ? "Preparing files"
     : running
-      ? "Steer"
+      ? steerActiveResponses ? "Steer" : "Queue for next turn"
       : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments;
@@ -1229,28 +1236,24 @@ export function Composer({
     resetAddMenuQuery(insertSelectedAction(item.item.action, range));
   }
 
-  function stageCurrentSteerDraft(promptOverride?: string): boolean {
-    const value = (
-      promptOverride ?? inputRef.current?.getPrompt() ?? prompt
-    ).trim();
-    if (!running || !value) return false;
-    if (attachments.length > 0 || selectedAction || selectedCommand) {
-      showToast(
-        "Steering supports a plain-text instruction. Remove files or actions before staging it.",
-        "info"
-      );
-      return false;
-    }
-    updateSteerDraftsForScope(submissionScopeKey, (current) => [
-      ...current,
-      createComposerSteerDraft(value),
-    ]);
-    clearComposerPrompt();
-    window.requestAnimationFrame(() => {
-      inputRef.current?.focusAtPromptIndex(0);
-    });
-    return true;
-  }
+  const { stageCurrentSteerDraft, submitImmediateSteer } = createComposerTaskSubmission({
+    running, scope: submissionScopeKey, inbox: taskInbox,
+    getPrompt: () => inputRef.current?.getPrompt() ?? prompt,
+    hasFilesOrActions: Boolean(attachments.length || selectedAction || selectedCommand),
+    provider, model, codexPermissionMode, codexReasoningEffort, openPondCommandAccessMode,
+    getCurrentSubmissionScopeKey, onSubmit, showToast,
+    begin: (scope) => {
+      if (taskInputSubmissionScopesRef.current.has(scope)) return false;
+      taskInputSubmissionScopesRef.current.add(scope);
+      return true;
+    },
+    finish: (scope) => { taskInputSubmissionScopesRef.current.delete(scope); },
+    clear: clearComposerPrompt, setError: setAttachmentError,
+    stageLocal: (body) => {
+      updateSteerDraftsForScope(submissionScopeKey, (current) => [...current, createComposerSteerDraft(body)]);
+      window.requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(0));
+    },
+  });
 
   async function submitQueuedSteerDraft(draftId: string): Promise<boolean> {
     const submissionScope = submissionScopeKey;
@@ -1265,10 +1268,6 @@ export function Composer({
     setAttachmentError(null);
     try {
       const steeringActiveTurn = running;
-      if (steeringActiveTurn && interruptRunningTurnBeforeSteer) {
-        const stopped = await onStop(STEER_INTERRUPTION_REASON);
-        if (stopped === false) return false;
-      }
       const sent = await onSubmit([], null, null, {
         preservePrompt: true,
         promptOverride: draft.prompt,
@@ -1318,43 +1317,6 @@ export function Composer({
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(draft.prompt.length);
     });
-  }
-
-  async function submitImmediateSteer(promptOverride?: string): Promise<boolean> {
-    const value = (
-      promptOverride ?? inputRef.current?.getPrompt() ?? prompt
-    ).trim();
-    if (!running || !value) return false;
-    if (attachments.length > 0 || selectedAction || selectedCommand) {
-      showToast(
-        "Steering supports a plain-text instruction. Remove files or actions before sending it.",
-        "info",
-      );
-      return false;
-    }
-    const submissionScope = submissionScopeKey;
-    if (!beginSubmissionForScope(submissionScope)) return false;
-    setAttachmentError(null);
-    try {
-      if (interruptRunningTurnBeforeSteer) {
-        const stopped = await onStop(STEER_INTERRUPTION_REASON);
-        if (stopped === false) return false;
-      }
-      const sent = await onSubmit([], null, null, {
-        preservePrompt: true,
-        promptOverride: value,
-        turnMetadata: { interactionKind: "steer" },
-      });
-      if (sent) clearComposerPrompt();
-      return sent;
-    } catch (error) {
-      setAttachmentError(
-        error instanceof Error ? error.message : String(error),
-      );
-      return false;
-    } finally {
-      finishSubmissionForScope(submissionScope);
-    }
   }
 
   async function submitComposerPayload(options: {
@@ -1424,7 +1386,7 @@ export function Composer({
   async function submitComposer() {
     if (running) {
       if (steerActiveResponses) await submitImmediateSteer();
-      else stageCurrentSteerDraft();
+      else await stageCurrentSteerDraft();
       return;
     }
     if (isSubmittingCurrentScope()) return;
@@ -1527,7 +1489,7 @@ export function Composer({
     if (options.submit) {
       if (running) {
         if (steerActiveResponses) await submitImmediateSteer(next.value);
-        else stageCurrentSteerDraft(next.value);
+        else await stageCurrentSteerDraft(next.value);
         return;
       }
       await submitComposerPayload({ promptOverride: next.value });
@@ -1635,7 +1597,10 @@ export function Composer({
           <ComposerCreateImproveStrip runtime={createImproveRuntime} />
         </Suspense>
       ) : null}
-      <ComposerSteerQueue
+      {taskInbox.enabled ? <TaskInboxPanel inbox={taskInbox} onRestore={(body) => {
+        onPromptChange(prompt.trim() ? `${prompt}\n\n${body}` : body);
+        inputRef.current?.focusAtPromptIndex(0);
+      }} /> : <ComposerSteerQueue
         drafts={steerDrafts}
         sendingDraftId={sendingSteerDraftId}
         onDeleteDraft={deleteQueuedSteerDraft}
@@ -1643,7 +1608,7 @@ export function Composer({
         onSteerDraft={(draftId) => {
           void submitQueuedSteerDraft(draftId);
         }}
-      />
+      />}
       {showGoalRuntime && goalRuntime && (
         <ComposerGoalStrip
           detailsOpen={goalDetailsOpen}
@@ -1658,6 +1623,10 @@ export function Composer({
           {composeNotice.message}
         </div>
       )}
+        {taskInbox.enabled && running && hasComposerInput && <div className="task-input-actions">
+          <button type="button" disabled={Boolean(taskInbox.busyId) || !taskInbox.snapshot?.acceptingInput} onClick={() => void submitImmediateSteer()}>Steer now</button>
+          <button type="button" disabled={Boolean(taskInbox.busyId)} onClick={() => void stageCurrentSteerDraft()}>Queue for next turn</button>
+        </div>}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu

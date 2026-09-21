@@ -13,6 +13,11 @@ const CHAT_MODEL_TOOLS = new Set([
 ]);
 
 const WORK_MODEL_TOOLS = new Set([
+  "openpond_declare_task_work",
+  "openpond_list_tasks",
+  "openpond_send_task_message",
+  "openpond_followup_task",
+  "openpond_wait_for_task",
   "ask_user",
   "connected_app_read",
   "connected_app_search",

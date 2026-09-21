@@ -1,8 +1,9 @@
+import { createTaskCoordinationMcp } from "./task-inbox/codex-mcp.js";
+import type { CodexTurnInput } from "./turns/ports.js";
 import type {
   CodexPermissionMode,
   CodexReasoningEffort,
   CodexStatus,
-  SendTurnRequest,
   Session,
 } from "@openpond/contracts";
 import {
@@ -30,11 +31,6 @@ type CodexRuntimeInput = {
   storeDir: string;
   updateSession: (sessionId: string, patch: Partial<Session>) => Promise<Session>;
 };
-
-type CodexTurnInput = Pick<
-  SendTurnRequest,
-  "approvalPolicy" | "sandbox" | "model" | "codexPermissionMode" | "codexReasoningEffort"
->;
 
 const CODEX_BASE_SESSION_CONFIG = {
   "tools.web_search": true,
@@ -65,6 +61,7 @@ export function createCodexRuntimeManager({
   storeDir,
   updateSession,
 }: CodexRuntimeInput) {
+  const coordinationServers = new Map<string, Awaited<ReturnType<typeof createTaskCoordinationMcp>>>();
   async function ensureCodexRuntime(
     session: Session,
     turnInput: CodexTurnInput
@@ -73,11 +70,14 @@ export function createCodexRuntimeManager({
     if (
       existing?.permissionMode === turnInput.codexPermissionMode &&
       existing.reasoningEffort === (turnInput.codexReasoningEffort ?? null) &&
-      existing.cwd === session.cwd
+      existing.cwd === session.cwd &&
+      coordinationServers.has(session.id) === Boolean(turnInput.coordination)
     ) return existing;
     if (existing) {
       codexSessions.delete(session.id);
       await existing.client.stop().catch(() => undefined);
+      await coordinationServers.get(session.id)?.close();
+      coordinationServers.delete(session.id);
     }
 
     setCodexStatus({ ...getCodexStatus(), appServer: { status: "starting", lastError: null } });
@@ -103,6 +103,10 @@ export function createCodexRuntimeManager({
     });
 
     try {
+      const coordination = turnInput.coordination ? await createTaskCoordinationMcp(turnInput.coordination) : null;
+      if (coordination) coordinationServers.set(session.id, coordination);
+      const config = { ...codexSessionConfig(turnInput.codexPermissionMode, turnInput.codexReasoningEffort),
+        ...(coordination ? { "mcp_servers.openpond_task": coordination.config } : {}) };
       const personalization = await loadPersonalizationSettings(store, storeDir);
       const instructions = [
         personalization.soul,
@@ -128,14 +132,14 @@ export function createCodexRuntimeManager({
             cwd: session.cwd,
             approvalPolicy: turnInput.approvalPolicy,
             sandbox: turnInput.sandbox,
-            config: codexSessionConfig(turnInput.codexPermissionMode, turnInput.codexReasoningEffort),
+            config,
           })
         : await client.startThread({
             cwd: session.cwd,
             model: turnInput.model,
             approvalPolicy: turnInput.approvalPolicy,
             sandbox: turnInput.sandbox,
-            config: codexSessionConfig(turnInput.codexPermissionMode, turnInput.codexReasoningEffort),
+            config,
             developerInstructions: instructions,
           });
       await updateSession(session.id, { codexThreadId: thread.threadId });
@@ -150,6 +154,9 @@ export function createCodexRuntimeManager({
       setCodexStatus({ ...getCodexStatus(), appServer: { status: "ready", lastError: null } });
       return runtime;
     } catch (error) {
+      await client.stop().catch(() => undefined);
+      await coordinationServers.get(session.id)?.close();
+      coordinationServers.delete(session.id);
       setCodexStatus({
         ...getCodexStatus(),
         appServer: {
@@ -161,5 +168,8 @@ export function createCodexRuntimeManager({
     }
   }
 
-  return { ensureCodexRuntime };
+  return { ensureCodexRuntime, closeCoordination: async () => {
+    await Promise.all([...coordinationServers.values()].map((server) => server.close()));
+    coordinationServers.clear();
+  } };
 }

@@ -81,6 +81,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/taskset-draft-store.test.ts",
   "tests/model-taskset-drafts.test.ts",
   "tests/task-inventory.test.ts",
+  "tests/task-inbox.test.ts",
   "tests/taskset-revision-store.test.ts",
   "tests/taskset-draft.test.ts",
   "tests/taskset-work-assets.test.ts",

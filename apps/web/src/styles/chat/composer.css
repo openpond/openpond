@@ -986,3 +986,19 @@
 .composer-create-spin {
   animation: topbar-spin 0.9s linear infinite;
 }
+
+.task-inbox-panel { display: grid; gap: 8px; padding: 8px 12px; max-height: 280px; overflow-y: auto; font-size: 12px; }
+.task-inbox-heading, .task-inbox-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); }
+.task-inbox-heading > span:first-child, .task-inbox-actions > span:first-child { margin-right: auto; }
+.task-inbox-item { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--border); }
+.task-inbox-item p, .task-inbox-status, .task-inbox-error { margin: 0; overflow-wrap: anywhere; }
+.task-inbox-panel button { border: 1px solid var(--border); border-radius: 5px; background: transparent; color: inherit; padding: 3px 7px; cursor: pointer; font-size: 11px; }
+.task-inbox-panel button:disabled { opacity: .45; cursor: default; }
+.task-inbox-panel textarea { width: 100%; min-height: 70px; resize: vertical; border: 1px solid var(--border); border-radius: 6px; padding: 8px; background: var(--panel); color: inherit; font: inherit; }
+.task-inbox-error { color: var(--danger, #bf4c45); }
+.task-inbox-status { color: var(--muted); line-height: 1.5; }
+.task-inbox-activity summary { cursor: pointer; color: var(--muted); }
+
+.task-input-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 12px; }
+.task-input-actions button { font: inherit; font-size: 12px; color: var(--text); background: var(--panel-soft); border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.task-input-actions button:disabled { opacity: .45; cursor: default; }

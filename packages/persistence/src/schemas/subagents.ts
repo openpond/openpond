@@ -298,6 +298,7 @@ export const SubagentMessagePrioritySchema = z.enum(["normal", "interrupt"]);
 export type SubagentMessagePriority = z.infer<typeof SubagentMessagePrioritySchema>;
 
 export const SubagentMessageDeliverySchema = z.object({
+  inputIds: z.array(z.string()).default([]),
   status: z.enum(["pending", "delivered", "undelivered"]).default("pending"),
   deliveredRunIds: z.array(z.string().trim().min(1).max(200)).max(200).default([]),
   acknowledgedRunIds: z.array(z.string().trim().min(1).max(200)).max(200).default([]),
