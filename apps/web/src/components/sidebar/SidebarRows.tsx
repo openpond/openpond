@@ -16,10 +16,8 @@ import type {
   WorkspaceState,
 } from "@openpond/contracts";
 import {
-  ArchiveRestore,
   Bookmark,
   BookmarkX,
-  Check,
   ChevronDown,
   ChevronRight,
   Cloud,
@@ -29,7 +27,6 @@ import {
   FileText,
   MessageSquare,
   MoreHorizontal,
-  PanelRight,
   Pin,
   PinOff,
   SquareTerminal,
@@ -46,6 +43,7 @@ import type { SidebarTerminalIndicator } from "../terminal/terminal-state";
 import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
+import { SidebarTaskMenu } from "./SidebarTaskMenu";
 import { RenameChatDialog } from "./RenameChatDialog";
 import { isTaskDraftSession } from "../../lib/task-drafts";
 import { SidebarAnimatedTitle } from "./SidebarAnimatedTitle";
@@ -206,7 +204,6 @@ export function SidebarSessionRow({
   subagentRuntime,
   terminalIndicator,
   projectLabel,
-  metadataPresentation,
   ariaDescribedBy,
   childSessionCount = 0,
   childSessionsExpanded = false,
@@ -268,56 +265,24 @@ export function SidebarSessionRow({
       : goalRunning && goalRuntime
       ? sidebarGoalRuntimeTooltip(goalRuntime)
       : "Running";
-  const resolvedMetadataPresentation =
-    metadataPresentation ?? (projectLabel ? "hover-detail" : "inline");
-  const showHoverDetail = resolvedMetadataPresentation === "hover-detail";
-  const showInlineDate = resolvedMetadataPresentation === "inline";
   const rowClassName = [
     "sidebar-task-row",
     isTaskDraftSession(session) ? "is-draft" : "",
-    onDockRight ? "actions-4" : onToggleSaveForLater ? "actions-3" : "",
     rowRunning ? "has-running-dot" : "",
-    showHoverDetail ? "has-project-detail" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].filter(Boolean).join(" ");
   const runningDotStyle = useMemo(syncedRunningPulseStyle, []);
   const taskActions = (
-    <div
-      className={`sidebar-row-actions${
-        showHoverDetail ? " sidebar-task-inline-actions" : ""
-      }`}
-    >
-      {onDockRight ? (
-        <SidebarRowAction label="Open in right panel" onClick={onDockRight}>
-          <PanelRight size={13} />
-        </SidebarRowAction>
-      ) : null}
-      <SidebarRowAction
-        label={session.pinned ? "Unpin chat" : "Pin chat"}
-        onClick={onTogglePin}
-      >
-        {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-      </SidebarRowAction>
-      {onToggleSaveForLater ? (
-        <SidebarRowAction
-          label={session.savedForLater ? "Return to active" : "Save for later"}
-          onClick={onToggleSaveForLater}
-        >
-          {session.savedForLater ? (
-            <BookmarkX size={13} />
-          ) : (
-            <Bookmark size={13} />
-          )}
-        </SidebarRowAction>
-      ) : null}
-      <SidebarRowAction
-        label={archived ? "Reopen" : "Mark done"}
-        onClick={onArchive}
-      >
-        {archived ? <ArchiveRestore size={13} /> : <Check size={13} />}
-      </SidebarRowAction>
-    </div>
+    <SidebarTaskMenu
+      title={session.title}
+      pinned={Boolean(session.pinned)}
+      savedForLater={Boolean(session.savedForLater)}
+      archived={archived}
+      onRename={onRename ? () => setRenameOpen(true) : undefined}
+      onTogglePin={onTogglePin}
+      onToggleSaveForLater={onToggleSaveForLater}
+      onDockRight={onDockRight}
+      onArchive={onArchive}
+    />
   );
   const row = (
     <SidebarInteractiveRow
@@ -367,7 +332,8 @@ export function SidebarSessionRow({
         icon ?? <MessageSquare size={15} />
       )}
       <span
-        className={`row-label-shell${showHoverDetail ? " has-detail" : ""}`}
+        className="row-label-shell"
+        title={projectLabel || undefined}
       >
         <span className="sidebar-session-title-line">
           <span
@@ -377,15 +343,7 @@ export function SidebarSessionRow({
           >
             <SidebarAnimatedTitle title={session.title} />
           </span>
-          {showInlineDate ? <SidebarUpdatedAt value={session.updatedAt} /> : null}
         </span>
-        {showHoverDetail ? (
-          <span className="sidebar-session-detail-line">
-            <span className="sidebar-session-project-label">{projectLabel}</span>
-            {taskActions}
-            <SidebarUpdatedAt value={session.updatedAt} />
-          </span>
-        ) : null}
       </span>
       <div className="row-meta">
         <span className="row-meta-status">
@@ -402,7 +360,7 @@ export function SidebarSessionRow({
             />
           ) : null}
         </span>
-        {showHoverDetail ? null : taskActions}
+        {taskActions}
       </div>
     </SidebarInteractiveRow>
   );
@@ -1166,6 +1124,7 @@ function SidebarInteractiveRow({
       onClick={onSelect}
       onDoubleClick={onDoubleClick}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect();
