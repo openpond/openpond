@@ -907,10 +907,16 @@ button.activity-artifact-name:focus-visible {
 
 .start-panel {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: safe center;
+  gap: 24px;
   width: 100%;
   min-width: 0;
   min-height: 0;
   height: 100%;
+  overflow-y: auto;
+  padding-block: 80px;
 }
 
 .new-experience-switcher {
@@ -922,9 +928,9 @@ button.activity-artifact-name:focus-visible {
   gap: 2px;
   padding: 3px;
   transform: translateX(-50%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.045);
+  background: transparent;
 }
 
 .new-experience-option {
@@ -956,14 +962,10 @@ button.activity-artifact-name:focus-visible {
 }
 
 .start-welcome {
-  position: absolute;
-  z-index: 0;
-  top: 50%;
-  left: 50%;
   display: grid;
   justify-items: center;
-  width: min(730px, calc(100% - 96px));
-  transform: translate(-50%, -50%);
+  justify-self: center;
+  width: min(730px, calc(100% - 28px));
 }
 
 .start-panel h1 {
