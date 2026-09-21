@@ -302,10 +302,17 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     },
     getSubagentRun: (id) => store.getSubagentRun ? store.getSubagentRun(id) : Promise.resolve(null),
     getActiveTurn: (id) => activeTurns.get(id), appendRuntimeEvent,
-    startFollowup: async (id, payload, turnId) => {
+    startFollowup: async (id, payload, turnId, sourceInput) => {
       const session = await getSession(id);
-      if (!session.subagentRunId) return sendTurn(id, payload, turnId);
       const request = SendTurnRequestSchema.parse(payload);
+      if (!session.subagentRunId) {
+        if (sourceInput.senderKind === "user") return sendTurn(id, request, turnId);
+        const previous = await store.latestTurnForSession(id);
+        const permissions = previous?.metadata.taskExecutionPermissions ?? {
+          approvalPolicy: "on-request", sandbox: "read-only", codexPermissionMode: "default",
+        };
+        return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>) }, turnId);
+      }
       const context = await prepareSubagentContinuationTurn({ session, request,
         requestedTurnPermissions: turnPermissionsFromSendTurnInput(request) });
       if (!context || context.run.status === "cancelled") throw new Error("Child follow-up is unavailable.");
@@ -1000,6 +1007,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
     const createImproveMetadata = {
       ...(input.metadata ? input.metadata : {}),
+      taskExecutionPermissions: { ...turnPermissions },
       ...(subagentDelegation ? { subagentDelegation } : {}),
       ...(effectiveUsageAttribution
         ? { usageAttribution: effectiveUsageAttribution }

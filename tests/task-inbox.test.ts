@@ -105,6 +105,11 @@ test("authorization, cycle prevention and generation-specific event waits share 
   await f.store.insertTurn({ ...f.turn, id: "new-b", sessionId: "b", status: "completed" });
   runtime.signals.notify("b");
   expect(await waiting).toMatchObject({ state: "completed", targetInputId: receipt.id });
+  await f.store.openTaskInboxTurn("a", "turn-a", runtime.ownerId);
+  const pending = await runtime.send({ senderSessionId: "b", sessionId: "a", body: "Previously authorized update", idempotencyKey: "access-change" });
+  await f.store.updateSession("b", (session) => ({ ...session, localProjectId: "other" }));
+  expect(await runtime.include("a", "turn-a", "after-access-change")).toEqual([]);
+  expect(await f.store.getTaskInput(pending.id)).toMatchObject({ state: "rejected" });
 });
 
 // Failure story: arrival between a condition read and sleeping is missed indefinitely.

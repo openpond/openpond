@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RuntimeEvent, SendTurnRequest, TaskInput, TaskInputMutation } from "@openpond/contracts";
+import { ApiRequestError } from "../api/api-client";
 import { sessionApi } from "../api/session-api";
 import type { ClientConnection } from "../api/api-client";
 import { connectionQueryScope } from "../lib/query-scope";
 
 const INPUT_EVENTS = new Set(["task.inbox", "task.input", "task.wait", "turn.started", "turn.completed", "turn.failed", "turn.interrupted", "approval.requested", "approval.resolved"]);
-type PendingIntent = { body: string; kind: "steer" | "queued"; key: string; turnId: string | null };
+type PendingIntent = { body: string; kind: "steer" | "queued"; key: string; turnId: string | null; request?: SendTurnRequest };
 
 function savedIntent(storageKey: string): PendingIntent | null {
   try {
@@ -69,7 +70,7 @@ export function useTaskInbox(connection: ClientConnection | null, sessionId: str
     const previous = savedIntent(storageKey);
     const retrying = previous?.body === body && previous.kind === kind;
     const intent = retrying ? previous : {
-      body, kind, key: crypto.randomUUID(), turnId: kind === "steer" ? state.data?.activeTurnId ?? null : null,
+      body, kind, request, key: crypto.randomUUID(), turnId: kind === "steer" ? state.data?.activeTurnId ?? null : null,
     };
     if (kind === "steer" && (!intent.turnId || (!retrying && !state.data?.acceptingInput))) {
       setFailure({ scope: operationScope, message: "This turn is no longer accepting steering. Your text is still in the composer; send it as a follow-up or queue it." });
@@ -77,9 +78,16 @@ export function useTaskInbox(connection: ClientConnection | null, sessionId: str
     }
     try { sessionStorage.setItem(storageKey, JSON.stringify(intent)); } catch { /* Browser storage may be unavailable. */ }
     const sent = await perform(intent.key, async () => {
-      const receipt = await (kind === "steer"
+      let receipt: TaskInput;
+      try { receipt = await (kind === "steer"
       ? sessionApi.steerTurn(connection, sessionId, { prompt: body, expectedTurnId: intent.turnId!, idempotencyKey: intent.key })
-      : sessionApi.queueTaskInput(connection, sessionId, request!, intent.key));
+      : sessionApi.queueTaskInput(connection, sessionId, intent.request!, intent.key));
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.status >= 400 && error.status < 500) {
+          try { sessionStorage.removeItem(storageKey); } catch { /* Storage is optional. */ }
+        }
+        throw error;
+      }
       if (receipt.state === "rejected" || receipt.state === "cancelled") {
         try { sessionStorage.removeItem(storageKey); } catch { /* Storage is optional. */ }
         throw new Error(receipt.error ?? "This input was cancelled. Review your text before sending again.");

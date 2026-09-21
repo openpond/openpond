@@ -55,3 +55,35 @@ test("steering replaces only a provider request and preserves an admitted tool i
   expect((await harness.runner.readTaskInbox("session_test")).inputs.map((input) => input.state)).toEqual(["resolved", "resolved"]);
   await harness.runner.close();
 });
+
+// Failure story: a peer can broaden a recipient's read-only execution policy by requesting another assignment.
+test("peer follow-up uses the recipient's persisted execution permissions", async () => {
+  const observed: string[] = [];
+  let sent = false, probed = false;
+  const harness = createTurnRunnerTestHarness({ sessions: ["sender", "recipient"].map((id) =>
+    turnRunnerTestSession({ id, experience: "development", localProjectId: "shared-project" })),
+    dependencies: {
+      harnessModelTools: [{ name: "permission_probe", description: "Inspect execution permissions", parameters: { type: "object", properties: {}, additionalProperties: false },
+        execute: async (context) => {
+          observed.push(context.turnPermissions.sandbox);
+          return { toolCallId: context.callId, name: "permission_probe", ok: true, contentText: "inspected", data: {} };
+        } }],
+      streamLocalByokChatTurn: async function* (input) {
+        const messages = JSON.stringify(input.messages);
+        if (messages.includes("Dispatch restricted followup") && !sent) {
+          sent = true;
+          yield { toolCalls: [{ id: "assign", type: "function", function: { name: "openpond_followup_task", arguments: JSON.stringify({ taskId: "recipient", message: "Probe execution permissions" }) } }] };
+        } else if (messages.includes("Probe execution permissions") && !messages.includes("Dispatch restricted followup") && !probed) {
+          probed = true;
+          yield { toolCalls: [{ id: "probe", type: "function", function: { name: "permission_probe", arguments: "{}" } }] };
+        } else yield { text: "Done" };
+      },
+    },
+  });
+  await harness.runner.sendTurn("recipient", { prompt: "Establish read only", sandbox: "read-only", modelRef: { providerId: "openrouter", modelId: "test/model" } });
+  await harness.runner.sendTurn("sender", { prompt: "Dispatch restricted followup", sandbox: "danger-full-access", modelRef: { providerId: "openrouter", modelId: "test/model" } });
+  await harness.dependencies.turnFollowUpQueue.drain();
+  expect(observed).toEqual(["read-only"]);
+  expect(harness.state.turns.filter((turn) => turn.sessionId === "recipient")).toHaveLength(2);
+  await harness.runner.close();
+});

@@ -20,7 +20,7 @@ export function createTaskInboxRuntime(deps: {
   recoverInterruptedTurn(sessionId: string, turnId: string): Promise<void>;
   getSubagentRun(id: string): Promise<SubagentRun | null>;
   getActiveTurn(id: string): ActiveTurn | undefined;
-  startFollowup(sessionId: string, payload: unknown, turnId: string): Promise<Turn>;
+  startFollowup(sessionId: string, payload: unknown, turnId: string, input: TaskInput): Promise<Turn>;
   appendRuntimeEvent(event: RuntimeEvent): Promise<void>;
   yieldWhileWaiting<T>(work: () => Promise<T>): Promise<T>;
   dispatchFollowup(sessionId: string, work: () => Promise<void>): Promise<void>;
@@ -250,7 +250,7 @@ export function createTaskInboxRuntime(deps: {
         try {
           if (input.senderSessionId) await authorize(input.senderSessionId, sessionId);
           const turn = await deps.startFollowup(sessionId, { ...input.payload, prompt: input.senderKind === "user" ? input.body : taskInputModelText(input),
-            metadata: { ...((input.payload.metadata as Record<string, unknown> | undefined) ?? {}), taskInputId: input.id } }, turnId);
+            metadata: { ...((input.payload.metadata as Record<string, unknown> | undefined) ?? {}), taskInputId: input.id } }, turnId, input);
           if (turn.status !== "completed") return;
         } catch (error) {
           await deps.store.closeTaskInboxTurn(sessionId, turnId, ownerId, "failed");

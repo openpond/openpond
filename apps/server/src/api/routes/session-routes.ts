@@ -43,7 +43,7 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   }
   if (inboxMatch && request.method === "POST") {
     const body = await readJson(request) as { input?: unknown; idempotencyKey?: unknown };
-    sendJson(response, 202, await agentRuntime.taskQueue({ threadId: decodeURIComponent(inboxMatch[1]!), ...body }));
+    sendJson(response, 202, await agentRuntime.taskQueue({ ...body, threadId: decodeURIComponent(inboxMatch[1]!) }));
     return true;
   }
   const inboxInputMatch = /^\/v1\/sessions\/([^/]+)\/inbox\/([^/]+)$/.exec(requestUrl.pathname);
