@@ -1,11 +1,10 @@
 import { useEffect, type CSSProperties } from "react";
 
-const TASK_DETAIL_POPOVER_WIDTH = 288;
-const TASK_DETAIL_POPOVER_ESTIMATED_HEIGHT = 112;
+const TASK_DETAIL_POPOVER_WIDTH = 240;
+const TASK_DETAIL_POPOVER_ESTIMATED_HEIGHT = 36;
 
 export type SidebarTaskDetail = {
   descriptionId: string;
-  projectLabel: string;
   sessionId: string;
   title: string;
   updatedAt: string;
@@ -52,7 +51,7 @@ export function SidebarTaskDetailPopover({
   if (!detail) return null;
   const updated = new Date(detail.updatedAt);
   const exactUpdatedAt = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "full",
+    dateStyle: "medium",
     timeStyle: "short",
   }).format(updated);
 
@@ -61,10 +60,9 @@ export function SidebarTaskDetailPopover({
       id={detail.descriptionId}
       className="sidebar-task-detail-popover"
       style={detail.style}
-      aria-label={`${detail.title} details`}
+      role="tooltip"
+      aria-label={`Last updated for ${detail.title}`}
     >
-      <div className="sidebar-task-detail-title">{detail.title}</div>
-      <div className="sidebar-task-detail-project">{detail.projectLabel}</div>
       <time dateTime={detail.updatedAt}>{exactUpdatedAt}</time>
     </aside>
   );

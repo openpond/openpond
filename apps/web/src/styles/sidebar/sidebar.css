@@ -1126,29 +1126,19 @@
   z-index: 126;
   top: var(--sidebar-task-detail-top, 128px);
   left: var(--sidebar-task-detail-left, calc(var(--sidebar-width, 320px) + 10px));
-  width: min(288px, calc(100vw - var(--sidebar-task-detail-left, 0px) - 12px));
+  width: max-content;
+  max-width: min(240px, calc(100vw - 24px));
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   background: #1d1d1d;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
   color: var(--muted-strong);
-  padding: 10px 11px;
+  padding: 8px 11px;
   pointer-events: none;
 }
 
-.sidebar-task-detail-title {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-task-detail-project,
 .sidebar-task-detail-popover time {
   display: block;
-  margin-top: 4px;
   color: #929292;
   font-size: 11px;
   line-height: 15px;

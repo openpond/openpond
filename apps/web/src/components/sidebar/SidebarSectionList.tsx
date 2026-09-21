@@ -529,13 +529,11 @@ export function SidebarSectionList({
 
   function showTaskDetail(
     session: Session,
-    projectLabel: string,
     target: HTMLElement,
   ) {
     if (typeof window === "undefined") return;
     setActiveTaskDetail({
       descriptionId: `sidebar-task-detail-${session.id}`,
-      projectLabel,
       sessionId: session.id,
       title: session.title,
       updatedAt: session.updatedAt,
@@ -581,30 +579,14 @@ export function SidebarSectionList({
       <div
         key={session.id}
         className={groupClassName}
-        onPointerEnter={
-          options.metadataPresentation === "flyout" && options.projectLabel
-            ? (event) => showTaskDetail(session, options.projectLabel!, event.currentTarget)
-            : undefined
-        }
-        onPointerLeave={
-          options.metadataPresentation === "flyout"
-            ? () => setActiveTaskDetail(null)
-            : undefined
-        }
-        onFocusCapture={
-          options.metadataPresentation === "flyout" && options.projectLabel
-            ? (event) => showTaskDetail(session, options.projectLabel!, event.currentTarget)
-            : undefined
-        }
-        onBlurCapture={
-          options.metadataPresentation === "flyout"
-            ? (event) => {
-                if (!event.currentTarget.contains(event.relatedTarget)) {
-                  setActiveTaskDetail(null);
-                }
-              }
-            : undefined
-        }
+        onPointerEnter={(event) => showTaskDetail(session, event.currentTarget)}
+        onPointerLeave={() => setActiveTaskDetail(null)}
+        onFocusCapture={(event) => showTaskDetail(session, event.currentTarget)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            setActiveTaskDetail(null);
+          }
+        }}
       >
         <SidebarSessionRow
           session={session}
@@ -625,7 +607,6 @@ export function SidebarSectionList({
           }
           metadataPresentation={options.metadataPresentation}
           ariaDescribedBy={
-            options.metadataPresentation === "flyout" &&
             activeTaskDetail?.sessionId === session.id
               ? activeTaskDetail.descriptionId
               : undefined
@@ -747,26 +728,43 @@ export function SidebarSectionList({
     }
     const session = row.session;
     return (
-      <SidebarSessionRow
+      <div
         key={row.key}
-        session={session}
-        selected={view === "chat" && selectedSessionId === session.id}
-        hideIcon
-        placeholder={placeholder}
-        running={inProgressSessionIds.has(session.id)}
-        goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-        subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
-        terminalIndicator={terminalIndicatorForSession(session.id)}
-        projectLabel={projectLabelForSession(session)}
-        metadataPresentation="flyout"
-        onSelect={() => selectSession(session)}
-        onTogglePin={() => toggleSessionPinned(session)}
-        onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
-        onDockRight={() => dockSessionRight(session)}
-        onArchive={() => archiveSession(session)}
-        onRename={renameSession}
-        {...dragProps}
-      />
+        onPointerEnter={(event) => showTaskDetail(session, event.currentTarget)}
+        onPointerLeave={() => setActiveTaskDetail(null)}
+        onFocusCapture={(event) => showTaskDetail(session, event.currentTarget)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setActiveTaskDetail(null);
+        }}
+      >
+        <SidebarSessionRow
+          ariaDescribedBy={
+            activeTaskDetail?.sessionId === session.id
+              ? activeTaskDetail.descriptionId
+              : undefined
+          }
+          session={session}
+          selected={view === "chat" && selectedSessionId === session.id}
+          hideIcon
+          placeholder={placeholder}
+          running={inProgressSessionIds.has(session.id)}
+          goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
+          subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+          terminalIndicator={terminalIndicatorForSession(session.id)}
+          projectLabel={projectLabelForSession(session)}
+          metadataPresentation="flyout"
+          onSelect={() => {
+            setActiveTaskDetail(null);
+            selectSession(session);
+          }}
+          onTogglePin={() => toggleSessionPinned(session)}
+          onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
+          onDockRight={() => dockSessionRight(session)}
+          onArchive={() => archiveSession(session)}
+          onRename={renameSession}
+          {...dragProps}
+        />
+      </div>
     );
   }
 
