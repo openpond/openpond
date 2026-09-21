@@ -56,7 +56,8 @@
   padding: 0;
 }
 
-.sidebar-task-menu-trigger .sidebar-row-action:hover,
-.sidebar-task-menu-trigger .sidebar-row-action:focus-visible {
+.sidebar-task-row:hover .sidebar-task-menu-trigger .sidebar-row-action,
+.sidebar-task-row:focus-within .sidebar-task-menu-trigger .sidebar-row-action,
+.sidebar-task-menu-trigger.is-open .sidebar-row-action {
   background: #000;
 }
