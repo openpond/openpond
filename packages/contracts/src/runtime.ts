@@ -2,6 +2,9 @@ import { z } from "zod";
 import { SUBAGENT_RUNTIME_EVENT_NAMES } from "./subagents.js";
 
 export const RuntimeEventNameSchema = z.enum([
+  "task.inbox",
+  "task.input",
+  "task.wait",
   "session.started",
   "session.title.updated",
   "turn.started",

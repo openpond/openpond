@@ -29,6 +29,28 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     return true;
   }
   const turnMatch = /^\/v1\/sessions\/([^/]+)\/turns$/.exec(requestUrl.pathname);
+  const steerMatch = /^\/v1\/sessions\/([^/]+)\/turns\/steer$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && steerMatch) {
+    markTransitionalAgentAdapter();
+    const result = await agentRuntime.turnSteer({ threadId: decodeURIComponent(steerMatch[1]!), input: await readJson(request) }) as { receipt: unknown };
+    sendJson(response, 202, result.receipt);
+    return true;
+  }
+  const inboxMatch = /^\/v1\/sessions\/([^/]+)\/inbox$/.exec(requestUrl.pathname);
+  if (inboxMatch && request.method === "GET") {
+    sendJson(response, 200, await agentRuntime.taskInbox({ threadId: decodeURIComponent(inboxMatch[1]!) }));
+    return true;
+  }
+  if (inboxMatch && request.method === "POST") {
+    const body = await readJson(request) as { input?: unknown; idempotencyKey?: unknown };
+    sendJson(response, 202, await agentRuntime.taskQueue({ ...body, threadId: decodeURIComponent(inboxMatch[1]!) }));
+    return true;
+  }
+  const inboxInputMatch = /^\/v1\/sessions\/([^/]+)\/inbox\/([^/]+)$/.exec(requestUrl.pathname);
+  if (inboxInputMatch && request.method === "PATCH") {
+    sendJson(response, 200, await agentRuntime.taskInputUpdate({ threadId: decodeURIComponent(inboxInputMatch[1]!), inputId: decodeURIComponent(inboxInputMatch[2]!), input: await readJson(request) }));
+    return true;
+  }
   if (request.method === "POST" && turnMatch) {
     markTransitionalAgentAdapter();
     const result = await agentRuntime.turnStart({

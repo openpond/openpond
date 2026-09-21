@@ -48,7 +48,7 @@ import {
   threadDetailProjectionFromRow,
   type ThreadDetailProjection,
 } from "./store-codecs.js";
-import { SqliteChatWorkflowStore } from "./store-chat-workflows.js";
+import { SqliteTaskInboxStore } from "./store-task-inbox.js";
 import {
   sessionRuntimeSummaries,
   sessionWithRuntimeSummary,
@@ -177,7 +177,7 @@ type RuntimeEventRecentWindow = {
   limit: number;
 };
 
-export class SqliteStore extends SqliteChatWorkflowStore {
+export class SqliteStore extends SqliteTaskInboxStore {
   async snapshot(): Promise<StoreData> {
     await this.ready;
     await this.writeQueue;

@@ -1,3 +1,4 @@
+import { taskInboxTestStore } from "./task-inbox-test-store";
 import {
   emptyOpenPondProfileState,
   type Approval,
@@ -50,6 +51,7 @@ export function withTurnRunnerTestStore<
       .find((run) => run?.id === runId) ?? null;
   };
   return {
+    ...taskInboxTestStore(() => store.snapshot()),
     ...store,
     async runtimeEventsForSession(sessionId, query = {}) {
       const snapshot = await store.snapshot();
@@ -191,6 +193,7 @@ export function createTurnRunnerTestHarness(options: {
       ?? null;
 
   const defaultStore: TurnRunnerTestDependencies["store"] = {
+    ...taskInboxTestStore(async () => state),
     async runtimeEventsForSession(sessionId, query = {}) {
       return state.events.map((runtimeEvent, index) => ({
         ...runtimeEvent,

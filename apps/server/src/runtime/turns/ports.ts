@@ -1,3 +1,4 @@
+import type { TaskCoordinationBridge } from "../task-inbox/codex-mcp.js";
 import type {
   Approval,
   AppPreferences,
@@ -57,6 +58,8 @@ import type {
   LocalCreatePipelineCheckResult,
 } from "../local-create-pipeline.js";
 import type { HostedToolRolloutFlags } from "../hosted-turn/rollout.js";
+import type { TaskInboxRepository } from "../../store/store-task-inbox.js";
+import type { TaskInput, TaskInputMutation } from "@openpond/contracts";
 
 export type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
 
@@ -77,7 +80,7 @@ export type CodexTurnInput = Pick<
   | "model"
   | "codexPermissionMode"
   | "codexReasoningEffort"
->;
+> & { coordination?: TaskCoordinationBridge };
 
 export type SubagentSandboxForkRequest = {
   sandboxId: string;
@@ -92,7 +95,8 @@ export type SubagentSandboxCleanupRequest = {
   run: SubagentRun;
 };
 
-export type TurnRepository = {
+export type TurnRepository = TaskInboxRepository & {
+  sessionShells(): Promise<Session[]>;
   getTaskset?(
     id: string
   ): Promise<import("@openpond/contracts").Taskset | null>;
@@ -479,6 +483,11 @@ export type TurnRunnerDependencies = {
 };
 
 export type TurnRunner = TurnDispatcherPort & {
+  steerSessionTurn(sessionId: string, payload: unknown): Promise<TaskInput>;
+  readTaskInbox(sessionId: string): Promise<import("@openpond/contracts").TaskInboxSnapshot>;
+  queueTaskInput(sessionId: string, payload: unknown, idempotencyKey: string): Promise<TaskInput>;
+  updateTaskInput(sessionId: string, inputId: string, mutation: TaskInputMutation): Promise<TaskInput>;
+  recoverTaskInbox(): Promise<void>;
   isSessionTurnActive(sessionId: string): boolean;
   waitForSessionTurnSettlement(sessionId: string): Promise<void>;
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;

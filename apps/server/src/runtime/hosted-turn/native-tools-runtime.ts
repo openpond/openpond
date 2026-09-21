@@ -41,6 +41,7 @@ export function createNativeToolRuntime(deps: {
   maxRepeatedInvalidToolRequests: number;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
   throwIfInterrupted(signal: AbortSignal): void;
+  hasPendingSteering?(sessionId: string, turnId: string): Promise<boolean>;
 }) {
   const maxImageInspectionsPerTurn = 12;
   const maxRepeatedInvalidToolRequests = deps.maxRepeatedInvalidToolRequests;
@@ -65,6 +66,17 @@ export function createNativeToolRuntime(deps: {
     const blockingQuestionCall = params.toolCalls.find((toolCall) => toolCall.name === "ask_user") ?? null;
     for (const toolCall of params.toolCalls) {
       throwIfInterrupted(params.signal);
+      if (await deps.hasPendingSteering?.(params.session.id, params.turnId)) {
+        const result: NativeModelToolResult = {
+          toolCallId: toolCall.id, name: toolCall.name, ok: false,
+          contentText: JSON.stringify({ ok: false, skipped: true, reason: "pending_user_steer", output: "Not executed: incorporate the pending user correction before choosing further actions." }),
+          data: { skipped: true, reason: "pending_user_steer" },
+        };
+        await appendNativeToolStarted(params.session, params.turnId, toolCall, {});
+        await appendNativeToolCompleted(params.session, params.turnId, result);
+        results.push(result);
+        continue;
+      }
       if (blockingQuestionCall && toolCall.id !== blockingQuestionCall.id) {
         const result: NativeModelToolResult = {
           toolCallId: toolCall.id,

@@ -2,6 +2,23 @@ import { describe, expect, test } from "vitest";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
 
 describe("background worker queue", () => {
+  // A waiting task must release capacity for its dependency without admitting another job for the same task.
+  test("a wait yields worker capacity while retaining task ownership", async () => {
+    const queue = createBackgroundWorkerQueue({ queueId: "coordination", concurrency: 1, keyForJob: (metadata) => String(metadata.task) });
+    const order: string[] = [];
+    let completeDependency!: () => void;
+    const dependency = new Promise<void>((resolve) => { completeDependency = resolve; });
+    queue.enqueue({ label: "waiter", metadata: { task: "a" } }, async () => {
+      order.push("waiting");
+      await queue.yieldWhileWaiting(() => dependency);
+      order.push("resumed");
+    });
+    queue.enqueue({ label: "same task", metadata: { task: "a" } }, async () => { order.push("next assignment"); });
+    queue.enqueue({ label: "dependency", metadata: { task: "b" } }, async () => { order.push("dependency"); completeDependency(); });
+    await queue.drain();
+    expect(order).toEqual(["waiting", "dependency", "resumed", "next assignment"]);
+  });
+
   test("runs jobs serially and drains queued work", async () => {
     const queue = createBackgroundWorkerQueue({ queueId: "turn-follow-up" });
     const order: string[] = [];

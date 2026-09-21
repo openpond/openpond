@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { runProcessCommand } from "../src/process-runner";
 
 const cliRoot = join(import.meta.dirname, "..");
-const RELEASE_AGENT_PROTOCOL_VERSION = "2026-08-26";
+const RELEASE_AGENT_PROTOCOL_VERSION = "2026-09-20";
 
 type CliPackageJson = {
   bin?: Record<string, string>;
@@ -112,7 +112,7 @@ describe("CLI installed-package smoke", () => {
           timeoutMs: 20_000,
         },
       );
-      expect(result.code).toBe(0);
+      expect(result.code, result.stderr || result.stdout).toBe(0);
       expect(result.stderr.trim()).toBe("");
       const messages = result.stdout.trim().split("\n").map((line) => JSON.parse(line));
       expect(messages).toHaveLength(5);

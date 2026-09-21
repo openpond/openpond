@@ -85,11 +85,11 @@ export type StartupMetrics =
     };
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
-  // Source review and bound-Reward editing controls measured 16,903,007 total
-  // bytes, up 3,818 from v0.2.5's 16,899,189 (2026-09-13). Initial assets remain
-  // 455,393 bytes. Add 4 KiB for this measured feature addition; initial-load,
-  // single-asset, and startup limits remain independently enforced.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 124 * 1024,
+  // Durable task inbox, steering controls, and queue receipts measured 16,912,969
+  // total bytes in the isolated 2026-09-20 build, up 9,962 from the previous
+  // reviewed feature baseline. Initial assets are 456,770 bytes. Add 12 KiB for
+  // this measured feature; initial-load, single-asset, and startup limits remain.
+  maxTotalJsBytes: 16 * 1024 * 1024 + 136 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };

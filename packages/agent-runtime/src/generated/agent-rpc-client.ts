@@ -27,6 +27,9 @@ export class AgentRpcClient {
   threadRead = (params: unknown) => this.#request("thread/read", params);
   turnStart = (params: unknown) => this.#request("turn/start", params);
   turnSteer = (params: unknown) => this.#request("turn/steer", params);
+  taskInbox = (params: unknown) => this.#request("task/inbox", params);
+  taskQueue = (params: unknown) => this.#request("task/queue", params);
+  taskInputUpdate = (params: unknown) => this.#request("task/inputUpdate", params);
   turnInterrupt = (params: unknown) => this.#request("turn/interrupt", params);
   approvalResolve = (params: unknown) => this.#request("approval/resolve", params);
   userInputResolve = (params: unknown) => this.#request("userInput/resolve", params);

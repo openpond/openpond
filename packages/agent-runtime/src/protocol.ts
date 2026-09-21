@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const AGENT_PROTOCOL_VERSION = "2026-08-26";
+export const AGENT_PROTOCOL_VERSION = "2026-09-20";
 
 export const AGENT_RPC_METHODS = [
   "initialize",
@@ -11,6 +11,9 @@ export const AGENT_RPC_METHODS = [
   "thread/read",
   "turn/start",
   "turn/steer",
+  "task/inbox",
+  "task/queue",
+  "task/inputUpdate",
   "turn/interrupt",
   "approval/resolve",
   "userInput/resolve",
@@ -95,6 +98,9 @@ export type AgentRuntimeHost = {
   threadRead(params: unknown): Promise<unknown>;
   turnStart(params: unknown): Promise<unknown>;
   turnSteer(params: unknown): Promise<unknown>;
+  taskInbox(params: unknown): Promise<unknown>;
+  taskQueue(params: unknown): Promise<unknown>;
+  taskInputUpdate(params: unknown): Promise<unknown>;
   turnInterrupt(params: unknown): Promise<unknown>;
   approvalResolve(params: unknown): Promise<unknown>;
   userInputResolve(params: unknown): Promise<unknown>;
@@ -181,6 +187,9 @@ export class AgentJsonRpcDispatcher {
       case "thread/read": return this.#host.threadRead(params);
       case "turn/start": return this.#host.turnStart(params);
       case "turn/steer": return this.#host.turnSteer(params);
+      case "task/inbox": return this.#host.taskInbox(params);
+      case "task/queue": return this.#host.taskQueue(params);
+      case "task/inputUpdate": return this.#host.taskInputUpdate(params);
       case "turn/interrupt": return this.#host.turnInterrupt(params);
       case "approval/resolve": return this.#host.approvalResolve(params);
       case "userInput/resolve": return this.#host.userInputResolve(params);

@@ -424,6 +424,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   });
   onStartupFailure(() => turnRunner.close());
   await turnRunner.recoverPendingSubagentCompletions();
+  await turnRunner.recoverTaskInbox();
 
   async function resolveApproval(
     approvalId: string,
@@ -474,6 +475,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       runtimeEventsForSession: (sessionId) =>
         store.runtimeEventsForSession(sessionId),
       sendTurn: turnRunner.sendTurn,
+      steerSessionTurn: turnRunner.steerSessionTurn,
+      readTaskInbox: turnRunner.readTaskInbox,
+      queueTaskInput: turnRunner.queueTaskInput,
+      updateTaskInput: turnRunner.updateTaskInput,
       isSessionTurnActive: turnRunner.isSessionTurnActive,
       waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
       interruptSessionTurn: turnRunner.interruptSessionTurn,

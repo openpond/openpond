@@ -790,7 +790,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     providerRuntimeIngestionQueue: workQueues.providerRuntimeIngestion,
   });
 
-  const { ensureCodexRuntime } = createCodexRuntimeManager({
+  const { ensureCodexRuntime, closeCoordination } = createCodexRuntimeManager({
     appendRuntimeEvent,
     codexSessions,
     getCodexStatus: codexStatusService.get,
@@ -804,6 +804,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     storeDir,
     updateSession,
   });
+
+  onStartupFailure(closeCoordination);
 
   const processLocalHarnessImprovementBoundary =
     createLocalHarnessImprovementRuntime({
@@ -1557,6 +1559,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
 
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({
+      steerSessionTurn: turnRunner.steerSessionTurn,
+      readTaskInbox: turnRunner.readTaskInbox,
+      queueTaskInput: turnRunner.queueTaskInput,
+      updateTaskInput: turnRunner.updateTaskInput,
       createSession: createSessionWithAutoTitle,
       getSession,
       turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
@@ -1832,6 +1838,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       trainingApi.learning.close,
       waitForOpenPondRefresh,
       turnRunner.close,
+      closeCoordination,
       teamChatAiExecutions.close,
       managedAdapterSyncService.close,
       taskMinerService.close,
@@ -1857,6 +1864,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   }
   if (options.httpEnabled !== false) await publishRuntimeEndpoint(storeDir, `http://${host}:${actualPort}`, serverId);
   await turnRunner.recoverPendingSubagentCompletions();
+  await turnRunner.recoverTaskInbox();
   workSandboxLifecycle.start();
   if (options.httpEnabled !== false) {
     localAgentScheduleLoop.start();

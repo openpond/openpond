@@ -8,6 +8,7 @@ import type {
   OpenPondApp,
   ProviderSettings,
   TeamChatMember,
+  RuntimeEvent,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
@@ -49,7 +50,8 @@ export type ComposerProps = {
   createImproveRuntime?: ComposerCreateImproveRuntime | null;
   busy: boolean;
   running?: boolean;
-  interruptRunningTurnBeforeSteer?: boolean;
+  taskSessionId?: string | null;
+  taskEvents?: readonly RuntimeEvent[];
   steerActiveResponses?: boolean;
   submissionScopeKey?: string;
   getCurrentSubmissionScopeKey?: () => string;

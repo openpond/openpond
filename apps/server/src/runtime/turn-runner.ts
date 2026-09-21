@@ -4,6 +4,8 @@ import {
   AppPreferencesSchema,
   DEFAULT_OPENPOND_CHAT_MODEL,
   DEFAULT_SESSION_EXPERIENCE,
+  TASK_COORDINATION_INSTRUCTIONS,
+  taskInputModelText,
   SendTurnRequestSchema,
   SessionUserQuestionResolutionSchema,
   type ChatModelRef,
@@ -13,6 +15,7 @@ import {
   type SessionUserQuestionResolution,
   type Session,
   type SubagentRoleSettings,
+  type SubagentRun,
   type Turn,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
@@ -37,7 +40,6 @@ import { buildChatMessagesForProvider } from "../openpond/hosted-chat.js";
 import type { ResolvedConnectedAppContext } from "../openpond/connected-app-context.js";
 import { isOpenAiCompatibleProviderId } from "../openpond/openai-compatible-provider.js";
 import { event, now } from "../utils.js";
-import type { BackgroundWorkReceipt } from "./background-worker-queue.js";
 import {
   hostedToolInstructionModeForProvider,
   nativeToolTransportEnabledForProvider,
@@ -51,12 +53,13 @@ import {
   type ProfileSkillRuntime,
 } from "./hosted-turn/native-tools-runtime.js";
 import { createHostedToolLoopRuntime } from "./hosted-turn/tool-loop-runtime.js";
+import { createTaskInboxRuntime } from "./task-inbox/runtime.js";
+import { taskCoordinationTools } from "../openpond/task-coordination-tools.js";
 import { createProfileSkillCatalogRuntime } from "./hosted-turn/profile-skill-catalog-runtime.js";
 import { createCapabilityCatalogRuntime } from "./hosted-turn/capability-catalog.js";
 import { createCreateImproveRuntime } from "./create-pipeline/runtime.js";
 import { createCreateImproveTurnHandler } from "./create-pipeline/send-turn.js";
 import { ActiveTurnRegistry } from "./turns/active-turn-registry.js";
-import { KeyedRegistry } from "./turns/keyed-registry.js";
 import type {
   ActiveTurn,
   TurnRunner,
@@ -288,9 +291,48 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   } = deps;
   const hostedToolFlags = resolveHostedToolRolloutFlags(deps.hostedToolFlags);
   const activeTurns = new ActiveTurnRegistry();
-  const subagentParentWakeJobs = new KeyedRegistry<BackgroundWorkReceipt>(
-    "subagent parent wake job"
-  );
+  const taskInbox = createTaskInboxRuntime({
+    store, getSession, listSessions: () => store.sessionShells(),
+    getTurn: (id) => store.getTurn(id), latestTurn: (id) => store.latestTurnForSession(id),
+    recoverInterruptedTurn: async (sessionId, turnId) => {
+      if ((await store.getTurn(turnId))?.status === "in_progress") {
+        await interruptTurn(await getSession(sessionId), turnId,
+          "The execution owner stopped. Pending inputs are preserved; review completed tool activity before continuing.");
+      }
+    },
+    getSubagentRun: (id) => store.getSubagentRun ? store.getSubagentRun(id) : Promise.resolve(null),
+    getActiveTurn: (id) => activeTurns.get(id), appendRuntimeEvent,
+    startFollowup: async (id, payload, turnId, sourceInput) => {
+      const session = await getSession(id);
+      const request = SendTurnRequestSchema.parse(payload);
+      if (!session.subagentRunId) {
+        if (sourceInput.senderKind === "user") return sendTurn(id, request, turnId);
+        const previous = await store.latestTurnForSession(id);
+        const permissions = previous?.metadata.taskExecutionPermissions ?? {
+          approvalPolicy: "on-request", sandbox: "read-only", codexPermissionMode: "default",
+        };
+        return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>) }, turnId);
+      }
+      const context = await prepareSubagentContinuationTurn({ session, request,
+        requestedTurnPermissions: turnPermissionsFromSendTurnInput(request) });
+      if (!context || context.run.status === "cancelled") throw new Error("Child follow-up is unavailable.");
+      const queued: SubagentRun = { ...context.run, status: "queued" as const, completedAt: null, error: null, report: null,
+        metadata: { ...context.run.metadata, completionConsumedByParent: null } };
+      await requireSubagentDeps().upsertRun(queued);
+      await runSubagentChildTurn({ run: queued, role: context.role, childSession: session,
+        parentSession: await getSession(queued.parentSessionId), parentTurnId: queued.parentTurnId ?? turnId,
+        contextPack: typeof queued.metadata.context === "string" ? queued.metadata.context : null,
+        childTurnPermissions: context.turnPermissions, initialPrompt: request.prompt, reservedTurnId: turnId });
+      const turn = await store.getTurn(turnId);
+      if (!turn) throw new Error("Child follow-up did not start.");
+      return turn;
+    },
+    dispatchFollowup: async (sessionId, work) => {
+      const receipt = await turnFollowUpQueue.enqueue({ label: "Task inbox follow-up", metadata: { sessionId } }, work).done;
+      if (receipt.status === "failed") throw new Error(receipt.error ?? "Task follow-up failed.");
+    },
+    yieldWhileWaiting: (work) => turnFollowUpQueue.yieldWhileWaiting(() => subagentQueue ? subagentQueue.yieldWhileWaiting(work) : work()),
+  });
   const connectedAppsForTurn = createConnectedAppTurnResolver({
     listIntegrationConnections,
     appendRuntimeEvent,
@@ -389,7 +431,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const turnRunnerLifecycle = createTurnRunnerLifecycle({
     activeTurns,
     interruptActiveTurn,
-    jobRegistries: [subagentParentWakeJobs],
+    jobRegistries: [],
     queues: [turnFollowUpQueue, ...(subagentQueue ? [subagentQueue] : [])],
   });
 
@@ -411,7 +453,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     listUsageRecords: store.listModelUsageRecords
       ? (query) => store.listModelUsageRecords!(query)
       : undefined,
-    notifyRunStateChanged: notifySubagentRunStateChanged,
+    notifyRunStateChanged: (run) => { notifySubagentRunStateChanged?.(run); if (run.childSessionId) taskInbox.wake(run.childSessionId); },
     appendRuntimeEvent,
   });
   const subagentToolsAvailable = subagentRepositoryRuntime.available;
@@ -478,6 +520,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     profileSkillBodyFromReadResult,
     readProfileSkillForModel,
   } = createNativeToolRuntime({
+    hasPendingSteering: async (sessionId, turnId) => (await store.pendingTaskInputs(sessionId, turnId)).some((input) => input.kind === "steer"),
     maxRepeatedInvalidToolRequests,
     appendRuntimeEvent,
     throwIfInterrupted,
@@ -506,6 +549,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     throwIfInterrupted,
   });
   const { runHostedToolLoop } = createHostedToolLoopRuntime({
+    taskInbox, inboxStore: store,
     resolveModelTools: deps.resolveModelTools,
     assertExecutionAllowed: (turnId) => assertTurnConfiguration(deps.storageHome, turnId),
     hostedToolFlags,
@@ -622,49 +666,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     getSession,
     appendSubagentReceipt,
   }) satisfies SubagentTurnHooks;
-  const {
-    queueSubagentFollowupMessage,
-    sendSubagentMessageFromModelTool,
-    withSubagentInterruptWakeMetadata,
-  } = createSubagentMessagingRuntime({
-    requireSubagentDeps,
-    getSession,
-    latestTurnForSession: (sessionId) =>
-      store.latestPersistedTurnForSession(sessionId),
-    appendRuntimeEvent,
-    appendSubagentReceipt,
-    getActiveTurn: (sessionId) => {
-      const active = activeTurns.get(sessionId);
-      return active ? { sessionId, turn: { id: active.turn.id } } : null;
-    },
-    interruptActiveTurn: (active, reason) => {
-      const current = activeTurns.get(active.sessionId);
-      if (!current)
-        throw new Error(`No active turn for session ${active.sessionId}`);
-      return interruptActiveTurn(current, reason);
-    },
+  const { queueSubagentFollowupMessage, sendSubagentMessageFromModelTool } = createSubagentMessagingRuntime({
+    inbox: taskInbox, requireSubagentDeps, appendRuntimeEvent,
   });
-  const { notifyParentOfSubagentCompletion, recoverPendingCompletions } =
-    createSubagentCompletionRuntime({
-      appendMessage: (message) => requireSubagentDeps().appendMessage(message),
-      listMessages: store.listSubagentMessages
-        ? (input) => store.listSubagentMessages!(input)
-        : async () => [],
-      getRun: (runId) => requireSubagentDeps().getRun(runId),
-      listRuns: (input) => requireSubagentDeps().listRuns(input),
-      upsertRun: upsertSubagentRunAndNotify,
-      getSession,
-      hasParentWakeTurn: (sessionId, messageId) =>
-        store.hasSubagentParentWakeTurn(sessionId, messageId),
-      appendRuntimeEvent,
-      turnFollowUpQueue,
-      parentWakeJobs: subagentParentWakeJobs,
-      getActiveTurn: (sessionId) => {
-        const active = activeTurns.get(sessionId);
-        return active ? { sessionId, turn: { id: active.turn.id } } : null;
-      },
-      sendTurn,
-    });
+  const { notifyParentOfSubagentCompletion, recoverPendingCompletions, close: closeCompletionDelivery } = createSubagentCompletionRuntime({
+    inbox: taskInbox, store, appendMessage: (message) => requireSubagentDeps().appendMessage(message),
+    getSession, appendRuntimeEvent,
+  });
   const { resolveSubagentPatchApplyApproval } =
     createSubagentPatchApprovalRuntime({
       getApproval: (approvalId) => store.getApproval(approvalId),
@@ -690,7 +698,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     upsertPersistedRun: store.upsertPersistedSubagentRun
       ? (run) => store.upsertPersistedSubagentRun!(run)
       : (run) => store.upsertSubagentRun!(run),
-    notifyRunStateChanged: notifySubagentRunStateChanged,
+    notifyRunStateChanged: (run) => { notifySubagentRunStateChanged?.(run); if (run.childSessionId) taskInbox.wake(run.childSessionId); },
     latestTurnForSession: (sessionId) =>
       store.latestPersistedTurnForSession(sessionId),
     latestAssistantTextForSession: (sessionId) =>
@@ -703,7 +711,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     applySubagentPatch,
     appendWorkspaceDiffEvent,
     uniqueSubagentRefs,
-    withSubagentInterruptWakeMetadata,
+    commitCompletion: (run, turnId) => store.commitSubagentCompletion(run, turnId),
     notifyParentOfSubagentCompletion,
   });
   const { archiveSubagentChildSession, subagentLifecycleActionNextStep } =
@@ -723,6 +731,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     startSubagentFromModelTool,
     statusSubagentsFromModelTool,
   } = createSubagentToolRuntime({
+    inbox: taskInbox,
     requireSubagentDeps,
     loadAppPreferences,
     getSession,
@@ -814,21 +823,39 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       connectedApps,
       options
       ),
+      ...taskCoordinationTools(taskInbox),
       ...(deps.harnessModelTools ?? []),
     ];
   }
-  async function sendTurn(sessionId: string, payload: unknown): Promise<Turn> {
+  async function sendTurn(sessionId: string, payload: unknown, reservedTurnId?: string): Promise<Turn> {
     const finish = turnRunnerLifecycle.beginSendTurn();
+    const turnId = reservedTurnId ?? randomUUID();
+    let owned = false;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let outcome: "completed" | "failed" | "interrupted" = "failed";
     try {
-      return await executeTurn(sessionId, payload);
+      await store.openTaskInboxTurn(sessionId, turnId, taskInbox.ownerId);
+      owned = true;
+      heartbeat = setInterval(() => {
+        void store.renewTaskInboxTurn(sessionId, turnId, taskInbox.ownerId).catch((error) => {
+          activeTurns.get(sessionId)?.controller.abort(error);
+        });
+      }, 20_000);
+      heartbeat.unref();
+      const result = await executeTurn(sessionId, payload, turnId);
+      outcome = result.status === "in_progress" ? "failed" : result.status;
+      return result;
     } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      if (owned) await taskInbox.settled(sessionId, turnId, outcome);
       finish();
     }
   }
 
   async function executeTurn(
     sessionId: string,
-    payload: unknown
+    payload: unknown,
+    turnId: string,
   ): Promise<Turn> {
     const input = SendTurnRequestSchema.parse(payload);
     let turnPermissions = turnPermissionsFromSendTurnInput(input);
@@ -980,6 +1007,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
     const createImproveMetadata = {
       ...(input.metadata ? input.metadata : {}),
+      taskExecutionPermissions: { ...turnPermissions },
       ...(subagentDelegation ? { subagentDelegation } : {}),
       ...(effectiveUsageAttribution
         ? { usageAttribution: effectiveUsageAttribution }
@@ -995,7 +1023,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         : {}),
     };
     const turn: Turn = {
-      id: randomUUID(),
+      id: turnId,
       sessionId,
       providerTurnId: null,
       modelRef: turnModelRef,
@@ -1099,6 +1127,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (activeTurn.codexRuntime && activeTurn.codexTurnId) void activeTurn.codexRuntime.client.interruptTurn({ threadId: activeTurn.codexRuntime.threadId, turnId: activeTurn.codexTurnId }).catch(() => undefined);
     });
     try {
+      if (session.experience !== "chat") await taskInbox.announcePresence(sessionId, turn.id).catch(async (error) => {
+        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "diagnostic", source: "server", status: "failed", output: `Peer presence notice unavailable: ${String(error)}` }));
+      });
       await markSubagentContinuationRunning({
         context: subagentContinuation,
         childTurnId: turn.id,
@@ -1332,7 +1363,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               requestId: options?.requestId ?? turn.id,
               maxTokens: options?.maxOutputTokens,
               reasoningEffort: turnPermissions.codexReasoningEffort,
-              signal: controller.signal,
+              signal: options?.signal ?? controller.signal,
             })) {
               if (delta.type === "text_delta" && delta.text)
                 yield { text: delta.text, raw: delta.raw };
@@ -1504,7 +1535,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               maxOutputTokens: options?.maxOutputTokens,
               requestId: options?.requestId ?? turn.id,
               promptCacheKey: session.id,
-              signal: controller.signal,
+              signal: options?.signal ?? controller.signal,
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };
               if (delta.reasoningText)
@@ -1555,8 +1586,23 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (turnCwd && turnCwd !== session.cwd)
         session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
+      const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
       const runtime = await ensureCodexRuntime(session, {
         ...input,
+        coordination: coordinationDefinitions.length ? {
+          tools: coordinationDefinitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
+          execute: async (name, args, callId, signal) => {
+            const active = activeTurns.get(sessionId);
+            if (!active || active.controller.signal.aborted || active.session.experience === "chat" || active.session.systemKind) throw new Error("This task has no active coordination execution.");
+            const definition = coordinationDefinitions.find((tool) => tool.name === name);
+            if (!definition) throw new Error("Unknown task coordination tool.");
+            const result = await definition.execute({ session: active.session, turnId: active.turn.id,
+              turnPermissions: turnPermissionsFromSendTurnInput(SendTurnRequestSchema.parse({ prompt: active.turn.prompt })), provider: "codex", model: active.turn.modelRef?.modelId ?? "codex",
+              callId, args, signal: AbortSignal.any([signal, active.controller.signal]), workspaceDiffBaseline: null,
+              mentionedApps: [], userPrompt: active.turn.prompt, turnMetadata: active.turn.metadata });
+            return result.contentText;
+          },
+        } : undefined,
         model: codexModel,
         approvalPolicy: turnPermissions.approvalPolicy,
         sandbox: turnPermissions.sandbox,
@@ -1566,15 +1612,18 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       activeTurn.codexRuntime = runtime;
       throwIfInterrupted(controller.signal);
       await assertTurnConfiguration(deps.storageHome, turn.id);
+      const initialRequestId = `codex-start:${turn.id}`;
+      const initialInputs = await taskInbox.include(sessionId, turn.id, initialRequestId);
       const providerTurn = await runtime.client.startTurn({
         threadId: runtime.threadId,
-        prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")),
+        prompt: codexPromptWithHarnessContext([providerPrompt, ...initialInputs.map(taskInputModelText)].join("\n\n"), [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")),
         cwd: turnCwd ?? session.cwd,
         model: codexModel,
         approvalPolicy: turnPermissions.approvalPolicy,
         sandbox: turnPermissions.sandbox,
       });
       activeTurn.codexTurnId = providerTurn.turnId;
+      await taskInbox.deliverCodex(activeTurn);
       if (controller.signal.aborted) {
         await runtime.client
           .interruptTurn({
@@ -1592,6 +1641,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         runtime.client.waitForTurn(providerTurn.turnId),
         waitForInterrupt(controller.signal),
       ]);
+      await taskInbox.finishCodex(activeTurn);
+      await store.settleTaskInputRequest(initialRequestId, "resolved");
       await appendWorkspaceDiffEvent(session, turn.id, {
         baseline: initialWorkspaceDiff,
       });
@@ -1671,15 +1722,28 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     }
   }
 
+  let closePromise: Promise<void> | null = null;
+  const close = () => closePromise ??= (async () => {
+    taskInbox.stopScheduling();
+    await turnRunnerLifecycle.close();
+    await closeCompletionDelivery();
+    await taskInbox.close();
+  })();
+
   return {
     sendTurn,
+    steerSessionTurn: taskInbox.steer,
+    readTaskInbox: (sessionId) => store.taskInboxSnapshot(sessionId),
+    queueTaskInput: taskInbox.queue,
+    updateTaskInput: taskInbox.mutate,
+    recoverTaskInbox: taskInbox.recover,
     isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),
     waitForSessionTurnSettlement: async (sessionId: string) => {
       await activeTurns.get(sessionId)?.settled;
     },
     interruptSessionTurn,
     interruptAll: turnRunnerLifecycle.interruptAll,
-    close: turnRunnerLifecycle.close,
+    close,
     applyCreateImproveAction: applyCreateImproveActionPayload,
     getCreateImproveRun,
     listCreateImproveRuns,

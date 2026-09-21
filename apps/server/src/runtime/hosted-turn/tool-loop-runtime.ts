@@ -1,8 +1,10 @@
+import { workspaceToolCorrectionMessage, trainingHarnessForTurn } from "./tool-loop-support.js";
 import {
   DEFAULT_SESSION_EXPERIENCE,
+  TASK_COORDINATION_INSTRUCTIONS,
   type AppPreferences,
-  type ChatProvider,
   type HarnessActionBinding,
+  type ChatProvider,
   type ModelUsageRecord,
   type OpenPondActionCatalogEntry,
   type OpenPondApp,
@@ -18,8 +20,9 @@ import {
   runProviderRound,
   runProviderRoundLoop,
   type AgentToolCatalogProjection,
+  type ProviderRoundResult,
 } from "@openpond/agent-runtime";
-import type { HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
+import type { HostedChatTool, HostedChatToolChoice, HostedChatToolCall, HostedChatContinuation } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import {
   hostedRequestedOutputTokens,
@@ -31,7 +34,6 @@ import {
   formatWorkspaceToolResultForModel,
   formatWorkspaceToolValidationErrorForModel,
   validateWorkspaceToolRequest,
-  type HostedToolInstructionMode,
 } from "../../openpond/hosted-tool-protocol.js";
 import {
   assistantMessageForNativeToolCalls,
@@ -72,11 +74,15 @@ import {
 import { subagentModelAsideMessages } from "./tool-loop-subagent-asides.js";
 import type { createHostedCompactionRuntime } from "./compaction-runtime.js";
 import { runWithSingleContextOverflowRecovery } from "./context-overflow-recovery.js";
+import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
+import type { TaskInboxRepository } from "../../store/store-task-inbox.js";
+import { appendTaskInputContext, projectTaskAssignment } from "../task-inbox/model-context.js";
 
 export { hostedTrainingHarnessRound } from "./training-harness-round.js";
 
 type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
 type HostedToolLoopStreamOptions = {
+  signal?: AbortSignal;
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
@@ -87,6 +93,8 @@ type PrepareHostedProviderRequest = ReturnType<
 >["prepareHostedProviderRequest"];
 
 export function createHostedToolLoopRuntime(deps: {
+  taskInbox: TaskInboxRuntime;
+  inboxStore: TaskInboxRepository;
   resolveModelTools?: TurnRunnerDependencies["resolveModelTools"];
   hostedToolFlags: HostedToolRolloutFlags;
   assertExecutionAllowed?: (turnId: string) => Promise<void>;
@@ -215,6 +223,8 @@ export function createHostedToolLoopRuntime(deps: {
   }): Promise<Session> {
     let session = params.session;
     const messages = [...params.messages];
+    const systemPrompt = `${params.systemPrompt}\n\n${TASK_COORDINATION_INSTRUCTIONS}`;
+    messages.unshift({ role: "system", content: TASK_COORDINATION_INSTRUCTIONS });
     const contextLimitTokens =
       params.contextLimitTokens ??
       trustedProviderContextLimit({
@@ -409,6 +419,14 @@ export function createHostedToolLoopRuntime(deps: {
       runRound: async (round) => {
         const { index } = round;
         throwIfInterrupted(params.signal);
+        const request = deps.taskInbox.beginRequest(session.id, params.signal);
+        let partialText = "";
+        let providerRound: ProviderRoundResult<HostedChatToolCall, HostedChatContinuation>;
+        try {
+        const inputs = await deps.taskInbox.include(session.id, params.turn.id, round.requestId);
+        const corrections = await deps.inboxStore.taskAssignmentInputs(params.turn.id);
+        appendTaskInputContext(messages, inputs);
+        projectTaskAssignment(messages, corrections, params.userPrompt);
         await appendPendingSubagentAsides();
         const trainingHarnessRound = hostedTrainingHarnessRound({
           trainingHarness,
@@ -428,12 +446,14 @@ export function createHostedToolLoopRuntime(deps: {
           tools: requestTools,
           maxOutputTokens,
           prompt: params.userPrompt,
-          systemPrompt: params.systemPrompt,
+          systemPrompt,
           signal: params.signal,
           roundIndex: index,
           streamCompactionChatTurn: params.streamCompactionChatTurn,
         });
         replaceMessages(prepared.messages);
+        appendTaskInputContext(messages, inputs);
+        projectTaskAssignment(messages, corrections, params.userPrompt);
         await recordRequestBudget({
           roundIndex: index,
           requestId: round.requestId,
@@ -441,8 +461,7 @@ export function createHostedToolLoopRuntime(deps: {
           budget: prepared.requestBudget,
         });
         await appendContextUsage({ messages });
-        const nativeToolAccumulator = new NativeToolCallAccumulator();
-        const providerRound = await runWithSingleContextOverflowRecovery({
+        providerRound = await runWithSingleContextOverflowRecovery({
           runAttempt: async ({ attempt, markOutputEscaped }) => {
             const usageRequestId = attempt === 0
               ? round.requestId
@@ -460,10 +479,10 @@ export function createHostedToolLoopRuntime(deps: {
               stream: params.stream(
                 messages,
                 requestTools.length > 0
-                  ? { tools: requestTools, toolChoice, requestId: usageRequestId, maxOutputTokens }
-                  : { requestId: usageRequestId, maxOutputTokens },
+                  ? { tools: requestTools, toolChoice, requestId: usageRequestId, maxOutputTokens, signal: request.signal }
+                  : { requestId: usageRequestId, maxOutputTokens, signal: request.signal },
               ),
-              signal: params.signal,
+              signal: request.signal,
               onDelta: async (delta) => {
                 throwIfInterrupted(params.signal);
                 usageRecorder.observeDelta(delta);
@@ -483,6 +502,7 @@ export function createHostedToolLoopRuntime(deps: {
                   );
                 }
                 if (delta.text) {
+                  partialText += delta.text;
                   await appendAssistantText(session, params.turn.id, delta.text);
                 }
               },
@@ -519,7 +539,7 @@ export function createHostedToolLoopRuntime(deps: {
               tools: requestTools,
               maxOutputTokens,
               prompt: params.userPrompt,
-              systemPrompt: params.systemPrompt,
+              systemPrompt,
               signal: params.signal,
               roundIndex: index,
               force: true,
@@ -527,6 +547,8 @@ export function createHostedToolLoopRuntime(deps: {
             });
             if (!recovered.compacted) return false;
             replaceMessages(recovered.messages);
+            appendTaskInputContext(messages, inputs);
+            projectTaskAssignment(messages, corrections, params.userPrompt);
             await recordRequestBudget({
               roundIndex: index,
               requestId: `${round.requestId}:overflow-retry`,
@@ -536,6 +558,17 @@ export function createHostedToolLoopRuntime(deps: {
             return true;
           },
         });
+        await deps.inboxStore.settleTaskInputRequest(round.requestId, "resolved");
+        } catch (error) {
+          await deps.inboxStore.settleTaskInputRequest(round.requestId, request.replaced() ? "replaced" : "failed");
+          if (!request.replaced()) throw error;
+          if (partialText.trim()) messages.push({ role: "assistant", content: `${partialText}\n[Generation paused for a user correction; no partial tool call was executed.]` });
+          await appendRuntimeEvent(event({ sessionId: session.id, turnId: params.turn.id, name: "diagnostic", source: "server", status: "completed",
+            output: "Continuing the same turn with the user correction.", data: { phase: "request_replaced", requestId: round.requestId } }));
+          return { type: "continue" };
+        } finally { request.finish(); }
+      const trainingHarnessRound = hostedTrainingHarnessRound({ trainingHarness, completedActionCount: completedTrainingHarnessActions, nativeTools });
+      const nativeToolAccumulator = new NativeToolCallAccumulator();
       const assistantText = providerRound.text;
       const latestContinuation = providerRound.continuation;
       const latestUsage = providerRound.usage;
@@ -606,6 +639,7 @@ export function createHostedToolLoopRuntime(deps: {
           (result) => result.turnControl === "await_user_input"
         );
         if (blockingQuestion) {
+          await deps.inboxStore.pauseTaskInboxTurn(session.id, params.turn.id, deps.taskInbox.ownerId);
           await appendContextUsage({
             messages,
             usage: latestUsage,
@@ -798,6 +832,7 @@ export function createHostedToolLoopRuntime(deps: {
           usage: latestUsage,
           includeCompletion: true,
         });
+        if (!await deps.inboxStore.sealTaskInboxTurn(session.id, params.turn.id, deps.taskInbox.ownerId)) return { type: "continue" };
         return { type: "complete", result: session };
       }
 
@@ -811,6 +846,10 @@ export function createHostedToolLoopRuntime(deps: {
       const toolResults: string[] = [];
       for (const request of requests) {
         throwIfInterrupted(params.signal);
+        if ((await deps.inboxStore.pendingTaskInputs(session.id, params.turn.id)).some((input) => input.kind === "steer")) {
+          toolResults.push("Not executed: incorporate the pending user correction before choosing further actions.");
+          continue;
+        }
         const toolRequest = normalizeMentionedSandboxToolRequest({
           request: {
             ...request,
@@ -906,61 +945,6 @@ export function createHostedToolLoopRuntime(deps: {
         return session;
       },
     });
-  }
-
-  function workspaceToolCorrectionMessage(
-    textFallbackMode: HostedToolInstructionMode,
-    nativeToolsAvailable: boolean
-  ): string {
-    const toolCallInstruction = nativeToolsAvailable
-      ? "Call an appropriate native tool now."
-      : textFallbackMode === "resource_text_fallback"
-      ? "Call a resource_search or resource_read openpond_tool block now."
-      : textFallbackMode === "full_text_fallback"
-      ? "Call the appropriate openpond_tool block now."
-      : "Explain the blocker instead of claiming the workspace changed.";
-    return [
-      "Your previous response did not call a workspace tool.",
-      "The user's request appears to require inspecting or changing the active workspace.",
-      toolCallInstruction,
-      "Do not claim the workspace changed until a tool result confirms it.",
-      "If the request cannot be completed with the available workspace tools, explain the blocker instead of saying it is done.",
-    ].join(" ");
-  }
-
-  async function trainingHarnessForTurn(
-    turn: Turn,
-    getTaskset: ((tasksetId: string) => Promise<Taskset | null>) | undefined
-  ): Promise<
-    | {
-        taskId: string;
-        actionBindings: HarnessActionBinding[];
-      }
-    | undefined
-  > {
-    const tasksetId =
-      typeof turn.metadata.trainingTasksetId === "string"
-        ? turn.metadata.trainingTasksetId.trim()
-        : "";
-    const taskId =
-      typeof turn.metadata.trainingHarnessTaskId === "string"
-        ? turn.metadata.trainingHarnessTaskId.trim()
-        : "";
-    if (!tasksetId || !taskId || !getTaskset) return undefined;
-    const taskset = await getTaskset(tasksetId);
-    if (!taskset || taskset.environment.kind !== "stateful_harness") {
-      return undefined;
-    }
-    const task = taskset.tasks.find((candidate) => {
-      const caseId =
-        typeof candidate.metadata.caseId === "string"
-          ? candidate.metadata.caseId.trim()
-          : "";
-      return candidate.id === taskId || caseId === taskId;
-    });
-    if (!task) return undefined;
-    const actionBindings = taskset.environment.actionBindings ?? [];
-    return actionBindings.length ? { taskId, actionBindings } : undefined;
   }
 
   return { runHostedToolLoop };

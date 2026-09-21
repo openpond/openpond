@@ -7,7 +7,7 @@ describe("app server composition", () => {
     const appServer = createAppServer({
       ports: {
         capabilities: async () => ({
-          protocolVersion: "2026-08-26",
+          protocolVersion: "2026-09-20",
           placement: "local",
           methods: [],
           features: {

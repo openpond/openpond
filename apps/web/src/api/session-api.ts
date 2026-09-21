@@ -12,6 +12,10 @@ import type {
   SendTurnRequest,
   Session,
   Turn,
+  TaskInput,
+  TaskInputMutation,
+  TaskInboxSnapshot,
+  SteerTurnRequest,
   WorkspaceDiffSummary,
   WorkspaceToolRequest,
   WorkspaceToolResult,
@@ -19,6 +23,14 @@ import type {
 import { apiFetch, type ClientConnection } from "./api-client";
 
 export const sessionApi = {
+  taskInbox: (connection: ClientConnection, sessionId: string) =>
+    apiFetch<TaskInboxSnapshot>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/inbox`),
+  steerTurn: (connection: ClientConnection, sessionId: string, input: SteerTurnRequest) =>
+    apiFetch<TaskInput>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/turns/steer`, { method: "POST", body: JSON.stringify(input) }),
+  queueTaskInput: (connection: ClientConnection, sessionId: string, input: SendTurnRequest, idempotencyKey: string) =>
+    apiFetch<TaskInput>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/inbox`, { method: "POST", body: JSON.stringify({ input, idempotencyKey }) }),
+  updateTaskInput: (connection: ClientConnection, sessionId: string, inputId: string, input: TaskInputMutation) =>
+    apiFetch<TaskInput>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/inbox/${encodeURIComponent(inputId)}`, { method: "PATCH", body: JSON.stringify(input) }),
   sendTurn: (connection: ClientConnection, sessionId: string, input: SendTurnRequest) =>
     apiFetch<Turn>(connection, `/v1/sessions/${sessionId}/turns`, {
       method: "POST",

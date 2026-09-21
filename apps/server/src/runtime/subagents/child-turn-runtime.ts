@@ -16,14 +16,12 @@ import {
 import type { SubagentTurnPermissions } from "./continuation-runtime.js";
 import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
 import { now, textFromUnknown } from "../../utils.js";
+import { completionBody } from "./completion-runtime.js";
 import {
-  recordFromUnknown,
-  stringFromRecord,
   truncateForModelAside,
   uniqueNonEmptyStrings,
 } from "../turns/value-utils.js";
 
-const SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES = 3;
 const SUBAGENT_REPORT_SUMMARY_MAX_CHARS = 20_000;
 
 type AppendSubagentReceipt = (input: {
@@ -56,7 +54,7 @@ export function createSubagentChildTurnRuntime(deps: {
     }): Promise<SubagentRun[]>;
     queue: BackgroundWorkerQueue;
   };
-  sendTurn(sessionId: string, payload: unknown): Promise<Turn>;
+  sendTurn(sessionId: string, payload: unknown, reservedTurnId?: string): Promise<Turn>;
   getTurn(turnId: string): Promise<Turn | null>;
   getPersistedRun(runId: string): Promise<SubagentRun | null>;
   upsertPersistedRun(run: SubagentRun): Promise<SubagentRun>;
@@ -82,10 +80,7 @@ export function createSubagentChildTurnRuntime(deps: {
   applySubagentPatch(run: SubagentRun): Promise<Record<string, unknown> | null>;
   appendWorkspaceDiffEvent(session: Session, turnId: string): Promise<void>;
   uniqueSubagentRefs(values: readonly (SubagentRef | null | undefined)[]): SubagentRef[];
-  withSubagentInterruptWakeMetadata(
-    metadata: Record<string, unknown> | undefined,
-    wake: Record<string, unknown>,
-  ): Record<string, unknown>;
+  commitCompletion(run: SubagentRun, turnId: string): Promise<void>;
   notifyParentOfSubagentCompletion(input: {
     run: SubagentRun;
     parentSession: Session;
@@ -110,8 +105,8 @@ export function createSubagentChildTurnRuntime(deps: {
   const applySubagentPatch = deps.applySubagentPatch;
   const appendWorkspaceDiffEvent = deps.appendWorkspaceDiffEvent;
   const uniqueSubagentRefs = deps.uniqueSubagentRefs;
-  const withSubagentInterruptWakeMetadata = deps.withSubagentInterruptWakeMetadata;
   const notifyParentOfSubagentCompletion = deps.notifyParentOfSubagentCompletion;
+  const commitCompletion = deps.commitCompletion;
   const store = { latestAssistantTextForSession: deps.latestAssistantTextForSession };
   const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   async function runSubagentChildTurn(input: {
@@ -123,6 +118,7 @@ export function createSubagentChildTurnRuntime(deps: {
     contextPack: string | null;
     childTurnPermissions: SubagentTurnPermissions;
     initialPrompt?: string | null;
+    reservedTurnId?: string;
   }): Promise<void> {
     const deps = requireSubagentDeps();
     const latestBeforeStart = await deps.getRun(input.run.id);
@@ -162,11 +158,10 @@ export function createSubagentChildTurnRuntime(deps: {
     });
     let lastChildTurnId = `failed_${run.id}`;
     try {
-      let childPrompt = input.initialPrompt?.trim() || subagentChildPrompt({
+      const childPrompt = input.initialPrompt?.trim() || subagentChildPrompt({
         objective: input.run.objective,
         contextPack: input.contextPack,
       });
-      let wakeResumeCount = 0;
       while (true) {
         const childTurn = await sendManagedSubagentTurn(input.childSession.id, input.run.id, {
           prompt: childPrompt,
@@ -184,38 +179,12 @@ export function createSubagentChildTurnRuntime(deps: {
           sandbox: input.childTurnPermissions.sandbox,
           codexPermissionMode: input.childTurnPermissions.codexPermissionMode,
           codexReasoningEffort: input.childTurnPermissions.codexReasoningEffort,
-        });
+        }, input.reservedTurnId);
         const finalizedChildTurn = await finalizedSubagentChildTurn(childTurn);
         lastChildTurnId = finalizedChildTurn.id;
         const latestAfterChild = await getPersistedRun(run.id);
         if (latestAfterChild?.status === "cancelled") return;
         run = latestAfterChild ?? run;
-        if (finalizedChildTurn.status === "interrupted") {
-          const wake = subagentInterruptWakeForTurn(run, finalizedChildTurn.id);
-          if (wake && wakeResumeCount < SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES) {
-            wakeResumeCount += 1;
-            run = await markSubagentInterruptWakeResuming({
-              run,
-              interruptedTurnId: finalizedChildTurn.id,
-              wake,
-              resumeCount: wakeResumeCount,
-            });
-            await appendSubagentReceipt({
-              parentSession: input.parentSession,
-              parentTurnId: input.parentTurnId,
-              run,
-              eventName: "subagent.progress",
-              status: "pending",
-              output: `${run.roleId} subagent is resuming after interrupt steering.`,
-            });
-            childPrompt = subagentInterruptWakeResumePrompt({
-              run,
-              interruptedTurnId: finalizedChildTurn.id,
-              wake,
-            });
-            continue;
-          }
-        }
         if (finalizedChildTurn.status !== "completed") {
           throw new Error(finalizedChildTurn.error || `Child turn ended with status ${finalizedChildTurn.status}.`);
         }
@@ -308,7 +277,7 @@ export function createSubagentChildTurnRuntime(deps: {
           });
         }
       }
-      await upsertPersistedRun(run);
+      await commitCompletion(run, lastChildTurnId);
       await appendSubagentReceipt({
         parentSession: input.parentSession,
         parentTurnId: input.parentTurnId,
@@ -324,9 +293,7 @@ export function createSubagentChildTurnRuntime(deps: {
         parentSession: input.parentSession,
         childSession: input.childSession,
         childTurnId: lastChildTurnId,
-        body: patchApplyError
-          ? `${run.report?.summary ?? "Child completed."}\n\nIntegration error: ${patchApplyError}`
-          : run.report?.summary ?? "Child conversation completed.",
+        body: completionBody(run),
         refs: uniqueSubagentRefs([
           ...(run.report?.artifacts ?? []),
           run.report?.patchRef ?? null,
@@ -399,7 +366,7 @@ export function createSubagentChildTurnRuntime(deps: {
           ...(workspaceHandoff ? { workspaceHandoff: workspaceHandoff.metadata } : {}),
         },
       });
-      await upsertPersistedRun(run);
+      await commitCompletion(run, lastChildTurnId);
       await appendSubagentReceipt({
         parentSession: input.parentSession,
         parentTurnId: input.parentTurnId,
@@ -415,7 +382,7 @@ export function createSubagentChildTurnRuntime(deps: {
         parentSession: input.parentSession,
         childSession: input.childSession,
         childTurnId: lastChildTurnId,
-        body: `${failureReport.summary}\n\nError: ${message}`,
+        body: completionBody(run),
         refs: uniqueSubagentRefs([
           ...failureReport.artifacts,
           failureReport.patchRef,
@@ -430,6 +397,7 @@ export function createSubagentChildTurnRuntime(deps: {
     childSessionId: string,
     runId: string,
     payload: Parameters<typeof sendTurn>[1],
+    reservedTurnId?: string,
   ): Promise<Turn> {
     const priorTurn = await latestTurnForSession(childSessionId);
     return await new Promise<Turn>((resolve, reject) => {
@@ -453,7 +421,7 @@ export function createSubagentChildTurnRuntime(deps: {
       // source observes a terminal current turn first resolves this one gate.
       // Resolve directly from the provider callback instead of relying on a
       // later polling iteration to observe shared callback state.
-      void sendTurn(childSessionId, payload).then(
+      void sendTurn(childSessionId, payload, reservedTurnId).then(
         (turn) => {
           dispatchedTurnId = turn.id;
           settleWithTurn(turn);
@@ -499,57 +467,6 @@ export function createSubagentChildTurnRuntime(deps: {
     }
     return latest;
   }
-
-  function subagentInterruptWakeForTurn(run: SubagentRun, turnId: string): Record<string, unknown> | null {
-    const wake = recordFromUnknown(recordFromUnknown(run.metadata)?.interruptWake);
-    if (!wake) return null;
-    if (stringFromRecord(wake, "activeTurnId") !== turnId) return null;
-    const status = stringFromRecord(wake, "status");
-    if (status !== "interrupted" && status !== "interrupting") return null;
-    if (!stringFromRecord(wake, "messageId")) return null;
-    return wake;
-  }
-
-  async function markSubagentInterruptWakeResuming(input: {
-    run: SubagentRun;
-    interruptedTurnId: string;
-    wake: Record<string, unknown>;
-    resumeCount: number;
-  }): Promise<SubagentRun> {
-    const deps = requireSubagentDeps();
-    const updated = SubagentRunSchema.parse({
-      ...input.run,
-      status: "running",
-      completedAt: null,
-      error: null,
-      metadata: withSubagentInterruptWakeMetadata(input.run.metadata, {
-        ...input.wake,
-        status: "resuming",
-        interruptedTurnId: input.interruptedTurnId,
-        resumeCount: input.resumeCount,
-        resumedAt: now(),
-      }),
-    });
-    await deps.upsertRun(updated);
-    return updated;
-  }
-
-  function subagentInterruptWakeResumePrompt(input: {
-    run: SubagentRun;
-    interruptedTurnId: string;
-    wake: Record<string, unknown>;
-  }): string {
-    const messageId = stringFromRecord(input.wake, "messageId") ?? "unknown";
-    return [
-      "A high-priority subagent mailbox message interrupted your previous child turn.",
-      `Message id: ${messageId}`,
-      `Interrupted turn: ${input.interruptedTurnId}`,
-      `Original assignment: ${input.run.objective}`,
-      "Read the Subagent mailbox interrupt in this turn context, apply that steering, and continue the assignment.",
-      "If the interrupted work was a wait, sleep, or polling command, do not repeat it unless the updated assignment still requires it.",
-    ].join("\n");
-  }
-
 
   return { runSubagentChildTurn };
 }

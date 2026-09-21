@@ -18,6 +18,7 @@ export function subagentModelAsideMessages(input: {
 }): string[] {
   const messages: string[] = [];
   for (const item of input.events) {
+    if (Array.isArray(recordFromUnknown(item.data)?.taskInputIds)) continue;
     const key = subagentAsideEventKey(item);
     if (input.deliveredKeys.has(key)) continue;
     const content = input.session.subagentRunId

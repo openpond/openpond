@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  SubagentMessageSchema,
   SubagentRunSchema,
 } from "../packages/contracts/src";
 import {
@@ -10,7 +9,7 @@ import {
 } from "./helpers/turn-runner-subagent-harness";
 
 describe("subagent child lifecycle", () => {
-  test("completes a child directly and continues the parent with one bounded result", async () => {
+  test("completes a child with a durable passive result and no parent watcher turn", async () => {
     const harness = createSubagentHarness({
       toolName: "openpond_subagent_start",
       toolArgs: {
@@ -42,14 +41,15 @@ describe("subagent child lifecycle", () => {
       body: "Focused child result.",
       delivery: {
         deliveredParentSessionId: "session_1",
-        wakeParentReason: "child_turn_completed",
+        status: "pending",
+        inputIds: [expect.any(String)],
       },
     });
     const parentContinuations = harness.turns.filter(
       (turn) => turn.metadata?.subagentCompletionWake
     );
-    expect(parentContinuations).toHaveLength(1);
-    expect(parentContinuations[0]?.prompt).toContain("Focused child result.");
+    expect(parentContinuations).toHaveLength(0);
+    expect((await harness.runner.readTaskInbox("session_1")).inputs).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "result", body: "Focused child result." })]));
   });
 
   test("compacts an oversized child final instead of failing the run", async () => {
@@ -71,10 +71,8 @@ describe("subagent child lifecycle", () => {
     expect(harness.runs[0]?.status).toBe("completed");
     expect(harness.runs[0]?.report?.summary.length).toBe(20_000);
     expect(harness.runs[0]?.report?.summary.endsWith("...")).toBe(true);
-    const continuation = harness.turns.find(
-      (turn) => turn.metadata?.subagentCompletionWake
-    );
-    expect(continuation?.prompt).toContain("Result");
+    const result = (await harness.runner.readTaskInbox("session_1")).inputs.find((input) => input.kind === "result");
+    expect(result?.body).toBe(harness.runs[0]?.report?.summary);
   });
 
   test("reuses the same child thread for an explicit follow-up", async () => {
@@ -154,61 +152,6 @@ describe("subagent child lifecycle", () => {
     ).toHaveLength(1);
   });
 
-  test("a completion continuation can queue a follow-up without a stale completion write winning", async () => {
-    const harness = createSubagentHarness({
-      toolName: "openpond_subagent_start",
-      toolArgs: { roleId: "review", objective: "Review the implementation" },
-      preferences: preferences(),
-      textBySessionId: { "role:review": ["First review.", "Second review."] },
-      toolCallForStream: (_stream, context) => {
-        if (context.requestSession?.id !== "session_1") return null;
-        const prompt = context.requestTurn?.prompt ?? "";
-        if (prompt === "Start review" && !context.injectedFlags.started) {
-          context.injectedFlags.started = true;
-          return {
-            name: "openpond_subagent_start",
-            args: { roleId: "review", objective: "Review the implementation" },
-          };
-        }
-        if (
-          prompt.includes("First review.") &&
-          !context.injectedFlags.followedUp
-        ) {
-          context.injectedFlags.followedUp = true;
-          return {
-            name: "openpond_subagent_followup",
-            args: {
-              runId: context.runs[0]!.id,
-              message: "Review the corrected implementation.",
-            },
-          };
-        }
-        return null;
-      },
-      disableDefaultToolCall: true,
-    });
-
-    await harness.runner.sendTurn("session_1", {
-      prompt: "Start review",
-      modelRef: { providerId: "openrouter", modelId: "test/model" },
-    });
-    await harness.subagentQueue.drain();
-    await harness.turnFollowUpQueue.drain();
-    await harness.subagentQueue.drain();
-    await harness.turnFollowUpQueue.drain();
-
-    expect(harness.runs).toHaveLength(1);
-    expect(harness.runs[0]).toMatchObject({
-      status: "completed",
-      report: { summary: "Second review." },
-    });
-    expect(
-      harness.messages.filter((message) =>
-        message.id.startsWith("subagent_completion_")
-      )
-    ).toHaveLength(2);
-  });
-
   test("ordinary child messages are queued without creating parent watcher turns", async () => {
     const harness = createSubagentHarness({
       toolName: "openpond_subagent_send_message",
@@ -263,160 +206,4 @@ describe("subagent child lifecycle", () => {
     ).toBe(false);
   });
 
-  test("recovers and coalesces durable completions once after restart", async () => {
-    const runs = ["research", "coding"].map((roleId, index) =>
-      SubagentRunSchema.parse({
-        id: `run_${roleId}`,
-        parentSessionId: "session_1",
-        parentTurnId: "turn_parent",
-        childSessionId: `session_child_${index + 1}`,
-        roleId,
-        objective: `Complete ${roleId}`,
-        modelRef: { providerId: "openrouter", modelId: "test/model" },
-        isolationMode: "none",
-        toolPolicy: roleId === "coding" ? "workspace_write" : "read_only",
-        background: true,
-        peerMessages: "parent_scoped",
-        status: "completed",
-        required: true,
-        report: { summary: `${roleId} result` },
-        createdAt: "2026-07-07T10:00:00.000Z",
-        completedAt: "2026-07-07T10:00:01.000Z",
-      })
-    );
-    const messages = runs.map((run, index) =>
-      SubagentMessageSchema.parse({
-        id: `subagent_completion_turn_child_${index + 1}`,
-        fromRunId: run.id,
-        toRole: "parent",
-        kind: "handoff",
-        priority: "normal",
-        body: run.report?.summary,
-        delivery: {
-          status: "delivered",
-          deliveredParentSessionId: "session_1",
-          acknowledgedParentSessionId: "session_1",
-          wakeRequestedParentSessionId: "session_1",
-          wakeQueuedParentSessionId: "session_1",
-          wakeParentReason: "child_turn_completed",
-        },
-        createdAt: "2026-07-07T10:00:01.000Z",
-      })
-    );
-    const harness = createSubagentHarness({
-      toolName: "openpond_subagent_start",
-      toolArgs: { roleId: "research", objective: "unused" },
-      preferences: preferences(),
-      initialRuns: runs,
-      initialMessages: messages,
-      disableDefaultToolCall: true,
-    });
-    runs.forEach((run, index) =>
-      harness.sessions.set(
-        run.childSessionId!,
-        baseSession({
-          id: run.childSessionId!,
-          parentSessionId: "session_1",
-          parentTurnId: "turn_parent",
-          subagentRunId: run.id,
-          subagentRoleId: run.roleId,
-        })
-      )
-    );
-
-    expect(await harness.runner.recoverPendingSubagentCompletions()).toBe(2);
-    await harness.turnFollowUpQueue.drain();
-
-    const continuations = harness.turns.filter(
-      (turn) => turn.metadata?.subagentCompletionWake
-    );
-    expect(continuations).toHaveLength(1);
-    expect(
-      (
-        continuations[0]?.metadata?.subagentCompletionWake as {
-          messageIds?: string[];
-        }
-      ).messageIds
-    ).toHaveLength(2);
-    expect(continuations[0]?.prompt).toContain("research result");
-    expect(continuations[0]?.prompt).toContain("coding result");
-    expect(await harness.runner.recoverPendingSubagentCompletions()).toBe(0);
-    await harness.turnFollowUpQueue.drain();
-    expect(
-      harness.turns.filter((turn) => turn.metadata?.subagentCompletionWake)
-    ).toHaveLength(1);
-  });
-
-  test("does not auto-continue a completion already consumed by join", async () => {
-    const run = SubagentRunSchema.parse({
-      id: "run_joined",
-      parentSessionId: "session_1",
-      parentTurnId: "turn_parent",
-      childSessionId: "session_child_joined",
-      roleId: "coding",
-      objective: "Complete the bounded edit",
-      modelRef: { providerId: "zai", modelId: "glm-5.2" },
-      isolationMode: "none",
-      toolPolicy: "workspace_write",
-      background: true,
-      peerMessages: "parent_scoped",
-      status: "completed",
-      report: { summary: "Joined result" },
-      metadata: {
-        completionConsumedByParent: {
-          at: "2026-07-07T10:00:02.000Z",
-          parentSessionId: "session_1",
-          parentTurnId: "turn_parent",
-          childCompletedAt: "2026-07-07T10:00:01.000Z",
-        },
-      },
-      createdAt: "2026-07-07T10:00:00.000Z",
-      completedAt: "2026-07-07T10:00:01.000Z",
-    });
-    const message = SubagentMessageSchema.parse({
-      id: "subagent_completion_turn_joined",
-      fromRunId: run.id,
-      toRole: "parent",
-      kind: "handoff",
-      priority: "normal",
-      body: "Joined result",
-      delivery: {
-        status: "delivered",
-        deliveredParentSessionId: "session_1",
-        acknowledgedParentSessionId: "session_1",
-        wakeRequestedParentSessionId: "session_1",
-        wakeQueuedParentSessionId: "session_1",
-        wakeParentReason: "child_turn_completed",
-      },
-      createdAt: "2026-07-07T10:00:01.000Z",
-    });
-    const harness = createSubagentHarness({
-      toolName: "openpond_subagent_start",
-      toolArgs: { roleId: "coding", objective: "unused" },
-      preferences: preferences(),
-      initialRuns: [run],
-      initialMessages: [message],
-      disableDefaultToolCall: true,
-    });
-    harness.sessions.set(
-      run.childSessionId!,
-      baseSession({
-        id: run.childSessionId!,
-        parentSessionId: "session_1",
-        parentTurnId: "turn_parent",
-        subagentRunId: run.id,
-        subagentRoleId: run.roleId,
-      })
-    );
-
-    expect(await harness.runner.recoverPendingSubagentCompletions()).toBe(1);
-    await harness.turnFollowUpQueue.drain();
-
-    expect(
-      harness.turns.some((turn) => turn.metadata?.subagentCompletionWake)
-    ).toBe(false);
-    expect(harness.runs[0]?.metadata?.completionNotifications).toEqual([
-      expect.objectContaining({ outcome: "joined" }),
-    ]);
-  });
 });

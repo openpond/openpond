@@ -9,6 +9,8 @@ import type {
 const ThreadIdParamsSchema = z.object({ threadId: z.string().trim().min(1) }).passthrough();
 const ThreadStartParamsSchema = z.object({ session: z.unknown() }).strict();
 const TurnParamsSchema = ThreadIdParamsSchema.extend({ input: z.unknown() });
+const QueueParamsSchema = TurnParamsSchema.extend({ idempotencyKey: z.string().trim().min(1).max(200) });
+const InputUpdateParamsSchema = TurnParamsSchema.extend({ inputId: z.string().trim().min(1) });
 const InterruptParamsSchema = ThreadIdParamsSchema.extend({ reason: z.string().trim().min(1).optional() });
 const ApprovalParamsSchema = z.object({ approvalId: z.string().trim().min(1), input: z.unknown() }).strict();
 
@@ -19,6 +21,10 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   listTurns(threadId: string): Promise<TTurn[]>;
   listEvents(threadId: string): Promise<TEvent[]>;
   startTurn(threadId: string, payload: unknown): Promise<TTurn>;
+  steerTurn(threadId: string, payload: unknown): Promise<unknown>;
+  readTaskInbox(threadId: string): Promise<unknown>;
+  queueTaskInput(threadId: string, payload: unknown, idempotencyKey: string): Promise<unknown>;
+  updateTaskInput(threadId: string, inputId: string, mutation: unknown): Promise<unknown>;
   isTurnActive(threadId: string): boolean;
   waitForTurnSettlement(threadId: string): Promise<void>;
   interruptTurn(threadId: string, reason?: string): Promise<TTurn>;
@@ -44,7 +50,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
 
 export type AgentRuntimeTelemetryEvent = {
   method: "runtime/capabilities" | "thread/start" | "thread/read" | "thread/resume" |
-    "turn/start" | "turn/steer" | "turn/interrupt" | "approval/resolve" |
+    "turn/start" | "turn/steer" | "turn/interrupt" | "task/inbox" | "task/queue" | "task/inputUpdate" | "approval/resolve" |
     "userInput/resolve" | "harness/inspect" | "harness/proposalReview" |
     "harness/review" | "harness/acceptEvaluationReview" |
     "harness/materializeEvaluationTaskset" | "harness/runEvaluationBaseline" |
@@ -122,11 +128,20 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
     turnSteer: async (params) => {
       const input = TurnParamsSchema.parse(params);
       return run("turn/steer", input.threadId, async () => {
-        if (ports.isTurnActive(input.threadId)) {
-          await ports.waitForTurnSettlement(input.threadId);
-        }
-        return { turn: await ports.startTurn(input.threadId, input.input) };
+        return { receipt: await ports.steerTurn(input.threadId, input.input) };
       });
+    },
+    taskInbox: async (params) => {
+      const { threadId } = ThreadIdParamsSchema.parse(params);
+      return run("task/inbox", threadId, () => ports.readTaskInbox(threadId));
+    },
+    taskQueue: async (params) => {
+      const input = QueueParamsSchema.parse(params);
+      return run("task/queue", input.threadId, () => ports.queueTaskInput(input.threadId, input.input, input.idempotencyKey));
+    },
+    taskInputUpdate: async (params) => {
+      const input = InputUpdateParamsSchema.parse(params);
+      return run("task/inputUpdate", input.threadId, () => ports.updateTaskInput(input.threadId, input.inputId, input.input));
     },
     turnInterrupt: async (params) => {
       const input = InterruptParamsSchema.parse(params);

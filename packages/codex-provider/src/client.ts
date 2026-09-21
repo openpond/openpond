@@ -186,6 +186,15 @@ export class CodexAppServerClient {
     }
   }
 
+  async steerTurn(params: { threadId: string; expectedTurnId: string; prompt: string }): Promise<{ turnId: string }> {
+    const response = await this.request("turn/steer", {
+      threadId: params.threadId, expectedTurnId: params.expectedTurnId,
+      input: [{ type: "text", text: params.prompt, text_elements: [] }],
+    }) as { turnId?: string };
+    if (response.turnId !== params.expectedTurnId) throw new Error("Codex steering did not acknowledge the expected active turn.");
+    return { turnId: response.turnId };
+  }
+
   async interruptTurn(params: { threadId: string; turnId: string }): Promise<{ response: unknown }> {
     await this.initialize();
     const response = await this.request("turn/interrupt", {
