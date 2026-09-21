@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { SqliteStore } from "../apps/server/dist/store/store.js";
 import { describe, test } from "node:test";
 import { createTurnRunner } from "../apps/server/dist/runtime/turn-runner.js";
 
@@ -424,14 +428,17 @@ describe("turn runner workspace cwd", () => {
     );
   });
 
-  test("keeps linked local project Codex turns in the local project checkout", async () => {
+  test("keeps linked local project Codex turns in the local project checkout", async (t) => {
     const turns = [];
     const events = [];
     const approvals = [];
     const resolveCalls = [];
     let codexRuntimeSession = null;
     let codexStartTurn = null;
-    const store = createMemoryStore({ events, turns, approvals });
+    const home = await mkdtemp(path.join(os.tmpdir(), "openpond-cwd-contract-"));
+    const store = new SqliteStore(home);
+    t.after(async () => { await store.close(); await rm(home, { recursive: true, force: true }); });
+    await store.insertSessionAtFront(baseSession());
     const runner = createTurnRunner(
       runnerDependencies({
         session: baseSession(),
@@ -465,6 +472,8 @@ describe("turn runner workspace cwd", () => {
         },
       })
     );
+
+    t.after(() => runner.close());
 
     const turn = await runner.sendTurn("session_1", {
       prompt: "rename call-mpp-service",

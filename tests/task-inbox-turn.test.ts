@@ -1,10 +1,11 @@
 import { expect, test } from "vitest";
+import { hostedCompactionPriorEvents, openRouterProviderSettingsWithContextWindow } from "./helpers/byok-turn-runner-harness";
 import { createTurnRunnerTestHarness, turnRunnerTestSession } from "./helpers/turn-runner-test-harness";
 
 function gate() { let resolve!: () => void; const promise = new Promise<void>((done) => { resolve = done; }); return { promise, resolve }; }
 
 // Failure story: steering cancels completed/running work, executes stale proposed actions, or loses the original assignment.
-test("steering replaces only a provider request and preserves an admitted tool in the same turn", async () => {
+test("steering preserves an admitted tool and the assignment across request replacement and compaction", async () => {
   const generating = gate(), toolStarted = gate(), releaseTool = gate();
   const executed: string[] = [];
   const requests: string[] = [];
@@ -12,8 +13,10 @@ test("steering replaces only a provider request and preserves an admitted tool i
   let toolSignal: AbortSignal | undefined;
   const harness = createTurnRunnerTestHarness({
     sessions: [turnRunnerTestSession({ experience: "development" })],
+    events: hostedCompactionPriorEvents(1_000).map((event) => ({ ...event, sessionId: "session_test" })),
     dependencies: {
       maxHostedWorkspaceToolRounds: 6,
+      loadProviderSettings: async () => openRouterProviderSettingsWithContextWindow(32_000),
       harnessModelTools: [{ name: "boundary_tool", description: "Boundary tool", parameters: { type: "object", properties: {}, additionalProperties: false },
         execute: async (context) => {
           executed.push(context.callId); toolSignal = context.signal; toolStarted.resolve(); await releaseTool.promise;
@@ -21,6 +24,10 @@ test("steering replaces only a provider request and preserves an admitted tool i
         },
       }],
       streamLocalByokChatTurn: async function* (input) {
+        if (input.requestId?.startsWith("compact-") || input.requestId?.includes(":context-compaction:")) {
+          yield { text: "Earlier history was summarized. Continue the current implementation." };
+          return;
+        }
         pass++;
         requests.push(JSON.stringify(input.messages));
         if (pass === 1) {
@@ -32,7 +39,8 @@ test("steering replaces only a provider request and preserves an admitted tool i
           });
         } else if (pass === 2) {
           yield { toolCalls: ["admitted", "stale-proposal"].map((id) => ({ id, type: "function", function: { name: "boundary_tool", arguments: "{}" } })) };
-        } else yield { text: "Finished the original assignment with both corrections." };
+        } else if (pass === 3) throw new Error("maximum context length exceeded");
+        else yield { text: "Finished the original assignment with both corrections." };
       },
     },
   });
@@ -47,9 +55,10 @@ test("steering replaces only a provider request and preserves an admitted tool i
   expect(await turnPromise).toMatchObject({ id: turnId, status: "completed" });
   expect(harness.state.turns).toHaveLength(1);
   expect(executed).toEqual(["admitted"]);
-  expect(requests[2]).toContain("Compare the approaches and deliver the chosen implementation.");
-  expect(requests[2]).toContain("Preserve the public API.");
-  expect(requests[2]).toContain("Use the existing data format.");
+  expect(harness.state.events.filter((event) => event.name === "session.compaction.completed")).toHaveLength(1);
+  expect(requests[3]).toContain("Compare the approaches and deliver the chosen implementation.");
+  expect(requests[3]).toContain("Preserve the public API.");
+  expect(requests[3]).toContain("Use the existing data format.");
   expect(requests[2]).toContain("durable tool result");
   expect(requests[2]).toContain("pending_user_steer");
   expect((await harness.runner.readTaskInbox("session_test")).inputs.map((input) => input.state)).toEqual(["resolved", "resolved"]);
