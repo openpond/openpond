@@ -75,7 +75,7 @@
   display: grid;
   width: auto;
   padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: 12px;
   background: rgba(24, 24, 24, 0.98);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
@@ -354,7 +354,7 @@
   bottom: calc(100% + 7px);
   display: grid;
   width: 220px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: 12px;
   background: rgba(24, 24, 24, 0.98);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
@@ -1227,7 +1227,7 @@
   );
   max-height: calc(100vh - var(--sidebar-project-locations-top, 128px) - 12px);
   overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 0;
   border-radius: 8px;
   background: #1d1d1d;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);

@@ -580,7 +580,7 @@
   left: 0;
   max-height: min(320px, 42vh);
   overflow-y: auto;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 9px;
   background: #222;
   padding: 5px;
@@ -624,7 +624,7 @@
   width: 210px;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 9px;
   background: #222;
   padding: 10px;

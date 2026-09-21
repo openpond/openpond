@@ -485,7 +485,7 @@
   position: fixed;
   z-index: 100;
   width: 150px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 7px;
   background: #222;
   padding: 4px;

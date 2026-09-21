@@ -262,7 +262,7 @@
   display: grid;
   width: 190px;
   padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: 8px;
   background: #252525;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
