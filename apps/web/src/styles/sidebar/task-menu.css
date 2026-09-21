@@ -29,7 +29,7 @@
 }
 .sidebar-task-menu button:hover,
 .sidebar-task-menu button:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
+  background: #000;
   outline: none;
 }
 .sidebar-task-menu .task-menu-done {
@@ -54,4 +54,9 @@
 .sidebar-row-actions.sidebar-task-menu-trigger {
   background: transparent;
   padding: 0;
+}
+
+.sidebar-task-menu-trigger .sidebar-row-action:hover,
+.sidebar-task-menu-trigger .sidebar-row-action:focus-visible {
+  background: #000;
 }
