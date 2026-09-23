@@ -86,6 +86,14 @@ export async function profileWorkflowsForRelease(input: {
   sourceRevision: string;
 }) {
   const releaseRef = { id: input.release.harnessRelease.id, contentHash: input.release.harnessRelease.contentHash };
+  if (!input.release.harnessRelease.files.some((file) => file.path === "workflows/catalog.json")) {
+    return {
+      profileRef: input.ref,
+      sourceRevision: input.sourceRevision,
+      harnessRelease: releaseRef,
+      workflows: [],
+    };
+  }
   const { runtime, catalog, catalogHash } = await loadLocalProfileWorkflowCatalog(input.store, releaseRef);
   const provenance = runtime.release.harnessRelease.metadata.profile;
   if (!provenance || typeof provenance !== "object" ||

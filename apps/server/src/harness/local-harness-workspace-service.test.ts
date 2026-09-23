@@ -30,7 +30,7 @@ import {
 } from "./local-harness-skill-runtime.js";
 import { applyLocalHarnessRefinerProposal } from "./local-harness-refiner.js";
 import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
-import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime } from "./local-profile-workflow-runtime.js";
+import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime, profileWorkflowsForRelease } from "./local-profile-workflow-runtime.js";
 import { materializeHarnessSource } from "../training/materialize-harness-source.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import {
@@ -74,6 +74,36 @@ async function fixture() {
 }
 
 describe("local Harness workspace service", () => {
+  it("discovers an empty catalog from an existing Profile without workflow source", async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-empty-profile-workflows-"));
+    const store = new SqliteStore(directory);
+    cleanup.push({ directory, store });
+    const repoPath = path.join(directory, "profile-repo");
+    const sourcePath = path.join(repoPath, "profiles", "personal");
+    await fs.mkdir(sourcePath, { recursive: true });
+    const profile = {
+      ...emptyOpenPondProfileState(),
+      mode: "local" as const,
+      repoPath,
+      sourcePath,
+      activeProfile: "personal",
+    };
+    const imported = await importProfileIntoLocalHarnessWorkspace({
+      store, storeDir: directory, id: "empty-profile-workflows",
+      ownerId: "desktop-personal", name: "Empty Profile", profile,
+      sourceRevision: "accepted-revision",
+    });
+    expect(await profileWorkflowsForRelease({
+      store,
+      release: imported.release,
+      ref: { source: "local", repositoryId: "fixture-repo", profileId: "personal" },
+      sourceRevision: "accepted-revision",
+    })).toMatchObject({
+      sourceRevision: "accepted-revision",
+      harnessRelease: { contentHash: imported.release.harnessRelease.contentHash },
+      workflows: [],
+    });
+  });
   it("creates a host-neutral source package and an immutable registered release", async () => {
     const { directory, store, workspace, release } = await fixture();
     const paths = localHarnessWorkspacePaths(directory, workspace.id);
