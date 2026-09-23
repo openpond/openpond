@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ChatModelRefSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash } from "@openpond/harness";
+import { ChatModelRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash } from "@openpond/harness";
 import { createProfileEvaluationSuiteRun } from "@openpond/evals";
 
 import type { SqliteStore } from "../store/store.js";
@@ -13,6 +13,9 @@ const SuiteRequestSchema = z.object({
   suiteId: ReleaseIdSchema,
   createdAt: ReleaseTimestampSchema,
   modelRef: ChatModelRefSchema,
+  /** Supplied only by a trusted hosted adapter; Desktop resolves the local
+   * provider configuration itself for every member. */
+  hostModelConfigurationHash: ReleaseHashSchema.optional(),
 }).strict();
 
 type PreparedRun = Awaited<ReturnType<ReturnType<typeof createProfileEvaluationRunPreparationService>>>;
@@ -46,6 +49,7 @@ export function createProfileEvaluationSuiteService(input: {
         createdAt: request.createdAt,
         definitionId,
         modelRef: request.modelRef,
+        ...(request.hostModelConfigurationHash ? { hostModelConfigurationHash: request.hostModelConfigurationHash } : {}),
       }));
     }
     const existing = await input.store.getProfileEvaluationSuiteRun(request.id);

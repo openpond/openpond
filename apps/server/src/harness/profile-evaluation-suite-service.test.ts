@@ -28,7 +28,7 @@ test("suite retry reuses retained evidence only while exact model configuration 
     catalogHash: contentHash(catalog), definitions: catalog.definitions, suites: catalog.suites,
   });
   let configurationHash = contentHash("config-1");
-  const prepareRun = vi.fn(async (request: { id: string; createdAt: string }) => ({
+  const prepareRun = vi.fn(async (request: { id: string; createdAt: string; hostModelConfigurationHash?: string }) => ({
     manifest: createTasksetRunManifest({
       schemaVersion: "openpond.tasksetRunManifest.v1", id: request.id,
       tasksetRelease: definition.tasksetRelease, packageHash: contentHash("package"),
@@ -69,8 +69,10 @@ test("suite retry reuses retained evidence only while exact model configuration 
     store, selectedWorkflows: async () => ({ profileRef, sourceRevision: "revision-1", harnessRelease }),
     prepareRun, executeRun,
   } as unknown as Parameters<typeof createProfileEvaluationSuiteService>[0]);
-  const request = { id: "suite-run", suiteId: "whole-profile", createdAt: "2026-09-23T00:00:00.000Z", modelRef };
+  const request = { id: "suite-run", suiteId: "whole-profile", createdAt: "2026-09-23T00:00:00.000Z", modelRef,
+    hostModelConfigurationHash: configurationHash };
   const first = await runSuite(request);
+  expect(prepareRun).toHaveBeenCalledWith(expect.objectContaining({ hostModelConfigurationHash: request.hostModelConfigurationHash }));
   expect((await runSuite(request)).contentHash).toBe(first.contentHash);
   expect(executeRun).toHaveBeenCalledTimes(1);
   configurationHash = contentHash("config-2");
