@@ -21,6 +21,7 @@ export const AGENT_RPC_METHODS = [
   "profile/evaluations",
   "profile/evaluations/prepare",
   "profile/evaluations/run",
+  "profile/evaluations/runSuite",
   "profile/evaluations/executeCase",
   "profile/evaluations/executeRun",
   "profile/evaluations/compare",
@@ -115,6 +116,7 @@ export type AgentRuntimeHost = {
   profileEvaluations(params: unknown): Promise<unknown>;
   profileEvaluationPrepare(params: unknown): Promise<unknown>;
   profileEvaluationRun(params: unknown): Promise<unknown>;
+  profileEvaluationRunSuite(params: unknown): Promise<unknown>;
   profileEvaluationExecuteCase(params: unknown): Promise<unknown>;
   profileEvaluationExecuteRun(params: unknown): Promise<unknown>;
   profileEvaluationCompare(params: unknown): Promise<unknown>;
@@ -211,6 +213,7 @@ export class AgentJsonRpcDispatcher {
       case "profile/evaluations": return this.#host.profileEvaluations(params);
       case "profile/evaluations/prepare": return this.#host.profileEvaluationPrepare(params);
       case "profile/evaluations/run": return this.#host.profileEvaluationRun(params);
+      case "profile/evaluations/runSuite": return this.#host.profileEvaluationRunSuite(params);
       case "profile/evaluations/executeCase": return this.#host.profileEvaluationExecuteCase(params);
       case "profile/evaluations/executeRun": return this.#host.profileEvaluationExecuteRun(params);
       case "profile/evaluations/compare": return this.#host.profileEvaluationCompare(params);

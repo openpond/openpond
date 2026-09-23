@@ -42,6 +42,7 @@ export function createAgentRuntimePorts(deps: {
   listProfileEvaluations(): Promise<unknown>;
   prepareProfileEvaluationRun(params: unknown): Promise<unknown>;
   runPreparedProfileEvaluation(params: unknown): Promise<unknown>;
+  runProfileEvaluationSuite(params: unknown): Promise<unknown>;
   executeProfileEvaluationCase(params: unknown): Promise<unknown>;
   executeProfileEvaluationRun(params: unknown): Promise<unknown>;
   compareProfileEvaluationRuns(params: unknown): Promise<unknown>;
@@ -131,6 +132,7 @@ export function createAgentRuntimePorts(deps: {
     listProfileEvaluations: deps.listProfileEvaluations,
     prepareProfileEvaluationRun: deps.prepareProfileEvaluationRun,
     runPreparedProfileEvaluation: deps.runPreparedProfileEvaluation,
+    runProfileEvaluationSuite: deps.runProfileEvaluationSuite,
     executeProfileEvaluationCase: deps.executeProfileEvaluationCase,
     executeProfileEvaluationRun: deps.executeProfileEvaluationRun,
     compareProfileEvaluationRuns: deps.compareProfileEvaluationRuns,

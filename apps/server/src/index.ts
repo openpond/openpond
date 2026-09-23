@@ -38,6 +38,7 @@ import { createOpenPondAppServer } from "./app-server-runtime.js";
 import { loadLocalHarnessRuntimeForSession } from "./harness/local-profile-workflow-runtime.js";
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
+import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
 import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { createManualCompactionRecorder } from "./runtime/manual-compaction-usage.js";
@@ -1578,6 +1579,12 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   });
   const profileEvaluationRunPayload = async (request: unknown) =>
     executeProfileEvaluationRun(await prepareProfileEvaluationRun(request));
+  const profileEvaluationRunSuitePayload = createProfileEvaluationSuiteService({
+    store,
+    selectedWorkflows: profileWorkflowsPayload,
+    prepareRun: prepareProfileEvaluationRun,
+    executeRun: executeProfileEvaluationRun,
+  });
 
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({
@@ -1599,6 +1606,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       listProfileEvaluations: profileEvaluationsPayload,
       prepareProfileEvaluationRun: profileEvaluationPreparePayload,
       runPreparedProfileEvaluation: profileEvaluationRunPayload,
+      runProfileEvaluationSuite: profileEvaluationRunSuitePayload,
       executeProfileEvaluationCase,
       executeProfileEvaluationRun,
       compareProfileEvaluationRuns: createProfileEvaluationComparisonService({
@@ -1726,6 +1734,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       profileEvaluationsPayload,
       profileEvaluationPreparePayload,
       profileEvaluationRunPayload,
+      profileEvaluationRunSuitePayload,
       profileEvaluationComparePayload,
       profileSelectPayload,
       profileRemovePayload,

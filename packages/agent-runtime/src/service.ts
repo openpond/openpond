@@ -33,6 +33,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   listProfileEvaluations(): Promise<unknown>;
   prepareProfileEvaluationRun(params: unknown): Promise<unknown>;
   runPreparedProfileEvaluation(params: unknown): Promise<unknown>;
+  runProfileEvaluationSuite(params: unknown): Promise<unknown>;
   executeProfileEvaluationCase(params: unknown): Promise<unknown>;
   executeProfileEvaluationRun(params: unknown): Promise<unknown>;
   compareProfileEvaluationRuns(params: unknown): Promise<unknown>;
@@ -58,7 +59,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
 export type AgentRuntimeTelemetryEvent = {
   method: "runtime/capabilities" | "thread/start" | "thread/read" | "thread/resume" |
     "turn/start" | "turn/steer" | "turn/interrupt" | "task/inbox" | "task/queue" | "task/inputUpdate" | "approval/resolve" |
-    "userInput/resolve" | "profile/workflows" | "profile/evaluations" | "profile/evaluations/prepare" | "profile/evaluations/run" | "profile/evaluations/executeCase" | "profile/evaluations/executeRun" | "profile/evaluations/compare" | "harness/inspect" | "harness/proposalReview" |
+    "userInput/resolve" | "profile/workflows" | "profile/evaluations" | "profile/evaluations/prepare" | "profile/evaluations/run" | "profile/evaluations/runSuite" | "profile/evaluations/executeCase" | "profile/evaluations/executeRun" | "profile/evaluations/compare" | "harness/inspect" | "harness/proposalReview" |
     "harness/review" | "harness/acceptEvaluationReview" |
     "harness/materializeEvaluationTaskset" | "harness/runEvaluationBaseline" |
     "harness/validate" |
@@ -175,6 +176,7 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
     profileEvaluations: () => run("profile/evaluations", null, () => ports.listProfileEvaluations()),
     profileEvaluationPrepare: (params) => run("profile/evaluations/prepare", null, () => ports.prepareProfileEvaluationRun(params)),
     profileEvaluationRun: (params) => run("profile/evaluations/run", null, () => ports.runPreparedProfileEvaluation(params)),
+    profileEvaluationRunSuite: (params) => run("profile/evaluations/runSuite", null, () => ports.runProfileEvaluationSuite(params)),
     profileEvaluationExecuteCase: (params) => run("profile/evaluations/executeCase", null, () => ports.executeProfileEvaluationCase(params)),
     profileEvaluationExecuteRun: (params) => run("profile/evaluations/executeRun", null, () => ports.executeProfileEvaluationRun(params)),
     profileEvaluationCompare: (params) => run("profile/evaluations/compare", null, () => ports.compareProfileEvaluationRuns(params)),

@@ -4,6 +4,8 @@ import {
   BenchmarkRunSummarySchema,
   EvaluationResultSchema,
   ProfileEvaluationComparisonSchema,
+  ProfileEvaluationSuiteRunSchema,
+  createProfileEvaluationSuiteRun,
   createProfileEvaluationComparison,
   TaskGradeSchema,
   TasksetMetricResultSchema,
@@ -15,6 +17,8 @@ import {
   type BenchmarkRunSummary,
   type EvaluationResult,
   type ProfileEvaluationComparison,
+  type ProfileEvaluationSuiteRun,
+  type ProfileEvaluationCatalog,
   type TaskGrade,
 } from "@openpond/evals";
 import { assertContentHash, contentHash, ImmutableReleaseRefSchema } from "@openpond/harness";
@@ -170,6 +174,49 @@ export class SqliteEvaluationResultStore extends SqliteDatasetStore {
     return this.listParsedPayloads(
       "SELECT payload FROM profile_evaluation_comparisons WHERE profile_key = ? ORDER BY created_at DESC, id ASC",
       [contentHash(OpenPondProfileRefSchema.parse(profileRef))], ProfileEvaluationComparisonSchema.parse,
+    );
+  }
+
+  async saveProfileEvaluationSuiteRun(profileRef: OpenPondProfileRef, catalog: ProfileEvaluationCatalog, suiteInput: ProfileEvaluationSuiteRun): Promise<ProfileEvaluationSuiteRun> {
+    const ref = OpenPondProfileRefSchema.parse(profileRef);
+    const suite = ProfileEvaluationSuiteRunSchema.parse(suiteInput);
+    assertContentHash(suite, "Profile evaluation suite run");
+    const members = [];
+    for (const member of suite.members) {
+      const run = await this.getProfileEvaluationRun(member.runManifest.id);
+      if (!run || contentHash(run.profileRef) !== contentHash(ref)
+        || run.manifest.contentHash !== member.runManifest.contentHash
+        || run.contentHash !== member.runHash
+        || run.passed !== member.passed
+        || run.metric.value !== member.score) {
+        throw new Error("Profile evaluation suite references a missing or mismatched run.");
+      }
+      members.push({ definitionId: member.definitionId, manifest: run.manifest, runHash: run.contentHash, passed: run.passed, score: run.metric.value });
+    }
+    const verified = createProfileEvaluationSuiteRun({ id: suite.id, suiteId: suite.suiteId, catalog, members, createdAt: suite.createdAt, completedAt: suite.completedAt });
+    if (verified.contentHash !== suite.contentHash) throw new Error("Profile evaluation suite differs from retained run evidence.");
+    const existing = await this.getProfileEvaluationSuiteRun(suite.id);
+    if (existing) {
+      if (existing.contentHash !== suite.contentHash) throw new Error(`Profile evaluation suite run ${suite.id} is immutable.`);
+      return existing;
+    }
+    await this.upsertPayload(
+      "INSERT INTO profile_evaluation_suite_runs (id, profile_key, payload, created_at) VALUES (?, ?, ?, ?)",
+      [suite.id, contentHash(ref), JSON.stringify(suite), suite.createdAt],
+    );
+    return suite;
+  }
+
+  async getProfileEvaluationSuiteRun(id: string): Promise<ProfileEvaluationSuiteRun | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM profile_evaluation_suite_runs WHERE id = ?", [id], ProfileEvaluationSuiteRunSchema.parse,
+    );
+  }
+
+  async listProfileEvaluationSuiteRuns(profileRef: OpenPondProfileRef): Promise<ProfileEvaluationSuiteRun[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM profile_evaluation_suite_runs WHERE profile_key = ? ORDER BY created_at DESC, id ASC",
+      [contentHash(OpenPondProfileRefSchema.parse(profileRef))], ProfileEvaluationSuiteRunSchema.parse,
     );
   }
 

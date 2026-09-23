@@ -96,11 +96,12 @@ export function createProfilePayloads(deps: {
       sourceRevision: workflows.sourceRevision,
       harnessRelease: workflows.harnessRelease,
     });
-    const [runs, comparisons] = await Promise.all([
+    const [runs, comparisons, suiteRuns] = await Promise.all([
       deps.store.listProfileEvaluationRuns(workflows.profileRef),
       deps.store.listProfileEvaluationComparisons(workflows.profileRef),
+      deps.store.listProfileEvaluationSuiteRuns(workflows.profileRef),
     ]);
-    return { ...evaluations, runs, comparisons };
+    return { ...evaluations, runs, comparisons, suiteRuns };
   }
 
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({

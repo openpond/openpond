@@ -5,7 +5,7 @@ import path from "node:path";
 import { expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
 import {
-  createTasksetRunManifest,
+  createProfileEvaluationSuiteRun, createTasksetRunManifest,
   executeProfileEvaluationRun, tasksetRunMetricPolicy,
 } from "@openpond/evals";
 import { genericToolConformance } from "@openpond/evals/conformance";
@@ -23,7 +23,9 @@ const definition = {
   split: "frozen_eval" as const, taskIds: [frozen.id], seeds: ["7"],
   criterion: { minimumPassRate: 1, requireComplete: true },
 };
-const catalog = { schemaVersion: "openpond.profileEvaluations.v1" as const, definitions: [definition], suites: [] };
+const catalog = { schemaVersion: "openpond.profileEvaluations.v1" as const, definitions: [definition], suites: [
+  { id: "workflow-suite", label: "Workflow suite", scope: "component" as const, definitionIds: [definition.id] },
+] };
 const source = {
   profileId: "team-profile", sourceRevision: "commit-1", harnessRelease,
   catalogHash: contentHash(catalog), definitionId: definition.id, definitionHash: contentHash(definition),
@@ -50,6 +52,7 @@ test("Profile evaluation grades, receipts, runs and comparison survive restart w
   let store = new SqliteStore(directory);
   try {
     const members = [];
+    const savedRuns = [];
     for (const ordinal of [1, 2]) {
       const runManifest = manifest(`profile-run-${ordinal}`, `profile-attempt-${ordinal}`);
       const result = await executeProfileEvaluationRun({
@@ -75,6 +78,7 @@ test("Profile evaluation grades, receipts, runs and comparison survive restart w
       };
       const saved = await store.saveProfileEvaluationRun({ ...content, contentHash: contentHash(content) });
       expect(saved.manifest.id).toBe(runManifest.id);
+      savedRuns.push(saved);
       members.push({ manifest: runManifest, result: result.metric });
     }
     const compare = createProfileEvaluationComparisonService({
@@ -82,12 +86,23 @@ test("Profile evaluation grades, receipts, runs and comparison survive restart w
     });
     const comparison = await compare({ id: "profile-comparison", runIds: members.map((member) => member.manifest.id) });
     expect((await compare({ id: "profile-comparison", runIds: members.map((member) => member.manifest.id) })).contentHash).toBe(comparison.contentHash);
+    const firstRun = savedRuns[0]!;
+    const suite = createProfileEvaluationSuiteRun({
+      id: "suite-result-1", suiteId: "workflow-suite", catalog,
+      members: [{ definitionId: definition.id, manifest: firstRun.manifest,
+        runHash: firstRun.contentHash, passed: firstRun.passed, score: firstRun.metric.value }],
+      createdAt: firstRun.manifest.createdAt, completedAt: firstRun.completedAt,
+    });
+    await store.saveProfileEvaluationSuiteRun(profileRef, catalog, suite);
+    expect((await store.saveProfileEvaluationSuiteRun(profileRef, catalog, suite)).contentHash).toBe(suite.contentHash);
     await store.close();
     store = new SqliteStore(directory);
     expect(await store.listProfileEvaluationRuns(profileRef)).toHaveLength(2);
     expect(await store.listProfileEvaluationRuns({ ...profileRef, repositoryId: "other-repo" })).toHaveLength(0);
     expect((await store.getProfileEvaluationReceipt("profile-attempt-1"))?.contentHash).toBeDefined();
     expect((await store.getProfileEvaluationComparison(comparison.id))?.contentHash).toBe(comparison.contentHash);
+    expect((await store.listProfileEvaluationSuiteRuns(profileRef))[0]?.contentHash).toBe(suite.contentHash);
+    await expect(store.saveProfileEvaluationSuiteRun({ ...profileRef, repositoryId: "other-repo" }, catalog, suite)).rejects.toThrow("missing or mismatched run");
     await expect(store.saveProfileEvaluationComparison({ ...profileRef, repositoryId: "other-repo" }, comparison)).rejects.toThrow("missing or mismatched run");
   } finally {
     await store.close();
