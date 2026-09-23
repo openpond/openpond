@@ -948,7 +948,7 @@ describe("local Harness workspace service", () => {
       gradingRole: "evaluation", metricPolicy: tasksetRunMetricPolicy(evaluationTaskset),
       population: [{ receiptId: "document-attempt", taskId: frozenTask.id, seed: "1", fixtureId: null }],
       runtimeTarget: genericToolConformance.manifest.runtimeTarget,
-      limits: genericToolConformance.manifest.limits,
+      limits: { ...genericToolConformance.manifest.limits, maximumSpendUsd: null },
       createdAt: NOW, metadata: {},
     });
     const binding = {

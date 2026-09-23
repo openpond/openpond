@@ -502,6 +502,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     selectedProfile: selectedEvaluationProfile,
     createSession: createSessionWithAutoTitle,
     sendTurn: turnRunner.sendTurn,
+    interruptSessionTurn: turnRunner.interruptSessionTurn,
   });
   const listProfileWorkflows = async () => {
     if (options.profileSource && explicitProfileRelease) {
@@ -600,14 +601,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       },
       executeProfileEvaluationCase,
       executeProfileEvaluationRun,
-      prepareProfileEvaluationRun: async (request) => {
-        const prepared = await prepareProfileEvaluationRun(request);
-        return { manifest: prepared.manifest, taskset: {
-          id: prepared.taskset.id, contentHash: prepared.taskset.contentHash,
-          connectedAppScopes: prepared.taskset.policy.connectedAppScopes,
-        } };
-      },
-      runPreparedProfileEvaluation: async (request) => executeProfileEvaluationRun(await prepareProfileEvaluationRun(request)),
+      prepareProfileEvaluationRun,
+      runPreparedProfileEvaluation: async (request) => executeProfileEvaluationRun(await prepareProfileEvaluationRun(request, { requireExpectedManifestHash: true })),
       runProfileEvaluationSuite: executeProfileEvaluationSuite,
       compareProfileEvaluationRuns: createProfileEvaluationComparisonService({ store, selectedProfile: selectedEvaluationProfile }),
       inspectHarness: () => localHarnessHistoryPayload(store),

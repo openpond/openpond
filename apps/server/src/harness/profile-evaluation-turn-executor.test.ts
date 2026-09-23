@@ -30,7 +30,7 @@ const manifest = createTasksetRunManifest({
   gradingRole: "evaluation", metricPolicy: tasksetRunMetricPolicy(taskset),
   population: [{ receiptId: "attempt", taskId: task.id, seed: "1", fixtureId: null }],
   runtimeTarget: genericToolConformance.manifest.runtimeTarget,
-  limits: genericToolConformance.manifest.limits,
+  limits: { ...genericToolConformance.manifest.limits, maximumSpendUsd: null },
   createdAt: genericToolConformance.manifest.createdAt,
   metadata: {},
 });

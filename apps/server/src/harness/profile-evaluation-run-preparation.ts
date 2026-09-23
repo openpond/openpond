@@ -23,6 +23,7 @@ const PrepareRequestSchema = z.object({
   /** Trusted embedding host's resolved model configuration receipt. Desktop
    * computes this itself and ignores the caller's value. */
   hostModelConfigurationHash: ReleaseHashSchema.optional(),
+  expectedManifestHash: ReleaseHashSchema.optional(),
 }).strict();
 
 type SelectedWorkflows = {
@@ -48,8 +49,11 @@ export function createProfileEvaluationRunPreparationService(input: {
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
   placement: "local" | "remote" | "colocated";
 }) {
-  return async (request: unknown) => {
+  return async (request: unknown, options?: { requireExpectedManifestHash?: boolean }) => {
     const parsed = PrepareRequestSchema.parse(request);
+    if (options?.requireExpectedManifestHash && !parsed.expectedManifestHash) {
+      throw new Error("Profile evaluation execution requires the reviewed manifest hash.");
+    }
     const selected = await input.selectedWorkflows();
     const discovered = await profileEvaluationsForRelease({
       store: input.store,
@@ -83,6 +87,10 @@ export function createProfileEvaluationRunPreparationService(input: {
     if (taskset.environment.kind !== "text" || taskset.tools.length
       || taskset.tasks.some((task) => task.artifactRefs.length)) {
       throw new Error("Workflow evaluation requires text cases with policy-visible input; Taskset-owned tools and file assets are unavailable in the Profile turn runtime.");
+    }
+    if (taskset.graders.some((grader) => grader.kind === "model_judge" || grader.kind === "custom_verifier")
+      || taskset.metrics?.aggregation === "custom") {
+      throw new Error("Profile evaluation cannot run this Taskset's model judge, custom verifier, or custom metric in the current app-server runtime.");
     }
     const runtimeTarget = {
       adapterId: target.kind === "workflow" ? "openpond.profile-workflow" : "openpond.profile-component",
@@ -132,6 +140,9 @@ export function createProfileEvaluationRunPreparationService(input: {
       metadata: { sourceTasksetId: taskset.metadata.sourceTasksetId ?? taskset.id },
     });
     assertProfileEvaluationRunAdmission(manifest, taskset, catalog);
+    if (parsed.expectedManifestHash && manifest.contentHash !== parsed.expectedManifestHash) {
+      throw new Error("Profile evaluation setup changed since preview; prepare the run again.");
+    }
     return {
       manifest, taskset,
       profileRef: selected.profileRef,
