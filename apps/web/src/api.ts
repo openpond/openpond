@@ -1,4 +1,5 @@
 import type { TrainingEvaluationTaskPage, TrainingCandidateDecision, TrainingCandidateDecisionRequest } from "openpond-sdk/training";
+import type { ProfileWorkflow, ProfileWorkflowBinding } from "@openpond/harness";
 import type {
   Approval,
   AppPreferences,
@@ -115,6 +116,13 @@ import type {
   TeamChatThreadDetail,
   TeamChatThreadMuteResult,
 } from "@openpond/contracts";
+
+export type ProfileWorkflowDiscovery = {
+  profileRef: OpenPondProfileRef;
+  sourceRevision: string;
+  harnessRelease: { id: string; contentHash: string };
+  workflows: Array<{ workflow: ProfileWorkflow; binding: ProfileWorkflowBinding }>;
+};
 import { apiFetch, type ClientConnection } from "./api/api-client";
 import { organizationApi } from "./api/organization-api";
 import { sessionApi } from "./api/session-api";
@@ -1075,6 +1083,8 @@ export const api = {
     apiFetch<BootstrapPayload["profile"]>(connection, "/v1/profile"),
   profileCatalog: (connection: ClientConnection) =>
     apiFetch<OpenPondProfileLibrary>(connection, "/v1/profile/catalog"),
+  profileWorkflows: (connection: ClientConnection) =>
+    apiFetch<ProfileWorkflowDiscovery>(connection, "/v1/profile/workflows"),
   profileSelect: (connection: ClientConnection, ref: OpenPondProfileRef) =>
     apiFetch<{
       profile: BootstrapPayload["profile"];

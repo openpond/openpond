@@ -17,6 +17,7 @@ import {
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { ProfileAgentsSection } from "../profile/ProfileAgentsSection";
+import { ProfileWorkflowsSection } from "../profile/ProfileWorkflowsSection";
 import { ProfileSelector } from "../profile/ProfileSelector";
 import { ProfileSettingsMenu } from "../profile/ProfileSettingsMenu";
 import "../../styles/workspace/git-dialogs.css";
@@ -46,6 +47,7 @@ type ProfileSettingsSectionProps = {
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onSkillCommand?: (command: string, provider?: ChatProvider) => void;
+  onOpenSession?: (sessionId: string) => void;
   overviewContent?: ReactNode;
 };
 
@@ -58,6 +60,7 @@ export function ProfileSettingsSection({
   onError,
   onToast,
   onSkillCommand,
+  onOpenSession,
   overviewContent,
 }: ProfileSettingsSectionProps) {
   const [profileCommitMessage, setProfileCommitMessage] = useState("");
@@ -241,10 +244,21 @@ export function ProfileSettingsSection({
           ) : null}
 
           {showSkills ? (
-            <ProfileSkillsSection
-              onSkillCommand={onSkillCommand}
-              profile={profile}
-            />
+            <>
+              <ProfileSkillsSection
+                onSkillCommand={onSkillCommand}
+                profile={profile}
+              />
+              <ProfileWorkflowsSection
+                connection={connection}
+                selectedProfileKey={payload?.profileLibrary?.lastUsed
+                  ? JSON.stringify(payload.profileLibrary.lastUsed)
+                  : null}
+                onError={onError}
+                onOpenSession={onOpenSession}
+                onToast={onToast}
+              />
+            </>
           ) : null}
 
         </>
