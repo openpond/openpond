@@ -15,6 +15,8 @@ export async function handleCoreRoutes({
     profileCatalogPayload,
     profileWorkflowsPayload,
     profileEvaluationsPayload,
+    profileEvaluationPreparePayload,
+    profileEvaluationRunPayload,
     profileEvaluationComparePayload,
     profileSelectPayload,
     profileRemovePayload,
@@ -97,6 +99,14 @@ export async function handleCoreRoutes({
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/profile/evaluations") {
     sendJson(response, 200, await profileEvaluationsPayload());
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/evaluations/prepare") {
+    sendJson(response, 200, await profileEvaluationPreparePayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/evaluations/run") {
+    sendJson(response, 200, await profileEvaluationRunPayload(await readJson(request)));
     return true;
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/profile/evaluations/compare") {
