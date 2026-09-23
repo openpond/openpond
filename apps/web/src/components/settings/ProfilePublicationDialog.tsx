@@ -15,6 +15,8 @@ const OPTIONAL_CONTENT: Array<{
   detail: string;
 }> = [
   { id: "actions", label: "Actions", detail: "Profile-level reusable actions" },
+  { id: "workflows", label: "Workflows", detail: "Workflow definitions and actions" },
+  { id: "instructions", label: "Instructions", detail: "Profile instructions used by evaluations" },
   { id: "prompts", label: "Prompts", detail: "Shared prompt files" },
   { id: "goals", label: "Goals", detail: "Goal definitions; never started automatically" },
   { id: "evals", label: "Evals", detail: "Evaluation definitions and fixtures" },
@@ -105,7 +107,7 @@ export function ProfilePublicationDialog({
         <button className="git-dialog-close" disabled={Boolean(busy)} type="button" aria-label="Close" onClick={onClose}><X size={14} /></button>
         <div className="git-dialog-icon"><UploadCloud size={18} /></div>
         <h2 id="profile-publication-title">Publish {entry.name}</h2>
-        <p>Choose the exact Agents, Skills, and optional files to share. OpenPond will show the complete file list before it pushes anything.</p>
+        <p>Choose the exact Agents, Skills, workflows, and optional files to share. OpenPond will show the complete file list before it pushes anything.</p>
 
         {!preview ? (
           <>

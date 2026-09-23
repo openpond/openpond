@@ -5,6 +5,8 @@ export const OpenPondProfilePublicationProviderSchema = z.enum(["github", "openp
 export const OpenPondProfilePublicationVisibilitySchema = z.enum(["private", "public"]);
 export const OpenPondProfilePublicationOptionalContentSchema = z.enum([
   "actions",
+  "workflows",
+  "instructions",
   "prompts",
   "goals",
   "evals",
