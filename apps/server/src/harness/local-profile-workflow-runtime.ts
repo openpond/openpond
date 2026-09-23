@@ -12,6 +12,7 @@ import {
 } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
+import type { LocalHarnessReleaseRecord } from "../store/store-harness-workspaces.js";
 import type { OpenPondProfileRef, OpenPondProfileState, Session } from "@openpond/contracts";
 import {
   loadSelectedLocalHarnessRuntime,
@@ -68,30 +69,40 @@ async function loadProfileWorkflows(input: {
     profile: input.profile,
     sourceRevision,
   });
-  const releaseRef = { id: release.harnessRelease.id, contentHash: release.harnessRelease.contentHash };
-  const { runtime, catalog, catalogHash } = await loadLocalProfileWorkflowCatalog(input.store, releaseRef);
-  const provenance = runtime.release.harnessRelease.metadata.profile;
-  if (!provenance || typeof provenance !== "object" ||
-      (provenance as Record<string, unknown>).id !== input.ref.profileId ||
-      (provenance as Record<string, unknown>).sourceRevision !== sourceRevision) {
-    throw new Error("Selected Profile workflow release differs from its Git source.");
-  }
+  const result = await profileWorkflowsForRelease({ store: input.store, release, ref: input.ref, sourceRevision });
   if (input.reloadProfile) {
     const refreshed = await input.reloadProfile();
     if (refreshed.git?.head !== sourceRevision || refreshed.git.dirty) {
       throw new Error("Profile source changed during workflow loading; retry from its committed revision.");
     }
   }
+  return result;
+}
+
+export async function profileWorkflowsForRelease(input: {
+  store: SqliteStore;
+  release: LocalHarnessReleaseRecord;
+  ref: OpenPondProfileRef;
+  sourceRevision: string;
+}) {
+  const releaseRef = { id: input.release.harnessRelease.id, contentHash: input.release.harnessRelease.contentHash };
+  const { runtime, catalog, catalogHash } = await loadLocalProfileWorkflowCatalog(input.store, releaseRef);
+  const provenance = runtime.release.harnessRelease.metadata.profile;
+  if (!provenance || typeof provenance !== "object" ||
+      (provenance as Record<string, unknown>).id !== input.ref.profileId ||
+      (provenance as Record<string, unknown>).sourceRevision !== input.sourceRevision) {
+    throw new Error("Selected Profile workflow release differs from its accepted source.");
+  }
   return {
     profileRef: input.ref,
-    sourceRevision,
+    sourceRevision: input.sourceRevision,
     harnessRelease: releaseRef,
     workflows: catalog.workflows.map((workflow) => ({
       workflow,
       binding: {
         schemaVersion: "openpond.profileWorkflowBinding.v1" as const,
         profileId: input.ref.profileId,
-        sourceRevision,
+        sourceRevision: input.sourceRevision,
         harnessRelease: releaseRef,
         catalogHash,
         workflowId: workflow.id,

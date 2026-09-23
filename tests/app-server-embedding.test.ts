@@ -398,7 +398,7 @@ test("explicit Profile source loads without replacing personal selection and rej
   const storeDir = path.join(root, "home");
   const options: OpenPondAppServerOptions = {
     storeDir, workspaceDir: path.join(root, "work"),
-    profileSource: { repoPath, profileId: "team", sourceRevision: "accepted-r1" },
+    profileSource: { repoPath, repositoryId: "team-repo", profileId: "team", sourceRevision: "accepted-r1" },
     embedding: { allowedTools: [], authorizeTool: async () => {} },
     streamOpenPondHostedChatTurn: async function* () {
       yield { type: "text_delta", raw: null, text: "Status complete" };
@@ -414,14 +414,20 @@ test("explicit Profile source loads without replacing personal selection and rej
     expect(sourceWorkspace?.currentChannel.release).toBeTruthy();
     expect((await store.getSelectedHarnessWorkspace({ ownerKind: "personal", ownerId: "desktop-personal" }))?.id)
       .not.toBe(sourceWorkspace?.id);
-    const binding = {
+    const discovered = await server.runtime.profileWorkflows({}) as {
+      profileRef: { source: "openpond_git"; repositoryId: string; profileId: string };
+      workflows: Array<{ binding: Record<string, unknown> }>;
+    };
+    expect(discovered.profileRef).toEqual({ source: "openpond_git", repositoryId: "team-repo", profileId: "team" });
+    const binding = discovered.workflows[0]!.binding;
+    expect(binding).toMatchObject({
       schemaVersion: "openpond.profileWorkflowBinding.v1", profileId: "team", sourceRevision: "accepted-r1",
       harnessRelease: sourceWorkspace!.currentChannel.release!, catalogHash: contentHash(catalog), workflowId: "status",
-    };
+    });
     const started = await server.runtime.threadStart({ session: {
       provider: "openpond", modelRef: { providerId: "openpond", modelId: "fixture-model" },
       experience: "work", title: "Status", cwd: options.workspaceDir,
-      currentProfile: { source: "openpond_git", repositoryId: "team/repo", profileId: "team" },
+      currentProfile: discovered.profileRef,
       profileWorkflowBinding: binding,
     } }) as { thread: { id: string } };
     expect(await server.runtime.turnStart({

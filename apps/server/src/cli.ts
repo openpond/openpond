@@ -10,7 +10,7 @@ import type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 import { parseListen } from "./utils.js";
 
 type CreateServer = (options: OpenPondServerOptions) => Promise<OpenPondServerInstance>;
-type ProfileSourceCliOptions = { repoPath: string; profileId: string; sourceRevision: string };
+type ProfileSourceCliOptions = { repoPath: string; repositoryId: string; profileId: string; sourceRevision: string };
 type CreateAgentServer = (options: { storeDir?: string; profileSource?: ProfileSourceCliOptions }) => Promise<AppServerInstance>;
 type ServerCliFactories = {
   createOpenPondServer: CreateServer;
@@ -60,6 +60,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let storeDir: string | null = null;
   let sourceBrowserState: string | undefined;
   let profileSourceRoot: string | null = null;
+  let profileRepositoryId: string | null = null;
   let profileId: string | null = null;
   let profileRevision: string | null = null;
   let index = 0;
@@ -104,6 +105,8 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       i += 1;
     } else if (arg === "--profile-source-root") {
       profileSourceRoot = path.resolve(requireValue(args, i, arg)); i += 1;
+    } else if (arg === "--profile-repository-id") {
+      profileRepositoryId = requireValue(args, i, arg); i += 1;
     } else if (arg === "--profile-id") {
       profileId = requireValue(args, i, arg); i += 1;
     } else if (arg === "--profile-revision") {
@@ -123,13 +126,13 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   if (mode !== "web" && (openBrowser || printAccessUrl)) {
     throw new Error("Browser options are only available in web mode.");
   }
-  const profileFlags = [profileSourceRoot, profileId, profileRevision].filter(Boolean).length;
-  if (profileFlags && (profileFlags !== 3 || mode !== "app-server")) {
-    throw new Error("Profile source flags require app-server mode and --profile-source-root, --profile-id, and --profile-revision together.");
+  const profileFlags = [profileSourceRoot, profileRepositoryId, profileId, profileRevision].filter(Boolean).length;
+  if (profileFlags && (profileFlags !== 4 || mode !== "app-server")) {
+    throw new Error("Profile source flags require app-server mode and --profile-source-root, --profile-repository-id, --profile-id, and --profile-revision together.");
   }
   return {
     mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, sourceBrowserState,
-    ...(profileFlags ? { profileSource: { repoPath: profileSourceRoot!, profileId: profileId!, sourceRevision: profileRevision! } } : {}),
+    ...(profileFlags ? { profileSource: { repoPath: profileSourceRoot!, repositoryId: profileRepositoryId!, profileId: profileId!, sourceRevision: profileRevision! } } : {}),
     help: false,
   };
 }
@@ -211,6 +214,7 @@ Options:
   --web-root DIR         Directory containing the built web UI for web mode
   --home DIR        Local app-server state directory
   --profile-source-root DIR  Authorized Profile repository source for app-server
+  --profile-repository-id ID Source repository identity supplied by the host
   --profile-id ID            Profile within that source
   --profile-revision REV     Accepted immutable source revision
   --open-browser         Open the authenticated web URL in the system browser

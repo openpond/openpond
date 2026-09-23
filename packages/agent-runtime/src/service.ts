@@ -29,6 +29,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   waitForTurnSettlement(threadId: string): Promise<void>;
   interruptTurn(threadId: string, reason?: string): Promise<TTurn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<TApproval>;
+  listProfileWorkflows(): Promise<unknown>;
   inspectHarness(): Promise<unknown>;
   reviewHarnessProposal(params: unknown): Promise<unknown>;
   reviewHarness(params: unknown): Promise<unknown>;
@@ -51,7 +52,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
 export type AgentRuntimeTelemetryEvent = {
   method: "runtime/capabilities" | "thread/start" | "thread/read" | "thread/resume" |
     "turn/start" | "turn/steer" | "turn/interrupt" | "task/inbox" | "task/queue" | "task/inputUpdate" | "approval/resolve" |
-    "userInput/resolve" | "harness/inspect" | "harness/proposalReview" |
+    "userInput/resolve" | "profile/workflows" | "harness/inspect" | "harness/proposalReview" |
     "harness/review" | "harness/acceptEvaluationReview" |
     "harness/materializeEvaluationTaskset" | "harness/runEvaluationBaseline" |
     "harness/validate" |
@@ -164,6 +165,7 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
         return { turn: await ports.startTurn(input.threadId, input.input) };
       });
     },
+    profileWorkflows: () => run("profile/workflows", null, () => ports.listProfileWorkflows()),
     harnessInspect: () => run("harness/inspect", null, () => ports.inspectHarness()),
     harnessProposalReview: (params) =>
       run("harness/proposalReview", null, () => ports.reviewHarnessProposal(params)),

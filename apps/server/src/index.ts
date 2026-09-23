@@ -1574,6 +1574,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
       interruptSessionTurn,
       resolveApproval,
+      listProfileWorkflows: profileWorkflowsPayload,
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
       reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({
