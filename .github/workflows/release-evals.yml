@@ -153,10 +153,22 @@ jobs:
       - run: pnpm run evals:publish:check
 
       - name: Publish through npm trusted publishing
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
         run: |
           set -euo pipefail
           npm install --global npm@11.18.0
-          npm publish ./packages/evals --access public --ignore-scripts
+          publish_output="$(mktemp)"
+          trap 'rm -f "${publish_output}"' EXIT
+          if npm publish ./packages/evals --access public --ignore-scripts >"${publish_output}" 2>&1; then
+            cat "${publish_output}"
+          elif grep -Fq "Cannot publish over previously staged version \"${VERSION}\"." "${publish_output}"; then
+            cat "${publish_output}"
+            echo "npm already staged @openpond/evals@${VERSION}; verify its registry integrity and provenance below."
+          else
+            cat "${publish_output}" >&2
+            exit 1
+          fi
 
       - name: Verify registry release and provenance
         env:
@@ -167,7 +179,7 @@ jobs:
           consumer_dir="$(mktemp -d)"
           trap 'rm -rf "${consumer_dir}"' EXIT
           installed="false"
-          for attempt in {1..30}; do
+          for attempt in {1..120}; do
             published="$(npm view "@openpond/evals@${VERSION}" version 2>/dev/null || true)"
             integrity="$(npm view "@openpond/evals@${VERSION}" dist.integrity 2>/dev/null || true)"
             if [[ "${published}" == "${VERSION}" && "${integrity}" == sha512-* ]]; then
@@ -181,7 +193,7 @@ jobs:
                 exit 0
               fi
             fi
-            echo "Waiting for npm package and attestation propagation (attempt ${attempt}/30)."
+            echo "Waiting for npm package and attestation propagation (attempt ${attempt}/120)."
             sleep 10
           done
           echo "@openpond/evals@${VERSION} was not verifiable after publication." >&2
