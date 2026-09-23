@@ -61,3 +61,40 @@ test("released workflow evaluation executes policy-visible cases and grades with
   expect(result.receipts[0]!.graderEvidenceRefs[0]!.contentHash).toBe(grades[0]);
   expect(receipts).toEqual([result.receipts[0]!.contentHash]);
 });
+
+test("resumes a retained member after interruption without executing or grading it again", async () => {
+  let retainedGrade: Awaited<ReturnType<Parameters<typeof executeProfileEvaluationRun>[0]["saveGrade"]>> | null = null;
+  let gradeValue: Parameters<Parameters<typeof executeProfileEvaluationRun>[0]["saveGrade"]>[0] | null = null;
+  let receiptValue: Parameters<Parameters<typeof executeProfileEvaluationRun>[0]["saveReceipt"]>[0] | null = null;
+  const execute = vi.fn(async () => ({
+    evidence: { output: { text: "done" }, runtimeEventRefs: [], artifactRefs: [] },
+    traceHash: contentHash("retained-trace"), artifactRefs: [],
+    startedAt: manifest.createdAt, completedAt: manifest.createdAt,
+    latencyMs: 0, costUsd: null, terminal: true,
+  }));
+  await expect(executeProfileEvaluationRun({
+    manifest, taskset, catalog, execute,
+    saveGrade: async (grade) => {
+      gradeValue = grade;
+      retainedGrade = { id: "stored-grade", contentHash: grade.contentHash, mediaType: "application/json", sizeBytes: null };
+      return retainedGrade;
+    },
+    saveReceipt: async (receipt) => { receiptValue = receipt; throw new Error("interrupted after receipt save"); },
+  })).rejects.toThrow("interrupted after receipt save");
+  expect(retainedGrade).not.toBeNull();
+  expect(receiptValue).not.toBeNull();
+  expect(gradeValue).not.toBeNull();
+  const resumedExecution = vi.fn(async () => { throw new Error("must not re-execute"); });
+  const resume = () => executeProfileEvaluationRun({
+    manifest, taskset, catalog, execute: resumedExecution,
+    loadCompletedMember: async () => ({ receipt: receiptValue!, grade: gradeValue! }),
+    saveGrade: async () => { throw new Error("must not re-grade"); },
+    saveReceipt: async () => { throw new Error("must not re-save"); },
+  });
+  const result = await resume();
+  expect(result.receipts).toEqual([receiptValue]);
+  expect(result.passRate).toBe(1);
+  expect(resumedExecution).not.toHaveBeenCalled();
+  receiptValue = { ...receiptValue!, taskId: "another-task" };
+  await expect(resume()).rejects.toThrow("differs from its admitted evidence");
+});

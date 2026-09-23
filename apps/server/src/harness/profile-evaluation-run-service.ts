@@ -28,8 +28,8 @@ export function createProfileEvaluationRunService(input: {
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   executeCase: ReturnType<typeof createProfileEvaluationCaseService>;
 }) {
-  return async (request: unknown): Promise<LocalProfileEvaluationRun> => {
-    const parsed = RunRequestSchema.parse(request);
+  const inFlight = new Map<string, { manifestHash: string; promise: Promise<LocalProfileEvaluationRun> }>();
+  const run = async (parsed: z.infer<typeof RunRequestSchema>): Promise<LocalProfileEvaluationRun> => {
     const selected = await input.selectedProfile();
     if (!selected || contentHash(selected.ref) !== contentHash(parsed.profileRef)
       || selected.sourceRevision !== parsed.binding.sourceRevision) {
@@ -77,6 +77,14 @@ export function createProfileEvaluationRunService(input: {
         return { id: grade.contentHash, contentHash: grade.contentHash, mediaType: "application/json", sizeBytes: null };
       },
       saveReceipt: async (receipt) => { await input.store.saveProfileEvaluationReceipt(receipt); },
+      loadCompletedMember: async ({ receiptId }) => {
+        const receipt = await input.store.getProfileEvaluationReceipt(receiptId);
+        if (!receipt) return null;
+        const gradeRef = receipt.graderEvidenceRefs[0];
+        const grade = gradeRef && await input.store.getProfileEvaluationGrade(gradeRef.contentHash);
+        if (!grade) throw new Error(`Retained Profile evaluation receipt ${receiptId} is missing its grade.`);
+        return { receipt, grade };
+      },
     });
     const content = {
       profileRef: selected.ref,
@@ -87,5 +95,21 @@ export function createProfileEvaluationRunService(input: {
       completedAt: new Date().toISOString(),
     };
     return input.store.saveProfileEvaluationRun({ ...content, contentHash: contentHash(content) });
+  };
+  return (request: unknown): Promise<LocalProfileEvaluationRun> => {
+    const parsed = RunRequestSchema.parse(request);
+    const current = inFlight.get(parsed.manifest.id);
+    if (current) {
+      if (current.manifestHash !== parsed.manifest.contentHash) {
+        throw new Error(`Profile evaluation run ${parsed.manifest.id} is already running with another manifest.`);
+      }
+      return current.promise;
+    }
+    const promise = run(parsed);
+    inFlight.set(parsed.manifest.id, { manifestHash: parsed.manifest.contentHash, promise });
+    void promise.finally(() => {
+      if (inFlight.get(parsed.manifest.id)?.promise === promise) inFlight.delete(parsed.manifest.id);
+    }).catch(() => {});
+    return promise;
   };
 }
