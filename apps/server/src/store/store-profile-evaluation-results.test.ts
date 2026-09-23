@@ -5,12 +5,13 @@ import path from "node:path";
 import { expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
 import {
-  createProfileEvaluationComparison, createTasksetRunManifest,
+  createTasksetRunManifest,
   executeProfileEvaluationRun, tasksetRunMetricPolicy,
 } from "@openpond/evals";
 import { genericToolConformance } from "@openpond/evals/conformance";
 
 import { SqliteStore } from "./store.js";
+import { createProfileEvaluationComparisonService } from "../harness/profile-evaluation-comparison-service.js";
 
 const taskset = genericToolConformance.taskset;
 const frozen = taskset.tasks.find((task) => task.split === "frozen_eval")!;
@@ -76,10 +77,11 @@ test("Profile evaluation grades, receipts, runs and comparison survive restart w
       expect(saved.manifest.id).toBe(runManifest.id);
       members.push({ manifest: runManifest, result: result.metric });
     }
-    const comparison = createProfileEvaluationComparison({
-      id: "profile-comparison", members, createdAt: genericToolConformance.manifest.createdAt,
+    const compare = createProfileEvaluationComparisonService({
+      store, selectedProfile: async () => ({ ref: profileRef, sourceRevision: source.sourceRevision }),
     });
-    await store.saveProfileEvaluationComparison(profileRef, comparison);
+    const comparison = await compare({ id: "profile-comparison", runIds: members.map((member) => member.manifest.id) });
+    expect((await compare({ id: "profile-comparison", runIds: members.map((member) => member.manifest.id) })).contentHash).toBe(comparison.contentHash);
     await store.close();
     store = new SqliteStore(directory);
     expect(await store.listProfileEvaluationRuns(profileRef)).toHaveLength(2);

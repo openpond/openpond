@@ -38,6 +38,7 @@ import { createOpenPondAppServer } from "./app-server-runtime.js";
 import { loadLocalHarnessRuntimeForSession } from "./harness/local-profile-workflow-runtime.js";
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
+import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { createManualCompactionRecorder } from "./runtime/manual-compaction-usage.js";
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
@@ -1591,6 +1592,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       executeProfileEvaluationCase,
       executeProfileEvaluationRun: createProfileEvaluationRunService({
         store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
+      }),
+      compareProfileEvaluationRuns: createProfileEvaluationComparisonService({
+        store, selectedProfile: selectedEvaluationProfile,
       }),
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
       reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,
