@@ -208,7 +208,9 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
                   <small>Profile source {run.sourceRevision.slice(0, 12)} · Suite run {run.id}</small>
                   <ul>{run.members.map((member) => (
                     <li key={member.runManifest.id}>
-                      <strong>{discovery.definitions.find((definition) => definition.id === member.definitionId)?.label ?? member.definitionId}</strong>
+                      <strong>{run.sourceRevision === discovery.sourceRevision
+                        ? discovery.definitions.find((definition) => definition.id === member.definitionId)?.label ?? member.definitionId
+                        : member.definitionId}</strong>
                       <span>{member.passed ? "Passed" : "Did not pass"} · {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`} · Run {member.runManifest.id}</span>
                     </li>
                   ))}</ul>
