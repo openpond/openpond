@@ -30,6 +30,14 @@ export const TRAINING_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS grade_results_attempt_idx ON grade_results(attempt_id, created_at DESC);
   CREATE TABLE IF NOT EXISTS evaluation_results (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS evaluation_results_taskset_kind_idx ON evaluation_results(taskset_id, kind, created_at DESC);
+  CREATE TABLE IF NOT EXISTS profile_evaluation_runs (id TEXT PRIMARY KEY, profile_key TEXT NOT NULL, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS profile_evaluation_runs_profile_created_idx ON profile_evaluation_runs(profile_key, created_at DESC);
+  CREATE INDEX IF NOT EXISTS profile_evaluation_runs_taskset_created_idx ON profile_evaluation_runs(taskset_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS profile_evaluation_grades (content_hash TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS profile_evaluation_receipts (id TEXT PRIMARY KEY, run_id TEXT NOT NULL, payload TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS profile_evaluation_receipts_run_idx ON profile_evaluation_receipts(run_id);
+  CREATE TABLE IF NOT EXISTS profile_evaluation_comparisons (id TEXT PRIMARY KEY, profile_key TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS profile_evaluation_comparisons_profile_created_idx ON profile_evaluation_comparisons(profile_key, created_at DESC);
   CREATE TABLE IF NOT EXISTS benchmark_runs (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, phase TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS benchmark_runs_taskset_created_idx ON benchmark_runs(taskset_id, created_at DESC);
   CREATE TABLE IF NOT EXISTS benchmark_comparisons (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);

@@ -35,6 +35,7 @@ import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
 import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime, profileWorkflowsForRelease } from "./local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
 import { createProfileEvaluationCaseService } from "./profile-evaluation-case-service.js";
+import { createProfileEvaluationRunService } from "./profile-evaluation-run-service.js";
 import { materializeHarnessSource } from "../training/materialize-harness-source.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import {
@@ -927,6 +928,24 @@ describe("local Harness workspace service", () => {
       manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
       modelRef, modelConfigurationHash, taskId: frozenTask.id, seed: "other",
     })).rejects.toThrow("released definition or admitted population");
+    const executeRun = createProfileEvaluationRunService({
+      store, selectedProfile: async () => ({ ref: profileRef, sourceRevision: "abc123" }), executeCase,
+    });
+    const run = await executeRun({
+      manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
+      modelRef, modelConfigurationHash,
+    });
+    expect(run.manifest.id).toBe(caseManifest.id);
+    expect((await store.getProfileEvaluationRun(caseManifest.id))?.contentHash).toBe(run.contentHash);
+    expect(await store.listProfileEvaluationRuns(profileRef)).toHaveLength(1);
+    expect(await executeRun({
+      manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
+      modelRef, modelConfigurationHash,
+    })).toEqual(run);
+    await expect(executeRun({
+      manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
+      modelRef, modelConfigurationHash: contentHash("forged-model-configuration"),
+    })).rejects.toThrow("admitted Profile workflow or model configuration");
     expect(imported.release.harnessRelease.metadata).toMatchObject({
       sourceLayout: "openpond.harnessSourceManifest.v1",
       profile: { id: "personal", sourceRevision: "abc123" },

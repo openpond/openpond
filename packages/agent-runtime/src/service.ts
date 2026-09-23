@@ -32,6 +32,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   listProfileWorkflows(): Promise<unknown>;
   listProfileEvaluations(): Promise<unknown>;
   executeProfileEvaluationCase(params: unknown): Promise<unknown>;
+  executeProfileEvaluationRun(params: unknown): Promise<unknown>;
   inspectHarness(): Promise<unknown>;
   reviewHarnessProposal(params: unknown): Promise<unknown>;
   reviewHarness(params: unknown): Promise<unknown>;
@@ -54,7 +55,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
 export type AgentRuntimeTelemetryEvent = {
   method: "runtime/capabilities" | "thread/start" | "thread/read" | "thread/resume" |
     "turn/start" | "turn/steer" | "turn/interrupt" | "task/inbox" | "task/queue" | "task/inputUpdate" | "approval/resolve" |
-    "userInput/resolve" | "profile/workflows" | "profile/evaluations" | "profile/evaluations/executeCase" | "harness/inspect" | "harness/proposalReview" |
+    "userInput/resolve" | "profile/workflows" | "profile/evaluations" | "profile/evaluations/executeCase" | "profile/evaluations/executeRun" | "harness/inspect" | "harness/proposalReview" |
     "harness/review" | "harness/acceptEvaluationReview" |
     "harness/materializeEvaluationTaskset" | "harness/runEvaluationBaseline" |
     "harness/validate" |
@@ -170,6 +171,7 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
     profileWorkflows: () => run("profile/workflows", null, () => ports.listProfileWorkflows()),
     profileEvaluations: () => run("profile/evaluations", null, () => ports.listProfileEvaluations()),
     profileEvaluationExecuteCase: (params) => run("profile/evaluations/executeCase", null, () => ports.executeProfileEvaluationCase(params)),
+    profileEvaluationExecuteRun: (params) => run("profile/evaluations/executeRun", null, () => ports.executeProfileEvaluationRun(params)),
     harnessInspect: () => run("harness/inspect", null, () => ports.inspectHarness()),
     harnessProposalReview: (params) =>
       run("harness/proposalReview", null, () => ports.reviewHarnessProposal(params)),
