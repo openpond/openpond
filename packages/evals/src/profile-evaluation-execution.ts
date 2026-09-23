@@ -1,8 +1,8 @@
 import { ImmutableArtifactRefSchema, contentHash, type ImmutableArtifactRef } from "@openpond/harness";
 
-import { gradeTaskEvidence, type AttemptEvidence, type CustomVerifierRunner, type ModelJudgeRunner, type TaskGrade } from "./graders.js";
+import { TaskGradeSchema, gradeTaskEvidence, type AttemptEvidence, type CustomVerifierRunner, type ModelJudgeRunner, type TaskGrade } from "./graders.js";
 import { aggregateTasksetRunReceipts, assertTasksetMetricSource, type TasksetMetricExecutor, type TasksetMetricResult } from "./metrics.js";
-import { createAttemptReceipt, type AttemptReceipt } from "./runs.js";
+import { createAttemptReceipt, verifyAttemptReceipt, type AttemptReceipt } from "./runs.js";
 import { assertProfileEvaluationRunAdmission, type TasksetRunManifest } from "./taskset-run-contract.js";
 import { policyTaskView, type TasksetRelease } from "./tasksets.js";
 import type { ProfileEvaluationCatalog, ProfileEvaluationRunSource } from "./profile-evaluations.js";
@@ -33,6 +33,12 @@ export async function executeProfileEvaluationRun(input: {
   }>;
   saveGrade: (grade: TaskGrade) => Promise<ImmutableArtifactRef>;
   saveReceipt: (receipt: AttemptReceipt) => Promise<void>;
+  /** A retained complete member can be reused after an interrupted run. The
+   * runner checks its immutable manifest, task, grader, and grade references. */
+  loadCompletedMember?: (member: { receiptId: string; taskId: string; seed: string }) => Promise<{
+    receipt: AttemptReceipt;
+    grade: TaskGrade;
+  } | null>;
   modelJudge?: ModelJudgeRunner;
   customVerifier?: CustomVerifierRunner;
   metricSource?: string;
@@ -55,6 +61,28 @@ export async function executeProfileEvaluationRun(input: {
   for (const member of input.manifest.population) {
     input.signal?.throwIfAborted();
     const task = tasks.get(member.taskId)!;
+    const retained = await input.loadCompletedMember?.(member) ?? null;
+    if (retained) {
+      const { receipt, grade } = retained;
+      const { contentHash: gradeHash, ...gradeContent } = TaskGradeSchema.parse(grade);
+      if (!verifyAttemptReceipt(receipt)
+        || gradeHash !== contentHash(gradeContent)
+        || receipt.id !== member.receiptId
+        || receipt.runManifest.id !== input.manifest.id
+        || receipt.runManifest.contentHash !== input.manifest.contentHash
+        || receipt.taskId !== member.taskId || receipt.seed !== member.seed
+        || receipt.graderEvidenceRefs.length !== 1
+        || receipt.graderEvidenceRefs[0]?.contentHash !== gradeHash
+        || grade.taskHash !== contentHash(task)
+        || grade.graderSetHash !== contentHash(input.taskset.graders)
+        || receipt.metadata.score !== grade.score
+        || receipt.metadata.passed !== grade.passed) {
+        throw new Error(`Retained Profile evaluation member ${member.receiptId} differs from its admitted evidence.`);
+      }
+      grades.push(grade);
+      receipts.push(receipt);
+      continue;
+    }
     const execution = await input.execute({
       task: policyTaskView(task), seed: member.seed, source,
       ...(input.signal ? { signal: input.signal } : {}),
