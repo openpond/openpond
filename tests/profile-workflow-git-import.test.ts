@@ -9,6 +9,7 @@ import { afterEach, expect, test } from "vitest";
 import { initializeHome } from "@openpond/persistence";
 import { installOpenPondProfile, updateInstalledOpenPondProfile } from "../apps/server/src/profile-installation.js";
 import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime } from "../apps/server/src/harness/local-profile-workflow-runtime.js";
+import { profileTrainingSource } from "../apps/server/src/harness/profile-training-source.js";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 
 const run = promisify(execFile);
@@ -107,6 +108,11 @@ test("GitHub-style Profile import and fast-forward update retain exact workflow 
   cleanup.push(() => store.close());
   const firstDiscovery = await ensureLocalProfileWorkflows({ store, storeDir: home, ref, profile: first });
   expect(firstDiscovery.workflows[0]?.workflow.invocation).toEqual({ kind: "instructions", instructions: "Write the first report." });
+  const firstRelease = await store.getHarnessReleaseRecord(firstDiscovery.harnessRelease.contentHash);
+  expect(firstRelease).not.toBeNull();
+  const trainingSource = await profileTrainingSource({ release: firstRelease!, storeDir: home });
+  expect(trainingSource.harnessRelease.contentHash).toBe(firstDiscovery.harnessRelease.contentHash);
+  expect(trainingSource.files.every((file) => trainingSource.harnessRelease.files.find((asset) => asset.path === file.path)?.visibility === "policy")).toBe(true);
   catalog.workflows[0]!.invocation.instructions = "Write the revised report.";
   await fs.writeFile(catalogPath, JSON.stringify(catalog));
   await publish();

@@ -40,6 +40,7 @@ import { createProfileEvaluationCaseService } from "./harness/profile-evaluation
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
 import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
 import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
+import { profileTrainingSource } from "./harness/profile-training-source.js";
 import { buildProfileEvaluationReport } from "./harness/profile-evaluation-report-service.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { createManualCompactionRecorder } from "./runtime/manual-compaction-usage.js";
@@ -1607,6 +1608,14 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       resolveApproval,
       listProfileWorkflows: profileWorkflowsPayload,
       listProfileEvaluations: profileEvaluationsPayload,
+      loadProfileTrainingSource: async () => {
+        const workflows = await profileWorkflowsPayload();
+        const release = await store.getHarnessReleaseRecord(workflows.harnessRelease.contentHash);
+        if (!release || release.harnessRelease.id !== workflows.harnessRelease.id) {
+          throw new Error("The selected Profile Harness release is unavailable.");
+        }
+        return profileTrainingSource({ release, storeDir });
+      },
       prepareProfileEvaluationRun: profileEvaluationPreparePayload,
       runPreparedProfileEvaluation: profileEvaluationRunPayload,
       runProfileEvaluationSuite: profileEvaluationRunSuitePayload,

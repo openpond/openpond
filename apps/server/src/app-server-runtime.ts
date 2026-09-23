@@ -36,6 +36,7 @@ import { ensureExplicitProfileHarnessSource, importLocalHarnessWorkspaceSource }
 import { PROFILE_HARNESS_WORKSPACE_PREFIX } from "./harness/profile-harness-workspace-identity.js";
 import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
+import { profileTrainingSource } from "./harness/profile-training-source.js";
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
 import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
@@ -570,6 +571,12 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       interruptSessionTurn: turnRunner.interruptSessionTurn,
       resolveApproval,
       listProfileWorkflows,
+      loadProfileTrainingSource: async () => {
+        if (!options.profileSource || !explicitProfileRelease) {
+          throw new Error("An explicit published Profile is required for hosted training source export.");
+        }
+        return profileTrainingSource({ release: explicitProfileRelease, storeDir });
+      },
       listProfileEvaluations: async () => {
         if (options.profileSource && explicitProfileRelease) {
           const evaluations = await profileEvaluationsForRelease({

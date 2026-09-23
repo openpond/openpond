@@ -5,12 +5,15 @@ import {
   createAgentSnapshot,
   createHarnessRelease,
   createHarnessSourcePackage,
+  createHarnessPolicySourcePackage,
+  harnessPolicySourcePackageFiles,
   harnessSourcePackageFiles,
   loadReleasedProfileWorkflowCatalog,
   resolveReleasedProfileWorkflow,
   resolveHarnessSourceSelection,
   sha256,
   validateHarnessSourcePackage,
+  validateHarnessPolicySourcePackage,
   type ImmutableAssetRef,
 } from "../src/index.js";
 
@@ -57,6 +60,15 @@ describe("released Harness source transport", () => {
     });
     const captured = createHarnessSourcePackage({ agentSnapshot, harnessRelease, files });
     const expectedRelease = { id: harnessRelease.id, contentHash: harnessRelease.contentHash };
+    const policy = createHarnessPolicySourcePackage(captured, expectedRelease);
+    expect(policy.harnessRelease.contentHash).toBe(harnessRelease.contentHash);
+    expect(policy.files.some((file) => file.path === "private/check.bin")).toBe(false);
+    expect(harnessPolicySourcePackageFiles(policy).has("private/check.bin")).toBe(false);
+    const leaked = structuredClone(policy);
+    leaked.files.push(captured.files.find((file) => file.path === "private/check.bin")!);
+    const { contentHash: _policyHash, ...leakedContent } = leaked;
+    expect(() => validateHarnessPolicySourcePackage({ ...leakedContent, contentHash: contentHash(leakedContent) }))
+      .toThrow("not policy-visible");
     const selection = { schemaVersion: "openpond.harnessSourceSelection.v1", mode: "selected_release",
       harnessRelease: expectedRelease, sourcePackageHash: captured.contentHash };
     expect(resolveHarnessSourceSelection({ selection, sourcePackage: captured, expectedRelease }).sourcePackage).toEqual(captured);

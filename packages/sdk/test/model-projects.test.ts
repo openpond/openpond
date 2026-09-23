@@ -90,6 +90,31 @@ it("builds stable Model save requests and bounds untrusted recipe JSON", async (
   expect(() => parseModelProjectSaveRequest({ ...request, project: { ...request.project, trainingSetup: { ...request.project.trainingSetup, recipe: nested } } })).toThrow(expect.objectContaining({ status: 400, code: "model_configuration_json_invalid" }));
 });
 
+it("retains an exact Profile evaluation selection without adding its cases to training", async () => {
+  const profileEvaluation = {
+    profileProjectId: "profile-project",
+    sourceRevision: "a".repeat(40),
+    catalogHash: HASH,
+    definitionId: "workflow-check",
+    harnessRelease: { id: "profile-harness", contentHash: HASH },
+    tasksetRelease: { id: "private-evaluation-taskset", contentHash: HASH },
+  };
+  const profileSource = {
+    profileProjectId: profileEvaluation.profileProjectId,
+    sourceRevision: profileEvaluation.sourceRevision,
+    harnessRelease: profileEvaluation.harnessRelease,
+  };
+  const request = await createModelProjectSaveRequest({
+    id: "model-profile-evaluation", profileId: "team-1", name: "Profile model", objective: null,
+    defaultBaseModel: null, defaultDestinationId: null,
+    trainingSetup: { profileSource, profileEvaluation, harnessRelease: profileSource.harnessRelease },
+  }, 0);
+  expect(parseModelProjectSaveRequest(request).project.trainingSetup).toMatchObject({
+    tasksetRef: null, profileSource, profileEvaluation, harnessRelease: profileSource.harnessRelease,
+  });
+  expect(parseModelProjectSaveRequest(request).project.trainingSetup.evaluationTasksetRef).toBeUndefined();
+});
+
 function setup() {
   return {
     tasksetRef: { id: "taskset-1", revision: 2, contentHash: HASH },

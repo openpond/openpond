@@ -1,4 +1,4 @@
-import { canonicalJson, contentHash, sha256, ImmutableReleaseRefSchema, HarnessSourceSelectionSchema, validateHarnessSourcePackage, type HarnessSourcePackage, type ImmutableReleaseRef, type VersionedReleaseRef } from "@openpond/harness";
+import { canonicalJson, contentHash, sha256, ImmutableReleaseRefSchema, HarnessSourceSelectionSchema, validateHarnessPolicySourcePackage, validateHarnessSourcePackage, type HarnessPolicySourcePackage, type HarnessSourcePackage, type ImmutableReleaseRef, type VersionedReleaseRef } from "@openpond/harness";
 import { compileBoundGraders } from "@openpond/evals/rewards";
 import { verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
 import { HarnessRunManifestContentSchema, HarnessRunManifestSchema, ResolvedTrainingBundleContentSchema, ResolvedTrainingBundleManifestSchema, type ComputeTargetBinding, type HarnessRunManifest, type HarnessRuntimeTargetBinding, type OpaqueSecretLeaseRef, type ResolvedTrainingBundleManifest, type TrainingEngineBinding } from "./training-bundle-contracts.js";
@@ -46,7 +46,7 @@ export function buildTasksetTrainingBundle(input: {
   workerProtocol: string;
   harnessRelease: ImmutableReleaseRef;
   tasksetRelease: ImmutableReleaseRef;
-  harnessSource?: HarnessSourcePackage | null;
+  harnessSource?: HarnessSourcePackage | HarnessPolicySourcePackage | null;
   tasksetAssetBytes?: ReadonlyMap<string, Uint8Array>;
   rewardExecution?: TasksetRewardExecution;
   verifierAssets?: LearningTextAsset[];
@@ -102,7 +102,9 @@ export function buildTasksetTrainingBundle(input: {
     throw new Error("The prepared Model requires its pinned evaluation source bytes.");
   }
   const harnessSource = input.harnessSource
-    ? validateHarnessSourcePackage(input.harnessSource, releasedHarness)
+    ? input.harnessSource.schemaVersion === "openpond.harnessPolicySourcePackage.v1"
+      ? validateHarnessPolicySourcePackage(input.harnessSource, releasedHarness)
+      : validateHarnessSourcePackage(input.harnessSource, releasedHarness)
     : null;
   if (setup.harnessRelease && !harnessSource) {
     throw new Error("A selected Harness requires its complete immutable source package.");
@@ -115,7 +117,8 @@ export function buildTasksetTrainingBundle(input: {
   if (harnessSource) {
     const leavesLocalHost = input.runtime.placement !== "local" || input.compute.kind !== "local";
     if (leavesLocalHost && (!harnessSource.agentSnapshot.portability.portable
-      || harnessSource.harnessRelease.files.some(file => file.visibility === "host_private"))) {
+      || (harnessSource.schemaVersion === "openpond.harnessSourcePackage.v1"
+        && harnessSource.harnessRelease.files.some(file => file.visibility !== "policy")))) {
       throw new Error("The selected Harness contains source that cannot leave its local host.");
     }
     addJsonAsset(assets, "harness/source-package.json", harnessSource);
