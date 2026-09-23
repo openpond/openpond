@@ -19,6 +19,7 @@ export const AGENT_RPC_METHODS = [
   "userInput/resolve",
   "profile/workflows",
   "profile/evaluations",
+  "profile/evaluations/executeCase",
   "harness/inspect",
   "harness/proposalReview",
   "harness/review",
@@ -108,6 +109,7 @@ export type AgentRuntimeHost = {
   userInputResolve(params: unknown): Promise<unknown>;
   profileWorkflows(params: unknown): Promise<unknown>;
   profileEvaluations(params: unknown): Promise<unknown>;
+  profileEvaluationExecuteCase(params: unknown): Promise<unknown>;
   harnessInspect(params: unknown): Promise<unknown>;
   harnessProposalReview(params: unknown): Promise<unknown>;
   harnessReview(params: unknown): Promise<unknown>;
@@ -199,6 +201,7 @@ export class AgentJsonRpcDispatcher {
       case "userInput/resolve": return this.#host.userInputResolve(params);
       case "profile/workflows": return this.#host.profileWorkflows(params);
       case "profile/evaluations": return this.#host.profileEvaluations(params);
+      case "profile/evaluations/executeCase": return this.#host.profileEvaluationExecuteCase(params);
       case "harness/inspect": return this.#host.harnessInspect(params);
       case "harness/proposalReview": return this.#host.harnessProposalReview(params);
       case "harness/review": return this.#host.harnessReview(params);

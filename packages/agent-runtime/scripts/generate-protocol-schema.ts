@@ -33,6 +33,7 @@ const methodNames = {
   "userInput/resolve": "userInputResolve",
   "profile/workflows": "profileWorkflows",
   "profile/evaluations": "profileEvaluations",
+  "profile/evaluations/executeCase": "profileEvaluationExecuteCase",
   "harness/inspect": "harnessInspect",
   "harness/proposalReview": "harnessProposalReview",
   "harness/review": "harnessReview",
