@@ -362,3 +362,90 @@
   max-height: 160px;
   overflow: auto;
 }
+
+.profile-evaluations {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.profile-evaluations-suites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-evaluations-suite,
+.profile-evaluations-row,
+.profile-evaluations-detail {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.profile-evaluations-suite,
+.profile-evaluations-row > div,
+.profile-evaluations-history li {
+  display: grid;
+  gap: 4px;
+}
+
+.profile-evaluations-suite strong,
+.profile-evaluations-row strong,
+.profile-evaluations-detail strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.profile-evaluations-suite span,
+.profile-evaluations-row p,
+.profile-evaluations-row small,
+.profile-evaluations-detail p,
+.profile-evaluations-detail small,
+.profile-evaluations-cases span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.profile-evaluations-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-evaluations button {
+  flex: none;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.profile-evaluations-detail,
+.profile-evaluations-cases,
+.profile-evaluations-history {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-evaluations-detail h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.profile-evaluations-detail ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}

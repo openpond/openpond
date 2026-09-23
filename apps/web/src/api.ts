@@ -1,5 +1,6 @@
 import type { TrainingEvaluationTaskPage, TrainingCandidateDecision, TrainingCandidateDecisionRequest } from "openpond-sdk/training";
-import type { ProfileWorkflow, ProfileWorkflowBinding } from "@openpond/harness";
+import type { ImmutableReleaseRef, ProfileWorkflow, ProfileWorkflowBinding } from "@openpond/harness";
+import type { ProfileEvaluationComparison, TasksetMetricResult, TasksetRunManifest } from "@openpond/evals";
 import type {
   Approval,
   AppPreferences,
@@ -130,6 +131,18 @@ export type ProfileEvaluationDiscovery = {
   catalogHash: string | null;
   definitions: import("@openpond/evals").ProfileEvaluationCatalog["definitions"];
   suites: import("@openpond/evals").ProfileEvaluationCatalog["suites"];
+  runs: Array<{
+    profileRef: OpenPondProfileRef;
+    manifest: TasksetRunManifest;
+    metric: TasksetMetricResult;
+    gradeRefs: ImmutableReleaseRef[];
+    receiptRefs: ImmutableReleaseRef[];
+    passRate: number;
+    passed: boolean;
+    completedAt: string;
+    contentHash: string;
+  }>;
+  comparisons: ProfileEvaluationComparison[];
 };
 import { apiFetch, type ClientConnection } from "./api/api-client";
 import { organizationApi } from "./api/organization-api";

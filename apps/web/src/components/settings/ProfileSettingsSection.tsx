@@ -18,6 +18,7 @@ import {
 import { api, type ClientConnection } from "../../api";
 import { ProfileAgentsSection } from "../profile/ProfileAgentsSection";
 import { ProfileWorkflowsSection } from "../profile/ProfileWorkflowsSection";
+import { ProfileEvaluationsSection } from "../profile/ProfileEvaluationsSection";
 import { ProfileSelector } from "../profile/ProfileSelector";
 import { ProfileSettingsMenu } from "../profile/ProfileSettingsMenu";
 import "../../styles/workspace/git-dialogs.css";
@@ -257,6 +258,12 @@ export function ProfileSettingsSection({
                 onError={onError}
                 onOpenSession={onOpenSession}
                 onToast={onToast}
+              />
+              <ProfileEvaluationsSection
+                connection={connection}
+                selectedProfileKey={payload?.profileLibrary?.lastUsed
+                  ? JSON.stringify(payload.profileLibrary.lastUsed)
+                  : null}
               />
             </>
           ) : null}
