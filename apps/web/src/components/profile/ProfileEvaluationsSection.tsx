@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { api, type ClientConnection, type ProfileEvaluationDiscovery } from "../../api";
+import { api, type ClientConnection, type ProfileEvaluationDiscovery, type ProfileEvaluationPreparedRun, type ProfileEvaluationRunRequest } from "../../api";
+import type { ProviderSettings } from "@openpond/contracts";
 import "../../styles/profile/profile-page.css";
 
 function targetLabel(target: ProfileEvaluationDiscovery["definitions"][number]["target"]): string {
@@ -17,6 +18,26 @@ function displayTimestamp(value: string): string {
   return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString();
 }
 
+type ModelChoice = { key: string; providerId: ProfileEvaluationRunRequest["modelRef"]["providerId"]; modelId: string; label: string };
+
+function availableModels(settings: ProviderSettings): ModelChoice[] {
+  return Object.values(settings.statuses).flatMap((status) => {
+    if (!status.enabled || !status.available || !status.credential.connected) return [];
+    const configured = settings.providers[status.id];
+    const ids = new Set([
+      ...status.modelIds,
+      ...settings.modelCaches[status.id]?.models.map((model) => model.id) ?? [],
+      ...configured?.modelOverrides ?? [],
+      status.defaultModel,
+      configured?.defaultModel,
+    ].filter((id): id is string => Boolean(id)));
+    return [...ids].map((modelId) => ({
+      key: JSON.stringify([status.id, modelId]), providerId: status.id, modelId,
+      label: `${status.displayName} · ${modelId}`,
+    }));
+  });
+}
+
 export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
   connection: ClientConnection | null;
   selectedProfileKey: string | null;
@@ -28,12 +49,20 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
   const [comparisonLimit, setComparisonLimit] = useState(20);
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
+  const [models, setModels] = useState<ModelChoice[]>([]);
+  const [selectedModelKey, setSelectedModelKey] = useState("");
+  const [plan, setPlan] = useState<{ request: ProfileEvaluationRunRequest; prepared: ProfileEvaluationPreparedRun } | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [runNotice, setRunNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!connection || !selectedProfileKey) {
       setDiscovery(null);
+      setModels([]);
+      setPlan(null);
       return;
     }
     let active = true;
@@ -44,6 +73,10 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
     setRunLimit(20);
     setComparisonLimit(20);
     setSelectedRunIds([]);
+    setModels([]);
+    setSelectedModelKey("");
+    setPlan(null);
+    setRunNotice(null);
     setError(null);
     void api.profileEvaluations(connection).then((result) => {
       if (active) setDiscovery(result);
@@ -51,6 +84,14 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
       if (active) setError(caught instanceof Error ? caught.message : String(caught));
     }).finally(() => {
       if (active) setLoading(false);
+    });
+    void api.providerSettings(connection).then((settings) => {
+      if (!active) return;
+      const choices = availableModels(settings);
+      setModels(choices);
+      setSelectedModelKey(choices[0]?.key ?? "");
+    }).catch((caught: unknown) => {
+      if (active) setError(caught instanceof Error ? caught.message : String(caught));
     });
     return () => { active = false; };
   }, [connection, selectedProfileKey]);
@@ -60,6 +101,42 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
   const runs = selected
     ? discovery?.runs.filter((run) => run.manifest.profileEvaluation?.definitionId === selected.id) ?? []
     : [];
+  const prepareRun = async () => {
+    const model = models.find((choice) => choice.key === selectedModelKey);
+    if (!connection || !selected || selected.target.kind !== "workflow" || !model || preparing) return;
+    const request: ProfileEvaluationRunRequest = {
+      id: `evaluation-${crypto.randomUUID()}`,
+      createdAt: new Date().toISOString(),
+      definitionId: selected.id,
+      modelRef: { providerId: model.providerId, modelId: model.modelId },
+    };
+    setPreparing(true);
+    setPlan(null);
+    setRunNotice(null);
+    setError(null);
+    try {
+      setPlan({ request, prepared: await api.profileEvaluationPrepare(connection, request) });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setPreparing(false);
+    }
+  };
+  const runPrepared = async () => {
+    if (!connection || !plan || running) return;
+    setRunning(true);
+    setError(null);
+    try {
+      const result = await api.profileEvaluationRun(connection, plan.request);
+      setDiscovery(await api.profileEvaluations(connection));
+      setPlan(null);
+      setRunNotice(`Run ${result.manifest.id} ${result.passed ? "passed" : "did not pass"}.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setRunning(false);
+    }
+  };
   const toggleRun = (id: string) => {
     setSelectedRunIds((current) => current.includes(id)
       ? current.filter((selectedRunId) => selectedRunId !== id)
@@ -87,6 +164,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
       </div>
       {loading ? <p>Loading evaluations…</p> : null}
       {error ? <p role="alert">{error}</p> : null}
+      {runNotice ? <p role="status">{runNotice}</p> : null}
       {discovery && discovery.definitions.length === 0 ? <p>No evaluations in this Profile yet.</p> : null}
       {discovery?.suites.length ? (
         <div className="profile-evaluations-suites" aria-label="Evaluation suites">
@@ -112,6 +190,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
               setSelectedId(selectedId === definition.id ? null : definition.id);
               setCaseLimit(50);
               setRunLimit(20);
+              setPlan(null);
             }}>
               {selectedId === definition.id ? "Hide details" : "View details"}
             </button>
@@ -123,6 +202,30 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
           <h4>{selected.label}</h4>
           <p>Taskset {selected.tasksetRelease.id} · {selected.tasksetRelease.contentHash.slice(0, 12)}</p>
           <p>Frozen split: {selected.split} · Minimum pass rate: {Math.round(selected.criterion.minimumPassRate * 100)}%</p>
+          {selected.target.kind === "workflow" ? (
+            <div className="profile-evaluations-run-form">
+              <label htmlFor="profile-evaluation-model">Model</label>
+              <select id="profile-evaluation-model" value={selectedModelKey} disabled={preparing || running} onChange={(event) => {
+                setSelectedModelKey(event.target.value);
+                setPlan(null);
+              }}>
+                {models.map((model) => <option key={model.key} value={model.key}>{model.label}</option>)}
+              </select>
+              {models.length === 0 ? <p>Connect a provider and load its models in Providers settings to run this check.</p> : null}
+              <button type="button" disabled={!selectedModelKey || preparing || running} onClick={() => void prepareRun()}>
+                {preparing ? "Checking run…" : "Check run setup"}
+              </button>
+              {plan ? (
+                <div className="profile-evaluations-run-plan">
+                  <strong>Run setup</strong>
+                  <small>Profile source {plan.prepared.manifest.profileEvaluation?.sourceRevision.slice(0, 12)} · Harness {plan.prepared.manifest.execution.kind === "harness" ? plan.prepared.manifest.execution.harnessRelease.id : ""}</small>
+                  <small>Taskset {plan.prepared.taskset.id} · {plan.prepared.manifest.population.length} attempts · {plan.prepared.manifest.limits.timeoutMs / 1_000}s per attempt</small>
+                  <small>Connected app scopes: {plan.prepared.taskset.connectedAppScopes.join(", ") || "none declared"}</small>
+                  <button type="button" disabled={running} onClick={() => void runPrepared()}>{running ? "Running evaluation…" : "Run evaluation"}</button>
+                </div>
+              ) : null}
+            </div>
+          ) : <p>Execution for {targetLabel(selected.target)} is not available yet.</p>}
           <div className="profile-evaluations-cases">
             <strong>Task cases</strong>
             <ul>{selected.taskIds.slice(0, caseLimit).map((taskId) => <li key={taskId}>{taskId}</li>)}</ul>
