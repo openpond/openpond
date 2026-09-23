@@ -2,7 +2,7 @@ import { z } from "zod";
 import { assertContentHash, contentHash, ImmutableReleaseRefSchema, MetadataSchema, ModelRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
 import { RunLimitsSchema, RuntimeTargetBindingSchema, verifyAttemptReceipt, type AttemptReceipt } from "./runs.js";
 import { TasksetMetricPolicySchema, type TasksetMetricPolicy } from "./metric-policy.js";
-import { ProfileEvaluationRunSourceSchema } from "./profile-evaluations.js";
+import { ProfileEvaluationCatalogSchema, ProfileEvaluationRunSourceSchema, type ProfileEvaluationCatalog } from "./profile-evaluations.js";
 import { assertTasksetRelease, type TasksetRelease } from "./tasksets.js";
 
 /** A fixture check owns no model identity and cannot become a model evaluation. */
@@ -76,6 +76,42 @@ export function assertTasksetRunRelease(manifest: TasksetRunManifest, taskset: T
     || contentHash(manifest.execution.verifierSetRelease) !== contentHash(taskset.verifierSetRelease)
     || manifest.execution.policyHash !== contentHash(taskset.policy)
   )) throw new Error("Taskset-owned execution differs from its pinned release.");
+}
+
+/** Resolve the verifier-only definition before dispatch. A Profile run must
+ * evaluate exactly its declared frozen cases and seeds through its release. */
+export function assertProfileEvaluationRunAdmission(
+  manifest: TasksetRunManifest,
+  taskset: TasksetRelease,
+  catalogInput: ProfileEvaluationCatalog,
+): void {
+  assertTasksetRunRelease(manifest, taskset);
+  const catalog = ProfileEvaluationCatalogSchema.parse(catalogInput);
+  const source = manifest.profileEvaluation;
+  if (!source || manifest.execution.kind !== "harness" || manifest.policy.kind !== "model") {
+    throw new Error("Profile evaluation requires fresh model execution through its bound Harness.");
+  }
+  if (source.catalogHash !== contentHash(catalog)) throw new Error("Profile evaluation catalog differs from its pinned source.");
+  const definition = catalog.definitions.find((entry) => entry.id === source.definitionId);
+  if (!definition || source.definitionHash !== contentHash(definition)
+    || contentHash(source.target) !== contentHash(definition.target)) {
+    throw new Error("Profile evaluation definition differs from its pinned source.");
+  }
+  if (definition.tasksetRelease.id !== taskset.id || definition.tasksetRelease.contentHash !== taskset.contentHash) {
+    throw new Error("Profile evaluation Taskset differs from its pinned definition.");
+  }
+  if (definition.split === "train") throw new Error("Profile evaluation cannot execute training cases.");
+  const tasks = new Map(taskset.tasks.map((task) => [task.id, task]));
+  if (definition.taskIds.some((id) => tasks.get(id)?.split !== definition.split)) {
+    throw new Error("Profile evaluation case is absent from its declared Taskset split.");
+  }
+  const expected = new Set(definition.taskIds.flatMap((taskId) => definition.seeds.map((seed) => JSON.stringify([taskId, seed]))));
+  const actual = new Set(manifest.population.map(({ taskId, seed }) => JSON.stringify([taskId, seed])));
+  if (manifest.population.some((member) => member.fixtureId !== null)
+    || actual.size !== expected.size || manifest.population.length !== expected.size
+    || [...actual].some((member) => !expected.has(member))) {
+    throw new Error("Profile evaluation population differs from its declared cases and seeds.");
+  }
 }
 
 /** Complete runs cannot drop failed members, add convenient attempts or relabel
