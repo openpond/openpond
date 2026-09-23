@@ -95,7 +95,9 @@ export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
   // verified build; allow 8 KiB for this reviewed addition.
   // Suite selection and retained-history controls measured 16,931,960 bytes
   // in the verified PR build; allow 2 KiB beyond the previous limit.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 152 * 1024,
+  // Profile report and matrix controls measured 16,935,957 bytes in PR #403;
+  // allow 4 KiB for this reviewed addition. Initial assets remain capped.
+  maxTotalJsBytes: 16 * 1024 * 1024 + 156 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
