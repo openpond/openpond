@@ -54,6 +54,7 @@ import { ensureLocalProfileWorkflows } from "../harness/local-profile-workflow-r
 import { profileEvaluationsForRelease } from "../harness/local-profile-evaluation-runtime.js";
 import { createProfileEvaluationRunPreparationService } from "../harness/profile-evaluation-run-preparation.js";
 import { loadLocalProfileEvaluationTaskset } from "../harness/local-profile-evaluation-taskset.js";
+import { createProfileEvaluationComparisonService } from "../harness/profile-evaluation-comparison-service.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -117,6 +118,14 @@ export function createProfilePayloads(deps: {
       });
     },
     placement: "local",
+  });
+
+  const profileEvaluationComparePayload = createProfileEvaluationComparisonService({
+    store: deps.store,
+    selectedProfile: async () => {
+      const workflows = await profileWorkflowsPayload();
+      return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
+    },
   });
 
   async function profileSelectPayload(payload: unknown) {
@@ -831,6 +840,7 @@ export function createProfilePayloads(deps: {
     profileWorkflowsPayload,
     profileEvaluationsPayload,
     profileEvaluationPreparePayload,
+    profileEvaluationComparePayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,

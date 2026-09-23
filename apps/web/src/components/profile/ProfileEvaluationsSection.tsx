@@ -25,6 +25,9 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [caseLimit, setCaseLimit] = useState(50);
   const [runLimit, setRunLimit] = useState(20);
+  const [comparisonLimit, setComparisonLimit] = useState(20);
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
+  const [comparing, setComparing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +42,8 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
     setSelectedId(null);
     setCaseLimit(50);
     setRunLimit(20);
+    setComparisonLimit(20);
+    setSelectedRunIds([]);
     setError(null);
     void api.profileEvaluations(connection).then((result) => {
       if (active) setDiscovery(result);
@@ -55,6 +60,25 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
   const runs = selected
     ? discovery?.runs.filter((run) => run.manifest.profileEvaluation?.definitionId === selected.id) ?? []
     : [];
+  const toggleRun = (id: string) => {
+    setSelectedRunIds((current) => current.includes(id)
+      ? current.filter((selectedRunId) => selectedRunId !== id)
+      : [...current, id]);
+  };
+  const compareRuns = async () => {
+    if (!connection || selectedRunIds.length < 2 || comparing) return;
+    setComparing(true);
+    setError(null);
+    try {
+      await api.profileEvaluationCompare(connection, selectedRunIds);
+      setDiscovery(await api.profileEvaluations(connection));
+      setSelectedRunIds([]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setComparing(false);
+    }
+  };
   return (
     <section aria-label="Profile evaluations" className="profile-evaluations">
       <div className="profile-workflows-header">
@@ -117,6 +141,42 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
             )}
             {runs.length > runLimit ? <button type="button" onClick={() => setRunLimit((limit) => limit + 20)}>Show more runs</button> : null}
           </div>
+        </div>
+      ) : null}
+      {discovery && discovery.runs.length > 1 ? (
+        <div className="profile-evaluations-detail" aria-label="Compare evaluation runs">
+          <h4>Compare runs</h4>
+          <p>Select two or more runs. Comparisons require the same Taskset, cases, environment, grading policy, limits, and runtime.</p>
+          <div className="profile-evaluations-comparison-runs">
+            {discovery.runs.slice(0, comparisonLimit).map((run) => (
+              <label key={run.manifest.id}>
+                <input type="checkbox" checked={selectedRunIds.includes(run.manifest.id)} onChange={() => toggleRun(run.manifest.id)} disabled={comparing} />
+                <span>
+                  <strong>{run.manifest.profileEvaluation?.definitionId ?? "Profile evaluation"} · {run.metric.value === null ? "No score" : `${Math.round(run.metric.value * 100)}%`}</strong>
+                  <small>{displayTimestamp(run.completedAt)} · {run.manifest.policy.kind === "model" ? `${run.manifest.policy.model.provider}/${run.manifest.policy.model.model}` : "fixture"} · Source {run.manifest.profileEvaluation?.sourceRevision.slice(0, 10)} · {run.manifest.id}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+          {discovery.runs.length > comparisonLimit ? <button type="button" onClick={() => setComparisonLimit((limit) => limit + 20)}>Show more runs</button> : null}
+          <button type="button" disabled={selectedRunIds.length < 2 || comparing} onClick={() => void compareRuns()}>
+            {comparing ? "Comparing…" : `Save comparison of ${selectedRunIds.length} runs`}
+          </button>
+        </div>
+      ) : null}
+      {discovery && discovery.comparisons.length > 0 ? (
+        <div className="profile-evaluations-detail" aria-label="Saved evaluation comparisons">
+          <h4>Saved comparisons</h4>
+          <ul>{discovery.comparisons.map((comparison) => (
+            <li key={comparison.id}>
+              <strong>{displayTimestamp(comparison.createdAt)} · {comparison.members.length} runs</strong>
+              <ul>{comparison.members.map((member) => (
+                <li key={member.runManifest.id}>
+                  {member.source.definitionId} · {member.policy.kind === "model" ? `${member.policy.model.provider}/${member.policy.model.model}` : "fixture"} · Source {member.source.sourceRevision.slice(0, 10)} · {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`}
+                </li>
+              ))}</ul>
+            </li>
+          ))}</ul>
         </div>
       ) : null}
     </section>
