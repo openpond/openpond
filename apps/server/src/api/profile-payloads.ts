@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
-import { OpenPondProfileRefSchema, type RuntimeEvent } from "@openpond/contracts";
+import { OpenPondProfileRefSchema, type ProviderSettings, type RuntimeEvent } from "@openpond/contracts";
+import { contentHash } from "@openpond/harness";
 import {
   collectProfileSourceUploadEntries,
   commitActiveProfileChanges,
@@ -51,12 +52,15 @@ import {
 import type { SqliteStore } from "../store/store.js";
 import { ensureLocalProfileWorkflows } from "../harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "../harness/local-profile-evaluation-runtime.js";
+import { createProfileEvaluationRunPreparationService } from "../harness/profile-evaluation-run-preparation.js";
+import { loadLocalProfileEvaluationTaskset } from "../harness/local-profile-evaluation-taskset.js";
 import { createProfileEvaluationComparisonService } from "../harness/profile-evaluation-comparison-service.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   store: SqliteStore;
   storeDir: string;
+  providerSettings: () => Promise<ProviderSettings>;
 }) {
   const { appendRuntimeEvent } = deps;
 
@@ -98,6 +102,50 @@ export function createProfilePayloads(deps: {
     ]);
     return { ...evaluations, runs, comparisons };
   }
+
+  const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
+    store: deps.store,
+    selectedWorkflows: profileWorkflowsPayload,
+    loadTasksetPackage: (definition, profileId) => loadLocalProfileEvaluationTaskset({
+      store: deps.store, storeDir: deps.storeDir, definition, profileId,
+    }),
+    modelConfigurationHash: async (modelRef) => {
+      const settings = await deps.providerSettings();
+      const status = settings.statuses[modelRef.providerId];
+      const provider = settings.providers[modelRef.providerId];
+      if (!status?.enabled || !status.available || !status.credential.connected) {
+        throw new Error(`Model provider ${modelRef.providerId} is unavailable for evaluation.`);
+      }
+      const availableModels = new Set([
+        ...status.modelIds,
+        ...(settings.modelCaches[modelRef.providerId]?.models.map((model) => model.id) ?? []),
+        ...(provider?.modelOverrides ?? []),
+        status.defaultModel,
+        provider?.defaultModel,
+      ]);
+      if (!availableModels.has(modelRef.modelId)) {
+        throw new Error(`Model ${modelRef.providerId}/${modelRef.modelId} is unavailable for evaluation.`);
+      }
+      return contentHash({
+        modelRef,
+        provider: provider ?? null,
+        credential: status.credential.source,
+      });
+    },
+    placement: "local",
+  });
+
+  const profileEvaluationPreparePayload = async (request: unknown) => {
+    const prepared = await prepareProfileEvaluationRun(request);
+    return {
+      manifest: prepared.manifest,
+      taskset: {
+        id: prepared.taskset.id,
+        contentHash: prepared.taskset.contentHash,
+        connectedAppScopes: prepared.taskset.policy.connectedAppScopes,
+      },
+    };
+  };
 
   const profileEvaluationComparePayload = createProfileEvaluationComparisonService({
     store: deps.store,
@@ -818,6 +866,8 @@ export function createProfilePayloads(deps: {
     profileCatalogPayload,
     profileWorkflowsPayload,
     profileEvaluationsPayload,
+    profileEvaluationPreparePayload,
+    prepareProfileEvaluationRun,
     profileEvaluationComparePayload,
     profileSelectPayload,
     profileRemovePayload,

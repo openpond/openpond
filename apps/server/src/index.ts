@@ -390,6 +390,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     profileCatalogPayload,
     profileWorkflowsPayload,
     profileEvaluationsPayload,
+    profileEvaluationPreparePayload,
+    prepareProfileEvaluationRun,
     profileEvaluationComparePayload,
     profileSelectPayload,
     profileRemovePayload,
@@ -1571,6 +1573,11 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     store, selectedProfile: selectedEvaluationProfile,
     createSession: createSessionWithAutoTitle, sendTurn,
   });
+  const executeProfileEvaluationRun = createProfileEvaluationRunService({
+    store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
+  });
+  const profileEvaluationRunPayload = async (request: unknown) =>
+    executeProfileEvaluationRun(await prepareProfileEvaluationRun(request));
 
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({
@@ -1591,9 +1598,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       listProfileWorkflows: profileWorkflowsPayload,
       listProfileEvaluations: profileEvaluationsPayload,
       executeProfileEvaluationCase,
-      executeProfileEvaluationRun: createProfileEvaluationRunService({
-        store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
-      }),
+      executeProfileEvaluationRun,
       compareProfileEvaluationRuns: createProfileEvaluationComparisonService({
         store, selectedProfile: selectedEvaluationProfile,
       }),
@@ -1717,6 +1722,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       profileCatalogPayload,
       profileWorkflowsPayload,
       profileEvaluationsPayload,
+      profileEvaluationPreparePayload,
+      profileEvaluationRunPayload,
       profileEvaluationComparePayload,
       profileSelectPayload,
       profileRemovePayload,

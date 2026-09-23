@@ -1746,7 +1746,7 @@ export function createServerPayloads(deps: {
     });
   }
 
-  const profilePayloads = createProfilePayloads({ appendRuntimeEvent, store, storeDir });
+  const profilePayloads = createProfilePayloads({ appendRuntimeEvent, store, storeDir, providerSettings: providerSettingsPayload });
 
   return {
     openPondCacheScope,

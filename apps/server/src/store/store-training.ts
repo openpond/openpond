@@ -443,6 +443,14 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     );
   }
 
+  async listTasksetRevisions(profileId: string): Promise<Taskset[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM taskset_revisions WHERE json_extract(payload, '$.profileId') = ? ORDER BY taskset_id, revision DESC",
+      [profileId],
+      parseStoredTaskset,
+    );
+  }
+
   async getTaskset(id: string): Promise<Taskset | null> {
     return this.getParsedPayload("SELECT payload FROM tasksets WHERE id = ?", [id], parseStoredTaskset);
   }
