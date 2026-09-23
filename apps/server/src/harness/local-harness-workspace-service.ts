@@ -25,6 +25,7 @@ import {
 } from "@openpond/harness";
 import { validateTaskSchema } from "@openpond/evals/task-schema";
 import { validateProfileEvaluationCatalog } from "@openpond/evals";
+import { validateTasksetPackage } from "openpond-sdk/taskset-packages";
 import { inspectReleasedProfileActionDependencies } from "./released-profile-action-dependencies.js";
 
 import type { SqliteStore } from "../store/store.js";
@@ -704,7 +705,7 @@ async function writeImportedProfileSource(
     if (!evaluationCatalogStat.isFile() || evaluationCatalogStat.isSymbolicLink()) {
       throw new Error("Profile evaluation catalog must be a regular file.");
     }
-    validateProfileEvaluationCatalog({
+    const { catalog } = validateProfileEvaluationCatalog({
       catalog: JSON.parse(await fs.readFile(evaluationCatalogPath, "utf8")),
       workflowIds,
       skillPaths: new Set(declarations.filter((file) => file.kind === "skill").map((file) => file.path)),
@@ -720,6 +721,38 @@ async function writeImportedProfileSource(
       visibility: "verifier",
       portability: "portable",
     });
+    const packageHashes = new Set(catalog.definitions.map((definition) => definition.tasksetRelease.contentHash));
+    const packageSourceDir = path.join(profileSource, "evals", "tasksets");
+    const packageDirStat = await fs.lstat(packageSourceDir).catch(() => null);
+    if (packageDirStat && (!packageDirStat.isDirectory() || packageDirStat.isSymbolicLink())) {
+      throw new Error("Profile evaluation Taskset directory must be a regular directory.");
+    }
+    for (const packageHash of packageHashes) {
+      const packagePath = path.join(packageSourceDir, `${packageHash}.json`);
+      const packageStat = await fs.lstat(packagePath).catch(() => null);
+      if (!packageStat) continue;
+      if (!packageStat.isFile() || packageStat.isSymbolicLink()) {
+        throw new Error("Profile evaluation Taskset package must be a regular file.");
+      }
+      const packageValue = validateTasksetPackage(JSON.parse(await fs.readFile(packagePath, "utf8")));
+      if (packageValue.taskset.contentHash !== packageHash
+        || !catalog.definitions.some((definition) =>
+          definition.tasksetRelease.contentHash === packageHash
+          && definition.tasksetRelease.id === packageValue.taskset.id)) {
+        throw new Error("Profile evaluation Taskset package differs from its catalog reference.");
+      }
+      const target = `evals/tasksets/${packageHash}.json`;
+      await copyRegularFile(packagePath, path.join(sourceDir, ...target.split("/")));
+      addDeclaration({
+        id: `profile-evaluation-taskset-${packageHash.slice(0, 16)}`,
+        kind: "asset",
+        path: target,
+        parentId: null,
+        mediaType: "application/json",
+        visibility: "verifier",
+        portability: "portable",
+      });
+    }
   }
 
   const dependency = await importedDependencyLock(profile, sourceRevision);
