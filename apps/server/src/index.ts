@@ -391,6 +391,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     profileWorkflowsPayload,
     profileEvaluationsPayload,
     profileEvaluationPreparePayload,
+    prepareProfileEvaluationRun,
     profileEvaluationComparePayload,
     profileSelectPayload,
     profileRemovePayload,
@@ -1576,7 +1577,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
   });
   const profileEvaluationRunPayload = async (request: unknown) =>
-    executeProfileEvaluationRun(await profileEvaluationPreparePayload(request));
+    executeProfileEvaluationRun(await prepareProfileEvaluationRun(request));
 
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({

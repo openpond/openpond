@@ -103,7 +103,7 @@ export function createProfilePayloads(deps: {
     return { ...evaluations, runs, comparisons };
   }
 
-  const profileEvaluationPreparePayload = createProfileEvaluationRunPreparationService({
+  const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
     store: deps.store,
     selectedWorkflows: profileWorkflowsPayload,
     loadTasksetPackage: (definition, profileId) => loadLocalProfileEvaluationTaskset({
@@ -119,6 +119,18 @@ export function createProfilePayloads(deps: {
     },
     placement: "local",
   });
+
+  const profileEvaluationPreparePayload = async (request: unknown) => {
+    const prepared = await prepareProfileEvaluationRun(request);
+    return {
+      manifest: prepared.manifest,
+      taskset: {
+        id: prepared.taskset.id,
+        contentHash: prepared.taskset.contentHash,
+        connectedAppScopes: prepared.taskset.policy.connectedAppScopes,
+      },
+    };
+  };
 
   const profileEvaluationComparePayload = createProfileEvaluationComparisonService({
     store: deps.store,
@@ -840,6 +852,7 @@ export function createProfilePayloads(deps: {
     profileWorkflowsPayload,
     profileEvaluationsPayload,
     profileEvaluationPreparePayload,
+    prepareProfileEvaluationRun,
     profileEvaluationComparePayload,
     profileSelectPayload,
     profileRemovePayload,
