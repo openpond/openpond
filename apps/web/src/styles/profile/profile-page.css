@@ -80,7 +80,7 @@
   display: grid;
   width: 194px;
   padding: 5px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 8px;
   background: var(--panel);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
