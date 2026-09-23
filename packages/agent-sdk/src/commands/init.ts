@@ -20,7 +20,7 @@ export async function initCommand(options: CliOptions) {
     errorOnExist: false,
     force: options.force === true,
   });
-  await rewriteLocalSdkDependency(options.cwd, sdkRoot);
+  await pinPublishedSdkDependency(options.cwd, sdkRoot);
 
   if (options.json) {
     console.log(JSON.stringify({ template: templateName, cwd: options.cwd }, null, 2));
@@ -49,14 +49,18 @@ function packageRoot() {
     : path.resolve(distRoot, "..", "..");
 }
 
-async function rewriteLocalSdkDependency(cwd: string, sdkRoot: string) {
+async function pinPublishedSdkDependency(cwd: string, sdkRoot: string) {
   const packageJsonPath = path.join(cwd, "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
     dependencies?: Record<string, string>;
   };
+  const sdkPackage = JSON.parse(await readFile(path.join(sdkRoot, "package.json"), "utf8")) as { version?: string };
+  if (!sdkPackage.version || !/^\d+\.\d+\.\d+$/.test(sdkPackage.version)) {
+    throw new Error("Agent SDK package lacks a portable release version.");
+  }
   packageJson.dependencies = {
     ...(packageJson.dependencies ?? {}),
-    "openpond-agent-sdk": `file:${sdkRoot}`,
+    "openpond-agent-sdk": sdkPackage.version,
   };
   await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 }
