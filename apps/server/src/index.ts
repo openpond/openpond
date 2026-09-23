@@ -1597,6 +1597,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       resolveApproval,
       listProfileWorkflows: profileWorkflowsPayload,
       listProfileEvaluations: profileEvaluationsPayload,
+      prepareProfileEvaluationRun: profileEvaluationPreparePayload,
+      runPreparedProfileEvaluation: profileEvaluationRunPayload,
       executeProfileEvaluationCase,
       executeProfileEvaluationRun,
       compareProfileEvaluationRuns: createProfileEvaluationComparisonService({

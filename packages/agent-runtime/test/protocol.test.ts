@@ -29,6 +29,8 @@ function host(): AgentRuntimeHost {
     turnInterrupt: vi.fn(async (params) => ({ interrupted: params })),
     approvalResolve: vi.fn(async (params) => ({ approval: params })),
     userInputResolve: vi.fn(async (params) => ({ input: params })),
+    profileEvaluationPrepare: vi.fn(async (params) => ({ manifest: params })),
+    profileEvaluationRun: vi.fn(async (params) => ({ run: params })),
     harnessInspect: vi.fn(async () => ({ release: "r1" })),
     harnessProposalReview: vi.fn(async (params) => ({ proposalReview: params })),
     harnessReview: vi.fn(async (params) => ({ review: params })),
@@ -43,6 +45,23 @@ function host(): AgentRuntimeHost {
 }
 
 describe("agent JSON-RPC protocol", () => {
+  test("routes authoritative Profile evaluation preparation and run requests", async () => {
+    const runtimeHost = host();
+    const dispatcher = new AgentJsonRpcDispatcher(runtimeHost);
+    await dispatcher.handle({
+      jsonrpc: "2.0", id: 1, method: "initialize",
+      params: { protocolVersion: AGENT_PROTOCOL_VERSION, client: { name: "test", version: "1" } },
+    });
+    await dispatcher.handle({ jsonrpc: "2.0", method: "initialized" });
+    const request = { definitionId: "workflow-check", modelRef: { providerId: "openpond", modelId: "test" } };
+    await expect(dispatcher.handle({ jsonrpc: "2.0", id: 2, method: "profile/evaluations/prepare", params: request }))
+      .resolves.toMatchObject({ result: { manifest: request } });
+    await expect(dispatcher.handle({ jsonrpc: "2.0", id: 3, method: "profile/evaluations/run", params: request }))
+      .resolves.toMatchObject({ result: { run: request } });
+    expect(runtimeHost.profileEvaluationPrepare).toHaveBeenCalledWith(request);
+    expect(runtimeHost.profileEvaluationRun).toHaveBeenCalledWith(request);
+  });
+
   test("uses the generated client for initialization and lifecycle calls", async () => {
     const request = vi.fn(async (method: string) => ({ method }));
     const notify = vi.fn(async () => undefined);
