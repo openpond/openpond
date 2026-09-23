@@ -145,4 +145,5 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 62, run: (store) => store.createModelProjectAuthoringTables() },
   { version: 63, run: (store) => store.createModelProjectAuthoringTables() },
   { version: 64, run: (store) => store.createTaskInboxTables() },
+  { version: 65, run: (store) => store.createTrainingTables() },
 ];

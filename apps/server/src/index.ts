@@ -37,6 +37,7 @@ import { runOpenPondServerCliEntrypoint } from "./server-cli-entrypoint.js";
 import { createOpenPondAppServer } from "./app-server-runtime.js";
 import { loadLocalHarnessRuntimeForSession } from "./harness/local-profile-workflow-runtime.js";
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
+import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { createManualCompactionRecorder } from "./runtime/manual-compaction-usage.js";
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
@@ -1560,6 +1561,15 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   });
   onStartupFailure(() => harnessEvaluationReviewScheduler.stop());
 
+  const selectedEvaluationProfile = async () => {
+    const workflows = await profileWorkflowsPayload();
+    return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
+  };
+  const executeProfileEvaluationCase = createProfileEvaluationCaseService({
+    store, selectedProfile: selectedEvaluationProfile,
+    createSession: createSessionWithAutoTitle, sendTurn,
+  });
+
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({
       steerSessionTurn: turnRunner.steerSessionTurn,
@@ -1578,14 +1588,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       resolveApproval,
       listProfileWorkflows: profileWorkflowsPayload,
       listProfileEvaluations: profileEvaluationsPayload,
-      executeProfileEvaluationCase: createProfileEvaluationCaseService({
-        store,
-        selectedProfile: async () => {
-          const workflows = await profileWorkflowsPayload();
-          return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
-        },
-        createSession: createSessionWithAutoTitle,
-        sendTurn,
+      executeProfileEvaluationCase,
+      executeProfileEvaluationRun: createProfileEvaluationRunService({
+        store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
       }),
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
       reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,

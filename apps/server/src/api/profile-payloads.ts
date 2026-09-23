@@ -85,12 +85,17 @@ export function createProfilePayloads(deps: {
 
   async function profileEvaluationsPayload() {
     const workflows = await profileWorkflowsPayload();
-    return profileEvaluationsForRelease({
+    const evaluations = await profileEvaluationsForRelease({
       store: deps.store,
       ref: workflows.profileRef,
       sourceRevision: workflows.sourceRevision,
       harnessRelease: workflows.harnessRelease,
     });
+    const [runs, comparisons] = await Promise.all([
+      deps.store.listProfileEvaluationRuns(workflows.profileRef),
+      deps.store.listProfileEvaluationComparisons(workflows.profileRef),
+    ]);
+    return { ...evaluations, runs, comparisons };
   }
 
   async function profileSelectPayload(payload: unknown) {

@@ -36,6 +36,7 @@ import { ensureExplicitProfileHarnessSource, importLocalHarnessWorkspaceSource }
 import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
+import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
 import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
 import {
   ensureLocalHarnessRunOverlay,
@@ -541,24 +542,47 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       },
       listProfileEvaluations: async () => {
         if (options.profileSource && explicitProfileRelease) {
-          return profileEvaluationsForRelease({
+          const evaluations = await profileEvaluationsForRelease({
             store,
             ref: { source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
             sourceRevision: options.profileSource.sourceRevision,
             harnessRelease: { id: explicitProfileRelease.harnessRelease.id, contentHash: explicitProfileRelease.harnessRelease.contentHash },
           });
+          const [runs, comparisons] = await Promise.all([
+            store.listProfileEvaluationRuns({ source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId }),
+            store.listProfileEvaluationComparisons({ source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId }),
+          ]);
+          return { ...evaluations, runs, comparisons };
         }
         const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
         if (!library.lastUsed) throw new Error("Select a Profile before loading its evaluations.");
         const workflows = await ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
-        return profileEvaluationsForRelease({
+        const evaluations = await profileEvaluationsForRelease({
           store,
           ref: workflows.profileRef,
           sourceRevision: workflows.sourceRevision,
           harnessRelease: workflows.harnessRelease,
         });
+        const [runs, comparisons] = await Promise.all([
+          store.listProfileEvaluationRuns(workflows.profileRef),
+          store.listProfileEvaluationComparisons(workflows.profileRef),
+        ]);
+        return { ...evaluations, runs, comparisons };
       },
       executeProfileEvaluationCase,
+      executeProfileEvaluationRun: createProfileEvaluationRunService({
+        store,
+        selectedProfile: async () => {
+          if (options.profileSource) return {
+            ref: { source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
+            sourceRevision: options.profileSource.sourceRevision,
+          };
+          const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
+          return library.lastUsed && profile.git?.head && !profile.git.dirty
+            ? { ref: library.lastUsed, sourceRevision: profile.git.head } : null;
+        },
+        executeCase: executeProfileEvaluationCase,
+      }),
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),
       reviewHarness: guardService(harnessEvaluationEnabled, "Harness evaluation", (request) => reviewSelectedLocalHarnessEvaluation({
