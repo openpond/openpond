@@ -921,6 +921,13 @@ export async function runProfileCheck(kind: string | undefined): Promise<void> {
     profileSourcePath: active.state.sourcePath!,
     agents: active.state.agents,
   });
+  if (sources.length === 0) {
+    if (checks.some((command) => command !== "inspect" && command !== "build" && command !== "validate" && command !== "eval")) {
+      throw new Error("check kind must be one of inspect, build, validate, eval, all");
+    }
+    await saveProfileCheckStatus("none", 0);
+    return;
+  }
   for (const command of checks) {
     if (
       command !== "inspect" &&
@@ -1220,18 +1227,7 @@ function profileCatalogSources(input: {
   const defaultAgent =
     input.manifest.profiles[input.profile]?.defaultAgent ??
     DEFAULT_PROFILE_AGENT;
-  const agents =
-    input.agents.length > 0
-      ? input.agents
-      : [
-          {
-            id: DEFAULT_PROFILE_AGENT,
-            name: DEFAULT_PROFILE_AGENT,
-            path: "agent/agent.ts",
-            enabled: true,
-          },
-        ];
-  return agents.map((agent) => ({
+  return input.agents.map((agent) => ({
     agentId: agent.id,
     sourcePath:
       agent.id === DEFAULT_PROFILE_AGENT
@@ -1342,14 +1338,16 @@ function summarizeProfileState(input: {
     input.actionCatalog.find((action) => action.id.endsWith(".chat"))?.id ??
     null;
   const checkFresh = Boolean(
-    input.lastCheck &&
-      input.lastCheck.status === "passed" &&
-      input.lastCheck.sourceHead &&
-      input.lastCheck.sourceHead === input.git.head &&
-      !input.git.dirty &&
-      !input.catalog.stale
+    !input.catalog.stale && !input.git.dirty && input.git.head && (
+      input.agents.length === 0 || (
+        input.lastCheck?.status === "passed"
+        && input.lastCheck.sourceHead === input.git.head
+      )
+    )
   );
-  const checkStaleReason = profileCheckStaleReason({
+  const checkStaleReason = input.agents.length === 0 && !input.catalog.stale && !input.git.dirty
+    ? null
+    : profileCheckStaleReason({
     catalog: input.catalog,
     git: input.git,
     lastCheck: input.lastCheck,
