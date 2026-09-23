@@ -40,6 +40,8 @@ export function createAgentRuntimePorts(deps: {
   resolveApproval(approvalId: string, payload: unknown): Promise<Approval>;
   listProfileWorkflows(): Promise<unknown>;
   listProfileEvaluations(): Promise<unknown>;
+  prepareProfileEvaluationRun(params: unknown): Promise<unknown>;
+  runPreparedProfileEvaluation(params: unknown): Promise<unknown>;
   executeProfileEvaluationCase(params: unknown): Promise<unknown>;
   executeProfileEvaluationRun(params: unknown): Promise<unknown>;
   compareProfileEvaluationRuns(params: unknown): Promise<unknown>;
@@ -127,6 +129,8 @@ export function createAgentRuntimePorts(deps: {
     resolveApproval: deps.resolveApproval,
     listProfileWorkflows: deps.listProfileWorkflows,
     listProfileEvaluations: deps.listProfileEvaluations,
+    prepareProfileEvaluationRun: deps.prepareProfileEvaluationRun,
+    runPreparedProfileEvaluation: deps.runPreparedProfileEvaluation,
     executeProfileEvaluationCase: deps.executeProfileEvaluationCase,
     executeProfileEvaluationRun: deps.executeProfileEvaluationRun,
     compareProfileEvaluationRuns: deps.compareProfileEvaluationRuns,

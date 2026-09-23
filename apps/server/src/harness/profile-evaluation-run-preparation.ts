@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ChatModelRefSchema, ModelRefSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash, type ChatModelRef } from "@openpond/harness";
+import { ChatModelRefSchema, ModelRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash, type ChatModelRef } from "@openpond/harness";
 import { type OpenPondProfileRef } from "@openpond/contracts";
 import {
   assertProfileEvaluationRunAdmission,
@@ -20,6 +20,9 @@ const PrepareRequestSchema = z.object({
   createdAt: ReleaseTimestampSchema,
   definitionId: ReleaseIdSchema,
   modelRef: ChatModelRefSchema,
+  /** Trusted embedding host's resolved model configuration receipt. Desktop
+   * computes this itself and ignores the caller's value. */
+  hostModelConfigurationHash: ReleaseHashSchema.optional(),
 }).strict();
 
 type SelectedWorkflows = {
@@ -42,7 +45,7 @@ export function createProfileEvaluationRunPreparationService(input: {
   store: SqliteStore;
   selectedWorkflows: () => Promise<SelectedWorkflows>;
   loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
-  modelConfigurationHash: (modelRef: ChatModelRef) => Promise<string>;
+  modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
   placement: "local" | "remote" | "colocated";
 }) {
   return async (request: unknown) => {
@@ -98,7 +101,7 @@ export function createProfileEvaluationRunPreparationService(input: {
       model: parsed.modelRef.modelId,
       revision: null, artifactHash: null, tokenizerRevision: null, chatTemplateHash: null,
     });
-    const modelConfigurationHash = await input.modelConfigurationHash(parsed.modelRef);
+    const modelConfigurationHash = await input.modelConfigurationHash(parsed.modelRef, parsed);
     const manifest = createTasksetRunManifest({
       schemaVersion: "openpond.tasksetRunManifest.v1",
       id: parsed.id,

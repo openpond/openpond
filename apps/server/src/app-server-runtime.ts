@@ -38,6 +38,8 @@ import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
 import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
+import { createProfileEvaluationRunPreparationService } from "./harness/profile-evaluation-run-preparation.js";
+import { loadLocalProfileEvaluationTaskset } from "./harness/local-profile-evaluation-taskset.js";
 import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
 import {
   ensureLocalHarnessRunOverlay,
@@ -500,6 +502,36 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     createSession: createSessionWithAutoTitle,
     sendTurn: turnRunner.sendTurn,
   });
+  const listProfileWorkflows = async () => {
+    if (options.profileSource && explicitProfileRelease) {
+      return profileWorkflowsForRelease({
+        store,
+        release: explicitProfileRelease,
+        ref: { source: "openpond_git" as const, repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
+        sourceRevision: options.profileSource.sourceRevision,
+      });
+    }
+    const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
+    if (!library.lastUsed) throw new Error("Select a Profile before loading its workflows.");
+    return ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
+  };
+  const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
+    store,
+    selectedWorkflows: listProfileWorkflows,
+    loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({
+      store, storeDir, definition, profileId, harnessRelease,
+    }),
+    modelConfigurationHash: async (modelRef, request) => {
+      if (!options.profileSource || modelRef.providerId !== "openpond" || !request.hostModelConfigurationHash) {
+        throw new Error("Hosted Profile evaluation requires an explicit source and trusted OpenPond model configuration receipt.");
+      }
+      return request.hostModelConfigurationHash;
+    },
+    placement: "remote",
+  });
+  const executeProfileEvaluationRun = createProfileEvaluationRunService({
+    store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
+  });
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",
@@ -529,19 +561,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
       interruptSessionTurn: turnRunner.interruptSessionTurn,
       resolveApproval,
-      listProfileWorkflows: async () => {
-        if (options.profileSource && explicitProfileRelease) {
-          return profileWorkflowsForRelease({
-            store,
-            release: explicitProfileRelease,
-            ref: { source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
-            sourceRevision: options.profileSource.sourceRevision,
-          });
-        }
-        const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
-        if (!library.lastUsed) throw new Error("Select a Profile before loading its workflows.");
-        return ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
-      },
+      listProfileWorkflows,
       listProfileEvaluations: async () => {
         if (options.profileSource && explicitProfileRelease) {
           const evaluations = await profileEvaluationsForRelease({
@@ -572,11 +592,15 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
         return { ...evaluations, runs, comparisons };
       },
       executeProfileEvaluationCase,
-      executeProfileEvaluationRun: createProfileEvaluationRunService({
-        store,
-        selectedProfile: selectedEvaluationProfile,
-        executeCase: executeProfileEvaluationCase,
-      }),
+      executeProfileEvaluationRun,
+      prepareProfileEvaluationRun: async (request) => {
+        const prepared = await prepareProfileEvaluationRun(request);
+        return { manifest: prepared.manifest, taskset: {
+          id: prepared.taskset.id, contentHash: prepared.taskset.contentHash,
+          connectedAppScopes: prepared.taskset.policy.connectedAppScopes,
+        } };
+      },
+      runPreparedProfileEvaluation: async (request) => executeProfileEvaluationRun(await prepareProfileEvaluationRun(request)),
       compareProfileEvaluationRuns: createProfileEvaluationComparisonService({ store, selectedProfile: selectedEvaluationProfile }),
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),
