@@ -51,7 +51,7 @@ type ExistingTarget = {
 };
 
 type PublicationRequiredSelection = {
-  kind: "Agent" | "Skill";
+  kind: "Agent" | "Skill" | "Workflow";
   label: string;
   prefix: string;
 };
@@ -122,8 +122,9 @@ async function buildPublicationPlan(
   const blockedReasons: string[] = [];
   if (status.code !== 0) blockedReasons.push("Profile source is not a readable Git repository.");
   if (status.stdout.trim()) blockedReasons.push("Commit or discard every change in the Profile repository before publishing.");
-  if (request.selection.agentIds.length === 0 && request.selection.skillNames.length === 0) {
-    blockedReasons.push("Select at least one Agent or Skill to publish.");
+  const includesWorkflows = request.selection.optionalContent.includes("workflows");
+  if (request.selection.agentIds.length === 0 && request.selection.skillNames.length === 0 && !includesWorkflows) {
+    blockedReasons.push("Select at least one Agent, Skill, or Workflow to publish.");
   }
 
   const trackedResult = await runCommand("git", ["ls-files", "-z"], repoPath);
@@ -168,6 +169,13 @@ async function buildPublicationPlan(
   }
   for (const optional of request.selection.optionalContent) {
     prefixes.set(`${profilePublicationRelativePath(profileRoot, optional)}/`, optional);
+  }
+  if (includesWorkflows) {
+    requiredSelections.push({
+      kind: "Workflow",
+      label: "source",
+      prefix: `${profilePublicationRelativePath(profileRoot, "workflows")}/`,
+    });
   }
 
   const excludedFiles: string[] = [];
