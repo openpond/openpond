@@ -36,9 +36,6 @@ import {
 
 const HARNESS_SOURCE_MANIFEST = "harness.json";
 const MAX_SOURCE_FILE_BYTES = 250_000_000;
-// Keep pre-0.2.21 workspaces addressable while source-path-independent imports
-// create a new immutable release for the same committed Profile revision.
-export const PROFILE_HARNESS_WORKSPACE_PREFIX = "profile-v2-";
 
 export type CompiledLocalHarnessSource = {
   manifest: HarnessSourceManifest;
