@@ -70,3 +70,19 @@ test("Profile suite rejects missing checks and mixed source releases", () => {
   expect(() => createProfileEvaluationSuiteRun({ ...input, members: [first] })).toThrow("incomplete run population");
   expect(() => createProfileEvaluationSuiteRun({ ...input, members: [first, second] })).toThrow("different Profile releases");
 });
+
+test("Profile suite rejects mixed model configurations", () => {
+  const first = member("profile-check");
+  const second = member("skill-check");
+  if (second.manifest.policy.kind !== "model") throw new Error("Expected model policy.");
+  const { contentHash: _hash, ...manifestContent } = second.manifest;
+  const manifest = createTasksetRunManifest({
+    ...manifestContent,
+    policy: { ...second.manifest.policy, configurationHash: contentHash("different-model-config") },
+  });
+  expect(() => createProfileEvaluationSuiteRun({
+    id: "suite-run-3", suiteId: "whole-profile", catalog,
+    members: [first, { ...second, manifest }],
+    createdAt: "2026-09-23T00:00:00.000Z", completedAt: "2026-09-23T01:00:00.000Z",
+  })).toThrow("different model configurations");
+});

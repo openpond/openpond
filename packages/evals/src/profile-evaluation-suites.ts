@@ -76,12 +76,18 @@ export function createProfileEvaluationSuiteRun(input: {
     return { ...member, manifest, source };
   });
   const first = parsed[0]!.source;
+  const firstPolicy = parsed[0]!.manifest.policy;
+  if (firstPolicy.kind !== "model") throw new Error("Profile evaluation suite requires model runs.");
   for (const member of parsed) {
     if (member.source.profileId !== first.profileId
       || member.source.sourceRevision !== first.sourceRevision
       || member.source.harnessRelease.id !== first.harnessRelease.id
       || member.source.harnessRelease.contentHash !== first.harnessRelease.contentHash) {
       throw new Error("Profile evaluation suite members use different Profile releases.");
+    }
+    const policy = member.manifest.policy;
+    if (policy.kind !== "model" || contentHash(policy) !== contentHash(firstPolicy)) {
+      throw new Error("Profile evaluation suite members use different model configurations.");
     }
   }
   const content = ProfileEvaluationSuiteRunContentSchema.parse({
