@@ -22,6 +22,7 @@ import {
 import { loadLocalHarnessRuntimeForAgentRun } from "./local-harness-run-overlay.js";
 import { DESKTOP_PERSONAL_HARNESS_OWNER_ID } from "./local-harness-selection.js";
 import { ensureExplicitProfileHarnessSource } from "./local-harness-workspace-service.js";
+import { PROFILE_HARNESS_WORKSPACE_PREFIX } from "./profile-harness-workspace-identity.js";
 
 type ProfileWorkflowsResult = Awaited<ReturnType<typeof loadProfileWorkflows>>;
 const profileLoads = new WeakMap<SqliteStore, Map<string, Promise<ProfileWorkflowsResult>>>();
@@ -38,7 +39,7 @@ export async function ensureLocalProfileWorkflows(input: {
       profile.activeProfile !== ref.profileId || !profile.git?.head || profile.git.dirty) {
     throw new Error("Select a clean, committed Profile before loading its workflows.");
   }
-  const workspaceId = `profile-${contentHash({ ref, sourceRevision: profile.git.head }).slice(0, 24)}`;
+  const workspaceId = `${PROFILE_HARNESS_WORKSPACE_PREFIX}${contentHash({ ref, sourceRevision: profile.git.head }).slice(0, 24)}`;
   let pending = profileLoads.get(input.store);
   if (!pending) {
     pending = new Map();
