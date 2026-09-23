@@ -92,6 +92,10 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       && input.binding.target.kind === "agent_action"
       ? events.find((event) => event.name === "workspace_action_result" && event.action === "profile_workflow_action")?.output
       : null;
+    if (input.binding.schemaVersion === "openpond.profileComponentBinding.v1"
+      && input.binding.target.kind === "agent_action" && typeof actionOutput !== "string") {
+      throw new Error("Profile Agent action evaluation did not produce a released action result.");
+    }
     const output = typeof actionOutput === "string" ? actionOutput : assistantOutput;
     return {
       evidence: {

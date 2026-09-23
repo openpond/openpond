@@ -156,6 +156,35 @@ test("Agent action case grades the released action result", async () => {
   expect(result.evidence.runtimeEventRefs).toEqual(["action-result", "assistant-output"]);
 });
 
+test("Agent action case rejects an assistant summary without an action result", async () => {
+  const target = { kind: "agent_action" as const, actionId: "calculate" };
+  const componentBinding = {
+    schemaVersion: "openpond.profileComponentBinding.v1" as const,
+    profileId: profileRef.profileId, sourceRevision: binding.sourceRevision,
+    harnessRelease, target,
+  };
+  const componentSource = { ...source, target };
+  const componentManifest = createTasksetRunManifest({
+    ...manifestContent, id: "missing-action-result", profileEvaluation: componentSource,
+  });
+  const execute = createProfileWorkflowEvaluationExecutor({
+    manifest: componentManifest, profileRef, binding: componentBinding,
+    modelRef, modelConfigurationHash,
+    createSession: async () => ({ id: "action-session" }) as Session,
+    sendTurn: async () => ({
+      id: "action-turn", status: "completed", startedAt: manifest.createdAt,
+      completedAt: manifest.createdAt, modelRef, harnessSnapshot: { harnessRelease },
+    }) as Turn,
+    runtimeEventsForTurn: async () => ([{
+      id: "assistant-output", name: "assistant.delta", timestamp: manifest.createdAt, output: "I ran the action.",
+    }] as RuntimeEvent[]),
+  });
+  await expect(execute({
+    task: { id: task.id, input: { value: 6 }, policyVisibleContext: {}, artifactRefs: [], tags: [] },
+    seed: "1", source: componentSource,
+  })).rejects.toThrow("did not produce a released action result");
+});
+
 test("whole-Profile case uses the bound release without a workflow input", async () => {
   const target = { kind: "profile" as const };
   const componentBinding = {
