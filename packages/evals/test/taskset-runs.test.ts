@@ -62,4 +62,20 @@ test("complete Taskset runs pin fixture identity, population and evaluation-role
   await expect(aggregateTasksetRunReceipts({ manifest: changedPolicy, taskset, receipts })).rejects.toThrow("metric differs");
   const changedExecution = createTasksetRunManifest({ ...runContent, execution: { kind: "taskset", environmentRelease: taskset.environmentRelease!, verifierSetRelease: taskset.verifierSetRelease!, policyHash: contentHash("different-policy") } });
   await expect(aggregateTasksetRunReceipts({ manifest: changedExecution, taskset, receipts })).rejects.toThrow("execution differs");
+  const profileSource = {
+    profileId: "personal", sourceRevision: "abc123",
+    harnessRelease: { id: "profile-harness", contentHash: contentHash("profile-harness") },
+    catalogHash: contentHash("catalog"), definitionId: "report-check",
+    definitionHash: contentHash("definition"), target: { kind: "workflow" as const, workflowId: "report" },
+    environmentHash: contentHash("environment"),
+  };
+  const profileRun = createTasksetRunManifest({
+    ...runContent, execution: { kind: "harness", harnessRelease: profileSource.harnessRelease },
+    profileEvaluation: profileSource,
+  });
+  expect(profileRun.profileEvaluation?.sourceRevision).toBe("abc123");
+  expect(() => createTasksetRunManifest({
+    ...runContent, execution: { kind: "harness", harnessRelease: { id: "other", contentHash: contentHash("other") } },
+    profileEvaluation: profileSource,
+  })).toThrow("exact bound Harness release");
 });

@@ -34,6 +34,7 @@ import {
 import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-runtime.js";
 import { ensureExplicitProfileHarnessSource, importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
 import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
+import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
 import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
 import {
   ensureLocalHarnessRunOverlay,
@@ -522,6 +523,25 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
         const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
         if (!library.lastUsed) throw new Error("Select a Profile before loading its workflows.");
         return ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
+      },
+      listProfileEvaluations: async () => {
+        if (options.profileSource && explicitProfileRelease) {
+          return profileEvaluationsForRelease({
+            store,
+            ref: { source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
+            sourceRevision: options.profileSource.sourceRevision,
+            harnessRelease: { id: explicitProfileRelease.harnessRelease.id, contentHash: explicitProfileRelease.harnessRelease.contentHash },
+          });
+        }
+        const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
+        if (!library.lastUsed) throw new Error("Select a Profile before loading its evaluations.");
+        const workflows = await ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
+        return profileEvaluationsForRelease({
+          store,
+          ref: workflows.profileRef,
+          sourceRevision: workflows.sourceRevision,
+          harnessRelease: workflows.harnessRelease,
+        });
       },
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),

@@ -14,6 +14,7 @@ export async function handleCoreRoutes({
     profileCurrentPayload,
     profileCatalogPayload,
     profileWorkflowsPayload,
+    profileEvaluationsPayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,
@@ -91,6 +92,10 @@ export async function handleCoreRoutes({
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/profile/workflows") {
     sendJson(response, 200, await profileWorkflowsPayload());
+    return true;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/profile/evaluations") {
+    sendJson(response, 200, await profileEvaluationsPayload());
     return true;
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/profile/init") {

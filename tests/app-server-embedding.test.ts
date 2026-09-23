@@ -382,6 +382,7 @@ test("explicit Profile source loads without replacing personal selection and rej
   const repoPath = path.join(root, "repo");
   const sourcePath = path.join(repoPath, "profiles", "team");
   await mkdir(path.join(sourcePath, "workflows"), { recursive: true });
+  await mkdir(path.join(sourcePath, "evals"), { recursive: true });
   await mkdir(path.join(sourcePath, "settings"), { recursive: true });
   await writeFile(path.join(repoPath, "openpond-profile.json"), JSON.stringify({
     schema: "openpond.profileRepo.v1", defaultProfile: "team",
@@ -395,6 +396,13 @@ test("explicit Profile source loads without replacing personal selection and rej
     invocation: { kind: "instructions", instructions: "Report the status of the subject." }, skillPaths: [],
   }] };
   await writeFile(catalogPath, JSON.stringify(catalog));
+  const evaluationCatalog = { schemaVersion: "openpond.profileEvaluations.v1",
+    definitions: [{ id: "profile-status", label: "Profile status", description: "",
+      target: { kind: "profile" }, tasksetRelease: { id: "status-cases", contentHash: "a".repeat(64) },
+      split: "frozen_eval", taskIds: ["status-case"], seeds: ["1"],
+      criterion: { minimumPassRate: 1, requireComplete: true } }],
+    suites: [{ id: "profile-suite", label: "Profile suite", scope: "profile", definitionIds: ["profile-status"] }] };
+  await writeFile(path.join(sourcePath, "evals", "catalog.json"), JSON.stringify(evaluationCatalog));
   const storeDir = path.join(root, "home");
   const options: OpenPondAppServerOptions = {
     storeDir, workspaceDir: path.join(root, "work"),
@@ -419,6 +427,11 @@ test("explicit Profile source loads without replacing personal selection and rej
       workflows: Array<{ binding: Record<string, unknown> }>;
     };
     expect(discovered.profileRef).toEqual({ source: "openpond_git", repositoryId: "team-repo", profileId: "team" });
+    const evaluations = await server.runtime.profileEvaluations({}) as {
+      sourceRevision: string; catalogHash: string; definitions: Array<{ id: string }>;
+    };
+    expect(evaluations).toMatchObject({ sourceRevision: "accepted-r1", catalogHash: contentHash(evaluationCatalog) });
+    expect(evaluations.definitions.map((entry) => entry.id)).toEqual(["profile-status"]);
     const binding = discovered.workflows[0]!.binding;
     expect(binding).toMatchObject({
       schemaVersion: "openpond.profileWorkflowBinding.v1", profileId: "team", sourceRevision: "accepted-r1",

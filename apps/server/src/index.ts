@@ -386,6 +386,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     profileCurrentPayload,
     profileCatalogPayload,
     profileWorkflowsPayload,
+    profileEvaluationsPayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,
@@ -1575,6 +1576,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       interruptSessionTurn,
       resolveApproval,
       listProfileWorkflows: profileWorkflowsPayload,
+      listProfileEvaluations: profileEvaluationsPayload,
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
       reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({
@@ -1694,6 +1696,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       profileCurrentPayload,
       profileCatalogPayload,
       profileWorkflowsPayload,
+      profileEvaluationsPayload,
       profileSelectPayload,
       profileRemovePayload,
       profilePublicationPreviewPayload,

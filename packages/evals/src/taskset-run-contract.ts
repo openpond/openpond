@@ -2,6 +2,7 @@ import { z } from "zod";
 import { assertContentHash, contentHash, ImmutableReleaseRefSchema, MetadataSchema, ModelRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
 import { RunLimitsSchema, RuntimeTargetBindingSchema, verifyAttemptReceipt, type AttemptReceipt } from "./runs.js";
 import { TasksetMetricPolicySchema, type TasksetMetricPolicy } from "./metric-policy.js";
+import { ProfileEvaluationRunSourceSchema } from "./profile-evaluations.js";
 import { assertTasksetRelease, type TasksetRelease } from "./tasksets.js";
 
 /** A fixture check owns no model identity and cannot become a model evaluation. */
@@ -26,6 +27,7 @@ export const TasksetRunManifestContentSchema = z.object({
   tasksetRelease: ImmutableReleaseRefSchema,
   packageHash: ReleaseHashSchema,
   execution: TasksetRunExecutionSchema,
+  profileEvaluation: ProfileEvaluationRunSourceSchema.optional(),
   policy: TasksetRunPolicySchema,
   gradingRole: z.literal("evaluation"),
   metricPolicy: TasksetMetricPolicySchema,
@@ -37,6 +39,11 @@ export const TasksetRunManifestContentSchema = z.object({
 }).strict().superRefine((value, context) => {
   if (new Set(value.population.map(member => member.receiptId)).size !== value.population.length) context.addIssue({ code: "custom", path: ["population"], message: "Run receipt identities must be unique." });
   if (value.population.some(member => (member.fixtureId !== null) !== (value.policy.kind === "fixture"))) context.addIssue({ code: "custom", path: ["population"], message: "Only fixture runs require a fixture identity for every member." });
+  if (value.profileEvaluation && (value.execution.kind !== "harness"
+    || value.execution.harnessRelease.id !== value.profileEvaluation.harnessRelease.id
+    || value.execution.harnessRelease.contentHash !== value.profileEvaluation.harnessRelease.contentHash)) {
+    context.addIssue({ code: "custom", path: ["profileEvaluation"], message: "Profile evaluation must execute its exact bound Harness release." });
+  }
 });
 export const TasksetRunManifestSchema = TasksetRunManifestContentSchema.safeExtend({ contentHash: ReleaseHashSchema });
 export type TasksetRunManifest = z.infer<typeof TasksetRunManifestSchema>;
