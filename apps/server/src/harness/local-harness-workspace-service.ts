@@ -24,6 +24,7 @@ import {
   type ImmutableAssetRef,
 } from "@openpond/harness";
 import { validateTaskSchema } from "@openpond/evals/task-schema";
+import { inspectReleasedProfileActionDependencies } from "./released-profile-action-dependencies.js";
 
 import type { SqliteStore } from "../store/store.js";
 import {
@@ -638,6 +639,7 @@ async function writeImportedProfileSource(
         portability: "portable",
       });
     }
+    await inspectReleasedProfileActionDependencies(path.join(sourceDir, "agents", safeSegment(agent.id)));
   }
 
   const workflowCatalogPath = path.join(profileSource, "workflows", "catalog.json");
@@ -918,6 +920,7 @@ async function listRegularFiles(root: string, directory = root): Promise<string[
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
+    if (["node_modules", ".git", ".openpond"].includes(entry.name) || entry.name.startsWith(".env")) continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isSymbolicLink()) throw new Error(`Harness source cannot contain symlinks: ${path.relative(root, absolute)}`);
     if (entry.isDirectory()) files.push(...(await listRegularFiles(root, absolute)));
