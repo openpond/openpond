@@ -49,6 +49,10 @@ export function createSessionStore(deps: {
         : loadLastUsedProfile
         ? await loadLastUsedProfile()
         : null;
+    if (input.profileWorkflowBinding &&
+        input.currentProfile?.profileId !== input.profileWorkflowBinding.profileId) {
+      throw new Error("Profile workflow session requires its selected Profile reference.");
+    }
     const managedLocalWork =
       input.experience === "work" &&
       !workspaceKind &&
@@ -89,6 +93,7 @@ export function createSessionStore(deps: {
       cloudProjectId: input.cloudProjectId ?? null,
       cloudTeamId: input.cloudTeamId ?? null,
       currentProfile,
+      profileWorkflowBinding: input.profileWorkflowBinding ?? null,
       ...(input.metadata ? { metadata: input.metadata } : {}),
       cwd,
       codexThreadId: null,

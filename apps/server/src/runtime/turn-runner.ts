@@ -19,6 +19,8 @@ import {
   type Turn,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
+import { prepareProfileWorkflowTurn } from "../harness/profile-workflow-turn.js";
+import { executeReleasedProfileWorkflowAction } from "../harness/released-profile-workflow-action.js";
 import {
   AGENT_PROTOCOL_VERSION,
   AgentCheckpointSchema,
@@ -927,7 +929,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         currentProfile: selectedProfileRef,
       });
     }
-    const selectedProfile = loadOpenPondProfileStateForRef
+    const selectedProfile = session.profileWorkflowBinding ? null : loadOpenPondProfileStateForRef
       ? await loadOpenPondProfileStateForRef(selectedProfileRef)
       : loadOpenPondProfileState
       ? await loadOpenPondProfileState()
@@ -938,6 +940,20 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     const selectedHarness = loadSelectedHarnessRuntime
       ? await loadSelectedHarnessRuntime(session)
       : null;
+    let profileWorkflowInputHash: string | null = null;
+    if (session.profileWorkflowBinding) {
+      const workflow = selectedHarness?.workflow;
+      if (!workflow) throw new Error("Bound Profile workflow is unavailable for this turn.");
+      const prepared = prepareProfileWorkflowTurn({ workflow, value: input.workflowInput, prompt: input.prompt });
+      selectedHarness.instructionContext = [
+        selectedHarness.instructionContext,
+        prepared.instruction,
+      ].join("\n\n");
+      input.prompt = prepared.prompt;
+      profileWorkflowInputHash = prepared.inputHash;
+    } else if (input.workflowInput !== undefined) {
+      throw new Error("Workflow input requires a bound Profile workflow session.");
+    }
     const admittedHarnessOverlay =
       selectedHarness && ensureHarnessRunOverlay
         ? await ensureHarnessRunOverlay({
@@ -1007,6 +1023,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
     const createImproveMetadata = {
       ...(input.metadata ? input.metadata : {}),
+      ...(session.profileWorkflowBinding ? {
+        profileWorkflowBinding: session.profileWorkflowBinding,
+        profileWorkflowInputHash,
+      } : {}),
       taskExecutionPermissions: { ...turnPermissions },
       ...(subagentDelegation ? { subagentDelegation } : {}),
       ...(effectiveUsageAttribution
@@ -1035,7 +1055,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       metadata: createImproveMetadata,
       createImproveRun: activeCreateImproveRun ?? null,
       profileSnapshot:
-        selectedProfileRef &&
+        session.profileWorkflowBinding && selectedProfileRef
+          ? {
+              ref: selectedProfileRef,
+              revision: session.profileWorkflowBinding.sourceRevision,
+              sourceHash: session.profileWorkflowBinding.harnessRelease.contentHash,
+            }
+          : selectedProfileRef &&
         selectedProfile &&
         selectedProfile.mode !== "none" &&
         !selectedProfile.error
@@ -1151,7 +1177,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             ]
           : undefined;
       const attachmentContext = chatAttachmentContext(attachmentContexts);
-      const providerPrompt = formatPromptWithAttachmentContext(
+      let providerPrompt = formatPromptWithAttachmentContext(
         promptWithSteeringContext(
           promptWithUserQuestionResolution(input.prompt, userQuestionResolution),
           input.metadata,
@@ -1185,6 +1211,30 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           status: "started",
         })
       );
+      if (selectedHarness?.workflowAction) {
+        const bundlePath = selectedHarness.release.bundlePath;
+        if (!bundlePath) throw new Error("Bound Profile action lacks its released source bundle.");
+        const result = await executeReleasedProfileWorkflowAction({
+          action: selectedHarness.workflowAction,
+          releaseBundlePath: bundlePath,
+          value: input.workflowInput,
+        });
+        await appendRuntimeEvent(event({
+          sessionId,
+          turnId: turn.id,
+          name: "workspace_action_result",
+          source: "chat_action",
+          action: "profile_workflow_action",
+          appId: session.appId,
+          status: "completed",
+          output: result.output,
+          data: {
+            actionId: selectedHarness.workflowAction.id,
+            profileWorkflowBinding: session.profileWorkflowBinding,
+          },
+        }));
+        providerPrompt += `\n\nReleased Profile workflow action result:\n${result.output}`;
+      }
       if (userQuestionResolution) {
         await appendRuntimeEvent(
           event({

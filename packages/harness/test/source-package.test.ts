@@ -6,6 +6,8 @@ import {
   createHarnessRelease,
   createHarnessSourcePackage,
   harnessSourcePackageFiles,
+  loadReleasedProfileWorkflowCatalog,
+  resolveReleasedProfileWorkflow,
   resolveHarnessSourceSelection,
   sha256,
   validateHarnessSourcePackage,
@@ -23,6 +25,18 @@ describe("released Harness source transport", () => {
       ["skills/report/SKILL.md", new TextEncoder().encode("Read reference.txt before writing the report.")],
       ["skills/report/reference.txt", new TextEncoder().encode("Released report terminology.")],
       ["private/check.bin", new Uint8Array([0, 255, 128, 1])],
+      ["workflows/catalog.json", new TextEncoder().encode(JSON.stringify({
+        schemaVersion: "openpond.profileWorkflows.v1",
+        workflows: [{
+          id: "report", label: "Report", description: "Write a report.",
+          inputSchema: { type: "object" },
+          invocation: { kind: "instructions", instructions: "Write the report." },
+          skillPaths: ["skills/report/SKILL.md"],
+        }],
+      }))],
+      ["workflows/actions.json", new TextEncoder().encode(JSON.stringify({
+        schemaVersion: "openpond.profileWorkflowActions.v1", actions: [],
+      }))],
     ]);
     const assets: ImmutableAssetRef[] = [...files].map(([path, bytes], index) => ({
       id: `source-${index}`, path, contentHash: sha256(bytes), sizeBytes: bytes.byteLength,
@@ -39,13 +53,24 @@ describe("released Harness source transport", () => {
       agentSnapshot: { id: agentSnapshot.id, contentHash: agentSnapshot.contentHash }, program: assets[0]!, tools: [],
       lifecycle: { create: true, reset: true, step: true, collect: true, destroy: true, resetScope: "attempt" },
       graderInterface: { visibleEvidence: ["output"], privilegedEvidence: ["private_verifier"], privateVerifierIsolation: true },
-      files: assets, metadata: { runtimeProtocol: "openpond.agent-runtime.v1" },
+      files: assets, metadata: { runtimeProtocol: "openpond.agent-runtime.v1", profile: { id: "team", sourceRevision: "commit-1" } },
     });
     const captured = createHarnessSourcePackage({ agentSnapshot, harnessRelease, files });
     const expectedRelease = { id: harnessRelease.id, contentHash: harnessRelease.contentHash };
     const selection = { schemaVersion: "openpond.harnessSourceSelection.v1", mode: "selected_release",
       harnessRelease: expectedRelease, sourcePackageHash: captured.contentHash };
     expect(resolveHarnessSourceSelection({ selection, sourcePackage: captured, expectedRelease }).sourcePackage).toEqual(captured);
+    const releasedCatalog = loadReleasedProfileWorkflowCatalog(captured);
+    const workflowBinding = {
+      schemaVersion: "openpond.profileWorkflowBinding.v1",
+      profileId: "team", sourceRevision: "commit-1",
+      harnessRelease: expectedRelease,
+      catalogHash: releasedCatalog.catalogHash, workflowId: "report",
+    };
+    expect(resolveReleasedProfileWorkflow({ binding: workflowBinding, sourcePackage: captured }).id).toBe("report");
+    expect(() => resolveReleasedProfileWorkflow({
+      binding: { ...workflowBinding, sourceRevision: "different" }, sourcePackage: captured,
+    })).toThrow(/provenance/);
     expect(() => resolveHarnessSourceSelection({ selection, expectedRelease })).toThrow();
     expect(() => resolveHarnessSourceSelection({ selection: { ...selection, mode: "taskset_owned", sourcePackageHash: null }, sourcePackage: captured, expectedRelease }))
       .toThrow("cannot include a selected Harness");

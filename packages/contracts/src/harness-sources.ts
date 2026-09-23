@@ -27,6 +27,7 @@ export const HarnessSourceFileKindSchema = z.enum([
   "skill",
   "skill_resource",
   "agent",
+  "workflow",
   "dependency_lock",
   "program",
   "asset",

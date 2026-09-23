@@ -35,6 +35,7 @@ import {
 } from "./constants.js";
 import { runOpenPondServerCliEntrypoint } from "./server-cli-entrypoint.js";
 import { createOpenPondAppServer } from "./app-server-runtime.js";
+import { loadLocalHarnessRuntimeForSession } from "./harness/local-profile-workflow-runtime.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { createManualCompactionRecorder } from "./runtime/manual-compaction-usage.js";
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
@@ -56,7 +57,6 @@ import {
 } from "./harness/local-harness-selection.js";
 import {
   ensureLocalHarnessRunOverlay,
-  loadLocalHarnessRuntimeForAgentRun,
 } from "./harness/local-harness-run-overlay.js";
 import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
 import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
@@ -385,6 +385,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     updateOpenPondAccountConfigPayload,
     profileCurrentPayload,
     profileCatalogPayload,
+    profileWorkflowsPayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,
@@ -832,7 +833,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     attachmentRootDir,
     store,
     loadSelectedHarnessRuntime: (session) =>
-      loadLocalHarnessRuntimeForAgentRun(store, session.id),
+      loadLocalHarnessRuntimeForSession(store, session),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
     harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }),
@@ -1691,6 +1692,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       updateOpenPondAccountConfigPayload,
       profileCurrentPayload,
       profileCatalogPayload,
+      profileWorkflowsPayload,
       profileSelectPayload,
       profileRemovePayload,
       profilePublicationPreviewPayload,

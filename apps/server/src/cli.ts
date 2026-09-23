@@ -10,7 +10,8 @@ import type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 import { parseListen } from "./utils.js";
 
 type CreateServer = (options: OpenPondServerOptions) => Promise<OpenPondServerInstance>;
-type CreateAgentServer = (options: { storeDir?: string }) => Promise<AppServerInstance>;
+type ProfileSourceCliOptions = { repoPath: string; profileId: string; sourceRevision: string };
+type CreateAgentServer = (options: { storeDir?: string; profileSource?: ProfileSourceCliOptions }) => Promise<AppServerInstance>;
 type ServerCliFactories = {
   createOpenPondServer: CreateServer;
   createOpenPondAppServer: CreateAgentServer;
@@ -25,6 +26,7 @@ type ParsedCliArgs = {
   printAccessUrl: boolean;
   storeDir: string | null;
   sourceBrowserState?: string;
+  profileSource?: ProfileSourceCliOptions;
   help: boolean;
 };
 type BrowserHandoff = typeof openUrlWithSystemBrowser;
@@ -57,6 +59,9 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let printAccessUrl = false;
   let storeDir: string | null = null;
   let sourceBrowserState: string | undefined;
+  let profileSourceRoot: string | null = null;
+  let profileId: string | null = null;
+  let profileRevision: string | null = null;
   let index = 0;
 
   const command = args[0];
@@ -97,6 +102,12 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
     } else if (arg === "--home") {
       storeDir = path.resolve(requireValue(args, i, arg));
       i += 1;
+    } else if (arg === "--profile-source-root") {
+      profileSourceRoot = path.resolve(requireValue(args, i, arg)); i += 1;
+    } else if (arg === "--profile-id") {
+      profileId = requireValue(args, i, arg); i += 1;
+    } else if (arg === "--profile-revision") {
+      profileRevision = requireValue(args, i, arg); i += 1;
     } else if (arg === "--open-browser") {
       openBrowser = true;
     } else if (arg === "--print-access-url") {
@@ -112,7 +123,15 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   if (mode !== "web" && (openBrowser || printAccessUrl)) {
     throw new Error("Browser options are only available in web mode.");
   }
-  return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, sourceBrowserState, help: false };
+  const profileFlags = [profileSourceRoot, profileId, profileRevision].filter(Boolean).length;
+  if (profileFlags && (profileFlags !== 3 || mode !== "app-server")) {
+    throw new Error("Profile source flags require app-server mode and --profile-source-root, --profile-id, and --profile-revision together.");
+  }
+  return {
+    mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, sourceBrowserState,
+    ...(profileFlags ? { profileSource: { repoPath: profileSourceRoot!, profileId: profileId!, sourceRevision: profileRevision! } } : {}),
+    help: false,
+  };
 }
 
 function defaultWebRootCandidates(): string[] {
@@ -191,6 +210,9 @@ Options:
   --port PORT            Bind port, or 0 for any free port (default ${DEFAULT_PORT})
   --web-root DIR         Directory containing the built web UI for web mode
   --home DIR        Local app-server state directory
+  --profile-source-root DIR  Authorized Profile repository source for app-server
+  --profile-id ID            Profile within that source
+  --profile-revision REV     Accepted immutable source revision
   --open-browser         Open the authenticated web URL in the system browser
   --print-access-url     Print the authenticated URL instead of opening it
 `);
@@ -209,7 +231,7 @@ export async function runOpenPondServerCli(factories: ServerCliFactories): Promi
   }
 
   if (args.mode === "app-server") {
-    await runAgentServer(factories.createOpenPondAppServer, args.storeDir);
+    await runAgentServer(factories.createOpenPondAppServer, args.storeDir, args.profileSource);
     return;
   }
 
@@ -289,16 +311,18 @@ export async function runOpenPondAppServerCli(
   if (args.mode !== "app-server") {
     throw new Error("The app-server entrypoint only accepts the app-server command.");
   }
-  await runAgentServer(createOpenPondAppServer, args.storeDir);
+  await runAgentServer(createOpenPondAppServer, args.storeDir, args.profileSource);
 }
 
 async function runAgentServer(
   createOpenPondAppServer: CreateAgentServer,
   storeDir: string | null,
+  profileSource?: ProfileSourceCliOptions,
 ): Promise<void> {
   if (storeDir) process.env.OPENPOND_HOME = storeDir;
   const appServer = await createOpenPondAppServer({
     ...(storeDir ? { storeDir } : {}),
+    ...(profileSource ? { profileSource } : {}),
   });
   await runAppServerJsonl({
     appServer,

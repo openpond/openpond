@@ -54,6 +54,46 @@ belong to `@openpond/evals`.
 
 ## Released source transport
 
+### Profile workflow catalog
+
+A Git-backed Profile may contain `workflows/catalog.json` beside its Skills,
+Agents, and evals. The file uses `openpond.profileWorkflows.v1`:
+
+```json
+{
+  "schemaVersion": "openpond.profileWorkflows.v1",
+  "workflows": [{
+    "id": "weekly-report",
+    "label": "Weekly report",
+    "description": "Summarize a supplied week.",
+    "inputSchema": { "type": "object", "properties": { "week": { "type": "integer" } }, "required": ["week"] },
+    "invocation": { "kind": "instructions", "instructions": "Write the report for the supplied week." },
+    "skillPaths": ["skills/report/SKILL.md"]
+  }]
+}
+```
+
+Workflow IDs are stable within one catalog. `skillPaths` name enabled primary
+Skill files in the released Harness source. An `agent_action` invocation names
+an enabled Agent action from the Profile action catalog. Import retains its
+identity, input schema, and Agent source in the same immutable release; the
+host executes it through the existing Agent SDK runner. Duplicate IDs, unsafe
+paths, missing references, invalid input schemas, and unsupported actions fail
+import. The catalog's exact bytes and generated `workflows/actions.json`
+inventory are included in the Harness release. Profile eval files remain
+outside model-visible Harness content.
+
+`openpond.profileWorkflowBinding.v1` names the Profile, accepted source
+revision, Harness release, catalog content hash, and workflow ID. The host
+resolves it from a fully verified source package. A bound Work session uses
+that release for every turn; source updates create new releases for fresh
+sessions and do not change admitted runs or personal Harness selection.
+
+Local servers expose committed workflow bindings at `GET /v1/profile/workflows`.
+Create a Work session with its `currentProfile` and returned
+`profileWorkflowBinding`, then start a turn with `workflowInput` matching the
+workflow's `inputSchema`. The turn records its binding and input hash.
+
 `openpond.harnessSourcePackage.v1` carries the complete immutable Agent
 snapshot, Harness release and their released file bytes. Creation and readback
 verify both release hashes, dependency references, the exact file population,

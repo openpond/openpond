@@ -30,6 +30,7 @@ import {
 } from "./local-harness-skill-runtime.js";
 import { applyLocalHarnessRefinerProposal } from "./local-harness-refiner.js";
 import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
+import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime } from "./local-profile-workflow-runtime.js";
 import { materializeHarnessSource } from "../training/materialize-harness-source.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import {
@@ -715,6 +716,26 @@ describe("local Harness workspace service", () => {
     );
     await fs.writeFile(path.join(sourcePath, "skills", "documents", "reference.md"), "Reference.\n");
     await fs.writeFile(path.join(sourcePath, "agent", "agent.ts"), "export const agent = {};\n");
+    await fs.mkdir(path.join(sourcePath, "workflows"), { recursive: true });
+    const workflowSource = `${JSON.stringify({
+      schemaVersion: "openpond.profileWorkflows.v1",
+      workflows: [{
+        id: "create-document",
+        label: "Create document",
+        description: "Create a document from supplied notes.",
+        inputSchema: { type: "object", properties: { notes: { type: "string" } } },
+        invocation: { kind: "instructions", instructions: "Create a document from the notes." },
+        skillPaths: ["skills/documents/SKILL.md"],
+      }, {
+        id: "publish-document",
+        label: "Publish document",
+        description: "Publish an approved document.",
+        inputSchema: { type: "object", properties: { title: { type: "string" } } },
+        invocation: { kind: "agent_action", actionId: "publish" },
+        skillPaths: [],
+      }],
+    })}\n`;
+    await fs.writeFile(path.join(sourcePath, "workflows", "catalog.json"), workflowSource);
     await fs.writeFile(path.join(repoPath, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
     const empty = emptyOpenPondProfileState();
     const profile = {
@@ -724,6 +745,7 @@ describe("local Harness workspace service", () => {
       activeProfile: "personal",
       sourcePath,
       agents: [{ id: "default", name: "Default", path: "agent/agent.ts", enabled: true }],
+      actionCatalog: [{ id: "publish", agentId: "default", sourceActionId: "publish", inputSchema: { type: "object", properties: { title: { type: "string" } } } }],
       skills: [{
         name: "documents",
         description: "Create documents.",
@@ -778,9 +800,92 @@ describe("local Harness workspace service", () => {
       ]),
     );
     expect(imported.release.harnessRelease.files.some((file) => file.path.includes("legacy"))).toBe(false);
+    expect(imported.release.harnessRelease.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "workflows/catalog.json" }),
+      expect.objectContaining({ path: "workflows/actions.json" }),
+    ]));
+    expect(await fs.readFile(path.join(localHarnessWorkspacePaths(directory, imported.workspace.id).source, "workflows", "catalog.json"), "utf8"))
+      .toBe(workflowSource);
     expect(imported.release.harnessRelease.metadata).toMatchObject({
       sourceLayout: "openpond.harnessSourceManifest.v1",
+      profile: { id: "personal", sourceRevision: "abc123" },
     });
+    const boundWorkflow = await loadLocalProfileWorkflowRuntime({
+      store,
+      binding: {
+        schemaVersion: "openpond.profileWorkflowBinding.v1",
+        profileId: "personal",
+        sourceRevision: "abc123",
+        harnessRelease: {
+          id: imported.release.harnessRelease.id,
+          contentHash: imported.release.harnessRelease.contentHash,
+        },
+        catalogHash: contentHash(JSON.parse(workflowSource)),
+        workflowId: "create-document",
+      },
+    });
+    expect(boundWorkflow.workflow.invocation).toEqual({
+      kind: "instructions", instructions: "Create a document from the notes.",
+    });
+    expect(boundWorkflow.runtime.release.harnessRelease.contentHash).toBe(imported.release.harnessRelease.contentHash);
+    const boundAction = await loadLocalProfileWorkflowRuntime({
+      store,
+      binding: {
+        schemaVersion: "openpond.profileWorkflowBinding.v1",
+        profileId: "personal",
+        sourceRevision: "abc123",
+        harnessRelease: {
+          id: imported.release.harnessRelease.id,
+          contentHash: imported.release.harnessRelease.contentHash,
+        },
+        catalogHash: contentHash(JSON.parse(workflowSource)),
+        workflowId: "publish-document",
+      },
+    });
+    expect(boundAction.action).toEqual({
+      id: "publish", agentId: "default", sourceActionId: "publish",
+      inputSchema: { type: "object", properties: { title: { type: "string" } } },
+    });
+    const ref = { source: "local" as const, repositoryId: "fixture-repo", profileId: "personal" };
+    const [discovered, concurrent] = await Promise.all([
+      ensureLocalProfileWorkflows({ store, storeDir: directory, ref, profile }),
+      ensureLocalProfileWorkflows({ store, storeDir: directory, ref, profile }),
+    ]);
+    expect(discovered).toEqual(concurrent);
+    expect(discovered.workflows[0]?.binding.harnessRelease.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    const nextWorkflowSource = workflowSource.replace("Create a document from the notes.", "Create a revised document from the notes.");
+    await fs.writeFile(path.join(sourcePath, "workflows", "catalog.json"), nextWorkflowSource);
+    await expect(ensureLocalProfileWorkflows({ store, storeDir: directory, ref, profile }))
+      .rejects.toThrow(/source changed under its accepted revision/);
+    const updated = await importProfileIntoLocalHarnessWorkspace({
+      store, storeDir: directory, id: "imported-personal-revision-2",
+      ownerId: "desktop-personal", name: "Imported Personal Harness revision 2",
+      profile: { ...profile, git: { ...profile.git, head: "revision-2" } },
+      now: () => LATER,
+    });
+    expect(updated.release.harnessRelease.contentHash).not.toBe(imported.release.harnessRelease.contentHash);
+    const updatedDiscovery = await ensureLocalProfileWorkflows({
+      store, storeDir: directory, ref,
+      profile: { ...profile, git: { ...profile.git, head: "revision-2" } },
+    });
+    expect(updatedDiscovery.workflows[0]?.binding.harnessRelease.contentHash)
+      .not.toBe(discovered.workflows[0]?.binding.harnessRelease.contentHash);
+    const invalidCatalog = JSON.parse(nextWorkflowSource);
+    invalidCatalog.workflows[0].inputSchema = { type: "unsupported" };
+    await fs.writeFile(path.join(sourcePath, "workflows", "catalog.json"), JSON.stringify(invalidCatalog));
+    await expect(importProfileIntoLocalHarnessWorkspace({
+      store, storeDir: directory, id: "invalid-workflow-schema", ownerId: "desktop-personal",
+      name: "Invalid workflow schema", profile,
+    })).rejects.toThrow(/invalid input schema/);
+    expect((await loadLocalProfileWorkflowRuntime({
+      store,
+      binding: {
+        schemaVersion: "openpond.profileWorkflowBinding.v1",
+        profileId: "personal", sourceRevision: "abc123",
+        harnessRelease: { id: imported.release.harnessRelease.id, contentHash: imported.release.harnessRelease.contentHash },
+        catalogHash: contentHash(JSON.parse(workflowSource)), workflowId: "create-document",
+      },
+    })).workflow.invocation).toEqual({ kind: "instructions", instructions: "Create a document from the notes." });
 
     await store.selectHarnessWorkspace({
       ownerKind: "personal",

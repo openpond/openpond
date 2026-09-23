@@ -38,6 +38,10 @@
       "types": "./dist/types/models.d.ts",
       "import": "./dist/models.js"
     },
+    "./profile-workflows": {
+      "types": "./dist/types/profile-workflows.d.ts",
+      "import": "./dist/profile-workflows.js"
+    },
     "./refiner": {
       "types": "./dist/types/refiner.d.ts",
       "import": "./dist/refiner.js"

@@ -759,6 +759,19 @@ async function loadOpenPondProfileStateForConfig(
   }
 }
 
+/** Inspect an explicitly authorized source checkout without changing the
+ * device's selected Profile or its personal configuration. */
+export async function loadOpenPondProfileStateFromSource(input: {
+  repoPath: string;
+  profileId: string;
+}): Promise<OpenPondProfileState> {
+  return loadOpenPondProfileStateForConfig({
+    repoPath: path.resolve(input.repoPath),
+    profile: input.profileId,
+    mode: "local",
+  });
+}
+
 export async function requireActiveLocalProfile(): Promise<{
   config: LocalOpenPondProfileConfig;
   state: OpenPondProfileState;
@@ -1076,6 +1089,7 @@ async function ensureProfileScaffoldFiles(
   for (const dir of [
     "agents",
     "skills",
+    "workflows",
     "actions",
     "extensions",
     "prompts",

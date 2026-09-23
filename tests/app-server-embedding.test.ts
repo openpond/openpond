@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
@@ -232,4 +232,141 @@ test("rejects changed bootstrap source and leaves the runtime home reopenable", 
   await writeFile(manifestPath, original);
   const reopened = await createOpenPondAppServer(options);
   await reopened.close();
+});
+
+test("executes a bound Profile workflow from its released source and retains identity after restart", async () => {
+  const paths = await fixture();
+  const sourceDir = paths.harness.sourceDirectory;
+  const manifestPath = path.join(sourceDir, "harness.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const catalog = {
+    schemaVersion: "openpond.profileWorkflows.v1",
+    workflows: [{
+      id: "weekly-report", label: "Weekly report", description: "Report the supplied week.",
+      inputSchema: { type: "object", properties: { week: { type: "integer" } }, required: ["week"], additionalProperties: false },
+      invocation: { kind: "instructions", instructions: "Report only the supplied week." },
+      skillPaths: [],
+    }],
+  };
+  await mkdir(path.join(sourceDir, "workflows"));
+  await writeFile(path.join(sourceDir, "workflows", "catalog.json"), JSON.stringify(catalog));
+  await writeFile(path.join(sourceDir, "workflows", "actions.json"), JSON.stringify({ schemaVersion: "openpond.profileWorkflowActions.v1", actions: [] }));
+  manifest.files.push({
+    id: "profile-workflows", kind: "workflow", path: "workflows/catalog.json", parentId: null,
+    mediaType: "application/json", visibility: "policy", portability: "portable",
+  });
+  manifest.files.push({
+    id: "profile-workflow-actions", kind: "asset", path: "workflows/actions.json", parentId: null,
+    mediaType: "application/json", visibility: "policy", portability: "portable",
+  });
+  manifest.toolDeclarations = [];
+  manifest.metadata = { importedFrom: "openpond.profile", profileId: "fixture", profileGitHead: "revision-1" };
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const compiled = await compileLocalHarnessSource({ workspaceId: paths.harness.workspaceId, sourceDir });
+  const binding = {
+    schemaVersion: "openpond.profileWorkflowBinding.v1", profileId: "fixture", sourceRevision: "revision-1",
+    harnessRelease: { id: compiled.harnessRelease.id, contentHash: compiled.harnessRelease.contentHash },
+    catalogHash: contentHash(catalog), workflowId: "weekly-report",
+  };
+  const provider = vi.fn();
+  const options: OpenPondAppServerOptions = {
+    ...paths,
+    embedding: { allowedTools: [], authorizeTool: async () => {} },
+    streamOpenPondHostedChatTurn: async function* (request) {
+      provider(request);
+      yield { type: "text_delta", raw: null, text: "Week 7 report" };
+      yield { type: "finish", raw: null, finishReason: "stop" };
+    },
+  };
+  const server = await createOpenPondAppServer(options);
+  cleanup.push(server.close);
+  const started = await server.runtime.threadStart({ session: {
+    provider: "openpond", modelRef: { providerId: "openpond", modelId: "fixture-model" },
+    experience: "work", title: "Weekly report", cwd: paths.workspaceDir,
+    currentProfile: { source: "local", repositoryId: "fixture-repo", profileId: "fixture" },
+    profileWorkflowBinding: binding,
+  } }) as { thread: { id: string } };
+  const threadId = started.thread.id;
+  const first = await server.runtime.turnStart({ threadId, input: { prompt: "Run report", workflowInput: { week: 7 } } });
+  expect(first, JSON.stringify(first))
+    .toMatchObject({ turn: { status: "completed", metadata: { profileWorkflowBinding: binding } } });
+  expect(JSON.stringify(provider.mock.calls[0])).toContain("Report only the supplied week.");
+  expect(JSON.stringify(provider.mock.calls[0])).toContain('\\"week\\":7');
+  await expect(server.runtime.turnStart({ threadId, input: { prompt: "Run report", workflowInput: { week: "bad" } } }))
+    .rejects.toThrow(/input is invalid/);
+  const invalid = await server.runtime.threadStart({ session: {
+    provider: "openpond", modelRef: { providerId: "openpond", modelId: "fixture-model" },
+    experience: "work", title: "Invalid binding", cwd: paths.workspaceDir,
+    currentProfile: { source: "local", repositoryId: "fixture-repo", profileId: "fixture" },
+    profileWorkflowBinding: { ...binding, catalogHash: "f".repeat(64) },
+  } }) as { thread: { id: string } };
+  await expect(server.runtime.turnStart({
+    threadId: invalid.thread.id, input: { prompt: "Run report", workflowInput: { week: 7 } },
+  })).rejects.toThrow(/catalog differs/);
+  expect(provider).toHaveBeenCalledTimes(1);
+  await server.close();
+  cleanup.pop();
+  const resumed = await createOpenPondAppServer(options);
+  cleanup.push(resumed.close);
+  expect(await resumed.runtime.turnStart({ threadId, input: { prompt: "Run again", workflowInput: { week: 8 } } }))
+    .toMatchObject({ turn: { status: "completed", metadata: { profileWorkflowBinding: binding } } });
+  expect(provider).toHaveBeenCalledTimes(2);
+});
+
+test("explicit Profile source loads without replacing personal selection and rejects changed restart bytes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-source-"));
+  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const repoPath = path.join(root, "repo");
+  const sourcePath = path.join(repoPath, "profiles", "team");
+  await mkdir(path.join(sourcePath, "workflows"), { recursive: true });
+  await mkdir(path.join(sourcePath, "settings"), { recursive: true });
+  await writeFile(path.join(repoPath, "openpond-profile.json"), JSON.stringify({
+    schema: "openpond.profileRepo.v1", defaultProfile: "team",
+    profiles: { team: { path: "profiles/team", defaultAgent: "", enabledAgents: [] } },
+  }));
+  await writeFile(path.join(sourcePath, "settings", "profile.yaml"), "schema: openpond.profile.v1\nprofile: team\nagents: []\n");
+  const catalogPath = path.join(sourcePath, "workflows", "catalog.json");
+  const catalog = { schemaVersion: "openpond.profileWorkflows.v1", workflows: [{
+    id: "status", label: "Status", description: "Report status.",
+    inputSchema: { type: "object", properties: { subject: { type: "string" } }, required: ["subject"] },
+    invocation: { kind: "instructions", instructions: "Report the status of the subject." }, skillPaths: [],
+  }] };
+  await writeFile(catalogPath, JSON.stringify(catalog));
+  const storeDir = path.join(root, "home");
+  const options: OpenPondAppServerOptions = {
+    storeDir, workspaceDir: path.join(root, "work"),
+    profileSource: { repoPath, profileId: "team", sourceRevision: "accepted-r1" },
+    embedding: { allowedTools: [], authorizeTool: async () => {} },
+    streamOpenPondHostedChatTurn: async function* () {
+      yield { type: "text_delta", raw: null, text: "Status complete" };
+      yield { type: "finish", raw: null, finishReason: "stop" };
+    },
+  };
+  const server = await createOpenPondAppServer(options);
+  cleanup.push(server.close);
+  const store = new SqliteStore(storeDir);
+  try {
+    const workspaces = await store.listHarnessWorkspaces({ ownerKind: "personal", ownerId: "desktop-personal" });
+    const sourceWorkspace = workspaces.find((workspace) => workspace.id.startsWith("profile-"));
+    expect(sourceWorkspace?.currentChannel.release).toBeTruthy();
+    expect((await store.getSelectedHarnessWorkspace({ ownerKind: "personal", ownerId: "desktop-personal" }))?.id)
+      .not.toBe(sourceWorkspace?.id);
+    const binding = {
+      schemaVersion: "openpond.profileWorkflowBinding.v1", profileId: "team", sourceRevision: "accepted-r1",
+      harnessRelease: sourceWorkspace!.currentChannel.release!, catalogHash: contentHash(catalog), workflowId: "status",
+    };
+    const started = await server.runtime.threadStart({ session: {
+      provider: "openpond", modelRef: { providerId: "openpond", modelId: "fixture-model" },
+      experience: "work", title: "Status", cwd: options.workspaceDir,
+      currentProfile: { source: "openpond_git", repositoryId: "team/repo", profileId: "team" },
+      profileWorkflowBinding: binding,
+    } }) as { thread: { id: string } };
+    expect(await server.runtime.turnStart({
+      threadId: started.thread.id, input: { prompt: "Run", workflowInput: { subject: "project" } },
+    })).toMatchObject({ turn: { status: "completed", harnessSnapshot: { harnessRelease: binding.harnessRelease } } });
+  } finally { await store.close(); }
+  await server.close();
+  cleanup.pop();
+  await writeFile(catalogPath, JSON.stringify({ ...catalog, workflows: [{ ...catalog.workflows[0], label: "Changed" }] }));
+  await expect(createOpenPondAppServer(options)).rejects.toThrow(/source changed under its accepted revision/);
 });

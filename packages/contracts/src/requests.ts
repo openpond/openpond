@@ -16,7 +16,7 @@ import {
   WorkspaceEditorPreferencesSchema,
   WorkspaceKindSchema,
 } from "./settings.js";
-import { SystemSessionKindSchema, type Session } from "./sessions.js";
+import { SessionSchema, SystemSessionKindSchema, type Session } from "./sessions.js";
 import {
   SubagentDelegationModeSchema,
   SubagentPreferencesSchema,
@@ -161,6 +161,7 @@ export const CreateSessionRequestSchema = z.object({
   cloudProjectId: z.string().nullable().optional(),
   cloudTeamId: z.string().nullable().optional(),
   currentProfile: OpenPondProfileRefSchema.nullable().optional(),
+  profileWorkflowBinding: SessionSchema.shape.profileWorkflowBinding,
   metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable().optional(),
   title: z.string().optional(),
@@ -191,6 +192,7 @@ export type PreviewLocalProjectCloudSourceRequest = z.infer<
 
 export const SendTurnRequestSchema = z.object({
   prompt: z.string().min(1),
+  workflowInput: z.unknown().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   usageAttribution: UsageRequestAttributionSchema.optional().nullable(),
   cwd: z.string().nullable().optional(),
