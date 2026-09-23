@@ -457,6 +457,35 @@
   overflow: auto;
 }
 
+.profile-evaluations-run-form,
+.profile-evaluations-run-plan {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.profile-evaluations-run-form label,
+.profile-evaluations-run-plan strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-evaluations-run-form select {
+  max-width: 100%;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.profile-evaluations-run-plan small {
+  overflow-wrap: anywhere;
+}
+
 .profile-evaluations-comparison-runs label {
   display: flex;
   align-items: flex-start;
