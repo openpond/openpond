@@ -91,7 +91,9 @@ export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
   // this measured feature; initial-load, single-asset, and startup limits remain.
   // The shared Profile workflow contract raised the verified PR renderer
   // total to 16,917,407 bytes; allow 6 KiB for that measured addition.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 142 * 1024,
+  // The Profile evaluation review UI measured 16,926,980 bytes in the
+  // verified build; allow 8 KiB for this reviewed addition.
+  maxTotalJsBytes: 16 * 1024 * 1024 + 150 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
