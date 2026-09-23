@@ -12,6 +12,8 @@ export * from "./metrics.js";
 export * from "./taskset-run-contract.js";
 export * from "./model-improvement-qualification.js";
 export * from "./preferences.js";
+export * from "./profile-evaluations.js";
+export * from "./profile-evaluation-comparisons.js";
 export * from "./review-conformance.js";
 export * from "./rollouts.js";
 export * from "./telemetry.js";

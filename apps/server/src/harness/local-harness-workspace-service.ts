@@ -24,6 +24,7 @@ import {
   type ImmutableAssetRef,
 } from "@openpond/harness";
 import { validateTaskSchema } from "@openpond/evals/task-schema";
+import { validateProfileEvaluationCatalog } from "@openpond/evals";
 
 import type { SqliteStore } from "../store/store.js";
 import {
@@ -640,6 +641,11 @@ async function writeImportedProfileSource(
     }
   }
 
+  const workflowIds = new Set<string>();
+  const enabledAgentIds = new Set(profile.agents.filter((agent) => agent.enabled).map((agent) => agent.id));
+  const actionIds = new Set(profile.actionCatalog
+    .filter((action) => action.agentId && enabledAgentIds.has(action.agentId))
+    .map((action) => action.id));
   const workflowCatalogPath = path.join(profileSource, "workflows", "catalog.json");
   const workflowCatalogStat = await fs.lstat(workflowCatalogPath).catch(() => null);
   if (workflowCatalogStat) {
@@ -647,7 +653,6 @@ async function writeImportedProfileSource(
       throw new Error("Profile workflow catalog must be a regular file.");
     }
     const catalogBytes = await fs.readFile(workflowCatalogPath);
-    const enabledAgentIds = new Set(profile.agents.filter((agent) => agent.enabled).map((agent) => agent.id));
     const workflowActions = profile.actionCatalog
       .filter((action) => action.agentId && enabledAgentIds.has(action.agentId))
       .map((action) => ({
@@ -663,6 +668,7 @@ async function writeImportedProfileSource(
       sourcePaths: new Set(declarations.filter((file) => file.kind === "skill").map((file) => file.path)),
       actionIds: new Set(workflowActions.map((action) => action.id)),
     });
+    for (const workflow of catalog.workflows) workflowIds.add(workflow.id);
     assertProfileWorkflowInputSchemas(catalog);
     const target = "workflows/catalog.json";
     await copyRegularFile(workflowCatalogPath, path.join(sourceDir, "workflows", "catalog.json"));
@@ -686,6 +692,30 @@ async function writeImportedProfileSource(
       parentId: null,
       mediaType: "application/json",
       visibility: "policy",
+      portability: "portable",
+    });
+  }
+
+  const evaluationCatalogPath = path.join(profileSource, "evals", "catalog.json");
+  const evaluationCatalogStat = await fs.lstat(evaluationCatalogPath).catch(() => null);
+  if (evaluationCatalogStat) {
+    if (!evaluationCatalogStat.isFile() || evaluationCatalogStat.isSymbolicLink()) {
+      throw new Error("Profile evaluation catalog must be a regular file.");
+    }
+    validateProfileEvaluationCatalog({
+      catalog: JSON.parse(await fs.readFile(evaluationCatalogPath, "utf8")),
+      workflowIds,
+      skillPaths: new Set(declarations.filter((file) => file.kind === "skill").map((file) => file.path)),
+      actionIds,
+    });
+    await copyRegularFile(evaluationCatalogPath, path.join(sourceDir, "evals", "catalog.json"));
+    addDeclaration({
+      id: "profile-evaluations",
+      kind: "asset",
+      path: "evals/catalog.json",
+      parentId: null,
+      mediaType: "application/json",
+      visibility: "verifier",
       portability: "portable",
     });
   }

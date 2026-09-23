@@ -11,7 +11,8 @@ import {
   TurnSchema,
   emptyOpenPondProfileState,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/harness";
+import { contentHash, createHarnessSourcePackage } from "@openpond/harness";
+import { loadReleasedProfileEvaluationCatalog } from "@openpond/evals";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
@@ -31,6 +32,7 @@ import {
 import { applyLocalHarnessRefinerProposal } from "./local-harness-refiner.js";
 import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
 import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime, profileWorkflowsForRelease } from "./local-profile-workflow-runtime.js";
+import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
 import { materializeHarnessSource } from "../training/materialize-harness-source.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import {
@@ -732,7 +734,7 @@ describe("local Harness workspace service", () => {
     ).rejects.toThrow("failed hash verification");
   });
 
-  it("imports selected Profile Skills and Agents once, excludes evals, and supports workspace selection", async () => {
+  it("imports Profile evaluation catalog as verifier-private source and supports workspace selection", async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-harness-import-"));
     const store = new SqliteStore(directory);
     cleanup.push({ directory, store });
@@ -766,6 +768,19 @@ describe("local Harness workspace service", () => {
       }],
     })}\n`;
     await fs.writeFile(path.join(sourcePath, "workflows", "catalog.json"), workflowSource);
+    await fs.mkdir(path.join(sourcePath, "evals"), { recursive: true });
+    const evaluationSource = `${JSON.stringify({
+      schemaVersion: "openpond.profileEvaluations.v1",
+      definitions: [{
+        id: "document-check", label: "Document check", description: "",
+        target: { kind: "workflow", workflowId: "create-document" },
+        tasksetRelease: { id: "documents", contentHash: "a".repeat(64) },
+        split: "frozen_eval", taskIds: ["document-case"], seeds: ["1"],
+        criterion: { minimumPassRate: 1, requireComplete: true },
+      }],
+      suites: [{ id: "component-checks", label: "Components", scope: "component", definitionIds: ["document-check"] }],
+    })}\n`;
+    await fs.writeFile(path.join(sourcePath, "evals", "catalog.json"), evaluationSource);
     await fs.writeFile(path.join(repoPath, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
     const empty = emptyOpenPondProfileState();
     const profile = {
@@ -833,9 +848,31 @@ describe("local Harness workspace service", () => {
     expect(imported.release.harnessRelease.files).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "workflows/catalog.json" }),
       expect.objectContaining({ path: "workflows/actions.json" }),
+      expect.objectContaining({ path: "evals/catalog.json", visibility: "verifier" }),
     ]));
     expect(await fs.readFile(path.join(localHarnessWorkspacePaths(directory, imported.workspace.id).source, "workflows", "catalog.json"), "utf8"))
       .toBe(workflowSource);
+    expect(await fs.readFile(path.join(localHarnessWorkspacePaths(directory, imported.workspace.id).source, "evals", "catalog.json"), "utf8"))
+      .toBe(evaluationSource);
+    const releasedFiles = new Map(await Promise.all(imported.release.harnessRelease.files.map(async (file) => [
+      file.path,
+      await fs.readFile(path.join(imported.release.bundlePath, "source", ...file.path.split("/"))),
+    ] as const)));
+    const evaluation = loadReleasedProfileEvaluationCatalog(createHarnessSourcePackage({
+      agentSnapshot: imported.release.agentSnapshot,
+      harnessRelease: imported.release.harnessRelease,
+      files: releasedFiles,
+    }));
+    expect(evaluation.catalog.definitions[0]?.target).toEqual({ kind: "workflow", workflowId: "create-document" });
+    expect(evaluation.catalogHash).toBe(contentHash(JSON.parse(evaluationSource)));
+    const discoveredEvaluations = await profileEvaluationsForRelease({
+      store,
+      ref: { source: "local", repositoryId: "profile-repo", profileId: "personal" },
+      sourceRevision: "abc123",
+      harnessRelease: { id: imported.release.harnessRelease.id, contentHash: imported.release.harnessRelease.contentHash },
+    });
+    expect(discoveredEvaluations.catalogHash).toBe(evaluation.catalogHash);
+    expect(discoveredEvaluations.definitions.map((entry) => entry.id)).toEqual(["document-check"]);
     expect(imported.release.harnessRelease.metadata).toMatchObject({
       sourceLayout: "openpond.harnessSourceManifest.v1",
       profile: { id: "personal", sourceRevision: "abc123" },

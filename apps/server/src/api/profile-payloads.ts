@@ -50,6 +50,7 @@ import {
 } from "./client-payload-projection.js";
 import type { SqliteStore } from "../store/store.js";
 import { ensureLocalProfileWorkflows } from "../harness/local-profile-workflow-runtime.js";
+import { profileEvaluationsForRelease } from "../harness/local-profile-evaluation-runtime.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -79,6 +80,16 @@ export function createProfilePayloads(deps: {
       ref,
       profile,
       reloadProfile: loadOpenPondProfileState,
+    });
+  }
+
+  async function profileEvaluationsPayload() {
+    const workflows = await profileWorkflowsPayload();
+    return profileEvaluationsForRelease({
+      store: deps.store,
+      ref: workflows.profileRef,
+      sourceRevision: workflows.sourceRevision,
+      harnessRelease: workflows.harnessRelease,
     });
   }
 
@@ -792,6 +803,7 @@ export function createProfilePayloads(deps: {
     profileCurrentPayload,
     profileCatalogPayload,
     profileWorkflowsPayload,
+    profileEvaluationsPayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,
