@@ -33,7 +33,7 @@ const catalog: ProfileWorkflowDiscovery = {
 };
 
 describe("Desktop Profile workflow launch", () => {
-  it("creates a session on the discovered release and forwards validated input", async () => {
+  it("creates a session on the discovered release and forwards input for server validation", async () => {
     const createSession = vi.fn().mockResolvedValue({ id: "session-1" });
     const sendTurn = vi.fn().mockResolvedValue({});
     const connection = {} as ClientConnection;
@@ -55,9 +55,10 @@ describe("Desktop Profile workflow launch", () => {
     }));
   });
 
-  it("rejects invalid input before creating a session", async () => {
+  it("surfaces app-server input rejection", async () => {
     const createSession = vi.fn();
-    const sendTurn = vi.fn();
+    createSession.mockResolvedValue({ id: "session-1" });
+    const sendTurn = vi.fn().mockRejectedValue(new Error("Workflow input does not match its schema."));
     await expect(launchProfileWorkflow({
       connection: {} as ClientConnection,
       catalog,
@@ -65,7 +66,7 @@ describe("Desktop Profile workflow launch", () => {
       value: { week: "seven" },
       client: { createSession, sendTurn },
     })).rejects.toThrow();
-    expect(createSession).not.toHaveBeenCalled();
-    expect(sendTurn).not.toHaveBeenCalled();
+    expect(createSession).toHaveBeenCalledOnce();
+    expect(sendTurn).toHaveBeenCalledOnce();
   });
 });
