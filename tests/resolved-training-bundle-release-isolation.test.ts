@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { ModelProjectSchema } from "@openpond/contracts";
-import { createAgentSnapshot, createHarnessRelease, createHarnessSourcePackage, harnessSourcePackageFiles, type HarnessSourcePackage } from "@openpond/harness";
+import { createAgentSnapshot, createHarnessPolicySourcePackage, createHarnessRelease, createHarnessSourcePackage, harnessSourcePackageFiles, type HarnessPolicySourcePackage, type HarnessSourcePackage } from "@openpond/harness";
 import { describe, expect, test } from "vitest";
 import { TRAINING_EVALUATION_SOURCE_PATH, type TrainingEvaluationSource } from "openpond-sdk/training";
 
@@ -75,7 +75,7 @@ describe("resolved training bundle release isolation", () => {
       updatedAt: FIXED_TIME,
     });
     const capabilityReceipt = sha256("release-isolation-capability");
-    const build = (selectedTaskset: typeof taskset, harnessSource?: HarnessSourcePackage, computeKind: "local" | "managed" = "local", evaluationSource?: TrainingEvaluationSource) =>
+    const build = (selectedTaskset: typeof taskset, harnessSource?: HarnessSourcePackage | HarnessPolicySourcePackage, computeKind: "local" | "managed" = "local", evaluationSource?: TrainingEvaluationSource) =>
       buildTasksetTrainingBundle({
         evaluationSource,
         taskset: selectedTaskset,
@@ -168,6 +168,13 @@ describe("resolved training bundle release isolation", () => {
     const localOnlySource = sourceFixture("Use the local-only instruction.", false);
     expect(() => build(taskset, localOnlySource)).not.toThrow();
     expect(() => build(taskset, localOnlySource, "managed")).toThrow("cannot leave its local host");
+    const privateSource = sourceFixture("Keep evaluation data private.", true, true);
+    expect(() => build(taskset, privateSource, "managed")).toThrow("cannot leave its local host");
+    const policySource = createHarnessPolicySourcePackage(privateSource);
+    const remote = build(taskset, policySource, "managed");
+    expect(JSON.parse(new TextDecoder().decode(remote.assets.get("harness/source-package.json")))).toEqual(policySource);
+    expect(policySource.files.some(file => file.path === "evals/private.json")).toBe(false);
+    expect(remote.manifest.harnessRelease.contentHash).toBe(privateSource.harnessRelease.contentHash);
 
     const cacheRoot = await mkdtemp(
       path.join(os.tmpdir(), "openpond-release-isolation-"),
@@ -243,15 +250,16 @@ describe("resolved training bundle release isolation", () => {
   });
 });
 
-function sourceFixture(instruction: string, portable = true): HarnessSourcePackage {
+function sourceFixture(instruction: string, portable = true, privateEvaluation = false): HarnessSourcePackage {
   const files = new Map([
     ["program.json", new TextEncoder().encode('{"runtimeProtocol":"openpond.agent-runtime.v1"}')],
     ["dependency-lock.json", new TextEncoder().encode('{"dependencies":{}}')],
     ["instructions/system.md", new TextEncoder().encode(instruction)],
   ]);
+  if (privateEvaluation) files.set("evals/private.json", new TextEncoder().encode('{"answer":"secret"}'));
   const assets = [...files].map(([path, bytes], index) => ({
     id: `harness-file-${index}`, path, contentHash: sha256(bytes), sizeBytes: bytes.byteLength,
-    mediaType: "text/plain", visibility: "policy" as const,
+    mediaType: "text/plain", visibility: path.startsWith("evals/") ? "verifier" as const : "policy" as const,
   }));
   const agentSnapshot = createAgentSnapshot({
     schemaVersion: "openpond.agentSnapshot.v2", id: "source-agent", sourceRelease: null,
