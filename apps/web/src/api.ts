@@ -1,6 +1,6 @@
 import type { TrainingEvaluationTaskPage, TrainingCandidateDecision, TrainingCandidateDecisionRequest } from "openpond-sdk/training";
 import type { ChatModelRef, ImmutableReleaseRef, ProfileWorkflow, ProfileWorkflowBinding } from "@openpond/harness";
-import type { ProfileEvaluationComparison, TasksetMetricResult, TasksetRunManifest } from "@openpond/evals";
+import type { ProfileEvaluationComparison, ProfileEvaluationReport, TasksetMetricResult, TasksetRunManifest } from "@openpond/evals";
 import type {
   Approval,
   AppPreferences,
@@ -144,6 +144,7 @@ export type ProfileEvaluationDiscovery = {
   }>;
   comparisons: ProfileEvaluationComparison[];
   suiteRuns: import("@openpond/evals").ProfileEvaluationSuiteRun[];
+  reports: ProfileEvaluationReport[];
 };
 export type ProfileEvaluationRunRequest = {
   id: string;
@@ -1145,6 +1146,11 @@ export const api = {
     apiFetch<ProfileEvaluationComparison>(connection, "/v1/profile/evaluations/compare", {
       method: "POST",
       body: JSON.stringify({ id: `comparison-${crypto.randomUUID()}`, runIds }),
+    }),
+  profileEvaluationSaveReport: (connection: ClientConnection, evidenceKind: "run" | "suite" | "comparison", evidenceId: string) =>
+    apiFetch<ProfileEvaluationReport>(connection, "/v1/profile/evaluations/reports", {
+      method: "POST",
+      body: JSON.stringify({ id: `report-${crypto.randomUUID()}`, evidenceKind, evidenceId }),
     }),
   profileSelect: (connection: ClientConnection, ref: OpenPondProfileRef) =>
     apiFetch<{

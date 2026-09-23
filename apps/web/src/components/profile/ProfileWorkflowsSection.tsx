@@ -10,12 +10,14 @@ export function ProfileWorkflowsSection({
   onError,
   onOpenSession,
   onToast,
+  onEvaluate,
 }: {
   connection: ClientConnection | null;
   selectedProfileKey: string | null;
   onError: (message: string | null) => void;
   onOpenSession?: (sessionId: string) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
+  onEvaluate?: (workflowId: string) => void;
 }) {
   const [catalog, setCatalog] = useState<ProfileWorkflowDiscovery | null>(null);
   const [loading, setLoading] = useState(false);
@@ -101,6 +103,7 @@ export function ProfileWorkflowsSection({
             setInputText("{}");
             setSelectedId(entry.workflow.id);
           }} type="button">Run</button>
+          {onEvaluate ? <button disabled={running} onClick={() => onEvaluate(entry.workflow.id)} type="button">Evaluate</button> : null}
         </div>
       ))}
       {selected ? (

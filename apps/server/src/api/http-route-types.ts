@@ -154,6 +154,7 @@ export type HttpRouteDeps = {
   profileEvaluationRunPayload: (payload: unknown) => Promise<unknown>;
   profileEvaluationRunSuitePayload: (payload: unknown) => Promise<unknown>;
   profileEvaluationComparePayload: (payload: unknown) => Promise<unknown>;
+  profileEvaluationSaveReportPayload: (payload: unknown) => Promise<unknown>;
   profileSelectPayload: (payload: unknown) => Promise<unknown>;
   profileRemovePayload: (payload: unknown) => Promise<unknown>;
   profilePublicationPreviewPayload: (payload: unknown) => Promise<unknown>;

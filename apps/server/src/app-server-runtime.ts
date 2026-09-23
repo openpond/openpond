@@ -39,6 +39,7 @@ import { createProfileEvaluationCaseService } from "./harness/profile-evaluation
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
 import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
 import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
+import { buildProfileEvaluationReport } from "./harness/profile-evaluation-report-service.js";
 import { createProfileEvaluationRunPreparationService } from "./harness/profile-evaluation-run-preparation.js";
 import { loadLocalProfileEvaluationTaskset } from "./harness/local-profile-evaluation-taskset.js";
 import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
@@ -605,6 +606,11 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       runPreparedProfileEvaluation: async (request) => executeProfileEvaluationRun(await prepareProfileEvaluationRun(request, { requireExpectedManifestHash: true })),
       runProfileEvaluationSuite: executeProfileEvaluationSuite,
       compareProfileEvaluationRuns: createProfileEvaluationComparisonService({ store, selectedProfile: selectedEvaluationProfile }),
+      buildProfileEvaluationReport: async (request) => {
+        const selected = await selectedEvaluationProfile();
+        if (!selected) throw new Error("Select a Profile before building an evaluation report.");
+        return buildProfileEvaluationReport({ store, profileRef: selected.ref, request });
+      },
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),
       reviewHarness: guardService(harnessEvaluationEnabled, "Harness evaluation", (request) => reviewSelectedLocalHarnessEvaluation({

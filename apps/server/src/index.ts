@@ -40,6 +40,7 @@ import { createProfileEvaluationCaseService } from "./harness/profile-evaluation
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
 import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
 import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
+import { buildProfileEvaluationReport } from "./harness/profile-evaluation-report-service.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { createManualCompactionRecorder } from "./runtime/manual-compaction-usage.js";
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
@@ -394,6 +395,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     profileEvaluationPreparePayload,
     prepareProfileEvaluationRun,
     profileEvaluationComparePayload,
+    profileEvaluationSaveReportPayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,
@@ -1613,6 +1615,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       compareProfileEvaluationRuns: createProfileEvaluationComparisonService({
         store, selectedProfile: selectedEvaluationProfile,
       }),
+      buildProfileEvaluationReport: async (request) => {
+        const selected = await selectedEvaluationProfile();
+        return buildProfileEvaluationReport({ store, profileRef: selected.ref, request });
+      },
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
       reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({
@@ -1737,6 +1743,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       profileEvaluationRunPayload,
       profileEvaluationRunSuitePayload,
       profileEvaluationComparePayload,
+      profileEvaluationSaveReportPayload,
       profileSelectPayload,
       profileRemovePayload,
       profilePublicationPreviewPayload,

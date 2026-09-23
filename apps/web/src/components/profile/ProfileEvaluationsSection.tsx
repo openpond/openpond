@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api, type ClientConnection, type ProfileEvaluationDiscovery, type ProfileEvaluationPreparedRun, type ProfileEvaluationRunRequest } from "../../api";
 import type { ProviderSettings } from "@openpond/contracts";
+import { ProfileEvaluationComparisonMatrix } from "./ProfileEvaluationComparisonMatrix";
 import "../../styles/profile/profile-page.css";
 
 function targetLabel(target: ProfileEvaluationDiscovery["definitions"][number]["target"]): string {
@@ -38,10 +39,14 @@ function availableModels(settings: ProviderSettings): ModelChoice[] {
   });
 }
 
-export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
+export type ProfileEvaluationTarget = { kind: "workflow" | "skill" | "profile"; id?: string };
+
+export function ProfileEvaluationsSection({ connection, selectedProfileKey, focusTarget }: {
   connection: ClientConnection | null;
   selectedProfileKey: string | null;
+  focusTarget?: ProfileEvaluationTarget | null;
 }) {
+  const sectionRef = useRef<HTMLElement>(null);
   const [discovery, setDiscovery] = useState<ProfileEvaluationDiscovery | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [caseLimit, setCaseLimit] = useState(50);
@@ -49,6 +54,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
   const [comparisonLimit, setComparisonLimit] = useState(20);
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
+  const [savingReportId, setSavingReportId] = useState<string | null>(null);
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [selectedModelKey, setSelectedModelKey] = useState("");
   const [plan, setPlan] = useState<{ request: ProfileEvaluationRunRequest; prepared: ProfileEvaluationPreparedRun } | null>(null);
@@ -96,6 +102,16 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
     });
     return () => { active = false; };
   }, [connection, selectedProfileKey]);
+
+  useEffect(() => {
+    if (!focusTarget || !discovery) return;
+    const definition = discovery.definitions.find((entry) => entry.target.kind === focusTarget.kind
+      && (focusTarget.kind === "profile" || focusTarget.kind === "workflow" && entry.target.kind === "workflow" && entry.target.workflowId === focusTarget.id
+        || focusTarget.kind === "skill" && entry.target.kind === "skill" && entry.target.skillPath === focusTarget.id));
+    setSelectedId(definition?.id ?? null);
+    setRunNotice(definition ? null : "No evaluation definition is saved for this Profile component.");
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [discovery, focusTarget]);
 
   if (!selectedProfileKey) return null;
   const selected = discovery?.definitions.find((definition) => definition.id === selectedId);
@@ -180,8 +196,22 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
       setComparing(false);
     }
   };
+  const saveReport = async (kind: "run" | "suite" | "comparison", id: string) => {
+    if (!connection || savingReportId) return;
+    setSavingReportId(id);
+    setError(null);
+    try {
+      const report = await api.profileEvaluationSaveReport(connection, kind, id);
+      setDiscovery(await api.profileEvaluations(connection));
+      setRunNotice(`Report ${report.id} saved to Profile source. Commit and publish the Profile when ready.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSavingReportId(null);
+    }
+  };
   return (
-    <section aria-label="Profile evaluations" className="profile-evaluations">
+    <section ref={sectionRef} aria-label="Profile evaluations" className="profile-evaluations">
       <div className="profile-workflows-header">
         <h3>Evaluations</h3>
         <p>Checks and retained results for this Profile’s released components.</p>
@@ -208,6 +238,9 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
                 <details key={run.id} className="profile-evaluations-suite-run">
                   <summary>{displayTimestamp(run.completedAt)} · {run.passed ? "Passed" : "Did not pass"} · {run.members.length} checks</summary>
                   <small>Profile source {run.sourceRevision.slice(0, 12)} · Suite run {run.id}</small>
+                  <button type="button" disabled={Boolean(savingReportId)} onClick={() => void saveReport("suite", run.id)}>
+                    {savingReportId === run.id ? "Saving report…" : "Save report to Profile"}
+                  </button>
                   <ul>{run.members.map((member) => (
                     <li key={member.runManifest.id}>
                       <strong>{run.sourceRevision === discovery.sourceRevision
@@ -283,6 +316,9 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
                 <li key={run.manifest.id}>
                   <span>{displayTimestamp(run.completedAt)} · {run.passed ? "Passed" : "Did not pass"} · {run.receiptRefs.length} attempts</span>
                   <small>Model {run.manifest.policy.kind === "model" ? `${run.manifest.policy.model.provider}/${run.manifest.policy.model.model}` : "fixture"} · Source {run.manifest.profileEvaluation?.sourceRevision.slice(0, 10)} · Run {run.manifest.id}</small>
+                  <button type="button" disabled={Boolean(savingReportId)} onClick={() => void saveReport("run", run.manifest.id)}>
+                    {savingReportId === run.manifest.id ? "Saving report…" : "Save report to Profile"}
+                  </button>
                 </li>
               ))}</ul>
             )}
@@ -317,11 +353,26 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
           <ul>{discovery.comparisons.map((comparison) => (
             <li key={comparison.id}>
               <strong>{displayTimestamp(comparison.createdAt)} · {comparison.members.length} runs</strong>
+              <button type="button" disabled={Boolean(savingReportId)} onClick={() => void saveReport("comparison", comparison.id)}>
+                {savingReportId === comparison.id ? "Saving report…" : "Save report to Profile"}
+              </button>
               <ul>{comparison.members.map((member) => (
                 <li key={member.runManifest.id}>
                   {member.source.definitionId} · {member.policy.kind === "model" ? `${member.policy.model.provider}/${member.policy.model.model}` : "fixture"} · Source {member.source.sourceRevision.slice(0, 10)} · {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`}
                 </li>
               ))}</ul>
+              <ProfileEvaluationComparisonMatrix comparison={comparison} />
+            </li>
+          ))}</ul>
+        </div>
+      ) : null}
+      {discovery?.reports.length ? (
+        <div className="profile-evaluations-detail" aria-label="Profile evaluation reports">
+          <h4>Reports saved in Profile source</h4>
+          <ul>{discovery.reports.map((report) => (
+            <li key={report.id}>
+              <strong>{displayTimestamp(report.createdAt)} · {report.summary.passedChecks}/{report.summary.totalChecks} checks passed</strong>
+              <small>Tested source {report.testedSources.map((source) => source.sourceRevision.slice(0, 10)).join(", ")} · Evidence {report.evidence.map((ref) => ref.id).join(", ")}</small>
             </li>
           ))}</ul>
         </div>
