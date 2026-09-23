@@ -51,6 +51,7 @@ import {
 import type { SqliteStore } from "../store/store.js";
 import { ensureLocalProfileWorkflows } from "../harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "../harness/local-profile-evaluation-runtime.js";
+import { createProfileEvaluationComparisonService } from "../harness/profile-evaluation-comparison-service.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -97,6 +98,14 @@ export function createProfilePayloads(deps: {
     ]);
     return { ...evaluations, runs, comparisons };
   }
+
+  const profileEvaluationComparePayload = createProfileEvaluationComparisonService({
+    store: deps.store,
+    selectedProfile: async () => {
+      const workflows = await profileWorkflowsPayload();
+      return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
+    },
+  });
 
   async function profileSelectPayload(payload: unknown) {
     const input = asRecord(payload);
@@ -809,6 +818,7 @@ export function createProfilePayloads(deps: {
     profileCatalogPayload,
     profileWorkflowsPayload,
     profileEvaluationsPayload,
+    profileEvaluationComparePayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,
