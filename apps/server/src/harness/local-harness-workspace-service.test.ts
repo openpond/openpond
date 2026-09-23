@@ -776,7 +776,7 @@ describe("local Harness workspace service", () => {
     await fs.mkdir(path.join(sourcePath, "evals"), { recursive: true });
     const evaluationEnvironment = createEnvironmentRelease({
       schemaVersion: "openpond.environmentRelease.v1", id: "document-environment", revision: 1,
-      contract: genericToolConformance.taskset.environment,
+      contract: { ...genericToolConformance.taskset.environment, kind: "text", entrypoint: "openpond.text-evaluation", stateful: false },
       actionSchemaRef: null, observationSchemaRef: null, stateSchemaRef: null,
       artifactCollection: { maxArtifacts: 100, maxTotalBytes: 1_000_000 },
       adapterConformanceHashes: {}, metadata: {},
@@ -787,8 +787,11 @@ describe("local Harness workspace service", () => {
       isolation: { processBoundary: "isolated_process", networkPolicy: "none", defaultTimeoutMs: 5_000 },
       calibrationReceiptRefs: [], metadata: {},
     });
+    const { contentHash: _conformanceHash, ...conformanceContent } = genericToolConformance.taskset;
+    const chatTasksetContent = { ...conformanceContent, environment: evaluationEnvironment.contract, tools: [] };
+    const chatTaskset = TasksetReleaseSchema.parse({ ...chatTasksetContent, contentHash: contentHash(chatTasksetContent) });
     const evaluationTaskset = bindTasksetExecutionReleases({
-      taskset: genericToolConformance.taskset,
+      taskset: chatTaskset,
       environment: evaluationEnvironment,
       verifierSet: evaluationVerifierSet,
     });

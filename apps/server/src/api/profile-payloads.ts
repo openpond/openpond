@@ -111,10 +111,25 @@ export function createProfilePayloads(deps: {
     }),
     modelConfigurationHash: async (modelRef) => {
       const settings = await deps.providerSettings();
+      const status = settings.statuses[modelRef.providerId];
+      const provider = settings.providers[modelRef.providerId];
+      if (!status?.enabled || !status.available || !status.credential.connected) {
+        throw new Error(`Model provider ${modelRef.providerId} is unavailable for evaluation.`);
+      }
+      const availableModels = new Set([
+        ...status.modelIds,
+        ...(settings.modelCaches[modelRef.providerId]?.models.map((model) => model.id) ?? []),
+        ...(provider?.modelOverrides ?? []),
+        status.defaultModel,
+        provider?.defaultModel,
+      ]);
+      if (!availableModels.has(modelRef.modelId)) {
+        throw new Error(`Model ${modelRef.providerId}/${modelRef.modelId} is unavailable for evaluation.`);
+      }
       return contentHash({
         modelRef,
-        provider: settings.providers[modelRef.providerId] ?? null,
-        credential: settings.statuses[modelRef.providerId]?.credential.source ?? "none",
+        provider: provider ?? null,
+        credential: status.credential.source,
       });
     },
     placement: "local",

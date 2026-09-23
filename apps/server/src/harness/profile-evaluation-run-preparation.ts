@@ -72,6 +72,10 @@ export function createProfileEvaluationRunPreparationService(input: {
     if (taskset.id !== definition.tasksetRelease.id || taskset.contentHash !== definition.tasksetRelease.contentHash) {
       throw new Error("Evaluation Taskset package differs from its released definition.");
     }
+    if (taskset.environment.kind !== "text" || taskset.tools.length
+      || taskset.tasks.some((task) => task.artifactRefs.length)) {
+      throw new Error("Workflow evaluation requires text cases with policy-visible input; Taskset-owned tools and file assets are unavailable in the Profile turn runtime.");
+    }
     const runtimeTarget = {
       adapterId: "openpond.profile-workflow",
       placement: input.placement,
