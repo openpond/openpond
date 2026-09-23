@@ -1,9 +1,10 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 
-import { prepareAgentSdkRuntimePackage, runAgentSdkProjectCommand } from "@openpond/cloud";
+import { runAgentSdkProjectCommand } from "@openpond/cloud";
 import { validateTaskValue } from "@openpond/evals/task-schema";
 import type { ProfileWorkflowAction } from "@openpond/harness";
+import { prepareReleasedProfileActionDependencies } from "./released-profile-action-dependencies.js";
 
 /** Invoke a workflow's typed target from the Agent source copied into its
  * admitted release. The active Profile checkout is never consulted here. */
@@ -36,15 +37,7 @@ export async function executeReleasedProfileWorkflowAction(input: {
     await fs.mkdir(path.join(runPath, "agent"), { recursive: true });
     await fs.rename(rootTs, path.join(runPath, "agent", "agent.ts"));
   }
-  if (!rootYaml?.isFile()) {
-    if (!(await fs.stat(path.join(runPath, "package.json")).catch(() => null))?.isFile()) {
-      await fs.writeFile(path.join(runPath, "package.json"), '{"type":"module"}\n', { flag: "wx" });
-    }
-    const sdkRoot = await prepareAgentSdkRuntimePackage();
-    const dependencyRoot = path.join(runPath, "node_modules");
-    await fs.mkdir(dependencyRoot, { recursive: true });
-    await fs.symlink(sdkRoot, path.join(dependencyRoot, "openpond-agent-sdk"), "dir");
-  }
+  await prepareReleasedProfileActionDependencies({ runPath });
   const result = await (input.run ?? runAgentSdkProjectCommand)({
     command: "run",
     cwd: runPath,
