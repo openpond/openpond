@@ -14,6 +14,7 @@ export * from "./model-improvement-qualification.js";
 export * from "./preferences.js";
 export * from "./profile-evaluations.js";
 export * from "./profile-evaluation-comparisons.js";
+export * from "./profile-evaluation-execution.js";
 export * from "./review-conformance.js";
 export * from "./rollouts.js";
 export * from "./telemetry.js";
