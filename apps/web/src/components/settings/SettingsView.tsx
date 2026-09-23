@@ -327,6 +327,7 @@ export function SettingsView({
             onPayload={onPayload}
             onError={onError}
             onToast={onToast}
+            onOpenSession={onOpenSourceSession}
           />
         ) : section === "skills" ? (
           <SkillsSettingsSection

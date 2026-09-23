@@ -19,6 +19,7 @@ export type ProfileViewProps = {
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onSkillCommand?: (command: string, provider?: ChatProvider) => void;
+  onOpenSession?: (sessionId: string) => void;
   overviewContent?: ReactNode;
 };
 
@@ -32,6 +33,7 @@ export function ProfileView({
   onError,
   onToast,
   onSkillCommand,
+  onOpenSession,
   overviewContent,
 }: ProfileViewProps) {
   return (
@@ -48,6 +50,7 @@ export function ProfileView({
         onError={onError}
         onToast={onToast}
         onSkillCommand={onSkillCommand}
+        onOpenSession={onOpenSession}
         overviewContent={overviewContent}
       />
     </section>
