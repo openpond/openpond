@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
-import { OpenPondProfileRefSchema, type RuntimeEvent } from "@openpond/contracts";
+import { OpenPondProfileRefSchema, type ProviderSettings, type RuntimeEvent } from "@openpond/contracts";
+import { contentHash } from "@openpond/harness";
 import {
   collectProfileSourceUploadEntries,
   commitActiveProfileChanges,
@@ -51,11 +52,14 @@ import {
 import type { SqliteStore } from "../store/store.js";
 import { ensureLocalProfileWorkflows } from "../harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "../harness/local-profile-evaluation-runtime.js";
+import { createProfileEvaluationRunPreparationService } from "../harness/profile-evaluation-run-preparation.js";
+import { loadLocalProfileEvaluationTaskset } from "../harness/local-profile-evaluation-taskset.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   store: SqliteStore;
   storeDir: string;
+  providerSettings: () => Promise<ProviderSettings>;
 }) {
   const { appendRuntimeEvent } = deps;
 
@@ -97,6 +101,23 @@ export function createProfilePayloads(deps: {
     ]);
     return { ...evaluations, runs, comparisons };
   }
+
+  const profileEvaluationPreparePayload = createProfileEvaluationRunPreparationService({
+    store: deps.store,
+    selectedWorkflows: profileWorkflowsPayload,
+    loadTasksetPackage: (definition, profileId) => loadLocalProfileEvaluationTaskset({
+      store: deps.store, storeDir: deps.storeDir, definition, profileId,
+    }),
+    modelConfigurationHash: async (modelRef) => {
+      const settings = await deps.providerSettings();
+      return contentHash({
+        modelRef,
+        provider: settings.providers[modelRef.providerId] ?? null,
+        credential: settings.statuses[modelRef.providerId]?.credential.source ?? "none",
+      });
+    },
+    placement: "local",
+  });
 
   async function profileSelectPayload(payload: unknown) {
     const input = asRecord(payload);
@@ -809,6 +830,7 @@ export function createProfilePayloads(deps: {
     profileCatalogPayload,
     profileWorkflowsPayload,
     profileEvaluationsPayload,
+    profileEvaluationPreparePayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,

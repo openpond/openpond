@@ -11,9 +11,10 @@ import {
   TurnSchema,
   emptyOpenPondProfileState,
 } from "@openpond/contracts";
-import { contentHash, createHarnessSourcePackage } from "@openpond/harness";
-import { createTasksetRunManifest, loadReleasedProfileEvaluationCatalog, resolveProfileEvaluationRunSource, tasksetRunMetricPolicy } from "@openpond/evals";
+import { contentHash, createHarnessSourcePackage, sha256 } from "@openpond/harness";
+import { TasksetReleaseSchema, bindTasksetExecutionReleases, createEnvironmentRelease, createVerifierSetRelease, createTasksetRunManifest, loadReleasedProfileEvaluationCatalog, resolveProfileEvaluationRunSource, tasksetRunMetricPolicy } from "@openpond/evals";
 import { genericToolConformance } from "@openpond/evals/conformance";
+import { createTasksetPackage } from "openpond-sdk/taskset-packages";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
@@ -36,6 +37,7 @@ import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime, profileWo
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
 import { createProfileEvaluationCaseService } from "./profile-evaluation-case-service.js";
 import { createProfileEvaluationRunService } from "./profile-evaluation-run-service.js";
+import { createProfileEvaluationRunPreparationService } from "./profile-evaluation-run-preparation.js";
 import { materializeHarnessSource } from "../training/materialize-harness-source.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import {
@@ -772,7 +774,37 @@ describe("local Harness workspace service", () => {
     })}\n`;
     await fs.writeFile(path.join(sourcePath, "workflows", "catalog.json"), workflowSource);
     await fs.mkdir(path.join(sourcePath, "evals"), { recursive: true });
-    const evaluationTaskset = genericToolConformance.taskset;
+    const evaluationEnvironment = createEnvironmentRelease({
+      schemaVersion: "openpond.environmentRelease.v1", id: "document-environment", revision: 1,
+      contract: genericToolConformance.taskset.environment,
+      actionSchemaRef: null, observationSchemaRef: null, stateSchemaRef: null,
+      artifactCollection: { maxArtifacts: 100, maxTotalBytes: 1_000_000 },
+      adapterConformanceHashes: {}, metadata: {},
+    });
+    const evaluationVerifierSet = createVerifierSetRelease({
+      schemaVersion: "openpond.verifierSetRelease.v1", id: "document-verifiers", revision: 1,
+      graders: genericToolConformance.taskset.graders,
+      isolation: { processBoundary: "isolated_process", networkPolicy: "none", defaultTimeoutMs: 5_000 },
+      calibrationReceiptRefs: [], metadata: {},
+    });
+    const evaluationTaskset = bindTasksetExecutionReleases({
+      taskset: genericToolConformance.taskset,
+      environment: evaluationEnvironment,
+      verifierSet: evaluationVerifierSet,
+    });
+    const privateBytes = Buffer.from("{}", "utf8");
+    const privateFiles = evaluationTaskset.tasks.map((task) => ({
+      asset: {
+        id: task.privilegedContextRef!, path: `private/${task.id}.json`,
+        mediaType: "application/json", sizeBytes: privateBytes.length,
+        contentHash: sha256(privateBytes), visibility: "host_private" as const,
+      },
+      base64: privateBytes.toString("base64"),
+    }));
+    const evaluationPackage = createTasksetPackage({
+      schemaVersion: "openpond.tasksetPackage.v1", taskset: evaluationTaskset,
+      environment: evaluationEnvironment, verifierSet: evaluationVerifierSet, files: privateFiles,
+    });
     const frozenTask = evaluationTaskset.tasks.find((task) => task.split === "frozen_eval")!;
     const evaluationSource = `${JSON.stringify({
       schemaVersion: "openpond.profileEvaluations.v1",
@@ -905,6 +937,40 @@ describe("local Harness workspace service", () => {
       catalogHash: contentHash(JSON.parse(workflowSource)), workflowId: "create-document",
     };
     const profileRef = { source: "local" as const, repositoryId: "profile-repo", profileId: "personal" };
+    const prepareRun = createProfileEvaluationRunPreparationService({
+      store,
+      selectedWorkflows: async () => ({
+        profileRef, sourceRevision: "abc123", harnessRelease: discoveredEvaluations.harnessRelease,
+        workflows: [{ workflow: JSON.parse(workflowSource).workflows[0], binding }],
+      }),
+      loadTasksetPackage: async () => evaluationPackage,
+      modelConfigurationHash: async () => modelConfigurationHash,
+      placement: "local",
+    });
+    const prepared = await prepareRun({
+      id: "prepared-document-run", createdAt: NOW, definitionId: "document-check", modelRef,
+    });
+    expect(prepared.manifest.tasksetRelease).toEqual({ id: evaluationTaskset.id, contentHash: evaluationTaskset.contentHash });
+    expect(prepared.manifest.packageHash).toBe(evaluationPackage.contentHash);
+    expect(prepared.manifest.population).toEqual([expect.objectContaining({ taskId: frozenTask.id, seed: "1" })]);
+    expect((await prepareRun({ id: "prepared-document-run", createdAt: NOW, definitionId: "document-check", modelRef }))
+      .manifest.contentHash).toBe(prepared.manifest.contentHash);
+    const { contentHash: _evaluationHash, ...evaluationTasksetContent } = evaluationTaskset;
+    const wrongTasksetContent = { ...evaluationTasksetContent, id: "other-taskset" };
+    const wrongTaskset = TasksetReleaseSchema.parse({ ...wrongTasksetContent, contentHash: contentHash(wrongTasksetContent) });
+    const wrongPackage = createTasksetPackage({
+      schemaVersion: "openpond.tasksetPackage.v1", taskset: wrongTaskset,
+      environment: evaluationEnvironment, verifierSet: evaluationVerifierSet, files: privateFiles,
+    });
+    await expect(createProfileEvaluationRunPreparationService({
+      store,
+      selectedWorkflows: async () => ({ profileRef, sourceRevision: "abc123", harnessRelease: discoveredEvaluations.harnessRelease,
+        workflows: [{ workflow: JSON.parse(workflowSource).workflows[0], binding }] }),
+      loadTasksetPackage: async () => wrongPackage,
+      modelConfigurationHash: async () => modelConfigurationHash,
+      placement: "local",
+    })({ id: "wrong-package-run", createdAt: NOW, definitionId: "document-check", modelRef }))
+      .rejects.toThrow("differs from its released definition");
     const caseSessions: unknown[] = [];
     const executeCase = createProfileEvaluationCaseService({
       store,
@@ -935,9 +1001,12 @@ describe("local Harness workspace service", () => {
       manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
       modelRef, modelConfigurationHash,
     });
+    const preparedRun = await executeRun(prepared);
+    expect(preparedRun.manifest.id).toBe("prepared-document-run");
+    expect(preparedRun.receiptRefs).toHaveLength(1);
     expect(run.manifest.id).toBe(caseManifest.id);
     expect((await store.getProfileEvaluationRun(caseManifest.id))?.contentHash).toBe(run.contentHash);
-    expect(await store.listProfileEvaluationRuns(profileRef)).toHaveLength(1);
+    expect(await store.listProfileEvaluationRuns(profileRef)).toHaveLength(2);
     expect(await executeRun({
       manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
       modelRef, modelConfigurationHash,
