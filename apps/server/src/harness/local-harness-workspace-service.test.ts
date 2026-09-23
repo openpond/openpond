@@ -924,6 +924,13 @@ describe("local Harness workspace service", () => {
       store, storeDir: directory, definition: discoveredEvaluations.definitions[0]!, profileId: "personal",
       harnessRelease: discoveredEvaluations.harnessRelease,
     })).toEqual(evaluationPackage);
+    const packageSourcePath = path.join(sourcePath, "evals", "tasksets", `${evaluationTaskset.contentHash}.json`);
+    await fs.writeFile(packageSourcePath, JSON.stringify({ ...evaluationPackage, contentHash: "0".repeat(64) }));
+    await expect(importProfileIntoLocalHarnessWorkspace({
+      store, storeDir: directory, id: "invalid-evaluation-package", ownerId: "desktop-personal",
+      name: "Invalid evaluation package", profile,
+    })).rejects.toThrow("Taskset package content hash differs");
+    await fs.writeFile(packageSourcePath, JSON.stringify(evaluationPackage));
     const modelRef = { providerId: "openpond" as const, modelId: "test-model" };
     const modelConfigurationHash = contentHash("model-configuration");
     const caseSource = resolveProfileEvaluationRunSource({
