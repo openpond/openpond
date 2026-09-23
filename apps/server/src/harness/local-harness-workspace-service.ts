@@ -818,7 +818,6 @@ async function writeImportedProfileSource(
       importedFrom: "openpond.profile",
       profileId: profile.activeProfile,
       profileGitHead: sourceRevision ?? profile.git?.head ?? null,
-      profileSourcePath: profile.sourcePath,
       excludedEvalCount: profile.evals.length,
       actionConversionPending: profile.actionCatalog.length > 0,
     },
