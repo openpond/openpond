@@ -20,7 +20,7 @@
   overflow: auto;
   scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
   scrollbar-width: thin;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 0;
   border-radius: 10px;
   background: #2b2b2b;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);

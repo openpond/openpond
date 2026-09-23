@@ -475,7 +475,7 @@
 .composer-command-menu {
   gap: 0;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 0;
   background: #242424;
   padding: 7px;
 }

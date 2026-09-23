@@ -267,7 +267,7 @@ button.user-message-attachment {
   gap: 14px;
   width: min(620px, 100%);
   padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 0;
   border-radius: 16px;
   background: linear-gradient(145deg, #202020, #1b1b1b);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
@@ -603,7 +603,7 @@ button.user-message-attachment {
   gap: 7px;
   width: min(560px, calc(100vw - 120px));
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 0;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.045);
   color: #f4f4f5;
@@ -784,7 +784,7 @@ button.user-message-attachment {
   max-width: 860px;
   margin: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.065);
+  border: 0;
   border-radius: 18px;
   background: #222222;
   color: #eeeeec;
@@ -1079,7 +1079,7 @@ button.user-message-attachment {
   display: grid;
   width: 220px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: 8px;
   background: #141414;
   padding: 5px;
@@ -1112,7 +1112,7 @@ button.user-message-attachment {
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
   width: min(560px, 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 0;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
   color: #f4f4f5;
@@ -1243,7 +1243,7 @@ button.user-message-attachment {
   display: grid;
   width: min(736px, 100%);
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 0;
   border-radius: 8px;
   background: #232323;
   color: #f1f1f1;
@@ -1383,7 +1383,7 @@ button.user-message-attachment {
   display: grid;
   gap: 10px;
   width: min(736px, 100%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 0;
   border-radius: 8px;
   background: #202323;
   color: #f1f1f1;

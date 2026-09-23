@@ -300,7 +300,7 @@
 .workspace-file-search-popover {
   position: absolute;
   z-index: 70;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 0;
   background: #2a2a2a;
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.44);
 }
@@ -504,7 +504,7 @@
   display: grid;
   width: 228px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 0;
   border-radius: 11px;
   background: #2a2a2a;
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.44);

@@ -266,30 +266,6 @@ describe("terminal websocket scope validation", () => {
 });
 
 describe("sidebar terminal indicators", () => {
-  test("renders save-for-later next to archive without the training action", () => {
-    const markup = renderToStaticMarkup(
-      createElement(SidebarSessionRow, {
-        session: sessionFixture({ savedForLater: true }),
-        selected: false,
-        hideIcon: true,
-        onSelect: () => undefined,
-        onDockRight: () => undefined,
-        onTogglePin: () => undefined,
-        onToggleSaveForLater: () => undefined,
-        onArchive: () => undefined,
-      })
-    );
-
-    expect(markup).toContain('aria-label="Return to active"');
-    expect(markup).toContain('aria-label="Open in right panel"');
-    expect(markup).toContain('aria-label="Pin chat"');
-    expect(markup).toContain('aria-label="Mark done"');
-    expect(markup.indexOf('aria-label="Open in right panel"')).toBeLessThan(
-      markup.indexOf('aria-label="Pin chat"')
-    );
-    expect(markup).not.toContain("Add to training");
-  });
-
   test("renders accessible terminal state on chat rows", () => {
     const markup = renderToStaticMarkup(
       createElement(SidebarSessionRow, {

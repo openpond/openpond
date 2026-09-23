@@ -75,7 +75,7 @@
   display: grid;
   width: auto;
   padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: 12px;
   background: rgba(24, 24, 24, 0.98);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
@@ -354,7 +354,7 @@
   bottom: calc(100% + 7px);
   display: grid;
   width: 220px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: 12px;
   background: rgba(24, 24, 24, 0.98);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
@@ -1126,32 +1126,43 @@
   z-index: 126;
   top: var(--sidebar-task-detail-top, 128px);
   left: var(--sidebar-task-detail-left, calc(var(--sidebar-width, 320px) + 10px));
-  width: min(288px, calc(100vw - var(--sidebar-task-detail-left, 0px) - 12px));
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: max-content;
+  max-width: min(240px, calc(100vw - 24px));
+  border: 0;
   border-radius: 8px;
   background: #1d1d1d;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
   color: var(--muted-strong);
-  padding: 10px 11px;
+  padding: 8px 11px;
   pointer-events: none;
 }
 
-.sidebar-task-detail-title {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-task-detail-project,
 .sidebar-task-detail-popover time {
   display: block;
-  margin-top: 4px;
   color: #929292;
   font-size: 11px;
   line-height: 15px;
+}
+
+.sidebar-task-detail-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: #929292;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.sidebar-task-detail-folder svg {
+  flex-shrink: 0;
+}
+
+.sidebar-task-detail-folder span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-task-title[data-overflowing="true"]:hover .sidebar-task-title-text {
@@ -1216,7 +1227,7 @@
   );
   max-height: calc(100vh - var(--sidebar-project-locations-top, 128px) - 12px);
   overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 0;
   border-radius: 8px;
   background: #1d1d1d;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);

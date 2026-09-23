@@ -1,23 +1,25 @@
 import { useEffect, type CSSProperties } from "react";
+import { Folder } from "../icons";
 
-const TASK_DETAIL_POPOVER_WIDTH = 288;
-const TASK_DETAIL_POPOVER_ESTIMATED_HEIGHT = 112;
+const TASK_DETAIL_POPOVER_WIDTH = 240;
+const TASK_DETAIL_POPOVER_ESTIMATED_HEIGHT = 36;
 
 export type SidebarTaskDetail = {
   descriptionId: string;
-  projectLabel: string;
   sessionId: string;
   title: string;
   updatedAt: string;
+  folderName: string | null;
   style: CSSProperties;
 };
 
 export function sidebarTaskDetailPosition(
   rect: Pick<DOMRect, "right" | "top">,
   viewport: { width: number; height: number },
+  hasFolder = false,
 ): CSSProperties {
   const maxLeft = Math.max(12, viewport.width - TASK_DETAIL_POPOVER_WIDTH - 12);
-  const maxTop = Math.max(12, viewport.height - TASK_DETAIL_POPOVER_ESTIMATED_HEIGHT - 12);
+  const maxTop = Math.max(12, viewport.height - TASK_DETAIL_POPOVER_ESTIMATED_HEIGHT - (hasFolder ? 22 : 0) - 12);
   return {
     "--sidebar-task-detail-left": `${Math.round(Math.max(12, Math.min(rect.right + 10, maxLeft)))}px`,
     "--sidebar-task-detail-top": `${Math.round(Math.max(12, Math.min(rect.top - 4, maxTop)))}px`,
@@ -52,7 +54,7 @@ export function SidebarTaskDetailPopover({
   if (!detail) return null;
   const updated = new Date(detail.updatedAt);
   const exactUpdatedAt = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "full",
+    dateStyle: "medium",
     timeStyle: "short",
   }).format(updated);
 
@@ -61,11 +63,16 @@ export function SidebarTaskDetailPopover({
       id={detail.descriptionId}
       className="sidebar-task-detail-popover"
       style={detail.style}
-      aria-label={`${detail.title} details`}
+      role="tooltip"
+      aria-label={`Last updated for ${detail.title}`}
     >
-      <div className="sidebar-task-detail-title">{detail.title}</div>
-      <div className="sidebar-task-detail-project">{detail.projectLabel}</div>
       <time dateTime={detail.updatedAt}>{exactUpdatedAt}</time>
+      {detail.folderName ? (
+        <div className="sidebar-task-detail-folder">
+          <Folder size={13} aria-hidden="true" />
+          <span>{detail.folderName}</span>
+        </div>
+      ) : null}
     </aside>
   );
 }
