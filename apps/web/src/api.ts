@@ -123,6 +123,14 @@ export type ProfileWorkflowDiscovery = {
   harnessRelease: { id: string; contentHash: string };
   workflows: Array<{ workflow: ProfileWorkflow; binding: ProfileWorkflowBinding }>;
 };
+export type ProfileEvaluationDiscovery = {
+  profileRef: OpenPondProfileRef;
+  sourceRevision: string;
+  harnessRelease: { id: string; contentHash: string };
+  catalogHash: string | null;
+  definitions: import("@openpond/evals").ProfileEvaluationCatalog["definitions"];
+  suites: import("@openpond/evals").ProfileEvaluationCatalog["suites"];
+};
 import { apiFetch, type ClientConnection } from "./api/api-client";
 import { organizationApi } from "./api/organization-api";
 import { sessionApi } from "./api/session-api";
@@ -1085,6 +1093,8 @@ export const api = {
     apiFetch<OpenPondProfileLibrary>(connection, "/v1/profile/catalog"),
   profileWorkflows: (connection: ClientConnection) =>
     apiFetch<ProfileWorkflowDiscovery>(connection, "/v1/profile/workflows"),
+  profileEvaluations: (connection: ClientConnection) =>
+    apiFetch<ProfileEvaluationDiscovery>(connection, "/v1/profile/evaluations"),
   profileSelect: (connection: ClientConnection, ref: OpenPondProfileRef) =>
     apiFetch<{
       profile: BootstrapPayload["profile"];

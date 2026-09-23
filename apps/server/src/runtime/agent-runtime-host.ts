@@ -39,6 +39,7 @@ export function createAgentRuntimePorts(deps: {
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<Approval>;
   listProfileWorkflows(): Promise<unknown>;
+  listProfileEvaluations(): Promise<unknown>;
   inspectHarness(): Promise<unknown>;
   reviewHarnessProposal(params: unknown): Promise<unknown>;
   reviewHarness(params: unknown): Promise<unknown>;
@@ -84,6 +85,7 @@ export function createAgentRuntimePorts(deps: {
         compaction: true,
         harnessInspection: true,
         profileWorkflows: true,
+        profileEvaluations: true,
         harnessProposalReview: true,
         harnessEvaluationReview: true,
         harnessEvaluationReviewAcceptance: true,
@@ -121,6 +123,7 @@ export function createAgentRuntimePorts(deps: {
     interruptTurn: deps.interruptSessionTurn,
     resolveApproval: deps.resolveApproval,
     listProfileWorkflows: deps.listProfileWorkflows,
+    listProfileEvaluations: deps.listProfileEvaluations,
     inspectHarness: deps.inspectHarness,
     reviewHarnessProposal: deps.reviewHarnessProposal,
     reviewHarness: deps.reviewHarness,
