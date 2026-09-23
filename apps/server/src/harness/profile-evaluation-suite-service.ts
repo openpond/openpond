@@ -42,6 +42,10 @@ export function createProfileEvaluationSuiteService(input: {
     const existing = await input.store.getProfileEvaluationSuiteRun(request.id);
     if (existing) {
       if (existing.suiteId !== suite.id || existing.catalogHash !== contentHash(catalog)
+        || existing.profileId !== selected.profileRef.profileId
+        || existing.sourceRevision !== selected.sourceRevision
+        || existing.harnessRelease.id !== selected.harnessRelease.id
+        || existing.harnessRelease.contentHash !== selected.harnessRelease.contentHash
         || existing.createdAt !== request.createdAt) {
         throw new Error(`Profile evaluation suite run ${request.id} already exists with another request.`);
       }
