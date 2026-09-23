@@ -400,6 +400,26 @@
   font-size: 12px;
 }
 
+.profile-evaluations-suite-run summary {
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.profile-evaluations-suite-run ul {
+  display: grid;
+  gap: 5px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.profile-evaluations-suite-run li {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .profile-evaluations-suite span,
 .profile-evaluations-row p,
 .profile-evaluations-row small,
