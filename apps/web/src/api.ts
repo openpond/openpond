@@ -1108,6 +1108,11 @@ export const api = {
     apiFetch<ProfileWorkflowDiscovery>(connection, "/v1/profile/workflows"),
   profileEvaluations: (connection: ClientConnection) =>
     apiFetch<ProfileEvaluationDiscovery>(connection, "/v1/profile/evaluations"),
+  profileEvaluationCompare: (connection: ClientConnection, runIds: string[]) =>
+    apiFetch<ProfileEvaluationComparison>(connection, "/v1/profile/evaluations/compare", {
+      method: "POST",
+      body: JSON.stringify({ id: `comparison-${crypto.randomUUID()}`, runIds }),
+    }),
   profileSelect: (connection: ClientConnection, ref: OpenPondProfileRef) =>
     apiFetch<{
       profile: BootstrapPayload["profile"];
