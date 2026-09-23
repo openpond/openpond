@@ -313,6 +313,69 @@ test("executes a bound Profile workflow from its released source and retains ide
   expect(provider).toHaveBeenCalledTimes(2);
 });
 
+test("executes a bound typed Profile action from its released Agent package", async () => {
+  const paths = await fixture();
+  const sourceDir = paths.harness.sourceDirectory;
+  const manifestPath = path.join(sourceDir, "harness.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const catalog = {
+    schemaVersion: "openpond.profileWorkflows.v1",
+    workflows: [{
+      id: "publish", label: "Publish", description: "Publish a report.",
+      inputSchema: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
+      invocation: { kind: "agent_action", actionId: "publish" }, skillPaths: [],
+    }],
+  };
+  const agentSource = `import { action, defineAgentProject, defineWorkflow } from "openpond-agent-sdk/primitives";
+const publish = defineWorkflow({ name: "publish-workflow", async run(_ctx, input) { return { text: String(input.title), intent: "publish" }; } });
+export default defineAgentProject({ name: "fixture", version: "0.1.0", useCase: "test", manifestMode: "typescript", runtime: { base: "node-bun-workspace" }, defaultAction: "publish", actions: [action("publish", { target: { kind: "workflow", workflow: publish } })], workflows: [publish] });\n`;
+  await mkdir(path.join(sourceDir, "workflows"));
+  await mkdir(path.join(sourceDir, "agents", "default", "agent"), { recursive: true });
+  await writeFile(path.join(sourceDir, "workflows", "catalog.json"), JSON.stringify(catalog));
+  await writeFile(path.join(sourceDir, "workflows", "actions.json"), JSON.stringify({
+    schemaVersion: "openpond.profileWorkflowActions.v1",
+    actions: [{ id: "publish", agentId: "default", sourceActionId: "publish", inputSchema: catalog.workflows[0]!.inputSchema }],
+  }));
+  await writeFile(path.join(sourceDir, "agents", "default", "agent", "agent.ts"), agentSource);
+  manifest.files.push(
+    { id: "workflow-catalog", kind: "workflow", path: "workflows/catalog.json", parentId: null, mediaType: "application/json", visibility: "policy", portability: "portable" },
+    { id: "workflow-actions", kind: "asset", path: "workflows/actions.json", parentId: null, mediaType: "application/json", visibility: "policy", portability: "portable" },
+    { id: "agent-default", kind: "agent", path: "agents/default/agent/agent.ts", parentId: null, mediaType: "text/javascript", visibility: "policy", portability: "portable" },
+  );
+  manifest.toolDeclarations = [];
+  manifest.metadata = { importedFrom: "openpond.profile", profileId: "fixture", profileGitHead: "revision-1" };
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const compiled = await compileLocalHarnessSource({ workspaceId: paths.harness.workspaceId, sourceDir });
+  const binding = {
+    schemaVersion: "openpond.profileWorkflowBinding.v1", profileId: "fixture", sourceRevision: "revision-1",
+    harnessRelease: { id: compiled.harnessRelease.id, contentHash: compiled.harnessRelease.contentHash },
+    catalogHash: contentHash(catalog), workflowId: "publish",
+  };
+  const provider = vi.fn();
+  const server = await createOpenPondAppServer({
+    ...paths,
+    embedding: { allowedTools: [], authorizeTool: async () => {} },
+    streamOpenPondHostedChatTurn: async function* (request) {
+      provider(request);
+      yield { type: "text_delta", raw: null, text: "Published" };
+      yield { type: "finish", raw: null, finishReason: "stop" };
+    },
+  });
+  cleanup.push(server.close);
+  await writeFile(path.join(sourceDir, "agents", "default", "agent", "agent.ts"), "throw new Error('mutable source was read');\n");
+  const started = await server.runtime.threadStart({ session: {
+    provider: "openpond", modelRef: { providerId: "openpond", modelId: "fixture-model" },
+    experience: "work", title: "Publish", cwd: paths.workspaceDir,
+    currentProfile: { source: "local", repositoryId: "fixture-repo", profileId: "fixture" },
+    profileWorkflowBinding: binding,
+  } }) as { thread: { id: string } };
+  const result = await server.runtime.turnStart({ threadId: started.thread.id, input: { prompt: "Publish report", workflowInput: { title: "Quarterly report" } } });
+  expect(result).toMatchObject({ turn: { status: "completed", metadata: { profileWorkflowBinding: binding } } });
+  expect(JSON.stringify(provider.mock.calls)).toContain("Quarterly report");
+  expect(JSON.stringify(provider.mock.calls)).toContain("publish");
+  expect(await readFile(path.join(sourceDir, "agents", "default", "agent", "agent.ts"), "utf8")).toContain("mutable source was read");
+});
+
 test("explicit Profile source loads without replacing personal selection and rejects changed restart bytes", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-source-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
