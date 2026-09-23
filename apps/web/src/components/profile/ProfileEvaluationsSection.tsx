@@ -203,7 +203,16 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
                 {runningSuiteId === suite.id ? "Running suite…" : "Run suite"}
               </button>
               {discovery.suiteRuns.filter((run) => run.suiteId === suite.id).slice(0, 5).map((run) => (
-                <small key={run.id}>{displayTimestamp(run.completedAt)} · {run.passed ? "Passed" : "Did not pass"} · {run.members.length} checks · {run.id}</small>
+                <details key={run.id} className="profile-evaluations-suite-run">
+                  <summary>{displayTimestamp(run.completedAt)} · {run.passed ? "Passed" : "Did not pass"} · {run.members.length} checks</summary>
+                  <small>Profile source {run.sourceRevision.slice(0, 12)} · Suite run {run.id}</small>
+                  <ul>{run.members.map((member) => (
+                    <li key={member.runManifest.id}>
+                      <strong>{discovery.definitions.find((definition) => definition.id === member.definitionId)?.label ?? member.definitionId}</strong>
+                      <span>{member.passed ? "Passed" : "Did not pass"} · {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`} · Run {member.runManifest.id}</span>
+                    </li>
+                  ))}</ul>
+                </details>
               ))}
             </div>
           ))}
