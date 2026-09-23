@@ -39,6 +39,15 @@ export function createProfileEvaluationSuiteService(input: {
     };
     const suite = catalog.suites.find((candidate) => candidate.id === request.suiteId);
     if (!suite) throw new Error(`Profile evaluation suite ${request.suiteId} is absent from the selected release.`);
+    const preparedRuns = [];
+    for (const definitionId of suite.definitionIds) {
+      preparedRuns.push(await input.prepareRun({
+        id: `suite-${contentHash([request.id, definitionId]).slice(0, 32)}`,
+        createdAt: request.createdAt,
+        definitionId,
+        modelRef: request.modelRef,
+      }));
+    }
     const existing = await input.store.getProfileEvaluationSuiteRun(request.id);
     if (existing) {
       if (existing.suiteId !== suite.id || existing.catalogHash !== contentHash(catalog)
@@ -49,9 +58,10 @@ export function createProfileEvaluationSuiteService(input: {
         || existing.createdAt !== request.createdAt) {
         throw new Error(`Profile evaluation suite run ${request.id} already exists with another request.`);
       }
-      for (const member of existing.members) {
+      for (const [index, member] of existing.members.entries()) {
         const run = await input.store.getProfileEvaluationRun(member.runManifest.id);
-        if (!run || run.contentHash !== member.runHash || run.manifest.contentHash !== member.runManifest.contentHash) {
+        if (!run || run.contentHash !== member.runHash || run.manifest.contentHash !== member.runManifest.contentHash
+          || run.manifest.contentHash !== preparedRuns[index]?.manifest.contentHash) {
           throw new Error("Retained Profile evaluation suite is missing member evidence.");
         }
         const policy = run.manifest.policy;
@@ -63,13 +73,8 @@ export function createProfileEvaluationSuiteService(input: {
       return existing;
     }
     const members = [];
-    for (const definitionId of suite.definitionIds) {
-      const prepared = await input.prepareRun({
-        id: `suite-${contentHash([request.id, definitionId]).slice(0, 32)}`,
-        createdAt: request.createdAt,
-        definitionId,
-        modelRef: request.modelRef,
-      });
+    for (const [index, definitionId] of suite.definitionIds.entries()) {
+      const prepared = preparedRuns[index]!;
       const result = await input.executeRun(prepared);
       members.push({
         definitionId,
