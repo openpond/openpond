@@ -41,7 +41,7 @@ type SelectedWorkflows = {
 export function createProfileEvaluationRunPreparationService(input: {
   store: SqliteStore;
   selectedWorkflows: () => Promise<SelectedWorkflows>;
-  loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string) => Promise<TasksetPackage>;
+  loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
   modelConfigurationHash: (modelRef: ChatModelRef) => Promise<string>;
   placement: "local" | "remote" | "colocated";
 }) {
@@ -67,7 +67,7 @@ export function createProfileEvaluationRunPreparationService(input: {
     }
     const binding = selected.workflows.find((entry) => entry.binding.workflowId === target.workflowId)?.binding;
     if (!binding) throw new Error(`Evaluation workflow ${target.workflowId} is absent from the selected Profile release.`);
-    const packageValue = validateTasksetPackage(await input.loadTasksetPackage(definition, selected.profileRef.profileId));
+    const packageValue = validateTasksetPackage(await input.loadTasksetPackage(definition, selected.profileRef.profileId, selected.harnessRelease));
     const taskset = packageValue.taskset;
     if (taskset.id !== definition.tasksetRelease.id || taskset.contentHash !== definition.tasksetRelease.contentHash) {
       throw new Error("Evaluation Taskset package differs from its released definition.");

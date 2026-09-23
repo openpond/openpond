@@ -35,6 +35,7 @@ import { applyLocalHarnessRefinerProposal } from "./local-harness-refiner.js";
 import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
 import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime, profileWorkflowsForRelease } from "./local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
+import { loadLocalProfileEvaluationTaskset } from "./local-profile-evaluation-taskset.js";
 import { createProfileEvaluationCaseService } from "./profile-evaluation-case-service.js";
 import { createProfileEvaluationRunService } from "./profile-evaluation-run-service.js";
 import { createProfileEvaluationRunPreparationService } from "./profile-evaluation-run-preparation.js";
@@ -821,6 +822,11 @@ describe("local Harness workspace service", () => {
       suites: [{ id: "component-checks", label: "Components", scope: "component", definitionIds: ["document-check"] }],
     })}\n`;
     await fs.writeFile(path.join(sourcePath, "evals", "catalog.json"), evaluationSource);
+    await fs.mkdir(path.join(sourcePath, "evals", "tasksets"));
+    await fs.writeFile(
+      path.join(sourcePath, "evals", "tasksets", `${evaluationTaskset.contentHash}.json`),
+      JSON.stringify(evaluationPackage),
+    );
     await fs.writeFile(path.join(repoPath, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
     const empty = emptyOpenPondProfileState();
     const profile = {
@@ -889,6 +895,7 @@ describe("local Harness workspace service", () => {
       expect.objectContaining({ path: "workflows/catalog.json" }),
       expect.objectContaining({ path: "workflows/actions.json" }),
       expect.objectContaining({ path: "evals/catalog.json", visibility: "verifier" }),
+      expect.objectContaining({ path: `evals/tasksets/${evaluationTaskset.contentHash}.json`, visibility: "verifier" }),
     ]));
     expect(await fs.readFile(path.join(localHarnessWorkspacePaths(directory, imported.workspace.id).source, "workflows", "catalog.json"), "utf8"))
       .toBe(workflowSource);
@@ -913,6 +920,10 @@ describe("local Harness workspace service", () => {
     });
     expect(discoveredEvaluations.catalogHash).toBe(evaluation.catalogHash);
     expect(discoveredEvaluations.definitions.map((entry) => entry.id)).toEqual(["document-check"]);
+    expect(await loadLocalProfileEvaluationTaskset({
+      store, storeDir: directory, definition: discoveredEvaluations.definitions[0]!, profileId: "personal",
+      harnessRelease: discoveredEvaluations.harnessRelease,
+    })).toEqual(evaluationPackage);
     const modelRef = { providerId: "openpond" as const, modelId: "test-model" };
     const modelConfigurationHash = contentHash("model-configuration");
     const caseSource = resolveProfileEvaluationRunSource({

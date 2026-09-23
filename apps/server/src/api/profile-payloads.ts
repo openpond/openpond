@@ -106,8 +106,8 @@ export function createProfilePayloads(deps: {
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
     store: deps.store,
     selectedWorkflows: profileWorkflowsPayload,
-    loadTasksetPackage: (definition, profileId) => loadLocalProfileEvaluationTaskset({
-      store: deps.store, storeDir: deps.storeDir, definition, profileId,
+    loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({
+      store: deps.store, storeDir: deps.storeDir, definition, profileId, harnessRelease,
     }),
     modelConfigurationHash: async (modelRef) => {
       const settings = await deps.providerSettings();
