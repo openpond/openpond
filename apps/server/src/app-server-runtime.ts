@@ -32,7 +32,7 @@ import {
   resolveSelectedLocalHarnessRelease,
 } from "./harness/local-harness-selection.js";
 import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-runtime.js";
-import { ensureExplicitProfileHarnessSource, importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
+import { ensureExplicitProfileHarnessSource, importLocalHarnessWorkspaceSource, PROFILE_HARNESS_WORKSPACE_PREFIX } from "./harness/local-harness-workspace-service.js";
 import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
@@ -242,7 +242,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     }
     explicitProfileRelease = await ensureExplicitProfileHarnessSource({
       store, storeDir,
-      workspaceId: `profile-${contentHash({ profileId: source.profileId, sourceRevision: source.sourceRevision }).slice(0, 24)}`,
+      workspaceId: `${PROFILE_HARNESS_WORKSPACE_PREFIX}${contentHash({ profileId: source.profileId, sourceRevision: source.sourceRevision }).slice(0, 24)}`,
       ownerId: "desktop-personal",
       name: source.profileId,
       profile,

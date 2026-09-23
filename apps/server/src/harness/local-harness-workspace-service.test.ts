@@ -1125,12 +1125,21 @@ describe("local Harness workspace service", () => {
       store, binding: { ...componentBase, sourceRevision: "other", target: { kind: "profile" } },
     })).rejects.toThrow("differs from its released source");
     const ref = { source: "local" as const, repositoryId: "fixture-repo", profileId: "personal" };
+    const legacyWorkspaceId = `profile-${contentHash({ ref, sourceRevision: profile.git.head }).slice(0, 24)}`;
+    const legacy = await importProfileIntoLocalHarnessWorkspace({
+      store, storeDir: directory, id: legacyWorkspaceId,
+      ownerId: "desktop-personal", name: "personal", profile,
+      selectionEligible: false,
+    });
     const [discovered, concurrent] = await Promise.all([
       ensureLocalProfileWorkflows({ store, storeDir: directory, ref, profile }),
       ensureLocalProfileWorkflows({ store, storeDir: directory, ref, profile }),
     ]);
     expect(discovered).toEqual(concurrent);
     expect(discovered.workflows[0]?.binding.harnessRelease.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(discovered.workflows[0]?.binding.harnessRelease.contentHash)
+      .not.toBe(legacy.release.harnessRelease.contentHash);
+    expect(await store.getHarnessWorkspace(legacyWorkspaceId)).not.toBeNull();
     const nextWorkflowSource = workflowSource.replace("Create a document from the notes.", "Create a revised document from the notes.");
     await fs.writeFile(path.join(sourcePath, "workflows", "catalog.json"), nextWorkflowSource);
     await expect(ensureLocalProfileWorkflows({ store, storeDir: directory, ref, profile }))
