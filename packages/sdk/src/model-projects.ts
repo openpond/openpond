@@ -71,10 +71,22 @@ export const ModelProjectRecipeDocumentSchema = z
   })
   .catchall(z.unknown());
 
+/** A held-out check selected from an exact released Profile catalog. Its
+ * Taskset and grader stay in the evaluation runtime, outside training input. */
+export const ModelProfileEvaluationSelectionSchema = z.object({
+  profileProjectId: IdSchema,
+  sourceRevision: z.string().regex(/^[a-f0-9]{40,64}$/),
+  catalogHash: HashSchema,
+  definitionId: IdSchema,
+  harnessRelease: ModelProjectImmutableRefSchema,
+  tasksetRelease: ModelProjectImmutableRefSchema,
+}).strict();
+
 export const ModelProjectTrainingSetupSchema = z
   .object({
     tasksetRef: ModelProjectVersionedRefSchema.nullable().default(null),
     evaluationTasksetRef: ModelProjectVersionedRefSchema.nullable().optional(),
+    profileEvaluation: ModelProfileEvaluationSelectionSchema.nullable().optional(),
     rewardBindingRef: ModelProjectVersionedRefSchema.nullable().optional(),
     tasksetRelease: ModelProjectImmutableRefSchema.nullable().default(null),
     harnessRelease: ModelProjectImmutableRefSchema.nullable().default(null),

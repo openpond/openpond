@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { contentHash, type ImmutableReleaseRef } from "./common.js";
-import { harnessSourcePackageFiles, validateHarnessSourcePackage } from "./source-package.js";
+import { harnessPolicySourcePackageFiles, harnessSourcePackageFiles, validateHarnessPolicySourcePackage, validateHarnessSourcePackage } from "./source-package.js";
 
 export const HARNESS_SOURCE_READ_TOOL_NAME = "harness_read_file";
 const ReadInputSchema = z.object({
@@ -38,8 +38,13 @@ export function createHarnessSourceRuntime(input: {
   dependencies?: Record<string, string>;
   maxContextCharacters: number;
 }) {
-  const source = validateHarnessSourcePackage(input.sourcePackage, input.expectedRelease);
-  const files = harnessSourcePackageFiles(source);
+  const policy = typeof input.sourcePackage === "object" && input.sourcePackage !== null
+    && "schemaVersion" in input.sourcePackage
+    && input.sourcePackage.schemaVersion === "openpond.harnessPolicySourcePackage.v1";
+  const source = policy
+    ? validateHarnessPolicySourcePackage(input.sourcePackage, input.expectedRelease)
+    : validateHarnessSourcePackage(input.sourcePackage, input.expectedRelease);
+  const files = policy ? harnessPolicySourcePackageFiles(source) : harnessSourcePackageFiles(source);
   const { agentSnapshot, harnessRelease } = source;
   const text = (path: string) => {
     const bytes = files.get(path);

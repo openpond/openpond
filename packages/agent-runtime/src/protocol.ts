@@ -19,6 +19,7 @@ export const AGENT_RPC_METHODS = [
   "userInput/resolve",
   "profile/workflows",
   "profile/evaluations",
+  "profile/trainingSource",
   "profile/evaluations/prepare",
   "profile/evaluations/run",
   "profile/evaluations/runSuite",
@@ -115,6 +116,7 @@ export type AgentRuntimeHost = {
   userInputResolve(params: unknown): Promise<unknown>;
   profileWorkflows(params: unknown): Promise<unknown>;
   profileEvaluations(params: unknown): Promise<unknown>;
+  profileTrainingSource(params: unknown): Promise<unknown>;
   profileEvaluationPrepare(params: unknown): Promise<unknown>;
   profileEvaluationRun(params: unknown): Promise<unknown>;
   profileEvaluationRunSuite(params: unknown): Promise<unknown>;
@@ -213,6 +215,7 @@ export class AgentJsonRpcDispatcher {
       case "userInput/resolve": return this.#host.userInputResolve(params);
       case "profile/workflows": return this.#host.profileWorkflows(params);
       case "profile/evaluations": return this.#host.profileEvaluations(params);
+      case "profile/trainingSource": return this.#host.profileTrainingSource(params);
       case "profile/evaluations/prepare": return this.#host.profileEvaluationPrepare(params);
       case "profile/evaluations/run": return this.#host.profileEvaluationRun(params);
       case "profile/evaluations/runSuite": return this.#host.profileEvaluationRunSuite(params);

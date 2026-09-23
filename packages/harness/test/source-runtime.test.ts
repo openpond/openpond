@@ -1,15 +1,19 @@
 import { expect, test } from "vitest";
 
-import { createHarnessSourceRuntime } from "../src/index.js";
+import { createHarnessPolicySourcePackage, createHarnessSourceRuntime } from "../src/index.js";
 import { sourceRuntimeFixture } from "./source-runtime-fixture.js";
 
 test("released source execution isolates private files and rejects unavailable required capabilities before policy work", () => {
   const source = sourceRuntimeFixture();
-  const compile = (sourcePackage = source) => createHarnessSourceRuntime({
+  const policy = createHarnessPolicySourcePackage(source);
+  const compile = (sourcePackage: typeof source | typeof policy = source) => createHarnessSourceRuntime({
     sourcePackage, expectedRelease: { id: sourcePackage.harnessRelease.id, contentHash: sourcePackage.harnessRelease.contentHash },
     baseSystemPrompt: "Complete the task.", runtimeId: "test-runtime", tools: [], maxContextCharacters: 50_000,
   });
   const runtime = compile();
+  const policyRuntime = compile(policy);
+  expect(policyRuntime.receipt.harnessRelease).toEqual(runtime.receipt.harnessRelease);
+  expect(policyRuntime.systemPrompt).toEqual(runtime.systemPrompt);
   expect(runtime.systemPrompt).not.toContain("PRIVATE_GRADER_SOURCE_NOT_POLICY_CONTEXT");
   expect(runtime.systemPrompt).not.toContain("private/grader.txt");
   expect(() => runtime.readFile({ path: "private/grader.txt" })).toThrow("not policy-visible");

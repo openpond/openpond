@@ -32,6 +32,14 @@ export const HarnessSourcePackageSchema = HarnessSourcePackageContentSchema.exte
 
 export type HarnessSourcePackage = z.infer<typeof HarnessSourcePackageSchema>;
 
+/** The guest receives only policy bytes while retaining the complete release
+ * manifest and identity. Verifier and host-private source remains on the host. */
+export const HarnessPolicySourcePackageSchema = HarnessSourcePackageContentSchema.extend({
+  schemaVersion: z.literal("openpond.harnessPolicySourcePackage.v1"),
+  contentHash: ReleaseHashSchema,
+}).strict();
+export type HarnessPolicySourcePackage = z.infer<typeof HarnessPolicySourcePackageSchema>;
+
 export const HarnessSourceSelectionSchema = z.object({
   schemaVersion: z.literal("openpond.harnessSourceSelection.v1"),
   mode: z.enum(["taskset_owned", "selected_release"]),
@@ -87,6 +95,72 @@ export function createHarnessSourcePackage(input: {
     })),
   });
   return validateHarnessSourcePackage({ ...content, contentHash: contentHash(content) });
+}
+
+export function createHarnessPolicySourcePackage(value: unknown, expected?: ImmutableReleaseRef): HarnessPolicySourcePackage {
+  const source = validateHarnessSourcePackage(value, expected);
+  const assets = new Map(source.harnessRelease.files.map((asset) => [asset.path, asset]));
+  const content = {
+    schemaVersion: "openpond.harnessPolicySourcePackage.v1" as const,
+    agentSnapshot: source.agentSnapshot,
+    harnessRelease: source.harnessRelease,
+    files: source.files.filter((file) => assets.get(file.path)?.visibility === "policy"),
+  };
+  return validateHarnessPolicySourcePackage({ ...content, contentHash: contentHash(content) }, expected);
+}
+
+export function validateHarnessPolicySourcePackage(value: unknown, expected?: ImmutableReleaseRef): HarnessPolicySourcePackage {
+  const source = HarnessPolicySourcePackageSchema.parse(value);
+  assertContentHash(source, "Harness policy source package");
+  assertContentHash(source.agentSnapshot, "Harness policy source Agent snapshot");
+  assertContentHash(source.harnessRelease, "Harness policy source release");
+  const { agentSnapshot, harnessRelease } = source;
+  if (expected && (expected.id !== harnessRelease.id || expected.contentHash !== harnessRelease.contentHash)) {
+    throw new Error("Harness policy source package differs from the selected release.");
+  }
+  if (harnessRelease.agentSnapshot.id !== agentSnapshot.id
+    || harnessRelease.agentSnapshot.contentHash !== agentSnapshot.contentHash) {
+    throw new Error("Harness policy source release does not bind its Agent snapshot.");
+  }
+  const assets = new Map<string, ImmutableAssetRef>();
+  for (const asset of harnessRelease.files) {
+    if (assets.has(asset.path)) throw new Error("Harness policy source contains duplicate asset paths.");
+    assets.set(asset.path, asset);
+  }
+  for (const asset of [harnessRelease.program, agentSnapshot.dependencyLock,
+    ...agentSnapshot.instructions, ...agentSnapshot.skills, ...agentSnapshot.agents]) {
+    if (contentHash(assets.get(asset.path) ?? null) !== contentHash(asset)) {
+      throw new Error(`Harness policy source dependency ${asset.path} is absent or differs from its release inventory.`);
+    }
+  }
+  for (const asset of [harnessRelease.program, agentSnapshot.dependencyLock,
+    ...agentSnapshot.instructions, ...agentSnapshot.skills]) {
+    if (asset.visibility !== "policy") throw new Error(`Harness policy source dependency ${asset.path} is private.`);
+  }
+  const expectedPaths = new Set(harnessRelease.files.filter((asset) => asset.visibility === "policy").map((asset) => asset.path));
+  const paths = new Set<string>();
+  let totalBytes = 0;
+  for (const file of source.files) {
+    if (paths.has(file.path)) throw new Error("Harness policy source contains duplicate files.");
+    paths.add(file.path);
+    const asset = assets.get(file.path);
+    if (!asset || asset.visibility !== "policy") throw new Error(`Harness policy source file ${file.path} is not policy-visible.`);
+    const bytes = decode(file.base64);
+    totalBytes += bytes.byteLength;
+    if (totalBytes > MAX_HARNESS_SOURCE_PACKAGE_BYTES) throw new Error("Harness policy source exceeds its byte limit.");
+    if (bytes.byteLength !== asset.sizeBytes || sha256(bytes) !== asset.contentHash) {
+      throw new Error(`Harness policy source file ${file.path} differs from its immutable bytes.`);
+    }
+  }
+  if (paths.size !== expectedPaths.size || [...expectedPaths].some((path) => !paths.has(path))) {
+    throw new Error("Harness policy source is missing released policy files.");
+  }
+  return source;
+}
+
+export function harnessPolicySourcePackageFiles(value: unknown, expected?: ImmutableReleaseRef): ReadonlyMap<string, Uint8Array> {
+  const source = validateHarnessPolicySourcePackage(value, expected);
+  return new Map(source.files.map((file) => [file.path, decode(file.base64)]));
 }
 
 /** Validate both release objects, their complete asset closure and exact bytes.
