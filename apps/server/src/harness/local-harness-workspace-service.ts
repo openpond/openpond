@@ -16,11 +16,14 @@ import {
   contentHash,
   createAgentSnapshot,
   createHarnessRelease,
+  ProfileWorkflowActionsSchema,
   sha256,
+  validateProfileWorkflowCatalog,
   type AgentSnapshot,
   type HarnessRelease,
   type ImmutableAssetRef,
 } from "@openpond/harness";
+import { validateTaskSchema } from "@openpond/evals/task-schema";
 
 import type { SqliteStore } from "../store/store.js";
 import {
@@ -74,6 +77,8 @@ export async function importProfileIntoLocalHarnessWorkspace(input: {
   ownerId: string;
   name: string;
   profile: OpenPondProfileState;
+  sourceRevision?: string;
+  selectionEligible?: boolean;
   now?: () => string;
 }): Promise<{ workspace: HarnessWorkspace; release: LocalHarnessReleaseRecord }> {
   if (input.profile.mode !== "local" || !input.profile.sourcePath) {
@@ -81,8 +86,64 @@ export async function importProfileIntoLocalHarnessWorkspace(input: {
   }
   return createLocalHarnessWorkspaceFromInitializer({
     ...input,
-    initializeSource: (sourceDir) => writeImportedProfileSource(sourceDir, input.name, input.profile),
+    initializeSource: (sourceDir) => writeImportedProfileSource(sourceDir, input.name, input.profile, input.sourceRevision),
   });
+}
+
+/** Compile Profile source without changing workspace selection or durable
+ * state. This also checks a restarted explicit binding against fresh bytes. */
+export async function compileProfileHarnessSource(input: {
+  storeDir: string;
+  workspaceId: string;
+  name: string;
+  profile: OpenPondProfileState;
+  sourceRevision?: string;
+}): Promise<CompiledLocalHarnessSource> {
+  if (input.profile.mode !== "local" || !input.profile.sourcePath) {
+    throw new Error("Only a loaded Profile source can be compiled.");
+  }
+  const root = path.join(input.storeDir, "library", "harnesses", "profile-previews");
+  await fs.mkdir(root, { recursive: true });
+  const sourceDir = path.join(root, randomUUID());
+  try {
+    await writeImportedProfileSource(sourceDir, input.name, input.profile, input.sourceRevision);
+    return await compileLocalHarnessSource({ workspaceId: input.workspaceId, sourceDir });
+  } finally {
+    await fs.rm(sourceDir, { recursive: true, force: true });
+  }
+}
+
+export async function ensureExplicitProfileHarnessSource(input: {
+  store: SqliteStore;
+  storeDir: string;
+  workspaceId: string;
+  ownerId: string;
+  name: string;
+  profile: OpenPondProfileState;
+  sourceRevision: string;
+}): Promise<LocalHarnessReleaseRecord> {
+  const compiled = await compileProfileHarnessSource(input);
+  const existing = await input.store.getHarnessWorkspace(input.workspaceId);
+  if (existing) {
+    const releaseRef = existing.currentChannel.release;
+    if (existing.ownerScope.kind !== "personal" || existing.ownerScope.id !== input.ownerId ||
+        existing.sourceRevision !== compiled.sourceRevision ||
+        releaseRef?.id !== compiled.harnessRelease.id ||
+        releaseRef.contentHash !== compiled.harnessRelease.contentHash) {
+      throw new Error("Explicit Profile source changed under its accepted revision.");
+    }
+    const release = await input.store.getHarnessReleaseRecord(releaseRef.contentHash);
+    if (!release) throw new Error("Explicit Profile source release is missing after restore.");
+    return release;
+  }
+  const imported = await importProfileIntoLocalHarnessWorkspace({
+    ...input, id: input.workspaceId, selectionEligible: false,
+  });
+  if (imported.release.harnessRelease.contentHash !== compiled.harnessRelease.contentHash ||
+      imported.workspace.sourceRevision !== compiled.sourceRevision) {
+    throw new Error("Explicit Profile source changed during import.");
+  }
+  return imported.release;
 }
 
 /** Install a trusted, immutable source snapshot without exposing persistence internals. */
@@ -155,6 +216,7 @@ async function createLocalHarnessWorkspaceFromInitializer(input: {
   ownerId: string;
   name: string;
   initializeSource: (sourceDir: string) => Promise<void>;
+  selectionEligible?: boolean;
   now?: () => string;
 }): Promise<{ workspace: HarnessWorkspace; release: LocalHarnessReleaseRecord }> {
   const now = input.now ?? (() => new Date().toISOString());
@@ -202,7 +264,10 @@ async function createLocalHarnessWorkspaceFromInitializer(input: {
       },
       createdAt: timestamp,
       updatedAt: timestamp,
-      metadata: { sourceLayout: "openpond.harnessSourceManifest.v1" },
+      metadata: {
+        sourceLayout: "openpond.harnessSourceManifest.v1",
+        ...(input.selectionEligible === false ? { selectionEligible: false } : {}),
+      },
     });
     return await input.store.createHarnessWorkspaceWithRelease({ workspace, release });
   } catch (error) {
@@ -284,6 +349,36 @@ export async function compileLocalHarnessSource(input: {
       },
     });
   }
+  const workflowFile = sourceFiles.find(({ path: filePath }) => filePath === "workflows/catalog.json");
+  if (workflowFile) {
+    const declaration = manifest.files.find((file) => file.path === workflowFile.path);
+    if (declaration?.kind !== "workflow" || declaration.visibility !== "policy") {
+      throw new Error("Profile workflow catalog requires a policy-visible workflow declaration.");
+    }
+    const actionsFile = sourceFiles.find(({ path: filePath }) => filePath === "workflows/actions.json");
+    const actionsDeclaration = manifest.files.find((file) => file.path === "workflows/actions.json");
+    if (!actionsFile || actionsDeclaration?.visibility !== "policy") {
+      throw new Error("Profile workflow catalog requires a released action inventory.");
+    }
+    const actions = ProfileWorkflowActionsSchema.parse(JSON.parse(new TextDecoder().decode(actionsFile.bytes))).actions;
+    const actionIds = new Set<string>();
+    for (const action of actions) {
+      if (actionIds.has(action.id)) throw new Error(`Duplicate Profile workflow action ${action.id}.`);
+      actionIds.add(action.id);
+      if (!validateTaskSchema(action.inputSchema).valid) {
+        throw new Error(`Profile workflow action ${action.id} has an invalid input schema.`);
+      }
+      if (!manifest.files.some((file) => file.path.startsWith(`agents/${action.agentId}/`))) {
+        throw new Error(`Profile workflow action ${action.id} lacks its Agent source.`);
+      }
+    }
+    const catalog = validateProfileWorkflowCatalog({
+      catalog: JSON.parse(new TextDecoder().decode(workflowFile.bytes)),
+      sourcePaths: new Set(manifest.files.filter((file) => file.kind === "skill").map((file) => file.path)),
+      actionIds,
+    });
+    assertProfileWorkflowInputSchemas(catalog);
+  }
 
   const sourceRevision = contentHash({
     manifest,
@@ -348,6 +443,12 @@ export async function compileLocalHarnessSource(input: {
       runtimeProtocol: manifest.runtimeProtocol,
       sourceRevision,
       sourceLayout: manifest.schemaVersion,
+      ...(manifest.metadata.importedFrom === "openpond.profile" ? {
+        profile: {
+          id: manifest.metadata.profileId,
+          sourceRevision: manifest.metadata.profileGitHead ?? sourceRevision,
+        },
+      } : {}),
     },
   });
   return { manifest, sourceRevision, agentSnapshot, harnessRelease, sourceFiles };
@@ -463,6 +564,7 @@ async function writeImportedProfileSource(
   sourceDir: string,
   name: string,
   profile: OpenPondProfileState,
+  sourceRevision?: string,
 ): Promise<void> {
   const profileSource = path.resolve(profile.sourcePath!);
   const declarations: HarnessSourceManifest["files"] = [];
@@ -538,7 +640,57 @@ async function writeImportedProfileSource(
     }
   }
 
-  const dependency = await importedDependencyLock(profile);
+  const workflowCatalogPath = path.join(profileSource, "workflows", "catalog.json");
+  const workflowCatalogStat = await fs.lstat(workflowCatalogPath).catch(() => null);
+  if (workflowCatalogStat) {
+    if (!workflowCatalogStat.isFile() || workflowCatalogStat.isSymbolicLink()) {
+      throw new Error("Profile workflow catalog must be a regular file.");
+    }
+    const catalogBytes = await fs.readFile(workflowCatalogPath);
+    const enabledAgentIds = new Set(profile.agents.filter((agent) => agent.enabled).map((agent) => agent.id));
+    const workflowActions = profile.actionCatalog
+      .filter((action) => action.agentId && enabledAgentIds.has(action.agentId))
+      .map((action) => ({
+        id: action.id,
+        agentId: safeSegment(action.agentId!),
+        sourceActionId: action.sourceActionId ?? action.id,
+        inputSchema: typeof action.inputSchema === "object" && action.inputSchema !== null
+          ? action.inputSchema
+          : { type: "object", additionalProperties: true },
+      }));
+    const catalog = validateProfileWorkflowCatalog({
+      catalog: JSON.parse(catalogBytes.toString("utf8")),
+      sourcePaths: new Set(declarations.filter((file) => file.kind === "skill").map((file) => file.path)),
+      actionIds: new Set(workflowActions.map((action) => action.id)),
+    });
+    assertProfileWorkflowInputSchemas(catalog);
+    const target = "workflows/catalog.json";
+    await copyRegularFile(workflowCatalogPath, path.join(sourceDir, "workflows", "catalog.json"));
+    addDeclaration({
+      id: "profile-workflows",
+      kind: "workflow",
+      path: target,
+      parentId: null,
+      mediaType: "application/json",
+      visibility: "policy",
+      portability: "portable",
+    });
+    await fs.writeFile(path.join(sourceDir, "workflows", "actions.json"), canonicalJson({
+      schemaVersion: "openpond.profileWorkflowActions.v1",
+      actions: workflowActions,
+    }), { flag: "wx" });
+    addDeclaration({
+      id: "profile-workflow-actions",
+      kind: "asset",
+      path: "workflows/actions.json",
+      parentId: null,
+      mediaType: "application/json",
+      visibility: "policy",
+      portability: "portable",
+    });
+  }
+
+  const dependency = await importedDependencyLock(profile, sourceRevision);
   const dependencyTarget = `dependency-lock/${dependency.name}`;
   await fs.mkdir(path.join(sourceDir, "dependency-lock"), { recursive: true });
   if (dependency.sourcePath) {
@@ -600,7 +752,7 @@ async function writeImportedProfileSource(
     metadata: {
       importedFrom: "openpond.profile",
       profileId: profile.activeProfile,
-      profileGitHead: profile.git?.head ?? null,
+      profileGitHead: sourceRevision ?? profile.git?.head ?? null,
       profileSourcePath: profile.sourcePath,
       excludedEvalCount: profile.evals.length,
       actionConversionPending: profile.actionCatalog.length > 0,
@@ -612,6 +764,15 @@ async function writeImportedProfileSource(
     { flag: "wx" },
   );
   await ensureHarnessInstructionSurface(sourceDir, name);
+}
+
+function assertProfileWorkflowInputSchemas(catalog: import("@openpond/harness").ProfileWorkflowCatalog): void {
+  for (const workflow of catalog.workflows) {
+    const result = validateTaskSchema(workflow.inputSchema);
+    if (!result.valid) {
+      throw new Error(`Profile workflow ${workflow.id} has an invalid input schema: ${result.issues[0]?.message ?? "schema mismatch"}`);
+    }
+  }
 }
 
 async function ensureHarnessInstructionSurface(
@@ -653,7 +814,7 @@ async function ensureHarnessInstructionSurface(
   await fs.writeFile(manifestPath, canonicalJson(normalized), { flag: "w" });
 }
 
-async function importedDependencyLock(profile: OpenPondProfileState): Promise<
+async function importedDependencyLock(profile: OpenPondProfileState, sourceRevision?: string): Promise<
   | { name: string; sourcePath: string; generated?: never }
   | { name: string; sourcePath: null; generated: Record<string, unknown> }
 > {
@@ -671,7 +832,7 @@ async function importedDependencyLock(profile: OpenPondProfileState): Promise<
     generated: {
       source: "openpond.profile",
       profileId: profile.activeProfile,
-      profileGitHead: profile.git?.head ?? null,
+      profileGitHead: sourceRevision ?? profile.git?.head ?? null,
       dependenciesResolved: false,
     },
   };

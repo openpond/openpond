@@ -16,6 +16,7 @@ import {
 import {
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
+  loadOpenPondProfileStateFromSource,
   readProfileSkill,
 } from "@openpond/cloud";
 import { createLogger } from "@openpond/logging";
@@ -31,10 +32,11 @@ import {
   resolveSelectedLocalHarnessRelease,
 } from "./harness/local-harness-selection.js";
 import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-runtime.js";
-import { importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
+import { ensureExplicitProfileHarnessSource, importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
+import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
+import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
 import {
   ensureLocalHarnessRunOverlay,
-  loadLocalHarnessRuntimeForAgentRun,
 } from "./harness/local-harness-run-overlay.js";
 import {
   createLocalHarnessSettingsRoutePayloads,
@@ -114,6 +116,8 @@ export type OpenPondAppServerOptions = {
   sandboxRequest?: AppServerSandboxRequest;
   /** Trusted source directory containing harness.json and declared assets. Immutable per workspace ID. */
   harness?: { sourceDirectory: string; workspaceId: string; name: string };
+  /** Authorized Profile repository bytes and accepted revision supplied by the embedding host. */
+  profileSource?: { repoPath: string; repositoryId: string; profileId: string; sourceRevision: string };
   /** Explicit embedding enables native-only, allowlisted tools and disables hosted services by default. */
   embedding?: AppServerEmbeddingOptions;
   services?: AppServerServiceOptions;
@@ -214,6 +218,29 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     logger,
   });
 
+  if (options.harness && options.profileSource) {
+    throw new Error("Configure either an explicit Harness source or Profile source for this app-server.");
+  }
+  let explicitProfileRelease: LocalHarnessReleaseRecord | null = null;
+  if (options.profileSource) {
+    const source = options.profileSource;
+    if (!source.repositoryId.trim() || !source.profileId.trim() || !source.sourceRevision.trim()) {
+      throw new Error("Explicit Profile source requires an identity and accepted revision.");
+    }
+    const profile = await loadOpenPondProfileStateFromSource({ repoPath: source.repoPath, profileId: source.profileId });
+    if (profile.mode !== "local" || !profile.sourcePath || profile.error ||
+        (profile.git?.isRepo && (profile.git.head !== source.sourceRevision || profile.git.dirty))) {
+      throw new Error("Explicit Profile source does not match its accepted revision.");
+    }
+    explicitProfileRelease = await ensureExplicitProfileHarnessSource({
+      store, storeDir,
+      workspaceId: `profile-${contentHash({ profileId: source.profileId, sourceRevision: source.sourceRevision }).slice(0, 24)}`,
+      ownerId: "desktop-personal",
+      name: source.profileId,
+      profile,
+      sourceRevision: source.sourceRevision,
+    });
+  }
   if (options.harness) {
     await importLocalHarnessWorkspaceSource({
       store, storeDir, sourceDir: options.harness.sourceDirectory,
@@ -385,7 +412,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
     loadSelectedHarnessRuntime: (session) =>
-      loadLocalHarnessRuntimeForAgentRun(store, session.id),
+      loadLocalHarnessRuntimeForSession(store, session),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
     harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }).filter(tool =>
@@ -483,6 +510,19 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
       interruptSessionTurn: turnRunner.interruptSessionTurn,
       resolveApproval,
+      listProfileWorkflows: async () => {
+        if (options.profileSource && explicitProfileRelease) {
+          return profileWorkflowsForRelease({
+            store,
+            release: explicitProfileRelease,
+            ref: { source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
+            sourceRevision: options.profileSource.sourceRevision,
+          });
+        }
+        const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
+        if (!library.lastUsed) throw new Error("Select a Profile before loading its workflows.");
+        return ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
+      },
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),
       reviewHarness: guardService(harnessEvaluationEnabled, "Harness evaluation", (request) => reviewSelectedLocalHarnessEvaluation({

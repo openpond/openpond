@@ -22,7 +22,7 @@ export async function ensureSelectedLocalHarnessWorkspace(input: {
     ownerKind: "personal",
     ownerId: DESKTOP_PERSONAL_HARNESS_OWNER_ID,
   });
-  if (selectedWorkspace) {
+  if (selectedWorkspace && selectedWorkspace.metadata.selectionEligible !== false) {
     await recoverLocalHarnessSourceSwap({
       store: input.store,
       storeDir: input.storeDir,
@@ -40,7 +40,7 @@ export async function ensureSelectedLocalHarnessWorkspace(input: {
       ownerKind: "personal",
       ownerId: DESKTOP_PERSONAL_HARNESS_OWNER_ID,
     })
-  )[0];
+  ).find((workspace) => workspace.metadata.selectionEligible !== false);
   if (existing) {
     await input.store.selectHarnessWorkspace({
       ownerKind: "personal",

@@ -5,6 +5,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/learning-store.test.ts",
   "tests/model-batch-review.test.ts",
   "tests/persistence-boundaries.test.ts",
+  "tests/profile-workflow-git-import.test.ts",
   "apps/server/src/**/*.test.ts",
   "tests/agent-app-server-cli.test.ts",
   "tests/agent-app-server-rpc.test.ts",

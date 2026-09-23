@@ -398,9 +398,12 @@ export type TurnRunnerDependencies = {
     release: {
       harnessRelease: import("@openpond/harness").HarnessRelease;
       agentSnapshot?: import("@openpond/harness").AgentSnapshot;
+      bundlePath?: string;
     };
     instructionContext: string;
     skillRuntime: import("../hosted-turn/native-tools-runtime.js").ProfileSkillRuntime;
+    workflow?: import("@openpond/harness").ProfileWorkflow;
+    workflowAction?: import("@openpond/harness").ProfileWorkflowAction;
   } | null>;
   ensureHarnessRunOverlay?: (input: {
     runId: string;

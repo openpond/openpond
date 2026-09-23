@@ -17,6 +17,7 @@ export const AGENT_RPC_METHODS = [
   "turn/interrupt",
   "approval/resolve",
   "userInput/resolve",
+  "profile/workflows",
   "harness/inspect",
   "harness/proposalReview",
   "harness/review",
@@ -104,6 +105,7 @@ export type AgentRuntimeHost = {
   turnInterrupt(params: unknown): Promise<unknown>;
   approvalResolve(params: unknown): Promise<unknown>;
   userInputResolve(params: unknown): Promise<unknown>;
+  profileWorkflows(params: unknown): Promise<unknown>;
   harnessInspect(params: unknown): Promise<unknown>;
   harnessProposalReview(params: unknown): Promise<unknown>;
   harnessReview(params: unknown): Promise<unknown>;
@@ -193,6 +195,7 @@ export class AgentJsonRpcDispatcher {
       case "turn/interrupt": return this.#host.turnInterrupt(params);
       case "approval/resolve": return this.#host.approvalResolve(params);
       case "userInput/resolve": return this.#host.userInputResolve(params);
+      case "profile/workflows": return this.#host.profileWorkflows(params);
       case "harness/inspect": return this.#host.harnessInspect(params);
       case "harness/proposalReview": return this.#host.harnessProposalReview(params);
       case "harness/review": return this.#host.harnessReview(params);

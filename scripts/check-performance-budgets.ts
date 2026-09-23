@@ -89,7 +89,9 @@ export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
   // total bytes in the isolated 2026-09-20 build, up 9,962 from the previous
   // reviewed feature baseline. Initial assets are 456,770 bytes. Add 12 KiB for
   // this measured feature; initial-load, single-asset, and startup limits remain.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 136 * 1024,
+  // The shared Profile workflow contract raised the verified PR renderer
+  // total to 16,917,407 bytes; allow 6 KiB for that measured addition.
+  maxTotalJsBytes: 16 * 1024 * 1024 + 142 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };

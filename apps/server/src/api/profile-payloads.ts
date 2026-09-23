@@ -48,9 +48,13 @@ import {
   profileLibraryForClient,
   profileStateForClient,
 } from "./client-payload-projection.js";
+import type { SqliteStore } from "../store/store.js";
+import { ensureLocalProfileWorkflows } from "../harness/local-profile-workflow-runtime.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
+  store: SqliteStore;
+  storeDir: string;
 }) {
   const { appendRuntimeEvent } = deps;
 
@@ -60,6 +64,22 @@ export function createProfilePayloads(deps: {
 
   async function profileCatalogPayload() {
     return profileLibraryForClient(await loadOpenPondProfileLibrary());
+  }
+
+  async function profileWorkflowsPayload() {
+    const [library, profile] = await Promise.all([
+      loadOpenPondProfileLibrary(),
+      loadOpenPondProfileState(),
+    ]);
+    const ref = library.lastUsed;
+    if (!ref) throw new Error("Select a Profile before loading its workflows.");
+    return ensureLocalProfileWorkflows({
+      store: deps.store,
+      storeDir: deps.storeDir,
+      ref,
+      profile,
+      reloadProfile: loadOpenPondProfileState,
+    });
   }
 
   async function profileSelectPayload(payload: unknown) {
@@ -771,6 +791,7 @@ export function createProfilePayloads(deps: {
   return {
     profileCurrentPayload,
     profileCatalogPayload,
+    profileWorkflowsPayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,
