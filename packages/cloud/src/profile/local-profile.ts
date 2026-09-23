@@ -1759,6 +1759,12 @@ function resolveAgentSdkRoot(): string {
   return path.dirname(packageJsonPath);
 }
 
+export async function prepareAgentSdkRuntimePackage(): Promise<string> {
+  const sdkRoot = resolveAgentSdkRoot();
+  await ensureAgentSdkBuilt(sdkRoot);
+  return sdkRoot;
+}
+
 function resolveAgentSdkCliLaunch(): { command: string; args: string[] } {
   const sdkRoot = resolveAgentSdkRoot();
   const distCli = path.join(sdkRoot, "dist", "cli.js");

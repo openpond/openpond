@@ -1218,6 +1218,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           action: selectedHarness.workflowAction,
           releaseBundlePath: bundlePath,
           value: input.workflowInput,
+          runId: turn.id,
         });
         await appendRuntimeEvent(event({
           sessionId,
@@ -1231,6 +1232,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           data: {
             actionId: selectedHarness.workflowAction.id,
             profileWorkflowBinding: session.profileWorkflowBinding,
+            runPath: result.runPath,
           },
         }));
         providerPrompt += `\n\nReleased Profile workflow action result:\n${result.output}`;
