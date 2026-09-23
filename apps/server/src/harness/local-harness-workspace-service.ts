@@ -646,26 +646,22 @@ async function writeImportedProfileSource(
 
   const workflowIds = new Set<string>();
   const enabledAgentIds = new Set(profile.agents.filter((agent) => agent.enabled).map((agent) => agent.id));
-  const actionIds = new Set(profile.actionCatalog
+  const workflowActions = profile.actionCatalog
     .filter((action) => action.agentId && enabledAgentIds.has(action.agentId))
-    .map((action) => action.id));
+    .map((action) => ({ id: action.id, agentId: safeSegment(action.agentId!),
+      sourceActionId: action.sourceActionId ?? action.id,
+      inputSchema: typeof action.inputSchema === "object" && action.inputSchema !== null
+        ? action.inputSchema : { type: "object", additionalProperties: true } }));
+  const actionIds = new Set(workflowActions.map((action) => action.id));
   const workflowCatalogPath = path.join(profileSource, "workflows", "catalog.json");
   const workflowCatalogStat = await fs.lstat(workflowCatalogPath).catch(() => null);
-  if (workflowCatalogStat) {
-    if (!workflowCatalogStat.isFile() || workflowCatalogStat.isSymbolicLink()) {
+  if (workflowCatalogStat || workflowActions.length) {
+    if (workflowCatalogStat && (!workflowCatalogStat.isFile() || workflowCatalogStat.isSymbolicLink())) {
       throw new Error("Profile workflow catalog must be a regular file.");
     }
-    const catalogBytes = await fs.readFile(workflowCatalogPath);
-    const workflowActions = profile.actionCatalog
-      .filter((action) => action.agentId && enabledAgentIds.has(action.agentId))
-      .map((action) => ({
-        id: action.id,
-        agentId: safeSegment(action.agentId!),
-        sourceActionId: action.sourceActionId ?? action.id,
-        inputSchema: typeof action.inputSchema === "object" && action.inputSchema !== null
-          ? action.inputSchema
-          : { type: "object", additionalProperties: true },
-      }));
+    const catalogBytes = workflowCatalogStat
+      ? await fs.readFile(workflowCatalogPath)
+      : Buffer.from(canonicalJson({ schemaVersion: "openpond.profileWorkflows.v1", workflows: [] }));
     const catalog = validateProfileWorkflowCatalog({
       catalog: JSON.parse(catalogBytes.toString("utf8")),
       sourcePaths: new Set(declarations.filter((file) => file.kind === "skill").map((file) => file.path)),
@@ -674,7 +670,9 @@ async function writeImportedProfileSource(
     for (const workflow of catalog.workflows) workflowIds.add(workflow.id);
     assertProfileWorkflowInputSchemas(catalog);
     const target = "workflows/catalog.json";
-    await copyRegularFile(workflowCatalogPath, path.join(sourceDir, "workflows", "catalog.json"));
+    await fs.mkdir(path.join(sourceDir, "workflows"), { recursive: true });
+    if (workflowCatalogStat) await copyRegularFile(workflowCatalogPath, path.join(sourceDir, "workflows", "catalog.json"));
+    else await fs.writeFile(path.join(sourceDir, "workflows", "catalog.json"), catalogBytes, { flag: "wx" });
     addDeclaration({
       id: "profile-workflows",
       kind: "workflow",
@@ -684,6 +682,8 @@ async function writeImportedProfileSource(
       visibility: "policy",
       portability: "portable",
     });
+  }
+  if (workflowCatalogStat || workflowActions.length) {
     await fs.writeFile(path.join(sourceDir, "workflows", "actions.json"), canonicalJson({
       schemaVersion: "openpond.profileWorkflowActions.v1",
       actions: workflowActions,

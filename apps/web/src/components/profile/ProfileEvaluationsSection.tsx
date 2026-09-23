@@ -128,7 +128,9 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
     setRunning(true);
     setError(null);
     try {
-      const result = await api.profileEvaluationRun(connection, plan.request);
+      const result = await api.profileEvaluationRun(connection, {
+        ...plan.request, expectedManifestHash: plan.prepared.manifest.contentHash,
+      });
       setDiscovery(await api.profileEvaluations(connection));
       setPlan(null);
       setRunNotice(`Run ${result.manifest.id} ${result.passed ? "passed" : "did not pass"}.`);

@@ -29,7 +29,7 @@ export function createProfileEvaluationRunService(input: {
   executeCase: ReturnType<typeof createProfileEvaluationCaseService>;
 }) {
   const inFlight = new Map<string, { manifestHash: string; promise: Promise<LocalProfileEvaluationRun> }>();
-  const run = async (parsed: z.infer<typeof RunRequestSchema>): Promise<LocalProfileEvaluationRun> => {
+  const run = async (parsed: z.infer<typeof RunRequestSchema>, signal?: AbortSignal): Promise<LocalProfileEvaluationRun> => {
     const selected = await input.selectedProfile();
     if (!selected || contentHash(selected.ref) !== contentHash(parsed.profileRef)
       || selected.sourceRevision !== parsed.binding.sourceRevision) {
@@ -45,6 +45,10 @@ export function createProfileEvaluationRunService(input: {
       suites: discovered.suites,
     };
     assertProfileEvaluationRunAdmission(parsed.manifest, parsed.taskset, catalog);
+    if (parsed.taskset.graders.some((grader) => grader.kind === "model_judge" || grader.kind === "custom_verifier")
+      || parsed.taskset.metrics?.aggregation === "custom") {
+      throw new Error("Profile evaluation cannot run this Taskset's model judge, custom verifier, or custom metric in the current app-server runtime.");
+    }
     const source = parsed.manifest.profileEvaluation!;
     const policy = parsed.manifest.policy;
     if (source.profileId !== selected.ref.profileId
@@ -70,9 +74,10 @@ export function createProfileEvaluationRunService(input: {
     }
     const result = await executeProfileEvaluationRun({
       manifest: parsed.manifest, taskset: parsed.taskset, catalog,
-      execute: ({ task, seed }) => input.executeCase({
+      execute: ({ task, seed, signal: memberSignal }) => input.executeCase({
         ...parsed, taskId: task.id, seed,
-      }),
+      }, memberSignal),
+      ...(signal ? { signal } : {}),
       saveGrade: async (grade) => {
         await input.store.saveProfileEvaluationGrade(grade);
         return { id: grade.contentHash, contentHash: grade.contentHash, mediaType: "application/json", sizeBytes: null };
@@ -97,7 +102,7 @@ export function createProfileEvaluationRunService(input: {
     };
     return input.store.saveProfileEvaluationRun({ ...content, contentHash: contentHash(content) });
   };
-  return (request: unknown): Promise<LocalProfileEvaluationRun> => {
+  return (request: unknown, signal?: AbortSignal): Promise<LocalProfileEvaluationRun> => {
     const parsed = RunRequestSchema.parse(request);
     const current = inFlight.get(parsed.manifest.id);
     if (current) {
@@ -106,7 +111,7 @@ export function createProfileEvaluationRunService(input: {
       }
       return current.promise;
     }
-    const promise = run(parsed);
+    const promise = run(parsed, signal);
     inFlight.set(parsed.manifest.id, { manifestHash: parsed.manifest.contentHash, promise });
     void promise.finally(() => {
       if (inFlight.get(parsed.manifest.id)?.promise === promise) inFlight.delete(parsed.manifest.id);

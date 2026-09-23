@@ -28,8 +28,9 @@ export function createProfileEvaluationCaseService(input: {
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   createSession: (request: unknown) => Promise<Session>;
   sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
+  interruptSessionTurn?: (sessionId: string, reason?: string) => Promise<Turn>;
 }) {
-  return async (request: unknown) => {
+  return async (request: unknown, signal?: AbortSignal) => {
     const parsed = ProfileEvaluationCaseRequestSchema.parse(request);
     const selected = await input.selectedProfile();
     if (!selected || contentHash(selected.ref) !== contentHash(parsed.profileRef)
@@ -62,8 +63,10 @@ export function createProfileEvaluationCaseService(input: {
       manifest: parsed.manifest, profileRef: selected.ref, binding: parsed.binding,
       modelRef: parsed.modelRef, modelConfigurationHash: parsed.modelConfigurationHash,
       createSession: input.createSession, sendTurn: input.sendTurn,
+      interruptSessionTurn: input.interruptSessionTurn,
       runtimeEventsForTurn: (turnId) => input.store.runtimeEventsForTurn(turnId),
     });
-    return execute({ task: policyTaskView(task), seed: parsed.seed, source });
+    return execute({ task: policyTaskView(task), seed: parsed.seed, source,
+      ...(signal ? { signal } : {}) });
   };
 }

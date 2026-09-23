@@ -30,6 +30,11 @@ export async function prepareReleasedProfileActionDependencies(input: {
   }
   const sdkPath = path.join(input.runPath, "node_modules", "openpond-agent-sdk");
   if (!(await fs.lstat(sdkPath).catch(() => null))) {
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    const dependencies = { ...dependencyMap(manifest.dependencies), ...dependencyMap(manifest.optionalDependencies) };
+    if (dependencies["openpond-agent-sdk"]) {
+      throw new Error("Released Profile Agent declared an SDK dependency that the locked installation did not provide.");
+    }
     const sdkRoot = await prepareAgentSdkRuntimePackage();
     await fs.mkdir(path.dirname(sdkPath), { recursive: true });
     await fs.symlink(sdkRoot, sdkPath, "dir");
@@ -47,8 +52,7 @@ export async function inspectReleasedProfileActionDependencies(runPath: string):
   }
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as Record<string, unknown>;
   const dependencies = { ...dependencyMap(manifest.dependencies), ...dependencyMap(manifest.optionalDependencies) };
-  const external = Object.keys(dependencies).filter((name) => name !== "openpond-agent-sdk");
-  if (external.length) {
+  if (Object.keys(dependencies).length) {
     for (const [name, spec] of Object.entries(dependencies)) {
       if (/^(?:file:|link:|workspace:|git\+|https?:)/i.test(spec)) {
         throw new Error(`Released Profile Agent dependency ${name} must use a portable registry version.`);

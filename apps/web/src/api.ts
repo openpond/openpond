@@ -150,6 +150,7 @@ export type ProfileEvaluationRunRequest = {
   createdAt: string;
   definitionId: string;
   modelRef: ChatModelRef;
+  expectedManifestHash?: string;
 };
 export type ProfileEvaluationSuiteRunRequest = {
   id: string;

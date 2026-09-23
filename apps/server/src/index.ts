@@ -1573,12 +1573,13 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
     store, selectedProfile: selectedEvaluationProfile,
     createSession: createSessionWithAutoTitle, sendTurn,
+    interruptSessionTurn: turnRunner.interruptSessionTurn,
   });
   const executeProfileEvaluationRun = createProfileEvaluationRunService({
     store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
   });
   const profileEvaluationRunPayload = async (request: unknown) =>
-    executeProfileEvaluationRun(await prepareProfileEvaluationRun(request));
+    executeProfileEvaluationRun(await prepareProfileEvaluationRun(request, { requireExpectedManifestHash: true }));
   const profileEvaluationRunSuitePayload = createProfileEvaluationSuiteService({
     store,
     selectedWorkflows: profileWorkflowsPayload,
