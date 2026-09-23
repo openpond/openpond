@@ -35,6 +35,7 @@ import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-r
 import { ensureExplicitProfileHarnessSource, importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
 import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
+import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
 import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
 import {
   ensureLocalHarnessRunOverlay,
@@ -482,6 +483,20 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     storeDir,
     evaluationReviewStream: harnessEvaluationReviewStream,
   });
+  const executeProfileEvaluationCase = createProfileEvaluationCaseService({
+    store,
+    selectedProfile: async () => {
+      if (options.profileSource) return {
+        ref: { source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
+        sourceRevision: options.profileSource.sourceRevision,
+      };
+      const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
+      return library.lastUsed && profile.git?.head && !profile.git.dirty
+        ? { ref: library.lastUsed, sourceRevision: profile.git.head } : null;
+    },
+    createSession: createSessionWithAutoTitle,
+    sendTurn: turnRunner.sendTurn,
+  });
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",
@@ -543,6 +558,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
           harnessRelease: workflows.harnessRelease,
         });
       },
+      executeProfileEvaluationCase,
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),
       reviewHarness: guardService(harnessEvaluationEnabled, "Harness evaluation", (request) => reviewSelectedLocalHarnessEvaluation({

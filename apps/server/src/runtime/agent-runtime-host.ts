@@ -40,6 +40,7 @@ export function createAgentRuntimePorts(deps: {
   resolveApproval(approvalId: string, payload: unknown): Promise<Approval>;
   listProfileWorkflows(): Promise<unknown>;
   listProfileEvaluations(): Promise<unknown>;
+  executeProfileEvaluationCase(params: unknown): Promise<unknown>;
   inspectHarness(): Promise<unknown>;
   reviewHarnessProposal(params: unknown): Promise<unknown>;
   reviewHarness(params: unknown): Promise<unknown>;
@@ -124,6 +125,7 @@ export function createAgentRuntimePorts(deps: {
     resolveApproval: deps.resolveApproval,
     listProfileWorkflows: deps.listProfileWorkflows,
     listProfileEvaluations: deps.listProfileEvaluations,
+    executeProfileEvaluationCase: deps.executeProfileEvaluationCase,
     inspectHarness: deps.inspectHarness,
     reviewHarnessProposal: deps.reviewHarnessProposal,
     reviewHarness: deps.reviewHarness,

@@ -1,0 +1,97 @@
+import { contentHash, type ChatModelRef, type ProfileWorkflowBinding } from "@openpond/harness";
+import type { OpenPondProfileRef, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import type { TasksetRunManifest } from "@openpond/evals";
+import type { executeProfileEvaluationRun } from "@openpond/evals";
+
+type ExecuteCase = Parameters<typeof executeProfileEvaluationRun>[0]["execute"];
+
+/** Execute a workflow case as an ordinary source-bound app-server turn. The
+ * app-server supplies the same connected apps, tool permissions and approvals
+ * used by Work; the Taskset runner supplies only policy-visible task fields. */
+export function createProfileWorkflowEvaluationExecutor(input: {
+  manifest: TasksetRunManifest;
+  profileRef: OpenPondProfileRef;
+  binding: ProfileWorkflowBinding;
+  modelRef: ChatModelRef;
+  modelConfigurationHash: string;
+  createSession: (request: unknown) => Promise<Session>;
+  sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
+  runtimeEventsForTurn: (turnId: string) => Promise<RuntimeEvent[]>;
+}): ExecuteCase {
+  const source = input.manifest.profileEvaluation;
+  const policy = input.manifest.policy;
+  if (!source || source.target.kind !== "workflow" || policy.kind !== "model"
+    || input.manifest.execution.kind !== "harness") {
+    throw new Error("Workflow evaluation requires a released Profile workflow and model policy.");
+  }
+  if (source.profileId !== input.profileRef.profileId
+    || source.profileId !== input.binding.profileId
+    || source.sourceRevision !== input.binding.sourceRevision
+    || source.harnessRelease.id !== input.binding.harnessRelease.id
+    || source.harnessRelease.contentHash !== input.binding.harnessRelease.contentHash
+    || source.target.workflowId !== input.binding.workflowId) {
+    throw new Error("Workflow evaluation binding differs from its admitted Profile source.");
+  }
+  if (policy.model.provider !== input.modelRef.providerId
+    || policy.model.model !== input.modelRef.modelId
+    || policy.configurationHash !== input.modelConfigurationHash) {
+    throw new Error("Workflow evaluation model differs from its admitted configuration.");
+  }
+  return async (member) => {
+    if (contentHash(member.source) !== contentHash(source)) {
+      throw new Error("Workflow evaluation case differs from its admitted Profile source.");
+    }
+    member.signal?.throwIfAborted();
+    const session = await input.createSession({
+      provider: input.modelRef.providerId,
+      modelRef: input.modelRef,
+      currentProfile: input.profileRef,
+      profileWorkflowBinding: input.binding,
+      hiddenFromDefaultSidebar: true,
+      metadata: {
+        profileEvaluationRun: { id: input.manifest.id, contentHash: input.manifest.contentHash },
+        taskId: member.task.id,
+        seed: member.seed,
+      },
+    });
+    const prompt = Object.keys(member.task.policyVisibleContext).length
+      ? `Policy-visible task context:\n${JSON.stringify(member.task.policyVisibleContext)}`
+      : " ";
+    const turn = await input.sendTurn(session.id, {
+      prompt,
+      workflowInput: member.task.input,
+      modelRef: input.modelRef,
+      approvalPolicy: "on-request",
+    });
+    if (turn.status === "in_progress" || !turn.completedAt) {
+      throw new Error("Workflow evaluation turn did not settle.");
+    }
+    if (!turn.harnessSnapshot
+      || turn.harnessSnapshot.harnessRelease.id !== source.harnessRelease.id
+      || turn.harnessSnapshot.harnessRelease.contentHash !== source.harnessRelease.contentHash) {
+      throw new Error("Workflow evaluation turn executed a different Harness release.");
+    }
+    if (!turn.modelRef || contentHash(turn.modelRef) !== contentHash(input.modelRef)) {
+      throw new Error("Workflow evaluation turn executed a different model.");
+    }
+    const events = await input.runtimeEventsForTurn(turn.id);
+    const output = events.filter((event) => event.name === "assistant.delta" && typeof event.output === "string")
+      .map((event) => event.output ?? "").join("");
+    return {
+      evidence: {
+        output: { text: output },
+        runtimeEventRefs: events.map((event) => event.id),
+        artifactRefs: [],
+        ...(turn.status !== "completed" ? { infrastructureError: turn.error ?? `Workflow evaluation turn ${turn.status}.` } : {}),
+      },
+      traceHash: contentHash(events),
+      artifactRefs: [],
+      startedAt: turn.startedAt,
+      completedAt: turn.completedAt,
+      latencyMs: Math.max(0, Date.parse(turn.completedAt) - Date.parse(turn.startedAt)),
+      costUsd: null,
+      terminal: turn.status === "completed",
+      failureClass: turn.status === "completed" ? null : turn.status === "interrupted" ? "cancelled" : "infrastructure_failure",
+    };
+  };
+}

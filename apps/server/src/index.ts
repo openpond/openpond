@@ -36,6 +36,7 @@ import {
 import { runOpenPondServerCliEntrypoint } from "./server-cli-entrypoint.js";
 import { createOpenPondAppServer } from "./app-server-runtime.js";
 import { loadLocalHarnessRuntimeForSession } from "./harness/local-profile-workflow-runtime.js";
+import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { createManualCompactionRecorder } from "./runtime/manual-compaction-usage.js";
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
@@ -1577,6 +1578,15 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       resolveApproval,
       listProfileWorkflows: profileWorkflowsPayload,
       listProfileEvaluations: profileEvaluationsPayload,
+      executeProfileEvaluationCase: createProfileEvaluationCaseService({
+        store,
+        selectedProfile: async () => {
+          const workflows = await profileWorkflowsPayload();
+          return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
+        },
+        createSession: createSessionWithAutoTitle,
+        sendTurn,
+      }),
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
       reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({

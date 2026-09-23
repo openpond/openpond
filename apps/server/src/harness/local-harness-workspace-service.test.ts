@@ -12,7 +12,8 @@ import {
   emptyOpenPondProfileState,
 } from "@openpond/contracts";
 import { contentHash, createHarnessSourcePackage } from "@openpond/harness";
-import { loadReleasedProfileEvaluationCatalog } from "@openpond/evals";
+import { createTasksetRunManifest, loadReleasedProfileEvaluationCatalog, resolveProfileEvaluationRunSource, tasksetRunMetricPolicy } from "@openpond/evals";
+import { genericToolConformance } from "@openpond/evals/conformance";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
@@ -33,6 +34,7 @@ import { applyLocalHarnessRefinerProposal } from "./local-harness-refiner.js";
 import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
 import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime, profileWorkflowsForRelease } from "./local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
+import { createProfileEvaluationCaseService } from "./profile-evaluation-case-service.js";
 import { materializeHarnessSource } from "../training/materialize-harness-source.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import {
@@ -769,13 +771,15 @@ describe("local Harness workspace service", () => {
     })}\n`;
     await fs.writeFile(path.join(sourcePath, "workflows", "catalog.json"), workflowSource);
     await fs.mkdir(path.join(sourcePath, "evals"), { recursive: true });
+    const evaluationTaskset = genericToolConformance.taskset;
+    const frozenTask = evaluationTaskset.tasks.find((task) => task.split === "frozen_eval")!;
     const evaluationSource = `${JSON.stringify({
       schemaVersion: "openpond.profileEvaluations.v1",
       definitions: [{
         id: "document-check", label: "Document check", description: "",
         target: { kind: "workflow", workflowId: "create-document" },
-        tasksetRelease: { id: "documents", contentHash: "a".repeat(64) },
-        split: "frozen_eval", taskIds: ["document-case"], seeds: ["1"],
+        tasksetRelease: { id: evaluationTaskset.id, contentHash: evaluationTaskset.contentHash },
+        split: "frozen_eval", taskIds: [frozenTask.id], seeds: ["1"],
         criterion: { minimumPassRate: 1, requireComplete: true },
       }],
       suites: [{ id: "component-checks", label: "Components", scope: "component", definitionIds: ["document-check"] }],
@@ -873,6 +877,56 @@ describe("local Harness workspace service", () => {
     });
     expect(discoveredEvaluations.catalogHash).toBe(evaluation.catalogHash);
     expect(discoveredEvaluations.definitions.map((entry) => entry.id)).toEqual(["document-check"]);
+    const modelRef = { providerId: "openpond" as const, modelId: "test-model" };
+    const modelConfigurationHash = contentHash("model-configuration");
+    const caseSource = resolveProfileEvaluationRunSource({
+      catalog: evaluation.catalog, definitionId: "document-check", profileId: "personal",
+      sourceRevision: "abc123", harnessRelease: discoveredEvaluations.harnessRelease,
+      environmentHash: contentHash("controlled-data"),
+    });
+    const caseManifest = createTasksetRunManifest({
+      schemaVersion: "openpond.tasksetRunManifest.v1", id: "document-evaluation-run",
+      tasksetRelease: { id: evaluationTaskset.id, contentHash: evaluationTaskset.contentHash },
+      packageHash: contentHash("package"),
+      execution: { kind: "harness", harnessRelease: discoveredEvaluations.harnessRelease },
+      profileEvaluation: caseSource,
+      policy: { kind: "model", model: { ...genericToolConformance.manifest.model, provider: modelRef.providerId, model: modelRef.modelId }, configurationHash: modelConfigurationHash },
+      gradingRole: "evaluation", metricPolicy: tasksetRunMetricPolicy(evaluationTaskset),
+      population: [{ receiptId: "document-attempt", taskId: frozenTask.id, seed: "1", fixtureId: null }],
+      runtimeTarget: genericToolConformance.manifest.runtimeTarget,
+      limits: genericToolConformance.manifest.limits,
+      createdAt: NOW, metadata: {},
+    });
+    const binding = {
+      schemaVersion: "openpond.profileWorkflowBinding.v1" as const,
+      profileId: "personal", sourceRevision: "abc123",
+      harnessRelease: discoveredEvaluations.harnessRelease,
+      catalogHash: contentHash(JSON.parse(workflowSource)), workflowId: "create-document",
+    };
+    const profileRef = { source: "local" as const, repositoryId: "profile-repo", profileId: "personal" };
+    const caseSessions: unknown[] = [];
+    const executeCase = createProfileEvaluationCaseService({
+      store,
+      selectedProfile: async () => ({ ref: profileRef, sourceRevision: "abc123" }),
+      createSession: async (request) => {
+        caseSessions.push(request);
+        return { id: "document-case-session" } as Awaited<ReturnType<Parameters<typeof createProfileEvaluationCaseService>[0]["createSession"]>>;
+      },
+      sendTurn: async () => ({
+        id: "document-case-turn", status: "completed", startedAt: NOW, completedAt: NOW,
+        modelRef, harnessSnapshot: { harnessRelease: discoveredEvaluations.harnessRelease },
+      }) as Awaited<ReturnType<Parameters<typeof createProfileEvaluationCaseService>[0]["sendTurn"]>>,
+    });
+    const caseResult = await executeCase({
+      manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
+      modelRef, modelConfigurationHash, taskId: frozenTask.id, seed: "1",
+    });
+    expect(caseResult.terminal).toBe(true);
+    expect(caseSessions).toEqual([expect.objectContaining({ profileWorkflowBinding: binding })]);
+    await expect(executeCase({
+      manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
+      modelRef, modelConfigurationHash, taskId: frozenTask.id, seed: "other",
+    })).rejects.toThrow("released definition or admitted population");
     expect(imported.release.harnessRelease.metadata).toMatchObject({
       sourceLayout: "openpond.harnessSourceManifest.v1",
       profile: { id: "personal", sourceRevision: "abc123" },
