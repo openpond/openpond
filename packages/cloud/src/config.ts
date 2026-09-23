@@ -22,7 +22,7 @@ export type ActiveProfileSelector = {
 };
 
 export type LocalOpenPondProfileCheckStatus = {
-  command: "inspect" | "build" | "validate" | "eval" | "run" | "none";
+  command: "inspect" | "build" | "validate" | "eval" | "run";
   status: "passed" | "failed";
   checkedAt: string;
   exitCode?: number | null;

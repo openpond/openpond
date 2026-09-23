@@ -925,7 +925,8 @@ export async function runProfileCheck(kind: string | undefined): Promise<void> {
     if (checks.some((command) => command !== "inspect" && command !== "build" && command !== "validate" && command !== "eval")) {
       throw new Error("check kind must be one of inspect, build, validate, eval, all");
     }
-    await saveProfileCheckStatus("none", 0);
+    // No enabled Agent packages means there are no SDK artifacts to validate.
+    await saveProfileCheckStatus("validate", 0);
     return;
   }
   for (const command of checks) {
