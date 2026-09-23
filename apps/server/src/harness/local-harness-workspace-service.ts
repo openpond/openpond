@@ -646,19 +646,13 @@ async function writeImportedProfileSource(
 
   const workflowIds = new Set<string>();
   const enabledAgentIds = new Set(profile.agents.filter((agent) => agent.enabled).map((agent) => agent.id));
-  const actionIds = new Set(profile.actionCatalog
-    .filter((action) => action.agentId && enabledAgentIds.has(action.agentId))
-    .map((action) => action.id));
   const workflowActions = profile.actionCatalog
     .filter((action) => action.agentId && enabledAgentIds.has(action.agentId))
-    .map((action) => ({
-      id: action.id,
-      agentId: safeSegment(action.agentId!),
+    .map((action) => ({ id: action.id, agentId: safeSegment(action.agentId!),
       sourceActionId: action.sourceActionId ?? action.id,
       inputSchema: typeof action.inputSchema === "object" && action.inputSchema !== null
-        ? action.inputSchema
-        : { type: "object", additionalProperties: true },
-    }));
+        ? action.inputSchema : { type: "object", additionalProperties: true } }));
+  const actionIds = new Set(workflowActions.map((action) => action.id));
   const workflowCatalogPath = path.join(profileSource, "workflows", "catalog.json");
   const workflowCatalogStat = await fs.lstat(workflowCatalogPath).catch(() => null);
   if (workflowCatalogStat || workflowActions.length) {
@@ -676,11 +670,9 @@ async function writeImportedProfileSource(
     for (const workflow of catalog.workflows) workflowIds.add(workflow.id);
     assertProfileWorkflowInputSchemas(catalog);
     const target = "workflows/catalog.json";
+    await fs.mkdir(path.join(sourceDir, "workflows"), { recursive: true });
     if (workflowCatalogStat) await copyRegularFile(workflowCatalogPath, path.join(sourceDir, "workflows", "catalog.json"));
-    else {
-      await fs.mkdir(path.join(sourceDir, "workflows"), { recursive: true });
-      await fs.writeFile(path.join(sourceDir, "workflows", "catalog.json"), catalogBytes, { flag: "wx" });
-    }
+    else await fs.writeFile(path.join(sourceDir, "workflows", "catalog.json"), catalogBytes, { flag: "wx" });
     addDeclaration({
       id: "profile-workflows",
       kind: "workflow",
@@ -692,7 +684,6 @@ async function writeImportedProfileSource(
     });
   }
   if (workflowCatalogStat || workflowActions.length) {
-    await fs.mkdir(path.join(sourceDir, "workflows"), { recursive: true });
     await fs.writeFile(path.join(sourceDir, "workflows", "actions.json"), canonicalJson({
       schemaVersion: "openpond.profileWorkflowActions.v1",
       actions: workflowActions,
