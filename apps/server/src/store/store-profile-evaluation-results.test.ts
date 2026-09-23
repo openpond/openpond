@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -12,6 +12,7 @@ import { genericToolConformance } from "@openpond/evals/conformance";
 
 import { SqliteStore } from "./store.js";
 import { createProfileEvaluationComparisonService } from "../harness/profile-evaluation-comparison-service.js";
+import { createProfileEvaluationReportService } from "../harness/profile-evaluation-report-service.js";
 
 const taskset = genericToolConformance.taskset;
 const frozen = taskset.tasks.find((task) => task.split === "frozen_eval")!;
@@ -102,6 +103,17 @@ test("Profile evaluation grades, receipts, runs and comparison survive restart w
     expect((await store.getProfileEvaluationReceipt("profile-attempt-1"))?.contentHash).toBeDefined();
     expect((await store.getProfileEvaluationComparison(comparison.id))?.contentHash).toBe(comparison.contentHash);
     expect((await store.listProfileEvaluationSuiteRuns(profileRef))[0]?.contentHash).toBe(suite.contentHash);
+    const sourcePath = path.join(directory, "profile-source");
+    await mkdir(sourcePath);
+    const reports = createProfileEvaluationReportService({
+      store, selectedProfile: async () => ({ ref: profileRef, sourcePath, gitBacked: true }),
+    });
+    const report = await reports.save({ id: "saved-comparison-report", evidenceKind: "comparison", evidenceId: comparison.id });
+    expect(report.testedSources[0]?.sourceRevision).toBe(source.sourceRevision);
+    expect(report.evidence.map((item) => item.id)).toEqual([comparison.id, "profile-run-1", "profile-run-2"]);
+    expect((await reports.list())[0]?.contentHash).toBe(report.contentHash);
+    expect(await readFile(path.join(sourcePath, "evals", "reports", `${report.id}.json`), "utf8")).not.toContain('"done"');
+    await expect(reports.save({ id: report.id, evidenceKind: "comparison", evidenceId: comparison.id })).rejects.toThrow();
     await expect(store.saveProfileEvaluationSuiteRun({ ...profileRef, repositoryId: "other-repo" }, catalog, suite)).rejects.toThrow("missing or mismatched run");
     await expect(store.saveProfileEvaluationComparison({ ...profileRef, repositoryId: "other-repo" }, comparison)).rejects.toThrow("missing or mismatched run");
   } finally {

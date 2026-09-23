@@ -55,6 +55,7 @@ import { profileEvaluationsForRelease } from "../harness/local-profile-evaluatio
 import { createProfileEvaluationRunPreparationService } from "../harness/profile-evaluation-run-preparation.js";
 import { loadLocalProfileEvaluationTaskset } from "../harness/local-profile-evaluation-taskset.js";
 import { createProfileEvaluationComparisonService } from "../harness/profile-evaluation-comparison-service.js";
+import { createProfileEvaluationReportService } from "../harness/profile-evaluation-report-service.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -88,6 +89,15 @@ export function createProfilePayloads(deps: {
     });
   }
 
+  const profileReports = createProfileEvaluationReportService({
+    store: deps.store,
+    selectedProfile: async () => {
+      const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
+      if (!library.lastUsed || !profile.sourcePath || profile.error) return null;
+      return { ref: library.lastUsed, sourcePath: profile.sourcePath, gitBacked: profile.git?.isRepo === true };
+    },
+  });
+
   async function profileEvaluationsPayload() {
     const workflows = await profileWorkflowsPayload();
     const evaluations = await profileEvaluationsForRelease({
@@ -96,12 +106,13 @@ export function createProfilePayloads(deps: {
       sourceRevision: workflows.sourceRevision,
       harnessRelease: workflows.harnessRelease,
     });
-    const [runs, comparisons, suiteRuns] = await Promise.all([
+    const [runs, comparisons, suiteRuns, reports] = await Promise.all([
       deps.store.listProfileEvaluationRuns(workflows.profileRef),
       deps.store.listProfileEvaluationComparisons(workflows.profileRef),
       deps.store.listProfileEvaluationSuiteRuns(workflows.profileRef),
+      profileReports.list(),
     ]);
-    return { ...evaluations, runs, comparisons, suiteRuns };
+    return { ...evaluations, runs, comparisons, suiteRuns, reports };
   }
 
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
@@ -155,6 +166,7 @@ export function createProfilePayloads(deps: {
       return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
     },
   });
+  const profileEvaluationSaveReportPayload = profileReports.save;
 
   async function profileSelectPayload(payload: unknown) {
     const input = asRecord(payload);
@@ -870,6 +882,7 @@ export function createProfilePayloads(deps: {
     profileEvaluationPreparePayload,
     prepareProfileEvaluationRun,
     profileEvaluationComparePayload,
+    profileEvaluationSaveReportPayload,
     profileSelectPayload,
     profileRemovePayload,
     profilePublicationPreviewPayload,

@@ -18,7 +18,7 @@ import {
 import { api, type ClientConnection } from "../../api";
 import { ProfileAgentsSection } from "../profile/ProfileAgentsSection";
 import { ProfileWorkflowsSection } from "../profile/ProfileWorkflowsSection";
-import { ProfileEvaluationsSection } from "../profile/ProfileEvaluationsSection";
+import { ProfileEvaluationsSection, type ProfileEvaluationTarget } from "../profile/ProfileEvaluationsSection";
 import { ProfileSelector } from "../profile/ProfileSelector";
 import { ProfileSettingsMenu } from "../profile/ProfileSettingsMenu";
 import "../../styles/workspace/git-dialogs.css";
@@ -69,6 +69,7 @@ export function ProfileSettingsSection({
   const [addProfileOpen, setAddProfileOpen] = useState(false);
   const [removeProfileTarget, setRemoveProfileTarget] = useState<OpenPondProfileCatalogEntry | null>(null);
   const [publicationTarget, setPublicationTarget] = useState<OpenPondProfileCatalogEntry | null>(null);
+  const [evaluationTarget, setEvaluationTarget] = useState<ProfileEvaluationTarget | null>(null);
   const profile = payload?.profile ?? null;
   const selectedDefaultTeamId = payload?.preferences.defaultTeamId?.trim() || "";
   const showControls = section === "all" || section === "profile" || section === "controls";
@@ -248,6 +249,7 @@ export function ProfileSettingsSection({
             <>
               <ProfileSkillsSection
                 onSkillCommand={onSkillCommand}
+                onEvaluate={(skillPath) => setEvaluationTarget({ kind: "skill", id: skillPath })}
                 profile={profile}
               />
               <ProfileWorkflowsSection
@@ -258,9 +260,11 @@ export function ProfileSettingsSection({
                 onError={onError}
                 onOpenSession={onOpenSession}
                 onToast={onToast}
+                onEvaluate={(workflowId) => setEvaluationTarget({ kind: "workflow", id: workflowId })}
               />
               <ProfileEvaluationsSection
                 connection={connection}
+                focusTarget={evaluationTarget}
                 selectedProfileKey={payload?.profileLibrary?.lastUsed
                   ? JSON.stringify(payload.profileLibrary.lastUsed)
                   : null}
@@ -923,9 +927,11 @@ function ProfileRepoDialog({
 
 function ProfileSkillsSection({
   onSkillCommand,
+  onEvaluate,
   profile,
 }: {
   onSkillCommand?: (command: string) => void;
+  onEvaluate?: (skillPath: string) => void;
   profile: ProfileState;
 }) {
   const skills = profile.skills.slice().sort((left, right) => left.name.localeCompare(right.name));
@@ -968,6 +974,7 @@ function ProfileSkillsSection({
                   commandDisabled={commandDisabled}
                   key={skill.name}
                   onSkillCommand={runCommand}
+                  onEvaluate={onEvaluate}
                   skill={skill}
                 />
               ))}
@@ -987,10 +994,12 @@ function ProfileSkillsSection({
 function ProfileSkillRow({
   commandDisabled,
   onSkillCommand,
+  onEvaluate,
   skill,
 }: {
   commandDisabled: boolean;
   onSkillCommand: (command: string) => void;
+  onEvaluate?: (skillPath: string) => void;
   skill: ProfileSkill;
 }) {
   const status: ProfileStatusCell =
@@ -1021,6 +1030,7 @@ function ProfileSkillRow({
       </td>
       <td>
         <div className="profile-skill-actions">
+          {onEvaluate ? <button className="settings-secondary compact" type="button" onClick={() => onEvaluate(skill.path)}>Evaluate</button> : null}
           <button
             className="settings-secondary compact"
             disabled={commandDisabled || !skill.enabled}
