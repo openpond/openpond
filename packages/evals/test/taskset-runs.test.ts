@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
 import { genericToolConformance } from "../src/conformance.js";
 import { createAttemptReceipt, type AttemptReceipt } from "../src/runs.js";
-import { aggregateTasksetRunReceipts, createTasksetRunManifest, tasksetRunMetricPolicy, TasksetRunManifestSchema, type TasksetRunManifest } from "../src/metrics.js";
+import { aggregateTasksetRunReceipts, assertProfileEvaluationRunAdmission, createTasksetRunManifest, tasksetRunMetricPolicy, TasksetRunManifestSchema, type TasksetRunManifest } from "../src/metrics.js";
 import { TasksetReleaseSchema } from "../src/tasksets.js";
 
 const { contentHash: _releaseHash, ...releaseContent } = genericToolConformance.taskset;
@@ -78,4 +78,38 @@ test("complete Taskset runs pin fixture identity, population and evaluation-role
     ...runContent, execution: { kind: "harness", harnessRelease: { id: "other", contentHash: contentHash("other") } },
     profileEvaluation: profileSource,
   })).toThrow("exact bound Harness release");
+});
+
+test("Profile admission binds the verifier-only definition to exact frozen cases and seeds", () => {
+  const frozen = taskset.tasks.find((task) => task.split === "frozen_eval")!;
+  const catalog = {
+    schemaVersion: "openpond.profileEvaluations.v1" as const,
+    definitions: [{
+      id: "report-check", label: "Report", description: "", target: { kind: "workflow" as const, workflowId: "report" },
+      tasksetRelease: { id: taskset.id, contentHash: taskset.contentHash }, split: "frozen_eval" as const,
+      taskIds: [frozen.id], seeds: ["1", "2"], criterion: { minimumPassRate: 1, requireComplete: true },
+    }], suites: [],
+  };
+  const source = {
+    profileId: "personal", sourceRevision: "abc123", harnessRelease: { id: "profile-harness", contentHash: contentHash("profile-harness") },
+    catalogHash: contentHash(catalog), definitionId: "report-check", definitionHash: contentHash(catalog.definitions[0]),
+    target: catalog.definitions[0]!.target, environmentHash: contentHash("environment"),
+  };
+  const fixture = manifest();
+  const { contentHash: _hash, ...content } = fixture;
+  const base = {
+    ...content, policy: { kind: "model" as const, model: legacy.model, configurationHash: contentHash("config") },
+    execution: { kind: "harness" as const, harnessRelease: source.harnessRelease }, profileEvaluation: source,
+    population: ["1", "2"].map((seed, index) => ({ receiptId: `profile-${index}`, taskId: frozen.id, seed, fixtureId: null })),
+  };
+  const admitted = createTasksetRunManifest(base);
+  expect(() => assertProfileEvaluationRunAdmission(admitted, taskset, catalog)).not.toThrow();
+  const changedPopulation = createTasksetRunManifest({ ...base, population: base.population.slice(0, 1) });
+  expect(() => assertProfileEvaluationRunAdmission(changedPopulation, taskset, catalog)).toThrow("population differs");
+  const changedDefinition = { ...catalog, definitions: [{ ...catalog.definitions[0]!, taskIds: [taskset.tasks[0]!.id] }] };
+  expect(() => assertProfileEvaluationRunAdmission(admitted, taskset, changedDefinition)).toThrow("catalog differs");
+  const wrongSplit = { ...catalog, definitions: [{ ...catalog.definitions[0]!, split: "train" as const, taskIds: [taskset.tasks[0]!.id] }] };
+  const wrongSource = { ...source, catalogHash: contentHash(wrongSplit), definitionHash: contentHash(wrongSplit.definitions[0]) };
+  const wrongRun = createTasksetRunManifest({ ...base, profileEvaluation: wrongSource, population: [{ ...base.population[0]!, taskId: taskset.tasks[0]!.id }] });
+  expect(() => assertProfileEvaluationRunAdmission(wrongRun, taskset, wrongSplit)).toThrow("training cases");
 });
