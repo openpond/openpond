@@ -54,6 +54,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
   const [plan, setPlan] = useState<{ request: ProfileEvaluationRunRequest; prepared: ProfileEvaluationPreparedRun } | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [running, setRunning] = useState(false);
+  const [runningSuiteId, setRunningSuiteId] = useState<string | null>(null);
   const [runNotice, setRunNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +138,27 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
       setRunning(false);
     }
   };
+  const runSuite = async (suiteId: string) => {
+    const model = models.find((choice) => choice.key === selectedModelKey);
+    if (!connection || !model || runningSuiteId) return;
+    setRunningSuiteId(suiteId);
+    setRunNotice(null);
+    setError(null);
+    try {
+      const result = await api.profileEvaluationRunSuite(connection, {
+        id: `suite-${crypto.randomUUID()}`,
+        createdAt: new Date().toISOString(),
+        suiteId,
+        modelRef: { providerId: model.providerId, modelId: model.modelId },
+      });
+      setDiscovery(await api.profileEvaluations(connection));
+      setRunNotice(`Suite ${result.id} ${result.passed ? "passed" : "did not pass"}.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setRunningSuiteId(null);
+    }
+  };
   const toggleRun = (id: string) => {
     setSelectedRunIds((current) => current.includes(id)
       ? current.filter((selectedRunId) => selectedRunId !== id)
@@ -168,10 +190,21 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
       {discovery && discovery.definitions.length === 0 ? <p>No evaluations in this Profile yet.</p> : null}
       {discovery?.suites.length ? (
         <div className="profile-evaluations-suites" aria-label="Evaluation suites">
+          <label htmlFor="profile-evaluation-suite-model">Suite model</label>
+          <select id="profile-evaluation-suite-model" value={selectedModelKey} disabled={Boolean(runningSuiteId)} onChange={(event) => setSelectedModelKey(event.target.value)}>
+            {models.map((model) => <option key={model.key} value={model.key}>{model.label}</option>)}
+          </select>
+          {models.length === 0 ? <p>Connect a provider and load its models in Providers settings to run a suite.</p> : null}
           {discovery.suites.map((suite) => (
             <div key={suite.id} className="profile-evaluations-suite">
               <strong>{suite.label}</strong>
               <span>{suite.scope === "profile" ? "Profile suite" : "Component suite"} · {suite.definitionIds.length} checks</span>
+              <button type="button" disabled={!selectedModelKey || Boolean(runningSuiteId) || running} onClick={() => void runSuite(suite.id)}>
+                {runningSuiteId === suite.id ? "Running suite…" : "Run suite"}
+              </button>
+              {discovery.suiteRuns.filter((run) => run.suiteId === suite.id).slice(0, 5).map((run) => (
+                <small key={run.id}>{displayTimestamp(run.completedAt)} · {run.passed ? "Passed" : "Did not pass"} · {run.members.length} checks · {run.id}</small>
+              ))}
             </div>
           ))}
         </div>

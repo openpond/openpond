@@ -143,11 +143,18 @@ export type ProfileEvaluationDiscovery = {
     contentHash: string;
   }>;
   comparisons: ProfileEvaluationComparison[];
+  suiteRuns: import("@openpond/evals").ProfileEvaluationSuiteRun[];
 };
 export type ProfileEvaluationRunRequest = {
   id: string;
   createdAt: string;
   definitionId: string;
+  modelRef: ChatModelRef;
+};
+export type ProfileEvaluationSuiteRunRequest = {
+  id: string;
+  createdAt: string;
+  suiteId: string;
   modelRef: ChatModelRef;
 };
 export type ProfileEvaluationPreparedRun = {
@@ -1125,6 +1132,11 @@ export const api = {
     }),
   profileEvaluationRun: (connection: ClientConnection, request: ProfileEvaluationRunRequest) =>
     apiFetch<ProfileEvaluationDiscovery["runs"][number]>(connection, "/v1/profile/evaluations/run", {
+      method: "POST",
+      body: JSON.stringify(request),
+    }),
+  profileEvaluationRunSuite: (connection: ClientConnection, request: ProfileEvaluationSuiteRunRequest) =>
+    apiFetch<ProfileEvaluationDiscovery["suiteRuns"][number]>(connection, "/v1/profile/evaluations/run-suite", {
       method: "POST",
       body: JSON.stringify(request),
     }),

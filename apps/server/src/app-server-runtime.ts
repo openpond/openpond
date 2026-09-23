@@ -37,6 +37,7 @@ import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profile
 import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
+import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
 import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
 import { createProfileEvaluationRunPreparationService } from "./harness/profile-evaluation-run-preparation.js";
 import { loadLocalProfileEvaluationTaskset } from "./harness/local-profile-evaluation-taskset.js";
@@ -532,6 +533,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   const executeProfileEvaluationRun = createProfileEvaluationRunService({
     store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
   });
+  const executeProfileEvaluationSuite = createProfileEvaluationSuiteService({
+    store, selectedWorkflows: listProfileWorkflows,
+    prepareRun: prepareProfileEvaluationRun, executeRun: executeProfileEvaluationRun,
+  });
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",
@@ -570,11 +575,12 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
             sourceRevision: options.profileSource.sourceRevision,
             harnessRelease: { id: explicitProfileRelease.harnessRelease.id, contentHash: explicitProfileRelease.harnessRelease.contentHash },
           });
-          const [runs, comparisons] = await Promise.all([
+          const [runs, comparisons, suiteRuns] = await Promise.all([
             store.listProfileEvaluationRuns({ source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId }),
             store.listProfileEvaluationComparisons({ source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId }),
+            store.listProfileEvaluationSuiteRuns({ source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId }),
           ]);
-          return { ...evaluations, runs, comparisons };
+          return { ...evaluations, runs, comparisons, suiteRuns };
         }
         const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
         if (!library.lastUsed) throw new Error("Select a Profile before loading its evaluations.");
@@ -585,11 +591,12 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
           sourceRevision: workflows.sourceRevision,
           harnessRelease: workflows.harnessRelease,
         });
-        const [runs, comparisons] = await Promise.all([
+        const [runs, comparisons, suiteRuns] = await Promise.all([
           store.listProfileEvaluationRuns(workflows.profileRef),
           store.listProfileEvaluationComparisons(workflows.profileRef),
+          store.listProfileEvaluationSuiteRuns(workflows.profileRef),
         ]);
-        return { ...evaluations, runs, comparisons };
+        return { ...evaluations, runs, comparisons, suiteRuns };
       },
       executeProfileEvaluationCase,
       executeProfileEvaluationRun,
@@ -601,6 +608,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
         } };
       },
       runPreparedProfileEvaluation: async (request) => executeProfileEvaluationRun(await prepareProfileEvaluationRun(request)),
+      runProfileEvaluationSuite: executeProfileEvaluationSuite,
       compareProfileEvaluationRuns: createProfileEvaluationComparisonService({ store, selectedProfile: selectedEvaluationProfile }),
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),

@@ -37,6 +37,7 @@ export class AgentRpcClient {
   profileEvaluations = (params: unknown) => this.#request("profile/evaluations", params);
   profileEvaluationPrepare = (params: unknown) => this.#request("profile/evaluations/prepare", params);
   profileEvaluationRun = (params: unknown) => this.#request("profile/evaluations/run", params);
+  profileEvaluationRunSuite = (params: unknown) => this.#request("profile/evaluations/runSuite", params);
   profileEvaluationExecuteCase = (params: unknown) => this.#request("profile/evaluations/executeCase", params);
   profileEvaluationExecuteRun = (params: unknown) => this.#request("profile/evaluations/executeRun", params);
   profileEvaluationCompare = (params: unknown) => this.#request("profile/evaluations/compare", params);
