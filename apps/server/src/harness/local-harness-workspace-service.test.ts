@@ -21,6 +21,7 @@ import { SqliteStore } from "../store/store.js";
 import {
   compileAndRegisterLocalHarnessRelease,
   compileLocalHarnessSource,
+  compileProfileHarnessSource,
   createLocalHarnessWorkspace,
   forkLocalHarnessWorkspaceFromRelease,
   importProfileIntoLocalHarnessWorkspace,
@@ -82,6 +83,32 @@ async function fixture() {
 }
 
 describe("local Harness workspace service", () => {
+  it("keeps a Profile release identity across distinct source locations", async () => {
+    const { directory } = await fixture();
+    const sourceRevision = "a".repeat(40);
+    const compile = async (sourceName: string) => {
+      const sourcePath = path.join(directory, sourceName, "profiles", "personal");
+      await fs.mkdir(sourcePath, { recursive: true });
+      return compileProfileHarnessSource({
+        storeDir: directory,
+        workspaceId: "profile-portable-source",
+        name: "Personal",
+        sourceRevision,
+        profile: {
+          ...emptyOpenPondProfileState(),
+          mode: "local",
+          repoPath: path.join(directory, sourceName),
+          sourcePath,
+          activeProfile: "personal",
+        },
+      });
+    };
+    const first = await compile("discovery");
+    const second = await compile("execution");
+    expect(second.sourceRevision).toBe(first.sourceRevision);
+    expect(second.harnessRelease).toEqual(first.harnessRelease);
+  });
+
   it("discovers an empty catalog from an existing Profile without workflow source", async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-empty-profile-workflows-"));
     const store = new SqliteStore(directory);
