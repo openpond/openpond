@@ -79,6 +79,22 @@ export const ProfileWorkflowBindingSchema = z.object({
 
 export type ProfileWorkflowBinding = z.infer<typeof ProfileWorkflowBindingSchema>;
 
+/** A component evaluation pins a released Profile without inventing a
+ * workflow definition. The target is checked against that exact release. */
+export const ProfileComponentBindingSchema = z.object({
+  schemaVersion: z.literal("openpond.profileComponentBinding.v1"),
+  profileId: z.string().trim().min(1).max(240),
+  sourceRevision: z.string().trim().min(1).max(240),
+  harnessRelease: ImmutableReleaseRefSchema,
+  target: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("profile") }).strict(),
+    z.object({ kind: z.literal("skill"), skillPath: SourcePathSchema }).strict(),
+    z.object({ kind: z.literal("agent_action"), actionId: z.string().trim().min(1).max(240) }).strict(),
+  ]),
+}).strict();
+
+export type ProfileComponentBinding = z.infer<typeof ProfileComponentBindingSchema>;
+
 /** Resolve a catalog only from a verified immutable source package. */
 export function loadReleasedProfileWorkflowCatalog(value: unknown): {
   sourcePackage: HarnessSourcePackage;

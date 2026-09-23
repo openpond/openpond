@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  ChatModelRefSchema, ProfileWorkflowBindingSchema, ReleaseHashSchema,
+  ChatModelRefSchema, ProfileComponentBindingSchema, ProfileWorkflowBindingSchema, ReleaseHashSchema,
   contentHash,
 } from "@openpond/harness";
 import { OpenPondProfileRefSchema, type OpenPondProfileRef } from "@openpond/contracts";
@@ -18,7 +18,7 @@ const RunRequestSchema = z.object({
   manifest: TasksetRunManifestSchema,
   taskset: TasksetReleaseSchema,
   profileRef: OpenPondProfileRefSchema,
-  binding: ProfileWorkflowBindingSchema,
+  binding: z.union([ProfileWorkflowBindingSchema, ProfileComponentBindingSchema]),
   modelRef: ChatModelRefSchema,
   modelConfigurationHash: ReleaseHashSchema,
 }).strict();
@@ -51,8 +51,9 @@ export function createProfileEvaluationRunService(input: {
       || source.sourceRevision !== parsed.binding.sourceRevision
       || source.harnessRelease.id !== parsed.binding.harnessRelease.id
       || source.harnessRelease.contentHash !== parsed.binding.harnessRelease.contentHash
-      || source.target.kind !== "workflow"
-      || source.target.workflowId !== parsed.binding.workflowId
+      || (parsed.binding.schemaVersion === "openpond.profileWorkflowBinding.v1"
+        ? source.target.kind !== "workflow" || source.target.workflowId !== parsed.binding.workflowId
+        : source.target.kind === "workflow" || contentHash(source.target) !== contentHash(parsed.binding.target))
       || policy.kind !== "model"
       || policy.model.provider !== parsed.modelRef.providerId
       || policy.model.model !== parsed.modelRef.modelId

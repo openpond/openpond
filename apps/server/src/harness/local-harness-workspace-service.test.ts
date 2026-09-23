@@ -33,7 +33,7 @@ import {
 } from "./local-harness-skill-runtime.js";
 import { applyLocalHarnessRefinerProposal } from "./local-harness-refiner.js";
 import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
-import { ensureLocalProfileWorkflows, loadLocalProfileWorkflowRuntime, profileWorkflowsForRelease } from "./local-profile-workflow-runtime.js";
+import { ensureLocalProfileWorkflows, loadLocalProfileComponentRuntime, loadLocalProfileWorkflowRuntime, profileWorkflowsForRelease } from "./local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
 import { loadLocalProfileEvaluationTaskset } from "./local-profile-evaluation-taskset.js";
 import { createProfileEvaluationCaseService } from "./profile-evaluation-case-service.js";
@@ -1076,6 +1076,27 @@ describe("local Harness workspace service", () => {
       id: "publish", agentId: "default", sourceActionId: "publish",
       inputSchema: { type: "object", properties: { title: { type: "string" } } },
     });
+    const componentBase = {
+      schemaVersion: "openpond.profileComponentBinding.v1" as const,
+      profileId: "personal", sourceRevision: "abc123",
+      harnessRelease: discoveredEvaluations.harnessRelease,
+    };
+    const boundSkill = await loadLocalProfileComponentRuntime({
+      store, binding: { ...componentBase, target: { kind: "skill", skillPath: "skills/documents/SKILL.md" } },
+    });
+    expect(boundSkill.instructionContext).toContain("Use the document runtime.");
+    expect(boundSkill.release.harnessRelease.contentHash).toBe(imported.release.harnessRelease.contentHash);
+    const boundComponentAction = await loadLocalProfileComponentRuntime({
+      store, binding: { ...componentBase, target: { kind: "agent_action", actionId: "publish" } },
+    });
+    expect(boundComponentAction.workflowAction).toEqual(boundAction.action);
+    const boundProfile = await loadLocalProfileComponentRuntime({
+      store, binding: { ...componentBase, target: { kind: "profile" } },
+    });
+    expect(boundProfile.release.harnessRelease.contentHash).toBe(imported.release.harnessRelease.contentHash);
+    await expect(loadLocalProfileComponentRuntime({
+      store, binding: { ...componentBase, sourceRevision: "other", target: { kind: "profile" } },
+    })).rejects.toThrow("differs from its released source");
     const ref = { source: "local" as const, repositoryId: "fixture-repo", profileId: "personal" };
     const [discovered, concurrent] = await Promise.all([
       ensureLocalProfileWorkflows({ store, storeDir: directory, ref, profile }),

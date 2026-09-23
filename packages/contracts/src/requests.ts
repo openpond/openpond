@@ -162,6 +162,7 @@ export const CreateSessionRequestSchema = z.object({
   cloudTeamId: z.string().nullable().optional(),
   currentProfile: OpenPondProfileRefSchema.nullable().optional(),
   profileWorkflowBinding: SessionSchema.shape.profileWorkflowBinding,
+  profileComponentBinding: SessionSchema.shape.profileComponentBinding,
   metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable().optional(),
   title: z.string().optional(),

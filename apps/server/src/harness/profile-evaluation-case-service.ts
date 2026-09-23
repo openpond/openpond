@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  ChatModelRefSchema, ProfileWorkflowBindingSchema,
+  ChatModelRefSchema, ProfileComponentBindingSchema, ProfileWorkflowBindingSchema,
   ReleaseHashSchema, ReleaseIdSchema, contentHash,
 } from "@openpond/harness";
 import { OpenPondProfileRefSchema, type OpenPondProfileRef, type Session, type Turn } from "@openpond/contracts";
@@ -14,7 +14,7 @@ const ProfileEvaluationCaseRequestSchema = z.object({
   manifest: TasksetRunManifestSchema,
   taskset: TasksetReleaseSchema,
   profileRef: OpenPondProfileRefSchema,
-  binding: ProfileWorkflowBindingSchema,
+  binding: z.union([ProfileWorkflowBindingSchema, ProfileComponentBindingSchema]),
   modelRef: ChatModelRefSchema,
   modelConfigurationHash: ReleaseHashSchema,
   taskId: ReleaseIdSchema,

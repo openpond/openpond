@@ -103,7 +103,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
     : [];
   const prepareRun = async () => {
     const model = models.find((choice) => choice.key === selectedModelKey);
-    if (!connection || !selected || selected.target.kind !== "workflow" || !model || preparing) return;
+    if (!connection || !selected || !model || preparing) return;
     const request: ProfileEvaluationRunRequest = {
       id: `evaluation-${crypto.randomUUID()}`,
       createdAt: new Date().toISOString(),
@@ -202,8 +202,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
           <h4>{selected.label}</h4>
           <p>Taskset {selected.tasksetRelease.id} · {selected.tasksetRelease.contentHash.slice(0, 12)}</p>
           <p>Frozen split: {selected.split} · Minimum pass rate: {Math.round(selected.criterion.minimumPassRate * 100)}%</p>
-          {selected.target.kind === "workflow" ? (
-            <div className="profile-evaluations-run-form">
+          <div className="profile-evaluations-run-form">
               <label htmlFor="profile-evaluation-model">Model</label>
               <select id="profile-evaluation-model" value={selectedModelKey} disabled={preparing || running} onChange={(event) => {
                 setSelectedModelKey(event.target.value);
@@ -224,8 +223,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey }: {
                   <button type="button" disabled={running} onClick={() => void runPrepared()}>{running ? "Running evaluation…" : "Run evaluation"}</button>
                 </div>
               ) : null}
-            </div>
-          ) : <p>Execution for {targetLabel(selected.target)} is not available yet.</p>}
+          </div>
           <div className="profile-evaluations-cases">
             <strong>Task cases</strong>
             <ul>{selected.taskIds.slice(0, caseLimit).map((taskId) => <li key={taskId}>{taskId}</li>)}</ul>

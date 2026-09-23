@@ -53,6 +53,12 @@ export function createSessionStore(deps: {
         input.currentProfile?.profileId !== input.profileWorkflowBinding.profileId) {
       throw new Error("Profile workflow session requires its selected Profile reference.");
     }
+    if (input.profileComponentBinding && (
+      input.profileWorkflowBinding
+      || input.currentProfile?.profileId !== input.profileComponentBinding.profileId
+    )) {
+      throw new Error("Profile component session requires its selected Profile reference and a single binding.");
+    }
     const managedLocalWork =
       input.experience === "work" &&
       !workspaceKind &&
@@ -94,6 +100,7 @@ export function createSessionStore(deps: {
       cloudTeamId: input.cloudTeamId ?? null,
       currentProfile,
       profileWorkflowBinding: input.profileWorkflowBinding ?? null,
+      profileComponentBinding: input.profileComponentBinding ?? null,
       ...(input.metadata ? { metadata: input.metadata } : {}),
       cwd,
       codexThreadId: null,

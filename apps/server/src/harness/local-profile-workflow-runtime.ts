@@ -8,6 +8,7 @@ import {
   type ProfileWorkflow,
   type ProfileWorkflowAction,
   type ProfileWorkflowBinding,
+  type ProfileComponentBinding,
   type ProfileWorkflowCatalog,
 } from "@openpond/harness";
 
@@ -122,12 +123,50 @@ export async function profileWorkflowsForRelease(input: {
 export async function loadLocalHarnessRuntimeForSession(store: SqliteStore, session: Session): Promise<
   (SelectedLocalHarnessRuntime & { workflow?: ProfileWorkflow; workflowAction?: ProfileWorkflowAction }) | null
 > {
+  if (session.profileComponentBinding) {
+    if (session.profileWorkflowBinding || session.currentProfile?.profileId !== session.profileComponentBinding.profileId) {
+      throw new Error("Profile component binding differs from the session Profile reference.");
+    }
+    return loadLocalProfileComponentRuntime({ store, binding: session.profileComponentBinding });
+  }
   if (!session.profileWorkflowBinding) return loadLocalHarnessRuntimeForAgentRun(store, session.id);
   if (session.currentProfile?.profileId !== session.profileWorkflowBinding.profileId) {
     throw new Error("Profile workflow binding differs from the session Profile reference.");
   }
   const { runtime, workflow, action } = await loadLocalProfileWorkflowRuntime({ store, binding: session.profileWorkflowBinding });
   return { ...runtime, workflow, ...(action ? { workflowAction: action } : {}) };
+}
+
+export async function loadLocalProfileComponentRuntime(input: {
+  store: SqliteStore;
+  binding: ProfileComponentBinding;
+}): Promise<SelectedLocalHarnessRuntime & { workflowAction?: ProfileWorkflowAction }> {
+  const { binding, store } = input;
+  const runtime = await loadSelectedLocalHarnessRuntime(store, binding.harnessRelease);
+  if (!runtime) throw new Error("The bound Profile component Harness release is unavailable.");
+  const provenance = runtime.release.harnessRelease.metadata.profile;
+  if (!provenance || typeof provenance !== "object"
+    || (provenance as Record<string, unknown>).id !== binding.profileId
+    || (provenance as Record<string, unknown>).sourceRevision !== binding.sourceRevision) {
+    throw new Error("Profile component binding differs from its released source.");
+  }
+  const target = binding.target;
+  if (target.kind === "profile") return runtime;
+  if (target.kind === "skill") {
+    if (!runtime.release.agentSnapshot?.skills.some((skill) => skill.path === target.skillPath)
+      || !runtime.release.bundlePath) {
+      throw new Error("Bound Profile Skill is unavailable in its released source.");
+    }
+    const markdown = await fs.readFile(path.join(runtime.release.bundlePath, "source", target.skillPath), "utf8");
+    return { ...runtime, instructionContext: [
+      runtime.instructionContext,
+      `Released Profile Skill (${target.skillPath}):\n${markdown}`,
+    ].join("\n\n") };
+  }
+  const released = await loadLocalProfileWorkflowCatalog(store, binding.harnessRelease);
+  const action = released.actions.find((candidate) => candidate.id === target.actionId);
+  if (!action) throw new Error("Bound Profile Agent action is unavailable in its released source.");
+  return { ...runtime, workflowAction: action };
 }
 
 /** A workflow session admits the release named by its binding, never the

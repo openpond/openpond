@@ -929,7 +929,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         currentProfile: selectedProfileRef,
       });
     }
-    const selectedProfile = session.profileWorkflowBinding ? null : loadOpenPondProfileStateForRef
+    const selectedProfile = session.profileWorkflowBinding || session.profileComponentBinding ? null : loadOpenPondProfileStateForRef
       ? await loadOpenPondProfileStateForRef(selectedProfileRef)
       : loadOpenPondProfileState
       ? await loadOpenPondProfileState()
@@ -951,8 +951,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ].join("\n\n");
       input.prompt = prepared.prompt;
       profileWorkflowInputHash = prepared.inputHash;
-    } else if (input.workflowInput !== undefined) {
-      throw new Error("Workflow input requires a bound Profile workflow session.");
+    } else if (input.workflowInput !== undefined && session.profileComponentBinding?.target.kind !== "agent_action") {
+      throw new Error("Workflow input requires a bound Profile workflow or Agent action session.");
     }
     const admittedHarnessOverlay =
       selectedHarness && ensureHarnessRunOverlay
@@ -1027,6 +1027,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         profileWorkflowBinding: session.profileWorkflowBinding,
         profileWorkflowInputHash,
       } : {}),
+      ...(session.profileComponentBinding ? {
+        profileComponentBinding: session.profileComponentBinding,
+      } : {}),
       taskExecutionPermissions: { ...turnPermissions },
       ...(subagentDelegation ? { subagentDelegation } : {}),
       ...(effectiveUsageAttribution
@@ -1055,11 +1058,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       metadata: createImproveMetadata,
       createImproveRun: activeCreateImproveRun ?? null,
       profileSnapshot:
-        session.profileWorkflowBinding && selectedProfileRef
+        (session.profileWorkflowBinding || session.profileComponentBinding) && selectedProfileRef
           ? {
               ref: selectedProfileRef,
-              revision: session.profileWorkflowBinding.sourceRevision,
-              sourceHash: session.profileWorkflowBinding.harnessRelease.contentHash,
+              revision: (session.profileWorkflowBinding ?? session.profileComponentBinding)!.sourceRevision,
+              sourceHash: (session.profileWorkflowBinding ?? session.profileComponentBinding)!.harnessRelease.contentHash,
             }
           : selectedProfileRef &&
         selectedProfile &&
@@ -1232,6 +1235,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           data: {
             actionId: selectedHarness.workflowAction.id,
             profileWorkflowBinding: session.profileWorkflowBinding,
+            profileComponentBinding: session.profileComponentBinding,
             runPath: result.runPath,
           },
         }));

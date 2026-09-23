@@ -17,7 +17,7 @@ import {
 } from "./profile-ref.js";
 import { DEFAULT_SESSION_EXPERIENCE, ExperienceSchema } from "./experiences.js";
 import { HarnessTurnSnapshotSchema } from "./harness-workspaces.js";
-import { ProfileWorkflowBindingSchema } from "@openpond/harness";
+import { ProfileComponentBindingSchema, ProfileWorkflowBindingSchema } from "@openpond/harness";
 
 export const SystemSessionKindSchema = z.enum(["openpond.lab"]);
 
@@ -47,6 +47,7 @@ export const SessionSchema = z.object({
   cloudTeamId: z.string().nullable().optional(),
   currentProfile: OpenPondProfileRefSchema.nullable().optional(),
   profileWorkflowBinding: ProfileWorkflowBindingSchema.nullable().optional(),
+  profileComponentBinding: ProfileComponentBindingSchema.nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable(),
   codexThreadId: z.string().nullable(),

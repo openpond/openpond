@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ChatModelRefSchema, ModelRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash, type ChatModelRef } from "@openpond/harness";
+import { ChatModelRefSchema, ModelRefSchema, ProfileComponentBindingSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash, type ChatModelRef } from "@openpond/harness";
 import { type OpenPondProfileRef } from "@openpond/contracts";
 import {
   assertProfileEvaluationRunAdmission,
@@ -65,11 +65,16 @@ export function createProfileEvaluationRunPreparationService(input: {
     const definition = discovered.definitions.find((item) => item.id === parsed.definitionId);
     if (!definition) throw new Error(`Evaluation ${parsed.definitionId} is absent from the selected Profile release.`);
     const target = definition.target;
-    if (target.kind !== "workflow") {
-      throw new Error(`Evaluation target ${target.kind} has no workflow executor.`);
-    }
-    const binding = selected.workflows.find((entry) => entry.binding.workflowId === target.workflowId)?.binding;
-    if (!binding) throw new Error(`Evaluation workflow ${target.workflowId} is absent from the selected Profile release.`);
+    const binding = target.kind === "workflow"
+      ? selected.workflows.find((entry) => entry.binding.workflowId === target.workflowId)?.binding
+      : ProfileComponentBindingSchema.parse({
+        schemaVersion: "openpond.profileComponentBinding.v1",
+        profileId: selected.profileRef.profileId,
+        sourceRevision: selected.sourceRevision,
+        harnessRelease: selected.harnessRelease,
+        target,
+      });
+    if (!binding) throw new Error(`Evaluation workflow ${target.kind === "workflow" ? target.workflowId : ""} is absent from the selected Profile release.`);
     const packageValue = validateTasksetPackage(await input.loadTasksetPackage(definition, selected.profileRef.profileId, selected.harnessRelease));
     const taskset = packageValue.taskset;
     if (taskset.id !== definition.tasksetRelease.id || taskset.contentHash !== definition.tasksetRelease.contentHash) {
@@ -80,11 +85,11 @@ export function createProfileEvaluationRunPreparationService(input: {
       throw new Error("Workflow evaluation requires text cases with policy-visible input; Taskset-owned tools and file assets are unavailable in the Profile turn runtime.");
     }
     const runtimeTarget = {
-      adapterId: "openpond.profile-workflow",
+      adapterId: target.kind === "workflow" ? "openpond.profile-workflow" : "openpond.profile-component",
       placement: input.placement,
       runtimeVersion: "app-server-v1",
       capabilityReceipt: contentHash({
-        adapterId: "openpond.profile-workflow",
+        adapterId: target.kind === "workflow" ? "openpond.profile-workflow" : "openpond.profile-component",
         packageHash: packageValue.contentHash,
         connectedAppScopes: taskset.policy.connectedAppScopes,
       }),
