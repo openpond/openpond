@@ -1,5 +1,5 @@
 import type { TrainingEvaluationTaskPage, TrainingCandidateDecision, TrainingCandidateDecisionRequest } from "openpond-sdk/training";
-import type { ImmutableReleaseRef, ProfileWorkflow, ProfileWorkflowBinding } from "@openpond/harness";
+import type { ChatModelRef, ImmutableReleaseRef, ProfileWorkflow, ProfileWorkflowBinding } from "@openpond/harness";
 import type { ProfileEvaluationComparison, TasksetMetricResult, TasksetRunManifest } from "@openpond/evals";
 import type {
   Approval,
@@ -143,6 +143,16 @@ export type ProfileEvaluationDiscovery = {
     contentHash: string;
   }>;
   comparisons: ProfileEvaluationComparison[];
+};
+export type ProfileEvaluationRunRequest = {
+  id: string;
+  createdAt: string;
+  definitionId: string;
+  modelRef: ChatModelRef;
+};
+export type ProfileEvaluationPreparedRun = {
+  manifest: TasksetRunManifest;
+  taskset: { id: string; contentHash: string; connectedAppScopes: string[] };
 };
 import { apiFetch, type ClientConnection } from "./api/api-client";
 import { organizationApi } from "./api/organization-api";
@@ -1108,6 +1118,16 @@ export const api = {
     apiFetch<ProfileWorkflowDiscovery>(connection, "/v1/profile/workflows"),
   profileEvaluations: (connection: ClientConnection) =>
     apiFetch<ProfileEvaluationDiscovery>(connection, "/v1/profile/evaluations"),
+  profileEvaluationPrepare: (connection: ClientConnection, request: ProfileEvaluationRunRequest) =>
+    apiFetch<ProfileEvaluationPreparedRun>(connection, "/v1/profile/evaluations/prepare", {
+      method: "POST",
+      body: JSON.stringify(request),
+    }),
+  profileEvaluationRun: (connection: ClientConnection, request: ProfileEvaluationRunRequest) =>
+    apiFetch<ProfileEvaluationDiscovery["runs"][number]>(connection, "/v1/profile/evaluations/run", {
+      method: "POST",
+      body: JSON.stringify(request),
+    }),
   profileEvaluationCompare: (connection: ClientConnection, runIds: string[]) =>
     apiFetch<ProfileEvaluationComparison>(connection, "/v1/profile/evaluations/compare", {
       method: "POST",
