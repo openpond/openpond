@@ -958,6 +958,9 @@
                     "$ref": "#/$defs/__schema21"
                   }
                 },
+                "requiredOutputs": {
+                  "$ref": "#/$defs/__schema33"
+                },
                 "provenance": {
                   "type": "object",
                   "properties": {

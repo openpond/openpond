@@ -94,6 +94,7 @@ export const TaskExampleSubmissionSchema = z.object({
   expected: LearningJsonObjectSchema.nullable(),
   evaluatorContext: LearningJsonObjectSchema.nullable(),
   assets: z.array(ImmutableAssetRefSchema).max(1_000),
+  requiredOutputs: TaskRecordSchema.shape.requiredOutputs,
   provenance: z.object({ sourceRecordRef: z.string().max(2_000).nullable(), mappingHash: ReleaseHashSchema.nullable() }).strict(),
 }).strict();
 

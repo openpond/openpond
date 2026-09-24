@@ -6,7 +6,7 @@ import { RewardReleaseSchema, RewardBindingSchema, executeRewardBinding } from "
 import { prepareReviewedLearningBatch } from "../src/training-learning-batch.js";
 import { validateTaskset } from "../src/taskset-drafts.js";
 
-async function reviewed(bytes = new TextEncoder().encode("Source facts")) {
+async function reviewed(bytes = new TextEncoder().encode("Source facts"), perTaskOutputs = false, unscored = false) {
   const now = "2026-09-09T00:00:00Z";
   const asset = { id: "source-file", path: "inputs/source.txt", mediaType: "text/plain", visibility: "policy", sizeBytes: bytes.length, contentHash: sha256(bytes) };
   const reward = RewardReleaseSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardRelease.v1", id: "answer", revision: 1,
@@ -18,18 +18,18 @@ async function reviewed(bytes = new TextEncoder().encode("Source facts")) {
   const definition = TaskDefinitionSchema.parse(sealLearningContent({ schemaVersion: "openpond.taskDefinition.v1", id: "definition", revision: 1,
     name: "File answer", description: "Reviewed Work", instructions: "Read the source and save answer.txt.", category: "tool_workflow", familyNamespace: "files",
     inputSchema: { type: "object" }, outputSchema: { type: "object", properties: { finalText: { type: "string" } }, required: ["finalText"] },
-    requiredOutputs: [{ path: "answer.txt", mediaType: "text/plain", maxBytes: 1000, schemaRef: null, metadata: {} }], rewardBinding: learningRef(binding), harness: null,
+    ...(!perTaskOutputs ? { requiredOutputs: [{ path: "answer.txt", mediaType: "text/plain", maxBytes: 1000, schemaRef: null, metadata: {} }] } : {}), rewardBinding: learningRef(binding), harness: null,
     execution: { environment: { protocolVersion: "openpond.environment.v1", kind: "work", entrypoint: "openpond-work-v1", stateful: true, deterministicSeeds: true, lifecycle: ["create", "reset", "step", "collect", "destroy"], networkPolicy: "none", defaultTimeoutMs: 30000 },
       tools: ["work_read_file", "work_save_output"].map(name => ({ name, description: name, inputSchema: toolSchema, inputSchemaHash: contentHash(toolSchema), sideEffect: name === "work_read_file" ? "read" : "write", timeoutMs: 30000 })), capabilities: [],
       policy: { policyVisibleFields: ["input"], privilegedFields: ["expectedOutput"], hiddenGraderRefs: binding.sources.map(source => source.graderId), connectedAppScopes: [] } } }));
   const source = LearningSourceSchema.parse(sealLearningContent({ schemaVersion: "openpond.learningSource.v1", id: "source", revision: 1,
     name: "Reviewed source", kind: "direct", taskDefinition: learningRef(definition), enabled: true, allowedSplits: ["train"], mapping: null, adapterVersion: null }));
   const evidence = TaskEvidenceSchema.parse(sealLearningContent({ schemaVersion: "openpond.taskEvidence.v1", id: "evidence", revision: 1, source: learningRef(source), supersedes: null, correctionFeedbackId: null, receivedAt: now,
-    submission: { schemaVersion: "openpond.taskExample.v1", sourceId: source.id, idempotencyKey: "example", taskDefinition: learningRef(definition), exampleId: "example", attemptId: "attempt", occurredAt: now, familyKey: "family", split: "train", input: { prompt: "Answer" }, observedOutput: { finalText: "wrong" }, expected: { finalText: "correct" }, evaluatorContext: null, assets: [asset], provenance: { sourceRecordRef: null, mappingHash: null } } }));
+    submission: { schemaVersion: "openpond.taskExample.v1", sourceId: source.id, idempotencyKey: "example", taskDefinition: learningRef(definition), exampleId: "example", attemptId: "attempt", occurredAt: now, familyKey: "family", split: "train", input: { prompt: "Answer" }, observedOutput: unscored ? null : { finalText: "wrong" }, expected: { finalText: "correct" }, evaluatorContext: null, assets: [asset], ...(perTaskOutputs ? { requiredOutputs: [{ path: "answer.txt", mediaType: "text/plain", maxBytes: 1000, schemaRef: null, metadata: {} }] } : {}), provenance: { sourceRecordRef: null, mappingHash: null } } }));
   const grade = (output: Record<string, unknown>) => executeRewardBinding({ binding, rewards: [reward], task: taskRecordFromEvidence(evidence, definition), evidence: taskAttemptEvidence(evidence, output) });
   const decision = TaskAdmissionDecisionSchema.parse(sealLearningContent({ schemaVersion: "openpond.taskAdmissionDecision.v1", id: "decision", revision: 1, evidence: learningRef(evidence), supersedes: null,
-    actor: { kind: "human", id: "reviewer", policy: null }, evidenceValidity: "valid", taskAdmissibility: "approved", observedQuality: "failed", targetApproval: "approved", approvedTarget: { finalText: "correct" },
-    grade: await grade({ finalText: "wrong" }), targetGrade: await grade({ finalText: "correct" }), note: "Reviewed", decidedAt: now }));
+    actor: { kind: "human", id: "reviewer", policy: null }, evidenceValidity: "valid", taskAdmissibility: "approved", observedQuality: unscored ? "unscored" : "failed", targetApproval: unscored ? "not_required" : "approved", approvedTarget: unscored ? null : { finalText: "correct" },
+    grade: unscored ? null : await grade({ finalText: "wrong" }), targetGrade: unscored ? null : await grade({ finalText: "correct" }), note: "Reviewed", decidedAt: now }));
   const batch = sealTaskBatch({ id: "batch", definition, binding, rewards: [reward], purpose: "reward_training", evidence: [evidence], decisions: [decision], priorSplits: [], actorId: "reviewer", now });
   return { batch, definition, binding, rewards: [reward], evidence: [evidence], decisions: [decision], profileId: "profile", assetBytes: new Map([[asset.id, bytes]]) };
 }
@@ -52,4 +52,21 @@ it("preserves reviewed Work contracts and verifies exact input bytes before prep
   expect(() => prepareReviewedLearningBatch({ ...input, definition: { ...input.definition, requiredOutputs: [] } })).toThrow();
   const secret = await reviewed(new TextEncoder().encode("password=example-private-credential"));
   expect(() => prepareReviewedLearningBatch(secret)).toThrow("unresolved data findings");
+});
+
+it("preserves a reviewed Work task's declared outputs when its shared definition has none", async () => {
+  const input = await reviewed(new TextEncoder().encode("Source facts"), true);
+  const result = prepareReviewedLearningBatch(input);
+  expect(input.definition.requiredOutputs).toBeUndefined();
+  expect(result.release.tasks[0]!.requiredOutputs).toEqual(input.evidence[0]!.submission.requiredOutputs);
+  expect(result.taskset.tasks[0]!.requiredOutputs).toMatchObject([{ path: "answer.txt", mediaType: "text/plain" }]);
+});
+
+it("prepares task-only online reward training without fabricating a grader receipt", async () => {
+  const input = await reviewed(new TextEncoder().encode("Source facts"), true, true);
+  const result = prepareReviewedLearningBatch(input);
+  expect(result.taskset.graderFixtures).toEqual([]);
+  expect(result.taskset.learningSignals.rewards).toEqual([]);
+  expect(validateTaskset(result.taskset).valid).toBe(false);
+  expect(validateTaskset(result.taskset, { allowUnscoredOnlineRewardBatch: true }).valid).toBe(true);
 });

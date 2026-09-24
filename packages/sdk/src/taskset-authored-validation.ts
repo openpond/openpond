@@ -21,7 +21,7 @@ export type TasksetValidationReport = {
   issues: TasksetValidationIssue[];
 };
 
-export function validateTaskset(input: unknown): TasksetValidationReport {
+export function validateTaskset(input: unknown, options: { allowUnscoredOnlineRewardBatch?: boolean } = {}): TasksetValidationReport {
   const parsed = TasksetSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -44,7 +44,7 @@ export function validateTaskset(input: unknown): TasksetValidationReport {
   validateSplitIsolation(taskset, issues);
   validatePolicyBoundary(taskset, issues);
   validateGraders(taskset, issues);
-  validateGraderFixtures(taskset, issues);
+  validateGraderFixtures(taskset, issues, options);
   validateLearningSignals(taskset, issues);
   validateCapabilities(taskset.capabilities, issues, taskset);
   validateWorkExecution(taskset, issues);
@@ -67,8 +67,13 @@ export function validateTaskset(input: unknown): TasksetValidationReport {
   };
 }
 
-function validateGraderFixtures(taskset: Taskset, issues: TasksetValidationIssue[]): void {
-  if (!taskset.graderFixtures.length) issues.push({ code: "grader_fixtures_required", severity: "error", message: "Taskset admission requires authored grader fixtures.", path: "graderFixtures" });
+function validateGraderFixtures(taskset: Taskset, issues: TasksetValidationIssue[], options: { allowUnscoredOnlineRewardBatch?: boolean }): void {
+  // The hosted learning boundary checks the sealed batch and executable Reward
+  // before opting into fresh-rollout GRPO. Ordinary authored Tasksets still
+  // require grader fixtures.
+  if (!taskset.graderFixtures.length && !(options.allowUnscoredOnlineRewardBatch && taskset.metadata.trainingMethod === "grpo" && taskset.metadata.learning)) {
+    issues.push({ code: "grader_fixtures_required", severity: "error", message: "Taskset admission requires authored grader fixtures.", path: "graderFixtures" });
+  }
   const taskIds = new Set(taskset.tasks.map((task) => task.id));
   const required = new Set(["positive", "negative", "boundary", "adversarial", "prompt_injection", "infrastructure_failure"]);
   for (const fixture of taskset.graderFixtures) {
