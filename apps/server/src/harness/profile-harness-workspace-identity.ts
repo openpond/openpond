@@ -1,3 +1,4 @@
-// A new ID keeps pre-0.2.21 releases addressable while the path-independent
-// compiler imports the same Profile revision into a new immutable workspace.
-export const PROFILE_HARNESS_WORKSPACE_PREFIX = "profile-v2-";
+// The component-package compiler changes immutable release bytes for an
+// existing Profile commit. Keep earlier releases addressable and import the
+// new compilation into a separate workspace.
+export const PROFILE_HARNESS_WORKSPACE_PREFIX = "profile-v3-";
