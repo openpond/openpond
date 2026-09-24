@@ -30,7 +30,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   interruptTurn(threadId: string, reason?: string): Promise<TTurn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<TApproval>;
   listProfileWorkflows(): Promise<unknown>;
-  listProfileEvaluations(): Promise<unknown>;
+  listProfileEvaluations(params?: unknown): Promise<unknown>;
   loadProfileTrainingSource(): Promise<unknown>;
   prepareProfileEvaluationRun(params: unknown): Promise<unknown>;
   runPreparedProfileEvaluation(params: unknown): Promise<unknown>;
@@ -175,7 +175,7 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
       });
     },
     profileWorkflows: () => run("profile/workflows", null, () => ports.listProfileWorkflows()),
-    profileEvaluations: () => run("profile/evaluations", null, () => ports.listProfileEvaluations()),
+    profileEvaluations: (params) => run("profile/evaluations", null, () => ports.listProfileEvaluations(params)),
     profileTrainingSource: () => run("profile/trainingSource", null, () => ports.loadProfileTrainingSource()),
     profileEvaluationPrepare: (params) => run("profile/evaluations/prepare", null, () => ports.prepareProfileEvaluationRun(params)),
     profileEvaluationRun: (params) => run("profile/evaluations/run", null, () => ports.runPreparedProfileEvaluation(params)),
