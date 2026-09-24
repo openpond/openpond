@@ -1,13 +1,24 @@
 import path from "node:path";
 
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { runProjectActionsCommand } from "../src/cli/actions-command";
+import { loadConfig } from "../src/config";
+
+vi.mock("../src/config", async importOriginal => ({
+  ...(await importOriginal<typeof import("../src/config")>()),
+  loadConfig: vi.fn(),
+}));
 
 const projectRoot = path.resolve(import.meta.dirname, "../../../examples/project-actions-analytics");
 
+beforeEach(() => {
+  vi.mocked(loadConfig).mockResolvedValue({});
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("Project Actions CLI", () => {
@@ -76,5 +87,35 @@ describe("Project Actions CLI", () => {
 
     expect(logs.at(-1)).toBe("Published Project Actions release release_1 from abc1234.");
     expect(fetch).toHaveBeenCalledOnce();
+    expect(loadConfig).not.toHaveBeenCalled();
+  });
+
+  test("publishes with a saved account key and its matching API endpoint", async () => {
+    vi.stubEnv("OPENPOND_API_KEY", "");
+    vi.stubEnv("OPENPOND_API_URL", "");
+    vi.mocked(loadConfig).mockResolvedValue({
+      apiKey: "opk_saved_test",
+      apiBaseUrl: "https://saved-api.example.test",
+    });
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({
+      release: {
+        id: "release_saved",
+        projectId: "project_1",
+        sourceCommitSha: "abc1234",
+        bundleHash: "bundle_hash",
+        registryHash: "registry_hash",
+        status: "ready",
+        createdAt: new Date().toISOString(),
+      },
+    }, { status: 201 }));
+    await runProjectActionsCommand({
+      cwd: projectRoot,
+      projectId: "project_1",
+      teamId: "team_1",
+      sourceCommitSha: "abc1234",
+      sourceRef: "main",
+    }, ["publish"]);
+    expect(loadConfig).toHaveBeenCalledOnce();
+    expect(String(fetch.mock.calls[0]?.[0])).toContain("saved-api.example.test");
   });
 });

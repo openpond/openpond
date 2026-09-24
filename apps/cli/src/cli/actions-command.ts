@@ -9,6 +9,8 @@ import {
   loadProjectActionConfiguration,
 } from "openpond-sdk/actions/local";
 import { parseBooleanOption } from "./common/options";
+import { resolveApiKey } from "./common/auth";
+import { loadConfig } from "../config";
 import { createOpenPondClient } from "openpond-sdk";
 
 const execFileAsync = promisify(execFile);
@@ -69,14 +71,17 @@ export async function runProjectActionsCommand(
   if (subcommand === "publish") {
     const projectId = requiredOption(options, "projectId");
     const teamId = requiredOption(options, "teamId");
-    const apiKey = stringOption(options, "apiKey") ?? process.env.OPENPOND_API_KEY?.trim();
-    if (!apiKey) throw new Error("OpenPond API key is required. Set OPENPOND_API_KEY or pass --api-key.");
+    const explicitKey = stringOption(options, "apiKey");
+    const envKey = process.env.OPENPOND_API_KEY?.trim() || null;
+    const config = explicitKey || envKey ? null : await loadConfig({ account: stringOption(options, "account") });
+    const apiKey = explicitKey ?? envKey ?? (config ? resolveApiKey(config) : null);
+    if (!apiKey) throw new Error("OpenPond API key is required. Select a saved OpenPond account, set OPENPOND_API_KEY, or pass --api-key.");
     const build = await buildProjectActions({ projectRoot, sourceDirectory, outputDirectory });
     const sourceCommitSha = stringOption(options, "sourceCommitSha") ?? await gitValue(projectRoot, ["rev-parse", "HEAD"]);
     const sourceRef = stringOption(options, "sourceRef") ?? await gitValue(projectRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
     const release = await createOpenPondClient({
       apiKey,
-      baseUrl: stringOption(options, "baseUrl") ?? process.env.OPENPOND_API_URL,
+      baseUrl: stringOption(options, "baseUrl") ?? (process.env.OPENPOND_API_URL?.trim() || config?.apiBaseUrl),
     }).actions.publish({
       projectId,
       teamId,
