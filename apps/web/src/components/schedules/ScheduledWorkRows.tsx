@@ -4,7 +4,34 @@ import type {
   HostedSavedWorkSchedule,
   LocalAgentSchedule,
 } from "@openpond/contracts";
+import type { ProfileWorkflowDiscovery } from "../../api";
 import { formatScheduledRunAt } from "./scheduledWorkFormatting";
+
+export function ProfileWorkflowRow({
+  entry,
+  onSelect,
+  selected,
+}: {
+  entry: ProfileWorkflowDiscovery["workflows"][number];
+  onSelect: () => void;
+  selected: boolean;
+}) {
+  return (
+    <button
+      aria-current={selected ? "true" : undefined}
+      className="scheduled-list-row"
+      onClick={onSelect}
+      type="button"
+    >
+      <span className="scheduled-status-dot" />
+      <span className="scheduled-list-copy">
+        <span className="scheduled-list-title"><strong>{entry.workflow.label}</strong></span>
+        <span>{entry.workflow.description}</span>
+        <small>On demand · Source {entry.binding.sourceRevision.slice(0, 10)}</small>
+      </span>
+    </button>
+  );
+}
 
 export function LocalScheduleRow({
   cadence,

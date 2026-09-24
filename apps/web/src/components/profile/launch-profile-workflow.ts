@@ -10,6 +10,7 @@ export async function launchProfileWorkflow(input: {
   prompt?: string;
   attachments?: ChatAttachment[];
   workspaceTarget?: "local" | "hosted";
+  onSessionCreated?: (sessionId: string) => void;
   client?: Pick<typeof api, "createSession" | "sendTurn">;
 }): Promise<string> {
   const selected = input.catalog.workflows.find((entry) => entry.workflow.id === input.workflowId);
@@ -23,6 +24,7 @@ export async function launchProfileWorkflow(input: {
     profileWorkflowBinding: selected.binding,
     title: selected.workflow.label,
   });
+  input.onSessionCreated?.(session.id);
   await client.sendTurn(input.connection, session.id, {
     prompt: input.prompt?.trim() || selected.workflow.label,
     workflowInput: input.value,

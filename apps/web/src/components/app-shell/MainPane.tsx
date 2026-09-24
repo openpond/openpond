@@ -1552,6 +1552,8 @@ export function MainPane({
         <Suspense fallback={null}>
           <ScheduledWorkPage
             connection={connection}
+            selectedProfileKey={selectedProfileRef ? JSON.stringify(selectedProfileRef) : null}
+            onOpenSession={onOpenSession}
             detailOpen={scheduledDetailOpen}
             detailExpanded={diffPanelExpanded}
             onDetailOpenChange={onScheduledDetailOpenChange}

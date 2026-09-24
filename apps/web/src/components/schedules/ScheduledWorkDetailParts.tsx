@@ -62,6 +62,7 @@ export function ScheduleRunRow({
 export function ScheduleDetailPanel({
   children,
   detailExpanded,
+  kind = "schedule",
   label,
   onClose,
   onDetailResizeStart,
@@ -69,6 +70,7 @@ export function ScheduleDetailPanel({
 }: {
   children: ReactNode;
   detailExpanded: boolean;
+  kind?: "schedule" | "workflow";
   label: string;
   onClose: () => void;
   onDetailResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -89,7 +91,7 @@ export function ScheduleDetailPanel({
         />
       ) : null}
       <div className="workspace-diff-topbar">
-        <div className="workspace-diff-tabs" role="tablist" aria-label="Schedule details">
+        <div className="workspace-diff-tabs" role="tablist" aria-label={`${kind === "workflow" ? "Workflow" : "Schedule"} details`}>
           <button
             aria-selected="true"
             className="workspace-diff-tab active"
@@ -97,24 +99,24 @@ export function ScheduleDetailPanel({
             type="button"
           >
             <CalendarClock size={14} />
-            <span>Schedule</span>
+            <span>{kind === "workflow" ? "Workflow" : "Schedule"}</span>
           </button>
         </div>
         <div className="workspace-diff-toolbar-actions">
           <button
-            aria-label={detailExpanded ? "Dock schedule details" : "Expand schedule details"}
+            aria-label={detailExpanded ? `Dock ${kind} details` : `Expand ${kind} details`}
             className="diff-icon-button"
             onClick={onToggleDetailExpanded}
-            title={detailExpanded ? "Dock schedule details" : "Expand schedule details"}
+            title={detailExpanded ? `Dock ${kind} details` : `Expand ${kind} details`}
             type="button"
           >
             {detailExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
           <button
-            aria-label="Close schedule details"
+            aria-label={`Close ${kind} details`}
             className="diff-icon-button"
             onClick={onClose}
-            title="Close schedule details"
+            title={`Close ${kind} details`}
             type="button"
           >
             <X size={14} />

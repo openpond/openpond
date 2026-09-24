@@ -17,7 +17,6 @@ import {
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { ProfileAgentsSection } from "../profile/ProfileAgentsSection";
-import { ProfileWorkflowsSection } from "../profile/ProfileWorkflowsSection";
 import { ProfileEvaluationsSection, type ProfileEvaluationTarget } from "../profile/ProfileEvaluationsSection";
 import { ProfileSelector } from "../profile/ProfileSelector";
 import { ProfileSettingsMenu } from "../profile/ProfileSettingsMenu";
@@ -61,7 +60,6 @@ export function ProfileSettingsSection({
   onError,
   onToast,
   onSkillCommand,
-  onOpenSession,
   overviewContent,
 }: ProfileSettingsSectionProps) {
   const [profileCommitMessage, setProfileCommitMessage] = useState("");
@@ -251,16 +249,6 @@ export function ProfileSettingsSection({
                 onSkillCommand={onSkillCommand}
                 onEvaluate={(skillPath) => setEvaluationTarget({ kind: "skill", id: skillPath })}
                 profile={profile}
-              />
-              <ProfileWorkflowsSection
-                connection={connection}
-                selectedProfileKey={payload?.profileLibrary?.lastUsed
-                  ? JSON.stringify(payload.profileLibrary.lastUsed)
-                  : null}
-                onError={onError}
-                onOpenSession={onOpenSession}
-                onToast={onToast}
-                onEvaluate={(workflowId) => setEvaluationTarget({ kind: "workflow", id: workflowId })}
               />
               <ProfileEvaluationsSection
                 connection={connection}

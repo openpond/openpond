@@ -16,7 +16,7 @@ import type {
   SavedWorkRecurrence,
   SavedWorkWeekday,
 } from "@openpond/contracts";
-import { api, type ClientConnection } from "../../api";
+import { api, type ClientConnection, type ProfileWorkflowDiscovery } from "../../api";
 import { useErrorToast } from "../../app/AppToastContext";
 import { useHostedSavedWork } from "../../hooks/useHostedSavedWork";
 import { useChatWorkflows } from "../../hooks/useChatWorkflows";
@@ -53,8 +53,10 @@ import {
   ChatWorkflowRow,
   HostedScheduleRow,
   LocalScheduleRow,
+  ProfileWorkflowRow,
 } from "./ScheduledWorkRows";
 import { ChatWorkflowDetail } from "./ChatWorkflowDetail";
+import { ProfileWorkflowDetail } from "./ProfileWorkflowDetail";
 import {
   capitalize,
   formatLocalTime,
@@ -90,6 +92,8 @@ const WEEKDAYS: SavedWorkWeekday[] = [
 
 export function ScheduledWorkPage({
   connection,
+  selectedProfileKey,
+  onOpenSession,
   detailOpen,
   detailExpanded,
   onDetailOpenChange,
@@ -97,6 +101,8 @@ export function ScheduledWorkPage({
   onToggleDetailExpanded,
 }: {
   connection: ClientConnection | null;
+  selectedProfileKey: string | null;
+  onOpenSession: (sessionId: string) => void;
   detailOpen: boolean;
   detailExpanded: boolean;
   onDetailOpenChange: (open: boolean) => void;
@@ -106,6 +112,9 @@ export function ScheduledWorkPage({
   const savedWork = useHostedSavedWork(connection);
   const chatWorkflows = useChatWorkflows(connection);
   const localSchedules = useLocalAgentSchedules(connection);
+  const [profileCatalog, setProfileCatalog] = useState<ProfileWorkflowDiscovery | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ScheduleFilter>("all");
   const [viewMode, setViewMode] = useState<ScheduledWorkViewMode>(
     readScheduledWorkViewMode,
@@ -139,6 +148,9 @@ export function ScheduledWorkPage({
     chatWorkflows.workflows.find(
       (workflow) => chatWorkflowKey(workflow.id) === selectedScheduleKey,
     ) ?? null;
+  const selectedProfile = profileCatalog?.workflows.find(
+    (entry) => profileWorkflowKey(entry.workflow.id) === selectedScheduleKey,
+  ) ?? null;
   const selectedRuns = selectedHosted
     ? savedWork.runs.filter((run) => run.scheduleId === selectedHosted.schedule.id)
     : [];
@@ -147,19 +159,46 @@ export function ScheduledWorkPage({
     [visibleChatWorkflows, visibleLocalSchedules, visibleRows]
   );
   const calendarItems = useMemo<ScheduledCalendarItem[]>(
-    () => combinedRows.map(calendarItemForRow),
-    [combinedRows],
+    () => [
+      ...combinedRows.map(calendarItemForRow),
+      ...(profileCatalog?.workflows.map((entry) => ({
+        enabled: true,
+        key: profileWorkflowKey(entry.workflow.id),
+        nextRunAt: null,
+        title: entry.workflow.label,
+      })) ?? []),
+    ],
+    [combinedRows, profileCatalog],
   );
 
   useErrorToast(savedWork.error, { prefix: "Workflows" });
   useErrorToast(localSchedules.error, { prefix: "Local schedules" });
   useErrorToast(chatWorkflows.error, { prefix: "Chat workflows" });
+  useErrorToast(profileError, { prefix: "Profile workflows" });
 
   useEffect(() => {
-    if (selectedScheduleKey && !selectedHosted && !selectedLocal && !selectedChat) {
+    if (!connection || !selectedProfileKey) {
+      setProfileCatalog(null);
+      setProfileError(null);
+      return;
+    }
+    let active = true;
+    setProfileLoading(true);
+    void api.profileWorkflows(connection).then((catalog) => {
+      if (active) { setProfileCatalog(catalog); setProfileError(null); }
+    }).catch((caught: unknown) => {
+      if (active) setProfileError(caught instanceof Error ? caught.message : String(caught));
+    }).finally(() => {
+      if (active) setProfileLoading(false);
+    });
+    return () => { active = false; };
+  }, [connection, selectedProfileKey]);
+
+  useEffect(() => {
+    if (selectedScheduleKey && !selectedHosted && !selectedLocal && !selectedChat && !selectedProfile && !profileLoading) {
       setSelectedScheduleKey(null);
     }
-  }, [selectedChat, selectedHosted, selectedLocal, selectedScheduleKey]);
+  }, [profileLoading, selectedChat, selectedHosted, selectedLocal, selectedProfile, selectedScheduleKey]);
 
   useEffect(() => {
     if (!detailOpen && selectedScheduleKey) setSelectedScheduleKey(null);
@@ -192,6 +231,7 @@ export function ScheduledWorkPage({
         savedWork.refresh(),
         localSchedules.refresh(),
         chatWorkflows.refresh(),
+        connection && selectedProfileKey ? api.profileWorkflows(connection).then(setProfileCatalog) : Promise.resolve(),
       ]);
     } finally {
       setManualRefreshing(false);
@@ -201,7 +241,7 @@ export function ScheduledWorkPage({
   return (
     <section
       aria-label="Workflows"
-      className={`scheduled-work-view${selectedHosted || selectedLocal || selectedChat ? " detail-open" : ""}${detailExpanded ? " detail-expanded" : ""}`}
+      className={`scheduled-work-view${selectedHosted || selectedLocal || selectedChat || selectedProfile ? " detail-open" : ""}${detailExpanded ? " detail-expanded" : ""}`}
     >
       <div className="scheduled-work-scroll">
         <div className="scheduled-work-content">
@@ -234,7 +274,7 @@ export function ScheduledWorkPage({
               <button
                 aria-label="Refresh schedules"
                 className="scheduled-icon-button"
-                disabled={!connection || savedWork.loading || localSchedules.loading || chatWorkflows.loading}
+                disabled={!connection || savedWork.loading || localSchedules.loading || chatWorkflows.loading || profileLoading}
                 onClick={() => void refreshSchedules()}
                 title="Refresh schedules"
                 type="button"
@@ -266,22 +306,23 @@ export function ScheduledWorkPage({
           </header>
 
           <section
-            aria-busy={savedWork.loading || localSchedules.loading || chatWorkflows.loading}
+            aria-busy={savedWork.loading || localSchedules.loading || chatWorkflows.loading || profileLoading}
             className="scheduled-list"
           >
             {!connection ? (
               <EmptyMessage>Connect to OpenPond to view scheduled Work.</EmptyMessage>
-            ) : (savedWork.loading || localSchedules.loading || chatWorkflows.loading) &&
+            ) : (savedWork.loading || localSchedules.loading || chatWorkflows.loading || profileLoading) &&
               rows.length === 0 &&
               localSchedules.schedules.length === 0 &&
-              chatWorkflows.workflows.length === 0 ? (
+              chatWorkflows.workflows.length === 0 &&
+              !profileCatalog?.workflows.length ? (
               <LoadingMessage label="Loading schedules" />
             ) : savedWork.error &&
               localSchedules.error &&
               rows.length === 0 &&
               localSchedules.schedules.length === 0 ? (
               <EmptyMessage>Schedules are unavailable. Refresh to try again.</EmptyMessage>
-            ) : combinedRows.length === 0 ? (
+            ) : combinedRows.length === 0 && !profileCatalog?.workflows.length ? (
               <EmptyMessage>Create a scheduled task here or ask for one in Work.</EmptyMessage>
             ) : viewMode === "calendar" ? (
               <ScheduledWorkCalendar
@@ -291,6 +332,14 @@ export function ScheduledWorkPage({
               />
             ) : (
               <div className="scheduled-list-rows">
+                {profileCatalog?.workflows.map((entry) => (
+                  <ProfileWorkflowRow
+                    entry={entry}
+                    key={profileWorkflowKey(entry.workflow.id)}
+                    onSelect={() => selectSchedule(profileWorkflowKey(entry.workflow.id))}
+                    selected={selectedScheduleKey === profileWorkflowKey(entry.workflow.id)}
+                  />
+                ))}
                 {combinedRows.map((item) =>
                   item.kind === "chat" ? (
                     <ChatWorkflowRow
@@ -333,7 +382,19 @@ export function ScheduledWorkPage({
         </div>
       </div>
 
-      {selectedHosted ? (
+      {selectedProfile && profileCatalog && connection ? (
+        <ProfileWorkflowDetail
+          catalog={profileCatalog}
+          connection={connection}
+          detailExpanded={detailExpanded}
+          entry={selectedProfile}
+          key={selectedProfile.workflow.id}
+          onClose={closeDetail}
+          onDetailResizeStart={onDetailResizeStart}
+          onOpenSession={onOpenSession}
+          onToggleDetailExpanded={onToggleDetailExpanded}
+        />
+      ) : selectedHosted ? (
         <ScheduleDetail
           key={`${selectedHosted.schedule.id}:${selectedHosted.definition.version}:${selectedHosted.schedule.configurationVersion}`}
           onClose={closeDetail}
@@ -945,6 +1006,10 @@ function localScheduleKey(scheduleId: string): string {
 
 function chatWorkflowKey(workflowId: string): string {
   return `chat:${workflowId}`;
+}
+
+function profileWorkflowKey(workflowId: string): string {
+  return `profile:${workflowId}`;
 }
 
 function hostedScheduleKey(scheduleId: string): string {
