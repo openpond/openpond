@@ -97,7 +97,9 @@ export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
   // in the verified PR build; allow 2 KiB beyond the previous limit.
   // Profile report and matrix controls measured 16,935,957 bytes in PR #403;
   // allow 4 KiB for this reviewed addition. Initial assets remain capped.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 156 * 1024,
+  // Profile PDF launch controls and source detail measured 16,967,612 bytes
+  // in PR #426; allow 32 KiB for that addition. Initial assets remain capped.
+  maxTotalJsBytes: 16 * 1024 * 1024 + 188 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
