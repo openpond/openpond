@@ -1,10 +1,12 @@
 import { createAgentSnapshot, createHarnessRelease, createHarnessSourcePackage, sha256 } from "../src/index.js";
 
-export function sourceRuntimeFixture(options: { format?: "uppercase" | "lowercase"; requiredCapability?: string } = {}) {
+export function sourceRuntimeFixture(options: { format?: "uppercase" | "lowercase"; requiredCapability?: string; profileImportLock?: boolean } = {}) {
   const format = options.format ?? "uppercase";
   const files = new Map([
     ["program.json", new TextEncoder().encode('{"runtimeProtocol":"openpond.agent-runtime.v1"}')],
-    ["dependency-lock.json", new TextEncoder().encode('{"dependencies":{}}')],
+    ["dependency-lock.json", new TextEncoder().encode(options.profileImportLock
+      ? '{"source":"openpond.profile","profileId":"default","profileGitHead":"abc123","dependenciesResolved":false}'
+      : '{"dependencies":{}}')],
     ["instructions/system.md", new TextEncoder().encode(`Format the released label as ${format}.`)],
     ["skills/label/SKILL.md", new TextEncoder().encode("Read skills/label/reference.txt and return its label in the format specified by the released instruction.")],
     ["skills/label/reference.txt", new TextEncoder().encode("Blue")],

@@ -58,9 +58,16 @@ export function createHarnessSourceRuntime(input: {
     throw new Error("Released Harness program requires a different execution adapter.");
   }
   if (agentSnapshot.agents.length) throw new Error("This Harness runtime does not execute released subagent programs.");
-  const lock = z.object({ dependencies: z.record(z.string(), z.string()) }).strict()
-    .parse(JSON.parse(text(agentSnapshot.dependencyLock.path)));
-  for (const [name, version] of Object.entries(lock.dependencies)) {
+  const lock = z.union([
+    z.object({ dependencies: z.record(z.string(), z.string()) }).strict(),
+    z.object({ source: z.literal("openpond.profile"), profileId: z.string().min(1),
+      profileGitHead: z.string().nullable(), dependenciesResolved: z.literal(false) }).strict(),
+  ]).parse(JSON.parse(text(agentSnapshot.dependencyLock.path)));
+  // A Profile import without a package lock captures a source identity, not
+  // executable dependencies. This adapter runs only instructions and Skills;
+  // subagent programs are rejected above and tool contracts are checked below.
+  const dependencies = "dependencies" in lock ? lock.dependencies : {};
+  for (const [name, version] of Object.entries(dependencies)) {
     if (input.dependencies?.[name] !== version) throw new Error(`Released Harness dependency is unavailable: ${name}@${version}`);
   }
   const omittedCapabilities: string[] = [];
