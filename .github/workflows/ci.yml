@@ -123,7 +123,24 @@ jobs:
 
       - name: Build affected CLI distribution
         if: needs.scope.outputs.distribution == 'true'
-        run: pnpm run cli:build
+        run: |
+          pnpm exec tsc -b apps/server
+          pnpm run cli:build
+
+      - name: Record package size
+        if: needs.scope.outputs.distribution == 'true'
+        run: node scripts/report-package-size.ts --output artifacts/package-size.json --check-contents
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: needs.scope.outputs.distribution == 'true'
+        with:
+          name: package-size-${{ github.sha }}
+          path: artifacts/package-size.json
+          if-no-files-found: error
+
+      - name: Check renderer loading budgets
+        if: needs.scope.outputs.distribution == 'true'
+        run: pnpm run budgets:check --renderer-only
 
       - name: Check affected CLI distribution
         if: needs.scope.outputs.distribution == 'true'
@@ -191,6 +208,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:artifacts
       - run: pnpm run cli:build:from-web
+      - name: Record package size
+        run: node scripts/report-package-size.ts --output artifacts/package-size.json --check-contents
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: package-size-${{ github.sha }}
+          path: artifacts/package-size.json
+          if-no-files-found: error
       - run: pnpm run budgets:check
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -201,6 +225,7 @@ jobs:
             apps/web/dist
             apps/desktop/dist
             apps/cli/dist
+            apps/cli/build/runtime-outputs.json
             packages/*/dist
           if-no-files-found: error
 
@@ -226,6 +251,57 @@ jobs:
           name: verified-build-${{ github.sha }}
           path: .
       - run: pnpm run cli:distribution:check
+
+  size_report:
+    name: Package size comparison
+    needs: [scope, targeted, verified_build]
+    if: >-
+      always() && github.event_name == 'pull_request' &&
+      (needs.verified_build.result == 'success' ||
+      (needs.targeted.result == 'success' && needs.scope.outputs.distribution == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      # Keep the current measurement tooling outside the base checkout. This
+      # works on the first PR introducing the report, and uses identical tooling
+      # on both builds. No API writes, PR comments, or privileged workflow event.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: package-size-${{ github.sha }}
+          path: artifacts/head-size
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.scope.outputs.base }}
+          path: .size-base
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: .size-base/pnpm-lock.yaml
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+      - name: Build exact PR base
+        working-directory: .size-base
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build:artifacts
+          pnpm run cli:build:from-web
+      - name: Compare package sizes
+        run: |
+          node scripts/report-package-size.ts --root .size-base --output artifacts/base-size.json --snapshot-only
+          node scripts/report-package-size.ts --head artifacts/head-size/package-size.json --base artifacts/base-size.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: package-size-comparison-${{ github.sha }}
+          path: |
+            artifacts/base-size.json
+            artifacts/head-size/package-size.json
+          if-no-files-found: error
 
   test_build:
     name: Prepare test runtime
@@ -438,11 +514,13 @@ jobs:
   checks:
     name: Checks
     if: always()
-    needs: [scope, targeted, quality, verified_build, distribution, test_build, unit, system, integration, image, python, contract, release_smoke]
+    needs: [scope, targeted, quality, verified_build, distribution, test_build, unit, system, integration, image, python, contract, release_smoke, size_report]
     runs-on: ubuntu-latest
     steps:
       - name: Require the selected CI lanes
         env:
+          SIZE_REPORT: ${{ needs.size_report.result }}
+          SIZE_REPORT_REQUIRED: ${{ github.event_name == 'pull_request' && (needs.scope.outputs.full == 'true' || needs.scope.outputs.distribution == 'true') }}
           SCOPE: ${{ needs.scope.result }}
           FULL: ${{ needs.scope.outputs.full }}
           TARGETED: ${{ needs.targeted.result }}
@@ -462,6 +540,11 @@ jobs:
         run: |
           set -euo pipefail
           test "${SCOPE}" = "success"
+          if test "${SIZE_REPORT_REQUIRED}" = "true"; then
+            test "${SIZE_REPORT}" = "success"
+          else
+            test "${SIZE_REPORT}" = "skipped"
+          fi
           if test "${FULL}" = "true"; then
             test "${TARGETED}" = "skipped"
             results=("${QUALITY}" "${VERIFIED_BUILD}" "${TEST_BUILD}" "${UNIT}" "${SYSTEM}" "${INTEGRATION}" "${PYTHON}" "${CONTRACT}" "${RELEASE_SMOKE}")

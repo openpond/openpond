@@ -1,3 +1,5 @@
 import { rm } from "node:fs/promises";
 
 await rm(new URL("../dist", import.meta.url), { recursive: true, force: true });
+
+await rm(new URL("../build/runtime-outputs.json", import.meta.url), { force: true });

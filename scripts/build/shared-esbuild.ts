@@ -2,7 +2,7 @@ import { chmod, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { build, type BuildOptions } from "esbuild";
+import { build, type BuildOptions, type BuildResult } from "esbuild";
 
 export const REPOSITORY_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -11,12 +11,12 @@ export const REPOSITORY_ROOT = path.resolve(
 
 const NODE_TARGET = "node24.18";
 
-export async function bundleNode(options: BuildOptions): Promise<void> {
+export async function bundleNode(options: BuildOptions): Promise<BuildResult> {
   const outputPath = options.outfile ?? options.outdir;
   if (outputPath) await mkdir(options.outfile ? path.dirname(outputPath) : outputPath, { recursive: true });
   const format = options.format ?? "esm";
 
-  await build({
+  return build({
     bundle: true,
     platform: "node",
     target: NODE_TARGET,

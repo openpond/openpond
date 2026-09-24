@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 
 import { runProcessCommand } from "../apps/cli/src/process-runner";
+import { checkPackageContents, PACKAGE_BUDGETS } from "./distribution/package-policy.ts";
 import { checkAppServerDistribution } from "./check-app-server-distribution.js";
 
 type PackResult = {
@@ -28,10 +29,6 @@ type ReadyPayload = {
 };
 
 const MiB = 1024 * 1024;
-// Keep a broad guard against accidentally publishing an entire source tree.
-// Vite's hashed, code-split assets legitimately fluctuate as lazy routes evolve,
-// so this should not act as a per-feature file-count ratchet.
-const MAX_NPM_PACKAGE_FILES = 500;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tempRoots: string[] = [];
 
@@ -57,9 +54,10 @@ async function checkNpmPackage() {
   const tarballPath = path.join(packDir, result.filename);
   const tarballSha256 = createHash("sha256").update(await readFile(tarballPath)).digest("hex");
 
-  enforce("npm packed bytes", result.size, 8 * MiB);
-  enforce("npm unpacked bytes", result.unpackedSize, 32 * MiB);
-  enforce("npm file count", result.entryCount, MAX_NPM_PACKAGE_FILES);
+  await checkPackageContents(root, result.files);
+  enforce("npm packed bytes", result.size, PACKAGE_BUDGETS.packedBytes);
+  enforce("npm unpacked bytes", result.unpackedSize, PACKAGE_BUDGETS.unpackedBytes);
+  enforce("npm file count", result.entryCount, PACKAGE_BUDGETS.files);
   const fileMap = new Map(result.files.map((file) => [file.path, file.size]));
   enforceRequiredFiles(fileMap, [
     "dist/cli.js",
