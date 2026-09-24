@@ -43,7 +43,9 @@ export function materializeLearningBatchTaskset(input: {
       fixtures.push({ id: `fixture-${kind}-${admission.taskId}`, taskId: admission.taskId, label: outcome.passed ? "positive" : "negative", output, infrastructureError: null, expectedPassed: outcome.passed, expectedRewardEligible: outcome.rewardEligible, metadata: { gradeReceiptHash: grade!.contentHash, evidence: admission.evidence, decision: admission.decision } });
     }
   }
-  if (!fixtures.length) throw new Error("Grade at least one reviewed response before preparing this batch. Grader fixtures must come from actual receipts.");
+  // Online reward training grades fresh rollouts. A task-only reviewed batch
+  // has no prior response receipt, so do not invent a calibration fixture.
+  if (!fixtures.length && input.batch.purpose !== "reward_training") throw new Error("Grade at least one reviewed response before preparing this batch. Grader fixtures must come from actual receipts.");
   const graders = projectLearningBatchGraders(input.binding, input.rewards, input.assets);
   const generatedFiles: GeneratedTaskFile[] = [];
   for (const grader of release.graders) {

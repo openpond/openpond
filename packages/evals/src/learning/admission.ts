@@ -21,6 +21,9 @@ export function inspectTaskEvidence(evidence: TaskEvidence, definition: TaskDefi
   const example = evidence.submission;
   const issues: TaskSchemaIssue[] = [];
   if (!sameLearningRef(example.taskDefinition, learningRef(definition))) issues.push({ path: "/taskDefinition", code: "definition_mismatch", message: "Evidence must pin this exact task definition." });
+  if (definition.requiredOutputs && example.requiredOutputs && contentHash(definition.requiredOutputs) !== contentHash(example.requiredOutputs)) {
+    issues.push({ path: "/requiredOutputs", code: "required_outputs_mismatch", message: "Example outputs must match the published task definition." });
+  }
   const input = validateTaskValue(definition.inputSchema, example.input);
   issues.push(...input.issues.map((issue) => ({ ...issue, path: `/input${issue.path}` })));
   if (example.expected !== null) {
@@ -82,13 +85,14 @@ export function readTaskJsonPointer(value: unknown, pointer: string): unknown {
 export function taskRecordFromEvidence(evidence: TaskEvidence, definition: TaskDefinition): TaskRecord {
   const inspection = inspectTaskEvidence(evidence, definition);
   if (!inspection.taskReady) throw new LearningDomainError("task_evidence_not_ready", 422, inspection.issues[0]!.code);
+  const requiredOutputs = evidence.submission.requiredOutputs ?? definition.requiredOutputs;
   return TaskRecordSchema.parse({
     id: evidence.id, clusterKey: evidence.submission.familyKey!, split: evidence.submission.split,
     input: evidence.submission.input, expectedOutput: evidence.submission.expected,
     policyVisibleContext: { instructions: definition.instructions },
     privilegedContextRef: evidence.submission.evaluatorContext === null ? null : `task-evidence:${evidence.contentHash}`,
     artifactRefs: evidence.submission.assets, tags: [definition.category],
-    ...(definition.requiredOutputs ? { requiredOutputs: definition.requiredOutputs } : {}),
+    ...(requiredOutputs === undefined ? {} : { requiredOutputs }),
   });
 }
 

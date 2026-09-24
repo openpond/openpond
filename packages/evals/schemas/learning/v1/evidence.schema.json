@@ -101,6 +101,13 @@
             "$ref": "#/$defs/__schema6"
           }
         },
+        "requiredOutputs": {
+          "maxItems": 1000,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema7"
+          }
+        },
         "provenance": {
           "type": "object",
           "properties": {
@@ -308,6 +315,61 @@
         "sizeBytes",
         "mediaType",
         "visibility"
+      ],
+      "additionalProperties": false
+    },
+    "__schema7": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "schemaRef": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema6"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxBytes": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 250000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metadata": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "path",
+        "mediaType",
+        "schemaRef",
+        "maxBytes",
+        "metadata"
       ],
       "additionalProperties": false
     }
