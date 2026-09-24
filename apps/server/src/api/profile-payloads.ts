@@ -56,6 +56,7 @@ import { createProfileEvaluationRunPreparationService } from "../harness/profile
 import { loadLocalProfileEvaluationTaskset } from "../harness/local-profile-evaluation-taskset.js";
 import { createProfileEvaluationComparisonService } from "../harness/profile-evaluation-comparison-service.js";
 import { createProfileEvaluationReportService } from "../harness/profile-evaluation-report-service.js";
+import { inspectProfileEvaluationRun } from "../harness/profile-evaluation-run-inspection.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -98,8 +99,15 @@ export function createProfilePayloads(deps: {
     },
   });
 
-  async function profileEvaluationsPayload() {
+  async function profileEvaluationsPayload(params?: unknown) {
     const workflows = await profileWorkflowsPayload();
+    if (params && typeof params === "object" && !Array.isArray(params) && "runId" in params) {
+      const runId = (params as { runId?: unknown }).runId;
+      if (typeof runId !== "string" || !runId.trim() || runId.length > 240 || Object.keys(params).length !== 1) {
+        throw new Error("Invalid Profile evaluation run request.");
+      }
+      return inspectProfileEvaluationRun({ store: deps.store, profileRef: workflows.profileRef, runId });
+    }
     const evaluations = await profileEvaluationsForRelease({
       store: deps.store,
       ref: workflows.profileRef,

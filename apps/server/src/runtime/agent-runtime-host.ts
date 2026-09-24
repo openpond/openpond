@@ -39,7 +39,7 @@ export function createAgentRuntimePorts(deps: {
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<Approval>;
   listProfileWorkflows(): Promise<unknown>;
-  listProfileEvaluations(): Promise<unknown>;
+  listProfileEvaluations(params?: unknown): Promise<unknown>;
   loadProfileTrainingSource(): Promise<unknown>;
   prepareProfileEvaluationRun(params: unknown): Promise<unknown>;
   runPreparedProfileEvaluation(params: unknown): Promise<unknown>;
