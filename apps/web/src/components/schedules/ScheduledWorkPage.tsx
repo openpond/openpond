@@ -69,7 +69,7 @@ import {
   scheduledRows,
   type ScheduleFilter,
   type ScheduledRow,
-} from "./scheduledWorkRows";
+} from "./scheduleRowLogic";
 import {
   capitalize,
   formatScheduledRunAt,
