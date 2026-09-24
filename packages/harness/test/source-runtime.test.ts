@@ -23,3 +23,14 @@ test("released source execution isolates private files and rejects unavailable r
   expect(() => createHarnessSourceRuntime({ sourcePackage: source, expectedRelease: { id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash },
     baseSystemPrompt: "Complete the task.", runtimeId: "test-runtime", tools: [], maxContextCharacters: 10 })).toThrow("context limit");
 });
+
+test("Profile import identity lock admits instruction-only source without inventing dependencies", () => {
+  const source = sourceRuntimeFixture({ profileImportLock: true });
+  const runtime = createHarnessSourceRuntime({
+    sourcePackage: createHarnessPolicySourcePackage(source),
+    expectedRelease: { id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash },
+    baseSystemPrompt: "Complete the task.", runtimeId: "profile-training", tools: [], maxContextCharacters: 50_000,
+  });
+  expect(runtime.receipt.harnessRelease.id).toBe(source.harnessRelease.id);
+  expect(runtime.systemPrompt).toContain("Format the released label");
+});
