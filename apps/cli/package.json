@@ -1,6 +1,6 @@
 {
   "name": "openpond",
-  "version": "0.2.22",
+  "version": "0.2.23",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "description": "OpenPond CLI and local harness",
