@@ -258,7 +258,7 @@ async function buildPublicationPlan(
     profiles: {
       [request.ref.profileId]: {
         path: profileRoot || ".",
-        defaultAgent: request.selection.agentIds[0] ?? "default",
+        ...(request.selection.agentIds[0] ? { defaultAgent: request.selection.agentIds[0] } : {}),
         enabledAgents: request.selection.agentIds,
       },
     },

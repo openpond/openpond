@@ -55,11 +55,14 @@ describe("CI change scope", () => {
     expect(classifyCiChanges(["packages/evals/python/tests/test_telemetry.py"]).python).toBe(true);
   });
 
-  test("selects heavy CLI distribution proof only for package-producing changes", () => {
+  test("selects distribution proof for every shipped app and its packaging tooling", () => {
     expect(classifyCiChanges(["apps/cli/src/index.ts"]).distribution).toBe(true);
     expect(classifyCiChanges(["packages/runtime/src/index.ts"]).distribution).toBe(true);
     expect(classifyCiChanges(["pnpm-lock.yaml"]).distribution).toBe(true);
-    expect(classifyCiChanges(["apps/web/src/App.tsx"]).distribution).toBe(false);
+    expect(classifyCiChanges(["apps/web/src/App.tsx"]).distribution).toBe(true);
+    expect(classifyCiChanges(["apps/server/src/index.ts"]).distribution).toBe(true);
+    expect(classifyCiChanges(["scripts/distribution/package-policy.ts"]).distribution).toBe(true);
+    expect(classifyCiChanges(["tests/example.test.ts"]).distribution).toBe(false);
   });
 
   test("runs the full suite when production code is deleted, but not for a deleted test", () => {

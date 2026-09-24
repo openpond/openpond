@@ -45,7 +45,7 @@ await build({
   target: "node22.14",
   format: "esm",
   legalComments: "none",
-  external: ["esbuild", "zod", "@openpond/evals", "@openpond/evals/*"],
+  external: ["esbuild", "zod", "yaml", "@openpond/evals", "@openpond/evals/*"],
   sourcemap: true,
   logLevel: "info",
 });

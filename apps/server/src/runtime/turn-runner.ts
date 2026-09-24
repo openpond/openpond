@@ -944,7 +944,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     if (session.profileWorkflowBinding) {
       const workflow = selectedHarness?.workflow;
       if (!workflow) throw new Error("Bound Profile workflow is unavailable for this turn.");
-      const prepared = prepareProfileWorkflowTurn({ workflow, value: input.workflowInput, prompt: input.prompt });
+      const prepared = prepareProfileWorkflowTurn({
+        workflow,
+        value: input.workflowInput ?? (workflow.invocation.kind === "instructions" ? {} : undefined),
+        prompt: input.prompt,
+      });
       selectedHarness.instructionContext = [
         selectedHarness.instructionContext,
         prepared.instruction,

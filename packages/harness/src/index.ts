@@ -14,4 +14,5 @@ export * from "./source-package.js";
 export * from "./source-runtime.js";
 export * from "./provider-loop.js";
 export * from "./profile-workflows.js";
+export * from "./profile-workflow-source.js";
 export * from "./source-execution.js";

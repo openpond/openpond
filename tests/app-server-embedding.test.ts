@@ -4,7 +4,10 @@ import path from "node:path";
 import { z } from "zod";
 import { afterEach, expect, test, vi } from "vitest";
 import { contentHash } from "@openpond/harness";
+import { createTasksetPackage } from "openpond-sdk/taskset-packages";
 import { initializeHome } from "@openpond/persistence";
+import { materializePortableTasksetRelease } from "../packages/taskset-sdk/src";
+import { tasksetFixture } from "./helpers/training-fixtures";
 import { createOpenPondAppServer, type OpenPondAppServerOptions } from "../apps/server/src/app-server-runtime";
 import { SqliteStore } from "../apps/server/src/store/store";
 import {
@@ -396,10 +399,25 @@ test("explicit Profile source loads without replacing personal selection and rej
     invocation: { kind: "instructions", instructions: "Report the status of the subject." }, skillPaths: [],
   }] };
   await writeFile(catalogPath, JSON.stringify(catalog));
+  const tasksetDraft = tasksetFixture();
+  const releases = materializePortableTasksetRelease({
+    taskset: { ...tasksetDraft, tasks: tasksetDraft.tasks.map((task) => ({ ...task, assets: [], privilegedContextRef: null })) },
+    adapterId: "profile-status",
+  });
+  const frozenTask = releases.tasksetRelease.tasks.find((task) => task.split === "frozen_eval")!;
+  const frozenPackage = createTasksetPackage({
+    schemaVersion: "openpond.tasksetPackage.v1",
+    taskset: releases.tasksetRelease,
+    environment: releases.environmentRelease,
+    verifierSet: releases.verifierSetRelease,
+    files: [],
+  });
+  await mkdir(path.join(sourcePath, "evals", "tasksets"));
+  await writeFile(path.join(sourcePath, "evals", "tasksets", `${releases.tasksetRelease.contentHash}.json`), JSON.stringify(frozenPackage));
   const evaluationCatalog = { schemaVersion: "openpond.profileEvaluations.v1",
     definitions: [{ id: "profile-status", label: "Profile status", description: "",
-      target: { kind: "profile" }, tasksetRelease: { id: "status-cases", contentHash: "a".repeat(64) },
-      split: "frozen_eval", taskIds: ["status-case"], seeds: ["1"],
+      target: { kind: "profile" }, tasksetRelease: { id: releases.tasksetRelease.id, contentHash: releases.tasksetRelease.contentHash },
+      split: "frozen_eval", taskIds: [frozenTask.id], seeds: ["1"],
       criterion: { minimumPassRate: 1, requireComplete: true } }],
     suites: [{ id: "profile-suite", label: "Profile suite", scope: "profile", definitionIds: ["profile-status"] }] };
   await writeFile(path.join(sourcePath, "evals", "catalog.json"), JSON.stringify(evaluationCatalog));

@@ -51,6 +51,13 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
     || file === "pnpm-lock.yaml"
     || file === "pnpm-workspace.yaml"
     || file.startsWith("apps/cli/")
+    || file.startsWith("apps/server/")
+    || file.startsWith("apps/web/")
+    || file.startsWith("scripts/build/")
+    || file.startsWith("scripts/distribution/")
+    || file === "scripts/report-package-size.ts"
+    || file === "scripts/check-cli-distribution.ts"
+    || file === "scripts/check-performance-budgets.ts"
     || /^packages\/[^/]+\/(?:package\.json|src\/)/.test(file)
   ));
 

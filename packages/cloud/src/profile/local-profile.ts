@@ -1094,6 +1094,9 @@ async function ensureProfileScaffoldFiles(
   options: { includeDefaultAgent?: boolean } = {}
 ): Promise<void> {
   await mkdir(path.join(repoPath, "profiles"), { recursive: true });
+  // An Agent-free Profile needs only its root repo manifest. Component folders
+  // appear when the author adds source; empty Goals and Settings are noise.
+  if (options.includeDefaultAgent === false) return;
   for (const dir of [
     "agents",
     "skills",
@@ -1110,21 +1113,15 @@ async function ensureProfileScaffoldFiles(
   }
   const profileManifestPath = path.join(profileSourcePath, PROFILE_MANIFEST);
   if (!existsSync(profileManifestPath)) {
-    const agentLines =
-      options.includeDefaultAgent === false
-        ? ["agents: []"]
-        : [
-            "agents:",
-            `  - id: ${DEFAULT_PROFILE_AGENT}`,
-            "    path: agent/agent.ts",
-            "    enabled: true",
-          ];
     await writeFile(
       profileManifestPath,
       [
         "schema: openpond.profile.v1",
         `profile: ${profile}`,
-        ...agentLines,
+        "agents:",
+        `  - id: ${DEFAULT_PROFILE_AGENT}`,
+        "    path: agent/agent.ts",
+        "    enabled: true",
         "",
       ].join("\n"),
       "utf8"

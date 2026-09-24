@@ -52,6 +52,7 @@
     "stage:desktop": "pnpm run agent-sdk:build && tsx scripts/stage-desktop-runtime.ts",
     "build:artifacts": "pnpm run bundle:server && pnpm run build:web && pnpm run build:desktop",
     "build": "pnpm run typecheck && pnpm run build:artifacts",
+    "budgets:size": "node scripts/report-package-size.ts",
     "budgets:warn": "tsx scripts/check-performance-budgets.ts",
     "budgets:check": "OPENPOND_BUDGETS_STRICT=1 tsx scripts/check-performance-budgets.ts",
     "budgets:desktop-package": "tsx scripts/check-desktop-package-budgets.ts",

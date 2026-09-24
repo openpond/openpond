@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OpenPondProfileRefSchema } from "./profile-ref.js";
 
 export const SavedWorkWeekdaySchema = z.enum([
   "sunday",
@@ -144,6 +145,9 @@ export const ChatWorkflowSchema = z.object({
   sourceTurnId: z.string().nullable(),
   name: z.string(),
   prompt: z.string(),
+  profileRef: OpenPondProfileRefSchema.optional(),
+  profileWorkflowId: z.string().optional(),
+  profileMigrationError: z.string().nullable().optional(),
   recurrence: SavedWorkRecurrenceSchema,
   enabled: z.boolean(),
   nextRunAt: z.string().nullable(),

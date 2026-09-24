@@ -58,8 +58,8 @@ test("workflow case runs in an exact source-bound app-server session", async () 
     currentProfile: profileRef, profileWorkflowBinding: binding,
   }));
   expect(sendTurn).toHaveBeenCalledWith("evaluation-session", expect.objectContaining({
-    workflowInput: task.input,
-    prompt: 'Policy-visible task context:\n{"date":"2026-09-23"}',
+    workflowInput: {},
+    prompt: '{"prompt":"Repeat the protocol."}\n\nPolicy-visible task context:\n{"date":"2026-09-23"}',
   }));
   expect(JSON.stringify(sendTurn.mock.calls[0])).not.toContain("expectedOutput");
   expect(result.evidence.output).toEqual({ text: "done" });

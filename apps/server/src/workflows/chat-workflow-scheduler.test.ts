@@ -92,6 +92,12 @@ describe("chat workflow recurrence", () => {
       store,
       queue,
       getSession: async (sessionId) => ({ id: sessionId, title: "Launch notes" }) as never,
+      resolveProfileOwner: async () => ({
+        ref: { source: "local", repositoryId: "test-profile", profileId: "test" },
+        sourcePath: "/test-profile",
+      }),
+      saveProfilePackage: async () => undefined,
+      readProfilePackage: async () => ({ name: "Morning brief", prompt: "Summarize the overnight launch activity." }),
       sendTurn: async (sessionId, payload) => {
         delivered.push({ sessionId, payload: payload as Record<string, unknown> });
         return { id: "turn-1", status: "completed", error: null } as never;

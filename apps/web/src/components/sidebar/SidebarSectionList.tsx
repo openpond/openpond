@@ -164,7 +164,7 @@ export function SidebarSectionList({
   dragItem,
 }: SidebarProps) {
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
-  const [taskSort, setTaskSort] = useState<SidebarTaskSort>("manual");
+  const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
   const [groupByProject, setGroupByProject] = useState(experience !== "chat");
   const [taskVisibility, setTaskVisibility] = useState(
     readSidebarTaskVisibilityPreferences,

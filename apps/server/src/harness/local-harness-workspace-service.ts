@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { constants as fsConstants, promises as fs } from "node:fs";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import {
@@ -13,6 +13,7 @@ import {
   AgentSnapshotSchema,
   HarnessReleaseSchema,
   canonicalJson,
+  compileProfileWorkflowPackages,
   contentHash,
   createAgentSnapshot,
   createHarnessRelease,
@@ -24,9 +25,14 @@ import {
   type ImmutableAssetRef,
 } from "@openpond/harness";
 import { validateTaskSchema } from "@openpond/evals/task-schema";
-import { validateProfileEvaluationCatalog } from "@openpond/evals";
+import {
+  ProfileEvaluationDefinitionSchema,
+  ProfileEvaluationSuiteSchema,
+  validateProfileEvaluationCatalog,
+} from "@openpond/evals";
 import { validateTasksetPackage } from "openpond-sdk/taskset-packages";
 import { inspectReleasedProfileActionDependencies } from "./released-profile-action-dependencies.js";
+import { copyRegularFile, listRegularFiles, mediaTypeForPath, resolveContainedRegularFile, safeSegment, selectAgentPrimaryFile, sourceFilesForImport } from "./local-harness-workspace-files.js";
 
 import type { SqliteStore } from "../store/store.js";
 import {
@@ -655,13 +661,29 @@ async function writeImportedProfileSource(
   const actionIds = new Set(workflowActions.map((action) => action.id));
   const workflowCatalogPath = path.join(profileSource, "workflows", "catalog.json");
   const workflowCatalogStat = await fs.lstat(workflowCatalogPath).catch(() => null);
-  if (workflowCatalogStat || workflowActions.length) {
+  const workflowSourcePaths = (await listRegularFiles(profileSource)).filter((file) => file.startsWith("workflows/"));
+  const hasWorkflowPackages = workflowSourcePaths.some((file) => /^workflows\/[^/]+\/(PROMPT\.md|ACTION\.json)$/.test(file));
+  if (hasWorkflowPackages && workflowCatalogStat) {
+    throw new Error("Authored Workflow packages and legacy workflows/catalog.json cannot coexist; migrate the catalog first.");
+  }
+  if (workflowCatalogStat || hasWorkflowPackages || workflowActions.length) {
     if (workflowCatalogStat && (!workflowCatalogStat.isFile() || workflowCatalogStat.isSymbolicLink())) {
       throw new Error("Profile workflow catalog must be a regular file.");
     }
-    const catalogBytes = workflowCatalogStat
-      ? await fs.readFile(workflowCatalogPath)
-      : Buffer.from(canonicalJson({ schemaVersion: "openpond.profileWorkflows.v1", workflows: [] }));
+    const packages = hasWorkflowPackages
+      ? compileProfileWorkflowPackages({
+          files: new Map(await Promise.all(workflowSourcePaths.map(async (file) => [
+            file, await fs.readFile(await resolveContainedRegularFile(profileSource, file), "utf8"),
+          ] as const))),
+          skillPaths: new Set(declarations.filter((file) => file.kind === "skill").map((file) => file.path)),
+          actionIds,
+        })
+      : null;
+    const catalogBytes = packages
+      ? Buffer.from(canonicalJson(packages.catalog))
+      : workflowCatalogStat
+        ? await fs.readFile(workflowCatalogPath)
+        : Buffer.from(canonicalJson({ schemaVersion: "openpond.profileWorkflows.v1", workflows: [] }));
     const catalog = validateProfileWorkflowCatalog({
       catalog: JSON.parse(catalogBytes.toString("utf8")),
       sourcePaths: new Set(declarations.filter((file) => file.kind === "skill").map((file) => file.path)),
@@ -671,8 +693,15 @@ async function writeImportedProfileSource(
     assertProfileWorkflowInputSchemas(catalog);
     const target = "workflows/catalog.json";
     await fs.mkdir(path.join(sourceDir, "workflows"), { recursive: true });
-    if (workflowCatalogStat) await copyRegularFile(workflowCatalogPath, path.join(sourceDir, "workflows", "catalog.json"));
-    else await fs.writeFile(path.join(sourceDir, "workflows", "catalog.json"), catalogBytes, { flag: "wx" });
+    await fs.writeFile(path.join(sourceDir, "workflows", "catalog.json"), catalogBytes, { flag: "wx" });
+    for (const file of packages?.referencedPaths ?? []) {
+      await copyRegularFile(path.join(profileSource, ...file.split("/")), path.join(sourceDir, ...file.split("/")));
+      addDeclaration({
+        id: `profile-workflow-source-${contentHash(file).slice(0, 16)}`,
+        kind: "asset", path: file, parentId: null, mediaType: mediaTypeForPath(file),
+        visibility: "policy", portability: "portable",
+      });
+    }
     addDeclaration({
       id: "profile-workflows",
       kind: "workflow",
@@ -683,7 +712,7 @@ async function writeImportedProfileSource(
       portability: "portable",
     });
   }
-  if (workflowCatalogStat || workflowActions.length) {
+  if (workflowCatalogStat || hasWorkflowPackages || workflowActions.length) {
     await fs.writeFile(path.join(sourceDir, "workflows", "actions.json"), canonicalJson({
       schemaVersion: "openpond.profileWorkflowActions.v1",
       actions: workflowActions,
@@ -701,17 +730,50 @@ async function writeImportedProfileSource(
 
   const evaluationCatalogPath = path.join(profileSource, "evals", "catalog.json");
   const evaluationCatalogStat = await fs.lstat(evaluationCatalogPath).catch(() => null);
-  if (evaluationCatalogStat) {
-    if (!evaluationCatalogStat.isFile() || evaluationCatalogStat.isSymbolicLink()) {
+  const evaluationSourcePaths = (await listRegularFiles(profileSource)).filter((file) =>
+    /^workflows\/[^/]+\/evals\/[^/]+\.json$/.test(file)
+    || /^evals\/(definitions|suites)\/[^/]+\.json$/.test(file));
+  if (evaluationCatalogStat && evaluationSourcePaths.length) {
+    throw new Error("Authored evaluation definitions and legacy evals/catalog.json cannot coexist; migrate the catalog first.");
+  }
+  if (evaluationCatalogStat || evaluationSourcePaths.length) {
+    if (evaluationCatalogStat && (!evaluationCatalogStat.isFile() || evaluationCatalogStat.isSymbolicLink())) {
       throw new Error("Profile evaluation catalog must be a regular file.");
     }
+    const authoredDefinitions = [];
+    const authoredSuites = [];
+    for (const file of evaluationSourcePaths) {
+      const value = JSON.parse(await fs.readFile(await resolveContainedRegularFile(profileSource, file), "utf8"));
+      if (file.startsWith("evals/suites/")) {
+        authoredSuites.push(ProfileEvaluationSuiteSchema.parse(value));
+      } else {
+        const definition = ProfileEvaluationDefinitionSchema.parse(value);
+        const owner = /^workflows\/([^/]+)\/evals\//.exec(file)?.[1];
+        if (owner && (definition.target.kind !== "workflow" || definition.target.workflowId !== owner)) {
+          throw new Error(`Profile evaluation ${definition.id} must target its containing Workflow ${owner}.`);
+        }
+        authoredDefinitions.push(definition);
+      }
+    }
+    const evaluationBytes = evaluationSourcePaths.length
+      ? Buffer.from(canonicalJson({ schemaVersion: "openpond.profileEvaluations.v1", definitions: authoredDefinitions.sort((a, b) => a.id.localeCompare(b.id)), suites: authoredSuites.sort((a, b) => a.id.localeCompare(b.id)) }))
+      : await fs.readFile(evaluationCatalogPath);
     const { catalog } = validateProfileEvaluationCatalog({
-      catalog: JSON.parse(await fs.readFile(evaluationCatalogPath, "utf8")),
+      catalog: JSON.parse(evaluationBytes.toString("utf8")),
       workflowIds,
       skillPaths: new Set(declarations.filter((file) => file.kind === "skill").map((file) => file.path)),
       actionIds,
     });
-    await copyRegularFile(evaluationCatalogPath, path.join(sourceDir, "evals", "catalog.json"));
+    await fs.mkdir(path.join(sourceDir, "evals"), { recursive: true });
+    await fs.writeFile(path.join(sourceDir, "evals", "catalog.json"), evaluationBytes, { flag: "wx" });
+    for (const file of evaluationSourcePaths) {
+      await copyRegularFile(path.join(profileSource, ...file.split("/")), path.join(sourceDir, ...file.split("/")));
+      addDeclaration({
+        id: `profile-evaluation-source-${contentHash(file).slice(0, 16)}`,
+        kind: "asset", path: file, parentId: null, mediaType: "application/json",
+        visibility: "verifier", portability: "portable",
+      });
+    }
     addDeclaration({
       id: "profile-evaluations",
       kind: "asset",
@@ -730,7 +792,7 @@ async function writeImportedProfileSource(
     for (const packageHash of packageHashes) {
       const packagePath = path.join(packageSourceDir, `${packageHash}.json`);
       const packageStat = await fs.lstat(packagePath).catch(() => null);
-      if (!packageStat) continue;
+      if (!packageStat) throw new Error(`Profile evaluation Taskset package ${packageHash} is missing.`);
       if (!packageStat.isFile() || packageStat.isSymbolicLink()) {
         throw new Error("Profile evaluation Taskset package must be a regular file.");
       }
@@ -902,40 +964,6 @@ async function importedDependencyLock(profile: OpenPondProfileState, sourceRevis
   };
 }
 
-async function sourceFilesForImport(source: string): Promise<string[]> {
-  const stats = await fs.lstat(source);
-  if (stats.isSymbolicLink()) throw new Error(`Profile source cannot be a symlink: ${source}`);
-  if (stats.isFile()) return [path.basename(source)];
-  if (!stats.isDirectory()) throw new Error(`Profile source is not a file or directory: ${source}`);
-  return listRegularFiles(source);
-}
-
-function selectAgentPrimaryFile(files: string[]): string {
-  for (const candidate of ["agent.ts", "index.ts", "agent/agent.ts", "agent.yaml", "agent.yml", "agent.json"]) {
-    if (files.includes(candidate)) return candidate;
-  }
-  return files[0]!;
-}
-
-async function copyRegularFile(source: string, target: string): Promise<void> {
-  const stats = await fs.lstat(source);
-  if (!stats.isFile() || stats.isSymbolicLink()) {
-    throw new Error(`Harness import source must be a regular non-symlink file: ${source}`);
-  }
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.copyFile(source, target, fsConstants.COPYFILE_EXCL);
-}
-
-function mediaTypeForPath(filePath: string): string {
-  const extension = path.extname(filePath).toLowerCase();
-  if ([".md", ".txt"].includes(extension)) return extension === ".md" ? "text/markdown" : "text/plain";
-  if ([".json"].includes(extension)) return "application/json";
-  if ([".yaml", ".yml"].includes(extension)) return "application/yaml";
-  if ([".ts", ".tsx", ".js", ".mjs", ".cjs"].includes(extension)) return "text/javascript";
-  if (extension === ".py") return "text/x-python";
-  return "application/octet-stream";
-}
-
 async function verifyMaterializedRelease(
   destination: string,
   compiled: CompiledLocalHarnessSource,
@@ -958,41 +986,4 @@ async function verifyMaterializedRelease(
       throw new Error(`Materialized Harness asset ${file.path} failed hash verification.`);
     }
   }
-}
-
-async function resolveContainedRegularFile(root: string, relativePath: string): Promise<string> {
-  const candidate = path.resolve(root, ...relativePath.split("/"));
-  const relative = path.relative(root, candidate);
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`Harness source path escapes its root: ${relativePath}`);
-  }
-  const stats = await fs.lstat(candidate);
-  if (!stats.isFile() || stats.isSymbolicLink()) {
-    throw new Error(`Harness source path must be a regular non-symlink file: ${relativePath}`);
-  }
-  const real = await fs.realpath(candidate);
-  const realRelative = path.relative(await fs.realpath(root), real);
-  if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {
-    throw new Error(`Harness source path resolves outside its root: ${relativePath}`);
-  }
-  return candidate;
-}
-
-async function listRegularFiles(root: string, directory = root): Promise<string[]> {
-  const entries = await fs.readdir(directory, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    if (["node_modules", ".git", ".openpond"].includes(entry.name) || entry.name.startsWith(".env")) continue;
-    const absolute = path.join(directory, entry.name);
-    if (entry.isSymbolicLink()) throw new Error(`Harness source cannot contain symlinks: ${path.relative(root, absolute)}`);
-    if (entry.isDirectory()) files.push(...(await listRegularFiles(root, absolute)));
-    else if (entry.isFile()) files.push(path.relative(root, absolute).split(path.sep).join("/"));
-    else throw new Error(`Harness source contains an unsupported entry: ${path.relative(root, absolute)}`);
-  }
-  return files.sort();
-}
-
-function safeSegment(value: string): string {
-  const result = value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-  return result.slice(0, 48) || "harness";
 }

@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { bundleNode, fromRoot, makeExecutable } from "./shared-esbuild.js";
@@ -13,7 +15,8 @@ export async function bundleCli(surface: CliBundleSurface = "all"): Promise<void
     entryPoints["sandbox-template/manifest"] = fromRoot("apps", "cli", "src", "sandbox-template", "manifest.ts");
   }
   // One production graph shares interpreter payloads between CLI and package entrypoints.
-  await bundleNode({
+  const result = await bundleNode({
+    metafile: true,
     entryPoints,
     outdir: fromRoot("apps", "cli", "dist"),
     splitting: true,
@@ -23,11 +26,19 @@ export async function bundleCli(surface: CliBundleSurface = "all"): Promise<void
     define: { __OPENPOND_COMPILED_CLI__: "false" },
     external: ["esbuild", "node-pty"],
   });
+  if (surface === "all") {
+    const outputs = Object.keys(result.metafile!.outputs)
+      .map((file) => path.relative(fromRoot("apps", "cli"), path.resolve(file)).replaceAll("\\", "/"))
+      .sort();
+    await mkdir(fromRoot("apps", "cli", "build"), { recursive: true });
+    await writeFile(fromRoot("apps", "cli", "build", "runtime-outputs.json"), JSON.stringify(outputs, null, 2) + "\n");
+  }
   if (surface === "all" || surface === "cli") await makeExecutable(fromRoot("apps", "cli", "dist", "cli.js"));
 }
 
 function parseSurface(value: string | undefined): CliBundleSurface {
-  if (!value || value === "all" || value === "cli" || value === "package") return value ?? "all";
+  if (!value) return "all";
+  if (value === "all" || value === "cli" || value === "package") return value;
   throw new Error(`Unknown CLI bundle surface: ${value}`);
 }
 

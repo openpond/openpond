@@ -1,13 +1,16 @@
 import { z } from "zod";
+import path from "node:path";
 import {
   ChatModelRefSchema, ProfileComponentBindingSchema, ProfileWorkflowBindingSchema,
   ReleaseHashSchema, ReleaseIdSchema, contentHash,
 } from "@openpond/harness";
-import { OpenPondProfileRefSchema, type OpenPondProfileRef, type Session, type Turn } from "@openpond/contracts";
+import { CHAT_ATTACHMENT_LIMITS, ChatAttachmentSchema, OpenPondProfileRefSchema, type OpenPondProfileRef, type Session, type Turn } from "@openpond/contracts";
 import { TasksetReleaseSchema, TasksetRunManifestSchema, assertProfileEvaluationRunAdmission, policyTaskView } from "@openpond/evals";
+import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
 
 import type { SqliteStore } from "../store/store.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
+import { loadLocalProfileEvaluationTaskset } from "./local-profile-evaluation-taskset.js";
 import { createProfileWorkflowEvaluationExecutor } from "./profile-evaluation-turn-executor.js";
 
 const ProfileEvaluationCaseRequestSchema = z.object({
@@ -25,6 +28,7 @@ const ProfileEvaluationCaseRequestSchema = z.object({
  * caller retains the full Taskset and private graders outside model context. */
 export function createProfileEvaluationCaseService(input: {
   store: SqliteStore;
+  storeDir?: string;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   createSession: (request: unknown) => Promise<Session>;
   sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
@@ -59,14 +63,45 @@ export function createProfileEvaluationCaseService(input: {
       throw new Error("Evaluation case differs from its released definition or admitted population.");
     }
     const task = parsed.taskset.tasks.find((item) => item.id === parsed.taskId)!;
+    const policyTask = policyTaskView(task);
+    if (policyTask.artifactRefs.length !== task.artifactRefs.length
+      || policyTask.artifactRefs.length > CHAT_ATTACHMENT_LIMITS.maxAttachments) {
+      throw new Error("Evaluation case has an unauthorized task attachment.");
+    }
+    if (policyTask.artifactRefs.length && !input.storeDir) {
+      throw new Error("Evaluation case attachment storage is unavailable.");
+    }
+    const releasedPackage = policyTask.artifactRefs.length ? await loadLocalProfileEvaluationTaskset({
+      store: input.store, storeDir: input.storeDir!, definition,
+      profileId: selected.ref.profileId, harnessRelease: parsed.binding.harnessRelease,
+    }) : null;
+    if (releasedPackage && (releasedPackage.contentHash !== parsed.manifest.packageHash
+      || releasedPackage.taskset.contentHash !== parsed.taskset.contentHash)) {
+      throw new Error("Evaluation case Taskset differs from its frozen package or admitted manifest.");
+    }
+    const attachments = policyTask.artifactRefs.map((asset) => {
+      if (asset.mediaType !== "application/pdf" || asset.sizeBytes > CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes) {
+        throw new Error(`Evaluation case attachment ${asset.id} is not an admitted PDF.`);
+      }
+      const file = releasedPackage?.files.find((entry) => entry.asset.id === asset.id);
+      if (!file || contentHash(file.asset) !== contentHash(asset)) {
+        throw new Error(`Evaluation case attachment ${asset.id} differs from its frozen Taskset file.`);
+      }
+      decodeTasksetPackageFile(file);
+      return ChatAttachmentSchema.parse({
+        id: asset.id, name: path.basename(asset.path), kind: "file",
+        mediaType: asset.mediaType, sizeBytes: asset.sizeBytes, contentsBase64: file.base64,
+      });
+    });
     const execute = createProfileWorkflowEvaluationExecutor({
       manifest: parsed.manifest, profileRef: selected.ref, binding: parsed.binding,
       modelRef: parsed.modelRef, modelConfigurationHash: parsed.modelConfigurationHash,
       createSession: input.createSession, sendTurn: input.sendTurn,
       interruptSessionTurn: input.interruptSessionTurn,
       runtimeEventsForTurn: (turnId) => input.store.runtimeEventsForTurn(turnId),
+      attachments, requiredOutputs: task.requiredOutputs ?? [],
     });
-    return execute({ task: policyTaskView(task), seed: parsed.seed, source,
+    return execute({ task: policyTask, seed: parsed.seed, source,
       ...(signal ? { signal } : {}) });
   };
 }

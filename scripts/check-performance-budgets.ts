@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { MAX_RENDERER_JS_BYTES } from "./distribution/package-policy.ts";
 import { isolatedOpenPondEnvironment } from "./isolated-openpond-environment";
 
 const execFileAsync = promisify(execFile);
@@ -85,19 +86,9 @@ export type StartupMetrics =
     };
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
-  // Durable task inbox, steering controls, and queue receipts measured 16,912,969
-  // total bytes in the isolated 2026-09-20 build, up 9,962 from the previous
-  // reviewed feature baseline. Initial assets are 456,770 bytes. Add 12 KiB for
-  // this measured feature; initial-load, single-asset, and startup limits remain.
-  // The shared Profile workflow contract raised the verified PR renderer
-  // total to 16,917,407 bytes; allow 6 KiB for that measured addition.
-  // The Profile evaluation review UI measured 16,926,980 bytes in the
-  // verified build; allow 8 KiB for this reviewed addition.
-  // Suite selection and retained-history controls measured 16,931,960 bytes
-  // in the verified PR build; allow 2 KiB beyond the previous limit.
-  // Profile report and matrix controls measured 16,935,957 bytes in PR #403;
-  // allow 4 KiB for this reviewed addition. Initial assets remain capped.
-  maxTotalJsBytes: 16 * 1024 * 1024 + 156 * 1024,
+  // Broad storage guard. Ordinary feature growth is reported against the PR
+  // base; initial-load and startup budgets remain independent user-facing limits.
+  maxTotalJsBytes: MAX_RENDERER_JS_BYTES,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
@@ -393,15 +384,17 @@ async function main(): Promise<void> {
     });
   }
 
-  const startup = await measureServerStartup({ root });
-  warnings.push(...checkStartupBudgets(startup));
-  if (startup.ok) {
-    const { routes, ...startupReport } = startup;
-    report.startup = startupReport;
-    report.serverRoutes = routes;
-    warnings.push(...checkServerRouteBudgets(routes));
-  } else {
-    report.startup = startup;
+  if (!process.argv.includes("--renderer-only")) {
+    const startup = await measureServerStartup({ root });
+    warnings.push(...checkStartupBudgets(startup));
+    if (startup.ok) {
+      const { routes, ...startupReport } = startup;
+      report.startup = startupReport;
+      report.serverRoutes = routes;
+      warnings.push(...checkServerRouteBudgets(routes));
+    } else {
+      report.startup = startup;
+    }
   }
 
   console.log(JSON.stringify(report, null, 2));

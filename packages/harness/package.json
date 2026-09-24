@@ -94,6 +94,7 @@
     "publish:check": "pnpm run build && pnpm run check:api && pnpm run check:consumer && npm pack --dry-run"
   },
   "dependencies": {
+    "yaml": "^2.9.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {

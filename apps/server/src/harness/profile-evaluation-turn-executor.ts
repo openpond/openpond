@@ -1,6 +1,7 @@
 import { contentHash, type ChatModelRef, type ProfileComponentBinding, type ProfileWorkflowBinding } from "@openpond/harness";
-import type { OpenPondProfileRef, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import { FileOutputRefSchema, type ChatAttachment, type FileOutputRef, type OpenPondProfileRef, type RuntimeEvent, type Session, type Turn } from "@openpond/contracts";
 import type { TasksetRunManifest } from "@openpond/evals";
+import type { RequiredOutputContract } from "@openpond/evals";
 import type { executeProfileEvaluationRun } from "@openpond/evals";
 
 type ExecuteCase = Parameters<typeof executeProfileEvaluationRun>[0]["execute"];
@@ -18,6 +19,8 @@ export function createProfileWorkflowEvaluationExecutor(input: {
   sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
   interruptSessionTurn?: (sessionId: string, reason?: string) => Promise<Turn>;
   runtimeEventsForTurn: (turnId: string) => Promise<RuntimeEvent[]>;
+  attachments?: ChatAttachment[];
+  requiredOutputs?: RequiredOutputContract[];
 }): ExecuteCase {
   const source = input.manifest.profileEvaluation;
   const policy = input.manifest.policy;
@@ -48,7 +51,9 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       throw new Error("Workflow evaluation case differs from its admitted Profile source.");
     }
     member.signal?.throwIfAborted();
+    const workCase = Boolean(input.attachments?.length || input.requiredOutputs?.length);
     const session = await input.createSession({
+      ...(workCase ? { experience: "work" } : {}),
       provider: input.modelRef.providerId,
       modelRef: input.modelRef,
       currentProfile: input.profileRef,
@@ -60,12 +65,11 @@ export function createProfileWorkflowEvaluationExecutor(input: {
         profileEvaluationRun: { id: input.manifest.id, contentHash: input.manifest.contentHash },
         taskId: member.task.id,
         seed: member.seed,
+        ...(workCase && input.profileRef.source === "local" ? { workspaceTarget: "local" } : {}),
       },
     });
     const prompt = [
-      ...(input.binding.schemaVersion === "openpond.profileWorkflowBinding.v1" ? [] : [
-        typeof member.task.input === "string" ? member.task.input : JSON.stringify(member.task.input),
-      ]),
+      typeof member.task.input === "string" ? member.task.input : JSON.stringify(member.task.input),
       ...(Object.keys(member.task.policyVisibleContext).length
         ? [`Policy-visible task context:\n${JSON.stringify(member.task.policyVisibleContext)}`]
         : []),
@@ -73,10 +77,13 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     const sendTurn = input.sendTurn(session.id, {
       prompt,
       ...(input.binding.schemaVersion === "openpond.profileWorkflowBinding.v1"
-        || input.binding.target.kind === "agent_action"
-        ? { workflowInput: member.task.input } : {}),
+        ? { workflowInput: {} }
+        : input.binding.target.kind === "agent_action"
+          ? { workflowInput: member.task.input } : {}),
       modelRef: input.modelRef,
       approvalPolicy: "on-request",
+      ...(workCase ? { sandbox: "workspace-write", codexPermissionMode: "default" } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     });
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let onAbort: (() => void) | undefined;
@@ -114,6 +121,26 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       throw new Error("Workflow evaluation turn executed a different model.");
     }
     const events = await input.runtimeEventsForTurn(turn.id);
+    const outputs = events
+      .filter((event) => event.name === "workspace_action_result"
+        && (event.action === "sandbox_save_output" || event.action === "work_output_save")
+        && event.status === "completed"
+        && event.turnId === turn.id)
+      .flatMap((event) => findFileOutputs(event.data))
+      .filter((output) => output.sourceTaskId === session.id
+        && output.sourceTurnId === turn.id && output.location.kind !== "external");
+    const matchedOutputs = (input.requiredOutputs ?? []).flatMap((required) => {
+      const output = [...outputs].reverse().find((candidate) => candidate.title === required.path
+        && candidate.contentType === required.mediaType
+        && (required.maxBytes === null || candidate.sizeBytes <= required.maxBytes));
+      return output ? [output] : [];
+    });
+    const artifactRefs = matchedOutputs.map((output) => ({
+      id: `${session.id}/${output.id}/${output.revision}/${output.title}`,
+      contentHash: output.sha256,
+      mediaType: output.contentType,
+      sizeBytes: output.sizeBytes,
+    }));
     const assistantOutput = events.filter((event) => event.name === "assistant.delta" && typeof event.output === "string")
       .map((event) => event.output ?? "").join("");
     const actionOutput = input.binding.schemaVersion === "openpond.profileComponentBinding.v1"
@@ -132,11 +159,11 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       evidence: {
         output: { text: output },
         runtimeEventRefs: events.map((event) => event.id),
-        artifactRefs: [],
+        artifactRefs: artifactRefs.map((artifact) => artifact.id),
         ...(turn.status !== "completed" ? { infrastructureError: turn.error ?? `Workflow evaluation turn ${turn.status}.` } : {}),
       },
       traceHash: contentHash(events),
-      artifactRefs: [],
+      artifactRefs,
       startedAt: turn.startedAt,
       completedAt: turn.completedAt,
       latencyMs: Math.max(0, Date.parse(turn.completedAt) - Date.parse(turn.startedAt)),
@@ -145,4 +172,14 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       failureClass: turn.status === "completed" ? null : turn.status === "interrupted" ? "cancelled" : "infrastructure_failure",
     };
   };
+}
+
+function findFileOutputs(value: unknown, depth = 0): FileOutputRef[] {
+  if (value == null || depth > 8) return [];
+  const parsed = FileOutputRefSchema.safeParse(value);
+  if (parsed.success) return [parsed.data];
+  if (Array.isArray(value)) return value.flatMap((item) => findFileOutputs(item, depth + 1));
+  if (typeof value !== "object") return [];
+  return Object.values(value as Record<string, unknown>)
+    .flatMap((item) => findFileOutputs(item, depth + 1));
 }
