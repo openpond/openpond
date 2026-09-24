@@ -22,6 +22,7 @@ import {
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
   loadOpenPondProfileStateForRef,
+  openPondProfileRef,
   readProfileSkill,
 } from "@openpond/cloud";
 import {
@@ -47,6 +48,7 @@ import { createManualCompactionRecorder } from "./runtime/manual-compaction-usag
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
 import { trustedProviderContextLimit } from "./openpond/context-usage.js";
 import { createLogger } from "@openpond/logging";
+import { readChatWorkflowPackage, saveChatWorkflowPackage } from "./workflows/profile-workflow-authoring.js";
 import {
   appDataDir,
   ensureCapabilityToken,
@@ -837,6 +839,18 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     createHostedSavedWork,
     isClosing: () => closing,
     logger,
+    async resolveProfileOwner(session, existingRef) {
+      const profile = await loadOpenPondProfileStateForRef(existingRef ?? session.currentProfile);
+      if (profile.error || profile.mode !== "local" || !profile.repoPath || !profile.sourcePath || !profile.activeProfile) {
+        throw new Error(profile.error ?? "Chat Workflow requires an installed local Profile owner.");
+      }
+      return {
+        ref: existingRef ?? session.currentProfile ?? openPondProfileRef({ repoPath: profile.repoPath, profile: profile.activeProfile }),
+        sourcePath: profile.sourcePath,
+      };
+    },
+    saveProfilePackage: (sourcePath, workflow) => saveChatWorkflowPackage({ sourcePath, workflow }),
+    readProfilePackage: (sourcePath, workflowId) => readChatWorkflowPackage({ sourcePath, workflowId }),
   });
   onStartupFailure(() => chatWorkflows.stop());
   const turnRunner = createTurnRunner({
@@ -1574,7 +1588,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
   };
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
-    store, selectedProfile: selectedEvaluationProfile,
+    store, storeDir, selectedProfile: selectedEvaluationProfile,
     createSession: createSessionWithAutoTitle, sendTurn,
     interruptSessionTurn: turnRunner.interruptSessionTurn,
   });
@@ -1930,7 +1944,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   workSandboxLifecycle.start();
   if (options.httpEnabled !== false) {
     localAgentScheduleLoop.start();
-    chatWorkflows.start();
+    await chatWorkflows.start();
     harnessEvaluationReviewScheduler.start();
   }
 

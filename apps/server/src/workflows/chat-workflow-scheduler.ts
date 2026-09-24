@@ -9,6 +9,7 @@ import type {
   Session,
   Turn,
   UpdateChatWorkflowRequest,
+  OpenPondProfileRef,
 } from "@openpond/contracts";
 import type { BackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
 import type { SqliteStore } from "../store/store.js";
@@ -22,7 +23,7 @@ type Logger = {
 };
 
 export type ChatWorkflowLoop = {
-  start(): void;
+  start(): Promise<void>;
   stop(): Promise<void>;
   create(input: CreateChatWorkflowRequest): Promise<ChatWorkflow>;
   list(sessionId?: string | null): Promise<ChatWorkflow[]>;
@@ -41,13 +42,50 @@ export function createChatWorkflowLoop(options: {
   isClosing(): boolean;
   logger?: Logger;
   tickMs?: number;
+  resolveProfileOwner(session: Session, existingRef?: OpenPondProfileRef): Promise<{ ref: OpenPondProfileRef; sourcePath: string }>;
+  saveProfilePackage(sourcePath: string, workflow: ChatWorkflow): Promise<void>;
+  readProfilePackage(sourcePath: string, workflowId: string): Promise<{ name: string; prompt: string }>;
 }): ChatWorkflowLoop {
   const runningIds = new Set<string>();
   let interval: ReturnType<typeof setInterval> | null = null;
   let activeTick: Promise<void> | null = null;
 
+  async function authoredWorkflow(workflow: ChatWorkflow): Promise<ChatWorkflow> {
+    if (!workflow.profileRef || !workflow.profileWorkflowId) {
+      throw new Error(workflow.profileMigrationError ?? `Chat Workflow ${workflow.id} has no Profile package.`);
+    }
+    const session = await options.getSession(workflow.sessionId);
+    const owner = await options.resolveProfileOwner(session, workflow.profileRef);
+    const source = await options.readProfilePackage(owner.sourcePath, workflow.profileWorkflowId);
+    return { ...workflow, name: source.name, prompt: source.prompt };
+  }
+
+  async function migrateExistingWorkflows(): Promise<void> {
+    for (const workflow of await options.store.listChatWorkflows()) {
+      if (workflow.profileRef && workflow.profileWorkflowId) continue;
+      try {
+        const session = await options.getSession(workflow.sessionId);
+        if (!session.currentProfile) throw new Error("Original session has no explicit Profile owner.");
+        const owner = await options.resolveProfileOwner(session, session.currentProfile);
+        const migrated = {
+          ...workflow,
+          profileRef: owner.ref,
+          profileWorkflowId: workflow.profileWorkflowId ?? `chat-${workflow.id.toLowerCase()}`,
+          profileMigrationError: null,
+        };
+        await options.saveProfilePackage(owner.sourcePath, migrated);
+        await options.store.patchChatWorkflow(workflow.id, () => migrated);
+      } catch (error) {
+        const message = `Profile package migration unresolved: ${error instanceof Error ? error.message : String(error)}`;
+        await options.store.patchChatWorkflow(workflow.id, (current) => ({ ...current, profileMigrationError: message }));
+        options.logger?.warn("chat workflow Profile migration unresolved", { workflowId: workflow.id, error: message });
+      }
+    }
+  }
+
   async function create(input: CreateChatWorkflowRequest): Promise<ChatWorkflow> {
     const session = await options.getSession(input.sessionId);
+    const owner = await options.resolveProfileOwner(session);
     const timestamp = now();
     const next = safeNextOccurrence(input.recurrence, new Date(), 0);
     if (!next.value) {
@@ -60,6 +98,8 @@ export function createChatWorkflowLoop(options: {
       sourceTurnId: input.sourceTurnId ?? null,
       name: input.name,
       prompt: input.prompt,
+      profileRef: owner.ref,
+      profileWorkflowId: `chat-${randomUUID()}`,
       recurrence: input.recurrence,
       enabled: true,
       nextRunAt: next.value,
@@ -71,6 +111,7 @@ export function createChatWorkflowLoop(options: {
       createdAt: timestamp,
       updatedAt: timestamp,
     };
+    await options.saveProfilePackage(owner.sourcePath, workflow);
     return options.store.upsertChatWorkflow(workflow);
   }
 
@@ -106,6 +147,7 @@ export function createChatWorkflowLoop(options: {
     scheduledFor: string,
     trigger: ChatWorkflowRun["trigger"],
   ): Promise<ChatWorkflowRun> {
+    workflow = await authoredWorkflow(workflow);
     const timestamp = now();
     const configuration = options.store.home ? await resolveEffectiveConfig(options.store.home) : undefined;
     const run: ChatWorkflowRun = {
@@ -203,8 +245,9 @@ export function createChatWorkflowLoop(options: {
   }
 
   return {
-    start() {
+    async start() {
       if (interval) return;
+      await migrateExistingWorkflows();
       void trackedTick().catch((error) =>
         options.logger?.warn("chat workflow tick failed", { error: String(error) }),
       );
@@ -221,7 +264,13 @@ export function createChatWorkflowLoop(options: {
       await activeTick?.catch(() => undefined);
     },
     create,
-    list: (sessionId) => options.store.listChatWorkflows({ sessionId }),
+    async list(sessionId) {
+      const workflows = await options.store.listChatWorkflows({ sessionId });
+      return Promise.all(workflows.map(async (workflow) => {
+        try { return await authoredWorkflow(workflow); }
+        catch (error) { return { ...workflow, profileMigrationError: error instanceof Error ? error.message : String(error) }; }
+      }));
+    },
     listRuns: (workflowId) => options.store.listChatWorkflowRuns(workflowId),
     async patch(id, input) {
       const existing = await options.store.getChatWorkflow(id);
@@ -240,6 +289,12 @@ export function createChatWorkflowLoop(options: {
         }));
       }
       const next = safeNextOccurrence(input.recurrence, new Date(), 0);
+      if (!existing.profileRef || !existing.profileWorkflowId) {
+        throw new Error(`Chat Workflow ${id} has no resolved Profile owner; migrate it before editing.`);
+      }
+      const session = await options.getSession(existing.sessionId);
+      const owner = await options.resolveProfileOwner(session, existing.profileRef);
+      await options.saveProfilePackage(owner.sourcePath, { ...existing, name: input.name, prompt: input.prompt });
       return options.store.patchChatWorkflow(id, (current) => ({
         ...current,
         name: input.name,

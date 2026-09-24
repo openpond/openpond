@@ -5,6 +5,7 @@ import {
   type CreateHostedSavedWorkRequest,
   type Session,
   type Turn,
+  type OpenPondProfileRef,
 } from "@openpond/contracts";
 import type { BackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
 import type { SqliteStore } from "../store/store.js";
@@ -22,6 +23,9 @@ export function createChatWorkflowRuntime(options: {
   createHostedSavedWork(input: CreateHostedSavedWorkRequest): Promise<Record<string, unknown>>;
   isClosing(): boolean;
   logger?: Logger;
+  resolveProfileOwner(session: Session, existingRef?: OpenPondProfileRef): Promise<{ ref: OpenPondProfileRef; sourcePath: string }>;
+  saveProfilePackage(sourcePath: string, workflow: import("@openpond/contracts").ChatWorkflow): Promise<void>;
+  readProfilePackage(sourcePath: string, workflowId: string): Promise<{ name: string; prompt: string }>;
 }) {
   let loop: ChatWorkflowLoop | null = null;
 
@@ -79,6 +83,9 @@ export function createChatWorkflowRuntime(options: {
         isSessionTurnActive: input.isSessionTurnActive,
         isClosing: options.isClosing,
         logger: options.logger,
+        resolveProfileOwner: options.resolveProfileOwner,
+        saveProfilePackage: options.saveProfilePackage,
+        readProfilePackage: options.readProfilePackage,
       });
     },
     async createScheduledWork(rawInput: CreateHostedSavedWorkRequest) {
@@ -99,7 +106,7 @@ export function createChatWorkflowRuntime(options: {
       };
     },
     start() {
-      requiredLoop().start();
+      return requiredLoop().start();
     },
     stop() {
       return requiredLoop().stop();

@@ -502,6 +502,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   };
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
     store,
+    storeDir,
     selectedProfile: selectedEvaluationProfile,
     createSession: createSessionWithAutoTitle,
     sendTurn: turnRunner.sendTurn,

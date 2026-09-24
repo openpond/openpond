@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { ChatModelRefSchema, ModelRefSchema, ProfileComponentBindingSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash, type ChatModelRef } from "@openpond/harness";
-import { type OpenPondProfileRef } from "@openpond/contracts";
+import { CHAT_ATTACHMENT_LIMITS, type OpenPondProfileRef } from "@openpond/contracts";
 import {
   assertProfileEvaluationRunAdmission,
   createTasksetRunManifest,
@@ -84,9 +84,18 @@ export function createProfileEvaluationRunPreparationService(input: {
     if (taskset.id !== definition.tasksetRelease.id || taskset.contentHash !== definition.tasksetRelease.contentHash) {
       throw new Error("Evaluation Taskset package differs from its released definition.");
     }
-    if (taskset.environment.kind !== "text" || taskset.tools.length
-      || taskset.tasks.some((task) => task.artifactRefs.length)) {
-      throw new Error("Workflow evaluation requires text cases with policy-visible input; Taskset-owned tools and file assets are unavailable in the Profile turn runtime.");
+    const textCase = taskset.environment.kind === "text" && taskset.tools.length === 0;
+    const workCase = taskset.environment.kind === "work"
+      && taskset.environment.entrypoint === "openpond-work-v1"
+      && taskset.tools.every((tool) => ["work_exec", "work_save_output"].includes(tool.name));
+    if (!textCase && !workCase) {
+      throw new Error("Profile evaluation supports text cases or Work cases with the built-in execution and output tools.");
+    }
+    if (taskset.tasks.some((task) => task.artifactRefs.length > CHAT_ATTACHMENT_LIMITS.maxAttachments
+      || task.artifactRefs.some((asset) => asset.visibility !== "policy"
+        || asset.mediaType !== "application/pdf"
+        || asset.sizeBytes > CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes))) {
+      throw new Error("Profile evaluation accepts only bounded policy-visible PDF task attachments.");
     }
     if (taskset.graders.some((grader) => grader.kind === "model_judge" || grader.kind === "custom_verifier")
       || taskset.metrics?.aggregation === "custom") {

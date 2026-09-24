@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { checkLocalProfileSource } from "@openpond/local-server/profile-source-check";
 
 import {
   collectProfileSourceUploadEntries,
@@ -109,7 +110,18 @@ export async function runOpenPondProfileCommand(options: CliOptions, rest: strin
     return;
   }
   if (subcommand === "check") {
-    await runProfileCheck(optionString(options, "kind") || rest[1] || "all");
+    const kind = optionString(options, "kind") || rest[1] || "all";
+    if (!["all", "inspect", "build", "validate", "eval"].includes(kind)) {
+      throw new Error("check kind must be one of inspect, build, validate, eval, all");
+    }
+    if (kind === "all" || kind === "validate") {
+      const state = await loadOpenPondProfileState();
+      if (!state.sourcePath) throw new Error("No active Profile source to validate.");
+      const result = await checkLocalProfileSource(state.sourcePath,
+        new Set(state.actionCatalog.map((action) => action.id)));
+      console.log(`Profile source valid: ${result.workflows} Workflows, ${result.skills} Skills, ${result.evaluations} evaluations, ${result.tasksets} frozen Tasksets.`);
+    }
+    await runProfileCheck(kind);
     return;
   }
   if (subcommand === "ensure-hosted") {

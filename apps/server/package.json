@@ -24,6 +24,7 @@
     "pngjs": "^7.0.0",
     "shell-quote": "^1.9.0",
     "ws": "^8.20.1",
+    "yaml": "^2.9.0",
     "zod": "^4.1.13",
     "@openpond/persistence": "workspace:*"
   },
@@ -39,6 +40,10 @@
     "./app-server-runtime": {
       "import": "./dist/app-server-runtime.js",
       "types": "./dist/app-server-runtime.d.ts"
+    },
+    "./profile-source-check": {
+      "import": "./dist/profile-source-check.js",
+      "types": "./dist/profile-source-check.d.ts"
     }
   },
   "bin": {

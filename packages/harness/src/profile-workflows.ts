@@ -17,7 +17,7 @@ export const ProfileWorkflowSchema = z.object({
   description: z.string().max(4_000),
   inputSchema: z.record(z.string(), z.unknown()),
   invocation: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("instructions"), instructions: z.string().trim().min(1).max(100_000) }).strict(),
+    z.object({ kind: z.literal("instructions"), instructions: z.string().min(1).max(100_000).refine((value) => Boolean(value.trim())) }).strict(),
     z.object({ kind: z.literal("agent_action"), actionId: z.string().trim().min(1).max(240) }).strict(),
   ]),
   skillPaths: z.array(SourcePathSchema).max(100),
