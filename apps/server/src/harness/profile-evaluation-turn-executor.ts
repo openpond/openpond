@@ -141,6 +141,21 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       mediaType: output.contentType,
       sizeBytes: output.sizeBytes,
     }));
+    // Stream deltas remain in the complete trace and reconstructed output.
+    // A long turn can emit more delta events than a grader receipt permits;
+    // retain its last stream anchor and every substantive event for grading.
+    let lastDeltaIndex = -1;
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      if (events[index]?.name.endsWith(".delta")) {
+        lastDeltaIndex = index;
+        break;
+      }
+    }
+    const runtimeEventRefs = events.flatMap((event, index) =>
+      event.name.endsWith(".delta") && index !== lastDeltaIndex ? [] : [event.id]);
+    if (runtimeEventRefs.length + artifactRefs.length > 10_000) {
+      throw new Error("Profile evaluation produced more than 10,000 substantive evidence references.");
+    }
     const assistantOutput = events.filter((event) => event.name === "assistant.delta" && typeof event.output === "string")
       .map((event) => event.output ?? "").join("");
     const actionOutput = input.binding.schemaVersion === "openpond.profileComponentBinding.v1"
@@ -158,7 +173,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     return {
       evidence: {
         output: { text: output },
-        runtimeEventRefs: events.map((event) => event.id),
+        runtimeEventRefs,
         artifactRefs: artifactRefs.map((artifact) => artifact.id),
         ...(turn.status !== "completed" ? { infrastructureError: turn.error ?? `Workflow evaluation turn ${turn.status}.` } : {}),
       },

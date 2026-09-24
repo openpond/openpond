@@ -67,6 +67,33 @@ test("workflow case runs in an exact source-bound app-server session", async () 
   expect(result.terminal).toBe(true);
 });
 
+test("long streamed workflow turns keep complete output and bounded grader evidence", async () => {
+  const deltas = Array.from({ length: 10_001 }, (_, index) => ({
+    id: `delta-${index}`, name: "assistant.delta", timestamp: manifest.createdAt,
+    output: index === 10_000 ? "done" : "",
+  })) as RuntimeEvent[];
+  const events = [
+    { id: "action-result", name: "workspace_action_result", timestamp: manifest.createdAt },
+    ...deltas,
+  ] as RuntimeEvent[];
+  const execute = createProfileWorkflowEvaluationExecutor({
+    manifest, profileRef, binding, modelRef, modelConfigurationHash,
+    createSession: async () => ({ id: "evaluation-session" }) as Session,
+    sendTurn: async () => ({
+      id: "evaluation-turn", status: "completed", startedAt: manifest.createdAt,
+      completedAt: manifest.createdAt, modelRef, harnessSnapshot: { harnessRelease },
+    }) as Turn,
+    runtimeEventsForTurn: async () => events,
+  });
+  const result = await execute({
+    task: { id: task.id, input: task.input, policyVisibleContext: {}, artifactRefs: [], tags: [] },
+    seed: "1", source,
+  });
+  expect(result.evidence.output).toEqual({ text: "done" });
+  expect(result.evidence.runtimeEventRefs).toEqual(["action-result", "delta-10000"]);
+  expect(result.traceHash).toBe(contentHash(events));
+});
+
 test("workflow case rejects a turn on a different released Harness", async () => {
   const execute = createProfileWorkflowEvaluationExecutor({
     manifest, profileRef, binding, modelRef, modelConfigurationHash,
