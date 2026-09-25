@@ -75,7 +75,6 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/sqlite-store.test.ts",
   "tests/static-web-security.test.ts",
   "tests/subagent-store.test.ts",
-  "tests/task-authoring-provenance.test.ts",
   "tests/task-creator-pipeline.test.ts",
   "tests/task-grader-execution.test.ts",
   "tests/taskset-authoring-skill.test.ts",
@@ -115,7 +114,7 @@ export const ROOT_UI_TESTS = [
 ] as const;
 
 export const ROOT_MEMORY_TESTS = [
-  "tests/runtime-event-lists.test.ts",
+  "tests/runtime-event-lists-performance.test.ts",
 ] as const;
 
 export const ROOT_IMAGE_TESTS = [

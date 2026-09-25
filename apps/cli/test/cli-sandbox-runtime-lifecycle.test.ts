@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { runCommand } from "./cli-command-fixture";
 
 import { createOpenPondSandboxClient } from "../src/sandbox/client";
 import { CLI_SECRET, type CapturedRequest, runCli, withSandboxApi } from "./cli-sandbox-fixture";
@@ -7,27 +8,27 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
   test("sandbox runtime inspection commands read runtime status and events", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {
-      const list = await runCli([
+      const list = await runCommand([
         "sandbox",
         "runtime-list",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const runtime = await runCli([
+      const runtime = await runCommand([
         "sandbox",
         "runtime-get",
         "workspace_test",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const events = await runCli([
+      const events = await runCommand([
         "sandbox",
         "runtime-events",
         "workspace_test",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const eventWrite = await runCli([
+      const eventWrite = await runCommand([
         "sandbox",
         "runtime-event",
         "workspace_test",
@@ -42,7 +43,7 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const statusWrite = await runCli([
+      const statusWrite = await runCommand([
         "sandbox",
         "runtime-status",
         "workspace_test",
@@ -206,7 +207,7 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         failOnUnpreservedChanges: true,
       });
 
-      const cliPatch = await runCli([
+      const cliPatch = await runCommand([
         "sandbox",
         "git-export-patch",
         "sandbox_test",
@@ -215,7 +216,7 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const cliPreserve = await runCli([
+      const cliPreserve = await runCommand([
         "sandbox",
         "runtime-preserve-source",
         "workspace_test",
@@ -228,7 +229,7 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const cliStop = await runCli([
+      const cliStop = await runCommand([
         "sandbox",
         "stop",
         "sandbox_test",
@@ -237,7 +238,7 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const cliDelete = await runCli([
+      const cliDelete = await runCommand([
         "sandbox",
         "delete",
         "sandbox_test",
@@ -282,13 +283,13 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
   test("sandbox pricing and costs expose tier and runner slot accounting", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {
-      const pricing = await runCli([
+      const pricing = await runCommand([
         "sandbox",
         "pricing",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const costs = await runCli([
+      const costs = await runCommand([
         "sandbox",
         "costs",
         "--team-id",
@@ -356,7 +357,7 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
       const secretRef = (
         JSON.parse(created.stdout) as { secret: { secretRef: string } }
       ).secret.secretRef;
-      const launched = await runCli([
+      const launched = await runCommand([
         "sandbox",
         "create",
         "--env-ref",
@@ -381,14 +382,14 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
   test("secret list, attach, rotate, revoke, and delete stay metadata-only", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {
-      const listed = await runCli([
+      const listed = await runCommand([
         "sandbox",
         "secrets",
         "--json",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const attached = await runCli([
+      const attached = await runCommand([
         "sandbox",
         "secret-attach",
         "secret_test",
@@ -412,14 +413,14 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         ],
         `${CLI_SECRET}\n`
       );
-      const revoked = await runCli([
+      const revoked = await runCommand([
         "sandbox",
         "secret-revoke",
         "secret_test",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const deleted = await runCli([
+      const deleted = await runCommand([
         "sandbox",
         "secret-delete",
         "secret_test",

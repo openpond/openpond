@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { access } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +17,9 @@ async function main(): Promise<void> {
   const existing = (await Promise.all(changed.map(async (file) => await exists(file) ? file : null)))
     .filter((file): file is string => file !== null);
   const relatedInputs = existing.filter((file) => /\.(?:[cm]?[jt]sx?)$/.test(file) && !file.endsWith(".test.mjs"));
-  const nodeTests = existing.filter((file) => file.endsWith(".test.mjs"));
+  const nodeTests = changed.some((file) => /^(apps\/server\/|packages\/)/.test(file))
+    ? (await readdir(path.join(root, "tests"))).filter((file) => file.endsWith(".test.mjs") && !file.startsWith("live-")).map((file) => `tests/${file}`)
+    : existing.filter((file) => file.endsWith(".test.mjs") && !file.includes("live-"));
 
   if (relatedInputs.length > 0) {
     await run(vitest, ["related", ...relatedInputs, "--run", "--passWithNoTests"]);

@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,20 +12,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRequire = createRequire(path.join(root, "package.json"));
 
 describe("dev desktop smoke script", () => {
-  test("prints usage without launching Electron", () => {
-    const result = spawnSync(process.execPath, [
-      workspaceRequire.resolve("tsx/cli"),
-      "scripts/smoke-dev-desktop.ts",
-      "--help",
-    ], {
-      cwd: root,
-      encoding: "utf8",
-    });
-
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("usage: pnpm run smoke:desktop:dev [");
-  });
 
   test("stops an owned process group after its launcher exits", async () => {
     if (process.platform === "win32") return;

@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   checks: read
+  actions: read
 
 concurrency:
   group: release-agent-sdk-${{ github.ref }}
@@ -90,31 +91,12 @@ jobs:
     if: needs.meta.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Wait for required CI
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in {1..60}; do
-            check_run="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/check-runs" --jq '[.check_runs[] | select(.name == "Checks" and .app.slug == "github-actions")] | sort_by(.started_at) | last // {}')"
-            status="$(jq -r '.status // empty' <<<"${check_run}")"
-            conclusion="$(jq -r '.conclusion // empty' <<<"${check_run}")"
-            url="$(jq -r '.html_url // empty' <<<"${check_run}")"
-            if [[ "${status}" == "completed" && "${conclusion}" == "success" ]]; then
-              echo "Required CI check passed: ${url}"
-              exit 0
-            fi
-            if [[ "${status}" == "completed" && -n "${conclusion}" ]]; then
-              echo "Required CI check concluded ${conclusion}: ${url}" >&2
-              exit 1
-            fi
-            echo "Waiting for required CI check on ${RELEASE_SHA} (attempt ${attempt}/60)."
-            sleep 10
-          done
-          echo "Timed out waiting for required Checks result on ${RELEASE_SHA}." >&2
-          exit 1
+        run: node scripts/wait-for-release-ci.mjs
 
   publish:
     name: Publish openpond-agent-sdk

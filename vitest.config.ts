@@ -1,7 +1,6 @@
 import { defineConfig } from "vitest/config";
 import {
   CLI_INTEGRATION_TESTS,
-  CLI_RELEASE_TESTS,
   ROOT_IMAGE_TESTS,
   ROOT_MEMORY_TESTS,
   ROOT_SYSTEM_TESTS,
@@ -9,7 +8,6 @@ import {
 } from "./scripts/test-suite-config";
 
 const cliIntegrationTests = CLI_INTEGRATION_TESTS.map((entry) => `apps/cli/${entry}`);
-const cliReleaseTests = CLI_RELEASE_TESTS.map((entry) => `apps/cli/${entry}`);
 
 const common = {
   environment: "node" as const,
@@ -117,7 +115,7 @@ export default defineConfig({
           ...forked,
           name: "cli-unit",
           include: ["apps/cli/test/**/*.test.{ts,tsx}"],
-          exclude: [...cliIntegrationTests, ...cliReleaseTests],
+          exclude: [...cliIntegrationTests],
         },
       },
       {
@@ -126,14 +124,6 @@ export default defineConfig({
           ...constrained,
           name: "cli-integration",
           include: [...cliIntegrationTests],
-        },
-      },
-      {
-        extends: true,
-        test: {
-          ...constrained,
-          name: "cli-release",
-          include: [...cliReleaseTests],
         },
       },
       {

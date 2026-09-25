@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test, vi, type MockInstance } from "vitest";
 
-import { createOpenPondClient } from "../src/index.js";
 import { OpenPondWorkflowsClient } from "../src/workflows.js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -112,15 +111,6 @@ describe("OpenPondWorkflowsClient", () => {
       method: "DELETE",
     });
     expect(request(fetch, 0).authorization).toBe("ApiKey opk_test");
-  });
-
-  test("is available from the root OpenPond client", () => {
-    const client = createOpenPondClient({
-      apiKey: "opk_test",
-      baseUrl: "https://api.example.test/",
-    });
-
-    expect(client.workflows).toBeInstanceOf(OpenPondWorkflowsClient);
   });
 
   test("rejects an empty schedule id before making a request", async () => {

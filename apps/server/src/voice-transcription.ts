@@ -1,9 +1,9 @@
 import { Buffer } from "node:buffer";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { constants as fsConstants, promises as fs } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { promises as fs, constants as fsConstants } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 
 type VoiceLogger = {
   info(message: string, metadata?: Record<string, unknown>): void;
@@ -377,30 +377,40 @@ async function downloadDefaultModel(
   return targetPath;
 }
 
-export async function streamVoiceModelResponseToFile(input: {
+export function streamVoiceModelResponseToFile(input: {
   response: Response;
   targetPath: string;
   signal: AbortSignal;
   minBytes: number;
   maxBytes: number;
 }): Promise<number> {
+  return streamWhisperResponseToFile(input, "model");
+}
+
+async function streamWhisperResponseToFile(input: {
+  response: Response;
+  targetPath: string;
+  signal: AbortSignal;
+  minBytes: number;
+  maxBytes: number;
+}, kind: "model" | "binary"): Promise<number> {
   const declaredBytes = Number(input.response.headers.get("content-length"));
   if (Number.isFinite(declaredBytes) && declaredBytes > input.maxBytes) {
-    throw new Error("Whisper model download exceeds the configured byte limit.");
+    throw new Error(`Whisper ${kind} download exceeds the configured byte limit.`);
   }
   const reader = input.response.body?.getReader();
-  if (!reader) throw new Error("Whisper model download did not return a response body.");
+  if (!reader) throw new Error(`Whisper ${kind} download did not return a response body.`);
   const file = await fs.open(input.targetPath, "wx", 0o600);
   let sizeBytes = 0;
   try {
     try {
       while (true) {
-        if (input.signal.aborted) throw new Error("Whisper model download was cancelled.");
+        if (input.signal.aborted) throw new Error(`Whisper ${kind} download was cancelled.`);
         const { done, value } = await reader.read();
         if (done) break;
         sizeBytes += value.byteLength;
         if (sizeBytes > input.maxBytes) {
-          throw new Error("Whisper model download exceeds the configured byte limit.");
+          throw new Error(`Whisper ${kind} download exceeds the configured byte limit.`);
         }
         await file.write(value);
       }
@@ -416,7 +426,7 @@ export async function streamVoiceModelResponseToFile(input: {
   }
   if (sizeBytes < input.minBytes) {
     await fs.rm(input.targetPath, { force: true });
-    throw new Error("Downloaded Whisper model is incomplete.");
+    throw new Error(`Downloaded Whisper ${kind} is incomplete.`);
   }
   await fs.chmod(input.targetPath, 0o600).catch(() => undefined);
   return sizeBytes;
@@ -550,49 +560,14 @@ async function downloadAndExtractWhisperBinary(
   }
 }
 
-export async function streamBinaryResponseToFile(input: {
+export function streamBinaryResponseToFile(input: {
   response: Response;
   targetPath: string;
   signal: AbortSignal;
   minBytes: number;
   maxBytes: number;
 }): Promise<number> {
-  const declaredBytes = Number(input.response.headers.get("content-length"));
-  if (Number.isFinite(declaredBytes) && declaredBytes > input.maxBytes) {
-    throw new Error("Whisper binary download exceeds the configured byte limit.");
-  }
-  const reader = input.response.body?.getReader();
-  if (!reader) throw new Error("Whisper binary download did not return a response body.");
-  const file = await fs.open(input.targetPath, "wx", 0o600);
-  let sizeBytes = 0;
-  try {
-    try {
-      while (true) {
-        if (input.signal.aborted) throw new Error("Whisper binary download was cancelled.");
-        const { done, value } = await reader.read();
-        if (done) break;
-        sizeBytes += value.byteLength;
-        if (sizeBytes > input.maxBytes) {
-          throw new Error("Whisper binary download exceeds the configured byte limit.");
-        }
-        await file.write(value);
-      }
-    } catch (error) {
-      await reader.cancel().catch(() => undefined);
-      throw error;
-    } finally {
-      await file.close();
-    }
-  } catch (error) {
-    await fs.rm(input.targetPath, { force: true });
-    throw error;
-  }
-  if (sizeBytes < input.minBytes) {
-    await fs.rm(input.targetPath, { force: true });
-    throw new Error("Downloaded whisper binary is incomplete.");
-  }
-  await fs.chmod(input.targetPath, 0o600).catch(() => undefined);
-  return sizeBytes;
+  return streamWhisperResponseToFile(input, "binary");
 }
 
 async function runExtractionCommand(

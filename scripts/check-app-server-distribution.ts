@@ -1,5 +1,7 @@
-import { writeFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { runProcessCommand } from "../apps/cli/src/process-runner";
 
 /** Exercise the published API from a fresh npm consumer, outside workspace resolution. */
 export async function checkAppServerDistribution(input: {
@@ -54,5 +56,28 @@ try {
     "--target", "ES2022", "--types", "node", "--typeRoots", path.join(input.root, "node_modules/@types"), source,
   ], { cwd: input.consumer });
   await input.command(process.execPath, [source], { cwd: input.consumer });
+  // The JSONL entrypoint must inherit the invocation cwd even when the package
+  // is installed elsewhere. This replaces the weaker workspace-installed smoke.
+  const cwd = path.join(input.consumer, "workspace");
+  const messages = [
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2026-09-20", client: { name: "packed-consumer", version: "1" } } },
+    { jsonrpc: "2.0", method: "initialized" },
+    { jsonrpc: "2.0", id: 2, method: "runtime/capabilities", params: {} },
+    { jsonrpc: "2.0", id: 3, method: "harness/validate", params: {} },
+    { jsonrpc: "2.0", id: 4, method: "thread/start", params: { session: {
+      provider: "openpond", modelRef: { providerId: "openpond", modelId: "openpond-chat" }, experience: "work", title: "Installed cwd proof",
+    } } },
+  ];
+  const result = await runProcessCommand(process.execPath, [
+    path.join(input.consumer, "node_modules/openpond/dist/cli.js"), "app-server", "--home", path.join(input.consumer, "jsonl-state"),
+  ], { cwd, env: { OPENPOND_FORCE_EMBEDDED_COMPANIONS: "1", OPENPOND_HARNESS_SCRIPTED_MODELS: "1" },
+    stdin: messages.map((message) => JSON.stringify(message)).join("\n") + "\n", timeoutMs: 20_000 });
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  assert.equal(result.stderr.trim(), "");
+  const responses = result.stdout.trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(responses.length, 5);
+  assert.equal(responses.find((message) => message.id === 2)?.result?.placement, "hosted_work");
+  assert.equal(responses.find((message) => message.id === 3)?.result?.valid, true);
+  assert.equal(responses.find((message) => message.id === 4)?.result?.thread?.cwd, await realpath(cwd));
   return "passed";
 }

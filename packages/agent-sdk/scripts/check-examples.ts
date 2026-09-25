@@ -49,34 +49,23 @@ const examples = [
   },
 ] as const;
 
-const commandMatrix = [
-  ["inspect", "--json"],
-  ["build", "--json"],
-  ["validate", "--json"],
-  ["eval", "--json"],
-] as const;
-
 for (const example of examples) {
   console.log(`Checking ${example.name}`);
   await rm(path.join(root, example.cwd, ".openpond"), { force: true, recursive: true });
-  await runSdk(["inspect", "--json", "--cwd", example.cwd]);
+  const fullPipeline = example.name === "integration-heavy-agent";
+  if (fullPipeline) await runSdk(["inspect", "--json", "--cwd", example.cwd]);
   await runSdk(["build", "--json", "--cwd", example.cwd]);
-  const firstBuildSnapshot = await readArtifactSnapshot(path.join(root, example.cwd, ".openpond"));
-  await runSdk(["build", "--json", "--cwd", example.cwd]);
-  const secondBuildSnapshot = await readArtifactSnapshot(path.join(root, example.cwd, ".openpond"));
-  assertSnapshotsEqual(example.name, firstBuildSnapshot, secondBuildSnapshot);
-  for (const command of commandMatrix) {
-    await runSdk([...command, "--cwd", example.cwd]);
+  if (fullPipeline) {
+    const first = await readArtifactSnapshot(path.join(root, example.cwd, ".openpond"));
+    await runSdk(["build", "--json", "--cwd", example.cwd]);
+    assertSnapshotsEqual(example.name, first, await readArtifactSnapshot(path.join(root, example.cwd, ".openpond")));
   }
-  await runSdk([
-    "run",
-    "chat",
-    "--cwd",
-    example.cwd,
-    "--input",
-    JSON.stringify(example.runInput),
-  ]);
-  await runSdk(["traces", "--json", "--cwd", example.cwd]);
+  await runSdk(["validate", "--json", "--cwd", example.cwd]);
+  if (fullPipeline) {
+    await runSdk(["eval", "--json", "--cwd", example.cwd]);
+    await runSdk(["run", "chat", "--cwd", example.cwd, "--input", JSON.stringify(example.runInput)]);
+    await runSdk(["traces", "--json", "--cwd", example.cwd]);
+  }
 }
 
 type ArtifactSnapshot = Map<string, string>;

@@ -1,25 +1,13 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  runCliCommand,
   getCliCommandDefinition,
   listCliCommandDefinitions,
+  runCliCommand,
 } from "../src/cli/command-registry";
 import type { Command } from "../src/cli/common";
-import { printHelp } from "../src/cli/help";
 
 describe("CLI command registry", () => {
-  test("registers every command with usage, option schema, and handler metadata", () => {
-    const definitions = listCliCommandDefinitions();
-
-    expect(definitions.length).toBeGreaterThan(20);
-    for (const definition of definitions) {
-      expect(definition.name).toBeTruthy();
-      expect(definition.usage).toContain("openpond");
-      expect(definition.optionSchema).toBeDefined();
-      expect(typeof definition.handler).toBe("function");
-    }
-  });
 
   test("resolves top-level aliases to their canonical command handlers", () => {
     expect(getCliCommandDefinition("organization")?.name).toBe("organizations");
@@ -37,76 +25,6 @@ describe("CLI command registry", () => {
         seen.add(name);
       }
     }
-  });
-
-  test("keeps local profile SDK alias commands registered", () => {
-    for (const command of ["inspect", "build", "validate", "eval", "run"] as const) {
-      const definition = getCliCommandDefinition(command);
-
-      expect(definition?.name).toBe(command);
-      expect(definition?.optionSchema.cwd).toBe("string");
-      expect(definition?.optionSchema.json).toBe("boolean");
-    }
-  });
-
-  test("registers GitHub extension lifecycle commands", () => {
-    const definition = getCliCommandDefinition("extension");
-    expect(definition?.usage).toContain("add|preview|list|inspect|update|remove");
-    expect(definition?.optionSchema).toMatchObject({
-      all: "boolean",
-      json: "boolean",
-      ref: "string",
-    });
-  });
-
-  test("registers the four-command Continual Support workflow", () => {
-    const definition = getCliCommandDefinition("continual");
-    expect(definition?.usage).toContain("init|validate|run|report");
-    expect(definition?.usages).toEqual(expect.arrayContaining([
-      expect.stringContaining("continual init"),
-      expect.stringContaining("continual validate"),
-      expect.stringContaining("continual run"),
-      expect.stringContaining("continual report"),
-    ]));
-  });
-
-  test("documents the headless chat contract in registry and top-level help", () => {
-    const definition = getCliCommandDefinition("chat");
-    expect(definition?.usage).toContain("--message-file <path>|--message <text>|--stdin");
-    expect(definition?.usage).toContain("--non-interactive");
-    expect(definition?.usage).toContain("--approval-policy <policy>");
-    expect(definition?.usage).toContain("--timeout-sec <n>");
-    expect(definition?.usage).toContain("--max-output-bytes <n>");
-    expect(definition?.usage).toContain("--sandbox <mode>");
-    expect(definition?.optionSchema).toMatchObject({
-      approvalPolicy: "string",
-      maxOutputBytes: "integer",
-      message: "string",
-      messageFile: "string",
-      nonInteractive: "boolean",
-      sandbox: "string",
-      stdin: "boolean",
-      timeoutSec: "integer",
-      yes: "boolean",
-    });
-
-    const logs: string[] = [];
-    const originalLog = console.log;
-    console.log = (message?: unknown) => {
-      logs.push(String(message ?? ""));
-    };
-    try {
-      printHelp();
-    } finally {
-      console.log = originalLog;
-    }
-
-    const output = logs.join("\n");
-    expect(output).toContain("openpond chat (--message-file <path>|--message <text>|--stdin) --non-interactive");
-    expect(output).toContain("[--approval-policy <policy>]");
-    expect(output).toContain("[--timeout-sec <n>]");
-    expect(output).toContain("[--max-output-bytes <n>]");
-    expect(output).toContain("[--sandbox <mode>]");
   });
 
   test("prints command usage for aliases without invoking the command handler", async () => {

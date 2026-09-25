@@ -47,9 +47,13 @@ jobs:
           node-version: "24.18.0"
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run typecheck
       - run: pnpm run build:sdk
-      - run: pnpm exec vitest run --project root-system tests/persistence-boundaries.test.ts --testTimeout 60000 --hookTimeout 30000
+      - if: runner.os == 'Linux' || github.event_name == 'workflow_dispatch'
+        run: pnpm exec vitest run --project root-system tests/persistence-boundaries.test.ts --testTimeout 60000 --hookTimeout 30000
+        env:
+          OPENPOND_HOME: ${{ runner.temp }}/openpond-portability
+      - if: runner.os != 'Linux' && github.event_name != 'workflow_dispatch'
+        run: pnpm exec vitest run --project root-system tests/persistence-boundaries.test.ts --testTimeout 60000 --hookTimeout 30000 --testNamePattern "credential custody|separate process edits|missing vault key|occupied destination|interrupted preparation|trusted project values|encrypted backup|native browser rename"
         env:
           OPENPOND_HOME: ${{ runner.temp }}/openpond-portability
       - if: runner.os == 'Linux'

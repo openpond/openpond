@@ -8,14 +8,14 @@ export {
 export const CLI_INTEGRATION_TESTS = [
   "test/cli-headless-chat.test.ts",
   "test/cli-project-agent-sandbox.test.ts",
+  "test/cli-sandbox-runtime-lifecycle.test.ts",
+  "test/cli-sandbox-secrets-redaction.test.ts",
+  "test/cli-sandbox-template.test.ts",
 ] as const;
-
-export const CLI_RELEASE_TESTS = ["test/cli-installed-smoke.test.ts"] as const;
 
 export const UNIT_TEST_PROJECTS = [
   "root-unit",
   "ui-unit",
-  "root-memory",
   "cli-unit",
   "agent-runtime",
   "app-server",

@@ -55,11 +55,11 @@ describe("CI change scope", () => {
     expect(classifyCiChanges(["packages/evals/python/tests/test_telemetry.py"]).python).toBe(true);
   });
 
-  test("selects distribution proof for every shipped app and its packaging tooling", () => {
+  test("separates shipped builds from installation and export proofs", () => {
     expect(classifyCiChanges(["apps/cli/src/index.ts"]).distribution).toBe(true);
-    expect(classifyCiChanges(["packages/runtime/src/index.ts"]).distribution).toBe(true);
+    expect(classifyCiChanges(["packages/runtime/src/index.ts"])).toMatchObject({ build: true, distribution: false });
     expect(classifyCiChanges(["pnpm-lock.yaml"]).distribution).toBe(true);
-    expect(classifyCiChanges(["apps/web/src/App.tsx"]).distribution).toBe(true);
+    expect(classifyCiChanges(["apps/web/src/App.tsx"])).toMatchObject({ build: true, distribution: false });
     expect(classifyCiChanges(["apps/server/src/index.ts"]).distribution).toBe(true);
     expect(classifyCiChanges(["scripts/distribution/package-policy.ts"]).distribution).toBe(true);
     expect(classifyCiChanges(["tests/example.test.ts"]).distribution).toBe(false);

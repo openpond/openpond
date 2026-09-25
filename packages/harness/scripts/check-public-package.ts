@@ -7,8 +7,8 @@ const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf
   dependencies?: Record<string, string>;
 };
 const dependencies = Object.keys(manifest.dependencies ?? {});
-if (dependencies.join(",") !== "zod") {
-  throw new Error(`@openpond/harness may depend only on zod; found ${dependencies.join(", ") || "none"}.`);
+if (dependencies.some((name) => !["yaml", "zod"].includes(name))) {
+  throw new Error(`@openpond/harness may depend only on yaml and zod; found ${dependencies.join(", ") || "none"}.`);
 }
 
 const forbidden = /(?:@openpond\/|electron|next\/|better-sqlite|node:sqlite|connected-app|provider sdk)/i;

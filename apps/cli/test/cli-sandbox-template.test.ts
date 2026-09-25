@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
+import { runCommand } from "./cli-command-fixture";
 
 import { CLI_SECRET, type CapturedRequest, runCli, withSandboxApi } from "./cli-sandbox-fixture";
 
@@ -108,7 +109,7 @@ describe("sandbox template CLI scenarios", () => {
       ].join("\n");
       await writeFile(manifestPath, baseManifest, "utf8");
 
-      const valid = await runCli(["sandbox-template", "validate"], "", {
+      const valid = await runCommand(["sandbox-template", "validate"], "", {
         cwd: projectDir,
       });
       expect(valid.code).toBe(0);
@@ -121,7 +122,7 @@ describe("sandbox template CLI scenarios", () => {
         ),
         "utf8"
       );
-      const invalid = await runCli(["sandbox-template", "validate"], "", {
+      const invalid = await runCommand(["sandbox-template", "validate"], "", {
         cwd: projectDir,
       });
       expect(invalid.code).not.toBe(0);
@@ -174,7 +175,7 @@ describe("sandbox template CLI scenarios", () => {
           "utf8"
         );
 
-        const result = await runCli(
+        const result = await runCommand(
           [
             "sandbox-template",
             "start",
@@ -253,7 +254,7 @@ describe("sandbox template CLI scenarios", () => {
           "utf8"
         );
 
-        const result = await runCli(
+        const result = await runCommand(
           [
             "sandbox-template",
             "start",
@@ -370,7 +371,7 @@ describe("sandbox template CLI scenarios", () => {
           "utf8"
         );
 
-        const result = await runCli(
+        const result = await runCommand(
           [
             "sandbox-template",
             "start",

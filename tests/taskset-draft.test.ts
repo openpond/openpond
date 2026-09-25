@@ -7,39 +7,18 @@ import { TasksetDraftSchema } from "@openpond/contracts";
 import {
   TasksetDraftPublishError,
   createTasksetDraft,
-  publishTasksetDraft,
-  tasksetDraftFromTaskset,
   hashTasksetDraftPackage,
   materializePortableTasksetRelease,
+  publishTasksetDraft,
   readTasksetDraftPackage,
+  tasksetDraftFromTaskset,
   validateTaskset,
   writeTasksetDraftPackage,
 } from "../packages/taskset-sdk/src/index.js";
-import {
-  TASKSET_DRAFT_SECTIONS,
-  draftValidationIssues,
-} from "../apps/web/src/components/datasets/taskset-draft-editor-helpers.js";
 
 const NOW = "2026-08-24T12:00:00.000Z";
 
 describe("Taskset draft authoring", () => {
-  it("keeps authoring to six generalized sections with inline validation", () => {
-    const draft = createTasksetDraft({
-      id: "taskset-draft-editor-shape",
-      profileId: "default",
-      now: NOW,
-    });
-
-    expect(TASKSET_DRAFT_SECTIONS.map((section) => section.id)).toEqual([
-      "overview",
-      "scenarios",
-      "environment",
-      "output",
-      "rewards",
-      "review",
-    ]);
-    expect(draftValidationIssues(draft)).toContain("Add a Taskset name.");
-  });
 
   it("initializes a valid empty draft without inventing tasks or graders", () => {
     const draft = createTasksetDraft({

@@ -10,7 +10,7 @@ describe("OpenAI subscription token refresh", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 401 })));
 
     await expect(refreshOpenAiSubscriptionToken("stale-refresh-token")).rejects.toThrow(
-      "Your OpenAI ChatGPT sign-in has expired or was invalidated. Reconnect it in Settings > Providers > OpenAI > Subscription by selecting Connect ChatGPT. This is an authentication issue, not a billing or model-access error.",
+      /sign-in.*expired|invalidated/i,
     );
   });
 

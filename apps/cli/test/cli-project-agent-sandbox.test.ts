@@ -3,13 +3,14 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
+import { runCommand } from "./cli-command-fixture";
 
-import { createOpenPondSandboxClient } from "../src/sandbox/client";
 import { collectProfileSourceUploadForPush } from "../src/cli/profile";
+import { createOpenPondSandboxClient } from "../src/sandbox/client";
 import {
   type CapturedRequest,
-  rewriteAgentSdkDependencyForTest,
   resolveTestAgentSdkRoot,
+  rewriteAgentSdkDependencyForTest,
   runCli,
   runDependencySetupFromUploadMetadata,
   runTestCommand,
@@ -23,7 +24,7 @@ describe("project and agent sandbox CLI scenarios", () => {
   test("project and agent commands use first-class sandbox API resources", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {
-      const projectList = await runCli([
+      const projectList = await runCommand([
         "project",
         "list",
         "--team-id",
@@ -32,7 +33,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const projectCreate = await runCli([
+      const projectCreate = await runCommand([
         "project",
         "create",
         "--team-id",
@@ -48,7 +49,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const projectUpdate = await runCli([
+      const projectUpdate = await runCommand([
         "project",
         "update",
         "project_test",
@@ -59,7 +60,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentCreate = await runCli([
+      const agentCreate = await runCommand([
         "agent",
         "create",
         "--team-id",
@@ -79,7 +80,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentUpdate = await runCli([
+      const agentUpdate = await runCommand([
         "agent",
         "update",
         "agent_test",
@@ -90,7 +91,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentRun = await runCli([
+      const agentRun = await runCommand([
         "agent",
         "run",
         "agent_test",
@@ -107,7 +108,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentBindSource = await runCli([
+      const agentBindSource = await runCommand([
         "agent",
         "bind-source",
         "agent_test",
@@ -120,7 +121,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentSourceDeployPlan = await runCli([
+      const agentSourceDeployPlan = await runCommand([
         "agent",
         "source",
         "deploy-plan",
@@ -130,7 +131,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentSourceChecks = await runCli([
+      const agentSourceChecks = await runCommand([
         "agent",
         "source",
         "checks",
@@ -148,7 +149,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentSourceSnapshots = await runCli([
+      const agentSourceSnapshots = await runCommand([
         "agent",
         "source",
         "manifest-snapshots",
@@ -160,7 +161,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentSourcePublish = await runCli([
+      const agentSourcePublish = await runCommand([
         "agent",
         "source",
         "publish",

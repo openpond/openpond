@@ -8,5 +8,5 @@
     "noEmit": true,
     "types": ["node", "vitest"]
   },
-  "include": ["turn-runner-public-contract.test.ts", "app-server-embedding.test.ts"]
+  "include": ["app-server-embedding.test.ts"]
 }
