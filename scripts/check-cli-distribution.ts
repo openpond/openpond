@@ -397,7 +397,9 @@ async function checkRunnableDistribution(commandName: string, prefixArgs: string
   }
   assertPersistenceMarker(ui.storePath);
   return {
-    versionP95Ms,
+    versionStartupMs: durations[0],
+    versionSamples: durations.length,
+    ...(durations.length > 1 ? { versionP95Ms } : {}),
     serverReadyMs: server.readyMs,
     uiReadyMs: ui.readyMs,
     sqlitePersistence: "passed",

@@ -28,6 +28,8 @@ Elapsed time includes command startup. Local measurements are not directly compa
 | Measurement | Before | After | Evidence |
 | --- | ---: | ---: | --- |
 | Three CLI matrices, same machine and `--maxWorkers=2`, 16 tests | 13.65 s | 3.77 s | 72.4% lower elapsed time; logs `/tmp/openpond-cli-before.log` and `/tmp/openpond-cli-final.log` |
+| Agent SDK example checks, same machine | 16.78 s | 4.15 s | 75.3% lower elapsed time; both passed |
+| Agent SDK packed-install checks, same machine | 18.14 s | 10.61 s | 41.5% lower elapsed time; both passed |
 | Agent SDK example subprocess count | 45 | 15 | One full dependency-rich pipeline plus four build/validate pairs |
 | Agent SDK independent npm installs | 8 | 3 | Generic export consumer, initialized rich template, rich copied pilot |
 | Historical full PR CI | 5m46s | pending | [Before run](https://github.com/openpond/openpond/actions/runs/36096491382), 1,143 aggregate job-seconds |
@@ -48,4 +50,4 @@ Elapsed time includes command startup. Local measurements are not directly compa
 - Explicit performance lane passed: two files, three tests, 3.54s. Small projection correctness tests remain in the unit lane.
 - Initial remote portability run exposed missing compiled contracts after removing the full workspace typecheck. Replaced it with `tsc -b apps/server`, which builds the storage test runtime without typechecking the renderer/desktop/terminal.
 - Four real temporary Git repositories/diffs also accepted single version-only changes and rejected an extra source commit in the aggregate diff. File-mode changes are rejected.
-- Final PR checks, merge SHA, and version-only release timing are recorded below when complete.
+- Final remote run timings, merge SHA, and release proof are recorded in [PR #437](https://github.com/openpond/openpond/pull/437) and the local working review. This committed file is the pre-merge implementation checkpoint.
