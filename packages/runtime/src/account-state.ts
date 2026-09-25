@@ -84,6 +84,15 @@ function apiKeyHint(apiKey?: string): string | null {
   return value.length >= 12 ? `••••••${value.slice(-6)}` : "••••••";
 }
 
+function apiKeyAccess(response: OpenPondAccountResponse | null): AccountState["accounts"][number]["apiKeyAccess"] {
+  if (response?.auth?.authType !== "openpond-api-key" || !response.auth.keyAccess) return null;
+  return {
+    ownerType: response.auth.keyAccess.ownerType,
+    teamId: response.auth.keyAccess.teamId,
+    scopes: response.auth.scopes,
+  };
+}
+
 export function toAccountState(input: {
   config: RuntimeLocalConfig;
   profiles: ConfiguredProfile[];
@@ -180,6 +189,7 @@ export function toAccountState(input: {
         email: candidateProfile?.email ?? null,
         avatarUrl: candidateProfile?.image ?? null,
         apiKeyHint: apiKeyHint(savedAccount?.apiKey),
+        apiKeyAccess: apiKeyAccess(profileLookup?.response ?? null),
       };
     }),
     error: error ?? health?.error ?? null,

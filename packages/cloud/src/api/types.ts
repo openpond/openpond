@@ -530,6 +530,14 @@ export type OpenPondAccountResponse = {
   account: OpenPondAccount;
   products: OpenPondAccountProduct[];
   asOf: string;
+  auth?: {
+    authType: string;
+    scopes: string[];
+    keyAccess?: {
+      ownerType: "user" | "team" | "organization" | "service" | null;
+      teamId: string | null;
+    };
+  };
 };
 
 export type OpenPondApiHealthResponse = {

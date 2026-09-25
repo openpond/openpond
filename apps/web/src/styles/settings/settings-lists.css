@@ -273,8 +273,8 @@
   margin-left: 6px;
 }
 
-.account-endpoint-dialog {
-  width: min(490px, calc(100vw - 34px));
+.git-dialog.account-endpoint-dialog {
+  width: min(520px, calc(100vw - 34px));
   max-height: calc(100vh - 32px);
   overflow-y: auto;
 }
@@ -306,25 +306,49 @@
 }
 
 .account-dialog-footer {
+  justify-content: flex-end;
   flex-wrap: wrap;
 }
 
 .account-dialog-save-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.account-dialog-remove {
+.git-dialog-secondary.account-dialog-remove {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  border: 1px solid rgba(255, 111, 111, 0.45);
+  background: rgba(255, 77, 77, 0.12);
   color: #ff9b9b;
 }
 
-.account-dialog-remove:hover:not(:disabled) {
+.git-dialog-secondary.account-dialog-remove:hover:not(:disabled) {
+  background: rgba(255, 77, 77, 0.2);
   color: #ffc0c0;
+}
+
+.account-dialog-advanced {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.account-dialog-advanced summary {
+  cursor: pointer;
+  padding: 11px 12px;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.account-dialog-advanced[open] summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.account-dialog-advanced-fields {
+  padding: 12px;
 }
 
 .active-pill,

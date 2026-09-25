@@ -78,6 +78,11 @@ export const AccountStateSchema = z.object({
       email: z.string().nullable().optional().default(null),
       avatarUrl: z.string().nullable(),
       apiKeyHint: z.string().nullable().optional(),
+      apiKeyAccess: z.object({
+        ownerType: z.enum(["user", "team", "organization", "service"]).nullable(),
+        teamId: z.string().nullable(),
+        scopes: z.array(z.string()),
+      }).nullable().optional().default(null),
     })
   ),
   error: z.string().nullable(),
