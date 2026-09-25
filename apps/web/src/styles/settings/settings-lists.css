@@ -321,14 +321,15 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border: 1px solid rgba(255, 111, 111, 0.45);
-  background: rgba(255, 77, 77, 0.12);
-  color: #ff9b9b;
+  border: 1px solid #d94b42;
+  background: #d94b42;
+  color: #fff;
 }
 
 .git-dialog-secondary.account-dialog-remove:hover:not(:disabled) {
-  background: rgba(255, 77, 77, 0.2);
-  color: #ffc0c0;
+  border-color: #bd3d36;
+  background: #bd3d36;
+  color: #fff;
 }
 
 .account-dialog-advanced {
