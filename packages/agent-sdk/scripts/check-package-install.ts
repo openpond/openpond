@@ -100,24 +100,24 @@ for (const templateName of templateNames) {
     throw new Error(`Initialized ${templateName} validation failed: ${JSON.stringify(initializedValidation.issues)}`);
   }
   if (templateName === "integration-heavy-agent") {
-  const initializedEval = await runJson([initializedCli, "eval", "--json"], target);
-  if (initializedEval.summary?.failed !== 0) {
-    throw new Error(`Initialized ${templateName} eval failed: ${JSON.stringify(initializedEval.summary)}`);
-  }
-  const initializedRun = await runJson([
-    initializedCli,
-    "run",
-    "chat",
-    "--input",
-    JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
-  ], target);
-  if (!initializedRun.result?.intent) {
-    throw new Error(`Initialized ${templateName} run did not return an intent: ${JSON.stringify(initializedRun)}`);
-  }
-  const initializedTraces = await runJson([initializedCli, "traces", "--json"], target);
-  if (!Array.isArray(initializedTraces.traces) || initializedTraces.traces.length === 0) {
-    throw new Error(`Initialized ${templateName} did not produce trace artifacts.`);
-  }
+    const initializedEval = await runJson([initializedCli, "eval", "--json"], target);
+    if (initializedEval.summary?.failed !== 0) {
+      throw new Error(`Initialized ${templateName} eval failed: ${JSON.stringify(initializedEval.summary)}`);
+    }
+    const initializedRun = await runJson([
+      initializedCli,
+      "run",
+      "chat",
+      "--input",
+      JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
+    ], target);
+    if (!initializedRun.result?.intent) {
+      throw new Error(`Initialized ${templateName} run did not return an intent: ${JSON.stringify(initializedRun)}`);
+    }
+    const initializedTraces = await runJson([initializedCli, "traces", "--json"], target);
+    if (!Array.isArray(initializedTraces.traces) || initializedTraces.traces.length === 0) {
+      throw new Error(`Initialized ${templateName} did not produce trace artifacts.`);
+    }
   }
   await runJson([initializedCli, "build", "--json"], target);
 }
@@ -139,24 +139,24 @@ for (const pilotName of pilotNames) {
     throw new Error(`Pilot ${pilotName} validation failed: ${JSON.stringify(pilotValidation.issues)}`);
   }
   if (pilotName === "integration-heavy-agent") {
-  const pilotEval = await runJson([pilotCli, "eval", "--json"], target);
-  if (pilotEval.summary?.failed !== 0) {
-    throw new Error(`Pilot ${pilotName} eval failed: ${JSON.stringify(pilotEval.summary)}`);
-  }
-  const pilotRun = await runJson([
-    pilotCli,
-    "run",
-    "chat",
-    "--input",
-    JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
-  ], target);
-  if (!pilotRun.result?.intent && typeof pilotRun.result?.text !== "string") {
-    throw new Error(`Pilot ${pilotName} run returned unexpected result: ${JSON.stringify(pilotRun)}`);
-  }
-  const pilotTraces = await runJson([pilotCli, "traces", "--json"], target);
-  if (!Array.isArray(pilotTraces.traces) || pilotTraces.traces.length === 0) {
-    throw new Error(`Pilot ${pilotName} did not produce trace artifacts.`);
-  }
+    const pilotEval = await runJson([pilotCli, "eval", "--json"], target);
+    if (pilotEval.summary?.failed !== 0) {
+      throw new Error(`Pilot ${pilotName} eval failed: ${JSON.stringify(pilotEval.summary)}`);
+    }
+    const pilotRun = await runJson([
+      pilotCli,
+      "run",
+      "chat",
+      "--input",
+      JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
+    ], target);
+    if (!pilotRun.result?.intent && typeof pilotRun.result?.text !== "string") {
+      throw new Error(`Pilot ${pilotName} run returned unexpected result: ${JSON.stringify(pilotRun)}`);
+    }
+    const pilotTraces = await runJson([pilotCli, "traces", "--json"], target);
+    if (!Array.isArray(pilotTraces.traces) || pilotTraces.traces.length === 0) {
+      throw new Error(`Pilot ${pilotName} did not produce trace artifacts.`);
+    }
   }
   await runJson([pilotCli, "build", "--json"], target);
 }

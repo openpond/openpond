@@ -1,13 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
-import {
-  latestRuntimeEventSequence,
-  MAX_LIVE_RUNTIME_EVENTS,
-  mergeBootstrapRuntimeEvents,
-  mergeLiveRuntimeEventLists,
-  mergeRuntimeEventsIntoSessionPageCache,
-  mergeRuntimeEventLists,
-} from "../apps/web/src/lib/runtime-event-lists";
+import { MAX_LIVE_RUNTIME_EVENTS, mergeLiveRuntimeEventLists } from "../apps/web/src/lib/runtime-event-lists";
 
 describe("runtime event projection performance", () => {
   test("projects a one-million-event recovery without retaining a second full copy", () => {

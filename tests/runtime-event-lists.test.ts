@@ -101,7 +101,7 @@ describe("runtime event list merging", () => {
 
   test("bounds the live projection while retaining the newest sequence window", () => {
     const events = Array.from(
-      { length: 100_000 },
+      { length: MAX_LIVE_RUNTIME_EVENTS + 10 },
       (_, index) => runtimeEvent(`event-${index + 1}`, index + 1),
     );
     let merged: RuntimeEvent[] = [];
@@ -109,8 +109,8 @@ describe("runtime event list merging", () => {
       merged = mergeLiveRuntimeEventLists(merged, events.slice(index, index + 1_000));
     }
     expect(merged).toHaveLength(MAX_LIVE_RUNTIME_EVENTS);
-    expect(merged[0]?.sequence).toBe(95_001);
-    expect(merged.at(-1)?.sequence).toBe(100_000);
+    expect(merged[0]?.sequence).toBe(11);
+    expect(merged.at(-1)?.sequence).toBe(MAX_LIVE_RUNTIME_EVENTS + 10);
   });
 
 

@@ -37,6 +37,7 @@ export function readPackageRelease(base, head, cwd = process.cwd(), staged = fal
     git(["rev-parse", "--verify", `${base}^{commit}`]);
     if (!staged) git(["merge-base", "--is-ancestor", base, head]);
     const diff = staged ? ["--cached", base] : [base, head];
+    if (git(["diff", "--summary", ...diff]).trim()) return "";
     const entries = git(["diff", "--name-status", "--no-renames", "-z", ...diff]).split("\0").filter(Boolean);
     if (entries.length !== 2 || entries[0] !== "M") return "";
     const [status, path] = entries;

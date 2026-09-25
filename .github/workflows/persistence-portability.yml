@@ -48,6 +48,8 @@ jobs:
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:sdk
+      - name: Build the storage test runtime
+        run: pnpm exec tsc -b apps/server
       - if: runner.os == 'Linux' || github.event_name == 'workflow_dispatch'
         run: pnpm exec vitest run --project root-system tests/persistence-boundaries.test.ts --testTimeout 60000 --hookTimeout 30000
         env:

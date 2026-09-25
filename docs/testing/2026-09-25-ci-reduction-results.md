@@ -45,4 +45,7 @@ Elapsed time includes command startup. Local measurements are not directly compa
 - Passed: eight executable aggregate-gate scenarios (targeted/full/package successes and failed/skipped/extra-job/scope rejection); workflow SHA checks and actionlint; repository structure/reachability/dependency checks; test-tier and hygiene checks.
 - System run: 178 files passed; one CLI startup timing assertion failed (11.22s against 10s while builds ran). Protocol assertions passed. After moving that timing budget to the explicit performance lane, the focused CLI test passed in 4.19s. Full run elapsed 353.00s under concurrent local load.
 - The retained app-server consumer typecheck exposed stale training fixtures: missing schema defaults and an invalid runtime event status. Fixtures now use the real Session schema defaults and `started` event status.
+- Explicit performance lane passed: two files, three tests, 3.54s. Small projection correctness tests remain in the unit lane.
+- Initial remote portability run exposed missing compiled contracts after removing the full workspace typecheck. Replaced it with `tsc -b apps/server`, which builds the storage test runtime without typechecking the renderer/desktop/terminal.
+- Four real temporary Git repositories/diffs also accepted single version-only changes and rejected an extra source commit in the aggregate diff. File-mode changes are rejected.
 - Final PR checks, merge SHA, and version-only release timing are recorded below when complete.
