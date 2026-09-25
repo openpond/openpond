@@ -1013,6 +1013,7 @@ export function resolveWorkerBaseUrl(baseUrl: string): string {
       if (
         host === DEFAULT_OPENPOND_API_HOST ||
         host === DEFAULT_OPENPOND_WEB_HOST ||
+        host === `www.${DEFAULT_OPENPOND_WEB_HOST}` ||
         host === "openpond.live" ||
         host === "www.openpond.live"
       ) {

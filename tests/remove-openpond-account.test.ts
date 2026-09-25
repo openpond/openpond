@@ -1,6 +1,6 @@
 import { updateAccountConfiguration, readAccountConfiguration, type PersistedAccountConfiguration } from "../packages/persistence/src/accounts";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runTestProcess } from "./helpers/run-process";
@@ -83,7 +83,7 @@ describe("removeOpenPondAccount", () => {
     ]);
   });
 
-  test("refuses to remove the active account", async () => {
+  test("removes the active account, selects another account, then allows removing the last one", async () => {
     const configPath = await writeConfig({
       activeProfile: {
         handle: "active",
@@ -95,16 +95,25 @@ describe("removeOpenPondAccount", () => {
           apiKey: "opk_active",
           baseUrl: "https://openpond.ai",
         },
+        {
+          handle: "other",
+          apiKey: "opk_other",
+          baseUrl: "https://openpond.ai",
+        },
       ],
     });
 
     const result = await runRemove("active", "https://openpond.ai");
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain(
-      "Switch to another OpenPond account before removing the active account."
-    );
+    expect(result.exitCode).toBe(0);
 
-    const saved = await readAccountConfiguration(path.dirname(configPath));
-    expect(saved.accounts).toHaveLength(1);
+    const afterFirst = await readAccountConfiguration(path.dirname(configPath));
+    expect(afterFirst.accounts?.map((account) => account.handle)).toEqual(["other"]);
+    expect(afterFirst.activeProfile).toEqual({ handle: "other", baseUrl: "https://openpond.ai" });
+
+    const lastResult = await runRemove("other", "https://openpond.ai");
+    expect(lastResult.exitCode).toBe(0);
+    const afterLast = await readAccountConfiguration(path.dirname(configPath));
+    expect(afterLast.accounts).toEqual([]);
+    expect(afterLast.activeProfile).toBeUndefined();
   });
 });

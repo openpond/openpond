@@ -1,6 +1,6 @@
 import { updateAccountConfiguration, readAccountConfiguration, type PersistedAccountConfiguration } from "../packages/persistence/src/accounts";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runTestProcess } from "./helpers/run-process";
@@ -79,5 +79,63 @@ describe("updateOpenPondAccountConfig", () => {
     expect(context.apiKey).toBe("opk_existing_secret");
     expect(context.apiBaseUrl).toBe("https://new-api.example");
     expect(context.chatApiBaseUrl).toBe("https://new-api.example/opchat/v1");
+
+    const apiOnlyScript = `
+      import { updateOpenPondAccountConfig } from "./packages/runtime/src/update-account-config.ts";
+      await updateOpenPondAccountConfig({
+        handle: "qa",
+        currentBaseUrl: "https://new-web.example",
+        apiBaseUrl: "https://other-api.example",
+      });
+    `;
+    const apiOnlyResult = await runTestProcess(process.execPath, ["--import", "tsx", "-e", apiOnlyScript], {
+      cwd: path.resolve(import.meta.dirname, ".."),
+      env: { ...process.env, OPENPOND_HOME: path.join(tempHome!, ".openpond") },
+    });
+    expect(apiOnlyResult.exitCode).toBe(0);
+    const afterApiOnly = await readAccountConfiguration(path.dirname(configPath));
+    expect(afterApiOnly.accounts?.[0]?.apiKey).toBe("opk_existing_secret");
+    expect(afterApiOnly.accounts?.[0]?.apiBaseUrl).toBe("https://other-api.example");
+  });
+
+  test("replaces the API key and endpoint without exposing the full credential in account state", async () => {
+    const configPath = await writeConfig({
+      activeProfile: { handle: "qa", baseUrl: "https://www.openpond.ai" },
+      accounts: [{
+        handle: "qa",
+        apiKey: "opk_original_secret",
+        baseUrl: "https://www.openpond.ai",
+        apiBaseUrl: "https://api.openpond.ai",
+        session: { token: "old_session_token" },
+      }],
+    });
+
+    const script = `
+      import { updateOpenPondAccountConfig } from "./packages/runtime/src/update-account-config.ts";
+      import { loadOpenPondAccountContext } from "./packages/runtime/src/account-context.ts";
+      await updateOpenPondAccountConfig({
+        handle: "qa",
+        currentBaseUrl: "https://www.openpond.ai",
+        apiBaseUrl: "https://api.example.test",
+        apiKey: "opk_replacement_secret",
+      });
+      const context = await loadOpenPondAccountContext();
+      console.log(JSON.stringify(context.accountState));
+    `;
+    const result = await runTestProcess(process.execPath, ["--import", "tsx", "-e", script], {
+      cwd: path.resolve(import.meta.dirname, ".."),
+      env: { ...process.env, OPENPOND_HOME: path.join(tempHome!, ".openpond") },
+    });
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain("opk_replacement_secret");
+    expect(result.stdout).not.toContain("opk_original_secret");
+    const state = JSON.parse(result.stdout);
+    expect(state.accounts[0].apiKeyHint).toBe("••••••secret");
+
+    const saved = await readAccountConfiguration(path.dirname(configPath));
+    expect(saved.accounts?.[0]?.apiKey).toBe("opk_replacement_secret");
+    expect(saved.accounts?.[0]?.apiBaseUrl).toBe("https://api.example.test");
+    expect(saved.accounts?.[0]?.session?.token).toBeUndefined();
   });
 });

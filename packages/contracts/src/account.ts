@@ -77,6 +77,7 @@ export const AccountStateSchema = z.object({
       displayLabel: z.string().nullable(),
       email: z.string().nullable().optional().default(null),
       avatarUrl: z.string().nullable(),
+      apiKeyHint: z.string().nullable().optional(),
     })
   ),
   error: z.string().nullable(),

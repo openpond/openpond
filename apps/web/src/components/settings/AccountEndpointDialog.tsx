@@ -1,14 +1,14 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import "../../styles/workspace/git-dialogs.css";
 import type { AccountState } from "@openpond/contracts";
-import { KeyRound, Save, Settings, X } from "../icons";
+import { KeyRound, Save, Settings, Trash2, X } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
 
 type AccountRow = AccountState["accounts"][number];
 type AccountEndpointDialogMode = "update" | "connect";
-const DEFAULT_OPENPOND_WEB_BASE_URL = "https://openpond.ai";
-const DEFAULT_OPENPOND_API_BASE_URL = "https://api.openpond.ai";
+const DEFAULT_WEB_URL = "https://www.openpond.ai";
+const DEFAULT_API_URL = "https://api.openpond.ai";
 
 export type AccountEndpointUpdate = {
   handle?: string;
@@ -20,98 +20,98 @@ export type AccountEndpointUpdate = {
   environment?: string | null;
 };
 
-export function accountEndpointSelectorForMode(
-  mode: AccountEndpointDialogMode,
-  account: Pick<AccountRow, "handle" | "baseUrl"> | null | undefined,
-): Pick<AccountEndpointUpdate, "handle" | "currentBaseUrl"> {
-  if (mode === "connect") {
-    return {
-      handle: undefined,
-      currentBaseUrl: null,
-    };
+function suggestedApiUrl(webUrl: string): string {
+  try {
+    const url = new URL(webUrl);
+    const host = url.hostname.toLowerCase();
+    if (host === "openpond.ai" || host === "www.openpond.ai") return DEFAULT_API_URL;
+  } catch {
+    // An incomplete environment URL has no API default.
   }
-  return {
-    handle: account?.handle,
-    currentBaseUrl: account?.baseUrl ?? null,
-  };
+  return "";
 }
 
-export function accountEndpointConfigForMode(
-  mode: AccountEndpointDialogMode,
-  account: Pick<
-    AccountRow,
-    "baseUrl" | "apiBaseUrl" | "chatApiBaseUrl" | "environment"
-  > | null | undefined,
-): Pick<
-  AccountEndpointUpdate,
-  "baseUrl" | "apiBaseUrl" | "chatApiBaseUrl" | "environment"
-> {
-  if (mode === "update" && account) {
-    return {
-      baseUrl: account.baseUrl ?? DEFAULT_OPENPOND_WEB_BASE_URL,
-      apiBaseUrl: account.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL,
-      chatApiBaseUrl: account.chatApiBaseUrl,
-      environment: account.environment ?? "production",
-    };
+function validateUrl(value: string, label: string): string | null {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === "https:") return null;
+    if (parsed.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) return null;
+  } catch {
+    // A partial URL stays in the input until the user submits it.
   }
-
-  return {
-    baseUrl: DEFAULT_OPENPOND_WEB_BASE_URL,
-    apiBaseUrl: DEFAULT_OPENPOND_API_BASE_URL,
-    environment: "production",
-  };
+  return `${label} must be an https:// URL (or http:// for localhost).`;
 }
 
 type AccountEndpointDialogProps = {
   account?: AccountRow | null;
   busy: boolean;
-  initialApiKey?: string;
   mode?: AccountEndpointDialogMode;
   onClose: () => void;
   onSave: (input: AccountEndpointUpdate) => Promise<void>;
+  onRemove?: () => Promise<boolean>;
 };
 
 export function AccountEndpointDialog({
   account,
   busy,
-  initialApiKey = "",
   mode = "update",
   onClose,
   onSave,
+  onRemove,
 }: AccountEndpointDialogProps) {
   const titleId = useId();
   const connectMode = mode === "connect";
-  const [apiKey, setApiKey] = useState(initialApiKey);
+  const initialWebUrl = account?.baseUrl ?? DEFAULT_WEB_URL;
+  const initialApiUrl = account?.apiBaseUrl ?? suggestedApiUrl(initialWebUrl);
+  const [webUrl, setWebUrl] = useState(initialWebUrl);
+  const [apiUrl, setApiUrl] = useState(initialApiUrl);
+  const [apiKey, setApiKey] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   useErrorToast(requestError);
 
-  useEffect(() => {
-    setApiKey(initialApiKey);
-    setValidationError(null);
-    setRequestError(null);
-  }, [account?.handle, initialApiKey]);
+  function changeWebUrl(value: string) {
+    setWebUrl(value);
+    setApiUrl(value.trim().replace(/\/+$/, "") === initialWebUrl ? initialApiUrl : suggestedApiUrl(value));
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setValidationError(null);
     setRequestError(null);
     const trimmedApiKey = apiKey.trim();
-    if (connectMode && !trimmedApiKey) {
-      setValidationError("API key is required.");
+    const trimmedWebUrl = webUrl.trim().replace(/\/+$/, "");
+    const trimmedApiUrl = apiUrl.trim().replace(/\/+$/, "");
+    const error =
+      (connectMode && !trimmedApiKey ? "API key is required." : null) ??
+      validateUrl(trimmedWebUrl, "Environment URL") ??
+      validateUrl(trimmedApiUrl, "API URL");
+    if (error) {
+      setValidationError(error);
       return;
     }
     try {
-      const accountSelector = accountEndpointSelectorForMode(mode, account);
-      const endpointConfig = accountEndpointConfigForMode(mode, account);
       await onSave({
-        ...accountSelector,
-        ...endpointConfig,
-        apiKey: connectMode ? trimmedApiKey : undefined,
+        handle: connectMode ? undefined : account?.handle,
+        currentBaseUrl: connectMode ? null : account?.baseUrl ?? null,
+        baseUrl: trimmedWebUrl,
+        apiBaseUrl: trimmedApiUrl,
+        chatApiBaseUrl: connectMode || trimmedApiUrl !== initialApiUrl
+          ? null
+          : account?.chatApiBaseUrl,
+        apiKey: trimmedApiKey || undefined,
+        environment: new URL(trimmedWebUrl).hostname.replace(/^www\./, "") === "openpond.ai"
+          ? "production"
+          : "custom",
       });
     } catch (caught) {
       setRequestError(caught instanceof Error ? caught.message : String(caught));
     }
+  }
+
+  async function remove() {
+    if (!onRemove) return;
+    if (await onRemove()) onClose();
   }
 
   return (
@@ -129,47 +129,74 @@ export function AccountEndpointDialog({
         aria-labelledby={titleId}
         onSubmit={(event) => void submit(event)}
       >
-        <button
-          className="git-dialog-close"
-          disabled={busy}
-          type="button"
-          title="Close"
-          aria-label="Close"
-          onClick={onClose}
-        >
+        <button className="git-dialog-close" disabled={busy} type="button" title="Close" aria-label="Close" onClick={onClose}>
           <X size={16} />
         </button>
         <div className="git-dialog-icon">
           {connectMode ? <KeyRound size={18} /> : <Settings size={18} />}
         </div>
-        <h2 id={titleId}>{connectMode ? "Add account" : "Account environment"}</h2>
-        {connectMode ? (
-          <p>Enter your OpenPond API key to connect another account.</p>
-        ) : (
-          <p>Update the web and API endpoints used by this account.</p>
-        )}
-        {connectMode ? (
-          <label className="git-dialog-field">
-            <span>API key</span>
-            <input
-              autoFocus
-              disabled={busy}
-              placeholder="opk_..."
-              type="password"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-            />
-          </label>
+        <h2 id={titleId}>{connectMode ? "Add account" : "Account settings"}</h2>
+        <p>{connectMode ? "Connect an OpenPond account with an API key." : "View this account, replace its key, or edit its environment."}</p>
+
+        {!connectMode && account ? (
+          <div className="account-dialog-details">
+            <div><span>Account</span><strong>{account.displayLabel || account.handle}</strong></div>
+            {account.email ? <div><span>Email</span><strong>{account.email}</strong></div> : null}
+            <div><span>Handle</span><strong>{account.handle}</strong></div>
+            <div><span>API key</span><strong>{account.apiKeyHint ?? (account.authHealth === "signed_in" ? "Connected with a session" : "No saved API key")}</strong></div>
+          </div>
         ) : null}
+
+        <label className="git-dialog-field">
+          <span>{connectMode ? "API key" : "Replace API key"}</span>
+          <input
+            autoComplete="off"
+            disabled={busy}
+            placeholder={connectMode ? "opk_..." : "Leave blank to keep the current key"}
+            type="password"
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+          />
+          {!connectMode ? <small>Enter a new key to replace the saved credential.</small> : null}
+        </label>
+        <label className="git-dialog-field">
+          <span>Environment URL</span>
+          <input
+            disabled={busy}
+            inputMode="url"
+            spellCheck={false}
+            type="url"
+            value={webUrl}
+            onChange={(event) => changeWebUrl(event.target.value)}
+          />
+          <small>Change this URL to connect this account to another environment.</small>
+        </label>
+        <label className="git-dialog-field">
+          <span>API URL</span>
+          <input
+            disabled={busy}
+            inputMode="url"
+            spellCheck={false}
+            type="url"
+            value={apiUrl}
+            onChange={(event) => setApiUrl(event.target.value)}
+          />
+          <small>Enter the API URL for a custom environment.</small>
+        </label>
         {validationError ? <div className="profile-dialog-warning">{validationError}</div> : null}
-        <div className="git-dialog-footer">
-          <button className="git-dialog-secondary" disabled={busy} type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="git-dialog-primary" disabled={busy} type="submit">
-            <Save size={14} />
-            <span>{busy ? "Saving" : connectMode ? "Connect account" : "Update account"}</span>
-          </button>
+        <div className="git-dialog-footer account-dialog-footer">
+          {!connectMode && onRemove ? (
+            <button className="git-dialog-secondary account-dialog-remove" disabled={busy} type="button" onClick={() => void remove()}>
+              <Trash2 size={14} /> Remove account
+            </button>
+          ) : <span />}
+          <div className="account-dialog-save-actions">
+            <button className="git-dialog-secondary" disabled={busy} type="button" onClick={onClose}>Cancel</button>
+            <button className="git-dialog-primary" disabled={busy} type="submit">
+              <Save size={14} />
+              <span>{busy ? "Saving" : connectMode ? "Connect account" : "Save changes"}</span>
+            </button>
+          </div>
         </div>
       </form>
     </div>

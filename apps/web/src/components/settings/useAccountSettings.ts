@@ -52,18 +52,28 @@ export function useAccountSettings({
 
   async function removeAccount(
     handleValue: string,
-    baseUrlValue?: string | null
+    baseUrlValue?: string | null,
+    wasActive = false
   ): Promise<boolean> {
     if (!connection) return false;
     setSaving(true);
     onError(null);
     try {
-      onPayload(
-        await api.removeOpenPondAccount(connection, {
-          handle: handleValue,
-          baseUrl: baseUrlValue ?? null,
-        })
-      );
+      const removedPayload = await api.removeOpenPondAccount(connection, {
+        handle: handleValue,
+        baseUrl: baseUrlValue ?? null,
+      });
+      onPayload(removedPayload);
+      if (wasActive) {
+        try {
+          const preferencesPayload = await api.savePreferences(connection, {
+            defaultTeamId: null,
+          });
+          onPayload({ ...removedPayload, preferences: preferencesPayload.preferences });
+        } catch (preferenceError) {
+          onError(preferenceError instanceof Error ? preferenceError.message : String(preferenceError));
+        }
+      }
       return true;
     } catch (removeError) {
       onError(

@@ -1697,7 +1697,7 @@ export function createServerPayloads(deps: {
     );
     return bootstrapPayload({
       forceOpenPond: true,
-      refreshCloudProjects: false,
+      refreshCloudProjects: true,
     });
   }
 
@@ -1725,6 +1725,7 @@ export function createServerPayloads(deps: {
     await updateOpenPondAccountConfig({
       handle: input.handle,
       currentBaseUrl: input.currentBaseUrl ?? undefined,
+      apiKey: input.apiKey,
       baseUrl: input.baseUrl,
       apiBaseUrl: input.apiBaseUrl,
       chatApiBaseUrl: input.chatApiBaseUrl,
