@@ -129,6 +129,7 @@ export type SaveOpenPondAccountInput = {
 export type UpdateOpenPondAccountConfigInput = {
   handle: string;
   currentBaseUrl?: string | null;
+  apiKey?: string;
   baseUrl?: string | null;
   apiBaseUrl?: string | null;
   chatApiBaseUrl?: string | null;

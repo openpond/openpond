@@ -78,7 +78,7 @@ export async function updateAccountConfiguration(home: string, change: (value: P
       const secrets: AccountSecrets = { ...(account.apiKey ? { apiKey: account.apiKey } : {}), ...(account.session?.token ? { token: account.session.token } : {}) };
       let credential = previous?.credential;
       const old = current.accounts?.find((entry) => accountId(entry.handle, entry.baseUrl) === accountId(account.handle, account.baseUrl));
-      if (old?.apiKey !== account.apiKey || old?.session?.token !== account.session?.token || (!credential && Object.keys(secrets).length)) {
+      if (old?.apiKey !== account.apiKey || old?.session?.token !== account.session?.token || old?.apiBaseUrl !== account.apiBaseUrl || old?.chatApiBaseUrl !== account.chatApiBaseUrl || (!credential && Object.keys(secrets).length)) {
         credential = undefined;
         if (Object.keys(secrets).length) {
           const credentialId = newCredentialId(id);
@@ -90,6 +90,7 @@ export async function updateAccountConfiguration(home: string, change: (value: P
       if (account.session) sessions.set(id, { appId: account.session.appId ?? null, conversationId: account.session.conversationId ?? null });
     }
     await updateConfig(home, (document) => ({ ...document, accounts: definitions,
+      ...(document.defaults?.account_id && !definitions[document.defaults.account_id] ? { defaults: { ...document.defaults, account_id: undefined } } : {}),
       ...(next.lspEnabled === undefined ? {} : { editor: { ...document.editor, language_servers: next.lspEnabled ? "auto" : "off" } }),
       ...(next.executionMode || next.mode ? { runtime: { ...document.runtime, ...(next.executionMode ? { execution_mode: next.executionMode } : {}), ...(next.mode ? { mode: next.mode } : {}) } } : {}) }), snapshot.rawRevision);
     withLocalDatabase(home, (db) => {

@@ -8,6 +8,8 @@ import type { AccountApiHealth, AccountProduct, AccountProfile, AccountState } f
 import type { RuntimeLocalAccount, RuntimeLocalConfig } from "./types.js";
 import {
   normalizeActiveProfile,
+  baseUrlEquals,
+  handleEquals,
   profileKey,
   profileAuthHealth,
   profileMatchesSelector,
@@ -74,6 +76,12 @@ function isEmptyDefaultProfile(profile: ConfiguredProfile): boolean {
     !profile.hasApiKey &&
     !profile.hasSessionToken
   );
+}
+
+function apiKeyHint(apiKey?: string): string | null {
+  const value = apiKey?.trim();
+  if (!value) return null;
+  return value.length >= 12 ? `••••••${value.slice(-6)}` : "••••••";
 }
 
 export function toAccountState(input: {
@@ -154,6 +162,10 @@ export function toAccountState(input: {
     apiHealth: normalizeHealth(health ?? null, apiBaseUrl),
     accounts: visibleProfileRows.map((candidate) => {
       const candidateBaseUrl = normalizeBaseUrl(candidate.baseUrl);
+      const savedAccount = config.accounts?.find((entry) =>
+        handleEquals(entry.handle, candidate.handle) &&
+        baseUrlEquals(entry.baseUrl, candidateBaseUrl)
+      );
       const profileLookup = accountProfiles?.[profileKey(candidate.handle, candidateBaseUrl)] ?? null;
       const candidateProfile = normalizeProfile(profileLookup?.response ?? null);
       return {
@@ -167,6 +179,7 @@ export function toAccountState(input: {
         displayLabel: candidateProfile?.name || candidateProfile?.handle || candidateProfile?.email || candidate.handle,
         email: candidateProfile?.email ?? null,
         avatarUrl: candidateProfile?.image ?? null,
+        apiKeyHint: apiKeyHint(savedAccount?.apiKey),
       };
     }),
     error: error ?? health?.error ?? null,

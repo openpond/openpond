@@ -26,7 +26,7 @@ export function mapUiBaseToApiBase(baseUrl?: string | null): string | null {
     const url = new URL(trimmed);
     const host = url.hostname.toLowerCase();
     if (host === DEFAULT_OPENPOND_API_HOST) return DEFAULT_OPENPOND_API_BASE_URL;
-    if (host === DEFAULT_OPENPOND_WEB_HOST || host === "openpond.live" || host === "www.openpond.live") {
+    if (host === DEFAULT_OPENPOND_WEB_HOST || host === `www.${DEFAULT_OPENPOND_WEB_HOST}` || host === "openpond.live" || host === "www.openpond.live") {
       return DEFAULT_OPENPOND_API_BASE_URL;
     }
     if (host.startsWith("api.")) return trimmed;

@@ -6,6 +6,7 @@ import {
   baseUrlEquals,
   handleEquals,
   normalizeActiveProfile,
+  selectorFromAccount,
 } from "./selectors.js";
 import { normalizeBaseUrl } from "./urls.js";
 
@@ -48,14 +49,13 @@ export async function removeOpenPondAccount(input: {
 
   const account = accounts[index]!;
   const activeProfile = normalizeActiveProfile(config.activeProfile);
-  if (activeProfile && accountMatchesSelector(account, activeProfile)) {
-    throw new Error(
-      "Switch to another OpenPond account before removing the active account."
-    );
-  }
-
+  const wasActive = Boolean(activeProfile && accountMatchesSelector(account, activeProfile));
   accounts.splice(index, 1);
   config.accounts = accounts;
+  if (wasActive || !activeProfile || !accounts.some((remaining) => accountMatchesSelector(remaining, activeProfile))) {
+    if (accounts[0]) config.activeProfile = selectorFromAccount(accounts[0]);
+    else delete config.activeProfile;
+  }
   });
   return loadOpenPondAccountContext();
 }

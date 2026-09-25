@@ -59,6 +59,13 @@ export async function updateOpenPondAccountConfig(
 
   const previousAccount = accounts[index]!;
   nextAccount = { ...previousAccount };
+  if (input.apiKey !== undefined) {
+    const apiKey = input.apiKey.trim();
+    if (!apiKey) throw new Error("OpenPond API key cannot be empty.");
+    nextAccount.apiKey = apiKey;
+    delete nextAccount.session;
+    delete nextAccount.token;
+  }
   applyOptionalUrl(nextAccount, "baseUrl", input.baseUrl);
   applyOptionalUrl(nextAccount, "apiBaseUrl", input.apiBaseUrl);
   applyOptionalUrl(nextAccount, "chatApiBaseUrl", input.chatApiBaseUrl);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
-import { ExternalLink, Plus, RefreshCw, Settings, Trash2 } from "../icons";
+import { ExternalLink, Plus, RefreshCw, Settings } from "../icons";
 import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
 import { AccountAvatar, AccountStateBadge } from "../account/AccountBadges";
@@ -39,7 +39,8 @@ type AccountSettingsSectionProps = {
   ) => Promise<void>;
   removeAccount: (
     handleValue: string,
-    baseUrlValue?: string | null
+    baseUrlValue?: string | null,
+    wasActive?: boolean
   ) => Promise<boolean>;
   onPayload: (payload: BootstrapPayload) => void;
   onPreferences: (payload: PreferencesPayload) => void;
@@ -124,7 +125,7 @@ export function AccountSettingsSection({
     ? "No account connected"
     : "Loading account";
   const activeMetaLabel = signedIn
-    ? accountEmail ?? accountEnvironmentLabel(activeEnvironment)
+    ? accountEmail ?? accountEnvironmentLabel(activeCandidate?.baseUrl ?? account?.baseUrl, activeEnvironment)
     : authError
     ? "Not connected"
     : signedOut
@@ -354,14 +355,15 @@ export function AccountSettingsSection({
       const nextPayload = await api.updateOpenPondAccountConfig(connection, {
         handle: input.handle ?? endpointDialogAccount.handle,
         currentBaseUrl: input.currentBaseUrl,
+        apiKey: input.apiKey,
         baseUrl: input.baseUrl,
         apiBaseUrl: input.apiBaseUrl,
         chatApiBaseUrl: input.chatApiBaseUrl,
-        environment: customEnvironmentName(input.environment),
+        environment: input.environment,
         setActive: endpointDialogAccount.isActive,
       });
       onPayload(nextPayload);
-      onToast?.("Account endpoints updated", "success");
+      onToast?.("Account updated", "success");
       setEndpointDialogAccount(null);
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : String(caught));
@@ -378,9 +380,9 @@ export function AccountSettingsSection({
     await switchAccount(candidateHandle, candidate.baseUrl);
   }
 
-  async function removeSavedAccount(candidate: AccountRow) {
+  async function removeSavedAccount(candidate: AccountRow): Promise<boolean> {
     const candidateHandle = candidate.handle?.trim() || "";
-    if (!candidateHandle || candidate.isActive) return;
+    if (!candidateHandle) return false;
     const candidateLabel = firstPresentText(
       candidate.displayLabel,
       candidate.email,
@@ -394,10 +396,12 @@ export function AccountSettingsSection({
       cancelLabel: "Cancel",
       tone: "danger",
     });
-    if (!confirmed) return;
-    if (await removeAccount(candidateHandle, candidate.baseUrl)) {
+    if (!confirmed) return false;
+    if (await removeAccount(candidateHandle, candidate.baseUrl, candidate.isActive)) {
       onToast?.("Account removed", "success");
+      return true;
     }
+    return false;
   }
 
   async function reloadDesktopApp() {
@@ -513,9 +517,6 @@ export function AccountSettingsSection({
               {accounts.length} account{accounts.length === 1 ? "" : "s"}
             </small>
           </div>
-          <p className="account-list-note">
-            Switch to another account before removing the active account.
-          </p>
           {accounts.map((candidate) => {
             const candidateHandle = candidate.handle?.trim() || "";
             const candidateLabel = firstPresentText(
@@ -539,53 +540,34 @@ export function AccountSettingsSection({
                     </span>
                   ) : null}
                   <span>
-                    {accountEnvironmentLabel(
-                      candidate.environment ?? "production"
-                    )}
+                    {accountEnvironmentLabel(candidate.baseUrl, candidate.environment)}
                   </span>
+                  {candidate.apiKeyHint ? <span>API key {candidate.apiKeyHint}</span> : null}
                 </div>
                 <div className="account-row-actions">
-                  <AccountStateBadge state={candidate.authHealth} />
                   {candidate.isActive ? (
                     <span className="active-pill">Active</span>
                   ) : null}
+                  {!candidate.isActive ? (
+                    <button
+                      className="inline-action"
+                      disabled={saving || !candidateHandle}
+                      type="button"
+                      onClick={() => void useSavedAccount(candidate)}
+                    >
+                      Use
+                    </button>
+                  ) : null}
                   <button
                     className="settings-icon-button ghost account-endpoint-action"
-                    disabled={
-                      !connection ||
-                      saving ||
-                      Boolean(savingEndpointKey) ||
-                      !candidateHandle
-                    }
+                    disabled={!connection || saving || Boolean(savingEndpointKey) || !candidateHandle}
                     type="button"
-                    aria-label={`Configure ${candidateLabel} environment`}
-                    title="Configure account environment"
+                    aria-label={`Settings for ${candidateLabel}`}
+                    title="Account settings"
                     onClick={() => setEndpointDialogAccount(candidate)}
                   >
                     <Settings size={15} />
                   </button>
-                  {!candidate.isActive ? (
-                    <>
-                      <button
-                        className="inline-action"
-                        disabled={saving || !candidateHandle}
-                        type="button"
-                        onClick={() => void useSavedAccount(candidate)}
-                      >
-                        Use
-                      </button>
-                      <button
-                        className="inline-action danger account-remove-action"
-                        disabled={saving || !candidateHandle}
-                        type="button"
-                        aria-label={`Remove ${candidateLabel}`}
-                        title={`Remove ${candidateLabel}`}
-                        onClick={() => void removeSavedAccount(candidate)}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </>
-                  ) : null}
                 </div>
               </div>
             );
@@ -663,12 +645,14 @@ export function AccountSettingsSection({
       ) : null}
       {endpointDialogAccount ? (
         <AccountEndpointDialog
+          key={endpointDialogKey}
           account={endpointDialogAccount}
-          busy={endpointDialogBusy}
+          busy={endpointDialogBusy || saving}
           onClose={() => {
             if (!endpointDialogBusy) setEndpointDialogAccount(null);
           }}
           onSave={updateAccountEndpoints}
+          onRemove={() => removeSavedAccount(endpointDialogAccount)}
         />
       ) : null}
       {addAccountDialogOpen ? (
@@ -728,16 +712,13 @@ export function conciseAccountError(
   return error.length > 220 ? `${error.slice(0, 217)}...` : error;
 }
 
-function accountEnvironmentLabel(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized || normalized === "production") return "Production";
-  return "Environment";
-}
-
-function customEnvironmentName(value?: string | null): string {
-  const trimmed = value?.trim();
-  if (!trimmed || trimmed.toLowerCase() === "production") return "custom";
-  return trimmed;
+function accountEnvironmentLabel(baseUrl?: string | null, environment?: string | null): string {
+  try {
+    if (baseUrl) return new URL(baseUrl).host;
+  } catch {
+    // Fall back to the saved environment label for an older invalid URL.
+  }
+  return environment?.trim() || "openpond.ai";
 }
 
 function accountSignUpUrl(baseUrl: string): string {

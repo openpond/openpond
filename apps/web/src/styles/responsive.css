@@ -97,7 +97,7 @@
   }
 
   .account-row {
-    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-columns: 38px minmax(0, 1fr) auto;
   }
 
   .profile-control-toolbar {
@@ -182,14 +182,6 @@
     align-items: stretch;
   }
 
-  .active-pill,
-  .account-endpoint-action,
-  .inline-action,
-  .account-row-actions,
-  .account-state {
-    justify-self: start;
-    grid-column: 2;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   .app-shell,
