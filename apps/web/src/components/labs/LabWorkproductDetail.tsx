@@ -1,3 +1,4 @@
+import { modelsLocation, navigateModelsRoute } from "./lab-primary-tab-state";
 import { HostedModelLearning } from "./learning/HostedModelLearning";
 import {
   lazy,
@@ -591,10 +592,12 @@ export function LabWorkproductDetail({
           </Suspense>
         ) : workproduct.kind === "model" ? (
           <>
+            {modelSection === "overview" && connection && modelProject?.hosted ? <HostedModelLearning key={`${connection.serverUrl}:${modelProject.profileId}:${modelProject.id}:${modelProject.hosted.teamId}:${modelProject.hosted.apiOrigin}`} connection={connection} model={modelProject} readOnly={readOnlyModel} /> : null}
+            {modelSection === "overview" && modelProject && !modelProject.hosted ? <section className="models-learning-overview"><h2>Continual learning</h2><div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Status</th><th>Updates</th></tr></thead><tbody><tr><td>Default</td><td>Connect a hosted team to configure continual learning.</td></tr></tbody></table></div></section> : null}
             {modelSection === "overview" ? (
               <LabModelProjectOverview
                 actions={modelProject ? (
-                  <button
+                  <><button className="training-button secondary" type="button" onClick={() => { void navigateModelsRoute(modelsLocation("settings", modelProject.id)); }}>Settings</button><button
                     className="training-button secondary"
                     disabled={
                       readOnlyModel ||
@@ -618,7 +621,7 @@ export function LabWorkproductDetail({
                       : modelProject.hosted
                         ? "Sync project"
                         : "Connect to hosted Team"}
-                  </button>
+                  </button></>
                 ) : undefined}
                 modelProject={modelProject}
                 modelRuns={modelOverviewRuns(modelRunEntries(modelJobs, modelVersions, modelLifecycleRuns))}
@@ -634,7 +637,6 @@ export function LabWorkproductDetail({
                 versions={modelVersions}
               />
             ) : null}
-            {modelSection === "overview" && connection && modelProject?.hosted ? <HostedModelLearning key={`${connection.serverUrl}:${modelProject.profileId}:${modelProject.id}:${modelProject.hosted.teamId}:${modelProject.hosted.apiOrigin}`} connection={connection} model={modelProject} readOnly={readOnlyModel} /> : null}
             {modelSection === "training" || modelSection === "evals" ? (
               <LabModelRunsPage
                 runs={runs}

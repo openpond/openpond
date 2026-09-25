@@ -1,3 +1,4 @@
+import { ModelsPageSearch } from "./ModelsPageSearch";
 import { useMemo } from "react";
 import type { CreateImproveRun, TrainingStateResponse } from "@openpond/contracts";
 import type { LabWorkproductSummary } from "./lab-workproducts";
@@ -43,7 +44,7 @@ export function modelAggregateRows(page: "runs" | "versions", state: TrainingSta
     rows.push({ ref: `job:${job.id}`, modelId: ownerId, modelName: modelNames.get(ownerId)!, kind: "Training", label: job.id, status: job.status, tasksetId, updatedAt: job.updatedAt });
   }
   for (const run of modelId ? [] : state.rewardModelRuns) {
-    rows.push({ ref: `reward-run:${run.id}`, modelId: null, modelName: `Reward ${run.rewardModelId}`, kind: "Reward training", label: run.id, status: run.status, tasksetId: run.taskset.id, updatedAt: run.updatedAt });
+    rows.push({ ref: `reward-run:${run.id}`, modelId: null, modelName: `Reward ${run.rewardModelId}`, kind: "Grader training", label: run.id, status: run.status, tasksetId: run.taskset.id, updatedAt: run.updatedAt });
   }
   for (const series of state.comparisonSeries) {
     if (!modelNames.has(series.modelProjectId)) continue;
@@ -63,10 +64,9 @@ export function ModelsAggregatePage({ page, state, models, runs, modelId, query,
   const start = after ? filtered.findIndex((row) => row.ref === after) + 1 : 0;
   const visible = filtered.slice(start, start + 25);
   return <div className="labs-flat-body labs-resource-page">
-    <ModelProjectPageHeader title={page === "runs" ? "Runs" : "Versions"} description={page === "runs" ? "Training, Reward training, and model comparisons." : "Trained versions with their parent model and source Taskset."} actions={page === "runs" ? <div className="model-build-actions"><button className="training-button secondary" type="button" onClick={onNewComparison}>New comparison</button><button className="training-button" type="button" onClick={onNewRun}>New training run</button></div> : undefined} />
-    <label className="labs-search"><span className="sr-only">Search {page}</span><input placeholder={`Search ${page}`} value={query} onChange={(event) => onSearch(event.target.value)} /></label>
+    <ModelProjectPageHeader title={page === "runs" ? "Runs" : "Versions"} description={page === "runs" ? "Training, Grader training, and model comparisons." : "Trained versions with their parent model and source Taskset."} actions={<><ModelsPageSearch label={`Search ${page}`} value={query} onSearch={onSearch} />{page === "runs" ? <div className="model-build-actions"><button className="training-button secondary" type="button" onClick={onNewComparison}>New comparison</button><button className="training-button" type="button" onClick={onNewRun}>New training run</button></div> : null}</>} />
     {!state ? <p role="status">Loading {page}…</p> : <div className="training-table-wrap"><table className="training-data-table">
-      <thead><tr><th>{page === "runs" ? "Run" : "Version"}</th><th>Model or reward</th><th>Type</th><th>Status</th><th>Taskset</th><th>Updated</th></tr></thead>
+      <thead><tr><th>{page === "runs" ? "Run" : "Version"}</th><th>Model or grader</th><th>Type</th><th>Status</th><th>Taskset</th><th>Updated</th></tr></thead>
       <tbody>{visible.map((row) => <tr key={row.ref} onClick={() => onOpen(row)}>
         <td><button className="labs-version-row-button" type="button" onClick={(event) => { event.stopPropagation(); onOpen(row); }}>{row.label}</button></td>
         <td>{row.modelName}</td><td>{row.kind}</td><td><LabStatusBadge label={statusLabel(row.status)} value={row.status} /></td><td>{row.tasksetId}</td><td>{formatDateTime(row.updatedAt)}</td>

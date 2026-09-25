@@ -33,10 +33,10 @@ export function CombinedRewardEditor({ client, binding, authoringDraft, onSaved,
     if (result) { setRevision(result.revision); setSaved(JSON.stringify(draft)); }
     return result;
   }
-  const guard = useDraftNavigation({ name: "combined Reward", dirty: saved !== JSON.stringify(draft), busy: mutation.busy, save: saveDraft });
+  const guard = useDraftNavigation({ name: "grader combination", dirty: saved !== JSON.stringify(draft), busy: mutation.busy, save: saveDraft });
   useImperativeHandle(closeRef, () => ({ requestClose: () => { void guard.requestLeave(onClose); } }));
   return <div className="labs-flat-body labs-resource-page learning-workspace">
-    <ModelProjectPageHeader title={binding ? "Edit combined Reward" : "New combined Reward"} description="Publish a reusable combination. Task formats copy these defaults into their own binding; existing formats keep their selected releases." />
+    <ModelProjectPageHeader title={binding ? "Edit combination" : "New combination"} description="Publish a reusable combination. Task formats copy these defaults into their own binding; existing formats keep their selected releases." />
     <LearningError error={mutation.error} />
     {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>

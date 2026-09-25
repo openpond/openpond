@@ -1,6 +1,5 @@
 import type {
   CreateImproveRun,
-  ModelRun,
   TaskCreationSnapshot,
   TrainingStateResponse,
 } from "@openpond/contracts";
@@ -11,7 +10,6 @@ import type {
 
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import { TrainingSuggestions } from "../training/TrainingSuggestions";
-import { statusLabel } from "../training/training-model-data";
 import {
   ChartColumnStacked,
   CheckCircle2,
@@ -23,13 +21,9 @@ import {
 } from "../icons";
 import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
-import { benchmarkTaskEfficiency } from "./benchmark-attempt-usage";
 import {
-  labLifecycleModelRuns,
-  labModelJobs,
   labModelVersions,
 } from "./lab-models";
-import { modelRunEntries } from "./LabModelWorkspace";
 import { type LabWorkproductProgression } from "./lab-workproduct-progression";
 import type { LabsRouteProps } from "./LabsRoute";
 
@@ -255,7 +249,7 @@ export function ModelsTable({
           <tr>
             <th>Model</th>
             <th>Availability</th>
-            <th>Recent run</th>
+            <th>Continual learning</th>
             <th>Updated</th>
             <th>
               <span className="sr-only">Actions</span>
@@ -268,18 +262,6 @@ export function ModelsTable({
             const hosted = row.hosted;
             const versions = item ? labModelVersions(item, runs, state) : [];
             const current = versions.find((version) => version.current) ?? null;
-            const runEntries = item
-              ? modelRunEntries(
-                  labModelJobs(item, runs, state),
-                  versions,
-                  labLifecycleModelRuns(item, state),
-                )
-              : [];
-            const recentRun = runEntries[0] ?? null;
-            const recentRunStatus =
-              recentRun?.lifecycleRun?.status ??
-              recentRun?.job?.status ??
-              "not_run";
             const pulling = hosted
               ? busyAction === `pull-hosted-model-project:${hosted.project.id}`
               : false;
@@ -310,7 +292,7 @@ export function ModelsTable({
                     <button type="button" disabled={opening} className="labs-workproduct-link labs-hosted-project-identity" onClick={(event) => { event.stopPropagation(); onSelect(row.key); }}>
                       <strong>{name}</strong>
                       <span>{description}</span>
-                      <small>{opening ? "Opening…" : hosted!.project.portableProjectId}</small>
+                      {opening ? <small>Opening…</small> : null}
                     </button>
                   )}
                 </td>
@@ -338,29 +320,7 @@ export function ModelsTable({
                     </span>
                   </div>
                 </td>
-                <td>
-                  <div className="labs-model-table-summary">
-                    {item ? (
-                      <LabStatusBadge
-                        label={statusLabel(recentRunStatus)}
-                        value={recentRunStatus}
-                      />
-                    ) : (
-                      <LabStatusBadge
-                        label={hosted!.project.trainingSetup.method?.toUpperCase() ?? "Configured"}
-                        value="prepared"
-                      />
-                    )}
-                    <span>
-                      {item
-                        ? recentModelRunLabel(
-                            recentRun?.lifecycleRun ?? null,
-                            runEntries.length,
-                          )
-                        : `Hosted source r${hosted!.project.sourceRevision}`}
-                    </span>
-                  </div>
-                </td>
+                <td><button className="labs-version-row-button" type="button" onClick={event => { event.stopPropagation(); onSelect(row.key); }}>{hosted || state?.modelProjects.find(project => project.id === item?.id)?.hosted ? "View settings" : "Connect hosted team"}</button></td>
                 <td>{compactUpdatedAt(row.updatedAt)}</td>
                 <td>
                   <div className="labs-workproduct-actions">
@@ -441,28 +401,6 @@ function hostedPullTitle(state: HostedModelProjectLocalState): string {
   if (state === "up_to_date") return "This project is current locally";
   if (state === "local_ahead") return "Sync local changes before pulling";
   return "Resolve the local and hosted project conflict before pulling";
-}
-
-function recentModelRunLabel(run: ModelRun | null, runCount: number): string {
-  if (run?.kind === "evaluation") {
-    const benchmark = run.evaluation?.benchmarkId === "harness-refiner"
-      ? "Harness Refiner 08112026"
-      : "Benchmark";
-    const outcome = run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
-      ? run.receipt.attempts?.length
-        ? (() => {
-            const efficiency = benchmarkTaskEfficiency(run.receipt);
-            return `${efficiency.passedTaskCount}/${efficiency.comparedTaskCount} passed`;
-          })()
-        : titleCase(run.receipt.terminalClassification.replaceAll("_", " "))
-      : run.receipt?.schemaVersion === "openpond.modelEvaluationStopReceipt.v1"
-        ? "Inconclusive"
-      : run.evaluationProgress
-        ? `${titleCase(run.evaluationProgress.stage)} ${run.evaluationProgress.completedAttempts}/${run.evaluationProgress.totalAttempts}`
-        : statusLabel(run.status);
-    return `${benchmark} · ${outcome}`;
-  }
-  return `${runCount} ${runCount === 1 ? "run" : "runs"}`;
 }
 
 function workproductTraining(item: LabWorkproductSummary) {

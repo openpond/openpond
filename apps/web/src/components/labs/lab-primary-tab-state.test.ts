@@ -14,8 +14,11 @@ describe("Models page, scope and resource route boundary", () => {
       if (page !== "get-started") expect(url.pathname).toContain("/models/model%20A");
       expect(modelsRouteFromLocation(url)).toEqual(original);
       expect(changeModelsScope(original, "model B")).toEqual(modelsLocation(page, "model B"));
-      expect(changeModelsScope(original, null)).toEqual(modelsLocation(page));
+      expect(changeModelsScope(original, null)).toEqual(modelsLocation(page === "settings" ? "models" : page));
     }
+    expect(modelsRouteFromLocation({ pathname: "/models/settings" })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models/model-a/settings/unknown" })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models/labeling/evidence-a", search: "?source=source-a" })).toEqual(modelsLocation("tasks", null, { resourceId: "evidence-a", sourceId: "source-a" }));
     const review = modelsLocation("evaluations", "model A", { collection: "review", sourceId: "source/A", resourceId: "evidence-a", after: "cursor-1" });
     expect(modelsRouteFromLocation(new URL(modelsPath(review), "https://local.invalid"))).toEqual(review);
     expect(changeModelsScope(review, "model B").sourceId).toBeUndefined();
