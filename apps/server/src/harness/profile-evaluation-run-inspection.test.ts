@@ -19,6 +19,7 @@ describe("Profile evaluation run inspection", () => {
   const receipt = {
     id: "receipt-1", contentHash: "c".repeat(64), taskId: "task-1", seed: "seed-1",
     runManifest: { id: "run-1", contentHash: "a".repeat(64) },
+    artifactRefs: [],
     graderEvidenceRefs: [{ id: "grade-1", contentHash: "d".repeat(64) }],
     latencyMs: 42, costUsd: 0.01, terminal: true,
   };

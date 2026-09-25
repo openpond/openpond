@@ -36,6 +36,7 @@ export async function inspectProfileEvaluationRun(input: {
       passed: grade.passed,
       gradingStatus: grade.gradingStatus,
       failureClass: grade.failureClass,
+      artifactCount: receipt.artifactRefs.length,
       latencyMs: receipt.latencyMs,
       costUsd: receipt.costUsd,
       terminal: receipt.terminal,
