@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
 import { access, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 import { createTaskCreatorService } from "../apps/server/src/training/task-creator";
 import { contentHash } from "../packages/taskset-sdk/src";
 import { seedConversation, withTrainingStore } from "./helpers/training-fixtures";
@@ -14,7 +14,7 @@ describe("Task Creator pipeline", () => {
       store,
       tasksetRootDir: path.join(directory, "training", "tasksets"),
       authoringSkillHash: contentHash("skill"),
-      loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: directory } as any),
+      loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: directory, git: { head: "abc123" } } as any),
     });
     const sources = await Promise.all([
       service.addSessionSource({ profileId: "default", sessionId: "session_harness_one", turnIds: ["turn_harness_one"], consentScope: "selected_turns" }),
@@ -38,6 +38,11 @@ describe("Task Creator pipeline", () => {
     const ready = await service.approveMaterialization(creation.id, true);
     expect(ready.state, ready.blockedReason ?? "Taskset materialization failed.").toBe("ready");
     expect(ready.materializedTasksetId).toBeTruthy();
+    const materialized = await store.getTaskset(ready.materializedTasksetId!);
+    expect(materialized?.authoringProvenance).toMatchObject({
+      skillHash: contentHash("skill"), sourceCommit: "abc123",
+      evidenceHashes: sources.map((source) => source.sourceHash),
+    });
   }));
 
   test("reconciles an interrupted authoring snapshot after restart without losing reviewed evidence", async () => withTrainingStore(async ({ store, directory }) => {

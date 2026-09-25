@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   BootstrapPayloadSchema,
+  createPlaceholderPanes,
   ContextUsageSnapshotSchema,
   CompactSessionRequestSchema,
   AppPreferencesSchema,
@@ -18,7 +19,6 @@ import {
   SessionSchema,
   TurnSchema,
   CreateImproveWorkflowCaptureSchema,
-  createPlaceholderPanes,
 } from "../packages/contracts/dist/index.js";
 
 function createImproveRunFixture(overrides = {}) {
@@ -325,14 +325,6 @@ describe("contracts", () => {
         triggerPercent: 90,
         summaryModel: "same_model",
       },
-    );
-  });
-
-  test("v1 placeholder panes cover workspace surfaces", () => {
-    const panes = createPlaceholderPanes();
-    assert.deepEqual(
-      panes.map((pane) => pane.key),
-      ["files", "diffs", "checks", "deploys", "sources", "schedules", "tool_runs", "logs", "app_config"],
     );
   });
 

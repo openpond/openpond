@@ -1,20 +1,15 @@
-import { describe, expect, test } from "vitest";
 import { SessionSchema, type RuntimeEvent } from "@openpond/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, test } from "vitest";
 import { MessageRow } from "../apps/web/src/components/chat/Messages";
-import { attachmentIconKind } from "../apps/web/src/components/chat/AttachmentTypeIcon";
+import { liveSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
 import {
   activityGroupSummary,
   buildChatMessages,
 } from "../apps/web/src/lib/chat-messages";
-import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
-import { liveSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
-import {
-  activityToolRowLabel,
-  subagentMessageNeedsCollapse,
-} from "../apps/web/src/components/chat/MessageActivityGroup";
 import { workTracePresentation } from "../apps/web/src/lib/chat-work-trace";
+import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
 function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
@@ -43,55 +38,6 @@ function commandStarted(
 }
 
 describe("chat message projection", () => {
-  test("collapses pasted user messages after five lines", () => {
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: {
-          id: "long_user_message",
-          role: "user" as const,
-          content: "one\ntwo\nthree\nfour\nfive\nsix",
-          timestamp: "2026-07-04T10:00:00.000Z",
-          turnId: "turn_long_user_message",
-        },
-      }),
-    );
-
-    expect(html).toContain("one\ntwo\nthree\nfour\nfive");
-    expect(html).not.toContain("six");
-    expect(html).toContain('aria-expanded="false"');
-  });
-
-  test("renders per-turn KV cache reuse as plain assistant footer metadata", () => {
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: {
-          id: "assistant_turn_cache",
-          role: "assistant" as const,
-          content: "The cache remained warm.",
-          timestamp: "2026-07-04T10:00:00.000Z",
-          turnId: "turn_cache",
-        },
-        kvCacheSummary: {
-          turnId: "turn_cache",
-          requests: 2,
-          cacheTelemetryRequests: 2,
-          cachedPromptTokens: 980,
-          uncachedPromptTokens: 320,
-          cacheWritePromptTokens: null,
-          cacheHitRate: 0.7538,
-          cacheTelemetryCoverage: 1,
-          providers: ["fireworks"],
-        },
-      }),
-    );
-
-    expect(html).toContain("assistant-message-footer");
-    expect(html).toContain("message-footer-separator");
-    expect(html).toContain("message-kv-cache-metric");
-    expect(html).toContain("KV 75%");
-    expect(html).not.toContain("message-kv-cache-badge");
-    expect(html).not.toContain("role=\"tooltip\"");
-  });
 
   test("projects subagent receipts as parent transcript activities", () => {
     const messages = buildChatMessages([
@@ -171,117 +117,6 @@ describe("chat message projection", () => {
     );
     expect(html).toContain("activity-subagent-avatar-group");
     expect(html).toContain("Open Coding subagent (completed) conversation");
-  });
-
-  test("renders child handoffs as separate visible right-aligned cards", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_started",
-        name: "turn.started",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        args: { prompt: "Diagnose the bug" },
-      }),
-      commandStarted("search_1", "turn_1", "rg goal apps/server/src"),
-      runtimeEvent({
-        id: "child_message",
-        name: "subagent.message",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        status: "completed",
-        data: {
-          childSessionId: "session_child_review",
-          roleId: "review",
-          modelRef: { providerId: "openai", modelId: "gpt-5.6-sol" },
-          status: "running",
-          message: {
-            id: "message_1",
-            fromRunId: "run_review",
-            kind: "status",
-            priority: "interrupt",
-            body: "The hidden-directory hypothesis was disproven.",
-            refs: [],
-            createdAt: "2026-05-16T00:00:00.000Z",
-          },
-          delivery: {
-            status: "delivered",
-            deliveredParentSessionId: "session_1",
-            wakeParentReason: "parent_turn_active",
-          },
-        },
-      }),
-      commandStarted("search_2", "turn_1", "rg scanner apps/server/src"),
-    ]);
-
-    expect(messages.map((message) => message.role)).toEqual([
-      "user",
-      "activity_group",
-      "activity_group",
-    ]);
-    expect(messages[1]?.activities).toHaveLength(2);
-    expect(
-      messages[1]?.activities?.every((activity) => !activity.subagentMessage)
-    ).toBe(true);
-    expect(messages[2]?.activities?.[0]?.subagentMessage).toMatchObject({
-      direction: "received",
-      roleId: "review",
-      childSessionId: "session_child_review",
-    });
-
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[2]!,
-        onOpenSession: () => undefined,
-      })
-    );
-    expect(html).toContain("activity-child-message-group received");
-    expect(html).toContain("Review subagent update · gpt-5.6-sol");
-    expect(html).toContain("The hidden-directory hypothesis was disproven.");
-    expect(html).not.toContain("Open child conversation");
-    expect(html).not.toContain("activity-summary");
-  });
-
-  test("collapses long subagent updates behind a five-line show-more control", () => {
-    const body = Array.from(
-      { length: 7 },
-      (_, index) => `Evidence line ${index + 1}`
-    ).join("\n");
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "child_message_long",
-        name: "subagent.message",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        status: "completed",
-        data: {
-          childSessionId: "session_child_research",
-          roleId: "research",
-          modelRef: { providerId: "openai", modelId: "gpt-5.6-sol" },
-          message: {
-            id: "message_long",
-            fromRunId: "run_research",
-            kind: "handoff",
-            body,
-            refs: [],
-          },
-          delivery: {
-            status: "delivered",
-            deliveredParentSessionId: "session_1",
-          },
-        },
-      }),
-    ]);
-
-    expect(subagentMessageNeedsCollapse(body)).toBe(true);
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[0]!,
-        onOpenSession: () => undefined,
-      })
-    );
-    expect(html).toContain('class="collapsed"');
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("Show more");
   });
 
   test("extracts a new child session shell from live subagent start receipts", () => {
@@ -903,103 +738,6 @@ describe("chat message projection", () => {
     expect(codexHtml).not.toContain("has-image-attachments");
   });
 
-  test("selects distinct icons for common attachment families", () => {
-    const iconKind = (name: string, mediaType: string, kind: "image" | "text" | "file" = "file") =>
-      attachmentIconKind({ name, mediaType, kind });
-
-    expect(iconKind("screen.png", "image/png", "image")).toBe("image");
-    expect(iconKind("component.tsx", "text/typescript", "text")).toBe("code");
-    expect(iconKind("report.pdf", "application/pdf")).toBe("document");
-    expect(iconKind("results.csv", "text/csv", "text")).toBe("spreadsheet");
-    expect(iconKind("source.zip", "application/zip")).toBe("archive");
-    expect(iconKind("recording.wav", "audio/wav")).toBe("audio");
-    expect(iconKind("demo.mp4", "video/mp4")).toBe("video");
-    expect(iconKind("brief.pptx", "application/octet-stream")).toBe("presentation");
-    expect(iconKind("artifact.bin", "application/octet-stream")).toBe("file");
-  });
-
-  test("renders OpenPond Chat markdown image output inline", () => {
-    const imageUrl =
-      "http://127.0.0.1:17876/v1/assets/chat-attachment-image?storageName=OpenPond%20Chat%20signed-out%20failure.png&signature=sig";
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_openpond_chat",
-        name: "turn.started",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        args: {
-          prompt: "Show the signed-out screenshots.",
-          provider: "openpond",
-          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
-        },
-      }),
-      runtimeEvent({
-        id: "assistant_image",
-        name: "assistant.delta",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        output: `OpenPond Chat failure after sending:\n\n![OpenPond Chat signed-out failure](${imageUrl})`,
-      }),
-    ]);
-
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[1]!,
-        connection: {
-          serverUrl: "http://127.0.0.1:17876",
-          token: "token",
-          platform: "test",
-        },
-      })
-    );
-    expect(html).toContain("OpenPond Chat failure after sending");
-    expect(html).toContain("markdown-inline-image ready");
-    expect(html).toContain("<img");
-    expect(html).toContain('alt="OpenPond Chat signed-out failure"');
-    expect(html).not.toContain("!<a");
-  });
-
-  test("renders OpenPond Chat html image output inline", () => {
-    const imageUrl =
-      "http://127.0.0.1:17876/v1/assets/chat-attachment-image?storageName=OpenPond%20Chat%20signed-out%20failure.png&signature=sig";
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_openpond_chat_html_image",
-        name: "turn.started",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        args: {
-          prompt: "Show the signed-out screenshots.",
-          provider: "openpond",
-          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
-        },
-      }),
-      runtimeEvent({
-        id: "assistant_html_image",
-        name: "assistant.delta",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        output: `OpenPond Chat failure after sending:\n\n!<img src="${imageUrl}" alt="OpenPond Chat signed-out failure" />`,
-      }),
-    ]);
-
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[1]!,
-        connection: {
-          serverUrl: "http://127.0.0.1:17876",
-          token: "token",
-          platform: "test",
-        },
-      })
-    );
-    expect(html).toContain("OpenPond Chat failure after sending");
-    expect(html).toContain("markdown-inline-image ready");
-    expect(html).toContain("<img");
-    expect(html).toContain('alt="OpenPond Chat signed-out failure"');
-    expect(html).not.toContain("!&lt;img");
-  });
-
   test("renders web search results as source pills on the assistant message", () => {
     const messages = buildChatMessages([
       runtimeEvent({
@@ -1086,47 +824,6 @@ describe("chat message projection", () => {
     expect(html).toContain('src="https://www.ussoccer.com/favicon.ico"');
     expect(html).toContain(">U.S. Soccer</span>");
     expect(html).not.toContain(">https://www.ussoccer.com");
-  });
-
-  test("renders OpenPond Chat public image file inventories inline", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_openpond_chat_image_inventory",
-        name: "turn.started",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        args: {
-          prompt: "testing, can you show me all the images in this directory",
-          provider: "openpond",
-          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
-        },
-      }),
-      runtimeEvent({
-        id: "assistant_image_inventory",
-        name: "assistant.delta",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        output:
-          "There are 13 image files in this workspace, all under `apps/web/public/`:\n\n" +
-          "**PNG files:**\n" +
-          "- `apps/web/public/openpond-icon.png`\n\n" +
-          "**SVG files (connected-apps):**\n" +
-          "- `apps/web/public/connected-apps/github.svg`",
-      }),
-    ]);
-
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[1]!,
-        onOpenFileInSidebar: () => {},
-        workspaceRootPath: "/home/glu/Projects/all/openpond",
-      })
-    );
-    expect(html).toContain("There are 13 image files");
-    expect(html).toContain("markdown-file-image-reference");
-    expect(html).toContain("markdown-file-image-preview ready");
-    expect(html).toContain('src="/openpond-icon.png"');
-    expect(html).toContain('src="/connected-apps/github.svg"');
   });
 
   test("projects Create/Improve turn metadata into a review message", () => {

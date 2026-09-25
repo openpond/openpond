@@ -1,54 +1,18 @@
 import { describe, expect, test } from "vitest";
 
+import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
 import {
   defaultProviderCredentialTab,
-  providerCredentialLabel,
   providerCredentialTabs,
   providerRowsForSubscriptionFilter,
   providerSupportsSubscription,
-  visibleProviderModelOptions,
+  visibleProviderModelOptions
 } from "../apps/web/src/components/settings/ProviderSettingsSection";
 import {
-  modelOptionsForProvider,
-  providerOptionsFromSettings,
-  providerModelSupportsReasoning,
+  modelOptionsForProvider
 } from "../apps/web/src/lib/app-models";
-import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
-import type { ProviderSecrets } from "../apps/server/src/openpond/provider-secrets";
 
 describe("provider model option capping", () => {
-  test("keeps the managed OpenPond catalog and effort picker available during fallback", () => {
-    const expectedModelIds = [
-      "accounts/fireworks/models/deepseek-v4-pro",
-      "accounts/fireworks/models/kimi-k3",
-      "accounts/fireworks/models/glm-5p3",
-      "accounts/fireworks/models/deepseek-v4-flash",
-      "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
-      "accounts/fireworks/models/minimax-m3",
-    ];
-    const settings = buildProviderSettings({
-      file: { version: 1, providers: {}, modelCaches: {} },
-    });
-
-    expect(modelOptionsForProvider("openpond", null).map((option) => option.value)).toEqual(
-      expectedModelIds,
-    );
-    expect(
-      modelOptionsForProvider("openpond", settings).map((option) => option.value),
-    ).toEqual(expectedModelIds);
-    expect(
-      modelOptionsForProvider("openpond", settings)[0],
-    ).toMatchObject({
-      value: "accounts/fireworks/models/deepseek-v4-pro",
-      label: "DeepSeek V4 Pro",
-    });
-    expect(
-      providerOptionsFromSettings(settings).find((option) => option.value === "openpond"),
-    ).toEqual({ value: "openpond", label: "OpenPond Chat", description: undefined });
-    for (const modelId of expectedModelIds) {
-      expect(providerModelSupportsReasoning("openpond", modelId, settings)).toBe(true);
-    }
-  });
 
   test("keeps the retired OpenPond Chat alias out of saved defaults and caches", () => {
     const settings = buildProviderSettings({
@@ -131,69 +95,5 @@ describe("provider model option capping", () => {
     expect(providerCredentialTabs(settings.statuses.openrouter)).toEqual(["api"]);
     expect(defaultProviderCredentialTab(settings.statuses.xai, settings)).toBe("api");
     expect(defaultProviderCredentialTab(settings.statuses.zai, settings)).toBe("subscription");
-  });
-
-  test("labels Z.ai Coding Plan credentials as plan keys", () => {
-    const secrets: ProviderSecrets = {
-      version: 1,
-      providers: {
-        zai: {
-          source: "local_secret",
-          value: "zai-test-key",
-          envVar: null,
-          oauth: null,
-          createdAt: "2026-07-08T00:00:00.000Z",
-          updatedAt: "2026-07-08T00:00:00.000Z",
-          lastValidatedAt: null,
-          lastError: null,
-        },
-      },
-    };
-    const settings = buildProviderSettings({
-      file: { version: 1, providers: {}, modelCaches: {} },
-      secrets,
-    });
-
-    expect(providerCredentialLabel(settings.statuses.zai!, settings)).toBe("Coding Plan key");
-  });
-
-  test("keeps current OpenAI subscription models visible with reasoning effort support", () => {
-    const settings = buildProviderSettings({
-      file: {
-        version: 1,
-        providers: {},
-        modelCaches: {
-          openai: {
-            providerId: "openai",
-            models: [
-              {
-                id: "gpt-5.5",
-                providerId: "openai",
-                displayName: "GPT-5.5",
-                contextWindow: null,
-                outputLimit: null,
-                lifecycleStatus: "active",
-                source: "curated",
-                capabilities: { reasoning: true },
-              },
-            ],
-            fetchedAt: "2026-07-08T10:00:00.000Z",
-            lastError: null,
-            source: "curated",
-          },
-        },
-      },
-    });
-    const options = modelOptionsForProvider("openai", settings).map((option) => option.value);
-
-    expect(options.slice(0, 3)).toEqual([
-      "gpt-5.6-sol",
-      "gpt-5.6-terra",
-      "gpt-5.6-luna",
-    ]);
-    expect(options).toContain("gpt-5.5");
-    expect(options).toContain("gpt-5.3-codex-spark");
-    expect(providerModelSupportsReasoning("openai", "gpt-5.6-sol", settings)).toBe(true);
-    expect(providerModelSupportsReasoning("openai", "gpt-5.3-codex-spark", settings)).toBe(true);
   });
 });

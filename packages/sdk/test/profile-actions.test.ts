@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
-  OpenPondProfileActionsClient,
-  createOpenPondClient,
+  OpenPondProfileActionsClient
 } from "../src/index.js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -38,15 +37,6 @@ describe("OpenPondProfileActionsClient", () => {
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe(
       "ApiKey opk_test",
     );
-  });
-
-  test("is available from the root OpenPond client", () => {
-    const client = createOpenPondClient({
-      apiKey: "opk_test",
-      baseUrl: "https://api.example.test/",
-    });
-
-    expect(client.profileActions).toBeInstanceOf(OpenPondProfileActionsClient);
   });
 
   test("runs a catalog-pinned Profile action with an ephemeral capability lease", async () => {

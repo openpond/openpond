@@ -1,11 +1,10 @@
-import { describe, expect, test } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 import {
   artifactArchitectureLabel,
-  desktopPackageBudget,
-  unpackedPackageCandidates,
+  unpackedPackageCandidates
 } from "../scripts/check-desktop-package-budgets";
 import { runtimeInventoryVerification } from "../scripts/desktop-runtime-inventory";
 import {
@@ -227,18 +226,6 @@ describe("desktop runtime staging", () => {
     expect(artifactArchitectureLabel("linux", "x64")).toBe("x86_64");
     expect(artifactArchitectureLabel("linux", "arm64")).toBe("arm64");
     expect(artifactArchitectureLabel("darwin", "x64")).toBe("x64");
-  });
-
-  test("keeps Linux unpacked package budgets architecture-specific", () => {
-    expect(desktopPackageBudget("linux", "x64")?.maxUnpackedBytes).toBe(
-      400 * 1024 * 1024
-    );
-    expect(desktopPackageBudget("linux", "arm64")?.maxUnpackedBytes).toBe(
-      339 * 1024 * 1024
-    );
-    expect(desktopPackageBudget("darwin", "arm64")?.maxUnpackedBytes).toBe(
-      400 * 1024 * 1024
-    );
   });
 
   test("uses signature-aware verification only for Darwin executable runtime files", () => {

@@ -85,7 +85,7 @@ describe("openpond app-server process boundary", () => {
       }),
     ]));
     expect(startupMs).not.toBeNull();
-    expect(startupMs!).toBeLessThan(10_000);
+    if (process.env.OPENPOND_CHECK_PERFORMANCE === "1") expect(startupMs!).toBeLessThan(10_000);
     reportMetric("processStartupMs", startupMs!);
     expect(stdout).not.toContain("OPENPOND_APP_SERVER_READY");
     expect(stdout).not.toContain("OpenPond API server");

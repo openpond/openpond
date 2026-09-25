@@ -5,6 +5,10 @@ on:
   pull_request:
     paths:
       - "apps/desktop/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "scripts/stage-desktop-runtime.ts"
+      - "scripts/desktop-runtime/**"
       - "apps/web/**"
       - "scripts/smoke-dev-desktop.ts"
       - "scripts/desktop-harness/**"
@@ -25,6 +29,24 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+      - id: scope
+        name: Select packaging proof
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync } from 'node:fs';
+          let packageRequired = true;
+          if (process.env.GITHUB_EVENT_NAME === 'pull_request') {
+            const files = execFileSync('git', ['diff', '--name-only', process.env.BASE_SHA, process.env.HEAD_SHA], { encoding: 'utf8' }).trim().split('\n');
+            packageRequired = files.some(file => /^(apps\/desktop\/|scripts\/(build\/|desktop-runtime\/|stage-desktop-runtime)|pnpm-lock.yaml$|package.json$|.github\/workflows\/desktop-smoke.yml$)/.test(file));
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `package=${packageRequired}\n`);
+          NODE
       - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
           version: "11.13.0"
@@ -34,12 +56,16 @@ jobs:
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:artifacts
-      - run: pnpm exec tsx scripts/prepare-release.ts --channel stable --version "$(node -p "require('./apps/desktop/package.json').version")"
-      - run: pnpm run package:linux:release
-      - run: pnpm run budgets:desktop-package
+      - if: steps.scope.outputs.package == 'true'
+        run: pnpm exec tsx scripts/prepare-release.ts --channel stable --version "$(node -p "require('./apps/desktop/package.json').version")"
+      - if: steps.scope.outputs.package == 'true'
+        run: pnpm run package:linux:release
+      - if: steps.scope.outputs.package == 'true'
+        run: pnpm run budgets:desktop-package
       - run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: xvfb-run -a pnpm run smoke:desktop:dev --skip-chat --json release-smoke/dev-render-commits.json
-      - run: xvfb-run -a pnpm run smoke:desktop:packaged --json release-smoke/packaged.json
+      - if: steps.scope.outputs.package == 'true'
+        run: xvfb-run -a pnpm run smoke:desktop:packaged --json release-smoke/packaged.json
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

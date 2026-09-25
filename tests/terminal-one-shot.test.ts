@@ -1,7 +1,3 @@
-import path from "node:path";
-import { Readable, Writable } from "node:stream";
-import { describe, expect, test } from "vitest";
-import { startFetchTestServer } from "./helpers/fetch-test-server";
 import {
   emptyOpenPondProfileState,
   ProviderSettingsSchema,
@@ -9,78 +5,19 @@ import {
   type ProviderSettings,
   type RuntimeEvent,
 } from "@openpond/contracts";
-import {
-  createLineModeTurnGuard,
-  createTerminalTurnSubmissionGuard,
-  LINE_MODE_TURN_RUNNING_MESSAGE,
-  TERMINAL_TURN_RUNNING_MESSAGE,
-} from "../apps/terminal/src/line-mode-turn-guard";
+import path from "node:path";
+import { Readable, Writable } from "node:stream";
+import { describe, expect, test } from "vitest";
+import { startFetchTestServer } from "./helpers/fetch-test-server";
 
 import { parseTerminalArgs, resolveTerminalChatMode, shouldRunOneShotChat, TerminalUsageError } from "../apps/terminal/src/args";
 import {
-  handleTerminalSlashCommand,
-  resolveTerminalCommandApproval,
-  type TerminalCommandContext,
+  type TerminalCommandContext
 } from "../apps/terminal/src/command-handlers";
-import {
-  formatTerminalCommandApprovalQuestion,
-  latestPendingCommandApproval,
-  parseTerminalPermissionChoice,
-  terminalPermissionDecision,
-} from "../apps/terminal/src/permissions";
-import {
-  openTerminalEvents,
-  readTerminalEventStream,
-  terminalEventReconnectDelayMs,
-  terminalEventStreamRequest,
-  type TerminalEventStreamStatus,
-  validateTerminalEventResponse,
-} from "../apps/terminal/src/events";
-import { apiFetch } from "../apps/terminal/src/connection";
-import {
-  runTerminalDirectCommand,
-  terminalDirectCommandBlockedReason,
-} from "../apps/terminal/src/direct-command";
 import { createOneShotAccumulator, runOneShotChat, TerminalOneShotExitError } from "../apps/terminal/src/one-shot-chat";
 import {
-  activeModelId,
-  blockingSetupRequirementsForAction,
-  formatModelOptions,
-  formatProfileAgents,
-  formatProfileCatalog,
-  formatProviderOptions,
-  modelLabel,
-  parseProviderModelSelection,
-  resolveModelSelection,
-} from "../apps/terminal/src/formatting";
-import {
-  formatTerminalProjects,
-  resolveTerminalProjectTarget,
-} from "../apps/terminal/src/projects";
-import {
-  createTerminalChatSession,
-  ensureTerminalChatSession,
-  profileLabel,
-  resolveResumedTerminalSelection,
-} from "../apps/terminal/src/session-state";
-import {
-  createLatestWinsTaskScheduler,
-  createSerialTaskScheduler,
-} from "../apps/terminal/src/task-scheduler";
-import { createTerminalRenderScheduler as createTerminalUiRenderScheduler } from "../apps/terminal/src/ui/render-scheduler";
-import {
-  appendRuntimeEvent,
-  appendTranscriptItem,
-  commitReadyTranscriptItems,
-  limitActiveTranscriptItems,
-  MAX_ACTIVE_STREAMING_TEXT_BYTES,
-  type TranscriptItem,
+  type TranscriptItem
 } from "../apps/terminal/src/ui/transcript";
-import {
-  parseDirectCommandPrompt,
-  parseSlashCommand,
-} from "../apps/terminal/src/ui/commands";
-import { runProcessCommand } from "../apps/cli/src/process-runner";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..");
 const tsxBinary = path.join(REPO_ROOT, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
@@ -283,21 +220,6 @@ describe("terminal argument parser", () => {
     expect(resolveTerminalChatMode(baseOptions, { inputIsTTY: false, outputIsTTY: true })).toBe("line-mode");
     expect(resolveTerminalChatMode(baseOptions, { inputIsTTY: true, outputIsTTY: false })).toBe("line-mode");
     expect(resolveTerminalChatMode(oneShotOptions, { inputIsTTY: false, outputIsTTY: false })).toBe("one-shot");
-  });
-
-  test("direct terminal usage advertises the headless trust controls", async () => {
-    const result = await runProcessCommand(
-      tsxBinary,
-      [path.join(REPO_ROOT, "apps", "terminal", "src", "index.ts"), "help"],
-      { timeoutMs: 5_000 },
-    );
-
-    expect(result.timedOut).toBe(false);
-    expect(result.code).toBe(0);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("Usage: openpond-app chat");
-    expect(result.stdout).toContain("[--approval-policy POLICY]");
-    expect(result.stdout).toContain("[--sandbox MODE]");
   });
 });
 

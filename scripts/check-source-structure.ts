@@ -185,7 +185,7 @@ async function walk(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
-    if (["dist", "build", "stage", "coverage", "node_modules"].includes(entry.name)) continue;
+    if (["dist", "build", "stage", "coverage", "node_modules", ".openpond", ".openpond-test-fixtures"].includes(entry.name)) continue;
     const target = path.join(directory, entry.name);
     if (entry.isDirectory()) files.push(...(await walk(target)));
     else files.push(target);

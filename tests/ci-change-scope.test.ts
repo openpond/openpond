@@ -55,17 +55,22 @@ describe("CI change scope", () => {
     expect(classifyCiChanges(["packages/evals/python/tests/test_telemetry.py"]).python).toBe(true);
   });
 
-  test("selects distribution proof for every shipped app and its packaging tooling", () => {
+  test("separates shipped builds from installation and export proofs", () => {
     expect(classifyCiChanges(["apps/cli/src/index.ts"]).distribution).toBe(true);
-    expect(classifyCiChanges(["packages/runtime/src/index.ts"]).distribution).toBe(true);
+    expect(classifyCiChanges(["packages/runtime/src/index.ts"])).toMatchObject({ build: true, distribution: false });
     expect(classifyCiChanges(["pnpm-lock.yaml"]).distribution).toBe(true);
-    expect(classifyCiChanges(["apps/web/src/App.tsx"]).distribution).toBe(true);
+    expect(classifyCiChanges(["apps/web/src/App.tsx"])).toMatchObject({ build: true, distribution: false });
     expect(classifyCiChanges(["apps/server/src/index.ts"]).distribution).toBe(true);
     expect(classifyCiChanges(["scripts/distribution/package-policy.ts"]).distribution).toBe(true);
     expect(classifyCiChanges(["tests/example.test.ts"]).distribution).toBe(false);
+    expect(classifyCiChanges(["scripts/check-app-server-distribution.ts"])).toMatchObject({ build: true, distribution: true });
+    expect(classifyCiChanges(["apps/cli/test/cli-options.test.ts"])).toMatchObject({ build: false, distribution: false });
   });
 
   test("runs the full suite when production code is deleted, but not for a deleted test", () => {
+    for (const file of ["apps/cli/test/options.test.ts", "packages/harness/test/api.test.ts", "apps/web/src/utils.test.ts"]) {
+      expect(classifyCiChanges([file], "pull_request", [file]).full).toBe(false);
+    }
     expect(classifyCiChanges(
       ["apps/server/src/legacy.ts"],
       "pull_request",

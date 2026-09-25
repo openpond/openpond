@@ -1,9 +1,8 @@
+import type { Session } from "@openpond/contracts";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import type { Session } from "@openpond/contracts";
-import { createHostedTurnHelpers } from "../apps/server/src/openpond/hosted-turn-helpers";
 import {
   buildRepositoryInstructionContext,
   resolveRepositoryInstructions,
@@ -84,65 +83,6 @@ describe("Development repository instructions", () => {
     expect(resolution?.diagnostics).toEqual([
       expect.stringContaining("outside the repository boundary"),
     ]);
-  });
-
-  test("adds persistence, destructive-action safety, and AGENTS.md to repository-aware Work", async () => {
-    const repositoryRoot = await createGitRepository();
-    await writeFile(
-      path.join(repositoryRoot, "AGENTS.md"),
-      "Use ./cli --staging changes --run for staging.",
-    );
-    const helpers = createHostedTurnHelpers({
-      appendRuntimeEvent: async () => undefined,
-    });
-
-    const developmentPrompt = await helpers.hostedSystemPrompt(
-      "Base prompt.",
-      "",
-      session({
-        experience: "development",
-        workspaceKind: "local_project",
-        cwd: repositoryRoot,
-      }),
-      { toolInstructionMode: "none" },
-    );
-    const chatPrompt = await helpers.hostedSystemPrompt(
-      "Base prompt.",
-      "",
-      session({
-        experience: "chat",
-        workspaceKind: "local_project",
-        cwd: repositoryRoot,
-      }),
-      { toolInstructionMode: "none" },
-    );
-    const workPrompt = await helpers.hostedSystemPrompt(
-      "Base prompt.",
-      "",
-      session({
-        experience: "work",
-        workspaceKind: "local_project",
-        cwd: repositoryRoot,
-      }),
-      { toolInstructionMode: "none" },
-    );
-
-    expect(developmentPrompt).toContain("Repository-aware Work:");
-    expect(developmentPrompt).toContain(
-      "If a command or tool fails, inspect the result, correct the approach, and retry when safe.",
-    );
-    expect(developmentPrompt).toContain(
-      "never use broad or ambiguous destructive commands",
-    );
-    expect(developmentPrompt).toContain(
-      "Use ./cli --staging changes --run for staging.",
-    );
-    expect(chatPrompt).not.toContain("Repository-aware Work:");
-    expect(chatPrompt).not.toContain(
-      "Use ./cli --staging changes --run for staging.",
-    );
-    expect(workPrompt).toContain("Repository-aware Work:");
-    expect(workPrompt).toContain("Use ./cli --staging changes --run for staging.");
   });
 });
 

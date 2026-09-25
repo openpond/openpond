@@ -158,7 +158,7 @@ async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
     "apps/cli/dist/web/index.html",
     "apps/cli/dist/skills/openpond-taskset-authoring/SKILL.md",
   ]);
-  await runVitestProjects(["cli-release"], env);
+  await runCommand(pnpmBinary, ["run", "cli:distribution:check"], { env });
 }
 
 async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void> {

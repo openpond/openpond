@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
+import { runCommand } from "./cli-command-fixture";
 
 import { CLI_SECRET, type CapturedRequest, runCli, withSandboxApi } from "./cli-sandbox-fixture";
 
@@ -60,7 +61,7 @@ describe("sandbox secret and create CLI redaction", () => {
   test("sandbox create sends secret refs and refuses secret-like literals without echoing plaintext", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {
-      const result = await runCli([
+      const result = await runCommand([
         "sandbox",
         "create",
         "--env-ref",
@@ -82,7 +83,7 @@ describe("sandbox secret and create CLI redaction", () => {
       });
     });
 
-    const rejected = await runCli([
+    const rejected = await runCommand([
       "sandbox",
       "create",
       "--env-literal",
@@ -102,7 +103,7 @@ describe("sandbox secret and create CLI redaction", () => {
   test("sandbox create sends low-level sandbox runtime options", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {
-      const result = await runCli([
+      const result = await runCommand([
         "sandbox",
         "create",
         "--workflow-mode",
@@ -147,7 +148,7 @@ describe("sandbox secret and create CLI redaction", () => {
   test("sandbox create sends image and Dockerfile workload sources", async () => {
     const imageRequests: CapturedRequest[] = [];
     await withSandboxApi(imageRequests, async (sandboxApiUrl) => {
-      const result = await runCli([
+      const result = await runCommand([
         "sandbox",
         "create",
         "--image",
@@ -190,7 +191,7 @@ describe("sandbox secret and create CLI redaction", () => {
       await writeFile(path.join(dockerContext, ".env.local"), "SECRET=skip\n");
 
       await withSandboxApi(dockerfileRequests, async (sandboxApiUrl) => {
-        const result = await runCli(
+        const result = await runCommand(
           [
             "sandbox",
             "create",

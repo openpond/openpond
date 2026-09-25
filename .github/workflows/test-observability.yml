@@ -2,8 +2,6 @@ name: Test observability
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "17 7 * * 1"
 
 permissions:
   contents: read
@@ -28,6 +26,10 @@ jobs:
           node-version: "24.18.0"
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:sdk
+      - run: pnpm exec tsc -b apps/server
+      - run: pnpm run agent-sdk:build
+      - run: pnpm run test:performance
       - run: pnpm run test:observe
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()

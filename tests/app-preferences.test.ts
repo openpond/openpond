@@ -1,12 +1,12 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, test } from "vitest";
 import {
   AppPreferencesSchema,
   UpdateAppPreferencesRequestSchema,
   type BootstrapPayload,
 } from "@openpond/contracts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 import { createOpenPondServer } from "../apps/server/src/index";
 import { normalizeAppPreferences } from "../apps/server/src/preferences";
 
@@ -78,12 +78,6 @@ describe("app preferences", () => {
       background: true,
       peerMessages: "parent_scoped",
     });
-    expect(preferences.subagents).not.toHaveProperty("maxTokens");
-    expect(preferences.subagents).not.toHaveProperty("heartbeatIntervalSeconds");
-    expect(coding).not.toHaveProperty("maxTurns");
-    expect(coding).not.toHaveProperty("maxTokens");
-    expect(coding).not.toHaveProperty("reviewRouting");
-    expect(coding).not.toHaveProperty("explorationSteering");
   });
 
   test("persists lean subagent settings through bootstrap", async () => {

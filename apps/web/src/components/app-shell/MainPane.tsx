@@ -342,6 +342,10 @@ export function MainPane({
     selectedProfileSession?.currentProfile ??
     bootstrap?.profileLibrary?.lastUsed ??
     null;
+  const accountTeamScopeKey = JSON.stringify({
+    account: bootstrap?.account.activeProfile ?? null,
+    teamId: bootstrap?.preferences.defaultTeamId ?? null,
+  });
   const selectedProfileState =
     profileStateForRef(
       bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
@@ -1551,6 +1555,7 @@ export function MainPane({
       ) : view === "scheduled" ? (
         <Suspense fallback={null}>
           <ScheduledWorkPage
+            key={accountTeamScopeKey}
             connection={connection}
             selectedProfileKey={selectedProfileRef ? JSON.stringify(selectedProfileRef) : null}
             onOpenSession={onOpenSession}
@@ -1568,6 +1573,7 @@ export function MainPane({
       ) : view === "projects" ? (
         <Suspense fallback={null}>
           <ProjectsPage
+            key={accountTeamScopeKey}
             accountBaseUrl={projectsAccountBaseUrl}
             connection={connection}
             onNewCloudProject={onNewCloudProject}

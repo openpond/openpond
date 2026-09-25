@@ -3,6 +3,8 @@ import { appendFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 
+import { hasTrustedCiProof, readPackageRelease } from "./package-release-scope.mjs";
+
 const execFileAsync = promisify(execFile);
 
 const criticalFiles = new Set([
@@ -12,6 +14,7 @@ const criticalFiles = new Set([
   "tsconfig.json",
   "vitest.config.ts",
   "scripts/ci-change-scope.mjs",
+  "scripts/package-release-scope.mjs",
   "scripts/check-test-tiers.ts",
   "scripts/run-affected-tests.ts",
   "scripts/run-tests.ts",
@@ -46,7 +49,7 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
   const affectedTests = files.some((file) => /(?:^|\/)[^/]+\.(?:[cm]?[jt]sx?)$/.test(file));
   const nodeContracts = files.some((file) => file.endsWith(".test.mjs"));
   const image = files.some((file) => file.includes("local-image-tool-registry") || file === "tests/local-image-tool-registry.test.ts");
-  const distribution = !docsOnly && files.some((file) => (
+  const build = !docsOnly && files.filter((file) => !isTestFile(file)).some((file) => (
     file === "package.json"
     || file === "pnpm-lock.yaml"
     || file === "pnpm-workspace.yaml"
@@ -61,12 +64,21 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
     || /^packages\/[^/]+\/(?:package\.json|src\/)/.test(file)
   ));
 
+  const distribution = !docsOnly && files.some((file) => (
+    ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "scripts/check-cli-distribution.ts", "scripts/check-app-server-distribution.ts"].includes(file)
+    || /^(?:scripts\/(?:build|distribution)\/|apps\/cli\/(?:scripts|bin)\/)/.test(file)
+    || /^(?:apps|packages)\/[^/]+\/(?:package\.json|tsconfig[^/]*\.json)$/.test(file)
+    || /^apps\/(?:cli|server)\/src\/(?:cli\/|index\.|app-server|server-companion)/.test(file)
+    || /^packages\/(?:harness|evals)\/src\//.test(file)
+  ));
+
   return {
     affectedTests,
     agentSdk: !docsOnly && files.some((file) => file.startsWith("packages/agent-sdk/")),
     cli: !docsOnly && files.some((file) => file.startsWith("apps/cli/")),
     docsOnly,
     distribution,
+    build: build || distribution,
     files,
     full,
     image,
@@ -75,6 +87,7 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
     python,
     reason: full ? reasons.join("; ") : docsOnly ? "documentation-only change" : "bounded pull-request change",
     release,
+    releasePackage: "",
     repositoryChecks: !docsOnly,
     typecheck: files.some((file) => /(?:^|\/)(?:package\.json|tsconfig(?:\.[^/]+)?\.json)$/.test(file) || /\.(?:ts|tsx|mts|cts)$/.test(file)),
     workflow,
@@ -85,8 +98,12 @@ function isDocumentationFile(file) {
   return file.startsWith("docs/") || file === "README.md" || file.endsWith(".md");
 }
 
+function isTestFile(file) {
+  return /(?:^|\/)(?:tests?|__tests__)\//.test(file) || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file);
+}
+
 function isProductionCodeFile(file) {
-  return /^(?:apps|packages)\/.+\.(?:[cm]?[jt]sx?)$/.test(file);
+  return !isTestFile(file) && /^(?:apps|packages)\/.+\.(?:[cm]?[jt]sx?)$/.test(file);
 }
 
 async function changedFiles(base, head) {
@@ -123,9 +140,18 @@ async function main() {
   const head = args.get("head") ?? process.env.CI_HEAD_SHA ?? "HEAD";
   if (!base) throw new Error("CI change scoping requires --base or CI_BASE_SHA");
 
-  const files = eventName === "pull_request" ? await changedFiles(base, head) : [];
-  const deleted = eventName === "pull_request" ? await deletedFiles(base, head) : [];
-  const result = classifyCiChanges(files, eventName, deleted);
+  let files = [];
+  let deleted = [];
+  try {
+    files = await changedFiles(base, head);
+    deleted = await deletedFiles(base, head);
+  } catch { /* Missing/zero refs select the full lane. */ }
+  let result = classifyCiChanges(files, eventName, deleted);
+  const releasePackage = ["pull_request", "push"].includes(eventName) ? readPackageRelease(base, head) : "";
+  if (releasePackage && (eventName === "pull_request" || (process.env.GITHUB_REF === "refs/heads/master" && await hasTrustedCiProof(base)))) {
+    result = { ...classifyCiChanges(["README.md"]), files, docsOnly: false, install: true, releasePackage,
+      reason: `verified version-only ${releasePackage} release` };
+  }
   console.log(`[ci-scope] ${result.full ? "full" : "targeted"}: ${result.reason}`);
   console.log(`[ci-scope] ${result.files.length} changed file(s)`);
 
@@ -137,6 +163,7 @@ async function main() {
     base,
     cli: result.cli,
     distribution: result.distribution,
+    build: result.build,
     full: result.full,
     head,
     image: result.image,
@@ -145,6 +172,7 @@ async function main() {
     python: result.python,
     reason: result.reason,
     release: result.release,
+    release_package: result.releasePackage,
     repository_checks: result.repositoryChecks,
     typecheck: result.typecheck,
     workflow: result.workflow,

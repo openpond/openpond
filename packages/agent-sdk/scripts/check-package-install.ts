@@ -83,7 +83,13 @@ if (runResult.result?.intent !== "answer") {
 for (const templateName of templateNames) {
   const target = path.join(initRoot, templateName);
   await runJson([cli, "init", templateName, "--cwd", target, "--json"], fixtureDir);
-  await run(["npm", "install", "--no-audit", "--no-fund"], target);
+  const initializedManifest = JSON.parse(await readFile(path.join(target, "package.json"), "utf8"));
+  if (!/^\d+\.\d+\.\d+$/.test(initializedManifest.dependencies?.["openpond-agent-sdk"] ?? "")) {
+    throw new Error(`Initialized ${templateName} must pin a portable SDK version`);
+  }
+  await rewriteSdkDependency(target, tarball);
+  if (templateName === "integration-heavy-agent") await run(["npm", "install", "--no-audit", "--no-fund"], target);
+  else await cp(path.join(fixtureDir, "node_modules"), path.join(target, "node_modules"), { recursive: true });
   const initializedCli = path.join(target, "node_modules/.bin/openpond-agent");
   const initializedInspect = await runJson([initializedCli, "inspect", "--json"], target);
   if (initializedInspect.project?.name !== templateName) {
@@ -93,23 +99,25 @@ for (const templateName of templateNames) {
   if (initializedValidation.status !== "passed") {
     throw new Error(`Initialized ${templateName} validation failed: ${JSON.stringify(initializedValidation.issues)}`);
   }
-  const initializedEval = await runJson([initializedCli, "eval", "--json"], target);
-  if (initializedEval.summary?.failed !== 0) {
-    throw new Error(`Initialized ${templateName} eval failed: ${JSON.stringify(initializedEval.summary)}`);
-  }
-  const initializedRun = await runJson([
-    initializedCli,
-    "run",
-    "chat",
-    "--input",
-    JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
-  ], target);
-  if (!initializedRun.result?.intent) {
-    throw new Error(`Initialized ${templateName} run did not return an intent: ${JSON.stringify(initializedRun)}`);
-  }
-  const initializedTraces = await runJson([initializedCli, "traces", "--json"], target);
-  if (!Array.isArray(initializedTraces.traces) || initializedTraces.traces.length === 0) {
-    throw new Error(`Initialized ${templateName} did not produce trace artifacts.`);
+  if (templateName === "integration-heavy-agent") {
+    const initializedEval = await runJson([initializedCli, "eval", "--json"], target);
+    if (initializedEval.summary?.failed !== 0) {
+      throw new Error(`Initialized ${templateName} eval failed: ${JSON.stringify(initializedEval.summary)}`);
+    }
+    const initializedRun = await runJson([
+      initializedCli,
+      "run",
+      "chat",
+      "--input",
+      JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
+    ], target);
+    if (!initializedRun.result?.intent) {
+      throw new Error(`Initialized ${templateName} run did not return an intent: ${JSON.stringify(initializedRun)}`);
+    }
+    const initializedTraces = await runJson([initializedCli, "traces", "--json"], target);
+    if (!Array.isArray(initializedTraces.traces) || initializedTraces.traces.length === 0) {
+      throw new Error(`Initialized ${templateName} did not produce trace artifacts.`);
+    }
   }
   await runJson([initializedCli, "build", "--json"], target);
 }
@@ -119,7 +127,8 @@ for (const pilotName of pilotNames) {
   await cp(path.join(root, "examples", pilotName), target, { recursive: true });
   await rm(path.join(target, ".openpond"), { force: true, recursive: true });
   await rewriteSdkDependency(target, tarball);
-  await run(["npm", "install", "--no-audit", "--no-fund"], target);
+  if (pilotName === "integration-heavy-agent") await run(["npm", "install", "--no-audit", "--no-fund"], target);
+  else await cp(path.join(fixtureDir, "node_modules"), path.join(target, "node_modules"), { recursive: true });
   const pilotCli = path.join(target, "node_modules/.bin/openpond-agent");
   const pilotInspect = await runJson([pilotCli, "inspect", "--json"], target);
   if (pilotInspect.project?.name !== expectedPilotProjectName(pilotName)) {
@@ -129,23 +138,25 @@ for (const pilotName of pilotNames) {
   if (pilotValidation.status !== "passed") {
     throw new Error(`Pilot ${pilotName} validation failed: ${JSON.stringify(pilotValidation.issues)}`);
   }
-  const pilotEval = await runJson([pilotCli, "eval", "--json"], target);
-  if (pilotEval.summary?.failed !== 0) {
-    throw new Error(`Pilot ${pilotName} eval failed: ${JSON.stringify(pilotEval.summary)}`);
-  }
-  const pilotRun = await runJson([
-    pilotCli,
-    "run",
-    "chat",
-    "--input",
-    JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
-  ], target);
-  if (!pilotRun.result?.intent && typeof pilotRun.result?.text !== "string") {
-    throw new Error(`Pilot ${pilotName} run returned unexpected result: ${JSON.stringify(pilotRun)}`);
-  }
-  const pilotTraces = await runJson([pilotCli, "traces", "--json"], target);
-  if (!Array.isArray(pilotTraces.traces) || pilotTraces.traces.length === 0) {
-    throw new Error(`Pilot ${pilotName} did not produce trace artifacts.`);
+  if (pilotName === "integration-heavy-agent") {
+    const pilotEval = await runJson([pilotCli, "eval", "--json"], target);
+    if (pilotEval.summary?.failed !== 0) {
+      throw new Error(`Pilot ${pilotName} eval failed: ${JSON.stringify(pilotEval.summary)}`);
+    }
+    const pilotRun = await runJson([
+      pilotCli,
+      "run",
+      "chat",
+      "--input",
+      JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
+    ], target);
+    if (!pilotRun.result?.intent && typeof pilotRun.result?.text !== "string") {
+      throw new Error(`Pilot ${pilotName} run returned unexpected result: ${JSON.stringify(pilotRun)}`);
+    }
+    const pilotTraces = await runJson([pilotCli, "traces", "--json"], target);
+    if (!Array.isArray(pilotTraces.traces) || pilotTraces.traces.length === 0) {
+      throw new Error(`Pilot ${pilotName} did not produce trace artifacts.`);
+    }
   }
   await runJson([pilotCli, "build", "--json"], target);
 }

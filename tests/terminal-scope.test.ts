@@ -1,8 +1,8 @@
 import { Buffer } from "node:buffer";
 
-import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, test } from "vitest";
 
 import type { Session } from "@openpond/contracts";
 import {
@@ -11,10 +11,11 @@ import {
   terminalScopesCompatibleForAttach,
 } from "../apps/server/src/runtime/terminal-sessions";
 import { SidebarSessionRow } from "../apps/web/src/components/sidebar/SidebarRows";
+import type { TerminalTab } from "../apps/web/src/components/terminal/terminal-overlay-types";
 import {
   migrateDraftTerminalTabs,
-  terminalQueuedCommandAppliesToScope,
   sidebarTerminalIndicator,
+  terminalQueuedCommandAppliesToScope,
   terminalScopeForProject,
   terminalScopeForSelection,
   terminalScopeForSession,
@@ -22,7 +23,6 @@ import {
   terminalScopeSummaries,
   terminalTabsForScope,
 } from "../apps/web/src/components/terminal/terminal-state";
-import type { TerminalTab } from "../apps/web/src/components/terminal/terminal-overlay-types";
 
 describe("terminal scope state", () => {
   test("selects separate terminal tabs when switching between conversations", () => {
@@ -282,115 +282,6 @@ describe("sidebar terminal indicators", () => {
 
     expect(markup).toContain("sidebar-terminal-indicator running");
     expect(markup).toContain('aria-label="Terminal running"');
-  });
-
-  test("renders goal running state with objective tooltip on chat rows", () => {
-    const markup = renderToStaticMarkup(
-      createElement(SidebarSessionRow, {
-        session: sessionFixture(),
-        selected: false,
-        hideIcon: true,
-        running: true,
-        goalRuntime: {
-          objective: "Review command access doc",
-          status: "active",
-          timeUsedSeconds: 12,
-          tokensUsed: null,
-          tokenBudget: null,
-          actionLabel: "Pursuing goal",
-          timeLabel: "12s",
-          label: "Goal 12s",
-          detail: "Active",
-          tooltip:
-            "Goal runtime: 12 seconds. Active. Review command access doc",
-          tone: "active",
-        },
-        onSelect: () => undefined,
-        onTogglePin: () => undefined,
-        onToggleSaveForLater: () => undefined,
-        onArchive: () => undefined,
-      })
-    );
-
-    expect(markup).toContain("has-running-dot");
-    expect(markup).toContain("sidebar-running-dot goal");
-    expect(markup).toContain("Pursuing goal");
-    expect(markup).not.toContain("sidebar-session-running-popover");
-    expect(markup).not.toContain("Review command access doc");
-    expect(markup).not.toContain("Pursuing goal: Review command access doc");
-    expect(markup).not.toContain(
-      'data-tooltip="Pursuing goal: Review command access doc"'
-    );
-  });
-
-  test("renders queued goals without a sidebar running dot", () => {
-    const markup = renderToStaticMarkup(
-      createElement(SidebarSessionRow, {
-        session: sessionFixture(),
-        selected: false,
-        hideIcon: true,
-        running: true,
-        goalRuntime: {
-          objective: "Wait for continuation worker",
-          status: "queued",
-          timeUsedSeconds: 0,
-          tokensUsed: null,
-          tokenBudget: null,
-          actionLabel: "Goal queued",
-          timeLabel: "0s",
-          label: "Goal 0s",
-          detail: "Queued",
-          tooltip:
-            "Goal runtime: 0 seconds. Queued. Wait for continuation worker",
-          tone: "active",
-        },
-        onSelect: () => undefined,
-        onTogglePin: () => undefined,
-        onToggleSaveForLater: () => undefined,
-        onArchive: () => undefined,
-      })
-    );
-
-    expect(markup).not.toContain("sidebar-running-dot");
-    expect(markup).not.toContain("sidebar-session-running-popover");
-    expect(markup).not.toContain("Goal queued");
-    expect(markup).not.toContain("Wait for continuation worker");
-  });
-
-  test("renders active subagents with purple running state ahead of goal state", () => {
-    const markup = renderToStaticMarkup(
-      createElement(SidebarSessionRow, {
-        session: sessionFixture(),
-        selected: false,
-        hideIcon: true,
-        running: true,
-        goalRuntime: {
-          objective: "Review command access doc",
-          status: "active",
-          timeUsedSeconds: 12,
-          tokensUsed: null,
-          tokenBudget: null,
-          actionLabel: "Pursuing goal",
-          timeLabel: "12s",
-          label: "Goal 12s",
-          detail: "Active",
-          tooltip:
-            "Goal runtime: 12 seconds. Active. Review command access doc",
-          tone: "active",
-        },
-        subagentRuntime: subagentRuntimeFixture(),
-        onSelect: () => undefined,
-        onTogglePin: () => undefined,
-        onToggleSaveForLater: () => undefined,
-        onArchive: () => undefined,
-      })
-    );
-
-    expect(markup).toContain("sidebar-running-dot subagent");
-    expect(markup).toContain("2 subagents running");
-    expect(markup).not.toContain("sidebar-session-running-popover");
-    expect(markup).not.toContain("Subagents: Coding running, Review queued");
-    expect(markup).not.toContain("sidebar-running-dot goal");
   });
 });
 

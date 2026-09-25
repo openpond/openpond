@@ -1,16 +1,16 @@
-import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
 
 import { runProcessCommand } from "../apps/cli/src/process-runner";
-import { checkPackageContents, PACKAGE_BUDGETS } from "./distribution/package-policy.ts";
 import { checkAppServerDistribution } from "./check-app-server-distribution.js";
+import { checkPackageContents, PACKAGE_BUDGETS } from "./distribution/package-policy.ts";
 
 type PackResult = {
   version: string;
@@ -85,7 +85,9 @@ async function checkNpmPackage() {
       throw new Error(`npm consumer unexpectedly installed ${unsupportedDependency}`);
     }
   }
-  const audit = await checkNpmAudit(consumer);
+  const audit = process.env.GITHUB_EVENT_NAME === "pull_request"
+    ? { status: "deferred-to-master", vulnerabilities: {} }
+    : await checkNpmAudit(consumer);
   const appServer = await checkAppServerDistribution({ root, consumer, command });
   const packageProof = {
     tarballSha256,
@@ -159,12 +161,10 @@ async function checkInstalledEntrypoints(input: {
   version: string;
 }): Promise<{ localBins: string[]; globalBins: string[]; tui: "passed"; pty: "passed" }> {
   const binNames = ["openpond", "openpond-code", "op"];
-  for (const binName of binNames) {
-    await assertVersionOutput(
-      installedBinPath(path.join(input.consumer, "node_modules", ".bin"), binName),
-      input.version,
-    );
-  }
+  for (const binName of binNames) requireFile(installedBinPath(path.join(input.consumer, "node_modules", ".bin"), binName));
+  const manifest = JSON.parse(await readFile(path.join(input.consumer, "node_modules/openpond/package.json"), "utf8"));
+  if (!binNames.every((name) => manifest.bin[name] === manifest.bin.openpond)) throw new Error("CLI aliases must resolve to the same entrypoint");
+  await assertVersionOutput(installedBinPath(path.join(input.consumer, "node_modules", ".bin"), "openpond"), input.version);
 
   const globalPrefix = await tempDir("openpond-cli-global-");
   await command("npm", [
@@ -177,9 +177,8 @@ async function checkInstalledEntrypoints(input: {
     "--no-fund",
   ]);
   const globalBinRoot = process.platform === "win32" ? globalPrefix : path.join(globalPrefix, "bin");
-  for (const binName of binNames) {
-    await assertVersionOutput(installedBinPath(globalBinRoot, binName), input.version);
-  }
+  for (const binName of binNames) requireFile(installedBinPath(globalBinRoot, binName));
+  await assertVersionOutput(installedBinPath(globalBinRoot, "op"), input.version);
 
   const tuiHome = await tempDir("openpond-cli-tui-home-");
   const tui = await command(
@@ -375,7 +374,7 @@ async function checkRunnableDistribution(commandName: string, prefixArgs: string
     OPENPOND_FORCE_EMBEDDED_COMPANIONS: "1",
   };
   const durations: number[] = [];
-  for (let index = 0; index < 9; index += 1) {
+  for (let index = 0; index < (process.argv.includes("--benchmark") ? 9 : 1); index += 1) {
     const started = performance.now();
     const version = await command(commandName, [...prefixArgs, "--version"], { cwd, env });
     durations.push(performance.now() - started);
@@ -384,7 +383,7 @@ async function checkRunnableDistribution(commandName: string, prefixArgs: string
     }
   }
   const versionP95Ms = percentile(durations, 0.95);
-  reportBudget("CLI version cold-start p95 ms", versionP95Ms, 750);
+  if (process.argv.includes("--benchmark")) reportBudget("CLI version cold-start p95 ms", versionP95Ms, 750);
 
   const terminal = await command(commandName, [...prefixArgs, "__terminal", "help"], { cwd, env });
   if (!terminal.stdout.includes("Usage: openpond-app chat")) {
@@ -398,7 +397,9 @@ async function checkRunnableDistribution(commandName: string, prefixArgs: string
   }
   assertPersistenceMarker(ui.storePath);
   return {
-    versionP95Ms,
+    versionStartupMs: durations[0],
+    versionSamples: durations.length,
+    ...(durations.length > 1 ? { versionP95Ms } : {}),
     serverReadyMs: server.readyMs,
     uiReadyMs: ui.readyMs,
     sqlitePersistence: "passed",

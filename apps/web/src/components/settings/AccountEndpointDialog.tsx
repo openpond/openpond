@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import "../../styles/workspace/git-dialogs.css";
 import type { AccountState } from "@openpond/contracts";
@@ -60,6 +60,7 @@ export function AccountEndpointDialog({
   onRemove,
 }: AccountEndpointDialogProps) {
   const titleId = useId();
+  const advancedRef = useRef<HTMLDetailsElement>(null);
   const connectMode = mode === "connect";
   const initialWebUrl = account?.baseUrl ?? DEFAULT_WEB_URL;
   const initialApiUrl = account?.apiBaseUrl ?? suggestedApiUrl(initialWebUrl);
@@ -88,6 +89,9 @@ export function AccountEndpointDialog({
       validateUrl(trimmedApiUrl, "API URL");
     if (error) {
       setValidationError(error);
+      if (error.startsWith("Environment URL") || error.startsWith("API URL")) {
+        if (advancedRef.current) advancedRef.current.open = true;
+      }
       return;
     }
     try {
@@ -136,7 +140,7 @@ export function AccountEndpointDialog({
           {connectMode ? <KeyRound size={18} /> : <Settings size={18} />}
         </div>
         <h2 id={titleId}>{connectMode ? "Add account" : "Account settings"}</h2>
-        <p>{connectMode ? "Connect an OpenPond account with an API key." : "View this account, replace its key, or edit its environment."}</p>
+        <p>{connectMode ? "Connect an OpenPond account with an API key." : "Review this account and its verified key access."}</p>
 
         {!connectMode && account ? (
           <div className="account-dialog-details">
@@ -144,53 +148,47 @@ export function AccountEndpointDialog({
             {account.email ? <div><span>Email</span><strong>{account.email}</strong></div> : null}
             <div><span>Handle</span><strong>{account.handle}</strong></div>
             <div><span>API key</span><strong>{account.apiKeyHint ?? (account.authHealth === "signed_in" ? "Connected with a session" : "No saved API key")}</strong></div>
+            <div><span>Access</span><strong>{account.apiKeyAccess ? (account.apiKeyAccess.teamId ? "This workspace" : account.apiKeyAccess.ownerType === "user" ? "All my workspaces" : "Account access") : "Not verified"}</strong></div>
+            {account.apiKeyAccess ? <div><span>Scopes</span><strong>{account.apiKeyAccess.scopes.join(", ") || "No scopes"}</strong></div> : null}
           </div>
         ) : null}
 
-        <label className="git-dialog-field">
-          <span>{connectMode ? "API key" : "Replace API key"}</span>
-          <input
-            autoComplete="off"
-            disabled={busy}
-            placeholder={connectMode ? "opk_..." : "Leave blank to keep the current key"}
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-          />
-          {!connectMode ? <small>Enter a new key to replace the saved credential.</small> : null}
-        </label>
-        <label className="git-dialog-field">
-          <span>Environment URL</span>
-          <input
-            disabled={busy}
-            inputMode="url"
-            spellCheck={false}
-            type="url"
-            value={webUrl}
-            onChange={(event) => changeWebUrl(event.target.value)}
-          />
-          <small>Change this URL to connect this account to another environment.</small>
-        </label>
-        <label className="git-dialog-field">
-          <span>API URL</span>
-          <input
-            disabled={busy}
-            inputMode="url"
-            spellCheck={false}
-            type="url"
-            value={apiUrl}
-            onChange={(event) => setApiUrl(event.target.value)}
-          />
-          <small>Enter the API URL for a custom environment.</small>
-        </label>
+        {connectMode ? (
+          <label className="git-dialog-field">
+            <span>API key</span>
+            <input autoComplete="off" disabled={busy} placeholder="opk_..." type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
+          </label>
+        ) : null}
+        <details className="account-dialog-advanced" ref={advancedRef}>
+          <summary>Advanced</summary>
+          <div className="account-dialog-advanced-fields">
+            {!connectMode ? (
+              <label className="git-dialog-field">
+                <span>Replace API key</span>
+                <input autoComplete="off" disabled={busy} placeholder="Leave blank to keep the current key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
+                <small>Enter a new key to replace the saved credential.</small>
+              </label>
+            ) : null}
+            <label className="git-dialog-field">
+              <span>Environment URL</span>
+              <input disabled={busy} inputMode="url" spellCheck={false} type="url" value={webUrl} onChange={(event) => changeWebUrl(event.target.value)} />
+              <small>Change this URL to connect this account to another environment.</small>
+            </label>
+            <label className="git-dialog-field">
+              <span>API URL</span>
+              <input disabled={busy} inputMode="url" spellCheck={false} type="url" value={apiUrl} onChange={(event) => setApiUrl(event.target.value)} />
+              <small>Enter the API URL for a custom environment.</small>
+            </label>
+          </div>
+        </details>
         {validationError ? <div className="profile-dialog-warning">{validationError}</div> : null}
         <div className="git-dialog-footer account-dialog-footer">
-          {!connectMode && onRemove ? (
-            <button className="git-dialog-secondary account-dialog-remove" disabled={busy} type="button" onClick={() => void remove()}>
-              <Trash2 size={14} /> Remove account
-            </button>
-          ) : <span />}
           <div className="account-dialog-save-actions">
+            {!connectMode && onRemove ? (
+              <button className="git-dialog-secondary account-dialog-remove" disabled={busy} type="button" onClick={() => void remove()}>
+                <Trash2 size={14} /> Remove account
+              </button>
+            ) : null}
             <button className="git-dialog-secondary" disabled={busy} type="button" onClick={onClose}>Cancel</button>
             <button className="git-dialog-primary" disabled={busy} type="submit">
               <Save size={14} />
