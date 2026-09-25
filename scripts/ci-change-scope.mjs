@@ -49,7 +49,7 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
   const affectedTests = files.some((file) => /(?:^|\/)[^/]+\.(?:[cm]?[jt]sx?)$/.test(file));
   const nodeContracts = files.some((file) => file.endsWith(".test.mjs"));
   const image = files.some((file) => file.includes("local-image-tool-registry") || file === "tests/local-image-tool-registry.test.ts");
-  const build = !docsOnly && files.some((file) => (
+  const build = !docsOnly && files.filter((file) => !isTestFile(file)).some((file) => (
     file === "package.json"
     || file === "pnpm-lock.yaml"
     || file === "pnpm-workspace.yaml"
@@ -78,7 +78,7 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
     cli: !docsOnly && files.some((file) => file.startsWith("apps/cli/")),
     docsOnly,
     distribution,
-    build,
+    build: build || distribution,
     files,
     full,
     image,
@@ -98,8 +98,12 @@ function isDocumentationFile(file) {
   return file.startsWith("docs/") || file === "README.md" || file.endsWith(".md");
 }
 
+function isTestFile(file) {
+  return /(?:^|\/)(?:tests?|__tests__)\//.test(file) || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file);
+}
+
 function isProductionCodeFile(file) {
-  return /^(?:apps|packages)\/.+\.(?:[cm]?[jt]sx?)$/.test(file);
+  return !isTestFile(file) && /^(?:apps|packages)\/.+\.(?:[cm]?[jt]sx?)$/.test(file);
 }
 
 async function changedFiles(base, head) {
