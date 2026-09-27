@@ -110,6 +110,7 @@ export type SidebarProps = {
   setChatRowsVisibleCount: Dispatch<SetStateAction<number>>;
   beginNewChat: (app?: OpenPondApp | null) => void;
   beginProjectChat: (projectId: string) => void;
+  onAddProject: () => void;
   dockSessionRight: (session: Session) => void;
   selectTeamThread: (threadId: string) => void;
   openTeamDm: (userId: string) => void;

@@ -38,6 +38,10 @@ function localProjectId(workspacePath: string): string {
   return `local_${createHash("sha256").update(workspacePath).digest("hex").slice(0, 20)}`;
 }
 
+function localProjectCollectionId(name: string, folders: string[]): string {
+  return `local_${createHash("sha256").update(JSON.stringify(["collection", name, [...folders].sort()])).digest("hex").slice(0, 20)}`;
+}
+
 function defaultProjectName(workspacePath: string): string {
   return path.basename(workspacePath) || "Local project";
 }
@@ -335,6 +339,7 @@ export async function listLocalProjects(store: SqliteStore): Promise<LocalProjec
         });
         return {
           ...project,
+          sourceFolders: project.sourceFolders ?? [project.workspacePath],
           sandboxTemplate,
         };
       })
@@ -351,20 +356,39 @@ export async function upsertLocalProject(
   const createdProjectPath = input.createNew
     ? await createNewProjectPath(input, options.defaultNewProjectDirectory)
     : null;
-  const selectedPath = createdProjectPath ?? input.path;
+  const sourceFolders = input.sourceFolders
+    ? await Promise.all(input.sourceFolders.map(async (folder) => (await resolveProjectPath(folder, { detectGitRoot: false })).selectedPath))
+    : null;
+  if (sourceFolders && new Set(sourceFolders).size !== sourceFolders.length) {
+    throw new Error("A source folder was selected more than once.");
+  }
+  const primaryFolder = input.primaryFolder
+    ? (await resolveProjectPath(input.primaryFolder, { detectGitRoot: false })).selectedPath
+    : sourceFolders?.[0];
+  if (sourceFolders && (!primaryFolder || !sourceFolders.includes(primaryFolder))) {
+    throw new Error("Primary folder must be one of the source folders.");
+  }
+  const selectedPath = createdProjectPath ?? primaryFolder ?? input.path;
   if (!selectedPath) throw new Error("Project path is required.");
   const resolved = await resolveProjectPath(selectedPath, { detectGitRoot: true });
   const sandboxTemplate = await detectLocalProjectSandboxTemplate(resolved);
   const projects = await listLocalProjects(store);
-  const existing = projects.find((project) => project.workspacePath === resolved.workspacePath);
+  const existing = sourceFolders
+    ? projects.find((project) => {
+        const roots = project.sourceFolders ?? [project.workspacePath];
+        return project.name === input.name?.trim() && roots.length === sourceFolders.length && roots.every((root) => sourceFolders.includes(root));
+      })
+    : projects.find((project) => project.workspacePath === resolved.workspacePath);
   const timestamp = now();
+  if (sourceFolders && existing) return { project: existing, created: false };
   const project: LocalProject = {
-    id: existing?.id ?? localProjectId(resolved.workspacePath),
+    id: existing?.id ?? (sourceFolders ? localProjectCollectionId(input.name!.trim(), sourceFolders) : localProjectId(resolved.workspacePath)),
     name: input.name?.trim() || existing?.name || defaultProjectName(resolved.workspacePath),
     path: resolved.selectedPath,
     workspacePath: resolved.workspacePath,
     repoPath: resolved.repoPath,
     source: resolved.source,
+    sourceFolders: sourceFolders ?? existing?.sourceFolders ?? [resolved.workspacePath],
     sandboxTemplate,
     linkedOpenPondApp: existing?.linkedOpenPondApp ?? null,
     linkedSandboxProject: existing?.linkedSandboxProject ?? null,
@@ -462,7 +486,7 @@ export async function linkLocalProjectOpenPondApp(
 export function localProjectWorkspacePaths(project: LocalProject): WorkspacePaths {
   return {
     workspacePath: project.workspacePath,
-    repoPath: project.workspacePath,
+    repoPath: project.repoPath ?? project.workspacePath,
   };
 }
 

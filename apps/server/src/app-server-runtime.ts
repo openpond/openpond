@@ -77,6 +77,7 @@ import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import { appDataDir } from "./paths.js";
 import { createBackgroundWorkerQueue } from "./runtime/background-worker-queue.js";
 import { createAppServerWorkspace } from "./runtime/app-server-workspace.js";
+import { findLocalProject } from "./workspace/local-projects.js";
 import type { AppServerSandboxRequest } from "./runtime/app-server-sandbox-tools.js";
 import {
   isBundledAuthoringSkillName,
@@ -273,6 +274,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
 
   const hostedTurnHelpers = createHostedTurnHelpers({
     appendRuntimeEvent,
+    findLocalProject: (projectId) => findLocalProject(store, projectId),
     onRepositoryInstructionDiagnostic: (diagnostic, session) => {
       logger.warn("repository instruction file skipped", {
         diagnostic,

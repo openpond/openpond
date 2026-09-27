@@ -264,6 +264,10 @@ function projectSourceRows(input: {
     (project.kind === "cloud" ? project.project.syncedAt : localLink?.syncedAt) ?? null;
   return [
     ["Repository", repositoryUrl ? <a href={repositoryUrl} onClick={(event) => { event.preventDefault(); void openProjectUrl(repositoryUrl); }}>{displayRepositoryUrl(repositoryUrl)}</a> : project.kind === "local" ? project.project.path : "Not available"],
+    ...(project.kind === "local" ? [
+      ["Primary folder", project.project.workspacePath],
+      ["Source folders", <ul key="source-folders" className="project-source-folder-list">{(project.project.sourceFolders ?? [project.project.workspacePath]).map((folder) => <li key={folder}>{folder}</li>)}</ul>],
+    ] satisfies Array<[string, ReactNode]> : []),
     ["Branch", branch],
     ["Latest commit", commit ? shortCommit(commit) : "Not available"],
     ["Last synced", syncedAt ? formatDate(syncedAt) : "Not available"],

@@ -20,6 +20,224 @@
   padding: 20px;
 }
 
+.new-project-dialog {
+  width: min(520px, calc(100vw - 34px));
+  max-height: calc(100vh - 34px);
+  overflow-y: auto;
+}
+
+.new-project-collection {
+  gap: 14px;
+  padding: 20px;
+}
+
+.new-project-collection h2 {
+  margin: 0 24px 0 0;
+  font-size: 21px;
+}
+
+.new-project-name-field {
+  display: flex;
+  align-items: center;
+  min-height: 41px;
+  padding: 0 12px;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: #2b2b2b;
+  color: #a9a9a9;
+}
+
+.new-project-name-field:focus-within {
+  border-color: #4c8dff;
+}
+
+.new-project-name-field input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f3f3f3;
+  font: inherit;
+  font-size: 13px;
+}
+
+.new-project-source-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.new-project-source-heading > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #aaa;
+}
+
+.new-project-source-box {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.new-project-source-box.empty {
+  display: grid;
+  place-items: center;
+  min-height: 102px;
+}
+
+.new-project-empty-source {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  color: #aaa;
+  font-size: 12px;
+}
+
+.new-project-empty-source button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 23px;
+  border: 0;
+  border-radius: 12px;
+  padding: 1px 9px;
+  background: #3a3a3a;
+  color: #f3f3f3;
+  cursor: pointer;
+}
+
+.new-project-folder-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.new-project-folder-row {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+}
+
+.new-project-folder-row > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-project-folder-row > svg {
+  flex: 0 0 auto;
+  color: #aaa;
+}
+
+.new-project-primary-pill,
+.new-project-make-primary {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 10px;
+  padding: 5px 9px;
+  background: transparent;
+  color: #c8c8c8;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.new-project-make-primary {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.04);
+  color: #aaa;
+  cursor: pointer;
+}
+
+.new-project-remove {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.new-project-add-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 47px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: #f3f3f3;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.new-project-add-row:hover,
+.new-project-make-primary:hover,
+.new-project-remove:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.new-project-manual-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #aaa;
+  font-size: 12px;
+}
+
+.new-project-manual-path input {
+  flex: 1 1 200px;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 7px;
+  background: #232323;
+  color: #f3f3f3;
+  padding: 4px 8px;
+}
+
+.new-project-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.new-project-cancel {
+  border: 0;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.new-project-collection .git-dialog-primary {
+  width: auto;
+  min-width: 122px;
+  min-height: 34px;
+}
+
+.new-project-error {
+  color: #ff9d9d !important;
+}
+
 .commit-dialog {
   width: min(464px, calc(100vw - 34px));
 }

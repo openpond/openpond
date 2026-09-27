@@ -215,6 +215,7 @@ export function MainPane({
   projectsTeamName,
   projectTaskCounts,
   onNewCloudProject,
+  onNewLocalProject,
   onNewProjectTask,
   onToggleProjectPinned,
   onUploadLocalProject,
@@ -1577,6 +1578,7 @@ export function MainPane({
             accountBaseUrl={projectsAccountBaseUrl}
             connection={connection}
             onNewCloudProject={onNewCloudProject}
+            onNewLocalProject={onNewLocalProject}
             onNewTask={onNewProjectTask}
             onTogglePinned={onToggleProjectPinned}
             onUploadLocalProject={onUploadLocalProject}

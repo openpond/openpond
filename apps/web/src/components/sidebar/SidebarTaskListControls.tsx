@@ -109,7 +109,7 @@ export function SidebarTaskListControls({
               <span className="section-menu-check" aria-hidden="true">
                 {showCodexChats ? <Check size={13} /> : null}
               </span>
-              <span>Show Codex chats</span>
+              <span>Show Codex chats, including pinned</span>
             </button>
             <button
               type="button"
@@ -120,7 +120,7 @@ export function SidebarTaskListControls({
               <span className="section-menu-check" aria-hidden="true">
                 {onlyRunningTasks ? <Check size={13} /> : null}
               </span>
-              <span>Only running tasks</span>
+              <span>Only running {noun}, including pinned</span>
             </button>
             {noun === "tasks" ? (
               <button

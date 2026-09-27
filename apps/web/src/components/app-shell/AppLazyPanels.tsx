@@ -163,7 +163,7 @@ export function AppLazyPanels({
   setSearchOpen: Dispatch<SetStateAction<boolean>>;
   submitCommitDialog: () => void | Promise<void>;
   submitCreateWorkspaceBranch: () => void | Promise<void>;
-  submitNewProjectDialog: () => void | Promise<void>;
+  submitNewProjectDialog: (collection?: { name: string; sourceFolders: string[]; primaryFolder: string }) => Promise<boolean | undefined>;
 }) {
   return (
     <>

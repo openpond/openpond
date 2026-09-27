@@ -18,6 +18,7 @@ import type { SqliteStore } from "../store/store.js";
 import type { RuntimeCodexSession } from "../types.js";
 import type { BackgroundWorkReceipt } from "./background-worker-queue.js";
 import { event } from "../utils.js";
+import { findLocalProject } from "../workspace/local-projects.js";
 
 type CodexRuntimeInput = {
   appendRuntimeEvent: (runtimeEvent: ReturnType<typeof event>) => Promise<void>;
@@ -108,12 +109,19 @@ export function createCodexRuntimeManager({
       const config = { ...codexSessionConfig(turnInput.codexPermissionMode, turnInput.codexReasoningEffort),
         ...(coordination ? { "mcp_servers.openpond_task": coordination.config } : {}) };
       const personalization = await loadPersonalizationSettings(store, storeDir);
+      const project = session.workspaceKind === "local_project" && session.workspaceId
+        ? await findLocalProject(store, session.workspaceId)
+        : null;
+      const additionalFolders = project?.sourceFolders?.filter((folder) => folder !== session.cwd) ?? [];
       const instructions = [
         personalization.soul,
         "You are running inside OpenPond App v1 app plumbing.",
         session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template"
           ? "The selected workspace is a remote OpenPond sandbox. Use OpenPond App sandbox APIs for sandbox operations, snapshots, and replay artifacts; do not assume the local working directory is the sandbox filesystem."
           : "The selected local project uses the working directory as its source root.",
+        additionalFolders.length
+          ? `Additional folders attached to this project (separate source roots; the active working directory and Git target remain ${session.cwd}):\n${additionalFolders.map((folder) => `- ${folder}`).join("\n")}`
+          : "",
         "Conversations are stored by OpenPond App outside the repository.",
         "Do not use emojis in responses, generated prompts, templates, profile text, comments, or sample output unless the user explicitly asks for them.",
         (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") && session.workspaceId
