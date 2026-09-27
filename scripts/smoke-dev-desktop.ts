@@ -283,7 +283,7 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
   const initial = await evaluateValue<{
     triggerDisplay: string;
     triggerLabel: string | null;
-    visibleExperience: string | null;
+    wordmarkDisplay: string | null;
     teamRowDisplay: string | null;
     teamRowBackgroundColor: string | null;
   }>(
@@ -304,7 +304,9 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
       const result = {
         triggerDisplay: getComputedStyle(trigger).display,
         triggerLabel: trigger.getAttribute("aria-label"),
-        visibleExperience: trigger.querySelector(".sidebar-experience-label")?.textContent?.trim() ?? null,
+        wordmarkDisplay: trigger.querySelector(".sidebar-wordmark") instanceof HTMLImageElement
+          ? getComputedStyle(trigger.querySelector(".sidebar-wordmark")).display
+          : null,
         teamRowDisplay: teamRowStyle.display,
         teamRowBackgroundColor: teamRowStyle.backgroundColor
       };
@@ -316,7 +318,7 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
   const experienceMenuStyled =
     ["flex", "inline-flex"].includes(initial.triggerDisplay) &&
     initial.triggerLabel === "OpenPond product: Work" &&
-    initial.visibleExperience === "Work";
+    initial.wordmarkDisplay === "block";
   if (!experienceMenuStyled) {
     throw new Error(
       `Experience menu styles were not loaded: ${JSON.stringify(initial)}`

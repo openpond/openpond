@@ -39,6 +39,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/learning-api.test.ts",
   "tests/learning-preparation.test.ts",
   "tests/local-project-actions.test.ts",
+  "tests/local-project-collections.test.ts",
   "tests/local-project-source-upload.test.ts",
   "tests/logger-redaction.test.ts",
   "tests/manual-compaction-usage.test.ts",

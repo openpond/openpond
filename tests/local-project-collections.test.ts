@@ -25,7 +25,7 @@ test("local project collection saves atomically and keeps its identity", async (
       upsertLocalProject(store, request),
       upsertLocalProject(store, request),
     ]);
-    expect(created.created).toBe(true);
+    expect([created.created, concurrent.created]).toContain(true);
     expect(concurrent.project.id).toBe(created.project.id);
     expect(created.project.workspacePath).toBe(second);
     expect(created.project.sourceFolders).toEqual([first, second]);
