@@ -3,6 +3,7 @@ import { Download, PanelLeft } from "../icons";
 import { isDesktopShell } from "../app-shell/WindowControls";
 import {
   SidebarNavigation,
+  SidebarNewTask,
   SidebarUtilityNavigation,
 } from "./SidebarNavigation";
 import { SidebarSectionList } from "./SidebarSectionList";
@@ -88,26 +89,30 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
 
-      <SidebarNavigation
-        productArea={productArea}
-        experience={experience}
-        beginNewChat={beginNewChat}
-        setSectionMenuOpen={setSidebarSectionMenuOpen}
-        setSelectedAppId={setSelectedAppId}
-        setSelectedProjectId={setSelectedProjectId}
-        setSelectedSessionId={setSelectedSessionId}
-        setView={setView}
-        view={view}
-        modelProjects={modelProjects}
-        modelTrainingActivityByProjectId={modelTrainingActivityByProjectId}
-      />
-
       {productArea === "models" ? null : (
-        <SidebarSectionList
-          {...props}
-          setSectionMenuOpen={setSidebarSectionMenuOpen}
-        />
+        <SidebarNewTask experience={experience} beginNewChat={beginNewChat} />
       )}
+
+      <div className="sidebar-scroll">
+        <SidebarNavigation
+          productArea={productArea}
+          setSectionMenuOpen={setSidebarSectionMenuOpen}
+          setSelectedAppId={setSelectedAppId}
+          setSelectedProjectId={setSelectedProjectId}
+          setSelectedSessionId={setSelectedSessionId}
+          setView={setView}
+          view={view}
+          modelProjects={modelProjects}
+          modelTrainingActivityByProjectId={modelTrainingActivityByProjectId}
+        />
+
+        {productArea === "models" ? null : (
+          <SidebarSectionList
+            {...props}
+            setSectionMenuOpen={setSidebarSectionMenuOpen}
+          />
+        )}
+      </div>
 
       <div className="sidebar-bottom-stack">
         {productArea === "models" ? null : (

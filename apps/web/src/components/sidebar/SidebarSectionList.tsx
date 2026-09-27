@@ -771,7 +771,7 @@ export function SidebarSectionList({
   }
 
   return (
-    <div className="sidebar-scroll">
+    <div className="sidebar-sections">
       <SidebarSection
         label={taskSectionLabel}
         className={`sidebar-task-section${
