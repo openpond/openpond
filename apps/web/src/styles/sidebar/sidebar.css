@@ -637,13 +637,22 @@
 }
 
 .sidebar-projects-section .section-actions {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 120ms ease;
+  visibility: hidden;
+}
+
+.sidebar-projects-section .section-header:hover .section-actions,
+.sidebar-projects-section .section-header:focus-within .section-actions {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
 }
 
 @media (hover: none) {
-  .sidebar-task-section .section-actions {
+  .sidebar-task-section .section-actions,
+  .sidebar-projects-section .section-actions {
     opacity: 1;
     pointer-events: auto;
     visibility: visible;

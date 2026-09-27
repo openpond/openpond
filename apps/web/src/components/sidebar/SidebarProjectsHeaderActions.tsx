@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MoreHorizontal } from "../icons";
+import { MoreHorizontal, Plus } from "../icons";
 
 export function SidebarProjectsHeaderActions({
   onAddProject,
@@ -61,7 +61,9 @@ export function SidebarProjectsHeaderActions({
           </div>
         ) : null}
       </div>
-      <button type="button" className="section-icon" onClick={onAddProject} aria-label="Add project" title="Add project">+</button>
+      <button type="button" className="section-icon" onClick={onAddProject} aria-label="Add project" title="Add project">
+        <Plus size={18} strokeWidth={2} aria-hidden="true" />
+      </button>
     </>
   );
 }
