@@ -51,10 +51,32 @@ type SidebarDestinationProps = {
   >;
 };
 
-export function SidebarNavigation({
+export function SidebarNewTask({
   experience = "work",
-  productArea = "chat",
   beginNewChat,
+}: {
+  experience?: Experience;
+  beginNewChat: (app?: OpenPondApp | null) => void;
+}) {
+  return (
+    <div className="sidebar-new-task">
+      <button
+        className="nav-command nav-command-new-task"
+        type="button"
+        onClick={() => {
+          navigateDesktopRoute({ kind: "chat", sessionId: null });
+          beginNewChat(null);
+        }}
+      >
+        <SquarePen size={18} />
+        <span>{newExperienceTitle(experience)}</span>
+      </button>
+    </div>
+  );
+}
+
+export function SidebarNavigation({
+  productArea = "chat",
   setSectionMenuOpen,
   setSelectedAppId,
   setSelectedProjectId,
@@ -63,9 +85,7 @@ export function SidebarNavigation({
   view,
   modelProjects = [],
   modelTrainingActivityByProjectId = {},
-}: SidebarDestinationProps & {
-  beginNewChat: (app?: OpenPondApp | null) => void;
-}) {
+}: SidebarDestinationProps) {
   const modelsRoute = useModelsRoute();
   const selectedModelProjectId = modelsRoute?.modelId ?? null;
   const activePage = modelsRoute?.page ?? "models";
@@ -101,19 +121,6 @@ export function SidebarNavigation({
 
   return (
     <nav className="sidebar-nav" aria-label="Primary">
-      {productArea === "models" ? null : (
-        <button
-          className="nav-command nav-command-new-task"
-          type="button"
-          onClick={() => {
-            navigateDesktopRoute({ kind: "chat", sessionId: null });
-            beginNewChat(null);
-          }}
-        >
-          <SquarePen size={18} />
-          <span>{newExperienceTitle(experience)}</span>
-        </button>
-      )}
       {productArea === "models" ? (
         <>
           <div className="sidebar-model-project-picker">

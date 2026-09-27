@@ -211,6 +211,16 @@
   flex: 0 0 auto;
 }
 
+.sidebar-new-task {
+  flex: 0 0 auto;
+  padding: 4px 14px 2px;
+  font-family: var(--font-web);
+}
+
+.sidebar-new-task + .sidebar-scroll > .sidebar-nav {
+  padding-top: 0;
+}
+
 .sidebar-nav {
   display: grid;
   gap: 2px;
