@@ -8,6 +8,7 @@ import {
   type OpenPondApp,
   type OpenPondActionCatalogEntry,
   type OpenPondProfileSkill,
+  type LocalProject,
   type RuntimeEvent,
   type Session,
 } from "@openpond/contracts";
@@ -94,6 +95,7 @@ export type HostedTurnHelpers = {
 
 export function createHostedTurnHelpers(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
+  findLocalProject?: (projectId: string) => Promise<LocalProject | null>;
   onRepositoryInstructionDiagnostic?: (
     diagnostic: string,
     session: Session,
@@ -180,6 +182,10 @@ export function createHostedTurnHelpers(deps: {
               toolInstructionMode
             )
         : buildGeneralWorkspaceTurnContext(session.cwd, toolInstructionMode);
+    const project = session.workspaceKind === "local_project" && session.workspaceId
+      ? await deps.findLocalProject?.(session.workspaceId)
+      : null;
+    const additionalProjectFolders = project?.sourceFolders?.filter((folder) => folder !== session.cwd) ?? [];
     const toolProtocol =
       hostedToolProtocolForInstructionMode(toolInstructionMode);
     const actionCatalogContext = buildActionCatalogContext(
@@ -208,6 +214,9 @@ export function createHostedTurnHelpers(deps: {
         developmentContext,
         toolProtocol,
         workspaceContext,
+        additionalProjectFolders.length
+          ? `Additional folders attached to this project (separate roots; the active workspace and Git commands remain scoped to ${session.cwd}):\n${additionalProjectFolders.map((folder) => `- ${folder}`).join("\n")}`
+          : null,
         options.userInstructionContext,
         options.extraSystemContext,
         repositoryInstructionContext,

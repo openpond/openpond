@@ -78,7 +78,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     rightChatPanels,
     newProjectMode,
     newProjectName,
-    newProjectPath,
     newProjectBusy,
     commitMessage,
     commitIncludeUnstaged,
@@ -246,10 +245,9 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setNewProjectPath,
   ]);
   const {
-    addProjectFolder,
-    addProjectFolderPath,
     createCloudProjectFromScratch,
     createProjectFromScratch,
+    createProjectCollection,
     removeProject,
   } = useProjectActions({
     connection,
@@ -257,7 +255,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     sessions,
     selectedProjectId,
     confirmProjectAction,
-    openExistingProjectDialog: openExistingProjectPathDialog,
     applyBootstrapPayload,
     expandProject,
     setExpandedProjectIds,
@@ -757,19 +754,17 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   });
   const { changeProjectTarget, submitNewProjectDialog } =
     useProjectTargetActions({
-      addProjectFolder,
-      addProjectFolderPath,
       appDispatch,
       busy,
       cloudProjectById,
       createCloudProjectFromScratch,
       createProjectFromScratch,
+      createProjectCollection,
       expandProject,
       localProjectById,
       newProjectBusy,
       newProjectMode,
       newProjectName,
-      newProjectPath,
       onCreateCloudEnvironment: createCloudEnvironmentFromSidebar,
       onNewCloudProject: openCloudProjectDialog,
       onNewLocalProject: openNewLocalProjectDialog,
@@ -897,7 +892,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     handleWorkspaceDiffPanelViewStateChange,
     openSessionInChat,
     openExistingProjectPathDialog,
-    addProjectFolder,
     removeProject,
     changeProjectTarget,
     submitNewProjectDialog,

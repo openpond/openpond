@@ -458,6 +458,16 @@
   text-decoration: underline;
 }
 
+.project-source-folder-list {
+  margin: 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+.project-source-folder-list li + li {
+  margin-top: 4px;
+}
+
 .project-detail-table code {
   color: var(--text);
   font-family: var(--font-mono);

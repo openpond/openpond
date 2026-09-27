@@ -312,6 +312,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     sendPromptFromMainComposer,
     openSandboxWorkspace,
     openCloudProjectDialog,
+    openExistingProjectPathDialog,
     openUrlInBrowserPanel,
     showBrowserPanel,
     showChangesPanel,
@@ -1047,6 +1048,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setChatRowsVisibleCount,
           beginNewChat: beginContextualNewChat,
           beginProjectChat,
+          onAddProject: openExistingProjectPathDialog,
           dockSessionRight: openRightChatPanel,
           selectTeamThread: (threadId) => {
             setView("team");
@@ -1301,6 +1303,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           projectsTeamName: teamChatOrganization?.displayName ?? null,
           projectTaskCounts,
           onNewCloudProject: openCloudProjectDialog,
+          onNewLocalProject: openExistingProjectPathDialog,
           onNewProjectTask: (project) => beginProjectChat(project.id),
           onToggleProjectPinned: toggleProjectPinned,
           onUploadLocalProject: moveProjectToCloud,

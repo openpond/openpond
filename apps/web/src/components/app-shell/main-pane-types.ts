@@ -158,6 +158,7 @@ export type MainPaneProps = {
   projectsTeamName: string | null;
   projectTaskCounts: Record<string, number>;
   onNewCloudProject: () => void;
+  onNewLocalProject: () => void;
   onNewProjectTask: (project: SidebarProjectItem) => void;
   onToggleProjectPinned: (project: SidebarProjectItem) => void;
   onUploadLocalProject: (project: SidebarProjectItem) => void;

@@ -541,6 +541,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     appendHostedContextUsage,
   } = createHostedTurnHelpers({
     appendRuntimeEvent,
+    findLocalProject: (projectId) => findLocalProject(store, projectId),
     onRepositoryInstructionDiagnostic: (diagnostic, session) => {
       logger.warn("repository instruction file skipped", {
         diagnostic,

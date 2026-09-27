@@ -16,7 +16,6 @@ import {
   isSidebarTaskPinned,
   sidebarTaskEmptyLabel,
   sidebarTaskRows,
-  sidebarTaskShortcutState,
   type SidebarTaskFilter,
   type SidebarTaskSort,
   type SidebarTasksetFilterOption,
@@ -39,6 +38,7 @@ import {
   SidebarShowMoreButton,
 } from "./SidebarRows";
 import { SidebarTaskListControls } from "./SidebarTaskListControls";
+import { SidebarProjectsHeaderActions } from "./SidebarProjectsHeaderActions";
 import {
   SidebarTaskDetailPopover,
   sidebarTaskDetailPosition,
@@ -118,6 +118,7 @@ export function SidebarSectionList({
   childSessionRowsByParentId = {},
   cloudProjectRows,
   beginProjectChat,
+  onAddProject,
   commitTaskDrop,
   commitTaskPreviewDrop,
   dockSessionRight,
@@ -133,7 +134,6 @@ export function SidebarSectionList({
   renameSession,
   restoreSession,
   runningSessionIds,
-  savedForLaterSessions,
   sectionMenuOpen,
   selectedProjectId,
   selectedSessionId,
@@ -165,7 +165,14 @@ export function SidebarSectionList({
 }: SidebarProps) {
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
-  const [groupByProject, setGroupByProject] = useState(experience !== "chat");
+  const [groupByProject, setGroupByProject] = useState(true);
+  useEffect(() => {
+    if (experience !== "chat") setGroupByProject(true);
+  }, [experience]);
+  const [projectsCollapsedByMode, setProjectsCollapsedByMode] = useState({ work: false, chat: true });
+  const [ordinaryCollapsedByMode, setOrdinaryCollapsedByMode] = useState({ work: false, chat: false });
+  const projectsMode = experience === "chat" ? "chat" : "work";
+  const projectsCollapsed = projectsCollapsedByMode[projectsMode];
   const [taskVisibility, setTaskVisibility] = useState(
     readSidebarTaskVisibilityPreferences,
   );
@@ -181,8 +188,11 @@ export function SidebarSectionList({
   >(() => new Map());
   const [activeTaskDetail, setActiveTaskDetail] =
     useState<SidebarTaskDetail | null>(null);
+  useEffect(() => {
+    if (!selectedProjectId) return;
+    setProjectsCollapsedByMode((current) => current[projectsMode] ? { ...current, [projectsMode]: false } : current);
+  }, [projectsMode, selectedProjectId]);
   const taskNoun = experience === "chat" ? "chats" : "tasks";
-  const taskSectionLabel = experience === "chat" ? "Chats" : "Tasks";
   const projectsSectionRows = projectRows ?? [
     ...localProjectRows,
     ...cloudProjectRows,
@@ -219,47 +229,6 @@ export function SidebarSectionList({
     subagentRuntimeBySessionId,
     terminalSummaries,
   ]);
-  const visibleRegularActiveSessions = useMemo(
-    () =>
-      activeSessions.filter(
-        (session) =>
-          sessionTaskset(session) === null &&
-          isSidebarTaskVisible(session, {
-            inProgressSessionIds,
-            onlyRunningTasks,
-            showCodexChats,
-          })
-      ),
-    [activeSessions, inProgressSessionIds, onlyRunningTasks, showCodexChats],
-  );
-  const visibleRegularSavedForLaterSessions = useMemo(
-    () =>
-      savedForLaterSessions.filter(
-        (session) =>
-          sessionTaskset(session) === null &&
-          isSidebarTaskVisible(session, {
-            inProgressSessionIds,
-            onlyRunningTasks,
-            showCodexChats,
-          })
-      ),
-    [
-      inProgressSessionIds,
-      onlyRunningTasks,
-      savedForLaterSessions,
-      showCodexChats,
-    ],
-  );
-  const activeTaskCount = Math.max(
-    0,
-    visibleRegularActiveSessions.length -
-      visibleRegularSavedForLaterSessions.length
-  );
-  const taskShortcut = sidebarTaskShortcutState({
-    activeCount: activeTaskCount,
-    filter: taskFilter,
-    savedForLaterCount: visibleRegularSavedForLaterSessions.length,
-  });
   const allManualTaskRows = useMemo(
     () =>
       sidebarTaskRows({
@@ -340,16 +309,18 @@ export function SidebarSectionList({
       ),
     [inProgressSessionIds, onlyRunningTasks, pinnedRows, showCodexChats],
   );
+  const ordinaryFilteredTaskRows = useMemo(
+    () => filteredTaskRows.filter((session) => !isSidebarTaskPinned(session)),
+    [filteredTaskRows],
+  );
   const visibleTaskRows = useMemo(
     () =>
-      filteredTaskRows
-        .filter((session) => !isSidebarTaskPinned(session))
-        .slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)),
-    [chatRowsVisibleCount, filteredTaskRows],
+      ordinaryFilteredTaskRows.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)),
+    [chatRowsVisibleCount, ordinaryFilteredTaskRows],
   );
   const groupedTaskRows = useMemo(
-    () =>
-      groupSidebarTaskRows(visibleTaskRows, (session) => {
+    () => {
+      const groups = groupSidebarTaskRows(visibleTaskRows, (session) => {
         if (isTaskDraftSession(session)) {
           return {
             key: "draft",
@@ -360,7 +331,7 @@ export function SidebarSectionList({
           };
         }
         const projectId = sidebarProjectIdBySessionId[session.id];
-        const label = projectLabelForSession(session) ?? "No project";
+        const label = projectLabelForSession(session) ?? "Work";
         return {
           key: projectId ? `project:${projectId}` : `projectless:${label}`,
           label,
@@ -368,10 +339,17 @@ export function SidebarSectionList({
           project: projectId ? (projectRowById.get(projectId) ?? null) : null,
           kind: projectId ? ("project" as const) : ("projectless" as const),
         };
-      }),
-    [projectLabelById, projectRowById, sidebarProjectIdBySessionId, visibleTaskRows],
+      });
+      for (const project of projectsSectionRows) {
+          if (!groups.some((group) => group.projectId === project.id)) {
+            groups.push({ key: `project:${project.id}`, label: project.project.name, projectId: project.id, project, kind: "project", sessions: [] });
+          }
+      }
+      return groups;
+    },
+    [projectsSectionRows, projectLabelById, projectRowById, sidebarProjectIdBySessionId, visibleTaskRows],
   );
-  const canShowMoreTasks = visibleTaskRows.length < filteredTaskRows.length;
+  const canShowMoreTasks = visibleTaskRows.length < ordinaryFilteredTaskRows.length;
   const canShowLessTasks =
     visibleTaskRows.length > SIDEBAR_TASK_INITIAL_LIMIT;
   const forcedExpandedTaskGroupKeys = useMemo(
@@ -654,13 +632,13 @@ export function SidebarSectionList({
 
   function showMoreTasks() {
     setChatRowsVisibleCount((count) =>
-      nextSidebarChatVisibleCount(count, filteredTaskRows.length)
+      nextSidebarChatVisibleCount(count, ordinaryFilteredTaskRows.length)
     );
   }
 
   function showLessTasks() {
     setChatRowsVisibleCount((count) =>
-      previousSidebarChatVisibleCount(count, filteredTaskRows.length)
+      previousSidebarChatVisibleCount(count, ordinaryFilteredTaskRows.length)
     );
   }
 
@@ -770,39 +748,91 @@ export function SidebarSectionList({
     );
   }
 
+  function renderTaskGroup(group: SidebarTaskGroup) {
+    const expanded =
+      forcedExpandedTaskGroupKeys.has(group.key) ||
+      taskGroupExpansion.get(group.key) !== false;
+    return (
+      <SidebarTaskProjectGroup
+        key={group.key}
+        expanded={expanded}
+        groupKey={group.key}
+        kind={group.kind}
+        label={group.label}
+        onToggle={() => {
+          setTaskGroupExpansion((current) => {
+            const next = new Map(current);
+            next.set(group.key, !expanded);
+            return next;
+          });
+        }}
+        onNewTask={group.project ? () => beginProjectChat(group.project!.id) : undefined}
+        onOpenProject={group.project ? () => {
+          setSelectedAppId(null);
+          setSelectedProjectId(group.project!.id);
+          setSelectedSessionId(null);
+          setView("chat");
+        } : undefined}
+        onRemoveProject={group.project ? () => removeProject(group.project!) : undefined}
+        project={group.project}
+      >
+        {group.sessions.map((session) =>
+          renderTaskSession(session, {
+            metadataPresentation: "flyout",
+            projectLabel: group.label,
+          }),
+        )}
+      </SidebarTaskProjectGroup>
+    );
+  }
+
   return (
     <div className="sidebar-sections">
+      {visiblePinnedRows.length > 0 ? (
+        <SidebarSection
+          label="Pinned"
+          className="sidebar-pinned-section"
+          collapsed={pinnedCollapsed}
+          onToggleCollapsed={onTogglePinnedCollapsed}
+        >
+          {visiblePinnedRows.map(renderPinnedRow)}
+        </SidebarSection>
+      ) : null}
       <SidebarSection
-        label={taskSectionLabel}
-        className={`sidebar-task-section${
+        label="Projects"
+        className={`sidebar-projects-section${
           experience !== "chat" ? " development" : ""
         }`}
-        titleAccessory={
-          experience !== "chat" ? (
-            <div className="sidebar-task-mode-buttons">
-              <button
-                type="button"
-                className={`section-icon sidebar-task-count-bubble${
-                  taskFilter === "saved_for_later" ? " active" : ""
-                }`}
-                aria-label={`Show ${taskShortcut.count} ${
-                  taskShortcut.targetLabel
-                } ${taskShortcut.count === 1 ? "task" : "tasks"}`}
-                onClick={() => changeTaskFilter(taskShortcut.targetFilter)}
-              >
-                <span>{taskShortcut.label}</span>
-                <span className="sidebar-task-count-badge" aria-hidden="true">
-                  {taskShortcut.count > 99 ? "99+" : taskShortcut.count}
-                </span>
-              </button>
-            </div>
-          ) : null
-        }
-        actionsVisible={
-          sectionMenuOpen === "chats" || sectionMenuOpen === "tasks-filter"
-        }
+        collapsed={projectsCollapsed}
+        onToggleCollapsed={() => setProjectsCollapsedByMode((current) => ({ ...current, [projectsMode]: !current[projectsMode] }))}
         actions={
-          <SidebarTaskListControls
+          <SidebarProjectsHeaderActions
+            onAddProject={onAddProject}
+            onViewProjects={() => {
+              void (async () => {
+                if (!await navigateDesktopRoute({ kind: "view", view: "projects" })) return;
+                setSelectedAppId(null);
+                setSelectedProjectId(null);
+                setSelectedSessionId(null);
+                setView("projects");
+              })();
+            }}
+          />
+        }
+      >
+        {groupedTaskRows
+          .filter((group) => group.kind === "project")
+          .map((group) => renderTaskGroup(
+            experience === "chat" || !groupByProject ? { ...group, sessions: [] } : group,
+          ))}
+      </SidebarSection>
+      <SidebarSection
+        label={experience === "chat" ? "Chat" : "Work"}
+        className="sidebar-task-section sidebar-ordinary-section"
+        collapsed={ordinaryCollapsedByMode[projectsMode]}
+        onToggleCollapsed={() => setOrdinaryCollapsedByMode((current) => ({ ...current, [projectsMode]: !current[projectsMode] }))}
+        actionsVisible={sectionMenuOpen === "chats" || sectionMenuOpen === "tasks-filter" || taskFilter !== "active" || onlyRunningTasks || !showCodexChats}
+        actions={<SidebarTaskListControls
             filter={taskFilter}
             groupByProject={groupByProject}
             noun={taskNoun}
@@ -833,81 +863,35 @@ export function SidebarSectionList({
             sort={taskSort}
             selectedTasksetId={selectedTasksetId}
             tasksets={tasksetOptions}
-          />
-        }
+          />}
       >
-        {visiblePinnedRows.length > 0 ? (
-          <SidebarSection
-            label="Pinned"
-            className="sidebar-pinned-section"
-            collapsed={pinnedCollapsed}
-            onToggleCollapsed={onTogglePinnedCollapsed}
-          >
-            {visiblePinnedRows.map(renderPinnedRow)}
-          </SidebarSection>
-        ) : null}
-        {groupByProject && experience !== "chat"
-          ? groupedTaskRows.map((group) => {
-              const expanded =
-                forcedExpandedTaskGroupKeys.has(group.key) ||
-                taskGroupExpansion.get(group.key) !== false;
-              return (
-                <SidebarTaskProjectGroup
-                  key={group.key}
-                  expanded={expanded}
-                  groupKey={group.key}
-                  kind={group.kind}
-                  label={group.label}
-                  onToggle={() => {
-                    setTaskGroupExpansion((current) => {
-                      const next = new Map(current);
-                      next.set(group.key, !expanded);
-                      return next;
-                    });
-                  }}
-                  onNewTask={group.project ? () => beginProjectChat(group.project!.id) : undefined}
-                  onOpenProject={group.project ? () => {
-                    setSelectedAppId(null);
-                    setSelectedProjectId(group.project!.id);
-                    setSelectedSessionId(null);
-                    setView("chat");
-                  } : undefined}
-                  onRemoveProject={group.project ? () => removeProject(group.project!) : undefined}
-                  project={group.project}
-                >
-                  {group.sessions.map((session) =>
-                    renderTaskSession(session, {
-                      metadataPresentation: "flyout",
-                      projectLabel: group.label,
-                    }),
-                  )}
-                </SidebarTaskProjectGroup>
-              );
-            })
-          : visibleTaskRows.map((session) => renderTaskSession(session))}
-        {filteredTaskRows.length === 0 ? (
+        {(experience === "chat" || !groupByProject
+          ? visibleTaskRows
+          : visibleTaskRows.filter((session) => !sidebarProjectIdBySessionId[session.id])
+        ).map((session) => renderTaskSession(session))}
+        {ordinaryFilteredTaskRows.length === 0 && visiblePinnedRows.length === 0 ? (
           <div className="empty-row">
             {sidebarTaskEmptyLabel(taskFilter, taskNoun)}
           </div>
         ) : null}
-        {filteredTaskRows.length > SIDEBAR_TASK_INITIAL_LIMIT &&
-        (canShowMoreTasks || canShowLessTasks) ? (
-          <div
-            className="sidebar-pagination-controls"
-            aria-label={`Showing ${visibleTaskRows.length} of ${filteredTaskRows.length} ${taskNoun}`}
-          >
-            {canShowMoreTasks ? (
-              <SidebarShowMoreButton onClick={showMoreTasks}>
-                Show more
-              </SidebarShowMoreButton>
-            ) : null}
-            {canShowLessTasks ? (
-              <SidebarShowMoreButton onClick={showLessTasks}>
-                Show less
-              </SidebarShowMoreButton>
-            ) : null}
-          </div>
-        ) : null}
+        {ordinaryFilteredTaskRows.length > SIDEBAR_TASK_INITIAL_LIMIT &&
+          (canShowMoreTasks || canShowLessTasks) ? (
+            <div
+              className="sidebar-pagination-controls"
+              aria-label={`Showing ${visibleTaskRows.length} of ${ordinaryFilteredTaskRows.length} ${taskNoun}`}
+            >
+              {canShowMoreTasks ? (
+                <SidebarShowMoreButton onClick={showMoreTasks}>
+                  Show more
+                </SidebarShowMoreButton>
+              ) : null}
+              {canShowLessTasks ? (
+                <SidebarShowMoreButton onClick={showLessTasks}>
+                  Show less
+                </SidebarShowMoreButton>
+              ) : null}
+            </div>
+          ) : null}
       </SidebarSection>
       <SidebarTaskDetailPopover
         detail={activeTaskDetail}

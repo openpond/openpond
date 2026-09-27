@@ -5,13 +5,12 @@ import type { AppAction, NewProjectMode, ShowAppToast } from "../app/app-state";
 import { normalizeChatModel, projectSelectionKey } from "../lib/app-models";
 
 export function useProjectTargetActions({
-  addProjectFolder,
-  addProjectFolderPath,
   appDispatch,
   busy,
   cloudProjectById,
   createCloudProjectFromScratch,
   createProjectFromScratch,
+  createProjectCollection,
   expandProject,
   localProjectById,
   onCreateCloudEnvironment,
@@ -21,7 +20,6 @@ export function useProjectTargetActions({
   newProjectBusy,
   newProjectMode,
   newProjectName,
-  newProjectPath,
   projectTargetValue,
   setDiffPanelOpen,
   setDraftModel,
@@ -34,13 +32,12 @@ export function useProjectTargetActions({
   showToast,
   workspaceBusy,
 }: {
-  addProjectFolder: () => void | Promise<void>;
-  addProjectFolderPath: (path: string) => Promise<unknown>;
   appDispatch: Dispatch<AppAction>;
   busy: boolean;
   cloudProjectById: Map<string, CloudProject>;
   createCloudProjectFromScratch: (name: string) => Promise<unknown>;
   createProjectFromScratch: (name: string) => Promise<unknown>;
+  createProjectCollection: (input: { name: string; sourceFolders: string[]; primaryFolder: string }) => Promise<boolean>;
   expandProject: (projectId: string) => void;
   localProjectById: Map<string, LocalProject>;
   onCreateCloudEnvironment: () => void;
@@ -50,7 +47,6 @@ export function useProjectTargetActions({
   newProjectBusy: boolean;
   newProjectMode: NewProjectMode;
   newProjectName: string;
-  newProjectPath: string;
   projectTargetValue: string;
   setDiffPanelOpen: Dispatch<SetStateAction<boolean>>;
   setDraftModel: Dispatch<SetStateAction<string>>;
@@ -73,7 +69,7 @@ export function useProjectTargetActions({
         return;
       }
       if (target === "action:add-local-project") {
-        void addProjectFolder();
+        onUseExistingFolderPath();
         return;
       }
       if (target === "action:add-local-project-path") {
@@ -125,7 +121,6 @@ export function useProjectTargetActions({
       }
     },
     [
-      addProjectFolder,
       appDispatch,
       busy,
       cloudProjectById,
@@ -145,35 +140,34 @@ export function useProjectTargetActions({
     ],
   );
 
-  const submitNewProjectDialog = useCallback(async () => {
+  const submitNewProjectDialog = useCallback(async (collection?: { name: string; sourceFolders: string[]; primaryFolder: string }) => {
     const projectName = newProjectName.trim();
-    const projectPath = newProjectPath.trim();
     if (newProjectBusy) return;
-    if (newProjectMode === "existing-local" ? !projectPath : !projectName) return;
+    if (newProjectMode === "existing-local" ? !collection?.name.trim() || !collection.sourceFolders.length : !projectName) return false;
     setNewProjectBusy(true);
     try {
       const created =
         newProjectMode === "cloud"
           ? await createCloudProjectFromScratch(projectName)
           : newProjectMode === "existing-local"
-            ? await addProjectFolderPath(projectPath)
+            ? await createProjectCollection(collection!)
           : await createProjectFromScratch(projectName);
       if (created) {
         setNewProjectDialogOpen(false);
         setNewProjectName("");
         setNewProjectPath("");
       }
+      return Boolean(created);
     } finally {
       setNewProjectBusy(false);
     }
   }, [
-    addProjectFolderPath,
     createCloudProjectFromScratch,
     createProjectFromScratch,
+    createProjectCollection,
     newProjectBusy,
     newProjectMode,
     newProjectName,
-    newProjectPath,
     setNewProjectBusy,
     setNewProjectDialogOpen,
     setNewProjectName,

@@ -28,6 +28,7 @@ type ProjectsPageProps = {
   taskCountByProjectId: Record<string, number>;
   teamName: string | null;
   onNewCloudProject: () => void;
+  onNewLocalProject: () => void;
   onNewTask: (project: SidebarProjectItem) => void;
   onTogglePinned: (project: SidebarProjectItem) => void;
   onUploadLocalProject: (project: SidebarProjectItem) => void;
@@ -45,6 +46,7 @@ export function ProjectsPage({
   taskCountByProjectId,
   teamName,
   onNewCloudProject,
+  onNewLocalProject,
   onNewTask,
   onTogglePinned,
   onUploadLocalProject,
@@ -85,6 +87,10 @@ export function ProjectsPage({
           </p>
         </div>
         <div className="projects-cloud-actions">
+          <button className="projects-cloud-button" onClick={onNewLocalProject} type="button">
+            <FolderGit2 aria-hidden="true" size={15} />
+            <span>Add project</span>
+          </button>
           <button className="projects-cloud-button" onClick={onNewCloudProject} type="button">
             <Cloud aria-hidden="true" size={15} />
             <span>New cloud project</span>
@@ -96,7 +102,7 @@ export function ProjectsPage({
         <div className="projects-empty">
           <FolderGit2 aria-hidden="true" size={24} />
           <h2>No projects yet</h2>
-          <p>Create a hosted project for this team.</p>
+          <p>Add folders from this computer or create a hosted project.</p>
         </div>
       ) : (
         <div className="projects-table-frame">

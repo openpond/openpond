@@ -636,6 +636,20 @@
   visibility: visible;
 }
 
+.sidebar-projects-section .section-actions {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+@media (hover: none) {
+  .sidebar-task-section .section-actions {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+  }
+}
+
 .section-menu {
   position: relative;
   display: inline-grid;
@@ -658,46 +672,6 @@
 .section-icon.active {
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
-}
-
-.sidebar-task-count-bubble.section-icon {
-  position: relative;
-  width: auto;
-  min-width: 0;
-  height: 20px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #9a9a9a;
-  padding: 0 8px;
-  font-size: 11px;
-  line-height: 1;
-}
-
-.sidebar-task-count-badge {
-  position: absolute;
-  top: -7px;
-  right: -7px;
-  display: grid;
-  box-sizing: border-box;
-  min-width: 16px;
-  height: 16px;
-  place-items: center;
-  border: 2px solid var(--panel);
-  border-radius: 999px;
-  background: #575757;
-  color: #fff;
-  padding: 0 3px;
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 650;
-  line-height: 1;
-}
-
-.sidebar-task-count-bubble.section-icon:hover,
-.sidebar-task-count-bubble.section-icon:focus-visible,
-.sidebar-task-count-bubble.section-icon.active {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.12);
 }
 
 .section-menu-popover {
@@ -764,27 +738,6 @@
 .sidebar-section-body {
   display: grid;
   gap: 3px;
-}
-
-.sidebar-task-section > .sidebar-section-body > .sidebar-pinned-section {
-  padding: 2px 0 8px;
-}
-
-.sidebar-task-mode-buttons {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease, visibility 120ms ease;
-  visibility: hidden;
-}
-
-.sidebar-task-section:hover .sidebar-task-mode-buttons,
-.sidebar-task-section:focus-within .sidebar-task-mode-buttons {
-  opacity: 1;
-  pointer-events: auto;
-  visibility: visible;
 }
 
 .section-menu-popover .section-menu-taskset-option {

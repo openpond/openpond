@@ -214,6 +214,7 @@ export const LocalProjectSchema = z.object({
   workspacePath: z.string(),
   repoPath: z.string().nullable(),
   source: z.enum(["folder", "git"]),
+  sourceFolders: z.array(z.string().min(1)).min(1).optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
   sandboxTemplate: LocalProjectSandboxTemplateSchema.nullable().optional().default(null),
   linkedOpenPondApp: LocalProjectOpenPondLinkSchema.nullable().optional().default(null),
@@ -228,12 +229,17 @@ export type LocalProject = z.infer<typeof LocalProjectSchema>;
 export const CreateLocalProjectRequestSchema = z
   .object({
     path: z.string().trim().min(1).optional(),
+    sourceFolders: z.array(z.string().trim().min(1)).min(1).optional(),
+    primaryFolder: z.string().trim().min(1).optional(),
     name: z.string().trim().min(1).max(120).optional(),
     createNew: z.boolean().optional(),
     baseDirectory: z.string().trim().min(1).max(4096).optional(),
   })
   .superRefine((value, context) => {
     if (value.createNew) {
+      if (value.path || value.sourceFolders || value.primaryFolder) {
+        context.addIssue({ code: "custom", message: "A new folder cannot be combined with existing source folders." });
+      }
       if (!value.name?.trim()) {
         context.addIssue({
           code: "custom",
@@ -243,12 +249,21 @@ export const CreateLocalProjectRequestSchema = z
       }
       return;
     }
-    if (!value.path?.trim()) {
+    if (value.path && value.sourceFolders) {
+      context.addIssue({ code: "custom", message: "Use either path or source folders." });
+    }
+    if (!value.path?.trim() && !value.sourceFolders?.length) {
       context.addIssue({
         code: "custom",
         path: ["path"],
         message: "Project path is required.",
       });
+    }
+    if (value.sourceFolders?.length && !value.name?.trim()) {
+      context.addIssue({ code: "custom", path: ["name"], message: "Project name is required." });
+    }
+    if (value.primaryFolder && !value.sourceFolders?.length) {
+      context.addIssue({ code: "custom", path: ["primaryFolder"], message: "Primary folder requires source folders." });
     }
   });
 
