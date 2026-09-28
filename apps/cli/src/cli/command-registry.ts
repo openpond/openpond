@@ -480,6 +480,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       compatibilityModel: "string",
       env: "string",
       environment: "string",
+      effort: "string",
       json: "boolean",
       message: "string",
       model: "string",

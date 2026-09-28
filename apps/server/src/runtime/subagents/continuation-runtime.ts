@@ -370,7 +370,7 @@ function isCodexPermissionMode(value: string | null): value is SendTurnRequest["
 }
 
 function isCodexReasoningEffort(value: string | null): value is NonNullable<SendTurnRequest["codexReasoningEffort"]> {
-  return value === "low" || value === "medium" || value === "high" || value === "xhigh";
+  return value === "off" || value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max";
 }
 
 function clampSandboxToRole(

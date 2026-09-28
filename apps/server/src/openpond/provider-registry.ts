@@ -573,11 +573,11 @@ function normalizeOpenPondManagedPreset(
   if (preset.id !== "openpond") return preset;
   const fallback = FALLBACK_PRESETS_BY_ID.get("openpond");
   if (!fallback) return preset;
-  const models = new Map<string, ProviderPresetModel>();
-  for (const model of [...fallback.models, ...preset.models]) {
-    if (model.id === LEGACY_OPENPOND_CHAT_MODEL) continue;
-    if (!models.has(model.id)) models.set(model.id, model);
-  }
+  const models = new Map(
+    preset.models
+      .filter((model) => model.id !== LEGACY_OPENPOND_CHAT_MODEL)
+      .map((model) => [model.id, model] as const),
+  );
   const defaultModel =
     preset.defaultModel &&
     preset.defaultModel !== LEGACY_OPENPOND_CHAT_MODEL &&
@@ -765,6 +765,7 @@ function modelCacheForSettings(
   preset: ServerProviderPreset,
   config: ProviderConfig,
   existing: ProviderModelCache | undefined,
+  hostedCatalogAvailable: boolean,
 ): ProviderModelCache {
   const source = existing?.source && existing.source !== "none" ? existing.source : preset.modelCacheSource;
   const cacheSource = source === "hosted" ? "hosted" : source === "manual" ? "manual" : "curated";
@@ -777,9 +778,13 @@ function modelCacheForSettings(
           )
       : existing?.models ?? [];
   const starterModels = starterModelsForPreset(preset, config, cacheSource);
+  const supportedHostedModelIds = new Set(preset.models.map((model) => model.id));
+  const retainedCachedModels = preset.id === "openpond" && hostedCatalogAvailable
+    ? cachedModels.filter((model) => model.source !== "hosted" || supportedHostedModelIds.has(model.id))
+    : cachedModels;
   const modelCandidates = STARTER_MODELS_FIRST_PROVIDER_IDS.has(preset.id)
-    ? [...starterModels, ...cachedModels]
-    : [...cachedModels, ...starterModels];
+    ? [...starterModels, ...retainedCachedModels]
+    : [...retainedCachedModels, ...starterModels];
   const models = uniqueModels(modelCandidates);
   return ProviderModelCacheSchema.parse({
     providerId: preset.id,
@@ -935,7 +940,7 @@ export function buildProviderSettings(input: {
   for (const preset of listProviderPresets(input.catalog)) {
     const providerId = preset.id;
     const config = providerConfigForPreset(preset, providers[providerId]);
-    const cache = modelCacheForSettings(preset, config, modelCaches[providerId]);
+    const cache = modelCacheForSettings(preset, config, modelCaches[providerId], Boolean(input.catalog));
     providers[providerId] = config;
     modelCaches[providerId] = cache;
     statuses[providerId] = providerStatus({

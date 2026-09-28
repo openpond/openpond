@@ -19,7 +19,6 @@ export function useTeamChatIncomingToast(input: {
         input.setView("team");
         void input.selectThread(threadId);
       },
-      dismissible: true,
       durationMs: 6_500,
       placement: "top-right",
     });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
+import { buildProviderSettings, getProviderPreset } from "../apps/server/src/openpond/provider-registry";
+import { ProviderCatalogSchema } from "@openpond/contracts";
 import {
   defaultProviderCredentialTab,
   providerCredentialTabs,
@@ -9,10 +10,67 @@ import {
   visibleProviderModelOptions
 } from "../apps/web/src/components/settings/ProviderSettingsSection";
 import {
-  modelOptionsForProvider
+  defaultReasoningEffortForModel,
+  effectiveReasoningEffortForModel,
+  modelOptionsForProvider,
+  reasoningEffortOptionsForModel,
 } from "../apps/web/src/lib/app-models";
 
 describe("provider model option capping", () => {
+
+  test("uses hosted model capabilities for OpenPond's visible models and efforts", () => {
+    const preset = getProviderPreset("openpond");
+    const catalog = ProviderCatalogSchema.parse({
+      version: 1,
+      generatedAt: "2026-09-27T00:00:00.000Z",
+      providers: [{
+        ...preset,
+        defaultModel: "gpt-6-sol",
+        models: [
+          { id: "gpt-6-sol", displayName: "GPT-6 Sol", capabilities: {
+            reasoning: true,
+            reasoningEfforts: ["off", "low", "medium", "high", "xhigh", "max"],
+          } },
+          { id: "accounts/fireworks/models/glm-5p3", displayName: "GLM-5.3", capabilities: {
+            reasoning: true,
+            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+          } },
+        ],
+      }],
+    });
+    const settings = buildProviderSettings({
+      catalog,
+      file: {
+        version: 1,
+        providers: {},
+        modelCaches: { openpond: {
+          providerId: "openpond",
+          models: [{
+            id: "accounts/fireworks/models/deepseek-v4-pro",
+            providerId: "openpond",
+            displayName: "DeepSeek V4 Pro",
+            source: "hosted",
+            capabilities: { reasoning: true },
+          }],
+          fetchedAt: null,
+          lastError: null,
+          source: "hosted",
+        } },
+      },
+    });
+
+    expect(modelOptionsForProvider("openpond", settings).map((option) => option.value)).toEqual([
+      "gpt-6-sol",
+      "accounts/fireworks/models/glm-5p3",
+    ]);
+    expect(reasoningEffortOptionsForModel("openpond", "gpt-6-sol", settings).map((option) => option.value))
+      .toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
+    expect(reasoningEffortOptionsForModel("openpond", "accounts/fireworks/models/glm-5p3", settings).map((option) => option.value))
+      .toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(defaultReasoningEffortForModel("openpond", "gpt-6-sol", settings)).toBe("medium");
+    expect(effectiveReasoningEffortForModel("openpond", "accounts/fireworks/models/glm-5p3", "off", settings))
+      .toBe("high");
+  });
 
   test("keeps the retired OpenPond Chat alias out of saved defaults and caches", () => {
     const settings = buildProviderSettings({

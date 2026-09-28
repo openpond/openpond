@@ -23,6 +23,7 @@ import { DEFAULT_OPENPOND_CHAT_MODEL } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import {
   codexPermissionTurnInput,
+  effectiveReasoningEffortForModel,
   modelForTurn,
   modelRefForTurn,
   normalizeChatModel,
@@ -1261,7 +1262,12 @@ export function useChatActions({
         codexPermissionMode:
           turnProvider === "codex" ? codexPermissionMode : "default",
         codexReasoningEffort: turnSupportsReasoningEffort
-          ? codexReasoningEffort
+          ? effectiveReasoningEffortForModel(
+              turnProvider,
+              turnModelPayload.model ?? modelForTurnValue,
+              codexReasoningEffort,
+              providerSettings,
+            )
           : undefined,
       });
       refreshBootstrapAfterAcceptedTurn(connection);

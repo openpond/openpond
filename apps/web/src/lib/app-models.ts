@@ -397,6 +397,11 @@ export const CODEX_REASONING_EFFORT_OPTIONS: Array<DropdownOption & { value: Cod
   { value: "high", label: "High" },
   { value: "xhigh", label: "Extra High", shortLabel: "Extra High" },
 ];
+const OPENPOND_REASONING_EFFORT_OPTIONS: Array<DropdownOption & { value: CodexReasoningEffort }> = [
+  { value: "off", label: "Off" },
+  ...CODEX_REASONING_EFFORT_OPTIONS,
+  { value: "max", label: "Max" },
+];
 export const OPENPOND_COMMAND_ACCESS_MODE_OPTIONS: Array<DropdownOption & { value: OpenPondCommandAccessMode }> = [
   {
     value: "ask",
@@ -645,7 +650,49 @@ export function modelOptionsForProvider(
         (provider !== "openpond" || value !== DEFAULT_OPENPOND_CHAT_MODEL),
     )
     .map((value) => ({ value, label: value }));
-  return uniqueDropdownOptions([...fromCache, ...manual, ...fallbackModelOptions(provider)]);
+  const fallback = provider === "openpond" && fromCache.length > 0
+    ? []
+    : fallbackModelOptions(provider);
+  return uniqueDropdownOptions([...fromCache, ...manual, ...fallback]);
+}
+
+export function reasoningEffortOptionsForModel(
+  provider: ChatProvider,
+  model: string,
+  settings?: ProviderSettings | null,
+): Array<DropdownOption & { value: CodexReasoningEffort }> {
+  if (provider !== "openpond") return CODEX_REASONING_EFFORT_OPTIONS;
+  const capabilities = providerModelCache(settings, provider)?.models.find(
+    (candidate) => candidate.id === model,
+  )?.capabilities;
+  if (!capabilities?.reasoningEfforts.length) return CODEX_REASONING_EFFORT_OPTIONS;
+  const allowed = new Set(capabilities.reasoningEfforts);
+  return OPENPOND_REASONING_EFFORT_OPTIONS.filter((option) => allowed.has(option.value));
+}
+
+export function defaultReasoningEffortForModel(
+  provider: ChatProvider,
+  model: string,
+  settings?: ProviderSettings | null,
+): CodexReasoningEffort {
+  const options = reasoningEffortOptionsForModel(provider, model, settings);
+  const desired = provider === "openpond" && (
+    model === "gpt-6-luna" || model === "gpt-6-sol" || model === "claude-opus-5-5"
+  ) ? "medium" : "high";
+  return options.some((option) => option.value === desired)
+    ? desired
+    : (options[0]?.value ?? "high");
+}
+
+export function effectiveReasoningEffortForModel(
+  provider: ChatProvider,
+  model: string,
+  selected: CodexReasoningEffort,
+  settings?: ProviderSettings | null,
+): CodexReasoningEffort {
+  return reasoningEffortOptionsForModel(provider, model, settings).some(
+    (option) => option.value === selected,
+  ) ? selected : defaultReasoningEffortForModel(provider, model, settings);
 }
 
 export function providerModelSupportsReasoning(

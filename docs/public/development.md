@@ -16,6 +16,10 @@ pnpm dev
 
 `pnpm dev` starts the watched app server, Vite renderer, and Electron desktop app. If the app is already running, keep using the existing process instead of starting another one.
 
+Server source edits automatically restart the backend; renderer edits use Vite hot reload. SDK builds are reused across launches when their source, build configuration, dependencies, and generated output are unchanged. The first launch builds them, and subsequent launches use incremental app compilation. Package source changes require restarting the dev command to refresh package builds. Electron main/preload changes also require restarting the dev command.
+
+Use `pnpm dev --no-watch` to disable backend restarts, or `pnpm stable` for the separate frozen desktop build without renderer hot reload. Typechecking and release builds remain available through `pnpm typecheck` and `pnpm build`.
+
 ## Test Commands
 
 Use the smallest confidence layer that matches the change:

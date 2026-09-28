@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { CodexReasoningEffortSchema } from "@openpond/contracts";
 import { loadConfig } from "../config";
 import {
   getOpChatModel,
@@ -53,6 +54,10 @@ export async function runOpChatCommand(
 
   if (subcommand === "chat") {
     const model = optionString(options, "model") || "openpond-chat";
+    const effortOption = optionString(options, "effort");
+    const reasoningEffort = effortOption
+      ? CodexReasoningEffortSchema.parse(effortOption)
+      : undefined;
     const message =
       optionString(options, "message") ||
       optionString(options, "prompt") ||
@@ -63,6 +68,7 @@ export async function runOpChatCommand(
         apiBaseUrl,
         token: apiKey,
         model,
+        reasoningEffort,
         messages: [{ role: "user", content: message }],
       });
       console.log(JSON.stringify(completion, null, 2));
@@ -76,6 +82,7 @@ export async function runOpChatCommand(
       apiBaseUrl,
       token: apiKey,
       model,
+      reasoningEffort,
       messages: [{ role: "user", content: message }],
     })) {
       if (chunk.type === "text_delta") {
@@ -112,7 +119,7 @@ export async function runOpChatCommand(
   }
 
   throw new Error(
-    "usage: opchat <provider-catalog|models|model|chat|smoke> [--opchat-api-base-url <url>]"
+    "usage: opchat <provider-catalog|models|model|chat|smoke> [--opchat-api-base-url <url>] [chat --model <id> --effort <off|low|medium|high|xhigh|max>]"
   );
 }
 

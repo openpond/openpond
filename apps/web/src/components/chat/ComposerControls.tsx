@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChatProvider, CodexReasoningEffort } from "@openpond/contracts";
+import type { ChatProvider, CodexReasoningEffort, ProviderSettings } from "@openpond/contracts";
 import {
   ArrowLeft,
   Check,
@@ -10,7 +10,7 @@ import {
   Plus,
   UploadCloud,
 } from "../icons";
-import { CODEX_REASONING_EFFORT_OPTIONS } from "../../lib/app-models";
+import { effectiveReasoningEffortForModel, reasoningEffortOptionsForModel } from "../../lib/app-models";
 import type { DropdownOption } from "../../lib/app-models";
 import type {
   WorkspaceTargetOptionState,
@@ -510,6 +510,7 @@ export function ComposerModelMenu({
   modelGroups,
   placement,
   provider,
+  providerSettings,
   reasoningEffort,
   showReasoning,
   onModelSelectionChange,
@@ -521,6 +522,7 @@ export function ComposerModelMenu({
   modelGroups: ComposerModelGroup[];
   placement: "bottom" | "top";
   provider: ChatProvider;
+  providerSettings?: ProviderSettings | null;
   reasoningEffort: CodexReasoningEffort;
   showReasoning: boolean;
   onModelSelectionChange: (provider: ChatProvider, model: string) => void;
@@ -532,9 +534,13 @@ export function ComposerModelMenu({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedGroup = modelGroups.find((group) => group.provider === provider);
   const selectedModel = selectedGroup?.options.find((option) => option.value === model);
+  const reasoningOptions = reasoningEffortOptionsForModel(provider, model, providerSettings);
+  const effectiveReasoningEffort = effectiveReasoningEffortForModel(
+    provider, model, reasoningEffort, providerSettings,
+  );
   const selectedReasoning =
-    CODEX_REASONING_EFFORT_OPTIONS.find((option) => option.value === reasoningEffort) ??
-    CODEX_REASONING_EFFORT_OPTIONS[1]!;
+    reasoningOptions.find((option) => option.value === effectiveReasoningEffort) ??
+    reasoningOptions[0]!;
   const modelLabel = compactModelLabel(selectedModel?.label ?? model);
   const triggerLabel = showReasoning
     ? `${modelLabel} ${selectedReasoning.shortLabel ?? selectedReasoning.label}`
@@ -738,20 +744,20 @@ export function ComposerModelMenu({
                 <span>Effort</span>
               </button>
               <div className="codex-model-menu-divider" />
-              {CODEX_REASONING_EFFORT_OPTIONS.map((option) => (
+              {reasoningOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   role="menuitemradio"
-                  aria-checked={option.value === reasoningEffort}
-                  className={option.value === reasoningEffort ? "selected" : ""}
+                  aria-checked={option.value === effectiveReasoningEffort}
+                  className={option.value === effectiveReasoningEffort ? "selected" : ""}
                   onClick={() => {
                     onReasoningEffortChange(option.value);
                     setPanel("root");
                   }}
                 >
                   <span>{option.label}</span>
-                  {option.value === reasoningEffort ? <Check size={14} /> : null}
+                  {option.value === effectiveReasoningEffort ? <Check size={14} /> : null}
                 </button>
               ))}
             </div>

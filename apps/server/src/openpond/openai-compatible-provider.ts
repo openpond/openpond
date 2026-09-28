@@ -823,6 +823,7 @@ function capabilitiesForModelId(modelId: string): ProviderModelCapabilities {
     streaming: true,
     toolCalling: true,
     structuredOutput: true,
+    reasoningEfforts: [],
     vision: /vision|gpt-4\.1|gpt-5|gemini|claude|pixtral|vl/.test(normalized),
     reasoning: /reason|r1|o1|o3|o4|gpt-5|grok|glm-(?:4\.[5-9]|5(?:\.\d+)?)|kimi-k2/.test(normalized),
   };
