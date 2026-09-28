@@ -5,6 +5,7 @@ import {
   type AgentHostStorageClient,
 } from "@openpond/agent-runtime";
 import { z } from "zod";
+import { hostedBoundedPage } from "./hosted-bounded-page.js";
 
 const pageSchema = z.object({
   entries: z.array(z.object({ sequence: z.number().int().positive(), event: RuntimeEventSchema })).max(200),
@@ -79,12 +80,13 @@ export class HostedRuntimeEventStorage {
     let remainingMatchingEvents = 0;
     while (entries.length < limit) {
       const chunkLimit = Math.min(200, limit - entries.length);
-      const page = pageSchema.parse(await this.client.request({
-        contractVersion: HOST_STORAGE_CONTRACT_VERSION,
-        requestId: `event-page:${randomUUID()}`,
-        operation: "events/page",
-        params: { sessionId: input.sessionId, afterSequence, beforeSequence, limit: chunkLimit },
-      }));
+      const page = await hostedBoundedPage(chunkLimit, async (limit) =>
+        pageSchema.parse(await this.client.request({
+          contractVersion: HOST_STORAGE_CONTRACT_VERSION,
+          requestId: `event-page:${randomUUID()}`,
+          operation: "events/page",
+          params: { sessionId: input.sessionId, afterSequence, beforeSequence, limit },
+        })));
       if (entries.length === 0) {
         totalMatchingEvents = page.totalMatchingEvents;
         remainingMatchingEvents = page.remainingMatchingEvents;
@@ -92,7 +94,7 @@ export class HostedRuntimeEventStorage {
       entries = beforeSequence === null
         ? [...entries, ...page.entries]
         : [...page.entries, ...entries];
-      if (page.entries.length < chunkLimit || page.entries.length === 0) break;
+      if (page.entries.length === 0 || page.remainingMatchingEvents <= page.entries.length) break;
       if (beforeSequence === null) {
         const next = page.entries.at(-1)!.sequence;
         if (next <= afterSequence) throw new Error("Host event cursor did not advance.");
