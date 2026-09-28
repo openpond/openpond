@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
 import { assertRfqEvaluationPaidDispatchQualified } from "./rfq-evaluation-paid-preflight.js";
 import { createModelComparisonEvaluationService } from "./model-comparison-evaluation-service.js";

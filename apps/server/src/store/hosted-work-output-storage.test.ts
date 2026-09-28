@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import test from "node:test";
+import { test } from "vitest";
 import type { AgentHostStorageClient, HostStorageRequest } from "@openpond/agent-runtime";
 import { HostedWorkOutputStorage } from "./hosted-work-output-storage.js";
 
