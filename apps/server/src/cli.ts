@@ -6,6 +6,7 @@ import { AgentHostStorageClient } from "@openpond/agent-runtime";
 import { createHostedRuntimeCoreStorage } from "./store/hosted-turn-repository.js";
 import { HostedTaskInboxStorage } from "./store/hosted-task-inbox-storage.js";
 import { createHostedModelStreamFromEnvironment } from "./runtime/hosted-model-stream.js";
+import { AdmittedHostedProfileReleaseSchema, type AdmittedHostedProfileRelease } from "./store/hosted-profile-source.js";
 import type { OpenPondAppServerOptions } from "./app-server-runtime.js";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -32,6 +33,7 @@ type ParsedCliArgs = {
   storeDir: string | null;
   sourceBrowserState?: string;
   profileSource?: ProfileSourceCliOptions;
+  admittedProfileRelease?: AdmittedHostedProfileRelease;
   runtimeStorage: "sqlite_bundle" | "hosted_postgres";
   help: boolean;
 };
@@ -69,6 +71,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let profileRepositoryId: string | null = null;
   let profileId: string | null = null;
   let profileRevision: string | null = null;
+  let admittedProfileRelease: AdmittedHostedProfileRelease | undefined;
   let runtimeStorage: ParsedCliArgs["runtimeStorage"] = "sqlite_bundle";
   let index = 0;
 
@@ -123,6 +126,19 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       profileId = requireValue(args, i, arg); i += 1;
     } else if (arg === "--profile-revision") {
       profileRevision = requireValue(args, i, arg); i += 1;
+    } else if (arg === "--hosted-profile-release") {
+      if (admittedProfileRelease) throw new Error("Duplicate hosted Profile release descriptor.");
+      const encoded = requireValue(args, i, arg);
+      if (encoded.length > 16_000 || !/^[A-Za-z0-9_-]+$/.test(encoded)) {
+        throw new Error("Invalid hosted Profile release descriptor.");
+      }
+      try {
+        admittedProfileRelease = AdmittedHostedProfileReleaseSchema.parse(
+          JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")));
+      } catch {
+        throw new Error("Invalid hosted Profile release descriptor.");
+      }
+      i += 1;
     } else if (arg === "--open-browser") {
       openBrowser = true;
     } else if (arg === "--print-access-url") {
@@ -145,9 +161,13 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   if (runtimeStorage === "hosted_postgres" && (mode !== "app-server" || storeDir || profileFlags)) {
     throw new Error("Hosted Postgres app-server cannot use --home or local Profile source flags.");
   }
+  if (admittedProfileRelease && runtimeStorage !== "hosted_postgres") {
+    throw new Error("Hosted Profile release requires hosted Postgres app-server mode.");
+  }
   return {
     mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, runtimeStorage, sourceBrowserState,
     ...(profileFlags ? { profileSource: { repoPath: profileSourceRoot!, repositoryId: profileRepositoryId!, profileId: profileId!, sourceRevision: profileRevision! } } : {}),
+    ...(admittedProfileRelease ? { admittedProfileRelease } : {}),
     help: false,
   };
 }
@@ -229,6 +249,7 @@ Options:
   --web-root DIR         Directory containing the built web UI for web mode
   --home DIR        Local app-server state directory
   --runtime-storage hosted-postgres  Host-admitted Postgres app-server mode
+  --hosted-profile-release BASE64URL  Host-admitted immutable Profile release descriptor
   --profile-source-root DIR  Authorized Profile repository source for app-server
   --profile-repository-id ID Source repository identity supplied by the host
   --profile-id ID            Profile within that source
@@ -331,7 +352,8 @@ export async function runOpenPondAppServerCli(
   if (args.mode !== "app-server") {
     throw new Error("The app-server entrypoint only accepts the app-server command.");
   }
-  await runAgentServer(createOpenPondAppServer, args.storeDir, args.profileSource, args.runtimeStorage);
+  await runAgentServer(createOpenPondAppServer, args.storeDir, args.profileSource,
+    args.runtimeStorage, args.admittedProfileRelease);
 }
 
 async function runAgentServer(
@@ -339,6 +361,7 @@ async function runAgentServer(
   storeDir: string | null,
   profileSource?: ProfileSourceCliOptions,
   runtimeStorage: ParsedCliArgs["runtimeStorage"] = "sqlite_bundle",
+  admittedProfileRelease?: AdmittedHostedProfileRelease,
 ): Promise<void> {
   const hostStorageClient = new AgentHostStorageClient();
   if (runtimeStorage === "hosted_postgres") {
@@ -350,6 +373,7 @@ async function runAgentServer(
           kind: "hosted_postgres", client: hostStorageClient,
           core: createHostedRuntimeCoreStorage(hostStorageClient),
           inbox: new HostedTaskInboxStorage(hostStorageClient),
+          ...(admittedProfileRelease ? { admittedProfileRelease } : {}),
         },
         streamOpenPondHostedChatTurn: createHostedModelStreamFromEnvironment(),
       }),
