@@ -22,6 +22,7 @@ import { TaskInputMutationSchema } from "@openpond/contracts";
 import type { TurnRunner } from "./turns/ports.js";
 
 export function createAgentRuntimePorts(deps: {
+  bindHome?: boolean;
   placement?: AgentProtocolCapabilities["placement"];
   connectedAppProviders?: AgentProtocolCapabilities["connectedAppProviders"];
   featureOverrides?: Partial<AgentProtocolCapabilities["features"]>;
@@ -115,7 +116,7 @@ export function createAgentRuntimePorts(deps: {
     };
   };
 
-  return bindHomeCallbacks(resolveOpenPondHome(), {
+  const callbacks = {
     capabilities,
     createThread: deps.createSession,
     readThread: deps.getSession,
@@ -157,7 +158,8 @@ export function createAgentRuntimePorts(deps: {
     subscribeEvents: deps.subscribeRuntimeEvents,
     eventNotification: runtimeEventNotification,
     telemetry: deps.observeRuntimeOperation,
-  });
+  };
+  return deps.bindHome === false ? callbacks : bindHomeCallbacks(resolveOpenPondHome(), callbacks);
 }
 
 function runtimeEventNotification(event: RuntimeEvent): JsonRpcNotification {

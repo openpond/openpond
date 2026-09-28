@@ -28,6 +28,7 @@ import type { OpenPondOrganization } from "../../lib/organization-types";
 import type { ClientConnection } from "../../api";
 
 export type SidebarProps = {
+  onOpenPonder?: () => void;
   productArea: ProductArea;
   onProductAreaChange: (productArea: ProductArea) => void;
   experience: Experience;

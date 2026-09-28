@@ -67,6 +67,8 @@ import type { SkillSourceDocument } from "./skill-source-document";
 import type { SkillPackageSourceSelection } from "./skill-package-source";
 
 export type MainPaneProps = {
+  ponderMode?: "clean" | "activity" | null;
+  onPonderModeChange?: (mode: "clean" | "activity" | null) => void;
   experience: Experience;
   onNewExperienceChange: (experience: Experience) => void;
   view: AppView;

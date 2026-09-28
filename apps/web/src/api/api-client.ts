@@ -67,6 +67,7 @@ async function performFetch<T>(connection: ClientConnection, path: string, init?
         : response.statusText;
     throw new ApiRequestError(error, response.status);
   }
+  if (response.status === 204) return undefined as T;
   const payload = await response.json();
   const revision = payload?.configuration?.rawRevision ?? (path === "/v1/preferences" ? payload?.rawRevision : undefined);
   if (typeof revision === "string" && order >= (responseOrders.get(connection) ?? 0)) {

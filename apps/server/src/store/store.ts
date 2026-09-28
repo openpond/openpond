@@ -49,6 +49,7 @@ import {
   type ThreadDetailProjection,
 } from "./store-codecs.js";
 import { SqliteTaskInboxStore } from "./store-task-inbox.js";
+import type { RuntimeHistoryStorage } from "./runtime-history-storage.js";
 import {
   sessionRuntimeSummaries,
   sessionWithRuntimeSummary,
@@ -177,7 +178,7 @@ type RuntimeEventRecentWindow = {
   limit: number;
 };
 
-export class SqliteStore extends SqliteTaskInboxStore {
+export class SqliteStore extends SqliteTaskInboxStore implements RuntimeHistoryStorage {
   async snapshot(): Promise<StoreData> {
     await this.ready;
     await this.writeQueue;
@@ -343,6 +344,32 @@ export class SqliteStore extends SqliteTaskInboxStore {
       [sessionId, boundedLimit],
     );
     return rows.map((row) => JSON.parse(row.payload) as Turn);
+  }
+
+  /** Cursor reads stay bounded even when other sessions grow without limit. */
+  async turnPageForSession(input: {
+    sessionId: string;
+    beforeSortIndex?: number | null;
+    limit?: number;
+  }): Promise<{ turns: Turn[]; nextBeforeSortIndex: number | null }> {
+    await this.ready;
+    await this.writeQueue;
+    const limit = Math.max(1, Math.min(200, Math.trunc(input.limit ?? 50)));
+    const before = input.beforeSortIndex;
+    const rows = await this.all<PayloadRow & { sort_index: number }>(
+      `SELECT sort_index, payload FROM turns
+       WHERE session_id = ? ${before === undefined || before === null ? "" : "AND sort_index < ?"}
+       ORDER BY sort_index DESC LIMIT ?`,
+      before === undefined || before === null
+        ? [input.sessionId, limit + 1]
+        : [input.sessionId, Math.max(0, Math.trunc(before)), limit + 1],
+    );
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    return {
+      turns: page.map((row) => JSON.parse(row.payload) as Turn),
+      nextBeforeSortIndex: hasMore ? page[page.length - 1]!.sort_index : null,
+    };
   }
 
   async countTurnsForSession(sessionId: string): Promise<number> {

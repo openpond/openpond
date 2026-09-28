@@ -50,7 +50,7 @@ export function createRuntimeEventBus({
   assistantDeltaFlushMs = DEFAULT_ASSISTANT_DELTA_FLUSH_MS,
 }: {
   logger: RuntimeEventLogger;
-  store: SqliteStore;
+  store: Pick<SqliteStore, "appendRuntimeEvent" | "runtimeEventPageRows">;
   assistantDeltaFlushMs?: number;
 }) {
   const subscribers = new Set<RuntimeEventSubscriber>();

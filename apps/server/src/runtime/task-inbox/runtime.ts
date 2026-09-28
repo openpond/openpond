@@ -6,7 +6,7 @@ import {
   type TaskPeer, type TaskWait, type Turn, type SubagentRun,
 } from "@openpond/contracts";
 import { event } from "../../utils.js";
-import type { TaskInboxRepository } from "../../store/store-task-inbox.js";
+import type { TaskInboxRepository } from "./repository.js";
 import type { ActiveTurn } from "../turns/ports.js";
 import { taskWorkspaceIdentity, workspaceRelationship } from "./workspace-identity.js";
 import { canCoordinateTasks } from "./scope.js";

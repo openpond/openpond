@@ -87,6 +87,7 @@ export async function importProfileIntoLocalHarnessWorkspace(input: {
   name: string;
   profile: OpenPondProfileState;
   sourceRevision?: string;
+  repositoryId?: string;
   selectionEligible?: boolean;
   now?: () => string;
 }): Promise<{ workspace: HarnessWorkspace; release: LocalHarnessReleaseRecord }> {
@@ -95,7 +96,7 @@ export async function importProfileIntoLocalHarnessWorkspace(input: {
   }
   return createLocalHarnessWorkspaceFromInitializer({
     ...input,
-    initializeSource: (sourceDir) => writeImportedProfileSource(sourceDir, input.name, input.profile, input.sourceRevision),
+    initializeSource: (sourceDir) => writeImportedProfileSource(sourceDir, input.name, input.profile, input.sourceRevision, input.repositoryId),
   });
 }
 
@@ -107,6 +108,7 @@ export async function compileProfileHarnessSource(input: {
   name: string;
   profile: OpenPondProfileState;
   sourceRevision?: string;
+  repositoryId?: string;
 }): Promise<CompiledLocalHarnessSource> {
   if (input.profile.mode !== "local" || !input.profile.sourcePath) {
     throw new Error("Only a loaded Profile source can be compiled.");
@@ -115,7 +117,7 @@ export async function compileProfileHarnessSource(input: {
   await fs.mkdir(root, { recursive: true });
   const sourceDir = path.join(root, randomUUID());
   try {
-    await writeImportedProfileSource(sourceDir, input.name, input.profile, input.sourceRevision);
+    await writeImportedProfileSource(sourceDir, input.name, input.profile, input.sourceRevision, input.repositoryId);
     return await compileLocalHarnessSource({ workspaceId: input.workspaceId, sourceDir });
   } finally {
     await fs.rm(sourceDir, { recursive: true, force: true });
@@ -130,8 +132,10 @@ export async function ensureExplicitProfileHarnessSource(input: {
   name: string;
   profile: OpenPondProfileState;
   sourceRevision: string;
+  repositoryId: string;
 }): Promise<LocalHarnessReleaseRecord> {
   const compiled = await compileProfileHarnessSource(input);
+  if (!input.repositoryId.trim()) throw new Error("Explicit Profile source requires a repository ID.");
   const existing = await input.store.getHarnessWorkspace(input.workspaceId);
   if (existing) {
     const releaseRef = existing.currentChannel.release;
@@ -456,6 +460,8 @@ export async function compileLocalHarnessSource(input: {
         profile: {
           id: manifest.metadata.profileId,
           sourceRevision: manifest.metadata.profileGitHead ?? sourceRevision,
+          ...(manifest.metadata.profileRepositoryId
+            ? { repositoryId: manifest.metadata.profileRepositoryId } : {}),
         },
       } : {}),
     },
@@ -574,6 +580,7 @@ async function writeImportedProfileSource(
   name: string,
   profile: OpenPondProfileState,
   sourceRevision?: string,
+  repositoryId?: string,
 ): Promise<void> {
   const profileSource = path.resolve(profile.sourcePath!);
   const declarations: HarnessSourceManifest["files"] = [];
@@ -879,6 +886,7 @@ async function writeImportedProfileSource(
     metadata: {
       importedFrom: "openpond.profile",
       profileId: profile.activeProfile,
+      ...(repositoryId ? { profileRepositoryId: repositoryId } : {}),
       profileGitHead: sourceRevision ?? profile.git?.head ?? null,
       excludedEvalCount: profile.evals.length,
       actionConversionPending: profile.actionCatalog.length > 0,

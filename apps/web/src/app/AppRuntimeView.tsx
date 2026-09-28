@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_PROVIDER,
@@ -66,6 +66,8 @@ interface AppRuntimeViewProps {
 const EMPTY_CLOUD_PROJECTS: CloudProject[] = [];
 
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
+  const [ponderMode, setPonderMode] = useState<"clean" | "activity" | null>(null);
+  const ponderModeRestored = useRef(new Set<string>());
   const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
   const desktopRoute = useDesktopRoute();
   const {
@@ -335,6 +337,22 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     toggleRightSidebar,
     removeProject,
   } = secondary;
+  const ponderIntroScope = bootstrap?.account.activeProfile && bootstrap?.preferences.defaultTeamId
+    ? `${bootstrap.account.activeProfile.handle}:${bootstrap.preferences.defaultTeamId}` : null;
+  useEffect(() => {
+    if (!ponderIntroScope || view !== "chat" || desktopRoute?.kind !== "chat" || desktopRoute.sessionId
+      || selectedSessionId || ponderModeRestored.current.has(ponderIntroScope)) return;
+    ponderModeRestored.current.add(ponderIntroScope);
+    try {
+      const saved = localStorage.getItem(`openpond:ponder-mode:v1:${ponderIntroScope}`);
+      if (saved === "clean" || saved === "activity") setPonderMode(saved);
+    } catch { /* Optional device preference. */ }
+  }, [ponderIntroScope, desktopRoute, view, selectedSessionId]);
+  useEffect(() => {
+    if (!ponderIntroScope || !ponderModeRestored.current.has(ponderIntroScope)) return;
+    try { localStorage.setItem(`openpond:ponder-mode:v1:${ponderIntroScope}`, ponderMode ?? "off"); }
+    catch { /* Optional device preference. */ }
+  }, [ponderIntroScope, ponderMode]);
   const beginProjectChat = useCallback((projectId: string) => {
     setSelectedAppId(null);
     setSelectedProjectId(projectId);
@@ -345,6 +363,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   }, [expandProject, requestMainComposerFocus, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView]);
   const beginContextualNewChat = useCallback(
     (app: OpenPondApp | null = null) => {
+      setPonderMode(null);
       const sourceProjectId = selectedSessionId
         ? sidebarProjectIdBySessionId[selectedSessionId] ?? null
         : null;
@@ -746,6 +765,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       return;
     }
     if (desktopRoute.sessionId !== null) {
+      setPonderMode(null);
       setSelectedAppId(null);
       setSelectedProjectId(null);
     }
@@ -972,6 +992,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         className={appShellClassName}
         style={appShellStyle}
         sidebar={{
+          onOpenPonder: () => {
+            navigateDesktopRoute({ kind: "chat", sessionId: null });
+            setSelectedSessionId(null);
+            setView("chat");
+            setPonderMode("activity");
+          },
           productArea,
           modelProjects: (training.payload?.modelProjects ?? []).filter((project) =>
             project.hosted === null || project.hosted.teamId === (appDefaults.defaultTeamId?.trim() ?? null),
@@ -1083,7 +1109,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         }}
         topBar={{
           sidebarOpen,
-          title,
+          title: view === "chat" && ponderMode ? "Ponder Pal" : title,
           backAction: labDetailNavigation.backAction,
           breadcrumbs: labDetailNavigation.breadcrumbs,
           conversationId: view === "chat" ? selectedSessionId : null,
@@ -1158,6 +1184,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             ),
         }}
         mainPane={{
+          ponderMode,
+          onPonderModeChange: setPonderMode,
           experience: activeExperience,
           onNewExperienceChange: changeNewExperience,
           view,

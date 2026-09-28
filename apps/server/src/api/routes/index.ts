@@ -13,6 +13,7 @@ import { handleOrganizationRoutes } from "./organization-routes.js";
 import { handleProjectCloudRoutes } from "./project-cloud-routes.js";
 import { handleSandboxRoutes } from "./sandbox-routes.js";
 import { handleSavedWorkRoutes } from "./saved-work-routes.js";
+import { handlePonderRoutes } from "./ponder-routes.js";
 import { handleSessionRoutes } from "./session-routes.js";
 import { handleSettingsRoutes } from "./settings-routes.js";
 import { handleUsageRoutes } from "./usage-routes.js";
@@ -37,6 +38,7 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "chat-workflows", handle: handleChatWorkflowRoutes },
   { id: "local-agent-schedules", handle: handleLocalAgentScheduleRoutes },
   { id: "saved-work", handle: handleSavedWorkRoutes },
+  { id: "ponder", handle: handlePonderRoutes },
   { id: "usage", handle: handleUsageRoutes },
   { id: "core", handle: handleCoreRoutes },
   { id: "desktop-browser", handle: handleDesktopBrowserRoutes },

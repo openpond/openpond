@@ -4,6 +4,10 @@ import { initializeHome, readPreferences } from "@openpond/persistence";
 import { onStartupFailure, ownHomeRuntime } from "./runtime/home-runtime-owner.js";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
+import { loadHostedHarnessRuntimeForSession } from "./store/hosted-harness-runtime.js";
+import { HostedHarnessOverlayStorage } from "./store/hosted-harness-overlay-storage.js";
+import { loadHostedRuntimeSettings } from "./store/hosted-runtime-settings.js";
+import type { TaskInboxRepository } from "./runtime/task-inbox/repository.js";
 
 import { createAppServer, type AppServerInstance } from "@openpond/app-server";
 import {
@@ -95,6 +99,7 @@ import {
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
+import type { TurnRunnerDependencies } from "./runtime/turns/ports.js";
 import { resolveMaxHostedWorkspaceToolRounds } from "./server-entry-helpers.js";
 import { createSessionStore } from "./store/session-store.js";
 import {
@@ -104,6 +109,7 @@ import {
 } from "./session-title-service.js";
 import { SqliteStore } from "./store/store.js";
 import { event, now } from "./utils.js";
+import { createHostedOwnedAppServer } from "./runtime/hosted-app-server-composition.js";
 
 import {
   createEmbeddingToolResolver,
@@ -119,7 +125,22 @@ export type { AppServerSandboxRequest } from "./runtime/app-server-sandbox-tools
 
 const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
 
+/** One selection boundary for the session, turn and event core. */
+export type AppServerRuntimeCoreStorage = TurnRunnerDependencies["store"] & Pick<SqliteStore,
+  "sessionCount" | "insertSessionAtFront" | "getSession" | "updateSession" |
+  "appendRuntimeEvent" | "runtimeEventPageRows" | "turnsForSession" |
+  "upsertApproval" | "upsertModelUsageRecord">;
+
 export type OpenPondAppServerOptions = {
+  hostStorageClient?: import("@openpond/agent-runtime").AgentHostStorageClient;
+  /** Select all mutable runtime domains together after host capability negotiation. */
+  runtimeStorage?: {
+    kind: "hosted_postgres";
+    client: import("@openpond/agent-runtime").AgentHostStorageClient;
+    core: AppServerRuntimeCoreStorage;
+    inbox: TaskInboxRepository;
+    admittedProfileRelease?: import("./store/hosted-profile-source.js").AdmittedHostedProfileRelease;
+  };
   storeDir?: string;
   workspaceDir?: string;
   version?: string;
@@ -173,12 +194,20 @@ export const APP_SERVER_COMPOSITION: readonly AppServerCompositionService[] = [
 ];
 
 export async function createOpenPondAppServer(options: OpenPondAppServerOptions = {}): Promise<OpenPondAppServerInstance> {
+  if (options.runtimeStorage) {
+    return createHostedOwnedAppServer({ ...options, runtimeStorage: options.runtimeStorage });
+  }
   const storeDir = path.resolve(options.storeDir ?? appDataDir());
   return ownHomeRuntime(storeDir, () => createOwnedAppServer({ ...options, storeDir }));
 }
 async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<OpenPondAppServerInstance> {
   const storeDir = path.resolve(options.storeDir ?? appDataDir());
   const embedded = Boolean(options.embedding);
+  const hostedRuntimeStorage = options.runtimeStorage;
+  if (hostedRuntimeStorage && (!options.hostStorageClient ||
+      hostedRuntimeStorage.client !== options.hostStorageClient)) {
+    throw new Error("Hosted runtime storage requires the authenticated host storage client.");
+  }
   if (embedded && !options.streamOpenPondHostedChatTurn) {
     throw new Error("Embedded Work requires an explicit model-stream adapter.");
   }
@@ -207,6 +236,12 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   const store = new SqliteStore(storeDir, { logger });
   onStartupFailure(() => store.close());
   await store.recentTurns(1);
+  const coreStore = hostedRuntimeStorage?.core ?? store;
+  const hostedHarnessOverlay = hostedRuntimeStorage && options.hostStorageClient
+    ? new HostedHarnessOverlayStorage(options.hostStorageClient) : null;
+  const loadRuntimePreferences = async () => hostedRuntimeStorage
+    ? (await loadHostedRuntimeSettings(options.hostStorageClient!)).preferences
+    : (await readPreferences(storeDir)).preferences;
   const scheduleRecovery = reconcileInterruptedScheduledWork(storeDir);
   if (scheduleRecovery.recovered || scheduleRecovery.needsReview) logger.warn("Scheduled work requires review after restart", scheduleRecovery);
   const streamOpenPondHostedChatTurn = createScriptedOpenPondChatStream(
@@ -220,7 +255,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     appendRuntimeEvent,
     closeEventSubscribers,
     subscribeRuntimeEvents,
-  } = createRuntimeEventBus({ logger, store });
+  } = createRuntimeEventBus({ logger, store: coreStore });
   const turnFollowUpQueue = createBackgroundWorkerQueue({
     queueId: "turn-follow-up",
     logger,
@@ -251,6 +286,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       name: source.profileId,
       profile,
       sourceRevision: source.sourceRevision,
+      repositoryId: source.repositoryId,
     });
   }
   if (options.harness) {
@@ -274,7 +310,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
 
   const hostedTurnHelpers = createHostedTurnHelpers({
     appendRuntimeEvent,
-    findLocalProject: (projectId) => findLocalProject(store, projectId),
+    findLocalProject: (projectId) => hostedRuntimeStorage
+      ? Promise.resolve(null) : findLocalProject(store, projectId),
     onRepositoryInstructionDiagnostic: (diagnostic, session) => {
       logger.warn("repository instruction file skipped", {
         diagnostic,
@@ -290,10 +327,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     failTurn,
     interruptTurn,
   } = createSessionStore({
-    store,
+    store: coreStore,
     defaultSessionCwd: () => workspaceDir,
     appendRuntimeEvent,
-    loadAppPreferences: async () => (await readPreferences(storeDir)).preferences,
+    loadAppPreferences: loadRuntimePreferences,
     loadLastUsedProfile: async () =>
       (await loadOpenPondProfileLibrary()).lastUsed,
   });
@@ -330,7 +367,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
         getSession,
         executeWorkspaceTool: workspace.executeWorkspaceTool,
         runtimeEventsForSession: (sessionId) =>
-          store.runtimeEventsForSession(sessionId),
+          coreStore.runtimeEventsForSession(sessionId),
       },
       resolveReleasedHarness: async () => {
         const runtime = await loadSelectedLocalHarnessRuntime(store);
@@ -345,7 +382,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     },
   }) : undefined;
   const upsertApproval = async (approval: Approval): Promise<void> => {
-    await store.upsertApproval(approval);
+    await coreStore.upsertApproval(approval);
   };
   const commandAccess = createOpenPondCommandAccessService({
     upsertApproval,
@@ -359,7 +396,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     record: ModelUsageRecord,
   ): Promise<void> => {
     try {
-      await store.upsertModelUsageRecord(record);
+      await coreStore.upsertModelUsageRecord(record);
     } catch (error) {
       await appendRuntimeEvent(
         runtimeDiagnostic(record, error),
@@ -381,7 +418,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     workInputsForSession: options.workInputsForSession,
     finalizeWorkTurn: options.finalizeWorkTurn,
     resolveModelTools: options.embedding ? createEmbeddingToolResolver(options.embedding, async (turnId, bindings) => {
-      const turn = await store.getTurn(turnId);
+      const turn = await coreStore.getTurn(turnId);
       if (!turn) throw new Error("Embedded turn is unavailable.");
       const session = await getSession(turn.sessionId);
       const previous = session.metadata?.embeddingToolBindings;
@@ -390,11 +427,12 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
         throw new Error("Embedded tool bindings changed; start a new thread.");
       }
       await updateSession(session.id, { metadata: { ...session.metadata, embeddingToolBindings: admittedBindings } });
-      await store.updateTurn(turnId, current => ({ ...current, metadata: { ...current.metadata, toolBindings: admittedBindings } }));
+      await coreStore.updateTurn(turnId, current => ({ ...current, metadata: { ...current.metadata, toolBindings: admittedBindings } }));
     }) : undefined,
     ...(embedded ? { hostedToolFlags: { toolMode: "native" as const, nativeToolTransport: true, nativeToolProviderDenylist: [], textToolFallback: false } } : {}),
     attachmentRootDir: path.join(storeDir, "attachments"),
-    store,
+    store: coreStore,
+    inboxStore: hostedRuntimeStorage?.inbox ?? store,
     createSession,
     upsertApproval,
     getSession,
@@ -424,10 +462,12 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     ...(embedded || services.profileActions === false ? { executeProfileSkillCommand: undefined } : {}),
     loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
-    loadSelectedHarnessRuntime: (session) =>
-      loadLocalHarnessRuntimeForSession(store, session),
-    ensureHarnessRunOverlay: (input) =>
-      ensureLocalHarnessRunOverlay({ store, ...input }),
+    loadSelectedHarnessRuntime: (session) => hostedRuntimeStorage
+      ? loadHostedHarnessRuntimeForSession(options.hostStorageClient!, session)
+      : loadLocalHarnessRuntimeForSession(store, session),
+    ensureHarnessRunOverlay: (input) => hostedHarnessOverlay
+      ? hostedHarnessOverlay.ensureHarnessRunOverlay(input)
+      : ensureLocalHarnessRunOverlay({ store, ...input }),
     harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }).filter(tool =>
       backgroundReview || !["refiner_profile_inspect", "refiner_profile_update", "refine_request", "refine_status"].includes(tool.name)),
     loadBuiltInOpenPondSkills: async () => [
@@ -447,9 +487,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     createScheduledWork: scheduling,
     executeConnectedAppTool: connectedApps?.execute,
     listIntegrationConnections: connectedApps?.list,
-    loadPersonalizationSoul: async () =>
-      (await loadPersonalizationSettings(store, storeDir)).soul,
-    loadAppPreferences: async () => (await readPreferences(storeDir)).preferences,
+    loadPersonalizationSoul: async () => hostedRuntimeStorage
+      ? (await loadHostedRuntimeSettings(options.hostStorageClient!)).personalizationSoul
+      : (await loadPersonalizationSettings(store, storeDir)).soul,
+    loadAppPreferences: loadRuntimePreferences,
     maybeCreateScaffoldForTurn: hostedTurnHelpers.maybeCreateScaffoldForTurn,
     hostedSystemPrompt: hostedTurnHelpers.hostedSystemPrompt,
     appendAssistantText: hostedTurnHelpers.appendAssistantText,
@@ -562,9 +603,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       },
       createSession: createSessionWithAutoTitle,
       getSession,
-      turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
-      runtimeEventsForSession: (sessionId) =>
-        store.runtimeEventsForSession(sessionId),
+      turnsForSession: (sessionId) => coreStore.turnsForSession(sessionId, 1_000),
+      runtimeEventsForSession: (sessionId) => coreStore.runtimeEventsForSession(sessionId),
       sendTurn: turnRunner.sendTurn,
       steerSessionTurn: turnRunner.steerSessionTurn,
       readTaskInbox: turnRunner.readTaskInbox,

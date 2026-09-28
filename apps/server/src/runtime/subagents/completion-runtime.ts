@@ -4,7 +4,7 @@ import {
 } from "@openpond/contracts";
 import { event, now } from "../../utils.js";
 import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
-import type { TaskInboxRepository } from "../../store/store-task-inbox.js";
+import type { TaskInboxRepository } from "../task-inbox/repository.js";
 
 export function createSubagentCompletionRuntime(deps: {
   inbox: TaskInboxRuntime;

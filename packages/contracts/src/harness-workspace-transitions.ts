@@ -359,6 +359,23 @@ export function advanceReviewedHarnessWorkspace(input: {
   };
 }
 
+/** One pure transition entrypoint for local and hosted persistence adapters. */
+export type HarnessWorkspaceTransition =
+  | ({ action: "advance" } & Omit<Parameters<typeof advanceHarnessWorkspace>[0], "workspace">)
+  | ({ action: "reviewedAdvance" } & Omit<Parameters<typeof advanceReviewedHarnessWorkspace>[0], "workspace">)
+  | ({ action: "rollback" } & Omit<Parameters<typeof rollbackHarnessWorkspace>[0], "workspace">);
+
+export function applyHarnessWorkspaceTransition(
+  workspace: HarnessWorkspace,
+  transition: HarnessWorkspaceTransition,
+): HarnessWorkspaceAdvanceResult {
+  switch (transition.action) {
+    case "advance": return advanceHarnessWorkspace({ ...transition, workspace });
+    case "reviewedAdvance": return advanceReviewedHarnessWorkspace({ ...transition, workspace });
+    case "rollback": return rollbackHarnessWorkspace({ ...transition, workspace });
+  }
+}
+
 function workspaceConflictReason(
   workspace: HarnessWorkspace,
   proposal: HarnessImprovementProposal,

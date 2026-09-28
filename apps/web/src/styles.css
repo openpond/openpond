@@ -5,6 +5,7 @@
 @import "./styles/common/tabs.css";
 @import "./styles/splash/app-splash.css";
 @import "./styles/shell.css";
+@import "./styles/ponder/ponder.css";
 @import "./styles/app-shell/main-pane.css";
 @import "./styles/sidebar/sidebar.css";
 @import "./styles/sidebar/user-auth-menu.css";

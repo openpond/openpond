@@ -7,10 +7,15 @@ import {
 export function NewExperienceSwitcher({
   value,
   onChange,
+  allowPonder = false,
 }: {
-  value: ChatTaskMode;
-  onChange: (experience: ChatTaskMode) => void;
+  value: ChatTaskMode | "ponder";
+  onChange: (experience: ChatTaskMode | "ponder") => void;
+  allowPonder?: boolean;
 }) {
+  const modeOptions = allowPonder
+    ? [{ value: "ponder" as const, label: "Ponder Pal" }, ...CHAT_TASK_MODE_OPTIONS]
+    : CHAT_TASK_MODE_OPTIONS;
   const selectAdjacentExperience = (
     event: KeyboardEvent<HTMLButtonElement>,
     currentIndex: number
@@ -19,19 +24,18 @@ export function NewExperienceSwitcher({
     if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = CHAT_TASK_MODE_OPTIONS.length - 1;
+      nextIndex = modeOptions.length - 1;
     } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-      nextIndex = (currentIndex + 1) % CHAT_TASK_MODE_OPTIONS.length;
+      nextIndex = (currentIndex + 1) % modeOptions.length;
     } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
       nextIndex =
-        (currentIndex - 1 + CHAT_TASK_MODE_OPTIONS.length) %
-        CHAT_TASK_MODE_OPTIONS.length;
+        (currentIndex - 1 + modeOptions.length) % modeOptions.length;
     } else {
       return;
     }
 
     event.preventDefault();
-    const nextExperience = CHAT_TASK_MODE_OPTIONS[nextIndex];
+    const nextExperience = modeOptions[nextIndex];
     if (!nextExperience) return;
 
     onChange(nextExperience.value);
@@ -48,7 +52,7 @@ export function NewExperienceSwitcher({
       role="radiogroup"
       aria-label="Choose task mode"
     >
-      {CHAT_TASK_MODE_OPTIONS.map((option, index) => {
+      {modeOptions.map((option, index) => {
         const selected = option.value === value;
         return (
           <button

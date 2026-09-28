@@ -70,6 +70,7 @@ async function loadProfileWorkflows(input: {
     name: input.profile.activeProfile!,
     profile: input.profile,
     sourceRevision,
+    repositoryId: input.ref.repositoryId,
   });
   const result = await profileWorkflowsForRelease({ store: input.store, release, ref: input.ref, sourceRevision });
   if (input.reloadProfile) {

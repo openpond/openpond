@@ -144,6 +144,7 @@ import {
 } from "./openpond/sandboxes.js";
 import { createHostedSavedWork } from "./openpond/saved-work.js";
 import { hostedSavedWorkRoutePayloads } from "./openpond/saved-work-route-payloads.js";
+import { requestHostedPonder } from "./openpond/ponder-pal.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
 import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
@@ -1736,6 +1737,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       ...harnessSettingsRoutes,
       ...refinerSettingsRoutes,
       ...hostedSavedWorkRoutePayloads,
+      ponderRequestPayload: requestHostedPonder,
       ...chatWorkflows.routePayloads,
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,

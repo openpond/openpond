@@ -178,6 +178,7 @@ export function Composer({
   voiceInputChannelKey = submissionScopeKey,
   initialSteerDrafts = EMPTY_STEER_DRAFTS,
   showProjectFooter = true,
+  hideModelControls = false,
   autoFocus = false,
   focusRequestId = 0,
   attachmentRequest = null,
@@ -1907,6 +1908,7 @@ export function Composer({
           fileInputRef={fileInputRef}
           modelValue={modelValue}
           modelOptions={modelOptions}
+          hideModelControls={hideModelControls}
           openPondCommandAccessMode={openPondCommandAccessMode}
           showCommandAccess={repositoryWork}
           profileTarget={showProjectFooter ? null : profileTarget}

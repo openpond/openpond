@@ -58,6 +58,7 @@ export type ComposerProps = {
   voiceInputChannelKey?: string;
   initialSteerDrafts?: ComposerSteerDraft[];
   showProjectFooter?: boolean;
+  hideModelControls?: boolean;
   autoFocus?: boolean;
   focusRequestId?: number;
   attachmentRequest?: { id: number; file: File } | null;

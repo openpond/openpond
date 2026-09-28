@@ -4,8 +4,11 @@ import { describe, expect, test, vi } from "vitest";
 
 import {
   AGENT_PROTOCOL_VERSION,
+  AgentHostStorageClient,
   AgentJsonRpcDispatcher,
   AgentRpcClient,
+  HostStorageRequestSchema,
+  HOST_STORAGE_CONTRACT_VERSION,
   runAgentJsonlServer,
   type AgentRuntimeHost,
   type JsonRpcNotification,
@@ -45,6 +48,18 @@ function host(): AgentRuntimeHost {
 }
 
 describe("agent JSON-RPC protocol", () => {
+  test("task inbox host requests reject forged scope and stale mutation revisions", () => {
+    const request = {
+      contractVersion: 1, requestId: "mutation-1", operation: "task-inbox/execute",
+      params: { action: "mutateTaskInput", sessionId: "session-1", inputId: "input-1",
+        change: { action: "cancel", expectedRevision: 2 } },
+    };
+    expect(HostStorageRequestSchema.safeParse(request).success).toBe(true);
+    expect(HostStorageRequestSchema.safeParse({ ...request, params: { ...request.params, teamId: "forged" } }).success).toBe(false);
+    expect(HostStorageRequestSchema.safeParse({ ...request, params: { ...request.params,
+      change: { action: "cancel", expectedRevision: 0 } } }).success).toBe(false);
+  });
+
   test("routes authoritative Profile evaluation preparation and run requests", async () => {
     const runtimeHost = host();
     const dispatcher = new AgentJsonRpcDispatcher(runtimeHost);
@@ -265,6 +280,45 @@ describe("agent JSON-RPC protocol", () => {
     ]));
   });
 
+  test("services a correlated host storage response while turn/start is pending", async () => {
+    const readable = new PassThrough();
+    const writable = new PassThrough();
+    const client = new AgentHostStorageClient();
+    const runtimeHost = host();
+    runtimeHost.turnStart = vi.fn(async () => ({
+      storage: await client.request({
+        contractVersion: 1,
+        requestId: "history-read-1",
+        operation: "events/page",
+        params: { sessionId: "thread-1", afterSequence: 0, limit: 10 },
+      }),
+    }));
+    const output: Record<string, unknown>[] = [];
+    let buffer = "";
+    writable.on("data", (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const message = JSON.parse(line) as Record<string, unknown>;
+        output.push(message);
+        if (message.method === "host/storage") {
+          readable.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { entries: [] } })}\n`);
+          readable.end();
+        }
+      }
+    });
+    const server = runAgentJsonlServer({ host: runtimeHost, readable, writable, hostStorageClient: client });
+    readable.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: AGENT_PROTOCOL_VERSION, client: { name: "storage-test", version: "1" } } })}\n`);
+    readable.write(`${JSON.stringify({ jsonrpc: "2.0", method: "initialized" })}\n`);
+    readable.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "turn/start", params: { threadId: "thread-1" } })}\n`);
+    await server;
+    expect(output).toEqual(expect.arrayContaining([
+      expect.objectContaining({ method: "host/storage" }),
+      expect.objectContaining({ id: 2, result: { storage: { entries: [] } } }),
+    ]));
+  });
+
   test("forwards canonical host notifications", async () => {
     const listeners = new Set<(notification: JsonRpcNotification) => void>();
     const runtimeHost = host();
@@ -287,6 +341,46 @@ describe("agent JSON-RPC protocol", () => {
     readable.end();
     await server;
     expect(output.join("")).toContain('"method":"turn/event"');
+  });
+
+  test("serves host storage replies while an async runtime is still starting", async () => {
+    const client = new AgentHostStorageClient();
+    const readable = new PassThrough();
+    const writable = new PassThrough();
+    const output: Record<string, unknown>[] = [];
+    let buffer = "";
+    writable.on("data", (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const message = JSON.parse(line) as Record<string, unknown>;
+        output.push(message);
+        if (message.method === "host/storage") {
+          readable.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { ready: true } })}\n`);
+        }
+        if (message.id === 1) readable.end();
+      }
+    });
+    const server = runAgentJsonlServer({
+      host: async () => {
+        const result = await client.request({ contractVersion: HOST_STORAGE_CONTRACT_VERSION,
+          requestId: "bootstrap", operation: "capabilities", params: {} });
+        if (!result || typeof result !== "object" || (result as { ready?: boolean }).ready !== true) {
+          throw new Error("Host storage did not admit startup.");
+        }
+        return host();
+      },
+      readable, writable, hostStorageClient: client,
+    });
+    readable.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {
+      protocolVersion: AGENT_PROTOCOL_VERSION, client: { name: "startup-test", version: "1" },
+    } })}\n`);
+    await server;
+    expect(output.findIndex((message) => message.method === "host/storage")).toBeLessThan(
+      output.findIndex((message) => message.id === 1),
+    );
+    expect(output).toEqual(expect.arrayContaining([expect.objectContaining({ id: 1, result: expect.anything() })]));
   });
 
   test("buffers pre-initialization events and streams a bounded event burst with backpressure", async () => {
