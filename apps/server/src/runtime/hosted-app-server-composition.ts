@@ -26,6 +26,7 @@ import { createAgentRuntimePorts } from "./agent-runtime-host.js";
 import { createEmbeddingToolResolver } from "./app-server-embedding.js";
 import { createHostedWorkOutputLifecycle } from "../work/hosted-work-output-lifecycle.js";
 import { createHostedEmbeddingAdapter, createHostedSandboxRequest } from "./hosted-embedding-adapter.js";
+import { assertHostedWorkCapabilities } from "./hosted-capability-admission.js";
 import { resolveMaxHostedWorkspaceToolRounds } from "../server-entry-helpers.js";
 import { createScriptedOpenPondChatStream, scriptedOpenPondModelsEnabled } from "../openpond/scripted-chat-provider.js";
 
@@ -58,19 +59,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
     contractVersion: HOST_STORAGE_CONTRACT_VERSION, requestId: randomUUID(),
     operation: "capabilities", params: {},
   }));
-  const required = ["sandbox/request", "embedding/authorize",
-    "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile",
-    "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put",
-    "harness/memory/get", "harness/memory/list", "harness/memory/write",
-    "harness/state/read",
-    "task-inbox/execute", "create-improve/execute", "approval/get", "approval/upsert",
-    "usage/getByRequestId", "usage/upsert", "usage/page",
-    "session/count", "session/get", "session/page", "session/put",
-    "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page",
-    "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"] as const;
-  if (required.some((operation) => !capabilities.operations.includes(operation))) {
-    throw new Error("Hosted Postgres runtime capabilities are incomplete.");
-  }
+  assertHostedWorkCapabilities(capabilities);
   const embedding = createHostedEmbeddingAdapter(client, capabilities.allowedTools);
   const sandboxRequest = createHostedSandboxRequest(client);
   const storeDir = path.resolve(options.storeDir ?? process.cwd());

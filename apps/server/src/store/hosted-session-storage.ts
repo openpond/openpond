@@ -5,6 +5,7 @@ import {
   type AgentHostStorageClient,
 } from "@openpond/agent-runtime";
 import { z } from "zod";
+import { hostedBoundedPage } from "./hosted-bounded-page.js";
 
 const storedSessionSchema = z.object({
   revision: z.number().int().min(1),
@@ -53,12 +54,13 @@ export class HostedSessionStorage {
     const sessions: Session[] = [];
     let afterId: string | null = null;
     do {
-      const page = sessionPageSchema.parse(await this.client.request({
-        contractVersion: HOST_STORAGE_CONTRACT_VERSION,
-        requestId: randomUUID(),
-        operation: "session/page",
-        params: { afterId, limit: Math.min(10, 1_001 - sessions.length) },
-      }));
+      const page = await hostedBoundedPage(Math.min(10, 1_001 - sessions.length), async (limit) =>
+        sessionPageSchema.parse(await this.client.request({
+          contractVersion: HOST_STORAGE_CONTRACT_VERSION,
+          requestId: randomUUID(),
+          operation: "session/page",
+          params: { afterId, limit },
+        })));
       sessions.push(...page.sessions);
       if (sessions.length > 1_000) throw new Error("Hosted session list exceeds 1,000 rows; use a scoped page query.");
       if (page.nextAfterId !== null && (page.sessions.length === 0 ||
@@ -119,12 +121,13 @@ export class HostedSessionStorage {
     const turns: Turn[] = [];
     let beforeSortIndex: number | null = null;
     while (turns.length < maximum) {
-      const page = turnPageSchema.parse(await this.client.request({
-        contractVersion: HOST_STORAGE_CONTRACT_VERSION,
-        requestId: randomUUID(),
-        operation: "turn/page",
-        params: { sessionId, beforeSortIndex, limit: Math.min(200, maximum - turns.length) },
-      }));
+      const page = await hostedBoundedPage(Math.min(200, maximum - turns.length), async (limit) =>
+        turnPageSchema.parse(await this.client.request({
+          contractVersion: HOST_STORAGE_CONTRACT_VERSION,
+          requestId: randomUUID(),
+          operation: "turn/page",
+          params: { sessionId, beforeSortIndex, limit },
+        })));
       turns.push(...page.turns);
       if (page.nextBeforeSortIndex === null) break;
       if (beforeSortIndex !== null && page.nextBeforeSortIndex >= beforeSortIndex) {
