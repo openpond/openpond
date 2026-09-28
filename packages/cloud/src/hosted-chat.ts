@@ -176,6 +176,7 @@ export type HostedChatRequestOptions = {
   signal?: AbortSignal;
   temperature?: number;
   maxTokens?: number;
+  reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh" | "max";
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   tool_choice?: HostedChatToolChoice;
@@ -339,6 +340,11 @@ function buildHostedChatBody(
   }
   if (typeof options.maxTokens === "number") {
     body.max_tokens = options.maxTokens;
+  }
+  if (options.reasoningEffort === "off") {
+    body.thinking = { type: "disabled" };
+  } else if (options.reasoningEffort) {
+    body.reasoning_effort = options.reasoningEffort;
   }
   if (options.tools) {
     body.tools = options.tools;
