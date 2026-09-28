@@ -4,10 +4,14 @@ import { opChatReasoningFields } from "../packages/runtime/src/chat.js";
 describe("OpChat reasoning fields", () => {
   test.each([
     [null, {}],
-    ["low", { thinking: { type: "disabled" } }],
+    ["off", { thinking: { type: "disabled" } }],
+    [
+      "low",
+      { thinking: { type: "enabled" }, reasoning_effort: "low" },
+    ],
     [
       "medium",
-      { thinking: { type: "enabled" }, reasoning_effort: "high" },
+      { thinking: { type: "enabled" }, reasoning_effort: "medium" },
     ],
     [
       "high",
@@ -15,6 +19,10 @@ describe("OpChat reasoning fields", () => {
     ],
     [
       "xhigh",
+      { thinking: { type: "enabled" }, reasoning_effort: "xhigh" },
+    ],
+    [
+      "max",
       { thinking: { type: "enabled" }, reasoning_effort: "max" },
     ],
   ] as const)("maps %s to the supported OpChat request", (effort, expected) => {

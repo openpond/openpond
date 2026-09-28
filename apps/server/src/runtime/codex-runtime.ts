@@ -46,7 +46,13 @@ function codexSessionConfig(
   return {
     ...CODEX_BASE_SESSION_CONFIG,
     approvals_reviewer: permissionMode === "auto-review" ? "auto_review" : "user",
-    ...(reasoningEffort ? { model_reasoning_effort: reasoningEffort } : {}),
+    ...(reasoningEffort ? {
+      model_reasoning_effort: reasoningEffort === "off"
+        ? "low"
+        : reasoningEffort === "max"
+          ? "xhigh"
+          : reasoningEffort,
+    } : {}),
   };
 }
 

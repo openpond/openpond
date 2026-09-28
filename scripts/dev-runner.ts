@@ -79,7 +79,7 @@ export function parseDevRunnerArgs(
   let host = env.OPENPOND_DEV_HOST || "127.0.0.1";
   let serverPort = numberFromEnv(env.OPENPOND_SERVER_PORT);
   let webPort = numberFromEnv(env.OPENPOND_WEB_PORT);
-  let watch = false;
+  let watch = true;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
@@ -89,6 +89,10 @@ export function parseDevRunnerArgs(
     }
     if (arg === "--watch") {
       watch = true;
+      continue;
+    }
+    if (arg === "--no-watch") {
+      watch = false;
       continue;
     }
     if (arg === "--host") {

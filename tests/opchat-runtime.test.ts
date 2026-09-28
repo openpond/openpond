@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import {
   listOpChatModels,
+  listOpChatProviderCatalog,
   listOpChatProviders,
   streamOpChatChatCompletion,
 } from "../packages/runtime/src/chat";
@@ -81,6 +82,33 @@ describe("OpenPond runtime OpChat routing", () => {
 
     expect(requests).toEqual(["https://api.example.test/opchat/v1/models"]);
     expect(result.data.map((model) => model.id)).toEqual(["openpond-chat", "deepseek-v4-flash"]);
+  });
+
+  test("keeps supported hosted catalog entries when the API adds a provider", async () => {
+    const provider = {
+      displayName: "OpenPond Chat",
+      credentialModes: ["openpond-account"],
+      routing: { hostedOpChat: true, localRuntime: true, localByok: false, hostedByok: false },
+      capabilities: { chatCompletions: true, streaming: true, modelDiscovery: "hosted", toolCalling: true, reasoning: true, imageInput: false, structuredOutput: false },
+      modelCacheSource: "hosted",
+      models: [{ id: "gpt-6-sol", displayName: "GPT-6 Sol", capabilities: {
+        reasoning: true,
+        reasoningEfforts: ["off", "low", "medium", "high", "xhigh", "max"],
+      } }],
+    };
+    globalThis.fetch = async () => jsonResponse({
+      version: 1,
+      generatedAt: "2026-09-27T00:00:00.000Z",
+      providers: [{ ...provider, id: "openpond" }, { ...provider, id: "fireworks" }],
+    });
+
+    const catalog = await listOpChatProviderCatalog({
+      apiBaseUrl: "https://api.example.test/opchat/v1",
+      token: "opk_test",
+    });
+    expect(catalog.providers.map((entry) => entry.id)).toEqual(["openpond"]);
+    expect(catalog.providers[0]?.models[0]?.capabilities?.reasoningEfforts)
+      .toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
   });
 
   test("lists providers from /opchat/v1/providers", async () => {

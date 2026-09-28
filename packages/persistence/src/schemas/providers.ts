@@ -100,6 +100,7 @@ export const ProviderModelCapabilitiesSchema = z.object({
   streaming: z.boolean().default(true),
   toolCalling: z.boolean().default(false),
   reasoning: z.boolean().default(false),
+  reasoningEfforts: z.array(z.enum(["off", "low", "medium", "high", "xhigh", "max"])).default([]),
   vision: z.boolean().default(false),
   structuredOutput: z.boolean().default(false),
 });

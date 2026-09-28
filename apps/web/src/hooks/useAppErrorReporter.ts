@@ -24,10 +24,8 @@ export function useAppErrorReporter({
       options: Pick<
         AppToast,
         | "actionLabel"
-        | "actionIcon"
         | "onAction"
         | "persistent"
-        | "dismissible"
         | "durationMs"
         | "placement"
       > = {},
@@ -38,16 +36,6 @@ export function useAppErrorReporter({
     },
     [appDispatch],
   );
-  const openDiagnosticsSettings = useCallback(() => {
-    appDispatch({
-      type: "patch",
-      patch: {
-        settingsSection: "diagnostics",
-        sidebarOpen: true,
-        view: "settings",
-      },
-    });
-  }, [appDispatch]);
   const setError = useCallback<Dispatch<SetStateAction<string | null>>>(
     (value) => {
       const current = latestErrorRef.current;
@@ -64,12 +52,7 @@ export function useAppErrorReporter({
         return;
       }
 
-      errorToastIdRef.current = showToast(appErrorToastMessage(next), "error", {
-        actionLabel: "Open diagnostics settings",
-        actionIcon: "settings",
-        onAction: openDiagnosticsSettings,
-        dismissible: true,
-      });
+      errorToastIdRef.current = showToast(appErrorToastMessage(next), "error");
       const connection = connectionRef.current;
       if (!connection) return;
       void api
@@ -82,7 +65,7 @@ export function useAppErrorReporter({
           console.warn("Unable to record client diagnostic.", diagnosticError);
         });
     },
-    [appDispatch, openDiagnosticsSettings, setErrorState, showToast],
+    [appDispatch, setErrorState, showToast],
   );
 
   useEffect(() => {

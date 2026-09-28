@@ -17,6 +17,7 @@ import type {
 import { DropdownSelect } from "../DropdownSelect";
 import {
   CODEX_PERMISSION_MODE_OPTIONS,
+  defaultReasoningEffortForModel,
   defaultModelForProvider,
   modelOptionsForProvider,
   OPENPOND_COMMAND_ACCESS_MODE_OPTIONS,
@@ -164,6 +165,7 @@ export function ComposerPrimaryControls({
     [modelGroups],
   );
   const changeModelSelection = (nextProvider: ChatProvider, nextModel: string) => {
+    onCodexReasoningEffortChange(defaultReasoningEffortForModel(nextProvider, nextModel, providerSettings));
     if (nextProvider === provider) {
       onModelChange(nextModel);
       return;
@@ -217,6 +219,7 @@ export function ComposerPrimaryControls({
             modelGroups={teamModelGroups}
             placement={dropdownPlacement}
             provider={provider}
+            providerSettings={providerSettings}
             reasoningEffort={codexReasoningEffort}
             showReasoning={showModelReasoningMenu}
             onModelSelectionChange={changeModelSelection}
@@ -384,6 +387,7 @@ export function ComposerPrimaryControls({
         modelGroups={modelGroups}
         placement={dropdownPlacement}
         provider={provider}
+        providerSettings={providerSettings}
         reasoningEffort={codexReasoningEffort}
         showReasoning={showModelReasoningMenu}
         onModelSelectionChange={changeModelSelection}

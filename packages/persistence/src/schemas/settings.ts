@@ -29,7 +29,7 @@ export const OpenPondCommandAccessModeSchema = z.enum(["ask", "full-access", "di
 
 export type OpenPondCommandAccessMode = z.infer<typeof OpenPondCommandAccessModeSchema>;
 
-export const CodexReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh"]);
+export const CodexReasoningEffortSchema = z.enum(["off", "low", "medium", "high", "xhigh", "max"]);
 
 export type CodexReasoningEffort = z.infer<typeof CodexReasoningEffortSchema>;
 

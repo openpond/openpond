@@ -828,6 +828,7 @@ Usage:
 Options:
   --compatibility-model <string>
   --compat-model <string>
+  --effort <string>
   --env <string>
   --environment <string>
   --json

@@ -25,10 +25,8 @@ export type AppToast = {
   message: string;
   tone: "success" | "error" | "info";
   actionLabel?: string;
-  actionIcon?: "settings";
   onAction?: () => void;
   persistent?: boolean;
-  dismissible?: boolean;
   durationMs?: number;
   placement?: "bottom-right" | "top-right";
 };
@@ -39,10 +37,8 @@ export type ShowAppToast = (
   options?: Pick<
     AppToast,
     | "actionLabel"
-    | "actionIcon"
     | "onAction"
     | "persistent"
-    | "dismissible"
     | "durationMs"
     | "placement"
   >

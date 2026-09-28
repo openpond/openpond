@@ -52,6 +52,6 @@ export function useErrorToast(
     }
     if (lastMessageRef.current === message) return;
     lastMessageRef.current = message;
-    showToast?.(message, "error", { dismissible: true });
+    showToast?.(message, "error");
   }, [enabled, message, showToast]);
 }

@@ -1,5 +1,8 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import os from "node:os";
+import { promises as fs } from "node:fs";
+import { ensureDevBuild } from "../scripts/build/dev-sdk";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
@@ -69,6 +72,7 @@ describe("dev runner", () => {
       "desktop",
     ]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
+      "watch",
       "apps/server/src/index.ts",
       "--port",
       "17874",
@@ -97,6 +101,7 @@ describe("dev runner", () => {
     ]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server", "renderer"]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
+      "watch",
       "apps/server/src/index.ts",
       "--port",
       "19074",
@@ -221,7 +226,46 @@ describe("dev runner", () => {
     ]);
   });
 
-  test("defaults to stable server when --watch is not passed", () => {
-    const options = parseDevRunnerArgs(["server"]);
+  test("allows backend watching to be explicitly disabled", () => {
+    const options = parseDevRunnerArgs(["server", "--no-watch"]);
     expect(options.watch).toBe(false);
+    expect(buildDevRunnerPlan(options, {}, root).processes[0]?.args[0]).toBe("apps/server/src/index.ts");
   });
+
+// Protects against silently launching stale or incomplete package artifacts.
+test("dev build cache invalidates changed inputs, damaged outputs, and failed builds", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-dev-build-"));
+  const input = path.join(directory, "source.ts");
+  const output = path.join(directory, "dist", "index.js");
+  let builds = 0;
+  let fail = false;
+  const options = {
+    inputs: [input], outputs: [path.dirname(output)], cacheFile: path.join(directory, "receipt.json"),
+    async build() {
+      builds += 1;
+      if (fail) throw new Error("build failed");
+      await fs.mkdir(path.dirname(output), { recursive: true });
+      await fs.writeFile(output, await fs.readFile(input));
+    },
+  };
+  try {
+    await fs.writeFile(input, "first");
+    expect(await ensureDevBuild(options)).toBe("built");
+    expect(await ensureDevBuild(options)).toBe("cached");
+    expect(builds).toBe(1);
+    await fs.writeFile(input, "second");
+    expect(await ensureDevBuild(options)).toBe("built");
+    expect(await fs.readFile(output, "utf8")).toBe("second");
+    await fs.rm(output);
+    expect(await ensureDevBuild(options)).toBe("built");
+    await fs.writeFile(input, "third");
+    fail = true;
+    await expect(ensureDevBuild(options)).rejects.toThrow("build failed");
+    fail = false;
+    expect(await ensureDevBuild(options)).toBe("built");
+    expect(await ensureDevBuild(options)).toBe("cached");
+    expect(await fs.readFile(output, "utf8")).toBe("third");
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

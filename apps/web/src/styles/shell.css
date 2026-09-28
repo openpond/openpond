@@ -379,10 +379,6 @@
   gap: 10px;
 }
 
-.app-toast.success {
-  border-color: rgba(99, 217, 138, 0.24);
-}
-
 .app-toast.top-right {
   top: 22px;
   bottom: auto;
@@ -420,14 +416,4 @@
 
 .app-toast button:hover {
   background: rgba(255, 255, 255, 0.12);
-}
-
-.app-toast .app-toast-icon-action,
-.app-toast .app-toast-close {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  color: var(--muted);
 }

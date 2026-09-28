@@ -21,6 +21,7 @@ import type {
 import {
   DEFAULT_OPENPOND_CHAT_MODEL,
   ProviderCatalogSchema,
+  ProviderIdSchema,
   type ProviderCatalog,
 } from "@openpond/contracts";
 import { loadOpenPondAccountContext } from "./account-context.js";
@@ -246,7 +247,18 @@ export async function listOpChatProviderCatalog(options: {
       `OpenPond OpChat provider catalog failed: ${response.status} ${await readOpChatError(response)}`,
     );
   }
-  return ProviderCatalogSchema.parse(await response.json());
+  const payload = await response.json();
+  if (!payload || typeof payload !== "object" || !Array.isArray(payload.providers)) {
+    return ProviderCatalogSchema.parse(payload);
+  }
+  return ProviderCatalogSchema.parse({
+    ...payload,
+    providers: payload.providers.filter((provider: unknown) =>
+      provider !== null &&
+      typeof provider === "object" &&
+      ProviderIdSchema.safeParse((provider as { id?: unknown }).id).success,
+    ),
+  });
 }
 
 export async function* streamOpChatChatCompletion(
@@ -545,12 +557,12 @@ export function opChatReasoningFields(
   effort: HostedChatTurnInput["reasoningEffort"]
 ): Record<string, unknown> {
   if (!effort) return {};
-  if (effort === "low") {
+  if (effort === "off") {
     return { thinking: { type: "disabled" } };
   }
   return {
     thinking: { type: "enabled" },
-    reasoning_effort: effort === "xhigh" ? "max" : "high",
+    reasoning_effort: effort,
   };
 }
 
