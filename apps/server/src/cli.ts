@@ -2,6 +2,11 @@ import { isRecoverableStartupError, startRecoveryServer } from "./api/startup-re
 import { resolveOpenPondHome } from "@openpond/persistence";
 import { getBundledRuntimeVersion, openUrlWithSystemBrowser } from "@openpond/runtime";
 import { runAppServerJsonl, type AppServerInstance } from "@openpond/app-server";
+import { AgentHostStorageClient } from "@openpond/agent-runtime";
+import { createHostedRuntimeCoreStorage } from "./store/hosted-turn-repository.js";
+import { HostedTaskInboxStorage } from "./store/hosted-task-inbox-storage.js";
+import { createHostedModelStreamFromEnvironment } from "./runtime/hosted-model-stream.js";
+import type { OpenPondAppServerOptions } from "./app-server-runtime.js";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +16,7 @@ import { parseListen } from "./utils.js";
 
 type CreateServer = (options: OpenPondServerOptions) => Promise<OpenPondServerInstance>;
 type ProfileSourceCliOptions = { repoPath: string; repositoryId: string; profileId: string; sourceRevision: string };
-type CreateAgentServer = (options: { storeDir?: string; profileSource?: ProfileSourceCliOptions }) => Promise<AppServerInstance>;
+type CreateAgentServer = (options: OpenPondAppServerOptions) => Promise<AppServerInstance>;
 type ServerCliFactories = {
   createOpenPondServer: CreateServer;
   createOpenPondAppServer: CreateAgentServer;
@@ -27,6 +32,7 @@ type ParsedCliArgs = {
   storeDir: string | null;
   sourceBrowserState?: string;
   profileSource?: ProfileSourceCliOptions;
+  runtimeStorage: "sqlite_bundle" | "hosted_postgres";
   help: boolean;
 };
 type BrowserHandoff = typeof openUrlWithSystemBrowser;
@@ -63,6 +69,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let profileRepositoryId: string | null = null;
   let profileId: string | null = null;
   let profileRevision: string | null = null;
+  let runtimeStorage: ParsedCliArgs["runtimeStorage"] = "sqlite_bundle";
   let index = 0;
 
   const command = args[0];
@@ -71,7 +78,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
     else if (command === "app-server") mode = "app-server";
     else if (command === "web") mode = "web";
     else if (command === "help") {
-      return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, help: true };
+      return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, runtimeStorage, help: true };
     }
     else throw new Error(`Unknown command: ${command}`);
     index = 1;
@@ -80,7 +87,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   for (let i = index; i < args.length; i += 1) {
     const arg = args[i]!;
     if (arg === "--help" || arg === "-h") {
-      return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, help: true };
+      return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, runtimeStorage, help: true };
     }
     if (arg === "--listen") {
       const listen = parseListen(requireValue(args, i, arg));
@@ -102,6 +109,11 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       throw new Error("--store-dir has been replaced by --home. Use --home <directory> or OPENPOND_HOME.");
     } else if (arg === "--home") {
       storeDir = path.resolve(requireValue(args, i, arg));
+      i += 1;
+    } else if (arg === "--runtime-storage") {
+      const value = requireValue(args, i, arg);
+      if (value !== "hosted-postgres") throw new Error("Unsupported app-server runtime storage.");
+      runtimeStorage = "hosted_postgres";
       i += 1;
     } else if (arg === "--profile-source-root") {
       profileSourceRoot = path.resolve(requireValue(args, i, arg)); i += 1;
@@ -130,8 +142,11 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   if (profileFlags && (profileFlags !== 4 || mode !== "app-server")) {
     throw new Error("Profile source flags require app-server mode and --profile-source-root, --profile-repository-id, --profile-id, and --profile-revision together.");
   }
+  if (runtimeStorage === "hosted_postgres" && (mode !== "app-server" || storeDir || profileFlags)) {
+    throw new Error("Hosted Postgres app-server cannot use --home or local Profile source flags.");
+  }
   return {
-    mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, sourceBrowserState,
+    mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, runtimeStorage, sourceBrowserState,
     ...(profileFlags ? { profileSource: { repoPath: profileSourceRoot!, repositoryId: profileRepositoryId!, profileId: profileId!, sourceRevision: profileRevision! } } : {}),
     help: false,
   };
@@ -213,6 +228,7 @@ Options:
   --port PORT            Bind port, or 0 for any free port (default ${DEFAULT_PORT})
   --web-root DIR         Directory containing the built web UI for web mode
   --home DIR        Local app-server state directory
+  --runtime-storage hosted-postgres  Host-admitted Postgres app-server mode
   --profile-source-root DIR  Authorized Profile repository source for app-server
   --profile-repository-id ID Source repository identity supplied by the host
   --profile-id ID            Profile within that source
@@ -235,7 +251,7 @@ export async function runOpenPondServerCli(factories: ServerCliFactories): Promi
   }
 
   if (args.mode === "app-server") {
-    await runAgentServer(factories.createOpenPondAppServer, args.storeDir, args.profileSource);
+    await runAgentServer(factories.createOpenPondAppServer, args.storeDir, args.profileSource, args.runtimeStorage);
     return;
   }
 
@@ -315,22 +331,42 @@ export async function runOpenPondAppServerCli(
   if (args.mode !== "app-server") {
     throw new Error("The app-server entrypoint only accepts the app-server command.");
   }
-  await runAgentServer(createOpenPondAppServer, args.storeDir, args.profileSource);
+  await runAgentServer(createOpenPondAppServer, args.storeDir, args.profileSource, args.runtimeStorage);
 }
 
 async function runAgentServer(
   createOpenPondAppServer: CreateAgentServer,
   storeDir: string | null,
   profileSource?: ProfileSourceCliOptions,
+  runtimeStorage: ParsedCliArgs["runtimeStorage"] = "sqlite_bundle",
 ): Promise<void> {
+  const hostStorageClient = new AgentHostStorageClient();
+  if (runtimeStorage === "hosted_postgres") {
+    if (storeDir || profileSource) throw new Error("Hosted Postgres app-server cannot use local storage sources.");
+    await runAppServerJsonl({
+      appServer: () => createOpenPondAppServer({
+        hostStorageClient,
+        runtimeStorage: {
+          kind: "hosted_postgres", client: hostStorageClient,
+          core: createHostedRuntimeCoreStorage(hostStorageClient),
+          inbox: new HostedTaskInboxStorage(hostStorageClient),
+        },
+        streamOpenPondHostedChatTurn: createHostedModelStreamFromEnvironment(),
+      }),
+      readable: process.stdin, writable: process.stdout, hostStorageClient,
+    });
+    return;
+  }
   if (storeDir) process.env.OPENPOND_HOME = storeDir;
   const appServer = await createOpenPondAppServer({
     ...(storeDir ? { storeDir } : {}),
     ...(profileSource ? { profileSource } : {}),
+    hostStorageClient,
   });
   await runAppServerJsonl({
     appServer,
     readable: process.stdin,
     writable: process.stdout,
+    hostStorageClient,
   });
 }

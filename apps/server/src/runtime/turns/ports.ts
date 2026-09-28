@@ -58,7 +58,7 @@ import type {
   LocalCreatePipelineCheckResult,
 } from "../local-create-pipeline.js";
 import type { HostedToolRolloutFlags } from "../hosted-turn/rollout.js";
-import type { TaskInboxRepository } from "../../store/store-task-inbox.js";
+import type { TaskInboxRepository } from "../task-inbox/repository.js";
 import type { TaskInput, TaskInputMutation } from "@openpond/contracts";
 
 export type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
@@ -308,6 +308,7 @@ export type TurnDispatcherPort = {
 export type TurnRunnerDependencies = {
   attachmentRootDir: string;
   store: TurnRepository;
+  inboxStore?: TaskInboxRepository;
   resolveCreateImproveTaskset?: (
     tasksetId: string,
     revision: number,

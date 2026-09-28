@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import type { HostedOutputIdentity, HostedSandboxOutputIdentity } from "@openpond/agent-runtime";
 import {
   FileOutputRefSchema,
   WorkOutputsResponseSchema,
@@ -40,6 +41,13 @@ export function createWorkOutputService(input: {
   storeDir: string;
   runtimeEventsForSession: (sessionId: string) => Promise<RuntimeEvent[]>;
   sandboxRequest?: typeof sandboxRequestPayload;
+  managedPersistence?: {
+    sourceTurnStartedAt(sessionId: string, turnId: string): Promise<string>;
+    save(input: { sessionId: string; turnId: string; identity: HostedOutputIdentity;
+      bytes: Buffer }): Promise<SaveWorkOutputResult>;
+    saveSandboxFile(input: { sessionId: string; turnId: string;
+      identity: HostedSandboxOutputIdentity; sandboxPath: string }): Promise<SaveWorkOutputResult>;
+  };
 }) {
   const outputRoot = path.join(input.storeDir, "work", "outputs");
   const sandboxRequest = input.sandboxRequest ?? sandboxRequestPayload;
@@ -76,7 +84,26 @@ export function createWorkOutputService(input: {
       runtimeEventsForSession: input.runtimeEventsForSession,
       sessionId: request.session.id,
       title,
+      ...(input.managedPersistence ? {
+        firstId: `hosted-${createHash("sha256").update(`${request.session.id}\0${title}`).digest("hex")}`,
+      } : {}),
     });
+    if (input.managedPersistence) {
+      const createdAt = await input.managedPersistence.sourceTurnStartedAt(
+        request.session.id, request.sourceTurnId,
+      );
+      const outputIdentity: HostedOutputIdentity = {
+        id: identity.id, title, contentType, sizeBytes: request.bytes.byteLength,
+        sha256: createHash("sha256").update(request.bytes).digest("hex"),
+        sourceTaskId: request.session.id, sourceTurnId: request.sourceTurnId,
+        revision: identity.revision, createdAt: new Date(createdAt).toISOString(),
+        validation,
+      };
+      return input.managedPersistence.save({
+        sessionId: request.session.id, turnId: request.sourceTurnId,
+        identity: outputIdentity, bytes: request.bytes,
+      });
+    }
     const taskDirectory = path.join(
       outputRoot,
       safePathSegment(request.session.id),
@@ -268,15 +295,31 @@ export function createWorkOutputService(input: {
       const sandboxPath = file.path.replace(/^\/workspace\//, "");
       const title = safeOutputName(path.posix.basename(sandboxPath));
       if (alreadySaved.has(title)) continue;
-      saved.push(
-        await saveWorkOutput({
+      if (input.managedPersistence) {
+        const identity = await nextOutputIdentity({
+          runtimeEventsForSession: input.runtimeEventsForSession,
+          sessionId: request.session.id, title,
+          firstId: `hosted-${createHash("sha256").update(`${request.session.id}\0${title}`).digest("hex")}`,
+        });
+        const createdAt = await input.managedPersistence.sourceTurnStartedAt(
+          request.session.id, request.sourceTurnId,
+        );
+        saved.push(await input.managedPersistence.saveSandboxFile({
+          sessionId: request.session.id, turnId: request.sourceTurnId,
+          identity: { id: identity.id, title, sourceTaskId: request.session.id,
+            sourceTurnId: request.sourceTurnId, revision: identity.revision,
+            createdAt: new Date(createdAt).toISOString(), validation: [] },
+          sandboxPath,
+        }));
+      } else {
+        saved.push(await saveWorkOutput({
           session: request.session,
           sourceTurnId: request.sourceTurnId,
           sandboxPath,
           suggestedName: title,
           validationPolicy: "preserve",
-        })
-      );
+        }));
+      }
       alreadySaved.add(title);
     }
     return saved;
@@ -800,6 +843,7 @@ async function nextOutputIdentity(input: {
   runtimeEventsForSession: (sessionId: string) => Promise<RuntimeEvent[]>;
   sessionId: string;
   title: string;
+  firstId?: string;
 }): Promise<{ id: string; revision: number }> {
   const events = await input.runtimeEventsForSession(input.sessionId);
   let latest: FileOutputRef | null = null;
@@ -809,7 +853,7 @@ async function nextOutputIdentity(input: {
     if (!latest || outputRef.revision > latest.revision) latest = outputRef;
   }
   return {
-    id: latest?.id ?? randomUUID(),
+    id: latest?.id ?? input.firstId ?? randomUUID(),
     revision: (latest?.revision ?? 0) + 1,
   };
 }

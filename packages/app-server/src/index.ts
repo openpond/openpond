@@ -3,6 +3,7 @@ import {
   runAgentJsonlServer,
   type AgentRuntimeHost,
   type AgentRuntimeServicePorts,
+  type AgentHostStorageClient,
 } from "@openpond/agent-runtime";
 import type { Readable, Writable } from "node:stream";
 
@@ -37,17 +38,23 @@ export function attachAppServer(input: {
 }
 
 export async function runAppServerJsonl(input: {
-  appServer: AppServerInstance;
+  appServer: AppServerInstance | (() => Promise<AppServerInstance>);
   readable: Readable;
   writable: Writable;
+  hostStorageClient?: AgentHostStorageClient;
 }): Promise<void> {
+  let created: AppServerInstance | null = typeof input.appServer === "function" ? null : input.appServer;
   try {
     await runAgentJsonlServer({
-      host: input.appServer.runtime,
+      host: created?.runtime ?? (async () => {
+        created = await (input.appServer as () => Promise<AppServerInstance>)();
+        return created.runtime;
+      }),
       readable: input.readable,
       writable: input.writable,
+      hostStorageClient: input.hostStorageClient,
     });
   } finally {
-    await input.appServer.close();
+    await created?.close();
   }
 }

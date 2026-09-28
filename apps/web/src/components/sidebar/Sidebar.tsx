@@ -94,6 +94,11 @@ export function Sidebar(props: SidebarProps) {
       )}
 
       <div className="sidebar-scroll">
+        {productArea !== "models" && props.account?.activeProfile && props.onOpenPonder ? (
+          <button type="button" className="sidebar-ponder-entry" onClick={props.onOpenPonder}>
+            <span aria-hidden="true">✦</span> Ponder Pal
+          </button>
+        ) : null}
         <SidebarNavigation
           productArea={productArea}
           setSectionMenuOpen={setSidebarSectionMenuOpen}

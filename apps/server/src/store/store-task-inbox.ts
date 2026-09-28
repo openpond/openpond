@@ -320,10 +320,4 @@ export class SqliteTaskInboxStore extends SqliteChatWorkflowStore {
   }
 }
 
-export type TaskInboxRepository = Pick<SqliteTaskInboxStore,
-  "taskInboxSnapshot" | "declareTaskWork" | "taskWorkAreas" | "recoverTaskInboxOwners" | "hasTaskCompletion" | "admitTaskInput" | "admitTaskInputs" | "rejectTaskInput" | "getTaskInput" | "taskInputsForSession" | "mutateTaskInput" |
-  "openTaskInboxTurn" | "renewTaskInboxTurn" | "pendingTaskInputs" | "taskAssignmentInputs" | "pauseTaskInboxTurn" | "includeTaskInputs" |
-  "settleTaskInputRequest" | "sealNativeTaskInboxTurn" | "sealTaskInboxTurn" | "closeTaskInboxTurn" | "taskInboxPaused" |
-  "reserveTaskFollowup" | "taskInboxWakeTargets" | "createTaskWait" | "settleTaskWait" | "taskWaitsForSession"
-  | "commitSubagentCompletion" | "pendingTaskCompletions" | "settleTaskCompletion"
->;
+export type { TaskInboxRepository } from "../runtime/task-inbox/repository.js";

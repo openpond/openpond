@@ -89,6 +89,7 @@ export type HttpRouteDeps = {
   activateRefinerReleasePayload: (payload: unknown) => Promise<unknown>;
   rollbackRefinerReleasePayload: (payload: unknown) => Promise<unknown>;
   listHostedSavedWorkPayload: () => Promise<unknown>;
+  ponderRequestPayload: (input: { path: string; method?: "GET" | "POST"; body?: Record<string, unknown>; idempotencyKey?: string }) => Promise<Record<string, unknown>>;
   createHostedSavedWorkPayload: (payload: unknown) => Promise<unknown>;
   updateHostedSavedWorkPayload: (
     scheduleId: string,

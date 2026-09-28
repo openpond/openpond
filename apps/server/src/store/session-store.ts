@@ -15,7 +15,8 @@ import type { SqliteStore } from "./store.js";
 import { event, now } from "../utils.js";
 
 export function createSessionStore(deps: {
-  store: SqliteStore;
+  store: Pick<SqliteStore,
+    "sessionCount" | "insertSessionAtFront" | "getSession" | "updateSession" | "getTurn" | "insertTurn" | "updateTurn">;
   defaultSessionCwd: (appId?: string | null) => string;
   createManagedLocalWorkCwd?: (sessionId: string) => Promise<string>;
   loadAppPreferences?: () => Promise<AppPreferences>;

@@ -69,6 +69,7 @@ export function ComposerPrimaryControls({
   fileInputRef,
   modelValue,
   modelOptions = [],
+  hideModelControls = false,
   openPondCommandAccessMode,
   showCommandAccess = true,
   profileTarget,
@@ -115,6 +116,7 @@ export function ComposerPrimaryControls({
   fileInputRef: RefObject<HTMLInputElement | null>;
   modelValue: string;
   modelOptions?: DropdownOption[];
+  hideModelControls?: boolean;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
   showCommandAccess?: boolean;
   profileTarget?: ComposerProfileTargetState | null;
@@ -341,7 +343,7 @@ export function ComposerPrimaryControls({
         />
       ) : null}
       <div className="composer-spacer" />
-      <span
+      {!hideModelControls && <span
         className={`context-status-shell ${contextWindowStatus.tone}`}
         style={contextStatusStyle}
       >
@@ -380,8 +382,8 @@ export function ComposerPrimaryControls({
             </span>
           ) : null}
         </span>
-      </span>
-      <ComposerModelMenu
+      </span>}
+      {!hideModelControls && <ComposerModelMenu
         disabled={busy}
         model={modelValue}
         modelGroups={modelGroups}
@@ -393,7 +395,7 @@ export function ComposerPrimaryControls({
         onModelSelectionChange={changeModelSelection}
         onProviderSetupOpen={onProviderSetupOpen}
         onReasoningEffortChange={onCodexReasoningEffortChange}
-      />
+      />}
       <VoiceInputButton
         buttonClassName="composer-icon"
         connection={connection}

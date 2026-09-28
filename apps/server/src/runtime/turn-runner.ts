@@ -291,10 +291,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
   } = deps;
+  const inboxStore = deps.inboxStore ?? store;
   const hostedToolFlags = resolveHostedToolRolloutFlags(deps.hostedToolFlags);
   const activeTurns = new ActiveTurnRegistry();
   const taskInbox = createTaskInboxRuntime({
-    store, getSession, listSessions: () => store.sessionShells(),
+    store: inboxStore, getSession, listSessions: () => store.sessionShells(),
     getTurn: (id) => store.getTurn(id), latestTurn: (id) => store.latestTurnForSession(id),
     recoverInterruptedTurn: async (sessionId, turnId) => {
       if ((await store.getTurn(turnId))?.status === "in_progress") {
@@ -522,7 +523,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     profileSkillBodyFromReadResult,
     readProfileSkillForModel,
   } = createNativeToolRuntime({
-    hasPendingSteering: async (sessionId, turnId) => (await store.pendingTaskInputs(sessionId, turnId)).some((input) => input.kind === "steer"),
+    hasPendingSteering: async (sessionId, turnId) => (await inboxStore.pendingTaskInputs(sessionId, turnId)).some((input) => input.kind === "steer"),
     maxRepeatedInvalidToolRequests,
     appendRuntimeEvent,
     throwIfInterrupted,
@@ -551,7 +552,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     throwIfInterrupted,
   });
   const { runHostedToolLoop } = createHostedToolLoopRuntime({
-    taskInbox, inboxStore: store,
+    taskInbox, inboxStore,
     resolveModelTools: deps.resolveModelTools,
     assertExecutionAllowed: (turnId) => assertTurnConfiguration(deps.storageHome, turnId),
     hostedToolFlags,
@@ -672,7 +673,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     inbox: taskInbox, requireSubagentDeps, appendRuntimeEvent,
   });
   const { notifyParentOfSubagentCompletion, recoverPendingCompletions, close: closeCompletionDelivery } = createSubagentCompletionRuntime({
-    inbox: taskInbox, store, appendMessage: (message) => requireSubagentDeps().appendMessage(message),
+    inbox: taskInbox, store: inboxStore, appendMessage: (message) => requireSubagentDeps().appendMessage(message),
     getSession, appendRuntimeEvent,
   });
   const { resolveSubagentPatchApplyApproval } =
@@ -713,7 +714,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     applySubagentPatch,
     appendWorkspaceDiffEvent,
     uniqueSubagentRefs,
-    commitCompletion: (run, turnId) => store.commitSubagentCompletion(run, turnId),
+    commitCompletion: (run, turnId) => inboxStore.commitSubagentCompletion(run, turnId),
     notifyParentOfSubagentCompletion,
   });
   const { archiveSubagentChildSession, subagentLifecycleActionNextStep } =
@@ -836,10 +837,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let outcome: "completed" | "failed" | "interrupted" = "failed";
     try {
-      await store.openTaskInboxTurn(sessionId, turnId, taskInbox.ownerId);
+      await inboxStore.openTaskInboxTurn(sessionId, turnId, taskInbox.ownerId);
       owned = true;
       heartbeat = setInterval(() => {
-        void store.renewTaskInboxTurn(sessionId, turnId, taskInbox.ownerId).catch((error) => {
+        void inboxStore.renewTaskInboxTurn(sessionId, turnId, taskInbox.ownerId).catch((error) => {
           activeTurns.get(sessionId)?.controller.abort(error);
         });
       }, 20_000);
@@ -1702,7 +1703,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         waitForInterrupt(controller.signal),
       ]);
       await taskInbox.finishCodex(activeTurn);
-      await store.settleTaskInputRequest(initialRequestId, "resolved");
+      await inboxStore.settleTaskInputRequest(initialRequestId, "resolved");
       await appendWorkspaceDiffEvent(session, turn.id, {
         baseline: initialWorkspaceDiff,
       });
@@ -1793,7 +1794,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   return {
     sendTurn,
     steerSessionTurn: taskInbox.steer,
-    readTaskInbox: (sessionId) => store.taskInboxSnapshot(sessionId),
+    readTaskInbox: (sessionId) => inboxStore.taskInboxSnapshot(sessionId),
     queueTaskInput: taskInbox.queue,
     updateTaskInput: taskInbox.mutate,
     recoverTaskInbox: taskInbox.recover,

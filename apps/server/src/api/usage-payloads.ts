@@ -37,6 +37,17 @@ type UsageStore = {
     status?: UsageStatusFilter | null;
     limit?: number;
   }): Promise<ModelUsageRecord[]>;
+  /** Hosted stores fail explicitly if a complete projection exceeds their
+   * bounded read limit. Local SQLite retains its existing complete read. */
+  listModelUsageRecordsComplete?(query: {
+    sessionId?: string | null;
+    startedAtFrom?: string | null;
+    startedAtTo?: string | null;
+    visibility?: UsageVisibilityFilter | null;
+    status?: UsageStatusFilter | null;
+    provider?: ModelUsageRecord["provider"] | null;
+    model?: string | null;
+  }): Promise<ModelUsageRecord[]>;
   sessionShells(): Promise<Session[]>;
 };
 
@@ -93,7 +104,7 @@ export async function usageSummaryPayload(input: {
   });
   const range = usageQueryRange(query.range, input.now ?? new Date());
   const [records, sessions] = await Promise.all([
-    input.store.listModelUsageRecords({
+    completeUsageRecords(input.store, {
       startedAtFrom: range.startedAtFrom,
       startedAtTo: range.startedAtTo,
       visibility: query.visibility,
@@ -185,7 +196,7 @@ export async function usageTurnCachePayload(input: {
   const query = UsageTurnCacheQuerySchema.parse({
     sessionId: input.requestUrl.searchParams.get("sessionId") ?? undefined,
   });
-  const records = await input.store.listModelUsageRecords({ sessionId: query.sessionId });
+  const records = await completeUsageRecords(input.store, { sessionId: query.sessionId });
   const groups = new Map<string, {
     totals: BreakdownAccumulator;
     providers: Set<ModelUsageRecord["provider"]>;
@@ -226,6 +237,15 @@ export async function usageTurnCachePayload(input: {
     sessionId: query.sessionId,
     turns,
   });
+}
+
+function completeUsageRecords(
+  store: UsageStore,
+  query: Parameters<NonNullable<UsageStore["listModelUsageRecordsComplete"]>>[0],
+): Promise<ModelUsageRecord[]> {
+  return store.listModelUsageRecordsComplete
+    ? store.listModelUsageRecordsComplete(query)
+    : store.listModelUsageRecords(query);
 }
 
 function usageQueryRange(range: "7d" | "30d" | "90d" | "all", now: Date): UsageQueryRange {

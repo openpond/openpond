@@ -75,7 +75,7 @@ import { subagentModelAsideMessages } from "./tool-loop-subagent-asides.js";
 import type { createHostedCompactionRuntime } from "./compaction-runtime.js";
 import { runWithSingleContextOverflowRecovery } from "./context-overflow-recovery.js";
 import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
-import type { TaskInboxRepository } from "../../store/store-task-inbox.js";
+import type { TaskInboxRepository } from "../task-inbox/repository.js";
 import { appendTaskInputContext, projectTaskAssignment } from "../task-inbox/model-context.js";
 
 export { hostedTrainingHarnessRound } from "./training-harness-round.js";

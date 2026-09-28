@@ -1371,6 +1371,7 @@ async function requestSandboxPublicApiRoot(params: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
+  idempotencyKey?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<Record<string, unknown>> {
@@ -1381,6 +1382,7 @@ async function requestSandboxPublicApiRoot(params: {
     {
       method: params.method ?? "GET",
       signal: params.signal,
+      ...(params.idempotencyKey ? { headers: { "idempotency-key": params.idempotencyKey } } : {}),
       ...(params.body ? { body: JSON.stringify(params.body) } : {}),
       ...(params.timeoutMs !== undefined
         ? { timeoutMs: params.timeoutMs }
@@ -1405,6 +1407,7 @@ export async function requestOpenPondPublicApi(params: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
+  idempotencyKey?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<Record<string, unknown>> {

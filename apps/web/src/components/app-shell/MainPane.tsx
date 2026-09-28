@@ -95,6 +95,7 @@ import {
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
+import { PonderDesktopPanel } from "../ponder/PonderDesktopPanel";
 
 import {
   AppsView,
@@ -136,6 +137,8 @@ const TrainingCreationPanel = lazy(() =>
   }))
 );
 export function MainPane({
+  ponderMode = null,
+  onPonderModeChange,
   experience,
   onNewExperienceChange,
   view,
@@ -1527,7 +1530,31 @@ export function MainPane({
           <CollaborationTabs onSelect={setView} view={view} />
         </Suspense>
       ) : null}
-      {view === "apps" ? (
+      {view === "chat" && ponderMode && connection && bootstrap?.account.activeProfile ? (
+        <PonderDesktopPanel connection={connection} presentation={ponderMode} composer={{
+          contextWindowStatus, providerSettings: bootstrap.providers ?? null,
+          provider: activeProvider, model: activeModel, projectTarget, workspaceTarget,
+          codexPermissionMode, codexReasoningEffort, openPondCommandAccessMode,
+          onProviderChange: changeMainComposerProvider, onProviderSetupOpen: onOpenProviderSettings,
+          onProjectTargetChange: changeProjectTarget,
+          onWorkspaceTargetChange: (target) => { void changeWorkspaceTarget(target); },
+          onModelChange: changeMainComposerModel,
+          onCodexPermissionModeChange: changeCodexPermissionMode,
+          onCodexReasoningEffortChange: changeCodexReasoningEffort,
+          onOpenPondCommandAccessModeChange: changeOpenPondCommandAccessMode,
+          showToast,
+        }} onOpenWork={(conversationId) => {
+          if (!projectsAccountBaseUrl) {
+            showToast("OpenPond account URL is unavailable for this Work task.", "error");
+            return;
+          }
+          try {
+            handleOpenBrowserLink(new URL(`/tasks/${encodeURIComponent(conversationId)}`, projectsAccountBaseUrl).toString(), { newTab: true });
+          } catch {
+            showToast("OpenPond account URL is invalid for this Work task.", "error");
+          }
+        }} />
+      ) : view === "apps" ? (
         <Suspense fallback={null}>
           <AppsView
             account={bootstrap?.account ?? null}
@@ -1848,8 +1875,13 @@ export function MainPane({
           <section className="start-panel">
             <Suspense fallback={null}>
               <NewExperienceSwitcher
-                value={experience === "chat" ? "chat" : "work"}
-                onChange={onNewExperienceChange}
+                value={ponderMode === "clean" ? "ponder" : experience === "chat" ? "chat" : "work"}
+                allowPonder={Boolean(bootstrap?.account.activeProfile)}
+                onChange={(mode) => {
+                  if (mode === "ponder") { onPonderModeChange?.("clean"); return; }
+                  onPonderModeChange?.(null);
+                  onNewExperienceChange(mode);
+                }}
               />
             </Suspense>
             <div className="start-welcome">

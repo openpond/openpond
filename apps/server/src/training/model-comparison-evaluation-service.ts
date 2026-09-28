@@ -28,6 +28,7 @@ import "./portable-jsonl-training-adapter.js";
 import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
 import { NativeToolCallAccumulator } from "../openpond/native-tool-calls.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
+import { assertRfqEvaluationPaidDispatchQualified } from "./rfq-evaluation-paid-preflight.js";
 import { readModelComparisonAttemptEvidence } from "./model-comparison-evidence-reader.js";
 import { resolveBaseCheckpoint } from "./model-comparison-evaluation-scheduler.js";
 import {
@@ -126,6 +127,7 @@ export function createModelComparisonEvaluationService(deps: {
     if (!batch) throw new Error("The requested Evals intake batch was not found.");
     if (batch.intakeEvaluation.status === "running" || batch.intakeEvaluation.status === "ready") return batch;
     const series = await requireSeries(deps.store, batch.seriesId);
+    assertRfqEvaluationPaidDispatchQualified(series.profileId);
     const protocol = series.benchmarkProtocol;
     if (!protocol) throw new Error("Generating responses requires a sealed benchmark protocol.");
     const protocolSchedule = protocol.schedule.find((entry) => entry.scheduleEntryId === batch.scheduleEntryId);
@@ -342,6 +344,7 @@ export function createModelComparisonEvaluationService(deps: {
     const entry = await requireEntry(deps.store, input.entryId);
     if (!entry.modelVersionId) throw new Error("Comparison evaluation requires a trained Model Version.");
     const series = await requireSeries(deps.store, entry.seriesId);
+    assertRfqEvaluationPaidDispatchQualified(series.profileId);
     if (input.targetBaseCheckpointId && input.targetModelVersionId) throw new Error("A comparison target must be either an exact Model Version or the sealed base Policy.");
     const targetModelVersionId = input.targetBaseCheckpointId ? null : input.targetModelVersionId ?? entry.modelVersionId;
     const targetVersion = targetModelVersionId ? await deps.store.getModelVersion(targetModelVersionId) : null;
@@ -428,6 +431,7 @@ export function createModelComparisonEvaluationService(deps: {
       throw new Error("External Comparison evaluation is not configured.");
     }
     const series = await requireSeries(deps.store, input.seriesId);
+    assertRfqEvaluationPaidDispatchQualified(series.profileId);
     const comparisonEntry = input.entryId ? await requireEntry(deps.store, input.entryId) : null;
     if (comparisonEntry && comparisonEntry.seriesId !== series.id) throw new Error("The reference Evaluation entry does not belong to the requested series.");
     const resolvedPanel = resolveComparisonPanel(series, comparisonEntry, input.cohortRole, input.panelId, input.taskset);
