@@ -17,6 +17,9 @@ export const HostedSandboxActionSchema = z.object({
   if (action.type !== "create" && !action.sandboxId) {
     context.addIssue({ code: "custom", message: "Sandbox identity is required." });
   }
+  if (action.type === "create" && action.sandboxId) {
+    context.addIssue({ code: "custom", message: "Create cannot target a sandbox identity." });
+  }
   if (action.type === "process_get" && !action.processId) {
     context.addIssue({ code: "custom", message: "Process identity is required." });
   }
