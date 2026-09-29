@@ -25,6 +25,7 @@ import { createTurnRunner } from "./turn-runner.js";
 import { createAgentRuntimePorts } from "./agent-runtime-host.js";
 import { createEmbeddingToolResolver } from "./app-server-embedding.js";
 import { createHostedWorkOutputLifecycle } from "../work/hosted-work-output-lifecycle.js";
+import { createHostedHarnessMemoryTools } from "../store/hosted-harness-memory-tools.js";
 import { createHostedEmbeddingAdapter, createHostedSandboxRequest } from "./hosted-embedding-adapter.js";
 import { assertHostedWorkCapabilities } from "./hosted-capability-admission.js";
 import { resolveMaxHostedWorkspaceToolRounds } from "../server-entry-helpers.js";
@@ -147,7 +148,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
       return loadHostedHarnessRuntimeForSession(client, session);
     },
     ensureHarnessRunOverlay: (input) => overlay.ensureHarnessRunOverlay(input),
-    harnessModelTools: [],
+    harnessModelTools: createHostedHarnessMemoryTools(client),
     loadBuiltInOpenPondSkills: async () => [],
     readBuiltInOpenPondSkill: unavailable,
     loadPersonalizationSoul: async () => (await loadHostedRuntimeSettings(client)).personalizationSoul,
