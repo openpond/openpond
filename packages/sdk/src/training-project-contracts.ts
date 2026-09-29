@@ -4,7 +4,7 @@ import { ImmutableReleaseRefSchema, contentHash } from "@openpond/harness";
 
 const Id = z.string().trim().min(1).max(240);
 const Revision = z.number().int().positive();
-export const TrainingResourceKindSchema = z.enum(["dataset", "evaluator", "model", "harness", "environment", "experiment", "learning_policy", "deployment"]);
+export const TrainingResourceKindSchema = z.enum(["dataset", "evaluator", "model", "training_configuration", "training_run", "harness", "environment", "experiment", "learning_policy", "deployment"]);
 export const TrainingResourceLinkSchema = z.object({
   kind: TrainingResourceKindSchema, resourceId: Id, release: ImmutableReleaseRefSchema.nullable(),
   role: z.enum(["training", "validation", "holdout", "target", "reward", "evaluation", "serving", "source"]),
