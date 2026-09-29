@@ -135,6 +135,10 @@
               "type": "string",
               "maxLength": 10000
             },
+            "feedbackKey": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,79}$"
+            },
             "kind": {
               "type": "string",
               "enum": [
