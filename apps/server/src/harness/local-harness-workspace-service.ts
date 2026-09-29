@@ -96,8 +96,14 @@ export async function importProfileIntoLocalHarnessWorkspace(input: {
   }
   return createLocalHarnessWorkspaceFromInitializer({
     ...input,
+    compilationWorkspaceId: input.repositoryId
+      ? profileCompilationWorkspaceId(input.repositoryId, input.name) : input.id,
     initializeSource: (sourceDir) => writeImportedProfileSource(sourceDir, input.name, input.profile, input.sourceRevision, input.repositoryId),
   });
+}
+
+function profileCompilationWorkspaceId(repositoryId: string, name: string): string {
+  return `profile-source-${contentHash([repositoryId, name]).slice(0, 24)}`;
 }
 
 /** Compile Profile source without changing workspace selection or durable
@@ -122,47 +128,11 @@ export async function compileProfileHarnessSource(input: {
     // Profile in different workspaces. The immutable release must be identical
     // so the discovery binding can be admitted by that owner's workspace.
     const sourceWorkspaceId = input.repositoryId
-      ? `profile-source-${contentHash([input.repositoryId, input.name]).slice(0, 24)}`
-      : input.workspaceId;
+      ? profileCompilationWorkspaceId(input.repositoryId, input.name) : input.workspaceId;
     return await compileLocalHarnessSource({ workspaceId: sourceWorkspaceId, sourceDir });
   } finally {
     await fs.rm(sourceDir, { recursive: true, force: true });
   }
-}
-
-export async function ensureExplicitProfileHarnessSource(input: {
-  store: SqliteStore;
-  storeDir: string;
-  workspaceId: string;
-  ownerId: string;
-  name: string;
-  profile: OpenPondProfileState;
-  sourceRevision: string;
-  repositoryId: string;
-}): Promise<LocalHarnessReleaseRecord> {
-  const compiled = await compileProfileHarnessSource(input);
-  if (!input.repositoryId.trim()) throw new Error("Explicit Profile source requires a repository ID.");
-  const existing = await input.store.getHarnessWorkspace(input.workspaceId);
-  if (existing) {
-    const releaseRef = existing.currentChannel.release;
-    if (existing.ownerScope.kind !== "personal" || existing.ownerScope.id !== input.ownerId ||
-        existing.sourceRevision !== compiled.sourceRevision ||
-        releaseRef?.id !== compiled.harnessRelease.id ||
-        releaseRef.contentHash !== compiled.harnessRelease.contentHash) {
-      throw new Error("Explicit Profile source changed under its accepted revision.");
-    }
-    const release = await input.store.getHarnessReleaseRecord(releaseRef.contentHash);
-    if (!release) throw new Error("Explicit Profile source release is missing after restore.");
-    return release;
-  }
-  const imported = await importProfileIntoLocalHarnessWorkspace({
-    ...input, id: input.workspaceId, selectionEligible: false,
-  });
-  if (imported.release.harnessRelease.contentHash !== compiled.harnessRelease.contentHash ||
-      imported.workspace.sourceRevision !== compiled.sourceRevision) {
-    throw new Error("Explicit Profile source changed during import.");
-  }
-  return imported.release;
 }
 
 /** Install a trusted, immutable source snapshot without exposing persistence internals. */
@@ -235,6 +205,7 @@ async function createLocalHarnessWorkspaceFromInitializer(input: {
   ownerId: string;
   name: string;
   initializeSource: (sourceDir: string) => Promise<void>;
+  compilationWorkspaceId?: string;
   selectionEligible?: boolean;
   now?: () => string;
 }): Promise<{ workspace: HarnessWorkspace; release: LocalHarnessReleaseRecord }> {
@@ -254,7 +225,7 @@ async function createLocalHarnessWorkspaceFromInitializer(input: {
 
   try {
     const compiled = await compileLocalHarnessSource({
-      workspaceId: input.id,
+      workspaceId: input.compilationWorkspaceId ?? input.id,
       sourceDir: paths.source,
     });
     const release = await materializeLocalHarnessRelease({
