@@ -43,7 +43,10 @@ export class OpenPondModelTasksetRunsClient {
     const params = new URLSearchParams({ ...(query.modelProjectId ? { modelProjectId: query.modelProjectId } : {}), ...(query.projectId ? { projectId: query.projectId } : {}), limit: String(query.limit) });
     if (query.afterId) params.set("afterId", query.afterId);
     const result = ModelTasksetRunPageSchema.parse(await this.#request(`?${params}`, "GET", undefined, options.signal));
-    if (result.items.length > query.limit || new Set(result.items.map(item => item.id)).size !== result.items.length || result.items.some(item => { this.#scope(item); return (query.modelProjectId !== undefined && item.modelProjectId !== query.modelProjectId) || (query.projectId !== undefined && item.project?.id !== query.projectId); })) throw new OpenPondModelTasksetRunError(502, "evaluation_page_mismatch", "Evaluation page differs from the selected model.");
+    // Project membership may be an explicit run link or a linked model
+    // configuration. Only the host can verify those associations; the SDK
+    // still enforces workspace identity and an exact model filter here.
+    if (result.items.length > query.limit || new Set(result.items.map(item => item.id)).size !== result.items.length || result.items.some(item => { this.#scope(item); return query.modelProjectId !== undefined && item.modelProjectId !== query.modelProjectId; })) throw new OpenPondModelTasksetRunError(502, "evaluation_page_mismatch", "Evaluation page differs from the selected scope.");
     return result;
   }
   #scope(summary: ModelTasksetRunSummary, id?: string) {

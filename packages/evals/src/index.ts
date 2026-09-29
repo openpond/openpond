@@ -4,6 +4,7 @@ export * from "./artifact-verification.js";
 export * from "./evidence/index.js";
 export * from "./execution-contracts.js";
 export * from "./execution-receipts.js";
+export * from "./experiments.js";
 export * from "./graders.js";
 export * from "./harness.js";
 export * from "./learned-preference.js";
