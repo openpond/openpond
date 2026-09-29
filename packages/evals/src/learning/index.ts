@@ -34,3 +34,4 @@ export * from "./policy-inspection.js";
 export * from "./task-queue-inspection.js";
 
 export * from "./acceptance-plan.js";
+export * from "./acceptance-group.js";
