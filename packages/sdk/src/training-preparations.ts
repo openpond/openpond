@@ -40,10 +40,24 @@ export const TrainingPreparationReceiptSchema = z.object({
 export const TrainingPreparationControlSchema = z.object({
   teamId: Id, planHash: Hash, expectedRevision: z.number().int().positive(),
 }).strict();
+export const TrainingPreparationListQuerySchema = z.object({
+  projectId: Id.optional(),
+  state: z.enum(["prepared", "submitted", "cancelled"]).optional(),
+  afterId: Id.optional(),
+  limit: z.number().int().min(1).max(100).default(25),
+}).strict();
+export const TrainingPreparationPageSchema = z.object({
+  schemaVersion: z.literal("openpond.trainingPreparationPage.v1"),
+  teamId: Id,
+  items: z.array(TrainingPreparationReceiptSchema).max(100),
+  nextCursor: Id.nullable(),
+}).strict();
 export type TrainingPreparationRequest = z.infer<typeof TrainingPreparationRequestSchema>;
 export type TrainingPreparationPlan = z.infer<typeof TrainingPreparationPlanSchema>;
 export type TrainingPreparationReceipt = z.infer<typeof TrainingPreparationReceiptSchema>;
 export type TrainingPreparationControl = z.infer<typeof TrainingPreparationControlSchema>;
+export type TrainingPreparationListQuery = z.input<typeof TrainingPreparationListQuerySchema>;
+export type TrainingPreparationPage = z.infer<typeof TrainingPreparationPageSchema>;
 
 export async function parseAndVerifyTrainingPreparationReceipt(value: unknown) {
   const receipt = TrainingPreparationReceiptSchema.parse(value);
@@ -63,6 +77,28 @@ export function createTrainingPreparationClient(request: (path: string, init?: R
     return receipt;
   }
   return {
+    /** Discover the authenticated user's retained preparations without creating jobs. */
+    async listPreparations(teamId: string, input: TrainingPreparationListQuery = {}) {
+      const scope = Id.parse(teamId);
+      const query = TrainingPreparationListQuerySchema.parse(input);
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) params.set(key, String(value));
+      const page = TrainingPreparationPageSchema.parse(await request(`/v1/training/preparations?${params}`));
+      if (page.teamId !== scope || page.items.length > query.limit
+        || new Set(page.items.map(item => item.plan.id)).size !== page.items.length
+        || (page.nextCursor !== null && (page.nextCursor !== page.items.at(-1)?.plan.id || page.nextCursor === query.afterId))) {
+        throw new OpenPondProtocolError("training_preparation_page_mismatch", "The preparation page does not match its workspace or cursor.");
+      }
+      const items = await Promise.all(page.items.map(async item => {
+        const receipt = await read(item, scope);
+        if ((query.projectId && receipt.plan.request.projectId !== query.projectId)
+          || (query.state && receipt.state !== query.state)) {
+          throw new OpenPondProtocolError("training_preparation_page_mismatch", "A preparation does not match the requested Project or state.");
+        }
+        return receipt;
+      }));
+      return { ...page, items };
+    },
     async prepareRun(input: TrainingPreparationRequest) {
       const parsed = TrainingPreparationRequestSchema.parse(input);
       const receipt = await read(await request("/v1/training/preparations", { method: "POST", body: JSON.stringify(parsed) }), parsed.teamId);

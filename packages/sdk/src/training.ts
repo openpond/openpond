@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTrainingPreparationClient } from "./training-preparations.js";
 export { TrainingPreparationRequestSchema, TrainingPreparationPlanContentSchema, TrainingPreparationPlanSchema, TrainingPreparationReceiptSchema, TrainingPreparationControlSchema, parseAndVerifyTrainingPreparationReceipt, type TrainingPreparationRequest, type TrainingPreparationPlan, type TrainingPreparationReceipt, type TrainingPreparationControl } from "./training-preparations.js";
+export { TrainingPreparationListQuerySchema, TrainingPreparationPageSchema, type TrainingPreparationListQuery, type TrainingPreparationPage } from "./training-preparations.js";
 import { createTrainingHarnessSourceClient } from "./training-harness-sources.js";
 export { TrainingHarnessSourcePublicationSchema } from "./training-harness-sources.js";
 import { createTrainingCandidateDecisionClient } from "./training-candidate-decisions.js";
