@@ -7,6 +7,10 @@ import { CustomVerifierGraderSpecSchema, DeterministicGraderSpecSchema, GraderSp
 import { assertBoundedTaskJson, validateTaskSchema } from "./task-schema.js";
 
 const bindingFields = { id: true, version: true, weight: true, hardGate: true, rewardEligible: true, privileged: true } as const;
+export const FeedbackKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,79}$/);
+export function feedbackKeyForReward(reward: Pick<RewardRelease, "id" | "feedbackKey">): string {
+  return reward.feedbackKey ?? `reward_${contentHash(reward.id).slice(0, 24)}`;
+}
 export const RewardImplementationSchema = z.union([
   DeterministicGraderSpecSchema.omit(bindingFields),
   ModelJudgeGraderSpecSchema.omit(bindingFields),
@@ -21,6 +25,7 @@ export const RewardReleaseContentSchema = z.object({
   revision: z.number().int().positive(),
   name: z.string().trim().min(1).max(500),
   description: z.string().max(10_000),
+  feedbackKey: FeedbackKeySchema.optional(),
   implementation: RewardImplementationSchema,
   rawScore: z.object({ minimum: z.number().finite(), maximum: z.number().finite() }).strict(),
   assets: z.array(ImmutableAssetRefSchema).max(1_000),
