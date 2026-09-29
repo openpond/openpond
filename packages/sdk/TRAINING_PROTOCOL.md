@@ -78,6 +78,34 @@ checkpoint inventory or qualification metrics, when the portable client needs
 that evidence to validate the artifact. This metadata is immutable output
 evidence, not private worker-control, lease, or provider state.
 
+## Manual run preparation
+
+Hosts supporting reviewed-data training expose these authenticated, team-scoped
+routes through `createTrainingClient`:
+
+```text
+POST /v1/training/preparations
+GET  /v1/training/preparations/{preparationId}?teamId=
+POST /v1/training/preparations/{preparationId}/start
+POST /v1/training/preparations/{preparationId}/cancel
+```
+
+`prepareRun` accepts a stable operation ID, the expected configuration revision
+and ETag, an exact sealed batch reference, an optional organizing Project, a run
+name and a maximum spend. Preparation freezes the executable inputs and stages
+artifacts without starting compute or creating a recurring learning policy.
+The returned plan binds its creator, request hash, source and submission hash.
+The SDK verifies both plan and request identity before returning the receipt.
+
+`startPreparation` and `cancelPreparation` require the retained plan hash and
+observed receipt revision. Starting uses the stored submission; mutable
+configuration changes do not silently recompile a prepared run. Providers must
+serialize cancellation with job and dispatch creation, retain the submitted job
+ID, and make identical retries return that same job. A cancelled preparation
+cannot start. Once submitted, use the ordinary job cancellation controls.
+Reading a preparation does not authorize starting it; the host rechecks scope,
+creator permissions, resource access, runtime availability and spending limits.
+
 ## Deterministic grading identity
 
 For portable training bundles, derive `job.rewardSource` with

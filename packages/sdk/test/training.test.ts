@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { canonicalSha256 } from "../src/protocol.js";
+import { type TrainingPreparationRequest } from "../src/training-preparations.js";
 
 import {
   OPENPOND_TRAINING_MEDIA_TYPE,
@@ -325,5 +327,35 @@ describe("Training SDK contracts", () => {
       requestId: null,
       details: {},
     }).code).toBe("budget_exceeded");
+  });
+});
+
+// Failure story: a preparation response from another workspace, altered plan,
+// or unsubmitted response must never authorize a paid start through the SDK.
+describe("manual training preparation boundary", () => {
+  it("binds preparation and controls to the exact request, workspace and immutable plan", async () => {
+    const request: TrainingPreparationRequest = {
+      schemaVersion: "openpond.trainingPreparationRequest.v1", teamId: "team-a", operationId: "manual-preparation-1", projectId: null,
+      configuration: { id: "hosted-project-1", expectedRevision: 3, expectedEtag: HASH },
+      batch: { id: "approved-batch", revision: 1, contentHash: HASH }, name: "One reviewed run", maximumSpendUsd: 2,
+    };
+    const content = { schemaVersion: "openpond.trainingPreparationPlan.v1" as const, id: "preparation-1", creatorUserId: "user-a", request,
+      requestHash: await canonicalSha256(request), source: submission().source, submissionHash: HASH, createdAt: NOW };
+    const plan = { ...content, contentHash: await canonicalSha256(content) };
+    let response: unknown = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan, revision: 1, state: "prepared", jobId: null };
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 }));
+    const client = createTrainingClient({ baseUrl: "https://training.example", fetch: fetcher });
+    const prepared = await client.prepareRun(request);
+    expect(prepared.plan.request.maximumSpendUsd).toBe(2);
+    const control = { teamId: request.teamId, planHash: plan.contentHash, expectedRevision: 1 };
+    await expect(client.startPreparation(plan.id, control)).rejects.toMatchObject({ code: "training_preparation_start_mismatch" });
+    response = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan, revision: 2, state: "submitted", jobId: "job-1" };
+    expect((await client.startPreparation(plan.id, control)).jobId).toBe("job-1");
+    await expect(client.getPreparation("team-b", plan.id)).rejects.toMatchObject({ code: "training_preparation_scope_mismatch" });
+    await expect(client.getPreparation("team-a", "different-plan")).rejects.toMatchObject({ code: "training_preparation_scope_mismatch" });
+    response = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan: { ...plan, request: { ...request, maximumSpendUsd: 3 } }, revision: 1, state: "prepared", jobId: null };
+    await expect(client.prepareRun(request)).rejects.toMatchObject({ code: "training_preparation_mismatch" });
+    response = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan, revision: 2, state: "cancelled", jobId: null };
+    expect((await client.cancelPreparation(plan.id, control)).state).toBe("cancelled");
   });
 });
