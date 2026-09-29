@@ -98,6 +98,14 @@
     "./training-bundle": {
       "types": "./dist/types/packages/sdk/src/training-bundle.d.ts",
       "import": "./dist/training-bundle.js"
+    },
+    "./training-projects": {
+      "types": "./dist/types/packages/sdk/src/training-projects.d.ts",
+      "import": "./dist/training-projects.js"
+    },
+    "./dataset-workspaces": {
+      "types": "./dist/types/packages/sdk/src/dataset-workspaces.d.ts",
+      "import": "./dist/dataset-workspaces.js"
     }
   },
   "publishConfig": {
