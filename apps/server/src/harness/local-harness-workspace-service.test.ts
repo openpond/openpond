@@ -91,9 +91,10 @@ describe("local Harness workspace service", () => {
       await fs.mkdir(sourcePath, { recursive: true });
       return compileProfileHarnessSource({
         storeDir: directory,
-        workspaceId: "profile-portable-source",
+        workspaceId: `profile-${sourceName}`,
         name: "Personal",
         sourceRevision,
+        repositoryId: "profile-repo",
         profile: {
           ...emptyOpenPondProfileState(),
           mode: "local",

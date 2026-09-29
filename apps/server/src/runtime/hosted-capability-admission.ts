@@ -5,7 +5,7 @@ export const HOSTED_WORK_REQUIRED_OPERATIONS = [
   "sandbox/request", "embedding/authorize",
   "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile",
   "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put",
-  "harness/memory/get", "harness/memory/list", "harness/memory/write",
+  "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write",
   "harness/state/read", "task-inbox/execute", "create-improve/execute",
   "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page",
   "session/count", "session/get", "session/page", "session/put",

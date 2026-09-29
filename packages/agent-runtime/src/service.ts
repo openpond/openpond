@@ -7,6 +7,7 @@ import type {
 } from "./protocol.js";
 
 const ThreadIdParamsSchema = z.object({ threadId: z.string().trim().min(1) }).passthrough();
+const ThreadReadParamsSchema = ThreadIdParamsSchema.extend({ includeHistory: z.boolean().optional() });
 const ThreadStartParamsSchema = z.object({ session: z.unknown() }).strict();
 const TurnParamsSchema = ThreadIdParamsSchema.extend({ input: z.unknown() });
 const QueueParamsSchema = TurnParamsSchema.extend({ idempotencyKey: z.string().trim().min(1).max(200) });
@@ -111,8 +112,11 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
   };
 
   const threadRead = async (params: unknown, method: "thread/read" | "thread/resume" = "thread/read") => {
-    const { threadId } = ThreadIdParamsSchema.parse(params);
+    const { threadId, includeHistory } = ThreadReadParamsSchema.parse(params);
     return run(method, threadId, async () => {
+      if (includeHistory === false) {
+        return { thread: await ports.readThread(threadId), turns: [], events: [] };
+      }
       const [thread, turns, events] = await Promise.all([
         ports.readThread(threadId),
         ports.listTurns(threadId),
