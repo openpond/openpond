@@ -7,6 +7,24 @@ import {
 } from "./app-server-sandbox-tools.js";
 
 describe("app-server sandbox tools", () => {
+  test("hosted Work asks the host to create its bound sandbox without a child runtime", async () => {
+    const calls: Parameters<AppServerSandboxRequest>[0][] = [];
+    const sandboxRequest: AppServerSandboxRequest = async (request) => {
+      calls.push(request);
+      return { sandbox: { id: "sandbox_hosted", state: "running" } };
+    };
+    const attached: string[] = [];
+    await executeAppServerSandboxTool({
+      session: workSession(),
+      request: toolRequest("sandbox_create", { runtime: { runtimeProfileId: "untrusted" } }),
+      sandboxRequest,
+      sandboxCreationMode: "hosted_worker",
+      attachSandbox: async ({ sandboxId }) => { attached.push(sandboxId); },
+    });
+    expect(calls).toEqual([{ type: "create", payload: {} }]);
+    expect(attached).toEqual(["sandbox_hosted"]);
+  });
+
   test("creates and attaches scoped lazy Work compute before remote file actions", async () => {
     const calls: Parameters<AppServerSandboxRequest>[0][] = [];
     const attached: string[] = [];

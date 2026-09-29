@@ -33,6 +33,6 @@ export function createHostedSandboxRequest(client: AgentHostStorageClient): AppS
       contractVersion: HOST_STORAGE_CONTRACT_VERSION,
       requestId: randomUUID(), operation: "sandbox/request",
       params: { action: admittedAction },
-    }, 60_000);
+    }, action.type === "create" ? 300_000 : action.type === "exec" ? 180_000 : 60_000);
   };
 }
