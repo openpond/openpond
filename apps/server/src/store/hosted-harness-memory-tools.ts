@@ -5,12 +5,9 @@ import { HOST_STORAGE_CONTRACT_VERSION, type AgentHostStorageClient } from "@ope
 import type { ModelToolDefinition } from "../openpond/model-tool-registry.js";
 import { loadHostedHarnessRuntimeForSession } from "./hosted-harness-runtime.js";
 
-/** Personal Harness memory reads are owned and bounded by the host. A Profile
- * needs a separate stable collection admission before it can use these tools. */
+/** Memory reads use the host-admitted owner and Profile collection. */
 export function createHostedHarnessMemoryTools(client: AgentHostStorageClient): ModelToolDefinition[] {
-  const personalOnly = ({ session }: { session: { currentProfile?: unknown } }) => !session.currentProfile;
   async function workspaceId(session: Parameters<typeof loadHostedHarnessRuntimeForSession>[1]): Promise<string> {
-    if (session.currentProfile) throw new Error("Hosted Profile memory collection has not been admitted.");
     const runtime = await loadHostedHarnessRuntimeForSession(client, session);
     if (!runtime) throw new Error("No hosted Harness is selected for this run.");
     return runtime.workspace.id;
@@ -18,8 +15,7 @@ export function createHostedHarnessMemoryTools(client: AgentHostStorageClient): 
   return [
     {
       name: "memory_search",
-      description: "Search bounded active Personal Harness memory. Returns keys, revisions and short excerpts.",
-      enabled: personalOnly,
+      description: "Search bounded active memory for this selected Harness or Profile. Returns keys, revisions and short excerpts.",
       parameters: { type: "object", additionalProperties: false,
         properties: { query: { type: "string", minLength: 1, maxLength: 500 },
           limit: { type: "integer", minimum: 1, maximum: 20 } }, required: ["query"] },
@@ -39,8 +35,7 @@ export function createHostedHarnessMemoryTools(client: AgentHostStorageClient): 
     },
     {
       name: "memory_inspect",
-      description: "Read one exact active Personal Harness memory entry returned by memory_search.",
-      enabled: personalOnly,
+      description: "Read one exact active memory entry returned by memory_search.",
       parameters: { type: "object", additionalProperties: false,
         properties: { key: { type: "string", minLength: 1, maxLength: 120 } }, required: ["key"] },
       execute: async (context) => {
