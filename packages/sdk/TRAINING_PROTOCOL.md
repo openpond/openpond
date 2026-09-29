@@ -248,3 +248,18 @@ the Taskset and training bundle.
 `createTrainingClient().publishHarnessSource(sourcePackage)` publishes a verified, portable, policy-visible `@openpond/harness` source package to the authenticated workspace without starting a Job. `getHarnessSource({ id, contentHash })` retrieves and verifies that exact release. The endpoints are `PUT` and `GET /v1/training/harness-sources/:releaseId/:contentHash`; they use the existing Training media type and read/write scopes.
 
 Hosted learning resolves this immutable source with Desktop closed. Publish before selecting the release on a hosted Model. Preparation still checks the Taskset adapter, required tools, private grading boundary and effective context; publication is not training or quality qualification. Existing prepared Jobs retain their captured source when a newer release is published.
+
+## Project Profile source binding
+
+SDK 0.9 requires `profileRepositoryId` on Training Project `harness` and `suite`
+targets. This is the authorized hosted repository locator; `source.profileId`
+is the Profile name inside that repository and must not be used as a repository
+ID. Keep both identities through preparation and execution. Existing incomplete
+Profile selections must be reselected explicitly; model targets are unchanged.
+
+Suite sources must contain unique definitions from one exact Profile source,
+catalog and Harness release. Their environment hashes may differ. A host must
+resolve the repository under the caller's workspace/permissions, verify the
+internal Profile ID and all selected immutable identities, and fail admission
+when they no longer match. Project association does not grant repository access
+or permission to execute a Profile's connected applications.

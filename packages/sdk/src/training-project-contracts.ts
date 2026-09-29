@@ -12,8 +12,17 @@ export const TrainingResourceLinkSchema = z.object({
 export const TrainingTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("model"), providerId: Id, modelId: Id, artifact: ImmutableReleaseRefSchema.nullable(),
     messages: z.array(z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().max(100_000) }).strict()).max(100) }).strict(),
-  z.object({ kind: z.literal("harness"), source: ProfileEvaluationRunSourceSchema }).strict(),
-  z.object({ kind: z.literal("suite"), suiteId: Id, sources: z.array(ProfileEvaluationRunSourceSchema).min(1).max(1_000) }).strict(),
+  z.object({ kind: z.literal("harness"), profileRepositoryId: Id, source: ProfileEvaluationRunSourceSchema }).strict(),
+  z.object({ kind: z.literal("suite"), profileRepositoryId: Id, suiteId: Id, sources: z.array(ProfileEvaluationRunSourceSchema).min(1).max(1_000) }).strict().superRefine((value, ctx) => {
+    const first = value.sources[0]!;
+    const identities = new Set<string>();
+    for (const [index, source] of value.sources.entries()) {
+      if (identities.has(source.definitionId)) ctx.addIssue({ code: "custom", path: ["sources", index], message: "Suite definitions must be unique." });
+      identities.add(source.definitionId);
+      if (source.profileId !== first.profileId || source.sourceRevision !== first.sourceRevision || source.catalogHash !== first.catalogHash || contentHash(source.harnessRelease) !== contentHash(first.harnessRelease))
+        ctx.addIssue({ code: "custom", path: ["sources", index], message: "Suite checks must belong to the same pinned Profile source and Harness release." });
+    }
+  }),
 ]);
 export const TrainingProjectContentSchema = z.object({
   name: z.string().trim().min(1).max(200), description: z.string().max(10_000),
