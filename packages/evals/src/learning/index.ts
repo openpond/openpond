@@ -32,3 +32,5 @@ export * from "./schedule-worker.js";
 export * from "./nightly-schedule.js";
 export * from "./policy-inspection.js";
 export * from "./task-queue-inspection.js";
+
+export * from "./acceptance-plan.js";
