@@ -41,6 +41,10 @@
       "import": "./dist/app-server-runtime.js",
       "types": "./dist/app-server-runtime.d.ts"
     },
+    "./hosted-profile-compiler": {
+      "import": "./dist/hosted-profile-compiler.js",
+      "types": "./dist/hosted-profile-compiler.d.ts"
+    },
     "./profile-source-check": {
       "import": "./dist/profile-source-check.js",
       "types": "./dist/profile-source-check.d.ts"
