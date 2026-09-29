@@ -22,6 +22,7 @@ export class OpenPondDatasetWorkspaceClient {
     const workspace = validateTasksetDraftWorkspace(request.workspace);
     if (workspace.draft.profileId !== this.options.teamId || workspace.draft.revision !== request.expectedRevision + 1) throw new Error("Dataset write scope or revision mismatch.");
     const result = this.readback(await this.request(`/${encodeURIComponent(workspace.draft.id)}`, "PUT", request, signal), workspace.draft.id);
+    if (request.originProjectId && result.originProjectId !== request.originProjectId) throw new Error("Dataset origin Project mismatch.");
     if (result.workspace.contentHash !== workspace.contentHash) throw new Error("Dataset write receipt differs from the saved bytes.");
     return result;
   }

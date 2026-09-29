@@ -147,3 +147,28 @@ retain a null metric value. The client verifies workspace, manifest,
 population, grading role, metric references and result hashes on readback.
 Hosts remain responsible for owner-authenticated evidence and durable
 dispatch/cancellation; a content hash is not producer authentication.
+
+### Dataset evaluations without a model configuration
+
+SDK 0.8 allows an evaluation request to set `modelProjectId: null` and select an
+exact published dataset release directly. The hosted executor still resolves the
+complete package and checks its supported runtime before admitting the run.
+Model-configuration-backed requests continue to require their attached release.
+
+`policy.messages` optionally supplies system, user and assistant context before
+each example. Those messages form part of the immutable execution policy hash;
+changing them produces a different evaluation configuration. Dataset reference
+answers are never included in these messages by the host.
+
+The optional `project` field contains `{ id, revision, contentHash, targetId }`.
+Its hash identifies the selected Project **content**, and `targetId` may be null
+for an ad hoc evaluation inside that Project. Hosts authorize the Project and
+resolve its retained revision before execution. Request, summary and manifest
+must agree on this provenance. Project attribution is not inferred from shared
+datasets or model configurations.
+
+`runs.list({ projectId })` reads that Project's attributed evaluations;
+`runs.list({})` reads authorized workspace history. Existing
+`runs.list({ modelProjectId })` filtering remains available. Callers must handle
+nullable `summary.modelProjectId` for independent evaluations. No trained model
+or serving deployment is created by running an evaluation.

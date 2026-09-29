@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EvaluationProjectContextSchema } from "./evaluation-project-context.js";
 import { assertContentHash } from "@openpond/harness";
 import { TasksetRunManifestSchema, TasksetRunMemberSchema, TasksetMetricResultSchema, assertTasksetMetricResult, orderTasksetRunReceipts } from "@openpond/evals/metrics";
 import { AttemptReceiptSchema } from "@openpond/evals/runs";
@@ -14,7 +15,8 @@ export const ModelTasksetRunPolicySchema = z.discriminatedUnion("kind", [
 ]);
 export const ModelTasksetRunRequestSchema = z.object({
   schemaVersion: z.literal("openpond.modelTasksetRunRequest.v1"),
-  operationId: IdSchema, teamId: IdSchema, modelProjectId: IdSchema,
+  operationId: IdSchema, teamId: IdSchema, modelProjectId: IdSchema.nullable(),
+  project: EvaluationProjectContextSchema.optional(),
   taskset: ModelProjectVersionedRefSchema, policy: ModelTasksetRunPolicySchema,
   population: z.array(TasksetRunMemberSchema).min(1).max(10_000),
 }).strict().superRefine((value, context) => {
@@ -25,7 +27,8 @@ export const ModelTasksetRunRequestSchema = z.object({
 export type ModelTasksetRunRequest = z.infer<typeof ModelTasksetRunRequestSchema>;
 export const ModelTasksetRunSummarySchema = z.object({
   schemaVersion: z.literal("openpond.modelTasksetRunSummary.v1"),
-  id: IdSchema, revision: z.number().int().positive(), teamId: IdSchema, modelProjectId: IdSchema,
+  id: IdSchema, revision: z.number().int().positive(), teamId: IdSchema, modelProjectId: IdSchema.nullable(),
+  project: EvaluationProjectContextSchema.optional(),
   operationId: IdSchema, taskset: ModelProjectVersionedRefSchema, policyKind: z.enum(["hosted_chat", "fixture"]),
   manifestHash: HashSchema,
   status: z.enum(["queued", "running", "cancelling", "completed", "failed", "cancelled"]),
@@ -51,7 +54,7 @@ export const ModelTasksetRunDetailsSchema = z.object({
   policySnapshot: ModelStarterAttemptSummarySchema.shape.policySnapshot,
 }).strict();
 export type ModelTasksetRunDetails = z.infer<typeof ModelTasksetRunDetailsSchema>;
-export const ModelTasksetRunListQuerySchema = z.object({ modelProjectId: IdSchema, afterId: IdSchema.optional(), limit: z.number().int().min(1).max(100).default(25) }).strict();
+export const ModelTasksetRunListQuerySchema = z.object({ modelProjectId: IdSchema.optional(), projectId: EvaluationProjectContextSchema.shape.id.optional(), afterId: IdSchema.optional(), limit: z.number().int().min(1).max(100).default(25) }).strict();
 export const ModelTasksetRunPageSchema = z.object({ items: z.array(ModelTasksetRunSummarySchema).max(100), nextCursor: IdSchema.nullable() }).strict();
 export const ModelTasksetRunResultSchema = z.object({
   schemaVersion: z.literal("openpond.modelTasksetRunResult.v1"),
@@ -70,6 +73,8 @@ export async function verifyModelTasksetRunDetails(value: unknown): Promise<Mode
   assertContentHash(manifest, "Taskset run manifest");
   if (manifest.contentHash !== summary.manifestHash
     || manifest.id !== summary.id || manifest.createdAt !== summary.createdAt || summary.teamId !== request.teamId || summary.modelProjectId !== request.modelProjectId
+    || canonicalJson(summary.project ?? null) !== canonicalJson(request.project ?? null)
+    || canonicalJson(manifest.metadata.project ?? null) !== canonicalJson(request.project ?? null)
     || summary.operationId !== request.operationId || summary.policyKind !== request.policy.kind
     || summary.totalCount !== request.population.length || summary.metricName !== manifest.metricPolicy.primaryMetric
     || canonicalJson(summary.taskset) !== canonicalJson(request.taskset)
