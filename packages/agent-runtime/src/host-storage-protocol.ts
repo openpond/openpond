@@ -303,6 +303,7 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
       afterSequence: z.number().int().min(0),
       beforeSequence: z.number().int().min(1).nullable().optional(),
       limit: pageSize,
+      excludeReasoningDeltas: z.boolean().optional(),
     }).strict(),
   }).strict(),
   z.object({

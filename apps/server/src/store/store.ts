@@ -488,6 +488,7 @@ export class SqliteStore extends SqliteTaskInboxStore implements RuntimeHistoryS
       afterSequence?: number | null;
       names?: readonly RuntimeEvent["name"][];
       limit?: number | null;
+      excludeReasoningDeltas?: boolean;
     } = {},
   ): Promise<RuntimeEvent[]> {
     await this.ready;
@@ -502,6 +503,7 @@ export class SqliteStore extends SqliteTaskInboxStore implements RuntimeHistoryS
       where.push(`name IN (${query.names.map(() => "?").join(", ")})`);
       params.push(...query.names);
     }
+    if (query.excludeReasoningDeltas) where.push("name <> 'assistant.reasoning.delta'");
     const limit = query.limit === undefined || query.limit === null
       ? null
       : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));

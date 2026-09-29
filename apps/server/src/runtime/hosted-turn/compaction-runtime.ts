@@ -241,7 +241,9 @@ export function createHostedCompactionRuntime(deps: {
         requestBudget: beforeBudget,
       };
     }
-    const priorEvents = await deps.runtimeEventsForSession(params.session.id);
+    const priorEvents = await deps.runtimeEventsForSession(params.session.id, {
+      excludeReasoningDeltas: true,
+    });
     const preparedEvents = await maybeAutoCompactHostedContext({
       ...params,
       maxContextTokens,

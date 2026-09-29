@@ -48,6 +48,16 @@ function host(): AgentRuntimeHost {
 }
 
 describe("agent JSON-RPC protocol", () => {
+  test("admits the bounded continuation filter on event pages", () => {
+    const request = { contractVersion: HOST_STORAGE_CONTRACT_VERSION,
+      requestId: "continuation-page-1", operation: "events/page",
+      params: { sessionId: "thread-1", afterSequence: 0, limit: 200,
+        excludeReasoningDeltas: true } };
+    expect(HostStorageRequestSchema.safeParse(request).success).toBe(true);
+    expect(HostStorageRequestSchema.safeParse({ ...request,
+      params: { ...request.params, excludeReasoningDeltas: "true" } }).success).toBe(false);
+  });
+
   test("task inbox host requests reject forged scope and stale mutation revisions", () => {
     const request = {
       contractVersion: 1, requestId: "mutation-1", operation: "task-inbox/execute",

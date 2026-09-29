@@ -129,6 +129,7 @@ export function createHostedToolLoopRuntime(deps: {
       afterSequence?: number | null;
       names?: readonly RuntimeEvent["name"][];
       limit?: number | null;
+      excludeReasoningDeltas?: boolean;
     }
   ): Promise<RuntimeEvent[]>;
   getSession(sessionId: string): Promise<Session>;
@@ -394,6 +395,7 @@ export function createHostedToolLoopRuntime(deps: {
       if (!subagentToolsAvailable()) return false;
       const pendingEvents = await store.runtimeEventsForSession(session.id, {
         afterSequence: lastDeliveredSubagentAsideSequence,
+        excludeReasoningDeltas: true,
       });
       lastDeliveredSubagentAsideSequence = pendingEvents.reduce(
         (latest, runtimeEvent) =>
