@@ -304,3 +304,11 @@ Parquet collections through the dataset reader. Search never examines private
 answers. Draft edits invalidate the index, and a published release remains
 separate from its draft. No task listing, editing, or labeling operation starts
 a training job.
+
+Independent dataset writes may include `originProjectId` at creation. This is
+immutable creation provenance, not exclusive ownership or a sharing grant. The
+host verifies that the Project belongs to the same workspace and is active.
+Receipts and list entries retain the origin so unpublished drafts remain visible
+in their originating Project. A release can still be used across Projects through
+explicit associations; changing or removing that association does not rewrite
+where the draft was created.

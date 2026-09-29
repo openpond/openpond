@@ -82,6 +82,22 @@ it("binds SDK transport and terminal results to the exact scoped evaluation popu
   const modelDetails = { ...details, request: modelRequest, policySnapshot: snapshot, manifest: modelManifest, summary: { ...summary, policyKind: "hosted_chat", manifestHash: modelManifest.contentHash } };
   returned = modelDetails;
   expect((await client.create(modelRequest)).manifest.policy.kind).toBe("model");
+  // The Project is execution provenance, not a fabricated model configuration.
+  // A server must not drop or substitute it while returning otherwise valid results.
+  const project = { id: "project", revision: 2, contentHash: await canonicalSha256("project-revision"), targetId: "target" };
+  const independentRequest = ModelTasksetRunRequestSchema.parse({ ...modelRequest, modelProjectId: null, project, policy: { ...modelRequest.policy, messages: [{ role: "system", content: "Answer accurately." }] } });
+  if (modelManifest.policy.kind !== "model") throw new Error("Expected a model policy");
+  const independentManifest = createTasksetRunManifest({ ...manifestContent, population: independentRequest.population, metadata: { project }, policy: { ...modelManifest.policy, configurationHash: await canonicalSha256({ policy: independentRequest.policy, snapshot }) } });
+  const independentDetails = { ...modelDetails, request: independentRequest, manifest: independentManifest, summary: { ...modelDetails.summary, modelProjectId: null, project, manifestHash: independentManifest.contentHash } };
+  returned = independentDetails;
+  expect((await client.create(independentRequest)).summary.project).toEqual(project);
+  returned = { ...independentDetails, summary: { ...independentDetails.summary, project: { ...project, revision: 3 } } };
+  await expect(client.get("run")).rejects.toThrow("admitted request");
+  returned = { ...independentDetails, request: { ...independentRequest, policy: { ...independentRequest.policy, messages: [{ role: "system", content: "Different prompt" }] } } };
+  await expect(client.get("run")).rejects.toThrow("admitted policy");
+  returned = { items: [independentDetails.summary], nextCursor: null };
+  expect((await client.list({ projectId: "project" })).items).toHaveLength(1);
+  await expect(client.list({ projectId: "other" })).rejects.toThrow("selected model");
   returned = { ...modelDetails, policySnapshot: { ...snapshot, configurationHash: await canonicalSha256("changed-provider") } };
   await expect(client.get("run")).rejects.toThrow("admitted policy");
 });
