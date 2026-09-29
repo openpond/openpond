@@ -1,0 +1,585 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "openpond.acceptanceGroupSnapshot.v1"
+    },
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "openpond.acceptanceGroupManifest.v1"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "teamId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "trainingJob": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "baseline": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "candidate": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "plan": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "string",
+              "const": "openpond.acceptancePlan.v1"
+            },
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "checks": {
+              "minItems": 1,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema3"
+              }
+            },
+            "maximumSpendUsd": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "contentHash": {
+              "$ref": "#/$defs/__schema9"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "id",
+            "revision",
+            "checks",
+            "maximumSpendUsd",
+            "contentHash"
+          ],
+          "additionalProperties": false
+        },
+        "maximumParallelAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "createdAt": {
+          "$ref": "#/$defs/__schema15"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/__schema16"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "teamId",
+        "trainingJob",
+        "baseline",
+        "candidate",
+        "plan",
+        "maximumParallelAttempts",
+        "createdAt",
+        "contentHash"
+      ],
+      "additionalProperties": false
+    },
+    "revision": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "blocked",
+        "cancelling",
+        "cleaning",
+        "completed",
+        "failed",
+        "cancelled",
+        "budget_exhausted"
+      ]
+    },
+    "attempts": {
+      "maxItems": 2000,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema17"
+      }
+    },
+    "failureCode": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema0"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "updatedAt": {
+      "$ref": "#/$defs/__schema15"
+    },
+    "contentHash": {
+      "$ref": "#/$defs/__schema16"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "manifest",
+    "revision",
+    "state",
+    "attempts",
+    "failureCode",
+    "updatedAt",
+    "contentHash"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "__schema1": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "contentHash"
+      ],
+      "additionalProperties": false
+    },
+    "__schema2": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "__schema3": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "name": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "required": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "role": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "unit": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "baselineReuse": {
+          "$ref": "#/$defs/__schema8"
+        },
+        "dataset": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "evaluator": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "executionHash": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "populationHash": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "metric": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "direction": {
+          "$ref": "#/$defs/__schema10"
+        },
+        "minimumCoverage": {
+          "$ref": "#/$defs/__schema11"
+        },
+        "threshold": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "maximumRegression": {
+          "$ref": "#/$defs/__schema13"
+        },
+        "maximumSpendUsd": {
+          "$ref": "#/$defs/__schema14"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "required",
+        "dataset",
+        "evaluator",
+        "executionHash",
+        "populationHash",
+        "metric",
+        "direction",
+        "minimumCoverage",
+        "threshold",
+        "maximumRegression",
+        "maximumSpendUsd"
+      ],
+      "additionalProperties": false
+    },
+    "__schema4": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "__schema5": {
+      "type": "boolean"
+    },
+    "__schema6": {
+      "type": "string",
+      "enum": [
+        "quality",
+        "retention",
+        "diagnostic"
+      ]
+    },
+    "__schema7": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "__schema8": {
+      "type": "object",
+      "properties": {
+        "maximumAgeSeconds": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 31536000
+        },
+        "qualification": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "required": [
+        "maximumAgeSeconds",
+        "qualification"
+      ],
+      "additionalProperties": false
+    },
+    "__schema9": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "__schema10": {
+      "type": "string",
+      "enum": [
+        "higher",
+        "lower"
+      ]
+    },
+    "__schema11": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1
+    },
+    "__schema12": {
+      "type": "number"
+    },
+    "__schema13": {
+      "type": "number",
+      "minimum": 0
+    },
+    "__schema14": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "__schema15": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "__schema16": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "__schema17": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "checkId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "subject": {
+          "$ref": "#/$defs/__schema18"
+        },
+        "ordinal": {
+          "$ref": "#/$defs/__schema19"
+        },
+        "dispatchId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "state": {
+          "$ref": "#/$defs/__schema20"
+        },
+        "artifact": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "checkHash": {
+          "$ref": "#/$defs/__schema16"
+        },
+        "measurement": {
+          "$ref": "#/$defs/__schema21"
+        },
+        "executionReceipt": {
+          "$ref": "#/$defs/__schema26"
+        },
+        "reusedFrom": {
+          "$ref": "#/$defs/__schema27"
+        },
+        "spendUsd": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "reservedUsd": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "cleanupComplete": {
+          "$ref": "#/$defs/__schema29"
+        },
+        "accountingComplete": {
+          "$ref": "#/$defs/__schema30"
+        },
+        "failureCode": {
+          "$ref": "#/$defs/__schema31"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/__schema15"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/__schema15"
+        }
+      },
+      "required": [
+        "id",
+        "checkId",
+        "subject",
+        "ordinal",
+        "dispatchId",
+        "state",
+        "artifact",
+        "checkHash",
+        "measurement",
+        "executionReceipt",
+        "reusedFrom",
+        "spendUsd",
+        "reservedUsd",
+        "cleanupComplete",
+        "accountingComplete",
+        "failureCode",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "__schema18": {
+      "type": "string",
+      "enum": [
+        "baseline",
+        "candidate"
+      ]
+    },
+    "__schema19": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema20": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "dispatching",
+        "running",
+        "grading",
+        "cleaning",
+        "completed",
+        "failed",
+        "cancelled",
+        "budget_exhausted"
+      ]
+    },
+    "__schema21": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "runId": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "artifact": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "checkHash": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "populationHash": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "scoredPopulationHash": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "executionHash": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "evaluator": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "metric": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "expectedCount": {
+              "$ref": "#/$defs/__schema22"
+            },
+            "scoredCount": {
+              "$ref": "#/$defs/__schema23"
+            },
+            "score": {
+              "$ref": "#/$defs/__schema24"
+            },
+            "status": {
+              "$ref": "#/$defs/__schema25"
+            },
+            "evidenceHash": {
+              "$ref": "#/$defs/__schema9"
+            }
+          },
+          "required": [
+            "runId",
+            "artifact",
+            "checkHash",
+            "populationHash",
+            "scoredPopulationHash",
+            "executionHash",
+            "evaluator",
+            "metric",
+            "expectedCount",
+            "scoredCount",
+            "score",
+            "status",
+            "evidenceHash"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema22": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema23": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema24": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema25": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "__schema26": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema27": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "attemptId": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "group",
+            "attemptId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema28": {
+      "type": "number",
+      "minimum": 0
+    },
+    "__schema29": {
+      "type": "boolean"
+    },
+    "__schema30": {
+      "type": "boolean"
+    },
+    "__schema31": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema0"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "$id": "urn:openpond:learning:v1:acceptance-group-snapshot",
+  "$comment": "Generated from @openpond/evals. Cross-resource identity, authorization, idempotency, admission, grading and split constraints are enforced by the shared domain service in addition to this structural schema."
+}

@@ -5,11 +5,16 @@ const Id = z.string().trim().min(1).max(240);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const AcceptanceCheckSchema = z.object({
   id: Id, name: z.string().trim().min(1).max(200), required: z.boolean(),
+  role: z.enum(["quality", "retention", "diagnostic"]).optional(),
+  unit: z.string().trim().min(1).max(80).optional(),
+  baselineReuse: z.object({ maximumAgeSeconds: z.number().int().positive().max(31_536_000), qualification: ImmutableReleaseRefSchema }).strict().optional(),
   dataset: ImmutableReleaseRefSchema, evaluator: ImmutableReleaseRefSchema,
   executionHash: Hash, populationHash: Hash, metric: Id, direction: z.enum(["higher", "lower"]),
   minimumCoverage: z.number().positive().max(1), threshold: z.number().finite(),
   maximumRegression: z.number().finite().nonnegative(), maximumSpendUsd: z.number().finite().positive(),
-}).strict();
+}).strict().superRefine((check, ctx) => {
+  if (check.role === "diagnostic" && check.required) ctx.addIssue({ code: "custom", message: "Diagnostic checks cannot be required acceptance gates." });
+});
 export const AcceptancePlanContentSchema = z.object({
   schemaVersion: z.literal("openpond.acceptancePlan.v1"), id: Id, revision: z.number().int().positive(),
   checks: z.array(AcceptanceCheckSchema).min(1).max(100),
