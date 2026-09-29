@@ -12,7 +12,7 @@ const seal = async <T extends object>(content: T) => ({ ...content, contentHash:
 it("binds SDK transport and terminal results to the exact scoped evaluation population", async () => {
   const { taskset, manifest: legacy } = genericToolConformance;
   const request = ModelTasksetRunRequestSchema.parse({
-    schemaVersion: "openpond.modelTasksetRunRequest.v1", operationId: "op", teamId: "team", modelProjectId: "model",
+    schemaVersion: "openpond.modelTasksetRunRequest.v1", operationId: "op", teamId: "team", modelProjectId: "model", name: "Response quality",
     taskset: { id: taskset.id, revision: 1, contentHash: taskset.contentHash }, policy: { kind: "fixture" },
     population: ["correct", "wrong", "infra"].map(receiptId => ({ receiptId, taskId: taskset.tasks[0]!.id, seed: "0", fixtureId: receiptId })),
   });
@@ -24,7 +24,7 @@ it("binds SDK transport and terminal results to the exact scoped evaluation popu
   });
   const summary = ModelTasksetRunSummarySchema.parse({
     schemaVersion: "openpond.modelTasksetRunSummary.v1", id: manifest.id, revision: 1, teamId: request.teamId, modelProjectId: request.modelProjectId,
-    operationId: request.operationId, taskset: request.taskset, policyKind: "fixture", manifestHash: manifest.contentHash,
+    operationId: request.operationId, name: request.name, taskset: request.taskset, policyKind: "fixture", manifestHash: manifest.contentHash,
     status: "queued", totalCount: 3, counts: { pending: 3, running: 0, completed: 0, failed: 0, cancelled: 0 },
     createdAt: manifest.createdAt, startedAt: null, completedAt: null, cleanupComplete: false, resultAvailable: false,
     score: null, metricName: manifest.metricPolicy.primaryMetric, error: null,
@@ -46,8 +46,10 @@ it("binds SDK transport and terminal results to the exact scoped evaluation popu
   await expect(client.get("run")).rejects.toThrow("another identity or workspace");
   returned = { ...details, request: { ...request, population: request.population.slice(1) } };
   await expect(client.create(request)).rejects.toThrow("admitted request");
+  returned = { ...details, summary: { ...summary, name: "Different experiment" } };
+  await expect(client.get("run")).rejects.toThrow("admitted request");
   returned = { items: [{ ...summary, modelProjectId: "other" }], nextCursor: null };
-  await expect(client.list({ modelProjectId: "model" })).rejects.toThrow("selected model");
+  await expect(client.list({ modelProjectId: "model" })).rejects.toThrow("selected scope");
   expect(ModelTasksetRunRequestSchema.safeParse({ ...request, population: [{ ...request.population[0], seed: "01" }] }).success).toBe(false);
   expect(ModelTasksetRunRequestSchema.safeParse({ ...request, worldState: { score: 1 } }).success).toBe(false);
   const receipts = await Promise.all(request.population.map(async (member, index) => createAttemptReceipt({
@@ -97,7 +99,12 @@ it("binds SDK transport and terminal results to the exact scoped evaluation popu
   await expect(client.get("run")).rejects.toThrow("admitted policy");
   returned = { items: [independentDetails.summary], nextCursor: null };
   expect((await client.list({ projectId: "project" })).items).toHaveLength(1);
-  await expect(client.list({ projectId: "other" })).rejects.toThrow("selected model");
+  // A linked Project can contain a run created before Project context was
+  // written into the run summary. The host validates that link before listing.
+  returned = { items: [summary], nextCursor: null };
+  expect((await client.list({ projectId: "project" })).items).toHaveLength(1);
+  returned = { items: [{ ...summary, teamId: "other" }], nextCursor: null };
+  await expect(client.list({ projectId: "project" })).rejects.toThrow("another identity or workspace");
   returned = { ...modelDetails, policySnapshot: { ...snapshot, configurationHash: await canonicalSha256("changed-provider") } };
   await expect(client.get("run")).rejects.toThrow("admitted policy");
 });

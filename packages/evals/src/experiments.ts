@@ -52,8 +52,10 @@ export function experimentCaseKey(identity: ExperimentCaseIdentity): string {
 export const ExperimentManifestContentSchema = z.object({
   schemaVersion: z.literal("openpond.experimentManifest.v1"),
   id: ReleaseIdSchema,
+  name: z.string().trim().min(1).max(500),
   teamId: ReleaseIdSchema,
   operationId: ReleaseIdSchema,
+  maximumCostUsd: MoneySchema,
   dataset: ImmutableReleaseRefSchema.extend({ revision: z.number().int().positive() }).strict(),
   target: ExperimentTargetSchema,
   evaluators: z.array(ExperimentEvaluatorSchema).max(100),

@@ -131,6 +131,8 @@ population of `{ receiptId, taskId, seed, fixtureId }` members. Receipt IDs are
 unique within the run; hosted seeds are canonical integer strings between
 `0` and `2147483647`. Requests support up to 10,000 members and never accept
 replacement world state, verifier bytes or caller-generated scores.
+An optional human-readable `name` is retained in the run summary and verified
+against the admitted request, so list and detail clients show the same name.
 
 Use `{ kind: "fixture" }` with each member's authored fixture ID to check a
 package without claiming model execution. Use a `hosted_chat` policy with a
