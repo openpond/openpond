@@ -12,6 +12,7 @@ import {
 export const OPENPOND_SCRIPTED_MODEL_PREFIX = "openpond-scripted-";
 export const OPENPOND_HARNESS_SCRIPTED_MODELS_ENV = "OPENPOND_HARNESS_SCRIPTED_MODELS";
 export const OPENPOND_SCRIPTED_CHAT_TWO_TURNS_MODEL = "openpond-scripted-chat-two-turns";
+export const OPENPOND_SCRIPTED_WORK_INPUT_MODEL = "openpond-scripted-work-input";
 export const OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL = "openpond-scripted-chat-delayed-stream";
 export const OPENPOND_SCRIPTED_CHAT_INTERRUPT_RECOVERY_MODEL =
   "openpond-scripted-chat-interrupt-recovery";
@@ -88,6 +89,24 @@ export async function* streamScriptedOpenPondChatTurn(
   }
   if (model === OPENPOND_SCRIPTED_CHAT_TWO_TURNS_MODEL) {
     yield* streamTwoTurnChat(input);
+    return;
+  }
+  if (model === OPENPOND_SCRIPTED_WORK_INPUT_MODEL) {
+    if (input.messages.filter((message) => message.role === "user").length > 1) {
+      const answered = input.messages.some((message) => typeof message.content === "string" &&
+        message.content.includes('"answer":"UTC"'));
+      yield textDelta(answered
+        ? "Work continued after the durable user question."
+        : "The resolved answer was missing from provider context.");
+      yield finishDelta("stop");
+      return;
+    }
+    yield toolCallDelta("ask_user", {
+      question: "Which timezone should this Work task use?",
+      reason: "The requested schedule has no timezone.",
+      options: [{ id: "utc", label: "UTC" }, { id: "local", label: "Local time" }],
+    });
+    yield finishDelta("tool_calls");
     return;
   }
   if (model === OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL) {
