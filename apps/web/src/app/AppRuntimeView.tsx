@@ -26,6 +26,7 @@ import {
   oldestRuntimeEventSequence,
 } from "../lib/runtime-event-lists";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
+import { openHostedConsole } from "../lib/console-navigation";
 import { runtimeEventsForSession } from "../lib/runtime-indexes";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
@@ -782,6 +783,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   ]);
   const changeProductArea = useCallback(
     (nextProductArea: ProductArea) => {
+      if (nextProductArea === "console") {
+        void openHostedConsole(account?.baseUrl ?? account?.activeProfile?.baseUrl);
+        return;
+      }
       setSectionMenuOpen(null);
       setSelectedAppId(null);
       setSelectedProjectId(null);
@@ -797,6 +802,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       changeNewExperience(readLastChatTaskModeFromBrowser());
     },
     [
+      account?.baseUrl,
+      account?.activeProfile?.baseUrl,
       changeNewExperience,
       navigateDesktopRoute,
       setSectionMenuOpen,

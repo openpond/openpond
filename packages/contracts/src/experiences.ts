@@ -4,7 +4,7 @@ export const ExperienceSchema = z.enum(["chat", "work", "development"]);
 
 export type Experience = z.infer<typeof ExperienceSchema>;
 
-export const ProductAreaSchema = z.enum(["chat", "models", "development"]);
+export const ProductAreaSchema = z.enum(["chat", "models", "console", "development"]);
 
 export type ProductArea = z.infer<typeof ProductAreaSchema>;
 
