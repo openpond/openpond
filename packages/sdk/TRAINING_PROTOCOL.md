@@ -85,6 +85,7 @@ routes through `createTrainingClient`:
 
 ```text
 POST /v1/training/preparations
+GET  /v1/training/preparations?state=prepared&limit=25
 GET  /v1/training/preparations/{preparationId}?teamId=
 POST /v1/training/preparations/{preparationId}/start
 POST /v1/training/preparations/{preparationId}/cancel
@@ -105,6 +106,15 @@ ID, and make identical retries return that same job. A cancelled preparation
 cannot start. Once submitted, use the ordinary job cancellation controls.
 Reading a preparation does not authorize starting it; the host rechecks scope,
 creator permissions, resource access, runtime availability and spending limits.
+
+`listPreparations(teamId, { state, projectId, afterId, limit })` discovers the
+authenticated user's preparations in that workspace. Filters are optional;
+`limit` defaults to 25 and is bounded at 100. Hosts return descending ID order
+and a `nextCursor` identifying the last returned preparation when another page
+exists. A Project filter uses the preparation's saved association. Listing never
+recompiles inputs or starts jobs. The SDK verifies each immutable receipt and
+rejects wrong-workspace, wrong-filter, duplicate or inconsistent cursor pages.
+Resume using `getPreparation` before an explicit start or discard operation.
 
 ## Deterministic grading identity
 
