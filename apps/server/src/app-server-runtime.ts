@@ -36,7 +36,8 @@ import {
   resolveSelectedLocalHarnessRelease,
 } from "./harness/local-harness-selection.js";
 import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-runtime.js";
-import { ensureExplicitProfileHarnessSource, importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
+import { ensureExplicitProfileHarnessSource } from "./harness/local-explicit-profile-source.js";
+import { importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
 import { PROFILE_HARNESS_WORKSPACE_PREFIX } from "./harness/profile-harness-workspace-identity.js";
 import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";

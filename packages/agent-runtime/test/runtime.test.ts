@@ -280,6 +280,8 @@ describe("@openpond/agent-runtime", () => {
 
   test("owns thread and turn lifecycle telemetry without recording request payloads", async () => {
     const telemetry: Array<Record<string, unknown>> = [];
+    const listTurns = vi.fn(async () => []);
+    const listEvents = vi.fn(async () => []);
     const service = createAgentRuntimeService({
       capabilities: async () => ({
         protocolVersion: "test",
@@ -291,8 +293,8 @@ describe("@openpond/agent-runtime", () => {
       }),
       createThread: async () => ({ id: "thread-1" }),
       readThread: async (threadId) => ({ id: threadId }),
-      listTurns: async () => [],
-      listEvents: async () => [],
+      listTurns,
+      listEvents,
       startTurn: async (threadId) => ({ id: "turn-1", threadId }),
       isTurnActive: () => false,
       waitForTurnSettlement: async () => undefined,
@@ -309,6 +311,15 @@ describe("@openpond/agent-runtime", () => {
       rollbackHarness: async () => ({}),
       telemetry: (event) => telemetry.push(event),
     });
+
+    await expect(service.threadRead({ threadId: "thread-1", includeHistory: false }))
+      .resolves.toEqual({ thread: { id: "thread-1" }, turns: [], events: [] });
+    expect(listTurns).not.toHaveBeenCalled();
+    expect(listEvents).not.toHaveBeenCalled();
+    await service.threadRead({ threadId: "thread-1" });
+    expect(listTurns).toHaveBeenCalledOnce();
+    expect(listEvents).toHaveBeenCalledOnce();
+    telemetry.length = 0;
 
     await service.turnStart({
       threadId: "thread-1",

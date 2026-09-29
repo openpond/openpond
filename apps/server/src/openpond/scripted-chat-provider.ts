@@ -12,6 +12,8 @@ import {
 export const OPENPOND_SCRIPTED_MODEL_PREFIX = "openpond-scripted-";
 export const OPENPOND_HARNESS_SCRIPTED_MODELS_ENV = "OPENPOND_HARNESS_SCRIPTED_MODELS";
 export const OPENPOND_SCRIPTED_CHAT_TWO_TURNS_MODEL = "openpond-scripted-chat-two-turns";
+export const OPENPOND_SCRIPTED_WORK_INPUT_MODEL = "openpond-scripted-work-input";
+export const OPENPOND_SCRIPTED_WORK_MEMORY_MODEL = "openpond-scripted-work-memory";
 export const OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL = "openpond-scripted-chat-delayed-stream";
 export const OPENPOND_SCRIPTED_CHAT_INTERRUPT_RECOVERY_MODEL =
   "openpond-scripted-chat-interrupt-recovery";
@@ -88,6 +90,57 @@ export async function* streamScriptedOpenPondChatTurn(
   }
   if (model === OPENPOND_SCRIPTED_CHAT_TWO_TURNS_MODEL) {
     yield* streamTwoTurnChat(input);
+    return;
+  }
+  if (model === OPENPOND_SCRIPTED_WORK_INPUT_MODEL) {
+    if (input.messages.filter((message) => message.role === "user").length > 1) {
+      const answered = input.messages.some((message) => typeof message.content === "string" &&
+        message.content.includes('"answer":"UTC"'));
+      yield textDelta(answered
+        ? "Work continued after the durable user question."
+        : "The resolved answer was missing from provider context.");
+      yield finishDelta("stop");
+      return;
+    }
+    yield toolCallDelta("ask_user", {
+      question: "Which timezone should this Work task use?",
+      reason: "The requested schedule has no timezone.",
+      options: [{ id: "utc", label: "UTC" }, { id: "local", label: "Local time" }],
+    });
+    yield finishDelta("tool_calls");
+    return;
+  }
+  if (model === OPENPOND_SCRIPTED_WORK_MEMORY_MODEL) {
+    const results = input.messages.filter((message) => message.role === "tool" && message.content)
+      .flatMap((message) => {
+        try { return [JSON.parse(message.content!) as Record<string, unknown>]; }
+        catch { return []; }
+      });
+    const inspected = results.find((result) => result.key === "launch-code" && typeof result.content === "string");
+    if (inspected) {
+      yield textDelta(inspected.content === "The launch code is cobalt."
+        ? "Durable hosted memory read: cobalt."
+        : inspected.content === "The launch code is azure."
+          ? "Durable hosted Profile memory read: azure."
+          : "Hosted memory inspect lost the saved entry.");
+      yield finishDelta("stop");
+      return;
+    }
+    const searched = results.find((result) => Array.isArray(result.matches));
+    if (searched) {
+      const matches = searched.matches;
+      if (!Array.isArray(matches) || !matches.some((entry) =>
+        entry && typeof entry === "object" && (entry as Record<string, unknown>).key === "launch-code")) {
+        yield textDelta("Hosted memory search lost the saved key.");
+        yield finishDelta("stop");
+        return;
+      }
+      yield toolCallDelta("memory_inspect", { key: "launch-code" });
+      yield finishDelta("tool_calls");
+      return;
+    }
+    yield toolCallDelta("memory_search", { query: "launch", limit: 5 });
+    yield finishDelta("tool_calls");
     return;
   }
   if (model === OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL) {

@@ -106,6 +106,7 @@ export type TurnRepository = TaskInboxRepository & {
       afterSequence?: number | null;
       names?: readonly RuntimeEvent["name"][];
       limit?: number | null;
+      excludeReasoningDeltas?: boolean;
     }
   ): Promise<RuntimeEvent[]>;
   persistedRuntimeEventsForSession?(
@@ -114,6 +115,7 @@ export type TurnRepository = TaskInboxRepository & {
       afterSequence?: number | null;
       names?: readonly RuntimeEvent["name"][];
       limit?: number | null;
+      excludeReasoningDeltas?: boolean;
     }
   ): Promise<RuntimeEvent[]>;
   latestAssistantTextForSession(sessionId: string): Promise<string | null>;
