@@ -113,7 +113,7 @@ export async function* streamScriptedOpenPondChatTurn(
   if (model === OPENPOND_SCRIPTED_WORK_MEMORY_MODEL) {
     const results = input.messages.filter((message) => message.role === "tool" && message.content)
       .flatMap((message) => {
-        try { return [JSON.parse(message.content) as Record<string, unknown>]; }
+        try { return [JSON.parse(message.content!) as Record<string, unknown>]; }
         catch { return []; }
       });
     const inspected = results.find((result) => result.key === "launch-code" && typeof result.content === "string");

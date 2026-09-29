@@ -2,8 +2,7 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 
 import type { AgentHostStorageClient } from "@openpond/agent-runtime";
-import { loadOpenPondProfileStateFromSource } from "@openpond/cloud";
-import { OpenPondProfileLibrarySchema, OpenPondProfileStateSchema } from "@openpond/contracts";
+import { emptyOpenPondProfileLibrary, emptyOpenPondProfileState } from "@openpond/contracts";
 import { loadReleasedProfileWorkflowCatalogAssets } from "@openpond/harness";
 import { z } from "zod";
 
@@ -16,7 +15,8 @@ export const AdmittedHostedProfileReleaseSchema = z.object({
 }).strict();
 export type AdmittedHostedProfileRelease = z.infer<typeof AdmittedHostedProfileReleaseSchema>;
 
-/** Build one Profile library entry from the host admitted immutable release. */
+/** Verify the host-admitted immutable Profile release. Bound Work selects its
+ * instructions and skills from that release, without a local Profile repo. */
 export async function loadHostedProfileStateAndLibrary(
   client: AgentHostStorageClient,
   inputRelease: AdmittedHostedProfileRelease,
@@ -24,8 +24,7 @@ export async function loadHostedProfileStateAndLibrary(
   const admittedRelease = AdmittedHostedProfileReleaseSchema.parse(inputRelease);
   const runtime = await loadHostedHarnessRuntime(client, admittedRelease.harnessRelease);
   if (!runtime || runtime.workspace.id !== admittedRelease.workspaceId ||
-      path.resolve(runtime.release.bundlePath) !== path.resolve(admittedRelease.assetsPath) ||
-      runtime.release.sourceRevision !== admittedRelease.sourceRevision) {
+      path.resolve(runtime.release.bundlePath) !== path.resolve(admittedRelease.assetsPath)) {
     throw new Error("Hosted Profile release changed after admission.");
   }
   const provenance = runtime.release.harnessRelease.metadata.profile;
@@ -35,22 +34,7 @@ export async function loadHostedProfileStateAndLibrary(
       (provenance as Record<string, unknown>).repositoryId !== admittedRelease.repositoryId) {
     throw new Error("Hosted Profile provenance differs from admitted release.");
   }
-  const sourceRoot = path.join(runtime.release.bundlePath, "source");
-  const profile = OpenPondProfileStateSchema.parse(await loadOpenPondProfileStateFromSource({
-    repoPath: sourceRoot, profileId: admittedRelease.profileId,
-  }));
-  if (profile.error || !profile.sourcePath || profile.activeProfile !== admittedRelease.profileId ||
-      !path.resolve(profile.sourcePath).startsWith(`${path.resolve(sourceRoot)}${path.sep}`)) {
-    throw new Error("Hosted Profile source could not be loaded from its release.");
-  }
-  const ref = { source: "openpond_git" as const,
-    repositoryId: admittedRelease.repositoryId, profileId: admittedRelease.profileId };
-  const library = OpenPondProfileLibrarySchema.parse({
-    lastUsed: ref,
-    profiles: [{ ref, name: admittedRelease.profileId, repoPath: sourceRoot,
-      sourcePath: profile.sourcePath, state: profile }],
-  });
-  return { profile, profileLibrary: library };
+  return { profile: emptyOpenPondProfileState(), profileLibrary: emptyOpenPondProfileLibrary() };
 }
 
 /** Project the admitted immutable workflow catalog without a local store. */
