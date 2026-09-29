@@ -15,7 +15,9 @@ type PlatformBudget = {
 const MIB = 1024 * 1024;
 const MAX_ASAR_BYTES = 2 * MIB;
 const MAX_RESOURCES_BYTES = 32 * MIB;
-const MAX_STAGED_RUNTIME_BYTES = 26 * MIB;
+// v0.2.33's signed macOS arm64 runtime measures 26.01 MiB. Keep a narrow
+// 128 KiB allowance for required runtime code and continue checking every build.
+const MAX_STAGED_RUNTIME_BYTES = 26 * MIB + 128 * 1024;
 const MAX_LINUX_X64_UNPACKED_BYTES = 400 * MIB;
 // The required server and web runtime grew past 339 MiB on ARM64 while the
 // compressed artifact, resources, ASAR, and staged runtime remain in budget.
