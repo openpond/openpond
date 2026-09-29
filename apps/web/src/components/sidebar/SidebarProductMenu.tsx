@@ -109,7 +109,7 @@ export function SidebarProductMenu({
           src={OPENPOND_WORDMARK_WHITE_URL}
           alt=""
         />
-        {value === "models" ? <span className="sidebar-experience-label">Models</span> : null}
+        <span className="sidebar-experience-label">{activeOption.label}</span>
         <ChevronDown size={13} aria-hidden="true" />
       </button>
       {open ? (

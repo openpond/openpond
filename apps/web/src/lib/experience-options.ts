@@ -23,13 +23,18 @@ export const PRODUCT_AREA_OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: "chat",
-    label: "Work",
+    label: "Chat",
     description: "Chat and complete tasks",
   },
   {
     value: "models",
     label: "Models",
     description: "Evaluate, train, and serve models",
+  },
+  {
+    value: "console",
+    label: "Console",
+    description: "Manage models and workspace resources",
   },
 ];
 
