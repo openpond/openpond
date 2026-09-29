@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { createTrainingPreparationClient } from "./training-preparations.js";
+export { TrainingPreparationRequestSchema, TrainingPreparationPlanContentSchema, TrainingPreparationPlanSchema, TrainingPreparationReceiptSchema, TrainingPreparationControlSchema, parseAndVerifyTrainingPreparationReceipt, type TrainingPreparationRequest, type TrainingPreparationPlan, type TrainingPreparationReceipt, type TrainingPreparationControl } from "./training-preparations.js";
 import { createTrainingHarnessSourceClient } from "./training-harness-sources.js";
 export { TrainingHarnessSourcePublicationSchema } from "./training-harness-sources.js";
 import { createTrainingCandidateDecisionClient } from "./training-candidate-decisions.js";
@@ -587,6 +589,7 @@ export function createTrainingClient(input: {
   }
 
   return {
+    ...createTrainingPreparationClient(request),
     ...createTrainingHarnessSourceClient(request),
     ...createTrainingCandidateDecisionClient(request),
     async capabilities() {
