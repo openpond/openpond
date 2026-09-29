@@ -120,7 +120,9 @@ export async function* streamScriptedOpenPondChatTurn(
     if (inspected) {
       yield textDelta(inspected.content === "The launch code is cobalt."
         ? "Durable hosted memory read: cobalt."
-        : "Hosted memory inspect lost the saved entry.");
+        : inspected.content === "The launch code is azure."
+          ? "Durable hosted Profile memory read: azure."
+          : "Hosted memory inspect lost the saved entry.");
       yield finishDelta("stop");
       return;
     }
@@ -137,7 +139,7 @@ export async function* streamScriptedOpenPondChatTurn(
       yield finishDelta("tool_calls");
       return;
     }
-    yield toolCallDelta("memory_search", { query: "cobalt", limit: 5 });
+    yield toolCallDelta("memory_search", { query: "launch", limit: 5 });
     yield finishDelta("tool_calls");
     return;
   }
