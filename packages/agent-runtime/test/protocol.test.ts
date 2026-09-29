@@ -329,6 +329,25 @@ describe("agent JSON-RPC protocol", () => {
     ]));
   });
 
+  test("does not cut off an explicitly budgeted hosted sandbox create at 60 seconds", async () => {
+    const client = new AgentHostStorageClient();
+    client.bind(async () => {});
+    const timer = vi.spyOn(globalThis, "setTimeout");
+    try {
+      const pending = client.request({
+        contractVersion: HOST_STORAGE_CONTRACT_VERSION,
+        requestId: "cold-sandbox-create",
+        operation: "sandbox/request",
+        params: { action: { type: "create", payload: {} } },
+      }, 300_000).catch((error: unknown) => error);
+      expect(timer.mock.calls.at(-1)?.[1]).toBe(300_000);
+      client.close();
+      expect(await pending).toMatchObject({ message: "Host storage transport closed." });
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
   test("forwards canonical host notifications", async () => {
     const listeners = new Set<(notification: JsonRpcNotification) => void>();
     const runtimeHost = host();
