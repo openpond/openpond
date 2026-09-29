@@ -90,6 +90,13 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
   z.object({
     contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
     requestId: id,
+    operation: z.literal("harness/memory/search"),
+    params: z.object({ workspaceId: id, query: z.string().trim().min(1).max(500),
+      limit: z.number().int().min(1).max(20) }).strict(),
+  }).strict(),
+  z.object({
+    contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
+    requestId: id,
     operation: z.literal("harness/memory/write"),
     params: z.object({ input: z.record(z.string(), z.unknown()) }).strict(),
   }).strict(),
@@ -308,7 +315,7 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
 
 export const HostStorageCapabilitySchema = z.object({
   contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
-  operations: z.array(z.enum(["sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/write", "harness/state/read", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(40),
+  operations: z.array(z.enum(["sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write", "harness/state/read", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(40),
   allowedTools: z.array(id).max(128),
   maxPageSize: pageSize,
   maxRequestBytes: z.number().int().min(1).max(1_000_000),
