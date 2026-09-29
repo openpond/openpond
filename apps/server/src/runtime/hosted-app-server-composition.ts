@@ -76,7 +76,8 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const outputLifecycle = createHostedWorkOutputLifecycle({
     client, storeDir, sandboxRequest,
     getTurn: (turnId) => core.getTurn(turnId),
-    runtimeEventsForSession: (sessionId) => core.runtimeEventsForSession(sessionId),
+    runtimeEventsForSession: (sessionId) => core.runtimeEventsForSession(sessionId,
+      { excludeReasoningDeltas: true }),
     appendRuntimeEvent,
   });
   const turnFollowUpQueue = createBackgroundWorkerQueue({ queueId: "turn-follow-up", logger });
@@ -191,7 +192,8 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
       },
       createSession, getSession,
       turnsForSession: (sessionId) => core.turnsForSession(sessionId, 1_000),
-      runtimeEventsForSession: (sessionId) => core.runtimeEventsForSession(sessionId),
+      runtimeEventsForSession: (sessionId) => core.runtimeEventsForSession(sessionId,
+        { excludeReasoningDeltas: true }),
       sendTurn, steerSessionTurn: turnRunner.steerSessionTurn,
       readTaskInbox: turnRunner.readTaskInbox, queueTaskInput: turnRunner.queueTaskInput,
       updateTaskInput: turnRunner.updateTaskInput,
