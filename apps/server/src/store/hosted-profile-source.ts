@@ -23,15 +23,15 @@ export async function loadHostedProfileStateAndLibrary(
 ) {
   const admittedRelease = AdmittedHostedProfileReleaseSchema.parse(inputRelease);
   const runtime = await loadHostedHarnessRuntime(client, admittedRelease.harnessRelease);
-  if (!runtime || runtime.workspace.id !== admittedRelease.workspaceId ||
-      path.resolve(runtime.release.bundlePath) !== path.resolve(admittedRelease.assetsPath)) {
+  if (!runtime || path.resolve(runtime.release.bundlePath) !== path.resolve(admittedRelease.assetsPath)) {
     throw new Error("Hosted Profile release changed after admission.");
   }
   const provenance = runtime.release.harnessRelease.metadata.profile;
   if (!provenance || typeof provenance !== "object" ||
       (provenance as Record<string, unknown>).id !== admittedRelease.profileId ||
       (provenance as Record<string, unknown>).sourceRevision !== admittedRelease.sourceRevision ||
-      (provenance as Record<string, unknown>).repositoryId !== admittedRelease.repositoryId) {
+      ((provenance as Record<string, unknown>).repositoryId !== undefined &&
+        (provenance as Record<string, unknown>).repositoryId !== admittedRelease.repositoryId)) {
     throw new Error("Hosted Profile provenance differs from admitted release.");
   }
   return { profile: emptyOpenPondProfileState(), profileLibrary: emptyOpenPondProfileLibrary() };
@@ -44,13 +44,14 @@ export async function listHostedProfileWorkflows(
 ) {
   const admittedRelease = AdmittedHostedProfileReleaseSchema.parse(inputRelease);
   const runtime = await loadHostedHarnessRuntime(client, admittedRelease.harnessRelease);
-  if (!runtime || runtime.workspace.id !== admittedRelease.workspaceId) {
+  if (!runtime || path.resolve(runtime.release.bundlePath) !== path.resolve(admittedRelease.assetsPath)) {
     throw new Error("Hosted Profile workflow release is unavailable.");
   }
   const provenance = runtime.release.harnessRelease.metadata.profile as Record<string, unknown> | undefined;
   if (provenance?.id !== admittedRelease.profileId ||
       provenance.sourceRevision !== admittedRelease.sourceRevision ||
-      provenance.repositoryId !== admittedRelease.repositoryId) {
+      (provenance.repositoryId !== undefined &&
+        provenance.repositoryId !== admittedRelease.repositoryId)) {
     throw new Error("Hosted Profile workflow provenance changed.");
   }
   const releaseRef = admittedRelease.harnessRelease;

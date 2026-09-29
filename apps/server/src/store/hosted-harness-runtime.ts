@@ -132,7 +132,8 @@ function assertProfileProvenance(
   if (!provenance || typeof provenance !== "object" ||
       (provenance as Record<string, unknown>).id !== profileId ||
       (provenance as Record<string, unknown>).sourceRevision !== sourceRevision ||
-      (provenance as Record<string, unknown>).repositoryId !== repositoryId) {
+      ((provenance as Record<string, unknown>).repositoryId !== undefined &&
+        (provenance as Record<string, unknown>).repositoryId !== repositoryId)) {
     throw new Error("Bound Profile source differs from its released Harness source.");
   }
 }
