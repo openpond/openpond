@@ -4,6 +4,7 @@ import path from "node:path";
 import { loadOpenPondProfileStateFromSource } from "@openpond/cloud";
 
 import { compileProfileHarnessSource, materializeLocalHarnessRelease } from "./harness/local-harness-workspace-service.js";
+import { isHostedProfileSourceWithinRepo } from "./hosted-profile-source-containment.js";
 
 export type HostedProfileCompileRequest = {
   repoPath: string;
@@ -26,7 +27,7 @@ export async function compileHostedProfileRelease(input: HostedProfileCompileReq
     repoPath: input.repoPath, profileId: input.profileId,
   });
   if (profile.error || profile.mode !== "local" || profile.activeProfile !== input.profileId ||
-      !profile.sourcePath || !path.resolve(profile.sourcePath).startsWith(`${path.resolve(input.repoPath)}${path.sep}`)) {
+      !profile.sourcePath || !isHostedProfileSourceWithinRepo(input.repoPath, profile.sourcePath)) {
     throw new Error("Hosted Profile source is unavailable.");
   }
   await mkdir(input.outputDir, { recursive: true });
