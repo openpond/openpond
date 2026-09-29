@@ -36,6 +36,7 @@ export async function executeAppServerSandboxTool(input: {
   session: Session;
   request: WorkspaceToolRequest;
   sandboxRequest: AppServerSandboxRequest;
+  sandboxCreationMode?: "runtime" | "hosted_worker";
   attachSandbox?: (input: {
     sandboxId: string;
     sandbox: Record<string, unknown>;
@@ -63,6 +64,7 @@ export async function executeAppServerSandboxTool(input: {
       args,
       session: input.session,
       sandboxRequest: input.sandboxRequest,
+      sandboxCreationMode: input.sandboxCreationMode ?? "runtime",
     });
     const createdSandbox = asRecord(asRecord(data).sandbox);
     const createdSandboxId = optionalString(createdSandbox.id);
@@ -213,7 +215,13 @@ async function createRemoteSandbox(input: {
   args: Record<string, unknown>;
   session: Session;
   sandboxRequest: AppServerSandboxRequest;
+  sandboxCreationMode: "runtime" | "hosted_worker";
 }): Promise<Record<string, unknown>> {
+  // Hosted Work delegates creation to the worker. It owns the runtime profile,
+  // resource policy, and turn binding; child supplied creation options are not authority.
+  if (input.sandboxCreationMode === "hosted_worker") {
+    return asRecord(await input.sandboxRequest({ type: "create", payload: {} }));
+  }
   const requestedRuntime = asRecord(input.args.runtime);
   const requestedRuntimeId = optionalString(requestedRuntime.runtimeId);
   const teamId =

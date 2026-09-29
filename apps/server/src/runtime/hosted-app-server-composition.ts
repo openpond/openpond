@@ -93,6 +93,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const workspace = createAppServerWorkspace({
     workspaceDir, logger, getSession, updateSession, appendRuntimeEvent,
     sandboxRequest,
+    sandboxCreationMode: "hosted_worker",
   });
   const helpers = createHostedTurnHelpers({
     appendRuntimeEvent, findLocalProject: async () => null,
