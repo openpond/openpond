@@ -1,3 +1,5 @@
+import { createTrainingAcceptanceClient } from "./training-acceptance.js";
+export { TrainingAcceptanceGroupReferenceSchema, TrainingAcceptanceGroupSummarySchema, TrainingAcceptanceGroupPageSchema, TrainingAcceptanceGroupQuerySchema, type TrainingAcceptanceGroupReference, type TrainingAcceptanceGroupSummary, type TrainingAcceptanceGroupPage, type TrainingAcceptanceGroupQuery, type TrainingAcceptanceTarget } from "./training-acceptance.js";
 import { z } from "zod";
 import { createTrainingPreparationClient } from "./training-preparations.js";
 export { TrainingPreparationRequestSchema, TrainingPreparationPlanContentSchema, TrainingPreparationPlanSchema, TrainingPreparationReceiptSchema, TrainingPreparationControlSchema, parseAndVerifyTrainingPreparationReceipt, type TrainingPreparationRequest, type TrainingPreparationPlan, type TrainingPreparationReceipt, type TrainingPreparationControl } from "./training-preparations.js";
@@ -591,6 +593,7 @@ export function createTrainingClient(input: {
 
   return {
     ...createTrainingPreparationClient(request),
+    ...createTrainingAcceptanceClient(request),
     ...createTrainingHarnessSourceClient(request),
     ...createTrainingCandidateDecisionClient(request),
     async capabilities() {
