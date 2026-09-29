@@ -11,7 +11,7 @@ import { createTasksetPackage, type TasksetPackage } from "./taskset-package-con
 /** Use the same validation, file pinning and release projection as Desktop.
  * Compilation neither executes models/graders nor selects the resulting release.
  * The host supplies its retained preparation and later commits Model/draft CAS. */
-export function compileModelTasksetDraftWorkspace(input: {
+export function compileTasksetDraftWorkspace(input: {
   workspace: TasksetDraftWorkspace;
   preparation: ModelTasksetDraftPreparation | null;
   adapterId: string;
@@ -20,11 +20,10 @@ export function compileModelTasksetDraftWorkspace(input: {
 }) {
   const workspace = validateTasksetDraftWorkspace(input.workspace);
   const preparation = input.preparation === null ? null : ModelTasksetDraftPreparationSchema.parse(input.preparation);
-  if (!workspace.draft.modelScope) throw new Error("Taskset draft requires a Model owner.");
-  if (preparation ? workspace.draft.id !== preparation.draftId || workspace.draft.modelScope.modelId !== preparation.lineage.owner.modelId
+  if (preparation ? workspace.draft.id !== preparation.draftId || workspace.draft.modelScope?.modelId !== preparation.lineage.owner.modelId
     || workspace.draft.profileId !== preparation.lineage.owner.scopeId
-    || contentHash(workspace.draft.modelScope.source ?? null) !== contentHash(preparation)
-    : workspace.draft.modelScope.source !== undefined) throw new Error("Taskset draft differs from its retained source preparation.");
+    || contentHash(workspace.draft.modelScope?.source ?? null) !== contentHash(preparation)
+    : workspace.draft.modelScope?.source !== undefined) throw new Error("Taskset draft differs from its retained source preparation.");
   // Validation and publication may happen in different requests. Package
   // identity depends on saved bytes, including their timestamp, not wall time.
   const taskset = publishTasksetDraft({ draft: workspace.draft, now: workspace.draft.updatedAt, sourcePackageHash: workspace.contentHash });
@@ -43,4 +42,10 @@ export function compileModelTasksetDraftWorkspace(input: {
     }),
   });
   return preparation ? publishModelTasksetDraftPackage({ preparation, edited, source: input.source }) : edited;
+}
+
+/** Model-derived authoring retains its stronger owner/source contract. */
+export function compileModelTasksetDraftWorkspace(input: Parameters<typeof compileTasksetDraftWorkspace>[0]) {
+  if (!input.workspace.draft.modelScope) throw new Error("Taskset draft requires a Model owner.");
+  return compileTasksetDraftWorkspace(input);
 }
