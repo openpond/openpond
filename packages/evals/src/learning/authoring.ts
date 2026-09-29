@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
-import { RewardBindingSourceSchema, RewardReleaseRefSchema } from "../rewards.js";
+import { FeedbackKeySchema, RewardBindingSourceSchema, RewardReleaseRefSchema } from "../rewards.js";
 import { LearningRevisionRefSchema } from "./contracts.js";
 
 /** Strings intentionally preserve incomplete JSON/code until explicit publication. */
@@ -17,6 +17,7 @@ export type RewardFixtureAuthoringFields = z.infer<typeof RewardFixtureAuthoring
 
 export const RewardAuthoringFieldsSchema = z.object({
   name: z.string().max(500), description: z.string().max(10_000),
+  feedbackKey: FeedbackKeySchema.optional(),
   kind: z.enum(["custom_verifier", "state", "content", "schema", "artifact", "runtime_event", "model_judge", "learned_model", "human"]),
   fields: z.string(), outputField: z.string(), expectedField: z.string(), expectedValue: z.string(),
   schema: z.string(), reference: z.string(), events: z.string(), code: z.string(), exportName: z.string(), timeout: z.string(),
