@@ -40,10 +40,10 @@ export class OpenPondModelTasksetRunsClient {
   }
   async list(value: z.input<typeof ModelTasksetRunListQuerySchema>, options: { signal?: AbortSignal } = {}) {
     const query = ModelTasksetRunListQuerySchema.parse(value);
-    const params = new URLSearchParams({ modelProjectId: query.modelProjectId, limit: String(query.limit) });
+    const params = new URLSearchParams({ ...(query.modelProjectId ? { modelProjectId: query.modelProjectId } : {}), ...(query.projectId ? { projectId: query.projectId } : {}), limit: String(query.limit) });
     if (query.afterId) params.set("afterId", query.afterId);
     const result = ModelTasksetRunPageSchema.parse(await this.#request(`?${params}`, "GET", undefined, options.signal));
-    if (result.items.length > query.limit || new Set(result.items.map(item => item.id)).size !== result.items.length || result.items.some(item => { this.#scope(item); return item.modelProjectId !== query.modelProjectId; })) throw new OpenPondModelTasksetRunError(502, "evaluation_page_mismatch", "Evaluation page differs from the selected model.");
+    if (result.items.length > query.limit || new Set(result.items.map(item => item.id)).size !== result.items.length || result.items.some(item => { this.#scope(item); return (query.modelProjectId !== undefined && item.modelProjectId !== query.modelProjectId) || (query.projectId !== undefined && item.project?.id !== query.projectId); })) throw new OpenPondModelTasksetRunError(502, "evaluation_page_mismatch", "Evaluation page differs from the selected model.");
     return result;
   }
   #scope(summary: ModelTasksetRunSummary, id?: string) {
