@@ -574,7 +574,7 @@ importers:
     dependencies:
       '@openpond/evals':
         specifier: ^0.11.8
-        version: link:../evals
+        version: 0.11.8(@openpond/harness@packages+harness)
       '@openpond/harness':
         specifier: ^0.4.2
         version: link:../harness
@@ -1038,6 +1038,12 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@openpond/evals@0.11.8':
+    resolution: {integrity: sha512-s7T6k8Vraavm94E4+2mOjH97XQYv2nQOrrJZGZL9G7ezOAoIHjfqOqkPn7ObeDOh/MTa49dMH2fTudfwjgjXjA==}
+    engines: {node: '>=22.14.0 <25'}
+    peerDependencies:
+      '@openpond/harness': ^0.4.0
 
   '@peculiar/asn1-schema@2.8.0':
     resolution: {integrity: sha512-7YT0U/ze0tF2QOBbE15gKZwy5tvgGyLRiRHLzhlbOpf7BT032oBSd0haZqXn5W6l26WLlu3dyxzjM+2638/z2Q==}
@@ -3807,6 +3813,15 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
+
+  '@openpond/evals@0.11.8(@openpond/harness@packages+harness)':
+    dependencies:
+      '@jitl/quickjs-singlefile-cjs-release-sync': 0.32.0
+      '@openpond/harness': link:packages/harness
+      '@sqlite.org/sqlite-wasm': 3.53.0-build1
+      ajv: 8.20.0
+      quickjs-emscripten-core: 0.32.0
+      zod: 4.4.3
 
   '@peculiar/asn1-schema@2.8.0':
     dependencies:
