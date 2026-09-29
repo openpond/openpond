@@ -1,4 +1,4 @@
-import { RewardReleaseSchema, createRewardRelease, type RewardRelease } from "../rewards.js";
+import { RewardReleaseSchema, createRewardRelease, feedbackKeyForReward, type RewardRelease } from "../rewards.js";
 import { assertBoundedTaskJson } from "../task-schema.js";
 import { RewardAuthoringFieldsSchema, RewardFixtureAuthoringFieldsSchema, type AuthoringDraftFor } from "./authoring.js";
 import { createLearningTextAsset, verifyLearningTextAsset, type LearningTextAsset } from "./assets.js";
@@ -55,7 +55,7 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
   const assets = [...(asset ? [asset] : []), ...(fixtureAsset ? [fixtureAsset] : [])];
   const reward = createRewardRelease({
     schemaVersion: "openpond.rewardRelease.v1", id: input.id, revision: (base?.revision ?? 0) + 1,
-    name: fields.name, description: fields.description, implementation,
+    name: fields.name, description: fields.description, feedbackKey: fields.feedbackKey ?? feedbackKeyForReward({ id: input.id }), implementation,
     rawScore: fields.kind === "learned_model" ? { minimum: authoringNumber(fields.minimum, "Minimum score"), maximum: authoringNumber(fields.maximum, "Maximum score") } : { minimum: 0, maximum: 1 },
     assets: assets.map(value => value.asset), ...(fixtureAsset ? { fixtureSetRef: fixtureAsset.asset } : {}),
     ...(calibrationCheckRef ? { calibrationCheckRef } : {}),
@@ -74,7 +74,7 @@ export function rewardAuthoringFields(reward: RewardRelease | null, sourceAsset:
   const fixtures = reward?.fixtureSetRef && fixtureAsset ? RewardFixtureAuthoringFieldsSchema.array().max(50).parse(JSON.parse(verifyLearningTextAsset(fixtureAsset, reward.fixtureSetRef))) : [];
   const config = implementation && "config" in implementation ? implementation.config : {};
   return {
-    name: reward?.name ?? "", description: reward?.description ?? "", kind: implementation?.kind ?? "state",
+    name: reward?.name ?? "", description: reward?.description ?? "", ...(reward?.feedbackKey ? { feedbackKey: reward.feedbackKey } : {}), kind: implementation?.kind ?? "state",
     fields: strings(config.fields).join(", ") || "answer", outputField: text(config.outputField) || "text", expectedField: text(config.expectedField) || "text", expectedValue: text(config.expectedValue),
     schema: JSON.stringify(config.jsonSchema ?? { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] }, null, 2),
     reference: text(config.refIncludes), events: strings(config.requiredEvents).join(", "),

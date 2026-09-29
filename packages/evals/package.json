@@ -67,6 +67,10 @@
       "types": "./dist/types/rewards.d.ts",
       "import": "./dist/rewards.js"
     },
+    "./experiments": {
+      "types": "./dist/types/experiments.d.ts",
+      "import": "./dist/experiments.js"
+    },
     ".": {
       "types": "./dist/types/index.d.ts",
       "import": "./dist/index.js"

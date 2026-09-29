@@ -16,6 +16,7 @@ export const ModelTasksetRunPolicySchema = z.discriminatedUnion("kind", [
 export const ModelTasksetRunRequestSchema = z.object({
   schemaVersion: z.literal("openpond.modelTasksetRunRequest.v1"),
   operationId: IdSchema, teamId: IdSchema, modelProjectId: IdSchema.nullable(),
+  name: z.string().trim().min(1).max(200).optional(),
   project: EvaluationProjectContextSchema.optional(),
   taskset: ModelProjectVersionedRefSchema, policy: ModelTasksetRunPolicySchema,
   population: z.array(TasksetRunMemberSchema).min(1).max(10_000),
@@ -28,6 +29,7 @@ export type ModelTasksetRunRequest = z.infer<typeof ModelTasksetRunRequestSchema
 export const ModelTasksetRunSummarySchema = z.object({
   schemaVersion: z.literal("openpond.modelTasksetRunSummary.v1"),
   id: IdSchema, revision: z.number().int().positive(), teamId: IdSchema, modelProjectId: IdSchema.nullable(),
+  name: z.string().trim().min(1).max(200).optional(),
   project: EvaluationProjectContextSchema.optional(),
   operationId: IdSchema, taskset: ModelProjectVersionedRefSchema, policyKind: z.enum(["hosted_chat", "fixture"]),
   manifestHash: HashSchema,
@@ -75,6 +77,7 @@ export async function verifyModelTasksetRunDetails(value: unknown): Promise<Mode
     || manifest.id !== summary.id || manifest.createdAt !== summary.createdAt || summary.teamId !== request.teamId || summary.modelProjectId !== request.modelProjectId
     || canonicalJson(summary.project ?? null) !== canonicalJson(request.project ?? null)
     || canonicalJson(manifest.metadata.project ?? null) !== canonicalJson(request.project ?? null)
+    || (summary.name ?? null) !== (request.name ?? null)
     || summary.operationId !== request.operationId || summary.policyKind !== request.policy.kind
     || summary.totalCount !== request.population.length || summary.metricName !== manifest.metricPolicy.primaryMetric
     || canonicalJson(summary.taskset) !== canonicalJson(request.taskset)
