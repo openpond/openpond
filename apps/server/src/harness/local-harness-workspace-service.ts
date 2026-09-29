@@ -118,7 +118,13 @@ export async function compileProfileHarnessSource(input: {
   const sourceDir = path.join(root, randomUUID());
   try {
     await writeImportedProfileSource(sourceDir, input.name, input.profile, input.sourceRevision, input.repositoryId);
-    return await compileLocalHarnessSource({ workspaceId: input.workspaceId, sourceDir });
+    // A discovery child and an owner's hosted child compile the same published
+    // Profile in different workspaces. The immutable release must be identical
+    // so the discovery binding can be admitted by that owner's workspace.
+    const sourceWorkspaceId = input.repositoryId
+      ? `profile-source-${contentHash([input.repositoryId, input.name]).slice(0, 24)}`
+      : input.workspaceId;
+    return await compileLocalHarnessSource({ workspaceId: sourceWorkspaceId, sourceDir });
   } finally {
     await fs.rm(sourceDir, { recursive: true, force: true });
   }
