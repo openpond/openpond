@@ -357,5 +357,17 @@ describe("manual training preparation boundary", () => {
     await expect(client.prepareRun(request)).rejects.toMatchObject({ code: "training_preparation_mismatch" });
     response = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan, revision: 2, state: "cancelled", jobId: null };
     expect((await client.cancelPreparation(plan.id, control)).state).toBe("cancelled");
+    const page = { schemaVersion: "openpond.trainingPreparationPage.v1", teamId: "team-a", items: [prepared], nextCursor: null };
+    response = page;
+    expect((await client.listPreparations("team-a", { state: "prepared", limit: 1 })).items).toEqual([prepared]);
+    await expect(client.listPreparations("team-b")).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
+    await expect(client.listPreparations("team-a", { projectId: "different-project" })).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
+    await expect(client.listPreparations("team-a", { state: "submitted" })).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
+    response = { ...page, items: [prepared, prepared] };
+    await expect(client.listPreparations("team-a")).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
+    response = { ...page, nextCursor: "unrelated-cursor" };
+    await expect(client.listPreparations("team-a")).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
+    response = { ...page, items: [{ ...prepared, plan: { ...plan, request: { ...request, maximumSpendUsd: 3 } } }] };
+    await expect(client.listPreparations("team-a")).rejects.toMatchObject({ code: "training_preparation_mismatch" });
   });
 });
