@@ -566,9 +566,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     recordTurnToolCatalog: async ({ turnId, hash, capabilities }) => {
       const checkpointTurn = await getStoredTurn(turnId);
       const compactionEvent = checkpointTurn
-        ? (await store.runtimeEventsForSession(checkpointTurn.sessionId, {
+          ? (await store.runtimeEventsForSession(checkpointTurn.sessionId, {
             names: ["session.compaction.completed"],
             limit: 1_000,
+            excludeReasoningDeltas: true,
           })).filter((runtimeEvent) => runtimeEvent.turnId === turnId).at(-1) ?? null
         : null;
       const compactionData = compactionEvent?.data && typeof compactionEvent.data === "object" &&
@@ -1017,7 +1018,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             profileRef: selectedProfileRef,
           })
         : null;
-    const priorEvents = await store.runtimeEventsForSession(sessionId);
+    const priorEvents = await store.runtimeEventsForSession(sessionId, {
+      excludeReasoningDeltas: true,
+    });
     const userQuestionResolution = parseUserQuestionResolution(
       input.metadata?.userQuestionResolution,
       priorEvents

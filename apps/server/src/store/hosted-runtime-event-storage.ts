@@ -19,6 +19,7 @@ export class HostedRuntimeEventStorage {
 
   async runtimeEventsForSession(sessionId: string, query: {
     afterSequence?: number | null; names?: readonly RuntimeEvent["name"][]; limit?: number | null;
+    excludeReasoningDeltas?: boolean;
   } = {}): Promise<RuntimeEvent[]> {
     const requested = query.limit == null ? 10_000 : Math.max(0, Math.trunc(query.limit));
     if (requested === 0) return [];
@@ -29,7 +30,8 @@ export class HostedRuntimeEventStorage {
     const names = query.names ? new Set(query.names) : null;
     while (events.length <= maximum) {
       const page = await this.runtimeEventPageRows({ sessionId, afterSequence: cursor,
-        beforeSequence: null, limit: Math.min(200, maximum + 1 - events.length) });
+        beforeSequence: null, limit: Math.min(200, maximum + 1 - events.length),
+        excludeReasoningDeltas: query.excludeReasoningDeltas });
       for (const entry of page.entries) {
         if (entry.sequence <= cursor) throw new Error("Host event cursor did not advance.");
         cursor = entry.sequence;
@@ -47,6 +49,7 @@ export class HostedRuntimeEventStorage {
 
   async persistedRuntimeEventsForSession(sessionId: string, query: {
     afterSequence?: number | null; names?: readonly RuntimeEvent["name"][]; limit?: number | null;
+    excludeReasoningDeltas?: boolean;
   } = {}): Promise<RuntimeEvent[]> {
     return this.runtimeEventsForSession(sessionId, query);
   }
@@ -67,6 +70,7 @@ export class HostedRuntimeEventStorage {
     afterSequence: number;
     beforeSequence: number | null;
     limit: number;
+    excludeReasoningDeltas?: boolean;
   }): Promise<{
     entries: Array<{ sequence: number; event: RuntimeEvent }>;
     totalMatchingEvents: number;
@@ -85,7 +89,8 @@ export class HostedRuntimeEventStorage {
           contractVersion: HOST_STORAGE_CONTRACT_VERSION,
           requestId: `event-page:${randomUUID()}`,
           operation: "events/page",
-          params: { sessionId: input.sessionId, afterSequence, beforeSequence, limit },
+          params: { sessionId: input.sessionId, afterSequence, beforeSequence, limit,
+            ...(input.excludeReasoningDeltas ? { excludeReasoningDeltas: true } : {}) },
         })));
       if (entries.length === 0) {
         totalMatchingEvents = page.totalMatchingEvents;
