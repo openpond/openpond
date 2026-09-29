@@ -359,3 +359,38 @@ unique eligible, unconsumed training attempts across current policies. It
 deduplicates shared sources and excludes held-out family reservations. Paused
 policies retain pending tasks. An invalid policy yields a null count and explicit
 issues rather than a misleading zero. Source credentials cannot read the queue.
+
+## Independent acceptance groups
+
+`createAcceptanceGroupManifest` pins a training Job, exact baseline/candidate
+artifacts, an acceptance plan and bounded concurrency. Each durable check declares
+its role and score unit. Required quality/retention gates remain separate;
+diagnostic checks cannot authorize acceptance. Pin the plan before training
+admission, then create the group when the exact candidate exists. A missing
+required group must block acceptance.
+
+`createAcceptanceGroupSnapshot` verifies plan/manifest/snapshot integrity and
+attempt identity. `assertAcceptanceGroupUpdate` enforces sequential revisions,
+append-only retries, immutable terminal evidence, legal lifecycle transitions,
+concurrency and dispatch budgets including outstanding reservations and prior
+attempt costs. New attempts enter queued; an explicitly reused baseline may enter
+completed. A terminal attempt requires cleanup, settled accounting and no remaining
+reservation. Deliberate reruns create a new immutable group.
+
+`assertAcceptanceBaselineReuse` accepts only fresh, exact, same-team measurements
+matching the artifact, check, qualification reference and execution configuration.
+It rejects recursively reused measurements. The owner must resolve the retained
+source group and current qualification/revocation/access state; hashes alone are
+not authorization or proof of execution.
+
+`acceptanceGroupVerdict` preserves per-check results and blocks acceptance until
+the group is complete, all required attempts have comparable measurements, cleanup
+and accounting are settled, and recorded spend stays within all budgets. Failed
+attempt costs count even if a later retry passes. It never averages unrelated
+metrics into one quality score.
+
+These contracts do not dispatch work or implement a database. Hosts must serialize
+revision changes and budget reservations, resolve authoritative execution/grading
+receipts, isolate holdouts from training, bind the exact candidate at runtime,
+verify cleanup, and enforce the verdict inside the candidate-decision transaction.
+No customer serving is activated by an acceptance group.
