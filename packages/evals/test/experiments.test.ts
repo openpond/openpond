@@ -18,8 +18,10 @@ function fixture(modelId: string, datasetHash = hash("a")) {
   const manifest = createExperimentManifest({
     schemaVersion: "openpond.experimentManifest.v1",
     id: `experiment-${modelId}`,
+    name: `Model ${modelId} on dataset one`,
     teamId: "team-one",
     operationId: `operation-${modelId}`,
+    maximumCostUsd: 5,
     dataset: { id: "dataset-one", revision: 1, contentHash: datasetHash },
     target: { kind: "model", modelId, configurationHash: hash("c") },
     evaluators: [evaluator],
@@ -72,5 +74,20 @@ describe("portable experiment evidence", () => {
       ...baseline.result,
       cases: [{ ...baseline.result.cases[0]!, feedback: [{ ...baseline.result.cases[0]!.feedback[0]!, value: 2 }] }],
     }, baseline.manifest)).toThrow();
+  });
+
+  it("keeps the named configuration and spend ceiling inside the immutable manifest", () => {
+    const original = fixture("model-a").manifest;
+    const { contentHash: _hash, ...content } = original;
+    expect(original.name).toBe("Model model-a on dataset one");
+    expect(original.maximumCostUsd).toBe(5);
+    expect(() => createExperimentManifest({
+      ...content,
+      name: " ",
+    })).toThrow();
+    expect(() => createExperimentManifest({
+      ...content,
+      maximumCostUsd: -1,
+    })).toThrow();
   });
 });
