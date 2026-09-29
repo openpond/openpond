@@ -330,3 +330,20 @@ pnpm release:sdk:patch
 ```
 
 That command creates an SDK-only release PR. Merging it triggers `release-sdk.yml`; desktop and CLI releases continue to use the existing `pnpm release:patch` command and workflow.
+
+### Independent acceptance evidence
+
+`training.acceptanceGroups({ teamId, jobId }, { cursor, limit })` lists retained
+independent-check groups for an authorized training Job. Pages contain bounded
+summaries rather than complete retry histories. Follow `nextCursor` to read more.
+
+`training.acceptanceGroup({ teamId, jobId }, groupId, reference?)` reads and verifies
+the complete group manifest, checks and attempt history. Passing a summary's
+`{ id, revision, contentHash }` reads that exact retained revision; omitting the
+reference reads the current snapshot. The client verifies workspace/Job/group
+identity and all snapshot hashes. Use `acceptanceGroupVerdict` from
+`@openpond/evals/learning` for the per-check view of verified retained evidence.
+
+These methods only read evidence. They do not dispatch checks, bypass server-side
+acceptance, start training or activate serving. An empty page means this Job has
+no recorded independent group; its existing trainer validation is separate.
