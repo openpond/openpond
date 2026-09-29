@@ -39,6 +39,7 @@ export function createAppServerWorkspace(input: {
   ): Promise<Session>;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
   sandboxRequest?: AppServerSandboxRequest;
+  sandboxCreationMode?: "runtime" | "hosted_worker";
 }) {
   const workspaceDir = path.resolve(input.workspaceDir);
   const locks = new Map<string, Promise<unknown>>();
@@ -126,6 +127,7 @@ export function createAppServerWorkspace(input: {
           session,
           request,
           sandboxRequest: input.sandboxRequest ?? sandboxRequestPayload,
+          sandboxCreationMode: input.sandboxCreationMode,
           attachSandbox: async ({ sandboxId, sandbox }) => {
             await input.updateSession(session.id, {
               appId: null,
