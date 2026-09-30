@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -110,6 +110,10 @@
     "./experiments": {
       "types": "./dist/types/packages/sdk/src/experiments.d.ts",
       "import": "./dist/experiments.js"
+    },
+    "./dataset-marketplace": {
+      "types": "./dist/types/packages/sdk/src/dataset-marketplace.d.ts",
+      "import": "./dist/dataset-marketplace.js"
     }
   },
   "publishConfig": {
