@@ -30,6 +30,7 @@ export type Command =
   | "training"
   | "taskset"
   | "experiments"
+  | "datasets"
   | "desktop-test"
   | "project"
   | "agent"

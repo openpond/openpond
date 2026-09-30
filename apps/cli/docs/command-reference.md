@@ -4,6 +4,41 @@
 
 Parsing, aliases, command help, and this reference use the same authoritative registry.
 
+## datasets
+
+```text
+Usage:
+  openpond datasets <upload|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>]
+
+Options:
+  --cursor <string>
+  --dataset-id <string>
+  --expected-revision <integer>
+  --json
+  --operation-id <string>
+  --package-hash <string>
+  --project <string>
+  --publish
+  --team <string>
+  --workspace-hash <string>
+```
+## experiments
+
+```text
+Usage:
+  openpond experiments <save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--json]
+
+Options:
+  --after-id <string>
+  --dataset-hash <string>
+  --input-file <string>
+  --json
+  --limit <integer>
+  --operation-id <string>
+  --project <string>
+  --search <string>
+  --team <string>
+```
 ## home
 
 ```text
