@@ -3,6 +3,7 @@ import {
   compareExperiments,
   createExperimentManifest,
   createExperimentResult,
+  verifyExperimentEvidence,
 } from "../src/experiments.js";
 
 const hash = (digit: string) => digit.repeat(64);
@@ -89,5 +90,50 @@ describe("portable experiment evidence", () => {
       ...content,
       maximumCostUsd: -1,
     })).toThrow();
+  });
+
+  it("uses matched completed feedback for deltas and excludes failed or incompatible evidence", () => {
+    // Protects the portable client/web boundary from counting failed outputs as
+    // measured improvement or comparing scores across different dataset pins.
+    const baseline = fixture("model-a");
+    const candidate = fixture("model-b");
+    const { contentHash: _hash, ...candidateContent } = candidate.result;
+    const revise = (status: "completed" | "failed") => ({ ...candidate,
+      result: createExperimentResult({ ...candidateContent,
+        cases: [{ ...candidate.result.cases[0]!, status,
+          feedback: [{ ...candidate.result.cases[0]!.feedback[0]!, value: 1 }] }],
+      }, candidate.manifest),
+    });
+    const comparison = compareExperiments(baseline, revise("completed"));
+    expect(comparison.metrics[0]).toMatchObject({ eligibleCount: 1, excludedCount: 0, baseline: 0.8, candidate: 1 });
+    expect(comparison.metrics[0]!.delta).toBeCloseTo(0.2);
+    expect(compareExperiments(baseline, revise("failed")).cases[0]!.feedback[0]).toMatchObject({ eligible: false, reason: "case_not_completed", delta: null });
+    expect(compareExperiments(baseline, fixture("model-c", hash("d"))).metrics[0]).toMatchObject({ eligibleCount: 0, excludedCount: 1, delta: null });
+    const { contentHash: _manifestHash, ...manifestContent } = candidate.manifest;
+    const mappedManifest = createExperimentManifest({ ...manifestContent, evaluators: candidate.manifest.evaluators.map(value => ({ ...value, configurationHash: hash("e") })) });
+    const mapped = { manifest: mappedManifest, result: createExperimentResult({ ...candidateContent, manifest: { id: mappedManifest.id, contentHash: mappedManifest.contentHash } }, mappedManifest) };
+    expect(compareExperiments(baseline, mapped).reasons).toContain("different_evaluators");
+  });
+
+  it("round-trips imported grader versions and unknown ceilings with bound execution lineage", () => {
+    // Historical evidence must remain portable without fabricated numeric
+    // revisions, spending limits or a result relabelled as another execution.
+    const original = fixture("model-a");
+    const { contentHash: _manifestHash, ...manifestContent } = original.manifest;
+    const importedEvaluator = { ...evaluator, release: { ...evaluator.release, revision: "exact-v3" } };
+    const manifest = createExperimentManifest({ ...manifestContent, maximumCostUsd: null,
+      target: { kind: "fixture", configurationHash: hash("c") }, evaluators: [importedEvaluator],
+      lineage: { definition: null, execution: { id: original.manifest.id, contentHash: hash("d") }, scoringPassId: null },
+    });
+    const { contentHash: _resultHash, ...resultContent } = original.result;
+    const result = createExperimentResult({ ...resultContent,
+      manifest: { id: manifest.id, contentHash: manifest.contentHash },
+      cases: [{ ...original.result.cases[0]!, feedback: [{ ...original.result.cases[0]!.feedback[0]!, evaluator: importedEvaluator.release }] }],
+    }, manifest);
+    expect(verifyExperimentEvidence({ manifest, result })).toEqual({ manifest, result });
+    expect(() => createExperimentManifest({ ...manifestContent,
+      lineage: { definition: null, execution: { id: "another-run", contentHash: hash("d") }, scoringPassId: null },
+    })).toThrow();
+    expect(() => verifyExperimentEvidence({ manifest, result: { ...result, status: "failed" } })).toThrow();
   });
 });
