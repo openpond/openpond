@@ -182,3 +182,7 @@ numeric or Boolean feedback contribute. Failed, cancelled, absent or ungraded
 cases never become zero-valued measurements. Categorical feedback remains
 inspectable without a numeric delta. This operation reads retained evidence and
 has no execution, grading or billing authority.
+
+## Retained Profile case evidence
+
+Profile execution may return an installation-owned `retainedEvidenceRef` with its exact session and turn identities. The runner validates it and binds it into immutable receipt metadata. A reference grants no access: the installation resolves it through its owner-scoped store and checks the source, member, output and trace hashes before inspection. Full outputs and bounded trace pages stay separate from private grading inputs. Missing historic references remain unavailable rather than reconstructed from a newer source.
