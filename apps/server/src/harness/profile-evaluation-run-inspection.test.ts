@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { OpenPondProfileRef } from "@openpond/contracts";
 
 import { inspectProfileEvaluationRun } from "./profile-evaluation-run-inspection.js";
+import { readProfileEvaluationPolicyEvidence } from "./profile-evaluation-policy-evidence.js";
+import { contentHash } from "@openpond/harness";
 
 describe("Profile evaluation run inspection", () => {
   const profileRef = { source: "openpond_git", repositoryId: "repo-a", profileId: "default" } as OpenPondProfileRef;
@@ -23,7 +25,7 @@ describe("Profile evaluation run inspection", () => {
     graderEvidenceRefs: [{ id: "grade-1", contentHash: "d".repeat(64) }],
     latencyMs: 42, costUsd: 0.01, terminal: true,
   };
-  const grade = { contentHash: "d".repeat(64), score: 1, passed: true, gradingStatus: "scored", failureClass: null };
+  const grade = { contentHash: "d".repeat(64), score: 1, passed: true, gradingStatus: "scored", failureClass: null, components: [] };
 
   it("keeps one Profile's run and mismatched case evidence out of another Profile's view", async () => {
     const store = {
@@ -38,5 +40,37 @@ describe("Profile evaluation run inspection", () => {
     });
     const tampered = { ...store, getProfileEvaluationReceipt: async () => ({ ...receipt, taskId: "different-task" }) } as unknown as typeof store;
     await expect(inspectProfileEvaluationRun({ store: tampered, profileRef, runId: "run-1" })).rejects.toThrow("differs from its retained run");
+  });
+
+  // A forged pointer or replaced event must not expose another case's output.
+  // The existing summary boundary does not resolve retained policy turns.
+  it("reads the exact retained policy turn and rejects foreign or changed evidence", async () => {
+    const harnessRelease = { id: "harness", contentHash: contentHash("harness") };
+    const manifest = { ...run.manifest, profileEvaluation: { sourceRevision: "revision", harnessRelease, target: { kind: "profile" } },
+      policy: { kind: "model", model: { provider: "openpond", model: "test-model" } } };
+    const events = [{ id: "event", turnId: "turn", name: "assistant.delta", output: "pond" },
+      { id: "completed", turnId: "turn", name: "turn.completed", output: "" }];
+    const session = { id: "session", currentProfile: profileRef, metadata: {
+      profileEvaluationRun: { id: manifest.id, contentHash: manifest.contentHash }, taskId: receipt.taskId, seed: receipt.seed } };
+    const turn = { id: "turn", sessionId: session.id, startedAt: "2026-09-30T00:00:00Z", completedAt: "2026-09-30T00:00:01Z",
+      prompt: "Return pond", error: null, modelRef: { providerId: "openpond", modelId: "test-model" }, harnessSnapshot: { harnessRelease } };
+    const retainedReceipt = { ...receipt, startedAt: turn.startedAt, completedAt: turn.completedAt,
+      traceHash: contentHash(events), outputHash: contentHash({ text: "pond" }), metadata: { retainedEvidenceRef: { sessionId: session.id, turnId: turn.id } } };
+    const store = { getSession: async () => session, getTurn: async () => turn, runtimeEventsForTurn: async () => events,
+      listModelUsageRecords: async () => [] };
+    const input = { store, manifest, receipt: retainedReceipt, profileRef } as unknown as Parameters<typeof readProfileEvaluationPolicyEvidence>[0];
+    expect(await readProfileEvaluationPolicyEvidence(input)).toMatchObject({ prompt: "Return pond", output: { text: "pond" } });
+    expect(await readProfileEvaluationPolicyEvidence({ ...input, eventLimit: 1 })).toMatchObject({
+      events: [events[0]], nextEventCursor: "event", eventCount: 2,
+    });
+    expect(await readProfileEvaluationPolicyEvidence({ ...input, eventLimit: 1, eventAfterId: "event" })).toMatchObject({
+      events: [events[1]], nextEventCursor: null,
+    });
+    await expect(readProfileEvaluationPolicyEvidence({ ...input, eventAfterId: "foreign-event" })).rejects.toThrow("cursor");
+    await expect(readProfileEvaluationPolicyEvidence({ ...input, profileRef: otherProfileRef })).rejects.toThrow("admitted case");
+    await expect(readProfileEvaluationPolicyEvidence({ ...input, store: { ...input.store,
+      runtimeEventsForTurn: async () => [{ ...events[0], output: "changed" }] as never } })).rejects.toThrow("immutable receipt");
+    await expect(readProfileEvaluationPolicyEvidence({ ...input, receipt: { ...input.receipt,
+      outputHash: contentHash({ text: "different" }) } })).rejects.toThrow("output differs");
   });
 });

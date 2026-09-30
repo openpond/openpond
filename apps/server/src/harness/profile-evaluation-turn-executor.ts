@@ -4,6 +4,7 @@ import type { TasksetRunManifest } from "@openpond/evals";
 import type { RequiredOutputContract } from "@openpond/evals";
 import type { executeProfileEvaluationRun } from "@openpond/evals";
 import { assertProfileEvaluationSpendAuthority } from "./profile-evaluation-spend-authority.js";
+import { profileEvaluationOutput } from "./profile-evaluation-policy-evidence.js";
 
 type ExecuteCase = Parameters<typeof executeProfileEvaluationRun>[0]["execute"];
 
@@ -155,17 +156,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     if (runtimeEventRefs.length + artifactRefs.length > 10_000) {
       throw new Error("Profile evaluation produced more than 10,000 substantive evidence references.");
     }
-    const assistantOutput = events.filter((event) => event.name === "assistant.delta" && typeof event.output === "string")
-      .map((event) => event.output ?? "").join("");
-    const actionOutput = input.binding.schemaVersion === "openpond.profileComponentBinding.v1"
-      && input.binding.target.kind === "agent_action"
-      ? events.find((event) => event.name === "workspace_action_result" && event.action === "profile_workflow_action")?.output
-      : null;
-    if (input.binding.schemaVersion === "openpond.profileComponentBinding.v1"
-      && input.binding.target.kind === "agent_action" && typeof actionOutput !== "string") {
-      throw new Error("Profile Agent action evaluation did not produce a released action result.");
-    }
-    const output = typeof actionOutput === "string" ? actionOutput : assistantOutput;
+    const output = profileEvaluationOutput(events, source.target.kind);
     if (Buffer.byteLength(output, "utf8") > input.manifest.limits.maxOutputBytes) {
       throw new Error(`Profile evaluation case exceeded its ${input.manifest.limits.maxOutputBytes}-byte output limit.`);
     }
@@ -177,6 +168,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
         ...(turn.status !== "completed" ? { infrastructureError: turn.error ?? `Workflow evaluation turn ${turn.status}.` } : {}),
       },
       traceHash: contentHash(events),
+      retainedEvidenceRef: { sessionId: session.id, turnId: turn.id },
       artifactRefs,
       startedAt: turn.startedAt,
       completedAt: turn.completedAt,
