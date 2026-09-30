@@ -34,7 +34,7 @@ import { validateTasksetPackage } from "openpond-sdk/taskset-packages";
 import { inspectReleasedProfileActionDependencies } from "./released-profile-action-dependencies.js";
 import { copyRegularFile, listRegularFiles, mediaTypeForPath, resolveContainedRegularFile, safeSegment, selectAgentPrimaryFile, sourceFilesForImport } from "./local-harness-workspace-files.js";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import {
   LocalHarnessReleaseRecordSchema,
   type LocalHarnessReleaseRecord,
@@ -66,7 +66,7 @@ export function localHarnessWorkspacePaths(
 }
 
 export async function createLocalHarnessWorkspace(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   id: string;
   ownerId: string;
@@ -80,7 +80,7 @@ export async function createLocalHarnessWorkspace(input: {
 }
 
 export async function importProfileIntoLocalHarnessWorkspace(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   id: string;
   ownerId: string;
@@ -137,7 +137,7 @@ export async function compileProfileHarnessSource(input: {
 
 /** Install a trusted, immutable source snapshot without exposing persistence internals. */
 export async function importLocalHarnessWorkspaceSource(input: {
-  store: SqliteStore; storeDir: string; sourceDir: string;
+  store: HarnessStateStore; storeDir: string; sourceDir: string;
   id: string; ownerId: string; name: string;
 }): Promise<void> {
   const compiled = await compileLocalHarnessSource({ workspaceId: input.id, sourceDir: input.sourceDir });
@@ -167,7 +167,7 @@ export async function importLocalHarnessWorkspaceSource(input: {
 }
 
 export async function forkLocalHarnessWorkspaceFromRelease(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   id: string;
   ownerId: string;
@@ -199,7 +199,7 @@ export async function forkLocalHarnessWorkspaceFromRelease(input: {
 }
 
 async function createLocalHarnessWorkspaceFromInitializer(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   id: string;
   ownerId: string;
@@ -267,7 +267,7 @@ async function createLocalHarnessWorkspaceFromInitializer(input: {
 }
 
 export async function compileAndRegisterLocalHarnessRelease(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   workspaceId: string;
   now?: () => string;

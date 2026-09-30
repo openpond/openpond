@@ -3,7 +3,7 @@ import { contentHash, ReleaseIdSchema } from "@openpond/harness";
 import { type OpenPondProfileRef } from "@openpond/contracts";
 import { createProfileEvaluationComparison } from "@openpond/evals";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 
 const ComparisonRequestSchema = z.object({
   id: ReleaseIdSchema,
@@ -13,7 +13,7 @@ const ComparisonRequestSchema = z.object({
 /** Retain a comparison over already graded runs in one authorized Profile.
  * Evals verifies compatible populations and explicit source/model axes. */
 export function createProfileEvaluationComparisonService(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
 }) {
   return async (request: unknown) => {

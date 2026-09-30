@@ -8,7 +8,7 @@ import { CHAT_ATTACHMENT_LIMITS, ChatAttachmentSchema, OpenPondProfileRefSchema,
 import { TasksetReleaseSchema, TasksetRunManifestSchema, assertProfileEvaluationRunAdmission, policyTaskView } from "@openpond/evals";
 import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
 import { loadLocalProfileEvaluationTaskset } from "./local-profile-evaluation-taskset.js";
 import { createProfileWorkflowEvaluationExecutor } from "./profile-evaluation-turn-executor.js";
@@ -28,7 +28,7 @@ const ProfileEvaluationCaseRequestSchema = z.object({
 /** Admits one case against the app-server's currently authorized Profile. The
  * caller retains the full Taskset and private graders outside model context. */
 export function createProfileEvaluationCaseService(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir?: string;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   createSession: (request: unknown) => Promise<Session>;
