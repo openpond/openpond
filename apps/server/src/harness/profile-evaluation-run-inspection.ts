@@ -1,11 +1,11 @@
 import { type OpenPondProfileRef } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 
 /** Return only the policy-safe case summary for one retained run in this Profile. */
 export async function inspectProfileEvaluationRun(input: {
-  store: Pick<SqliteStore, "getProfileEvaluationRun" | "getProfileEvaluationReceipt" | "getProfileEvaluationGrade">;
+  store: Pick<HarnessStateStore, "getProfileEvaluationRun" | "getProfileEvaluationReceipt" | "getProfileEvaluationGrade">;
   profileRef: OpenPondProfileRef;
   runId: string;
 }) {

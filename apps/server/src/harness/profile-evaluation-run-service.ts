@@ -9,7 +9,7 @@ import {
   executeProfileEvaluationRun,
 } from "@openpond/evals";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalProfileEvaluationRun } from "../store/store-evaluation-results.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
 import { createProfileEvaluationCaseService } from "./profile-evaluation-case-service.js";
@@ -25,7 +25,7 @@ const RunRequestSchema = z.object({
 }).strict();
 
 export function createProfileEvaluationRunService(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   executeCase: ReturnType<typeof createProfileEvaluationCaseService>;
 }) {

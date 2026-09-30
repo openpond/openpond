@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TaskInboxStorageParamsSchema } from "./task-inbox-storage-protocol.js";
 import { RefinerStorageActionSchema } from "./refiner-storage-protocol.js";
+import { HarnessReviewStorageParamsSchema } from "./harness-review-storage-protocol.js";
 import { HostedOutputBeginParamsSchema, HostedOutputChunkParamsSchema,
   HostedOutputCompleteParamsSchema, HostedOutputSaveSandboxFileParamsSchema } from "./host-output-storage-protocol.js";
 import { HostedSandboxRequestParamsSchema,
@@ -111,6 +112,20 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
   z.object({
     contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
     requestId: id,
+    operation: z.literal("profile-evaluations/execute"),
+    params: z.discriminatedUnion("action", [
+      z.object({ action: z.literal("get"), kind: z.enum(["grade", "receipt", "run", "comparison", "suite"]), id }).strict(),
+      z.object({ action: z.literal("page"), kind: z.enum(["grade", "receipt", "run", "comparison", "suite"]),
+        profileKey: z.string().regex(/^[a-f0-9]{64}$/), before: z.object({ createdAt: z.string(), id }).strict().nullable(),
+        limit: z.number().int().min(1).max(100) }).strict(),
+      z.object({ action: z.literal("put"), kind: z.enum(["grade", "receipt", "run", "comparison", "suite"]),
+        payload: z.record(z.string(), z.unknown()), profileKey: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+        createdAt: z.string() }).strict(),
+    ]),
+  }).strict(),
+  z.object({
+    contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
+    requestId: id,
     operation: z.literal("harness/workspace/transition"),
     params: z.discriminatedUnion("action", [
       z.object({ action: z.literal("advance"), receiptId: id, workspaceId: id,
@@ -134,6 +149,12 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
     requestId: id,
     operation: z.literal("task-inbox/execute"),
     params: TaskInboxStorageParamsSchema,
+  }).strict(),
+  z.object({
+    contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
+    requestId: id,
+    operation: z.literal("harness/review/execute"),
+    params: HarnessReviewStorageParamsSchema,
   }).strict(),
   z.object({
     contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
@@ -316,7 +337,7 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
 
 export const HostStorageCapabilitySchema = z.object({
   contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
-  operations: z.array(z.enum(["sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write", "harness/state/read", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(40),
+  operations: z.array(z.enum(["sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write", "harness/state/read", "profile-evaluations/execute", "harness/review/execute", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(48),
   allowedTools: z.array(id).max(128),
   maxPageSize: pageSize,
   maxRequestBytes: z.number().int().min(1).max(1_000_000),

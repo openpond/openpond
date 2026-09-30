@@ -1,5 +1,5 @@
 import type { OpenPondProfileState } from "@openpond/contracts";
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalHarnessReleaseRecord } from "../store/store-harness-workspaces.js";
 import {
   compileProfileHarnessSource,
@@ -8,7 +8,7 @@ import {
 
 /** Admit one exact Profile source into a personal Harness workspace. */
 export async function ensureExplicitProfileHarnessSource(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   workspaceId: string;
   ownerId: string;

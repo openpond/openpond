@@ -13,7 +13,7 @@ import {
   type HarnessEvaluationReviewModelStream,
 } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { ensureLocalHarnessRunOverlay } from "./local-harness-run-overlay.js";
 import { recordAppliedLocalHarnessRefinementCandidate } from "./local-harness-refinement-candidates.js";
 import {
@@ -34,7 +34,7 @@ export type LocalHarnessCrossRunRefinementResult = {
 };
 
 export async function continueConfirmedLocalHarnessCandidate(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   candidate: HarnessRefinementCandidate;
   review: HarnessEvaluationReviewReceipt;
@@ -184,7 +184,7 @@ function createCrossRunTrigger(input: {
 }
 
 async function resolveCandidateObservations(
-  store: SqliteStore,
+  store: HarnessStateStore,
   workspaceId: string,
   evidence: HarnessRefinementCandidate["occurrences"],
 ): Promise<ImprovementObservation[]> {

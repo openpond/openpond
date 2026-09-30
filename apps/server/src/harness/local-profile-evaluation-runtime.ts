@@ -4,13 +4,13 @@ import path from "node:path";
 import type { OpenPondProfileRef } from "@openpond/contracts";
 import { loadReleasedProfileEvaluationCatalogAssets } from "@openpond/evals";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { loadSelectedLocalHarnessRuntime } from "./local-harness-skill-runtime.js";
 
 /** Discover only verifier-private definitions from the exact Profile release
  * already selected by the caller. This never adopts a different workspace. */
 export async function profileEvaluationsForRelease(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   ref: OpenPondProfileRef;
   sourceRevision: string;
   harnessRelease: { id: string; contentHash: string };

@@ -8,7 +8,7 @@ import type {
 } from "@openpond/harness";
 import { stableId } from "@openpond/harness/refiner-support";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessReviewStateStore } from "../store/harness-state-store.js";
 
 export {
   boundedObservationEvidence,
@@ -54,7 +54,7 @@ export function refinerReleaseMetadata(release: {
 }
 
 export async function findRefinerOutcome(
-  store: SqliteStore,
+  store: HarnessReviewStateStore,
   workspaceId: string,
   trigger: RefinementTriggerDecision,
 ): Promise<HarnessRefinerOutcome | null> {
@@ -70,7 +70,7 @@ export async function findRefinerOutcome(
 }
 
 export async function findProposal(
-  store: SqliteStore,
+  store: HarnessReviewStateStore,
   workspaceId: string,
   proposalId: string,
 ): Promise<HarnessImprovementProposal | null> {
@@ -85,7 +85,7 @@ export async function findProposal(
 }
 
 export async function findProposalByTrigger(
-  store: SqliteStore,
+  store: HarnessReviewStateStore,
   workspaceId: string,
   trigger: RefinementTriggerDecision,
 ): Promise<HarnessImprovementProposal | null> {
@@ -104,7 +104,7 @@ export async function findProposalByTrigger(
 }
 
 export async function findProposalValidations(
-  store: SqliteStore,
+  store: HarnessReviewStateStore,
   workspaceId: string,
   proposal: HarnessImprovementProposal,
 ): Promise<HarnessTargetedValidationReceipt[]> {

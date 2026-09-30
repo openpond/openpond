@@ -6,7 +6,7 @@ import type { ProfileEvaluationDefinition } from "@openpond/evals";
 import type { Taskset } from "@openpond/contracts";
 import { validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { desktopTasksetRuntimeAdapterId } from "../training/portable-evals-adapter.js";
 import { captureAuthoredModelTasksetPackage } from "../training/model-taskset-package-capture.js";
 import { cacheTasksetPackage, readCachedTasksetPackage } from "../training/taskset-package-files.js";
@@ -16,7 +16,7 @@ import { loadSelectedLocalHarnessRuntime } from "./local-harness-skill-runtime.j
  * Native sources are captured with their exact assets; imported sources are
  * read from the already verified portable package cache. */
 export async function loadLocalProfileEvaluationTaskset(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   definition: ProfileEvaluationDefinition;
   profileId: string;

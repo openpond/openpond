@@ -9,7 +9,7 @@ import {
   type ProfileEvaluationReport,
 } from "@openpond/evals";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalProfileEvaluationRun } from "../store/store-evaluation-results.js";
 
 const SaveRequestSchema = z.object({
@@ -36,7 +36,7 @@ async function ensureRegularDirectory(directory: string): Promise<void> {
 }
 
 async function loadRuns(input: {
-  store: SqliteStore; profileRef: OpenPondProfileRef;
+  store: HarnessStateStore; profileRef: OpenPondProfileRef;
   evidenceKind: "run" | "suite" | "comparison"; evidenceId: string;
 }): Promise<{ runs: LocalProfileEvaluationRun[]; primary: { kind: "run" | "suite" | "comparison"; id: string; contentHash: string } }> {
   let ids: string[];
@@ -78,7 +78,7 @@ async function loadRuns(input: {
 /** Build only from retained evidence. Hosted callers can persist the returned
  * document through their authorized Profile source adapter. */
 export async function buildProfileEvaluationReport(input: {
-  store: SqliteStore; profileRef: OpenPondProfileRef; request: unknown;
+  store: HarnessStateStore; profileRef: OpenPondProfileRef; request: unknown;
 }): Promise<ProfileEvaluationReport> {
   const parsed = SaveRequestSchema.parse(input.request);
   const { runs, primary } = await loadRuns({
@@ -117,7 +117,7 @@ export async function buildProfileEvaluationReport(input: {
 /** Write only a compact, evidence-linked summary to the selected Git Profile.
  * The next Profile commit/push remains an explicit user action. */
 export function createProfileEvaluationReportService(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   selectedProfile: () => Promise<SelectedProfile | null>;
 }) {
   const list = async (): Promise<ProfileEvaluationReport[]> => {

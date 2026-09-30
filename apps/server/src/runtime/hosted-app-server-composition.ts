@@ -14,6 +14,9 @@ import { VERSION } from "../constants.js";
 import { loadHostedHarnessRuntimeForSession, loadHostedHarnessRuntime } from "../store/hosted-harness-runtime.js";
 import { HostedHarnessOverlayStorage } from "../store/hosted-harness-overlay-storage.js";
 import { HostedHarnessStateStorage } from "../store/hosted-harness-state-storage.js";
+import { HostedHarnessReviewStorage } from "../store/hosted-harness-review-storage.js";
+import { loadHostedRefinerRelease } from "../store/hosted-refiner-release.js";
+import { createLocalHarnessImprovementRuntime } from "../harness/local-harness-improvement-runtime.js";
 import { loadHostedRuntimeSettings } from "../store/hosted-runtime-settings.js";
 import { listHostedProfileWorkflows, loadHostedProfileStateAndLibrary } from "../store/hosted-profile-source.js";
 import { createRuntimeEventBus } from "./runtime-event-bus.js";
@@ -69,10 +72,15 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const logger = createLogger({ channel: "app-server", logDir: path.join(storeDir, "logs"),
     metadata: { version: options.version ?? VERSION, runtimeVersion: getBundledRuntimeVersion(), placement: "hosted_work" } });
   const core = storage.core;
+  const reviewStore = new HostedHarnessReviewStorage(client, storeDir);
   const admittedProfile = storage.admittedProfileRelease
     ? await loadHostedProfileStateAndLibrary(client, storage.admittedProfileRelease)
     : { profile: emptyProfile, profileLibrary: emptyProfileLibrary };
-  const { appendRuntimeEvent, closeEventSubscribers, subscribeRuntimeEvents } = createRuntimeEventBus({ logger, store: core });
+  const { appendRuntimeEvent, closeEventSubscribers, subscribeRuntimeEvents } = createRuntimeEventBus({ logger, store: {
+    appendRuntimeEvent: event => ["harness.refiner.queued", "harness.refiner.started", "harness.refiner.completed", "harness.refiner.failed"].includes(event.name)
+      ? reviewStore.appendRuntimeEvent(event) : core.appendRuntimeEvent(event),
+    runtimeEventPageRows: input => core.runtimeEventPageRows(input),
+  } });
   const outputLifecycle = createHostedWorkOutputLifecycle({
     client, storeDir, sandboxRequest,
     getTurn: (turnId) => core.getTurn(turnId),
@@ -84,6 +92,17 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const subagentQueue = createBackgroundWorkerQueue({ queueId: "subagent", logger });
   const stream = createScriptedOpenPondChatStream(options.streamOpenPondHostedChatTurn,
     { enabled: scriptedOpenPondModelsEnabled() });
+  const refinerQueue = createBackgroundWorkerQueue({ queueId: "harness-refiner", logger, concurrency: 1 });
+  const improvement = createLocalHarnessImprovementRuntime({ store: reviewStore, storeDir, queue: refinerQueue,
+    streamOpenPondHostedChatTurn: stream, appendRuntimeEvent,
+    upsertModelUsageRecord: record => reviewStore.upsertModelUsageRecord(record),
+    prepareReview: trigger => reviewStore.prepareReview(trigger),
+    loadActiveRefinerRelease: async () => {
+      const runtime = await loadHostedHarnessRuntime(client);
+      if (!runtime) throw new Error("Hosted review has no admitted Harness workspace.");
+      return loadHostedRefinerRelease(client, runtime.workspace.id);
+    },
+  });
   const preferences = async () => (await loadHostedRuntimeSettings(client)).preferences;
   const { createSession, getSession, updateSession, completeTurn, failTurn, interruptTurn } = createSessionStore({
     store: core, defaultSessionCwd: () => workspaceDir, appendRuntimeEvent,
@@ -150,6 +169,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
       return loadHostedHarnessRuntimeForSession(client, session);
     },
     ensureHarnessRunOverlay: (input) => overlay.ensureHarnessRunOverlay(input),
+    processHarnessImprovementBoundary: improvement,
     harnessModelTools: createHostedHarnessMemoryTools(client),
     loadBuiltInOpenPondSkills: async () => [],
     readBuiltInOpenPondSkill: unavailable,
@@ -166,6 +186,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   });
   await turnRunner.recoverPendingSubagentCompletions();
   await turnRunner.recoverTaskInbox();
+  let recoveredReviews = false;
   const sendTurn: typeof turnRunner.sendTurn = async (sessionId, payload) => {
     if (SendTurnRequestSchema.parse(payload).attachments?.length) {
       throw new Error("Hosted attachments require managed-file admission.");
@@ -175,6 +196,11 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
         session.currentProfile.repositoryId !== storage.admittedProfileRelease.repositoryId ||
         session.currentProfile.profileId !== storage.admittedProfileRelease.profileId)) {
       throw new Error("Hosted Profile session lacks admitted immutable source.");
+    }
+    if (!recoveredReviews) {
+      await improvement.reconcilePending();
+      await refinerQueue.drain();
+      recoveredReviews = true;
     }
     return turnRunner.sendTurn(sessionId, payload);
   };
@@ -247,7 +273,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
       if (closing) return;
       closing = true;
       await turnRunner.close();
-      await Promise.all([turnFollowUpQueue.drain(), subagentQueue.drain()]);
+      await Promise.all([turnFollowUpQueue.drain(), subagentQueue.drain(), refinerQueue.drain()]);
       await closeEventSubscribers();
       await logger.flush();
     },

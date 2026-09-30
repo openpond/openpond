@@ -12,7 +12,7 @@ import {
   type ProfileWorkflowCatalog,
 } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalHarnessReleaseRecord } from "../store/store-harness-workspaces.js";
 import type { OpenPondProfileRef, OpenPondProfileState, Session } from "@openpond/contracts";
 import {
@@ -25,10 +25,10 @@ import { ensureExplicitProfileHarnessSource } from "./local-explicit-profile-sou
 import { PROFILE_HARNESS_WORKSPACE_PREFIX } from "./profile-harness-workspace-identity.js";
 
 type ProfileWorkflowsResult = Awaited<ReturnType<typeof loadProfileWorkflows>>;
-const profileLoads = new WeakMap<SqliteStore, Map<string, Promise<ProfileWorkflowsResult>>>();
+const profileLoads = new WeakMap<HarnessStateStore, Map<string, Promise<ProfileWorkflowsResult>>>();
 
 export async function ensureLocalProfileWorkflows(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   ref: OpenPondProfileRef;
   profile: OpenPondProfileState;
@@ -54,7 +54,7 @@ export async function ensureLocalProfileWorkflows(input: {
 }
 
 async function loadProfileWorkflows(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   ref: OpenPondProfileRef;
   profile: OpenPondProfileState;
@@ -83,7 +83,7 @@ async function loadProfileWorkflows(input: {
 }
 
 export async function profileWorkflowsForRelease(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   release: LocalHarnessReleaseRecord;
   ref: OpenPondProfileRef;
   sourceRevision: string;
@@ -122,7 +122,7 @@ export async function profileWorkflowsForRelease(input: {
   };
 }
 
-export async function loadLocalHarnessRuntimeForSession(store: SqliteStore, session: Session): Promise<
+export async function loadLocalHarnessRuntimeForSession(store: HarnessStateStore, session: Session): Promise<
   (SelectedLocalHarnessRuntime & { workflow?: ProfileWorkflow; workflowAction?: ProfileWorkflowAction }) | null
 > {
   if (session.profileComponentBinding) {
@@ -140,7 +140,7 @@ export async function loadLocalHarnessRuntimeForSession(store: SqliteStore, sess
 }
 
 export async function loadLocalProfileComponentRuntime(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   binding: ProfileComponentBinding;
 }): Promise<SelectedLocalHarnessRuntime & { workflowAction?: ProfileWorkflowAction }> {
   const { binding, store } = input;
@@ -174,7 +174,7 @@ export async function loadLocalProfileComponentRuntime(input: {
 /** A workflow session admits the release named by its binding, never the
  * process's movable personal Harness selection. */
 export async function loadLocalProfileWorkflowRuntime(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   binding: ProfileWorkflowBinding;
 }): Promise<{ runtime: SelectedLocalHarnessRuntime; workflow: ProfileWorkflow; action?: ProfileWorkflowAction }> {
   const { runtime, catalog, catalogHash, actions } = await loadLocalProfileWorkflowCatalog(input.store, input.binding.harnessRelease);
@@ -195,7 +195,7 @@ export async function loadLocalProfileWorkflowRuntime(input: {
 }
 
 export async function loadLocalProfileWorkflowCatalog(
-  store: SqliteStore,
+  store: HarnessStateStore,
   reference: { id: string; contentHash: string },
 ): Promise<{
   runtime: SelectedLocalHarnessRuntime;

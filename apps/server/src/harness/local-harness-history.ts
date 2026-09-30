@@ -32,7 +32,7 @@ import {
 import type { ModelImprovementQualificationReceipt } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalHarnessReleaseRecord } from "../store/store-harness-release-record.js";
 import { truncatePatch } from "../workspace-tools/workspace-tool-common.js";
 import { runWorkspaceCommand } from "../workspace/workspaces.js";
@@ -47,7 +47,7 @@ import { reviewSelectedLocalHarnessEvaluationFromHost } from "./local-harness-ev
 import { nextHarnessEvaluationReviewRunAt } from "./local-harness-evaluation-review-scheduler.js";
 
 export function createLocalHarnessSettingsRoutePayloads(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   evaluationReviewStream?: import("@openpond/harness").HarnessEvaluationReviewModelStream;
 }) {
@@ -230,7 +230,7 @@ function parseHarnessProposalReviewRequest(payload: unknown): HarnessProposalRev
 }
 
 export async function localHarnessHistoryPayload(
-  store: SqliteStore,
+  store: HarnessStateStore,
 ): Promise<HarnessHistoryPayload> {
   const workspace = await store.getSelectedHarnessWorkspace({
     ownerKind: "personal",
@@ -423,7 +423,7 @@ export async function localHarnessHistoryPayload(
 }
 
 export async function reviewLocalHarnessEvaluationFromSettings(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   request: HarnessEvaluationReviewRequest;
   stream?: import("@openpond/harness").HarnessEvaluationReviewModelStream;
@@ -455,7 +455,7 @@ export async function reviewLocalHarnessEvaluationFromSettings(input: {
 }
 
 export async function updateLocalHarnessEvaluationReviewScheduleFromSettings(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   request: HarnessEvaluationReviewScheduleRequest;
 }): Promise<HarnessEvaluationReviewScheduleResponse> {
   const workspace = await input.store.getHarnessWorkspace(input.request.workspaceId);
@@ -492,7 +492,7 @@ export async function updateLocalHarnessEvaluationReviewScheduleFromSettings(inp
 }
 
 export async function updateLocalHarnessBackgroundReviewFromSettings(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   request: HarnessBackgroundReviewRequest;
 }): Promise<HarnessBackgroundReviewResponse> {
   const workspace = await input.store.getHarnessWorkspace(input.request.workspaceId);
@@ -508,7 +508,7 @@ export async function updateLocalHarnessBackgroundReviewFromSettings(input: {
 }
 
 async function requireHarnessReleaseRecord(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   workspaceId: string;
   release: HarnessHistoryReleaseRef;
   label: string;
@@ -569,7 +569,7 @@ function countHarnessPatchLines(patch: string): { additions: number; deletions: 
 }
 
 export async function localHarnessReleaseDiffPayload(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   request: HarnessReleaseDiffRequest;
 }): Promise<HarnessReleaseDiffPayload> {
@@ -639,7 +639,7 @@ export async function localHarnessReleaseDiffPayload(input: {
 }
 
 export async function rollbackLocalHarnessFromSettings(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   request: HarnessRollbackRequest;
 }): Promise<HarnessRollbackResponse> {
@@ -670,7 +670,7 @@ export async function rollbackLocalHarnessFromSettings(input: {
 }
 
 export async function reviewLocalHarnessProposalFromSettings(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   request: HarnessProposalReviewRequest;
 }): Promise<HarnessProposalReviewResponse> {

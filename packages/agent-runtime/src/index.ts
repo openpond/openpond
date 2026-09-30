@@ -6,6 +6,7 @@ export * from "./host-storage-protocol.js";
 export * from "./host-output-storage-protocol.js";
 export * from "./host-embedded-execution-protocol.js";
 export * from "./refiner-storage-protocol.js";
+export * from "./harness-review-storage-protocol.js";
 export * from "./task-inbox-storage-protocol.js";
 export * from "./host-storage-client.js";
 export * from "./jsonl.js";
