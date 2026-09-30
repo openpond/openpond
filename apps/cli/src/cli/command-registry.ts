@@ -72,8 +72,14 @@ const PROFILE_SDK_OPTION_SCHEMA = {
 
 export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   {
+    name: "datasets",
+    usage: "openpond datasets <upload|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>]",
+    optionSchema: { team: "string", operationId: "string", expectedRevision: "integer", publish: "boolean", project: "string", datasetId: "string", cursor: "string", workspaceHash: "string", packageHash: "string", json: "boolean" },
+    handler: async ({ options, rest }) => (await import("./datasets")).runDatasetsCommand(options, rest),
+  },
+  {
     name: "experiments",
-    usage: "openpond experiments <save|read|list|start|status|cancel|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--json]",
+    usage: "openpond experiments <save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--json]",
     optionSchema: { team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", afterId: "string", limit: "integer", json: "boolean" },
     handler: async ({ options, rest }) => (await import("./experiments")).runExperimentsCommand(options, rest),
   },

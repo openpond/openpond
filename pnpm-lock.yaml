@@ -144,6 +144,9 @@ importers:
       '@openpond/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@openpond/taskset-sdk':
+        specifier: workspace:*
+        version: link:../../packages/taskset-sdk
       '@openpond/terminal':
         specifier: workspace:*
         version: link:../terminal
