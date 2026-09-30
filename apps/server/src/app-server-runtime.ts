@@ -2,6 +2,7 @@ import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-reco
 import { createExperimentCaseService } from "./evaluations/experiment-case-service.js";
 import { createLocalExperimentPolicy } from "./evaluations/local-experiment-policy.js";
 import { createHostExperimentPolicy } from "./evaluations/host-experiment-policy.js";
+import { createHostExperimentEnvironment } from "./evaluations/host-experiment-environment.js";
 import { z } from "zod";
 import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
 import { initializeHome, readPreferences } from "@openpond/persistence";
@@ -598,6 +599,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     prepareRun: prepareProfileEvaluationRun, executeRun: executeProfileEvaluationRun,
   });
   const experimentCases=createExperimentCaseService({
+    ...(options.experimentPolicyClient ? {
+      resolveEnvironment: async (request: import("./evaluations/experiment-case-contract.js").ExperimentModelCase) =>
+        createHostExperimentEnvironment(options.experimentPolicyClient!, request),
+    } : {}),
     resolvePolicy:async request=>options.experimentPolicyClient
       ?createHostExperimentPolicy(options.experimentPolicyClient,request)
       :createLocalExperimentPolicy({request,stream:streamOpenPondHostedChatTurn}),

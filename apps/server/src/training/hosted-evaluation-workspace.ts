@@ -1,3 +1,6 @@
+import { listOpChatModels } from "@openpond/cloud/hosted-chat";
+import { projectHostedCaseUsage } from "./hosted-case-usage.js";
+import { OpenPondModelTasksetRunsClient } from "openpond-sdk/model-taskset-runs";
 import { attachHostedDatasetGrader } from "./hosted-grader-attachment.js";
 import { hostedDatasetAuthoring } from "./hosted-dataset-authoring.js";
 import { OpenPondExperimentInspectionClient } from "openpond-sdk/experiments";
@@ -6,7 +9,7 @@ import { OpenPondGraderInspectionClient, GraderCatalogQuerySchema, GraderUsageQu
 import { OpenPondModelStarterAttemptsClient, ModelStarterAttemptChoicesQuerySchema } from "openpond-sdk/model-starter-attempts";
 import { OpenPondLearningClient, LearningReadRequestSchema, LearningCommandRequestSchema } from "openpond-sdk/learning";
 import { z } from "zod";
-import { OpenPondExperimentsClient, SaveExperimentSchema, PrepareHarnessExperimentSchema, StartExperimentSchema, ExperimentScoringRequestSchema } from "openpond-sdk/experiments";
+import { OpenPondExperimentsClient, ExperimentListQuerySchema, SaveExperimentSchema, PrepareHarnessExperimentSchema, StartExperimentSchema, ExperimentScoringRequestSchema, ExperimentDefinitionRefSchema, type ExperimentDefinitionRef } from "openpond-sdk/experiments";
 import { OpenPondTrainingProjectClient } from "openpond-sdk/training-projects";
 import { OpenPondDatasetPopulationClient, DatasetPopulationQuerySchema, OpenPondDatasetWorkspaceClient, DatasetWorkspaceWriteSchema, DatasetWorkspacePublishSchema } from "openpond-sdk/dataset-workspaces";
 import { OpenPondDatasetMarketplaceClient, CatalogBrowse, CatalogCategoriesQuerySchema, AdoptCatalogDataset, PublishCatalogDataset, CatalogVisibilityChange } from "openpond-sdk/dataset-marketplace";
@@ -14,7 +17,7 @@ import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 
 const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
-  "executionHistory", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "case", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "definition", "save", "prepareHarness", "start", "executions", "execution", "result", "cancel", "retry", "score", "passes", "pass", "passResult", "cancelPass", "compare",
+  "datasetExperiments", "executionHistory", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "definition", "save", "prepareHarness", "start", "executions", "execution", "result", "cancel", "retry", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
 const Identity = z.object({ id: Id }).passthrough();
 
@@ -44,17 +47,26 @@ export function createHostedEvaluationWorkspace(input: { resolveAccess: () => Pr
       if (request.projectId && result.originProjectId !== request.projectId && !selectedProject?.content.resources.some(resource => resource.kind === "dataset" && (resource.resourceId === result.datasetId || resource.resourceId === result.publication?.tasksetId || resource.release && result.publication && resource.release.id === result.publication.release.id && resource.release.contentHash === result.publication.release.contentHash))) throw new Error("This Dataset is not associated with the selected Project.");
       return result;
     };
-    const ownedDefinition = async (id: string) => { const result = await experiments.get(id); assertProject(result.request.project); return result; };
+    const ownedDefinition = async (id: string, reference?: ExperimentDefinitionRef) => { const result = await experiments.get(id, { reference }); assertProject(result.request.project); return result; };
     const ownedExecution = async (id: string) => { const result = await experiments.execution(id); assertProject(result.request.project); return result; };
     const ownedPass = async (id: string) => { const result = await experiments.scoringPass(id); await ownedExecution(result.request.execution.id); return result; };
     if (["createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder"].includes(request.operation)) return hostedDatasetAuthoring({ client: datasets, teamId: access.teamId, projectId: request.projectId, ownerScope: selectedProject?.ownerScope, operation: request.operation, value: request.value, requireDataset });
     if (request.operation === "attachDatasetGrader") return attachHostedDatasetGrader({ value: request.value, learning: new OpenPondLearningClient({ ...options, scope: access.teamId }), datasets, requireDataset });
     const inspection = new OpenPondGraderInspectionClient(options);
-    if (request.operation === "executionHistory") return new OpenPondExperimentHistoryClient(options).list({ ...ExperimentHistoryQuerySchema.parse(request.value ?? {}), projectId: request.projectId ?? undefined });
+    if (request.operation === "datasetExperiments") {
+      const query = ExperimentListQuerySchema.pick({ datasetHash: true, afterId: true, search: true, limit: true }).extend({ datasetHash: ExperimentListQuerySchema.shape.datasetHash.unwrap() }).strict().parse(request.value);
+      return experiments.list({ ...query, ...(request.projectId ? { projectId: request.projectId } : {}) });
+    }
+    if (request.operation === "executionHistory") return new OpenPondExperimentHistoryClient(options).list({ ...ExperimentHistoryQuerySchema.parse(request.value ?? {}), ...(request.projectId ? { projectId: request.projectId } : {}) });
     if (request.operation === "projects") return projects.list(z.object({ cursor: Id.optional() }).strict().parse(request.value ?? {}));
+    if (request.operation === "graderModels") {
+      const models = z.object({ data: z.array(z.object({ id: z.string().min(1).max(500), display_name: z.string().max(500).optional(), endpoints: z.array(z.string()).optional(), capabilities: z.object({ samplingParameters: z.boolean().optional() }).passthrough().optional() }).passthrough()).max(200) }).passthrough().parse(await listOpChatModels({ apiBaseUrl: `${access.apiBaseUrl}/v1`, token: access.token }));
+      return { models: models.data.filter(model => model.endpoints?.includes("chat.completions")).map(model => ({ id: model.id, name: model.display_name ?? model.id, supportsSampling: model.capabilities?.samplingParameters === true })) };
+    }
     if (request.operation === "graderCatalog") { const { allProjects, ...query } = z.object({ allProjects: z.boolean().optional() }).passthrough().parse(request.value ?? {}); return inspection.catalog(GraderCatalogQuerySchema.parse({ ...query, ...(request.projectId && !allProjects ? { projectId: request.projectId } : {}) })); }
     if (request.operation === "graderVersions") { const data = z.object({ id: Id, beforeRevision: z.number().int().positive().optional() }).parse(request.value); return inspection.versions(data.id, { beforeRevision: data.beforeRevision }); }
     if (request.operation === "graderUsage") { const data = Identity.parse(request.value); return inspection.usage(data.id, GraderUsageQuerySchema.parse(data.query)); }
+    if (request.operation === "caseUsage") { const data = z.object({ id: Id, receiptId: z.string().min(1).max(500) }).strict().parse(request.value); const run = await ownedExecution(data.id); const result = await new OpenPondModelTasksetRunsClient(options).result(data.id); return projectHostedCaseUsage(run, result, data.receiptId); }
     if (request.operation === "case") { const data = z.object({ id: Id, receiptId: z.string().min(1).max(500), afterId: z.string().max(500).optional() }).parse(request.value); const execution = await ownedExecution(data.id); return new OpenPondExperimentInspectionClient(options).case(data.id, data.receiptId, { afterId: data.afterId, manifestHash: execution.summary.manifestHash }); }
     if (request.operation === "modelChoices") return new OpenPondModelStarterAttemptsClient(options).choices(ModelStarterAttemptChoicesQuerySchema.parse({ modelProjectId: null, ...z.object({ taskset: z.unknown() }).parse(request.value) }));
     if (request.operation === "learningRelay") {
@@ -78,16 +90,12 @@ export function createHostedEvaluationWorkspace(input: { resolveAccess: () => Pr
     if (request.operation === "marketplaceChecks") { const data = z.object({ id: Id, operationId: Id }).strict().parse(request.value); return marketplace.checks(data.operationId, data.id); }
     if (request.operation === "marketplaceAdopt") { const data = AdoptCatalogDataset.parse(request.value); if ((data.projectId ?? null) !== request.projectId) throw new Error("Dataset import Project differs from the selected Project."); return marketplace.adopt(data); }
     if (request.operation === "catalogDatasets") return catalog.list(z.object({ afterId: Id.optional(), limit: z.number().int().min(1).max(100).optional() }).strict().parse(request.value ?? {}));
-    if (request.operation === "catalogDataset") {
-      const result = await catalog.get(Identity.parse(request.value).id);
-      if (request.projectId && !selectedProject?.content.resources.some(resource => resource.kind === "dataset" && (resource.resourceId === result.id || resource.release?.id === result.release.id && resource.release.contentHash === result.release.contentHash))) throw new Error("This Dataset release is not associated with the selected Project.");
-      return result;
-    }
+    if (request.operation === "catalogDataset") return catalog.get(Identity.parse(request.value).id);
     if (request.operation === "resolveDataset") return catalog.resolve(z.object({ release: DatasetPopulationQuerySchema.shape.release }).strict().parse(request.value).release);
     if (request.operation === "datasetPopulation") return new OpenPondDatasetPopulationClient(options).read(DatasetPopulationQuerySchema.parse(request.value));
     if (request.operation === "inventory") {
-      const query = z.object({ cursor: Id.optional(), catalogCursor: Id.optional(), afterId: Id.optional(), search: z.string().max(200).optional() }).parse(request.value ?? {});
-      const [projectPage, datasetPage, experimentPage, releasedDatasets] = await Promise.all([projects.list(), datasets.list({ cursor: query.cursor, projectId: request.projectId ?? undefined }), experiments.list({ projectId: request.projectId ?? undefined, afterId: query.afterId, search: query.search }), catalog.list({ limit: 100, afterId: query.catalogCursor })]);
+      const query = z.object({ cursor: z.string().max(2_000).optional(), catalogCursor: z.string().max(2_000).optional(), afterId: Id.optional(), search: z.string().max(100).optional(), sort: z.enum(["id", "name", "updated"]).optional() }).parse(request.value ?? {});
+      const [projectPage, datasetPage, experimentPage, releasedDatasets] = await Promise.all([projects.list(), datasets.list({ cursor: query.cursor, projectId: request.projectId ?? undefined, search: query.search, sort: query.sort }), experiments.list({ ...(request.projectId ? { projectId: request.projectId } : {}), ...(query.afterId ? { afterId: query.afterId } : {}), ...(query.search !== undefined ? { search: query.search } : {}) }), catalog.list({ limit: 100, afterId: query.catalogCursor, ...(request.projectId ? { projectId: request.projectId } : {}), search: query.search, sort: query.sort })]);
       return { teamId: access.teamId, apiOrigin: new URL(access.apiBaseUrl).origin, projects: { ...projectPage, projects: selectedProject && !projectPage.projects.some(project => project.id === selectedProject.id) ? [...projectPage.projects, selectedProject] : projectPage.projects }, releasedDatasets, datasets: datasetPage, experiments: experimentPage };
     }
     if (request.operation === "saveDataset") { const write = DatasetWorkspaceWriteSchema.parse(request.value); if (request.projectId !== (write.originProjectId ?? null)) throw new Error("Dataset origin differs from the selected Project."); return datasets.save(write); }
@@ -110,7 +118,7 @@ export function createHostedEvaluationWorkspace(input: { resolveAccess: () => Pr
       return experiments.compare(data.baselineId, data.candidateId);
     }
     const data = Identity.parse(request.value);
-    if (request.operation === "definition") return ownedDefinition(data.id);
+    if (request.operation === "definition") return ownedDefinition(data.id, data.reference === undefined ? undefined : ExperimentDefinitionRefSchema.parse(data.reference));
     if (request.operation === "executions") { await ownedDefinition(data.id); return experiments.executions(data.id, { afterId: typeof data.afterId === "string" ? data.afterId : undefined }); }
     if (["pass", "passResult", "cancelPass"].includes(request.operation)) { const result = await ownedPass(data.id); return request.operation === "pass" ? result : request.operation === "passResult" ? experiments.scoringResult(data.id) : experiments.cancelScoringPass(data.id); }
     const result = await ownedExecution(data.id);

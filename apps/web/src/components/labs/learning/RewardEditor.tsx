@@ -1,5 +1,5 @@
 import { useImperativeHandle, useRef, useState, type Ref } from "react";
-import { learningRef, rewardFixtureFromRating, TaskRatingSchema, type TaskEvidence, type TaskFeedback, type AuthoringDraftFor } from "openpond-sdk/learning";
+import { learningRef, graderFeedbackKeyFromName, feedbackKeyForReward, rewardFixtureFromRating, TaskRatingSchema, type TaskEvidence, type TaskFeedback, type AuthoringDraftFor } from "openpond-sdk/learning";
 import { useAuthoringDraft } from "./useAuthoringDraft";
 import {
   compileRewardAuthoring, compileRewardFixtures, rewardAuthoringFields, RewardCheckRunSchema, RewardReleaseSchema,
@@ -15,6 +15,7 @@ import { TaskRatingDetails } from "./TaskRatingFields";
 
 type Fields = Parameters<typeof compileRewardAuthoring>[0]["fields"];
 type Kind = RewardRelease["implementation"]["kind"];
+export type GraderModelChoice = { id: string; name: string; supportsSampling: boolean };
 const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "custom_verifier", label: "Code verifier · JavaScript" },
   { value: "state", label: "Code verifier · Exact fields" },
@@ -27,7 +28,7 @@ const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "human", label: "Human review rubric" },
 ];
 
-export function RewardEditor(props: { initialFields?: Partial<Fields>; allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
+export function RewardEditor(props: { models?: GraderModelChoice[]; embedded?: boolean; initialFields?: Partial<Fields>; allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
   const implementation = props.reward?.implementation;
   const assetId = implementation && "verifierRef" in implementation ? implementation.verifierRef.id
     : implementation && "rubricRef" in implementation ? implementation.rubricRef.id
@@ -38,7 +39,9 @@ export function RewardEditor(props: { initialFields?: Partial<Fields>; allowedKi
   return <RewardEditorForm {...props} sourceAsset={asset.resource} fixtureAsset={fixtures.resource} />;
 }
 
-function RewardEditorForm({ initialFields, allowedKinds, client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose, closeRef }: {
+function RewardEditorForm({ models, embedded, initialFields, allowedKinds, client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose, closeRef }: {
+  models?: GraderModelChoice[];
+  embedded?: boolean;
   initialFields?: Partial<Fields>;
   allowedKinds?: readonly Kind[];
   closeRef?: Ref<DraftEditorHandle>;
@@ -55,8 +58,10 @@ function RewardEditorForm({ initialFields, allowedKinds, client, reward, sourceA
     const rating = TaskRatingSchema.parse(fromLabel.feedback.submission.value);
     return { ...fields, ...(!reward ? { name: `Reward for ${fromLabel.evidence.submission.exampleId}`, kind: "model_judge" as const, rubric: rating.criteria } : {}), fixtures: [...(fields.fixtures ?? []).filter(item => item.id !== fixture.id), fixture] };
   });
-  const [draft, setDraft] = useState(authoringDraft?.fields ?? initial);
-  const [saved, setSaved] = useState(JSON.stringify(authoringDraft?.fields ?? initial));
+  const [effectiveInitial] = useState(() => ({ ...(authoringDraft?.fields ?? initial), feedbackKey: reward ? feedbackKeyForReward(reward) : authoringDraft?.fields.feedbackKey ?? initial.feedbackKey ?? graderFeedbackKeyFromName(initial.name, id) }));
+  const [draft, setDraft] = useState(effectiveInitial);
+  const [saved, setSaved] = useState(JSON.stringify(effectiveInitial));
+  const [automaticKey, setAutomaticKey] = useState(!reward && !authoringDraft?.fields.feedbackKey && !initial.feedbackKey);
   const [revision, setRevision] = useState(reward?.revision ?? 0);
   const mutation = useLearningMutation(client);
   const [pendingAction, setPendingAction] = useState<"save" | "check" | "publish" | null>(null);
@@ -67,7 +72,8 @@ function RewardEditorForm({ initialFields, allowedKinds, client, reward, sourceA
     });
   }
   const persistence = useAuthoringDraft(authoringDraft);
-  const [checkBudget, setCheckBudget] = useState("0");
+  const [checkBudget, setCheckBudget] = useState("5");
+  const [savedCheckBudget, setSavedCheckBudget] = useState("5");
   const checkRequest = useRef<{ requestKey: string; operationId: string } | null>(null);
   const draftInput = () => ({ targetKind: "reward" as const, targetId: id, baseRelease: reward ? learningRef(reward) : null, fields: draft });
   async function saveDraft() {
@@ -75,7 +81,7 @@ function RewardEditorForm({ initialFields, allowedKinds, client, reward, sourceA
     if (result) setSaved(JSON.stringify(draft));
     return Boolean(result);
   }
-  const patch = (update: Partial<typeof draft>) => setDraft((value) => ({ ...value, ...update }));
+  const patch = (update: Partial<typeof draft>) => setDraft(value => ({ ...value, ...update, ...(update.name !== undefined && automaticKey ? { feedbackKey: graderFeedbackKeyFromName(update.name, id) } : {}) }));
 
   async function save() {
     const result = await runAction("publish", async (api) => {
@@ -117,19 +123,20 @@ function RewardEditorForm({ initialFields, allowedKinds, client, reward, sourceA
       checkRequest.current = request;
       const response = await api.command({ action: "queue_reward_check", operationId: request.operationId, draft: learningRef(record), timeoutMs: 300_000, maximumSpendUsd });
       const result = RewardCheckRunSchema.parse(response.resources[0]);
+      setSavedCheckBudget(checkBudget);
       checkRequest.current = null;
       return result;
     });
   }
-  const guard = useDraftNavigation({ name: "Reward", dirty: JSON.stringify(draft) !== saved, busy: mutation.busy, save: saveDraft });
+  const guard = useDraftNavigation({ name: "Reward", dirty: JSON.stringify(draft) !== saved || checkBudget !== savedCheckBudget, busy: mutation.busy, save: checkBudget === savedCheckBudget ? saveDraft : undefined });
   useImperativeHandle(closeRef, () => ({ requestClose: () => { void guard.requestLeave(onClose); } }));
+  const modelIdentity = <><label>Model provider<input value={draft.providerId} onChange={(event) => patch({ providerId: event.target.value })} /></label><label>Judge model<input value={draft.modelId} onChange={(event) => patch({ modelId: event.target.value })} /></label><label>Model revision (optional)<input value={draft.modelRevision} onChange={(event) => patch({ modelRevision: event.target.value })} /></label></>;
   return <div className="labs-flat-body labs-resource-page learning-workspace">
-    <ModelProjectPageHeader title={reward ? "Edit Reward" : "New Reward"} description="Save the grader and its source as an immutable release. Task formats keep the release they selected." />
+    {!embedded ? <ModelProjectPageHeader title={reward ? "Edit Reward" : "New Reward"} description="Save the grader and its source as an immutable release. Task formats keep the release they selected." /> : null}
     <LearningError error={mutation.error} />
     {fromLabel ? <section><h2>Retained label</h2><p>Attempt {fromLabel.evidence.submission.exampleId} · revision {fromLabel.evidence.revision}. {fromLabel.feedback.submittedBy ? `Submitted by ${fromLabel.feedback.submittedBy.id} (${fromLabel.feedback.submittedBy.role}).` : "Submitter not recorded."}</p><TaskRatingDetails value={fromLabel.feedback.submission.value} /><p>The fixture is an editable copy. The original label remains unchanged.</p></section> : null}
     {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
-    <label>Feedback key (optional)<input value={draft.feedbackKey ?? ""} placeholder="Generated from the grader ID" onChange={event => { const key = event.target.value; setDraft(value => { const { feedbackKey: _previous, ...fields } = value; return key ? { ...fields, feedbackKey: key } : fields; }); }} /><small>Results and comparisons use this key. Give each independent score a distinct key.</small></label>
     <label>Description (optional)<textarea maxLength={10_000} value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>
     <label>Reward type<select value={draft.kind} onChange={(event) => patch({ kind: event.target.value as Kind })}>{KINDS.filter(kind => !allowedKinds || allowedKinds.includes(kind.value) || kind.value === draft.kind).map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></label>
     {draft.kind === "custom_verifier" ? <>
@@ -143,12 +150,12 @@ function RewardEditorForm({ initialFields, allowedKinds, client, reward, sourceA
     {draft.kind === "artifact" ? <label>Required artifact reference<input value={draft.reference} onChange={(event) => patch({ reference: event.target.value })} /></label> : null}
     {draft.kind === "runtime_event" ? <label>Required events<input value={draft.events} onChange={(event) => patch({ events: event.target.value })} /><small>Separate event references with commas.</small></label> : null}
     {draft.kind === "model_judge" || draft.kind === "human" ? <label>Rubric<textarea rows={10} value={draft.rubric} onChange={(event) => patch({ rubric: event.target.value })} /></label> : null}
-    {draft.kind === "model_judge" ? <><label>Model provider<input value={draft.providerId} onChange={(event) => patch({ providerId: event.target.value })} /></label><label>Judge model<input value={draft.modelId} onChange={(event) => patch({ modelId: event.target.value })} /></label><label>Model revision (optional)<input value={draft.modelRevision} onChange={(event) => patch({ modelRevision: event.target.value })} /></label><label>Temperature<input type="number" min={0} max={2} step={0.1} value={draft.temperature} onChange={(event) => patch({ temperature: event.target.value })} /></label><p>Changing the rubric or model requires calibration before this judge can grade examples.</p></> : null}
+    {draft.kind === "model_judge" ? <>{embedded && models ? <label>Judge model<select value={draft.providerId === "openpond" ? draft.modelId : ""} onChange={event => patch({ providerId: "openpond", modelId: event.target.value, temperature: "0" })}><option value="">Choose model</option>{models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}</select></label> : null}{!embedded ? modelIdentity : null}<p>Changing the rubric or model requires calibration before this judge can grade examples.</p></> : null}
     {draft.kind === "human" ? <label>Reviewer role<input value={draft.reviewerRole} onChange={(event) => patch({ reviewerRole: event.target.value })} /></label> : null}
     {draft.kind === "learned_model" ? <><label>Model version<input value={draft.learnedId} onChange={(event) => patch({ learnedId: event.target.value })} /></label><label>Model version content hash<input value={draft.learnedHash} onChange={(event) => patch({ learnedHash: event.target.value })} /></label><LearningJsonField label="Model input contract" value={draft.inputContract} onChange={(inputContract) => patch({ inputContract })} /><label>Raw score minimum<input type="number" value={draft.minimum} onChange={(event) => patch({ minimum: event.target.value })} /></label><label>Raw score maximum<input type="number" value={draft.maximum} onChange={(event) => patch({ maximum: event.target.value })} /></label></> : null}
     <RewardFixturesEditor fixtures={draft.fixtures ?? []} onChange={fixtures => patch({ fixtures })} />
     {draft.kind === "model_judge" ? <p>Check a passing and a failing example before publishing a calibrated judge. Publishing without a matching check keeps the judge pending.</p> : null}
-    {draft.kind === "model_judge" ? <label>Maximum fixture cost (USD)<input type="number" min={0} max={1000} step="0.01" value={checkBudget} onChange={event => setCheckBudget(event.target.value)} /><small>Total limit for this fixture check. A provider request starts only when its maximum charge fits the remaining limit.</small></label> : null}
+    <details><summary>Advanced settings</summary>{embedded && draft.kind === "model_judge" ? modelIdentity : null}<label>Feedback key<input value={draft.feedbackKey} disabled={Boolean(reward)} maxLength={80} pattern="[a-z][a-z0-9_]{0,79}" onChange={event => { setAutomaticKey(false); patch({ feedbackKey: event.target.value }); }} /><small>{reward ? "This released score key stays fixed across grader updates." : "Derived from the name and this grader’s identity. Override before publication if you need a technical score key."}</small></label>{draft.kind === "model_judge" && (!embedded || draft.providerId === "openpond" && models?.some(model => model.id === draft.modelId && model.supportsSampling)) ? <label>Temperature<input type="number" min={0} max={2} step={0.1} value={draft.temperature} onChange={(event) => patch({ temperature: event.target.value })} /><small>0 uses deterministic sampling.</small></label> : embedded && draft.kind === "model_judge" ? <p>Sampling is managed by the selected model provider.</p> : null}{draft.kind === "model_judge" ? <label>Maximum fixture cost (USD)<input type="number" min={0} max={1000} step="0.01" value={checkBudget} onChange={event => setCheckBudget(event.target.value)} /><small>Total limit for this fixture check. A provider request starts only when its maximum charge fits the remaining limit.</small></label> : null}</details>
     <RewardCheckHistory client={client} targetId={id} draft={persistence.record?.targetKind === "reward" ? persistence.record : null} unchanged={JSON.stringify(draft) === JSON.stringify(persistence.record?.fields)} busy={mutation.busy || !draft.fixtures?.length} onCheck={checkFixtures} checking={pendingAction === "check"} />
     <LearningActions><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button><button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void saveDraft(); }}>{pendingAction === "save" ? "Saving draft…" : "Save draft"}</button><button type="button" className="training-button" disabled={mutation.busy || !draft.name.trim()} onClick={async () => { const result = await save(); if (result) { guard.allowNextNavigation(); onSaved(result); } }}>{pendingAction === "publish" ? "Publishing…" : `Publish release ${revision + 1}`}</button></LearningActions>
     {guard.dialog}
