@@ -11,8 +11,7 @@ import {
 } from "@openpond/evals";
 import { validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 
-import type { HarnessStateStore } from "../store/harness-state-store.js";
-import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
+import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
 import { type ProfileWorkflow } from "@openpond/harness";
 
 const PrepareRequestSchema = z.object({
@@ -50,7 +49,7 @@ type SelectedWorkflows = {
 /** Build a complete, immutable run request from the selected released Profile
  * and the exact Taskset package named by its verifier-private definition. */
 export function createProfileEvaluationRunPreparationService(input: {
-  store: HarnessStateStore;
+  loadCatalog: ProfileEvaluationCatalogSource;
   selectedWorkflows: () => Promise<SelectedWorkflows>;
   loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
@@ -62,8 +61,7 @@ export function createProfileEvaluationRunPreparationService(input: {
       throw new Error("Profile evaluation execution requires the reviewed manifest hash.");
     }
     const selected = await input.selectedWorkflows();
-    const discovered = await profileEvaluationsForRelease({
-      store: input.store,
+    const discovered = await input.loadCatalog({
       ref: selected.profileRef,
       sourceRevision: selected.sourceRevision,
       harnessRelease: selected.harnessRelease,

@@ -66,6 +66,7 @@ test("suite retry reuses retained evidence only while exact model configuration 
     }),
   };
   const runSuite = createProfileEvaluationSuiteService({
+    loadCatalog: async () => ({ profileRef, sourceRevision: "revision-1", harnessRelease, catalogHash: contentHash(catalog), definitions: catalog.definitions, suites: catalog.suites }),
     store, selectedWorkflows: async () => ({ profileRef, sourceRevision: "revision-1", harnessRelease }),
     prepareRun, executeRun,
   } as unknown as Parameters<typeof createProfileEvaluationSuiteService>[0]);

@@ -36,7 +36,7 @@ async function ensureRegularDirectory(directory: string): Promise<void> {
 }
 
 async function loadRuns(input: {
-  store: HarnessStateStore; profileRef: OpenPondProfileRef;
+  store: Pick<HarnessStateStore, "getProfileEvaluationSuiteRun" | "getProfileEvaluationComparison" | "getProfileEvaluationRun">; profileRef: OpenPondProfileRef;
   evidenceKind: "run" | "suite" | "comparison"; evidenceId: string;
 }): Promise<{ runs: LocalProfileEvaluationRun[]; primary: { kind: "run" | "suite" | "comparison"; id: string; contentHash: string } }> {
   let ids: string[];
@@ -78,7 +78,7 @@ async function loadRuns(input: {
 /** Build only from retained evidence. Hosted callers can persist the returned
  * document through their authorized Profile source adapter. */
 export async function buildProfileEvaluationReport(input: {
-  store: HarnessStateStore; profileRef: OpenPondProfileRef; request: unknown;
+  store: Pick<HarnessStateStore, "getProfileEvaluationSuiteRun" | "getProfileEvaluationComparison" | "getProfileEvaluationRun">; profileRef: OpenPondProfileRef; request: unknown;
 }): Promise<ProfileEvaluationReport> {
   const parsed = SaveRequestSchema.parse(input.request);
   const { runs, primary } = await loadRuns({
@@ -117,7 +117,7 @@ export async function buildProfileEvaluationReport(input: {
 /** Write only a compact, evidence-linked summary to the selected Git Profile.
  * The next Profile commit/push remains an explicit user action. */
 export function createProfileEvaluationReportService(input: {
-  store: HarnessStateStore;
+  store: Pick<HarnessStateStore, "getProfileEvaluationSuiteRun" | "getProfileEvaluationComparison" | "getProfileEvaluationRun">;
   selectedProfile: () => Promise<SelectedProfile | null>;
 }) {
   const list = async (): Promise<ProfileEvaluationReport[]> => {

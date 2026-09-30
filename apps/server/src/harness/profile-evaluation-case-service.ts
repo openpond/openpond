@@ -9,8 +9,9 @@ import { TasksetReleaseSchema, TasksetRunManifestSchema, assertProfileEvaluation
 import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
 
 import type { HarnessStateStore } from "../store/harness-state-store.js";
-import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
-import { loadLocalProfileEvaluationTaskset } from "./local-profile-evaluation-taskset.js";
+import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
+import type { ProfileEvaluationDefinition } from "@openpond/evals";
+import type { TasksetPackage } from "openpond-sdk/taskset-packages";
 import { createProfileWorkflowEvaluationExecutor } from "./profile-evaluation-turn-executor.js";
 import { assertRfqEvaluationPaidDispatchQualified } from "../training/rfq-evaluation-paid-preflight.js";
 
@@ -28,8 +29,10 @@ const ProfileEvaluationCaseRequestSchema = z.object({
 /** Admits one case against the app-server's currently authorized Profile. The
  * caller retains the full Taskset and private graders outside model context. */
 export function createProfileEvaluationCaseService(input: {
-  store: HarnessStateStore;
+  store: Pick<HarnessStateStore, "runtimeEventsForTurn">;
   storeDir?: string;
+  loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
+  loadCatalog: ProfileEvaluationCatalogSource;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   createSession: (request: unknown) => Promise<Session>;
   sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
@@ -45,8 +48,8 @@ export function createProfileEvaluationCaseService(input: {
     // Direct case execution must meet the same gate as run and suite paths.
     // Keep this before createSession/sendTurn, including resumed members.
     assertRfqEvaluationPaidDispatchQualified(selected.ref.profileId);
-    const discovered = await profileEvaluationsForRelease({
-      store: input.store, ref: selected.ref, sourceRevision: selected.sourceRevision,
+    const discovered = await input.loadCatalog({
+      ref: selected.ref, sourceRevision: selected.sourceRevision,
       harnessRelease: parsed.binding.harnessRelease,
     });
     const source = parsed.manifest.profileEvaluation;
@@ -75,10 +78,9 @@ export function createProfileEvaluationCaseService(input: {
     if (policyTask.artifactRefs.length && !input.storeDir) {
       throw new Error("Evaluation case attachment storage is unavailable.");
     }
-    const releasedPackage = policyTask.artifactRefs.length ? await loadLocalProfileEvaluationTaskset({
-      store: input.store, storeDir: input.storeDir!, definition,
-      profileId: selected.ref.profileId, harnessRelease: parsed.binding.harnessRelease,
-    }) : null;
+    const releasedPackage = policyTask.artifactRefs.length ? await input.loadTasksetPackage(
+      definition, selected.ref.profileId, parsed.binding.harnessRelease,
+    ) : null;
     if (releasedPackage && (releasedPackage.contentHash !== parsed.manifest.packageHash
       || releasedPackage.taskset.contentHash !== parsed.taskset.contentHash)) {
       throw new Error("Evaluation case Taskset differs from its frozen package or admitted manifest.");
