@@ -104,6 +104,8 @@
 }
 
 .app-titlebar {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;

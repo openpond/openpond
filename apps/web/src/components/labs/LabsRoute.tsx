@@ -1,6 +1,6 @@
 import { HostedEvaluationWorkspace } from "./workspace/HostedEvaluationWorkspace";
 import { LabComparisonSeriesCreateDialog } from "./LabComparisonSeriesCreateDialog";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LearnedPreferenceRewardBinding, TasksetDraft } from "@openpond/contracts";
 import { appendTaskIntake, taskIntakeSourceFiles } from "openpond-sdk/taskset-drafts";
 import { learningRef, type TaskBatch } from "openpond-sdk/learning";
@@ -67,6 +67,9 @@ export function LabsRoute(props: LabsRouteProps) {
   // Packaged Desktop chooses a new local API port at launch. Catalog authority
   // is the hosted account/workspace, so its persisted key must survive that port.
   const starterCacheScope = props.account?.state === "signed_in" ? JSON.stringify([props.account.apiBaseUrl, props.account.activeProfile?.handle ?? null, profileId, training.settingsPreferences.defaultTeamId ?? null]) : null;
+  const hostedResourceKey = JSON.stringify([workspaceKey, route?.area, route?.page, route?.resourceId]);
+  const [hostedResourceTitle, setHostedResourceTitle] = useState<{ key: string; name: string | null } | null>(null);
+  const reportHostedResourceName = useCallback((name: string | null) => setHostedResourceTitle(current => current?.key === hostedResourceKey && current.name === name ? current : { key: hostedResourceKey, name }), [hostedResourceKey]);
   const priorWorkspace = useRef(workspaceKey);
   const workspaceChanged = priorWorkspace.current !== workspaceKey;
   useErrorToast(createImprove.error);
@@ -109,14 +112,15 @@ export function LabsRoute(props: LabsRouteProps) {
   useEffect(() => {
     if (lastCloseRequest.current === props.closeDetailRequestId) return;
     lastCloseRequest.current = props.closeDetailRequestId;
-    if (route) void navigateModelsRoute(modelsLocation(route.page, route.modelId, { collection: ["new", "drafts"].includes(route.collection) ? "default" : route.collection }));
+    if (route) void navigateModelsRoute(modelsLocation(route.page, route.modelId, { area: route.area, projectId: route.projectId, collection: ["new", "drafts"].includes(route.collection) ? "default" : route.collection }));
   }, [props.closeDetailRequestId, route]);
   useEffect(() => {
     if (!route) { props.onDetailOpenChange(null); return; }
     const label = MODELS_PAGE_LABELS[route.page];
-    const kind = route.page === "tasksets" || route.page === "tasks" ? "dataset" : route.page === "rewards" ? "scoring" : route.page === "evaluations" || route.page === "labeling" ? "evaluation" : "model";
-    props.onDetailOpenChange({ kind, kindLabel: label, kindOnSelect: () => { void navigateModelsRoute(modelsLocation(route.page, route.modelId)); }, workproductLabel: selected?.name ?? (route.modelId ? "Unavailable model" : null), segments: route.resourceId ? [{ label: route.resourceId }, ...(route.detailTab ? [{ label: route.detailTab }] : [])] : [] });
-  }, [route, selected?.name, props.onDetailOpenChange]);
+    const hostedPage = ["datasets", "graders", "experiments"].includes(route.page);
+    const kind = ["datasets", "tasksets", "tasks"].includes(route.page) ? "dataset" : ["graders", "rewards"].includes(route.page) ? "scoring" : ["experiments", "evaluations", "labeling"].includes(route.page) ? "evaluation" : "model";
+    props.onDetailOpenChange({ rootLabel: route.area === "console" ? "Console" : "Models", kind, kindLabel: label, kindOnSelect: () => { void navigateModelsRoute(modelsLocation(route.page, route.modelId, { area: route.area, projectId: route.projectId })); }, workproductLabel: selected?.name ?? (route.modelId ? "Unavailable model" : null), segments: route.resourceId ? [{ label: hostedPage ? hostedResourceTitle?.key === hostedResourceKey ? hostedResourceTitle.name ?? "Loading resource…" : "Loading resource…" : route.resourceId }, ...(route.detailTab ? [{ label: route.detailTab }] : [])] : [] });
+  }, [route, selected?.name, hostedResourceKey, hostedResourceTitle, props.onDetailOpenChange]);
 
   const open = (next: ModelsRoute) => { void navigateModelsRoute(next); };
   const toast = (message: string, tone: "success" | "info" | "error" = "info") => profileView.onToast?.(message, tone) ?? 0;
@@ -186,7 +190,7 @@ export function LabsRoute(props: LabsRouteProps) {
   let page: ReactNode;
   if (workspaceChanged) page = <p role="status">Loading workspace…</p>;
   else if (!route) page = unavailable("This Models location is unavailable.");
-  else if (["datasets", "graders", "experiments"].includes(route.page)) page = <HostedEvaluationWorkspace key={workspaceKey} connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`} route={route} onNavigate={open} onLocalDatasets={() => open(modelsLocation("tasksets"))} />;
+  else if (["datasets", "graders", "experiments"].includes(route.page)) page = <HostedEvaluationWorkspace key={workspaceKey} connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`} route={route} onNavigate={open} onResourceName={reportHostedResourceName} onSidebarControl={props.onEvaluationSidebarControl} onLocalDatasets={() => open(modelsLocation("tasksets"))} />;
   else if (route.modelId && !state) page = <p role="status">Loading model…</p>;
   else if (route.modelId && !selected) page = unavailable("This model is not available in the active profile and team.");
   else if (route.page === "get-started") {

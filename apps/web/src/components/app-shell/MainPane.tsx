@@ -270,6 +270,8 @@ export function MainPane({
   onAddRightChat,
   onOpenRightChatForSession,
   onLabDetailOpenChange,
+  evaluationSidebarActive,
+  onEvaluationSidebarControl,
   scheduledDetailOpen,
   onScheduledDetailOpenChange,
   onTerminalTabsChange,
@@ -800,7 +802,7 @@ export function MainPane({
       showTeamAgentConversationPanel ||
       showWorkPanel,
   });
-  const showRightPanel =
+  const showRightPanel = !evaluationSidebarActive && (
     showDiffPanel ||
     showLabSkillPanel ||
     showBrowserPanel ||
@@ -810,7 +812,7 @@ export function MainPane({
     showTeamAiThreadPanel ||
     showTeamAgentConversationPanel ||
     showWorkPanel ||
-    showRightHomePanel;
+    showRightHomePanel);
   const rightPanelExpanded =
     showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
   const accountBaseUrl =
@@ -1638,6 +1640,7 @@ export function MainPane({
                 onCreateAgent={createAgentFromLab}
                 onImproveAgent={improveAgentFromLab}
                 onDetailOpenChange={onLabDetailOpenChange}
+                onEvaluationSidebarControl={onEvaluationSidebarControl}
                 onSkillSelectionChange={handleLabSkillSelectionChange}
                 onOpenRunConversation={onOpenRightChatForSession}
                 onAnswerQuestion={answerCreateImproveQuestion}

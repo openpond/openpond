@@ -67,6 +67,8 @@ import type { SkillSourceDocument } from "./skill-source-document";
 import type { SkillPackageSourceSelection } from "./skill-package-source";
 
 export type MainPaneProps = {
+  evaluationSidebarActive?: boolean;
+  onEvaluationSidebarControl?: (control: import("../labs/workspace/WorkspacePanel").EvaluationSidebarControl | null) => void;
   ponderMode?: "clean" | "activity" | null;
   onPonderModeChange?: (mode: "clean" | "activity" | null) => void;
   experience: Experience;

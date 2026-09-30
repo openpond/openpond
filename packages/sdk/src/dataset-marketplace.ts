@@ -40,6 +40,8 @@ export const CatalogSummarySchema = z.object({
   buildIntent: z.string().min(1), methodHint: z.string().nullable(), graders: z.array(CatalogGraderSchema),
 }).strict();
 export const CatalogBrowsePageSchema = z.object({ items: z.array(CatalogSummarySchema).max(100), nextCursor: z.string().max(3000).nullable() }).strict();
+export const CatalogCategoriesQuerySchema = z.object({ publisher: CatalogSlug.optional() }).strict();
+export const CatalogCategoriesSchema = z.object({ categories: z.array(z.string().trim().min(1).max(100)).max(100) }).strict();
 export const CatalogDetailSchema = z.object({ summary: CatalogSummarySchema, versions: z.array(CatalogSummarySchema).max(100) }).strict();
 export const CatalogVisibilityReceiptSchema = z.object({ operationId: CatalogId, releaseId: CatalogId, visibility: z.enum(["private", "public"]), visibilityRevision: z.number().int().positive(), summary: CatalogSummarySchema }).strict();
 export const CatalogAdoptionReceiptSchema = z.object({ operationId: CatalogId, releaseId: CatalogId, teamId: CatalogId, tasksetId: CatalogId, release: CatalogReleaseRef, packageHash: CatalogHash, snapshotHash: CatalogHash, graders: z.array(CatalogGraderSchema), projectId: CatalogId.nullable() }).strict();
@@ -72,6 +74,13 @@ export class OpenPondDatasetMarketplaceClient {
     for (const [key, value] of Object.entries(parsed)) if (value !== undefined) search.set(key, String(value));
     const result = CatalogBrowsePageSchema.parse(await this.#request(`?${search}`, options));
     if (result.items.length > parsed.limit || (parsed.publisher && result.items.some(item => item.namespace !== parsed.publisher))) this.#mismatch();
+    return result;
+  }
+  async categories(query: z.input<typeof CatalogCategoriesQuerySchema> = {}, options: RequestOptions = {}) {
+    const parsed = CatalogCategoriesQuerySchema.parse(query);
+    const suffix = parsed.publisher ? `?publisher=${encodeURIComponent(parsed.publisher)}` : "";
+    const result = CatalogCategoriesSchema.parse(await this.#request(`/categories${suffix}`, options));
+    if (new Set(result.categories).size !== result.categories.length) this.#mismatch();
     return result;
   }
   async get(releaseId: string, options: RequestOptions = {}) {

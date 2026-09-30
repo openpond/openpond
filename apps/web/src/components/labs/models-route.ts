@@ -1,8 +1,9 @@
 export const MODELS_PAGES = ["get-started", "models", "datasets", "graders", "experiments", "tasks", "tasksets", "labeling", "rewards", "evaluations", "runs", "versions", "serving"] as const;
 export type ModelsPage = (typeof MODELS_PAGES)[number];
-export type ModelsCollection = "default" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers" | "combined";
+export type ModelsCollection = "default" | "history" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers" | "combined";
 export interface ModelsRoute {
   page: ModelsPage;
+  area?: "console";
   modelId: string | null;
   collection: ModelsCollection;
   resourceId: string | null;
@@ -10,6 +11,7 @@ export interface ModelsRoute {
   query: string;
   after: string | null;
   sourceId?: string | null;
+  datasetKind?: "release";
   projectId?: string | null;
   executionId?: string | null;
   passId?: string | null;
@@ -19,6 +21,7 @@ export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
   "get-started": "Get started", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Runs", versions: "Versions", serving: "Serving",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
+  experiments: ["history"],
   tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
 };
 const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
@@ -39,7 +42,7 @@ export function modelsLocation(page: ModelsPage = "models", modelId: string | nu
 
 export function modelsRouteFromLocation(input: { pathname: string; search?: string }): ModelsRoute | null {
   const encoded = input.pathname.split("/").filter(Boolean);
-  if (encoded[0] !== "models") return null;
+  if (encoded[0] !== "models" && encoded[0] !== "console") return null;
   let parts: string[];
   try { parts = encoded.slice(1).map(decodeURIComponent); } catch { return null; }
   if (parts.some((part) => !part.trim() || part.length > 2_000 || part.includes("\u0000"))) return null;
@@ -57,6 +60,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const detailTab = parts.shift() ?? null;
   if (parts.length || (detailTab && !resourceId)) return null;
   if ((page === "models" || page === "get-started") && resourceId) return null;
+  if (collection === "history" && (resourceId || detailTab)) return null;
   if (collection === "drafts" || collection === "new") {
     if (!resourceId || detailTab) return null;
   } else if (collection === "series") {
@@ -66,14 +70,17 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   } else if (detailTab && !detailTabs[page]?.includes(detailTab)) return null;
   if (page === "serving" && detailTab) return null;
   const query = new URLSearchParams(input.search ?? "");
-  if ([...query.keys()].some((key) => !["model", "q", "after", "source", "project", "execution", "pass"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
+  if ([...query.keys()].some((key) => !["model", "q", "after", "source", "project", "execution", "pass", "dataset"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
   const sourceId = query.get("source");
   if (sourceId !== null && ((page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
+  if (query.has("dataset") && (page !== "datasets" || !resourceId || query.get("dataset") !== "release")) return null;
   const hosted = ["datasets", "graders", "experiments"].includes(page);
+  if (encoded[0] === "console" && !hosted) return null;
   const projectId = query.get("project") === "all" ? null : query.get("project");
   const executionId = query.get("execution");
   const passId = query.get("pass");
   if ([projectId, executionId, passId].some(id => id !== null && (!id.trim() || id.length > 240)) || (!hosted && (projectId || executionId || passId)) || (page !== "experiments" && (executionId || passId)) || (hosted && pathModelId)) return null;
+  if (collection === "history" && (executionId || passId)) return null;
   const legacyModelId = query.get("model");
   if (hosted && legacyModelId !== null) return null;
   if (pathModelId && legacyModelId && pathModelId !== legacyModelId) return null;
@@ -82,11 +89,11 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const search = query.get("q") ?? "";
   const after = query.get("after");
   if ((modelId !== null && (!modelId.trim() || modelId.length > 500)) || search.length > 1_000 || (after !== null && (!after.trim() || after.length > 2_000))) return null;
-  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(hosted ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("execution") ? { executionId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
+  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(query.get("dataset") === "release" ? { datasetKind: "release" } : {}), ...(encoded[0] === "console" ? { area: "console" } : {}), ...(hosted ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("execution") ? { executionId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
 }
 
 export function modelsPath(route: ModelsRoute): string {
-  const parts = ["/models"];
+  const parts = [route.area === "console" ? "/console" : "/models"];
   if (route.modelId) parts.push(encodeURIComponent(route.modelId));
   if (route.page === "evaluations" && route.collection === "review") return modelsPath(modelsLocation("labeling", route.modelId, { collection: "default", resourceId: route.resourceId, sourceId: route.sourceId, query: route.query, after: route.after }));
   if (route.page === "evaluations") parts.push("runs", route.collection === "comparisons" ? "comparisons" : "evaluations");
@@ -99,6 +106,7 @@ export function modelsPath(route: ModelsRoute): string {
   const query = new URLSearchParams();
   if (route.projectId) query.set("project", route.projectId);
   else if (route.projectId === null && ["datasets", "graders", "experiments"].includes(route.page)) query.set("project", "all");
+  if (route.page === "datasets" && route.resourceId && route.datasetKind === "release") query.set("dataset", "release");
   if (route.executionId) query.set("execution", route.executionId);
   if (route.passId) query.set("pass", route.passId);
   if (route.query) query.set("q", route.query);
@@ -108,7 +116,7 @@ export function modelsPath(route: ModelsRoute): string {
 }
 
 export function changeModelsScope(route: ModelsRoute, modelId: string | null): ModelsRoute {
-  return modelsLocation(route.page, modelId, { ...(["datasets", "graders", "experiments"].includes(route.page) && route.projectId !== undefined ? { projectId: route.projectId } : {}), collection: route.collection === "new" || route.collection === "drafts" ? "default" : route.collection });
+  return modelsLocation(route.page, modelId, { ...(route.area ? { area: route.area } : {}), ...(["datasets", "graders", "experiments"].includes(route.page) && route.projectId !== undefined ? { projectId: route.projectId } : {}), collection: route.collection === "new" || route.collection === "drafts" ? "default" : route.collection });
 }
 
 export function modelsResourceLocation(route: ModelsRoute, resourceId: string | null, detailTab: string | null = null): ModelsRoute {
