@@ -10,7 +10,7 @@ import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { desktopTasksetRuntimeAdapterId } from "../training/portable-evals-adapter.js";
 import { captureAuthoredModelTasksetPackage } from "../training/model-taskset-package-capture.js";
 import { cacheTasksetPackage, readCachedTasksetPackage } from "../training/taskset-package-files.js";
-import { loadSelectedLocalHarnessRuntime } from "./local-harness-skill-runtime.js";
+import { type SelectedLocalHarnessRuntime, loadSelectedLocalHarnessRuntime } from "./local-harness-skill-runtime.js";
 
 /** Resolve the frozen Taskset revision associated with a released evaluation.
  * Native sources are captured with their exact assets; imported sources are
@@ -25,18 +25,8 @@ export async function loadLocalProfileEvaluationTaskset(input: {
   const expected = input.definition.tasksetRelease;
   const runtime = await loadSelectedLocalHarnessRuntime(input.store, input.harnessRelease);
   if (!runtime) throw new Error("Evaluation Profile Harness release is unavailable.");
-  const packagePath = `evals/tasksets/${expected.contentHash}.json`;
-  const asset = runtime.release.harnessRelease.files.find((file) => file.path === packagePath);
-  if (asset) {
-    if (asset.visibility !== "verifier") throw new Error("Evaluation Taskset package is not verifier-private.");
-    const bytes = await fs.readFile(path.join(runtime.release.bundlePath, "source", ...packagePath.split("/")));
-    if (sha256(bytes) !== asset.contentHash) throw new Error("Released evaluation Taskset package bytes differ from their source receipt.");
-    const packageValue = validateTasksetPackage(JSON.parse(bytes.toString("utf8")));
-    if (packageValue.taskset.id !== expected.id || packageValue.taskset.contentHash !== expected.contentHash) {
-      throw new Error("Released evaluation Taskset package differs from its definition.");
-    }
-    return packageValue;
-  }
+  const released = await loadReleasedProfileEvaluationTaskset({ ...input, runtime });
+  if (released) return released;
   const revisions = await input.store.listTasksetRevisions(input.profileId);
   for (const taskset of revisions) {
     if (expected.id !== taskset.id && expected.id !== `taskset-release-${taskset.id}-r${taskset.revision}`) continue;
@@ -76,4 +66,31 @@ async function loadCandidate(storeDir: string, taskset: Taskset): Promise<Taskse
   });
   await cacheTasksetPackage(storeDir, packageValue);
   return packageValue;
+}
+
+/** A hosted Profile executes only the portable package sealed into its release. */
+export async function loadReleasedProfileEvaluationTaskset(input: {
+  runtime: Pick<SelectedLocalHarnessRuntime, "release">;
+  definition: ProfileEvaluationDefinition;
+  harnessRelease: { id: string; contentHash: string };
+}): Promise<TasksetPackage | null> {
+  const expected = input.definition.tasksetRelease;
+  const runtime = input.runtime;
+  if (runtime.release.harnessRelease.id !== input.harnessRelease.id
+    || runtime.release.harnessRelease.contentHash !== input.harnessRelease.contentHash) {
+    throw new Error("Evaluation Taskset runtime differs from its requested release.");
+  }
+  const packagePath = `evals/tasksets/${expected.contentHash}.json`;
+  const asset = runtime.release.harnessRelease.files.find((file) => file.path === packagePath);
+  if (asset) {
+    if (asset.visibility !== "verifier") throw new Error("Evaluation Taskset package is not verifier-private.");
+    const bytes = await fs.readFile(path.join(runtime.release.bundlePath, "source", ...packagePath.split("/")));
+    if (sha256(bytes) !== asset.contentHash) throw new Error("Released evaluation Taskset package bytes differ from their source receipt.");
+    const packageValue = validateTasksetPackage(JSON.parse(bytes.toString("utf8")));
+    if (packageValue.taskset.id !== expected.id || packageValue.taskset.contentHash !== expected.contentHash) {
+      throw new Error("Released evaluation Taskset package differs from its definition.");
+    }
+    return packageValue;
+  }
+  return null;
 }

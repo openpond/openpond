@@ -11,7 +11,7 @@ import {
 
 import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalProfileEvaluationRun } from "../store/store-evaluation-results.js";
-import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
+import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
 import { createProfileEvaluationCaseService } from "./profile-evaluation-case-service.js";
 import { assertRfqEvaluationPaidDispatchQualified } from "../training/rfq-evaluation-paid-preflight.js";
 
@@ -25,7 +25,8 @@ const RunRequestSchema = z.object({
 }).strict();
 
 export function createProfileEvaluationRunService(input: {
-  store: HarnessStateStore;
+  store: Pick<HarnessStateStore, "getProfileEvaluationRun" | "saveProfileEvaluationGrade" | "saveProfileEvaluationReceipt" | "getProfileEvaluationReceipt" | "getProfileEvaluationGrade" | "saveProfileEvaluationRun">;
+  loadCatalog: ProfileEvaluationCatalogSource;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   executeCase: ReturnType<typeof createProfileEvaluationCaseService>;
 }) {
@@ -37,8 +38,8 @@ export function createProfileEvaluationRunService(input: {
       throw new Error("Evaluation Profile differs from the app-server's authorized selection.");
     }
     assertRfqEvaluationPaidDispatchQualified(selected.ref.profileId);
-    const discovered = await profileEvaluationsForRelease({
-      store: input.store, ref: selected.ref, sourceRevision: selected.sourceRevision,
+    const discovered = await input.loadCatalog({
+      ref: selected.ref, sourceRevision: selected.sourceRevision,
       harnessRelease: parsed.binding.harnessRelease,
     });
     const catalog = {

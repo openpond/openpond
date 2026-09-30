@@ -65,6 +65,15 @@ export class HostedTurnRepository extends HostedTaskInboxStorage implements Turn
     afterSequence?: number | null; names?: readonly RuntimeEvent["name"][]; limit?: number | null;
     excludeReasoningDeltas?: boolean;
   }): Promise<RuntimeEvent[]> { return this.events.persistedRuntimeEventsForSession(id, query); }
+  async runtimeEventsForTurn(id: string, query?: {
+    names?: readonly RuntimeEvent["name"][]; limit?: number | null;
+  }): Promise<RuntimeEvent[]> {
+    const turn = await this.getTurn(id);
+    if (!turn) return [];
+    const events = (await this.events.runtimeEventsForSession(turn.sessionId))
+      .filter(event => event.turnId === id && (!query?.names || query.names.includes(event.name)));
+    return query?.limit == null ? events : events.slice(0, Math.max(0, query.limit));
+  }
   runtimeEventPageRows(input: {
     sessionId: string | null; afterSequence: number; beforeSequence: number | null; limit: number;
   }) { return this.events.runtimeEventPageRows(input); }

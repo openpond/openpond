@@ -987,7 +987,7 @@ describe("local Harness workspace service", () => {
     };
     const profileRef = { source: "local" as const, repositoryId: "profile-repo", profileId: "personal" };
     const prepareRun = createProfileEvaluationRunPreparationService({
-      store,
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
       selectedWorkflows: async () => ({
         profileRef, sourceRevision: "abc123", harnessRelease: discoveredEvaluations.harnessRelease,
         workflows: [{ workflow: JSON.parse(workflowSource).workflows[0], binding }],
@@ -1012,7 +1012,7 @@ describe("local Harness workspace service", () => {
       environment: evaluationEnvironment, verifierSet: evaluationVerifierSet, files: privateFiles,
     });
     await expect(createProfileEvaluationRunPreparationService({
-      store,
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
       selectedWorkflows: async () => ({ profileRef, sourceRevision: "abc123", harnessRelease: discoveredEvaluations.harnessRelease,
         workflows: [{ workflow: JSON.parse(workflowSource).workflows[0], binding }] }),
       loadTasksetPackage: async () => wrongPackage,
@@ -1022,6 +1022,8 @@ describe("local Harness workspace service", () => {
       .rejects.toThrow("differs from its released definition");
     const caseSessions: unknown[] = [];
     const executeCase = createProfileEvaluationCaseService({
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
+    loadTasksetPackage: async () => evaluationPackage,
       store,
       selectedProfile: async () => ({ ref: profileRef, sourceRevision: "abc123" }),
       createSession: async (request) => {
@@ -1044,6 +1046,7 @@ describe("local Harness workspace service", () => {
       modelRef, modelConfigurationHash, taskId: frozenTask.id, seed: "other",
     })).rejects.toThrow("released definition or admitted population");
     const executeRun = createProfileEvaluationRunService({
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
       store, selectedProfile: async () => ({ ref: profileRef, sourceRevision: "abc123" }), executeCase,
     });
     const run = await executeRun({
