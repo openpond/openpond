@@ -1,6 +1,7 @@
 import { contentHash } from "@openpond/harness";
 import { FeedbackKeySchema } from "@openpond/evals/rewards";
 import { ModelTasksetRunRequestSchema } from "./model-taskset-runs-contracts.js";
+import { TasksetRunManifestSchema } from "@openpond/evals/metrics";
 import { z } from "zod";
 import { ExperimentFieldMappingsSchema } from "./experiment-field-mappings.js";
 
@@ -49,6 +50,17 @@ export const ExperimentExecutionContextSchema = z.object({
   graders: z.array(ExperimentGraderPinSchema).min(1).max(100),
 }).strict();
 export type ExperimentExecutionContext = z.infer<typeof ExperimentExecutionContextSchema>;
+
+export const PrepareHarnessExperimentSchema = z.object({
+  operationId: Id, profileRepositoryId: Id, definitionId: Id, modelId: Id,
+  reasoningEffort: z.enum(["off", "low", "medium", "high", "xhigh", "max"]).optional(),
+  maximumCostUsd: z.number().finite().positive().max(10_000),
+}).strict();
+export const PreparedHarnessExperimentSchema = z.object({
+  request: ModelTasksetRunRequestSchema, manifest: TasksetRunManifestSchema,
+  maximumCostUsd: z.number().finite().positive().max(10_000),
+  graders: z.array(ExperimentGraderPinSchema).min(1).max(100),
+}).strict();
 
 export function verifyExperimentDefinition(value: unknown): ExperimentDefinition {
   const parsed = ExperimentDefinitionSchema.parse(value);

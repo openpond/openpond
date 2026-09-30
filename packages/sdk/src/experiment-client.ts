@@ -3,7 +3,8 @@ import { contentHash } from "@openpond/harness";
 import { compareExperiments, verifyExperimentEvidence } from "@openpond/evals/experiments";
 import { ExperimentDefinitionRefSchema, ExperimentListQuerySchema, SaveExperimentSchema, StartExperimentSchema, experimentDefinitionRef,
   verifyExperimentDefinition, type ExperimentDefinitionRef } from "./experiment-contracts.js";
-import { verifyModelTasksetRunDetails } from "./model-taskset-runs-contracts.js";
+import { PrepareHarnessExperimentSchema, PreparedHarnessExperimentSchema } from "./experiment-contracts.js";
+import { verifyHarnessExperimentManifest, verifyModelTasksetRunDetails } from "./model-taskset-runs-contracts.js";
 import { ExperimentScoringRequestSchema, verifyExperimentScoringPass, type ExperimentScoringRequest } from "./experiment-scoring-contracts.js";
 
 const Id = z.string().trim().min(1).max(200);
@@ -19,6 +20,20 @@ export class OpenPondExperimentsClient {
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim())
       throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");
+  }
+  /** Resolves a released target without saving a definition or dispatching it. */
+  async prepareHarness(value: z.input<typeof PrepareHarnessExperimentSchema>, signal?: AbortSignal) {
+    const request = PrepareHarnessExperimentSchema.parse(value);
+    const result = PreparedHarnessExperimentSchema.parse(await this.request("/harness-setup", "POST", request, signal));
+    verifyHarnessExperimentManifest(result.request, result.manifest);
+    const policy = result.request.policy;
+    if (result.request.teamId !== this.options.teamId || result.request.operationId !== request.operationId
+      || policy.kind !== "hosted_harness" || policy.profileRepositoryId !== request.profileRepositoryId
+      || policy.source.definitionId !== request.definitionId || policy.modelId !== request.modelId
+      || policy.reasoningEffort !== request.reasoningEffort || result.maximumCostUsd !== request.maximumCostUsd
+      || result.manifest.limits.maximumSpendUsd !== request.maximumCostUsd)
+      throw new Error("Harness preparation differs from its requested scope or configuration.");
+    return result;
   }
   async save(value: z.input<typeof SaveExperimentSchema>, signal?: AbortSignal) {
     const request = SaveExperimentSchema.parse(value);

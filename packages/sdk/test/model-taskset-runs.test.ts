@@ -153,6 +153,14 @@ it("binds SDK transport and terminal results to the exact scoped evaluation popu
   returned = { definition, run: startedRun };
   const experiments = new OpenPondExperimentsClient({ baseUrl: "https://host.invalid", apiKey: "test", teamId: "team",
     fetch: async () => Response.json(returned) });
+  const preparation = { request: harnessRequest, manifest: { ...harnessManifest, limits: { ...harnessManifest.limits, maximumSpendUsd: 1 } },
+    maximumCostUsd: 1, graders: definition.graders };
+  const { contentHash: _prepareHash, ...prepareContent } = preparation.manifest;
+  returned = { ...preparation, manifest: createTasksetRunManifest(prepareContent) };
+  const preparationRequest = { operationId: "op", profileRepositoryId: "profile-repo", definitionId: "check", modelId: "catalog-model", maximumCostUsd: 1 };
+  expect((await experiments.prepareHarness(preparationRequest)).request.policy.kind).toBe("hosted_harness");
+  await expect(experiments.prepareHarness({ ...preparationRequest, profileRepositoryId: "another-repo" })).rejects.toThrow("requested scope");
+  returned = { definition, run: startedRun };
   expect((await experiments.start({ operationId: "op", definition: reference })).request.population).toEqual(harnessRequest.population);
   const changedDefinitionContent = { ...definitionContent, request: { ...definitionContent.request,
     population: definitionContent.request.population.map(member => ({ ...member, seed: "1" })) } };
