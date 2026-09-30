@@ -30,7 +30,7 @@ export function desktopRouteFromLocation(input: { pathname: string; search?: str
   const route = modelsRouteFromLocation(input);
   if (route) return { kind: "models", route };
   const parts = input.pathname.split("/").filter(Boolean);
-  if (parts[0] === "models") return { kind: "models_unavailable", pathname: input.pathname, search: input.search ?? "" };
+  if (parts[0] === "models" || parts[0] === "console") return { kind: "models_unavailable", pathname: input.pathname, search: input.search ?? "" };
   if (parts[0] === "settings" && parts.length === 2 && settingsSections.has(parts[1] as SettingsSection)) {
     const returnTo = safeModelsReturn(new URLSearchParams(input.search ?? "").get("returnTo"));
     return { kind: "settings", section: parts[1] as SettingsSection, ...(returnTo ? { returnTo } : {}) };
@@ -64,7 +64,7 @@ export function settingsReturnRoute(route: DesktopRoute | null): DesktopRoute {
 }
 
 function safeModelsReturn(value: string | null): string | null {
-  if (!value || value.length > 6_000 || !value.startsWith("/models") || value.startsWith("//")) return null;
+  if (!value || value.length > 6_000 || !["/models", "/console"].some(prefix => value.startsWith(prefix)) || value.startsWith("//")) return null;
   const url = new URL(value, "https://local.openpond.invalid");
   if (url.origin !== "https://local.openpond.invalid" || url.hash) return null;
   const route = modelsRouteFromLocation(url);

@@ -44,6 +44,8 @@ export function createAgentRuntimePorts(deps: {
   loadProfileTrainingSource(): Promise<unknown>;
   prepareProfileEvaluationRun(params: unknown): Promise<unknown>;
   runPreparedProfileEvaluation(params: unknown): Promise<unknown>;
+  executeExperimentCase?(params: unknown): Promise<unknown>;
+  cancelExperimentCase?(params: unknown): Promise<unknown>;
   runProfileEvaluationSuite(params: unknown): Promise<unknown>;
   executeProfileEvaluationCase(params: unknown): Promise<unknown>;
   executeProfileEvaluationRun(params: unknown): Promise<unknown>;
@@ -83,7 +85,9 @@ export function createAgentRuntimePorts(deps: {
     return {
       protocolVersion: AGENT_PROTOCOL_VERSION,
       placement: deps.placement ?? "local",
-      methods: [...AGENT_RPC_METHODS],
+      methods: AGENT_RPC_METHODS.filter(method =>
+        (method !== "experiments/executeCase" || Boolean(deps.executeExperimentCase)) &&
+        (method !== "experiments/cancelCase" || Boolean(deps.cancelExperimentCase))),
       features: {
         streamingEvents: true,
         interruption: true,
@@ -136,6 +140,8 @@ export function createAgentRuntimePorts(deps: {
     loadProfileTrainingSource: deps.loadProfileTrainingSource,
     prepareProfileEvaluationRun: deps.prepareProfileEvaluationRun,
     runPreparedProfileEvaluation: deps.runPreparedProfileEvaluation,
+    executeExperimentCase: deps.executeExperimentCase,
+    cancelExperimentCase: deps.cancelExperimentCase,
     runProfileEvaluationSuite: deps.runProfileEvaluationSuite,
     executeProfileEvaluationCase: deps.executeProfileEvaluationCase,
     executeProfileEvaluationRun: deps.executeProfileEvaluationRun,

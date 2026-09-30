@@ -1,4 +1,8 @@
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
+import { createExperimentCaseService } from "./evaluations/experiment-case-service.js";
+import { createLocalExperimentPolicy } from "./evaluations/local-experiment-policy.js";
+import { createHostExperimentPolicy } from "./evaluations/host-experiment-policy.js";
+import { z } from "zod";
 import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
 import { initializeHome, readPreferences } from "@openpond/persistence";
 import { onStartupFailure, ownHomeRuntime } from "./runtime/home-runtime-owner.js";
@@ -133,6 +137,8 @@ export type AppServerRuntimeCoreStorage = TurnRunnerDependencies["store"] & Pick
   "upsertApproval" | "upsertModelUsageRecord" | "runtimeEventsForTurn" | "listModelUsageRecords">;
 
 export type OpenPondAppServerOptions = {
+  /** Dedicated host-admitted case runtime; credentials/spend remain at its owner. */
+  experimentPolicyClient?: import("@openpond/agent-runtime").AgentHostStorageClient;
   hostStorageClient?: import("@openpond/agent-runtime").AgentHostStorageClient;
   /** Select all mutable runtime domains together after host capability negotiation. */
   runtimeStorage?: {
@@ -591,6 +597,15 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     store, selectedWorkflows: listProfileWorkflows,
     prepareRun: prepareProfileEvaluationRun, executeRun: executeProfileEvaluationRun,
   });
+  const experimentCases=createExperimentCaseService({
+    resolvePolicy:async request=>options.experimentPolicyClient
+      ?createHostExperimentPolicy(options.experimentPolicyClient,request)
+      :createLocalExperimentPolicy({request,stream:streamOpenPondHostedChatTurn}),
+    executeProfile: request => {
+      if (options.experimentPolicyClient) throw new Error("A model-case owner cannot execute a Profile.");
+      return executeProfileEvaluationCase(request);
+    },
+  });
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",
@@ -664,6 +679,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
         return { ...evaluations, runs, comparisons, suiteRuns };
       },
       executeProfileEvaluationCase,
+      executeExperimentCase:experimentCases.execute,
+      cancelExperimentCase:raw=>Promise.resolve(experimentCases.cancel(z.object({id:z.string().min(1)}).strict().parse(raw).id)),
       executeProfileEvaluationRun,
       prepareProfileEvaluationRun,
       runPreparedProfileEvaluation: async (request) => executeProfileEvaluationRun(await prepareProfileEvaluationRun(request, { requireExpectedManifestHash: true })),
@@ -717,6 +734,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     close: async () => {
       if (closing) return;
       closing = true;
+      await experimentCases.close();
       await turnRunner.close();
       await Promise.all([
         turnFollowUpQueue.drain(),

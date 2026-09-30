@@ -24,6 +24,13 @@ export const HostStorageScopeSchema = z.object({
 }).strict();
 
 export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
+  z.object({contractVersion:z.literal(HOST_STORAGE_CONTRACT_VERSION),requestId:id,
+    operation:z.literal("experiment/policy"),params:z.object({
+      caseId:id,admissionHash:z.string().regex(/^[a-f0-9]{64}$/),ordinal:z.number().int().nonnegative(),
+      messages:z.array(z.record(z.string(),z.unknown())).max(2_000),
+      tools:z.array(z.record(z.string(),z.unknown())).max(200),
+    }).strict(),
+  }).strict(),
   z.object({ contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id,
     operation: z.literal("sandbox/request"), params: HostedSandboxRequestParamsSchema }).strict(),
   z.object({ contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id,
@@ -340,7 +347,7 @@ export const HostStorageCapabilitySchema = z.object({
   operations: z.array(z.enum(["sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write", "harness/state/read", "profile-evaluations/execute", "harness/review/execute", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(48),
   allowedTools: z.array(id).max(128),
   maxPageSize: pageSize,
-  maxRequestBytes: z.number().int().min(1).max(1_000_000),
+  maxRequestBytes: z.number().int().min(1).max(8_388_608),
   maxInFlight: z.number().int().min(1).max(64),
 }).strict();
 

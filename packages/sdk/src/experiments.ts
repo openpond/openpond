@@ -6,3 +6,4 @@ export * from "./experiment-grading-contracts.js";
 export * from "./harness-experiment-policy.js";
 
 export * from "./experiment-inspection.js";
+export * from "./experiment-history.js";

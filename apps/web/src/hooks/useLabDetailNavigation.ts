@@ -36,7 +36,7 @@ export function buildLabDetailBreadcrumbs(
   if (!detailLocation) return [{ label: "Models" }];
   return [
     {
-      label: "Models",
+      label: detailLocation.rootLabel ?? "Models",
       onSelect: () => requestClose(null),
     },
     {

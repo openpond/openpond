@@ -26,7 +26,6 @@ import {
   oldestRuntimeEventSequence,
 } from "../lib/runtime-event-lists";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
-import { openHostedConsole } from "../lib/console-navigation";
 import { runtimeEventsForSession } from "../lib/runtime-indexes";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
@@ -70,7 +69,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [ponderMode, setPonderMode] = useState<"clean" | "activity" | null>(null);
   const ponderModeRestored = useRef(new Set<string>());
   const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
+  const [evaluationSidebar, setEvaluationSidebar] = useState<import("../components/labs/workspace/WorkspacePanel").EvaluationSidebarControl | null>(null);
   const desktopRoute = useDesktopRoute();
+  const hostedEvaluationRoute = desktopRoute?.kind === "models" && ["datasets", "graders", "experiments"].includes(desktopRoute.route.page);
   const {
     composerDraftStore,
     appDispatch,
@@ -743,7 +744,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setRightPanelMode,
     sidebarFileOpenRequest,
   ]);
-  const productArea = productAreaForAppView(view, activeExperience);
+  const productArea = desktopRoute?.kind === "models" && desktopRoute.route.area === "console" ? "console" : productAreaForAppView(view, activeExperience);
   useEffect(() => {
     if (!desktopRoute) return;
     if (desktopRoute.kind === "models" || desktopRoute.kind === "models_unavailable") {
@@ -783,16 +784,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   ]);
   const changeProductArea = useCallback(
     (nextProductArea: ProductArea) => {
-      if (nextProductArea === "console") {
-        void openHostedConsole(account?.baseUrl ?? account?.activeProfile?.baseUrl);
-        return;
-      }
       setSectionMenuOpen(null);
       setSelectedAppId(null);
       setSelectedProjectId(null);
       setSelectedSessionId(null);
-      if (nextProductArea === "models") {
-        navigateModelsRoute(modelsLocation());
+      if (nextProductArea === "models" || nextProductArea === "console") {
+        navigateModelsRoute(nextProductArea === "console" ? modelsLocation("datasets", null, { area: "console" }) : modelsLocation());
         setView("labs");
         return;
       }
@@ -802,8 +799,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       changeNewExperience(readLastChatTaskModeFromBrowser());
     },
     [
-      account?.baseUrl,
-      account?.activeProfile?.baseUrl,
       changeNewExperience,
       navigateDesktopRoute,
       setSectionMenuOpen,
@@ -1136,10 +1131,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           diffPanelOpen,
           terminalOpen,
           rightSidebarAvailable: rightSidebarAvailableForView,
-          rightSidebarOpen: view === "scheduled" ? scheduledDetailOpen : diffPanelOpen,
+          rightSidebarOpen: view === "labs" && hostedEvaluationRoute ? evaluationSidebar?.open ?? false : view === "scheduled" ? scheduledDetailOpen : diffPanelOpen,
           onToggleDiffPanel: toggleRightSidebar,
           onToggleRightSidebar:
-            view === "scheduled"
+            view === "labs" && hostedEvaluationRoute ? evaluationSidebar?.toggle : view === "scheduled"
               ? () => setScheduledDetailOpen((open) => !open)
               : view === "team" && Boolean(teamAiThreadId)
               ? toggleTeamAiSidebar
@@ -1365,6 +1360,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             if (session) openRightChatPanel(session, { preserveView: true });
           },
           onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
+          evaluationSidebarActive: view === "labs" && hostedEvaluationRoute,
+          onEvaluationSidebarControl: setEvaluationSidebar,
           scheduledDetailOpen,
           onScheduledDetailOpenChange: setScheduledDetailOpen,
           onTerminalTabsChange: setTerminalTabs,

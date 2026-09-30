@@ -9,6 +9,7 @@ export type LabDetailKind =
   | "comparison";
 
 export type LabDetailLocation = {
+  rootLabel?: "Models" | "Console";
   kind: LabDetailKind;
   kindLabel: string;
   kindOnSelect?: () => void;

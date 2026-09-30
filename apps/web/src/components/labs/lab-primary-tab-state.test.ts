@@ -20,6 +20,9 @@ describe("Models page, scope and resource route boundary", () => {
     for (const page of ["datasets", "graders", "experiments"] as const) {
       const scoped = modelsLocation(page, "model A", { projectId: "project A", resourceId: "resource A" });
       expect(scoped.modelId).toBeNull();
+      const consoleRoute = { ...scoped, area: "console" as const };
+      expect(modelsPath(consoleRoute)).toMatch(/^\/console\//);
+      expect(desktopRouteFromLocation(new URL(modelsPath(consoleRoute), "https://local.invalid"))).toEqual({ kind: "models", route: consoleRoute });
       expect(modelsRouteFromLocation(new URL(modelsPath(scoped), "https://local.invalid"))).toEqual(scoped);
       expect(changeModelsScope(scoped, "model B")).toEqual(modelsLocation(page, null, { projectId: "project A" }));
       expect(modelsRouteFromLocation({ pathname: `/models/model-a/${page}` })).toBeNull();
@@ -38,6 +41,15 @@ describe("Models page, scope and resource route boundary", () => {
 
   // Regression: ambiguous execution IDs and retired paths silently selected the wrong resource or project.
   it("preserves typed resource identities and reserves creation and series routes", () => {
+    const history = modelsLocation("experiments", null, { area: "console", collection: "history", projectId: "project A", after: "run-cursor" });
+    expect(modelsRouteFromLocation(new URL(modelsPath(history), "https://local.invalid"))).toEqual(history);
+    expect(modelsRouteFromLocation({ pathname: "/console/experiments/history/extra" })).toBeNull();
+    // An imported release keeps its ordinary Dataset ID while selecting the
+    // immutable reader; the marker must not spill into other resource routes.
+    const releasedDataset = modelsLocation("datasets", null, { area: "console", resourceId: "hosted-dataset/A", datasetKind: "release", detailTab: "tasks" });
+    expect(modelsRouteFromLocation(new URL(modelsPath(releasedDataset), "https://local.invalid"))).toEqual(releasedDataset);
+    expect(modelsRouteFromLocation({ pathname: "/console/graders/g", search: "?dataset=release" })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/console/datasets", search: "?dataset=release" })).toBeNull();
     for (const ref of ["model-run:same", "job:same", "reward-run:same"]) {
       const route = modelsLocation("runs", null, { resourceId: ref, detailTab: "metrics" });
       expect(modelsRouteFromLocation(new URL(modelsPath(route), "https://local.invalid"))).toEqual(route);
@@ -58,6 +70,8 @@ describe("Models page, scope and resource route boundary", () => {
 describe("Settings and other Desktop destinations", () => {
   // Regression: configuring a provider discarded the originating run draft and returned to new chat.
   it("carries a bounded canonical Models return location without allowing external redirects", () => {
+    const consoleReturn = modelsPath(modelsLocation("experiments", null, { area: "console", projectId: "project A", resourceId: "exp A" }));
+    expect(settingsReturnRoute({ kind: "settings", section: "providers", returnTo: consoleReturn })).toEqual({ kind: "models", route: modelsLocation("experiments", null, { area: "console", projectId: "project A", resourceId: "exp A" }) });
     const origin = modelsLocation("tasksets", "model-a", { collection: "drafts", resourceId: "draft-a" });
     const settings = { kind: "settings" as const, section: "providers" as const, returnTo: modelsPath(origin) };
     const location = new URL(desktopPath(settings), "https://local.invalid");
