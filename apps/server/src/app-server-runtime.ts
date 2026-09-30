@@ -47,7 +47,7 @@ import { createProfileEvaluationRunService } from "./harness/profile-evaluation-
 import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
 import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
 import { buildProfileEvaluationReport } from "./harness/profile-evaluation-report-service.js";
-import { inspectProfileEvaluationRun } from "./harness/profile-evaluation-run-inspection.js";
+import { inspectProfileEvaluationRun, ProfileEvaluationInspectionRequestSchema } from "./harness/profile-evaluation-run-inspection.js";
 import { createProfileEvaluationRunPreparationService } from "./harness/profile-evaluation-run-preparation.js";
 import { loadLocalProfileEvaluationTaskset } from "./harness/local-profile-evaluation-taskset.js";
 import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
@@ -624,13 +624,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       },
       listProfileEvaluations: async (params?: unknown) => {
         if (params && typeof params === "object" && !Array.isArray(params) && "runId" in params) {
-          const runId = (params as { runId?: unknown }).runId;
-          if (typeof runId !== "string" || !runId.trim() || runId.length > 240 || Object.keys(params).length !== 1) {
-            throw new Error("Invalid Profile evaluation run request.");
-          }
+          const inspection = ProfileEvaluationInspectionRequestSchema.parse(params);
           const selected = await selectedEvaluationProfile();
           if (!selected) throw new Error("Select a Profile before inspecting an evaluation run.");
-          return inspectProfileEvaluationRun({ store, profileRef: selected.ref, runId });
+          return inspectProfileEvaluationRun({ store, profileRef: selected.ref, ...inspection });
         }
         if (options.profileSource && explicitProfileRelease) {
           const evaluations = await profileEvaluationsForRelease({
