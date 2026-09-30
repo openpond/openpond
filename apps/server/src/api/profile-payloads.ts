@@ -121,7 +121,7 @@ export function createProfilePayloads(deps: {
   }
 
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
-    store: deps.store,
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: deps.store }),
     selectedWorkflows: profileWorkflowsPayload,
     loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({
       store: deps.store, storeDir: deps.storeDir, definition, profileId, harnessRelease,

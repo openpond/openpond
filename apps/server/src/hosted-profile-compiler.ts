@@ -64,3 +64,11 @@ export async function runHostedProfileCompilerCli(args: string[]): Promise<void>
   const result = await compileHostedProfileRelease(input);
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
+
+export async function runHostedProfileEvaluationCli(args: string[]): Promise<void> {
+  await (await import("./hosted-profile-evaluation-preparation.js")).runHostedProfileEvaluationCli(args);
+}
+
+export async function runHostedProfileInspectionCli(args: string[]): Promise<void> {
+  await (await import("./hosted-profile-evaluation-inspection.js")).runHostedProfileInspectionCli(args);
+}

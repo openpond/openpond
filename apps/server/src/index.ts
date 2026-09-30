@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
+import { loadLocalProfileEvaluationTaskset } from "./harness/local-profile-evaluation-taskset.js";
 import { createConfigurationPayloads } from "./api/configuration-payloads.js";
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
 import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
@@ -1590,16 +1592,20 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
   };
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
+    loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({ store: store, storeDir: storeDir, definition, profileId, harnessRelease }),
     store, storeDir, selectedProfile: selectedEvaluationProfile,
     createSession: createSessionWithAutoTitle, sendTurn,
     interruptSessionTurn: turnRunner.interruptSessionTurn,
   });
   const executeProfileEvaluationRun = createProfileEvaluationRunService({
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
     store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
   });
   const profileEvaluationRunPayload = async (request: unknown) =>
     executeProfileEvaluationRun(await prepareProfileEvaluationRun(request, { requireExpectedManifestHash: true }));
   const profileEvaluationRunSuitePayload = createProfileEvaluationSuiteService({
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
     store,
     selectedWorkflows: profileWorkflowsPayload,
     prepareRun: prepareProfileEvaluationRun,

@@ -130,7 +130,7 @@ const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
 export type AppServerRuntimeCoreStorage = TurnRunnerDependencies["store"] & Pick<SqliteStore,
   "sessionCount" | "insertSessionAtFront" | "getSession" | "updateSession" |
   "appendRuntimeEvent" | "runtimeEventPageRows" | "turnsForSession" |
-  "upsertApproval" | "upsertModelUsageRecord">;
+  "upsertApproval" | "upsertModelUsageRecord" | "runtimeEventsForTurn" | "listModelUsageRecords">;
 
 export type OpenPondAppServerOptions = {
   hostStorageClient?: import("@openpond/agent-runtime").AgentHostStorageClient;
@@ -546,6 +546,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       ? { ref: library.lastUsed, sourceRevision: profile.git.head } : null;
   };
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
+    loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({ store: store, storeDir: storeDir, definition, profileId, harnessRelease }),
     store,
     storeDir,
     selectedProfile: selectedEvaluationProfile,
@@ -567,7 +569,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     return ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
   };
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
-    store,
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
     selectedWorkflows: listProfileWorkflows,
     loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({
       store, storeDir, definition, profileId, harnessRelease,
@@ -581,9 +583,11 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     placement: "remote",
   });
   const executeProfileEvaluationRun = createProfileEvaluationRunService({
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
     store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
   });
   const executeProfileEvaluationSuite = createProfileEvaluationSuiteService({
+    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
     store, selectedWorkflows: listProfileWorkflows,
     prepareRun: prepareProfileEvaluationRun, executeRun: executeProfileEvaluationRun,
   });

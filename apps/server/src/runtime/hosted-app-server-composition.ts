@@ -1,3 +1,4 @@
+import { createHostedProfileEvaluationRuntime } from "./hosted-profile-evaluation-runtime.js";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -204,13 +205,17 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
     }
     return turnRunner.sendTurn(sessionId, payload);
   };
+  const evaluations = storage.admittedProfileRelease?.hostExecution ? createHostedProfileEvaluationRuntime({
+    client, core, release: storage.admittedProfileRelease, storeDir,
+    createSession, sendTurn, interruptSessionTurn: turnRunner.interruptSessionTurn,
+  }) : null;
   let closing = false;
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       bindHome: false,
       placement: "hosted_work", connectedAppProviders: [],
       featureOverrides: {
-        profileWorkflows: Boolean(storage.admittedProfileRelease), profileEvaluations: false,
+        profileWorkflows: Boolean(storage.admittedProfileRelease), profileEvaluations: Boolean(evaluations),
         harnessProposalReview: false,
         harnessEvaluationReview: false, harnessEvaluationReviewAcceptance: false,
         harnessEvaluationTasksetMaterialization: false, harnessEvaluationBaseline: false,
@@ -236,11 +241,11 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
       },
       listProfileWorkflows: storage.admittedProfileRelease
         ? () => listHostedProfileWorkflows(client, storage.admittedProfileRelease!) : unavailable,
-      listProfileEvaluations: unavailable,
-      loadProfileTrainingSource: unavailable, prepareProfileEvaluationRun: unavailable,
-      runPreparedProfileEvaluation: unavailable, runProfileEvaluationSuite: unavailable,
-      executeProfileEvaluationCase: unavailable, executeProfileEvaluationRun: unavailable,
-      compareProfileEvaluationRuns: unavailable, buildProfileEvaluationReport: unavailable,
+      listProfileEvaluations: evaluations?.listProfileEvaluations ?? unavailable,
+      loadProfileTrainingSource: unavailable, prepareProfileEvaluationRun: evaluations?.prepareProfileEvaluationRun ?? unavailable,
+      runPreparedProfileEvaluation: evaluations?.runPreparedProfileEvaluation ?? unavailable, runProfileEvaluationSuite: evaluations?.runProfileEvaluationSuite ?? unavailable,
+      executeProfileEvaluationCase: evaluations?.executeProfileEvaluationCase ?? unavailable, executeProfileEvaluationRun: evaluations?.executeProfileEvaluationRun ?? unavailable,
+      compareProfileEvaluationRuns: evaluations?.compareProfileEvaluationRuns ?? unavailable, buildProfileEvaluationReport: evaluations?.buildProfileEvaluationReport ?? unavailable,
       inspectHarness: async () => {
         const runtime = await loadHostedHarnessRuntime(client);
         if (!runtime) return null;

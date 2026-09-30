@@ -51,6 +51,16 @@ export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void
 }
 
 async function runEmbeddedCompanion(argv: string[]): Promise<boolean> {
+  if (argv[0] === "__inspect-hosted-profile-evaluation") {
+    await (await import("@openpond/local-server/hosted-profile-compiler"))
+      .runHostedProfileInspectionCli(argv.slice(1));
+    return true;
+  }
+  if (argv[0] === "__prepare-hosted-profile-evaluation") {
+    await (await import("@openpond/local-server/hosted-profile-compiler"))
+      .runHostedProfileEvaluationCli(argv.slice(1));
+    return true;
+  }
   if (argv[0] === "__compile-hosted-profile") {
     await (await import("@openpond/local-server/hosted-profile-compiler"))
       .runHostedProfileCompilerCli(argv.slice(1));

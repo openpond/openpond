@@ -13,7 +13,7 @@ const ComparisonRequestSchema = z.object({
 /** Retain a comparison over already graded runs in one authorized Profile.
  * Evals verifies compatible populations and explicit source/model axes. */
 export function createProfileEvaluationComparisonService(input: {
-  store: HarnessStateStore;
+  store: Pick<HarnessStateStore, "getProfileEvaluationRun" | "getProfileEvaluationComparison" | "saveProfileEvaluationComparison">;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
 }) {
   return async (request: unknown) => {

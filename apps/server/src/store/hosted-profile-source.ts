@@ -11,6 +11,7 @@ import { loadHostedHarnessRuntime } from "./hosted-harness-runtime.js";
 export const AdmittedHostedProfileReleaseSchema = z.object({
   profileId: z.string().min(1), sourceRevision: z.string().min(1), repositoryId: z.string().min(1),
   harnessRelease: z.object({ id: z.string().min(1), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+  hostExecution: z.object({ conversationId: z.string().min(1), turnId: z.string().min(1) }).strict().optional(),
   workspaceId: z.string().min(1), assetsPath: z.string().min(1).refine(path.isAbsolute),
 }).strict();
 export type AdmittedHostedProfileRelease = z.infer<typeof AdmittedHostedProfileReleaseSchema>;
