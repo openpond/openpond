@@ -8,7 +8,7 @@ export const CatalogMetadata = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().min(1).max(5_000),
   license: z.string().trim().min(1).max(500),
-  sourceUrl: z.string().url().max(2000).refine(value => ["https:", "http:"].includes(new URL(value).protocol), "Use an HTTP or HTTPS source URL.").nullable(),
+  sourceUrl: z.string().url().max(2000).refine(value => /^https?:\/\//i.test(value), "Use an HTTP or HTTPS source URL.").nullable(),
   attribution: z.string().max(5000),
   category: z.string().trim().min(1).max(100),
 }).strict();
