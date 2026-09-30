@@ -109,6 +109,10 @@ describe("portable experiment evidence", () => {
     expect(comparison.metrics[0]!.delta).toBeCloseTo(0.2);
     expect(compareExperiments(baseline, revise("failed")).cases[0]!.feedback[0]).toMatchObject({ eligible: false, reason: "case_not_completed", delta: null });
     expect(compareExperiments(baseline, fixture("model-c", hash("d"))).metrics[0]).toMatchObject({ eligibleCount: 0, excludedCount: 1, delta: null });
+    const { contentHash: _manifestHash, ...manifestContent } = candidate.manifest;
+    const mappedManifest = createExperimentManifest({ ...manifestContent, evaluators: candidate.manifest.evaluators.map(value => ({ ...value, configurationHash: hash("e") })) });
+    const mapped = { manifest: mappedManifest, result: createExperimentResult({ ...candidateContent, manifest: { id: mappedManifest.id, contentHash: mappedManifest.contentHash } }, mappedManifest) };
+    expect(compareExperiments(baseline, mapped).reasons).toContain("different_evaluators");
   });
 
   it("round-trips imported grader versions and unknown ceilings with bound execution lineage", () => {

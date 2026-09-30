@@ -31,6 +31,8 @@ export const ExperimentEvaluatorSchema = z.object({
   // has its exact version string and implementation hash. Neither is invented.
   release: ImmutableReleaseRefSchema.extend({ revision: z.union([z.number().int().positive(), z.string().trim().min(1).max(200)]) }).strict(),
   feedbackKey: FeedbackKeySchema,
+  /** Binds field mappings and admitted scorer settings without changing the Reward's release hash. */
+  configurationHash: ReleaseHashSchema.optional(),
   output: z.enum(["boolean", "score", "category"]),
   /** Category labels are meaningful only for category output. */
   categories: z.array(z.string().trim().min(1).max(120)).max(50),
