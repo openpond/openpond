@@ -26,7 +26,7 @@ const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "human", label: "Human review rubric" },
 ];
 
-export function RewardEditor(props: { closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
+export function RewardEditor(props: { allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
   const implementation = props.reward?.implementation;
   const assetId = implementation && "verifierRef" in implementation ? implementation.verifierRef.id
     : implementation && "rubricRef" in implementation ? implementation.rubricRef.id
@@ -37,7 +37,8 @@ export function RewardEditor(props: { closeRef?: Ref<DraftEditorHandle>; fromLab
   return <RewardEditorForm {...props} sourceAsset={asset.resource} fixtureAsset={fixtures.resource} />;
 }
 
-function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose, closeRef }: {
+function RewardEditorForm({ allowedKinds, client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose, closeRef }: {
+  allowedKinds?: readonly Kind[];
   closeRef?: Ref<DraftEditorHandle>;
   fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback };
   authoringDraft?: AuthoringDraftFor<"reward">;
@@ -127,7 +128,7 @@ function RewardEditorForm({ client, reward, sourceAsset, fixtureAsset, authoring
     {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
     <label>Description (optional)<textarea maxLength={10_000} value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>
-    <label>Reward type<select value={draft.kind} onChange={(event) => patch({ kind: event.target.value as Kind })}>{KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></label>
+    <label>Reward type<select value={draft.kind} onChange={(event) => patch({ kind: event.target.value as Kind })}>{KINDS.filter(kind => !allowedKinds || allowedKinds.includes(kind.value) || kind.value === draft.kind).map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></label>
     {draft.kind === "custom_verifier" ? <>
       <LearningJsonField label="JavaScript source" value={draft.code} onChange={(code) => patch({ code })} hint="Export a function returning score (0–1), passed, and feedback. It receives input, output, expectedOutput and evaluatorContext. Files, network and imports are unavailable." />
       <label>Function export<input value={draft.exportName} onChange={(event) => patch({ exportName: event.target.value })} /></label>

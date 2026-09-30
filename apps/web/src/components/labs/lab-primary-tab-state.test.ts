@@ -11,10 +11,19 @@ describe("Models page, scope and resource route boundary", () => {
       const original = modelsLocation(page, "model A");
       const url = new URL(modelsPath(original), "https://local.invalid");
       expect(url.searchParams.has("model")).toBe(false);
-      if (page !== "get-started") expect(url.pathname).toContain("/models/model%20A");
+      if (["datasets", "graders", "experiments"].includes(page)) expect(url.pathname).toBe(`/models/${page}`);
+      else if (page !== "get-started") expect(url.pathname).toContain("/models/model%20A");
       expect(modelsRouteFromLocation(url)).toEqual(original);
       expect(changeModelsScope(original, "model B")).toEqual(modelsLocation(page, "model B"));
       expect(changeModelsScope(original, null)).toEqual(modelsLocation(page));
+    }
+    for (const page of ["datasets", "graders", "experiments"] as const) {
+      const scoped = modelsLocation(page, "model A", { projectId: "project A", resourceId: "resource A" });
+      expect(scoped.modelId).toBeNull();
+      expect(modelsRouteFromLocation(new URL(modelsPath(scoped), "https://local.invalid"))).toEqual(scoped);
+      expect(changeModelsScope(scoped, "model B")).toEqual(modelsLocation(page, null, { projectId: "project A" }));
+      expect(modelsRouteFromLocation({ pathname: `/models/model-a/${page}` })).toBeNull();
+      expect(modelsRouteFromLocation({ pathname: `/models/${page}`, search: "?model=model-a" })).toBeNull();
     }
     const review = modelsLocation("evaluations", "model A", { collection: "review", sourceId: "source/A", resourceId: "evidence-a", after: "cursor-1" });
     expect(modelsRouteFromLocation(new URL(modelsPath(review), "https://local.invalid"))).toEqual(review);

@@ -18,6 +18,7 @@ export class OpenPondTrainingProjectClient {
     const request = TrainingProjectWriteSchema.parse(input);
     const result = this.readback(await this.request(`/${encodeURIComponent(request.id)}`, "PUT", request, signal), request.id);
     if (result.revision !== request.expectedRevision + 1 || contentHash(result.content) !== contentHash(request.content)) throw new Error("Project write revision mismatch.");
+    if (request.ownerScope && result.ownerScope !== request.ownerScope) throw new Error("Project owner scope mismatch.");
     return result;
   }
   async archive(id: string, input: { operationId: string; expectedRevision: number; archived: boolean }, signal?: AbortSignal) {

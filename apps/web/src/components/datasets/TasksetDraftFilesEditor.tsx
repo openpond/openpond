@@ -1,14 +1,14 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import type { TasksetDraft } from "@openpond/contracts";
 import type { TasksetDraftFile, TasksetDraftFileInfo } from "openpond-sdk/model-taskset-authoring";
-import type { useTraining } from "../../hooks/useTraining";
+import type { TasksetDraftAuthoringClient } from "./taskset-draft-authoring-client";
 import { AppDialog } from "../dialogs/AppDialog";
 import { useDraftNavigation } from "../labs/useDraftNavigation";
 
 const CodeEditor = lazy(() => import("../workspace-diff/WorkspaceMonacoEditor"));
 
 export function TasksetDraftFilesEditor({ draft, initialFiles, training, onSaved, onClose }: {
-  draft: TasksetDraft; initialFiles: TasksetDraftFileInfo[]; training: ReturnType<typeof useTraining>;
+  draft: TasksetDraft; initialFiles: TasksetDraftFileInfo[]; training: TasksetDraftAuthoringClient;
   onSaved: (draft: TasksetDraft, notice?: string) => void; onClose: () => void;
 }) {
   const [files, setFiles] = useState(initialFiles);

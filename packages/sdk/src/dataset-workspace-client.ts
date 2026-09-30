@@ -1,4 +1,4 @@
-import { DatasetWorkspaceListSchema, DatasetWorkspacePublishSchema, DatasetWorkspaceReceiptSchema, DatasetWorkspaceValidationSchema, DatasetWorkspaceWriteSchema } from "./dataset-workspace-contracts.js";
+import { DatasetWorkspaceBeginVersionSchema, DatasetWorkspaceVersionsSchema, DatasetWorkspaceListSchema, DatasetWorkspacePublishSchema, DatasetWorkspaceReceiptSchema, DatasetWorkspaceValidationSchema, DatasetWorkspaceWriteSchema } from "./dataset-workspace-contracts.js";
 import { validateTasksetDraftWorkspace } from "./taskset-draft-workspace.js";
 import type { z } from "zod";
 
@@ -17,12 +17,30 @@ export class OpenPondDatasetWorkspaceClient {
     return result;
   }
   async get(id: string, signal?: AbortSignal) { return this.readback(await this.request(`/${encodeURIComponent(id)}`, "GET", undefined, signal), id); }
+  async beginVersion(id: string, input: z.input<typeof DatasetWorkspaceBeginVersionSchema>, signal?: AbortSignal) {
+    const request = DatasetWorkspaceBeginVersionSchema.parse(input);
+    const result = this.readback(await this.request(`/${encodeURIComponent(id)}/begin-version`, "POST", request, signal), id);
+    if (result.revision !== request.expectedRevision + 1 || result.workspace.draft.status !== "draft" || !result.publication || !result.workspace.draft.publishedTasksetRef) throw new Error("Editable version receipt mismatch.");
+    return result;
+  }
+  async versions(id: string, options: { beforeRevision?: number; signal?: AbortSignal } = {}) {
+    const query = new URLSearchParams(options.beforeRevision === undefined ? {} : { beforeRevision: String(options.beforeRevision) });
+    const result = DatasetWorkspaceVersionsSchema.parse(await this.request(`/${encodeURIComponent(id)}/versions?${query}`, "GET", undefined, options.signal));
+    if (result.teamId !== this.options.teamId || result.datasetId !== id || result.items.some((item, index) => (index > 0 && item.workspaceRevision >= result.items[index - 1]!.workspaceRevision) || (options.beforeRevision !== undefined && item.workspaceRevision >= options.beforeRevision))) throw new Error("Dataset version history scope/order mismatch.");
+    return result;
+  }
+  async version(id: string, workspaceRevision: number, signal?: AbortSignal) {
+    const result = this.readback(await this.request(`/${encodeURIComponent(id)}/versions/${workspaceRevision}`, "GET", undefined, signal), id);
+    if (result.revision !== workspaceRevision || result.workspace.draft.status !== "published") throw new Error("Dataset immutable version mismatch.");
+    return result;
+  }
   async save(input: z.input<typeof DatasetWorkspaceWriteSchema>, signal?: AbortSignal) {
     const request = DatasetWorkspaceWriteSchema.parse(input);
     const workspace = validateTasksetDraftWorkspace(request.workspace);
     if (workspace.draft.profileId !== this.options.teamId || workspace.draft.revision !== request.expectedRevision + 1) throw new Error("Dataset write scope or revision mismatch.");
     const result = this.readback(await this.request(`/${encodeURIComponent(workspace.draft.id)}`, "PUT", request, signal), workspace.draft.id);
     if (request.originProjectId && result.originProjectId !== request.originProjectId) throw new Error("Dataset origin Project mismatch.");
+    if (request.ownerScope && result.ownerScope !== request.ownerScope) throw new Error("Dataset owner scope mismatch.");
     if (result.workspace.contentHash !== workspace.contentHash) throw new Error("Dataset write receipt differs from the saved bytes.");
     return result;
   }

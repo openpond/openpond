@@ -98,7 +98,7 @@ export function SidebarNavigation({
   }
 
   async function selectModelsPage(page: ModelsPage) {
-    if (!await navigateModelsRoute(modelsLocation(page, selectedModelProjectId))) return;
+    if (!await navigateModelsRoute(modelsLocation(page, ["datasets", "graders", "experiments"].includes(page) ? null : selectedModelProjectId, { projectId: modelsRoute?.projectId ?? null }))) return;
     clearWorkspaceSelection();
     setView("labs");
   }
@@ -123,7 +123,7 @@ export function SidebarNavigation({
     <nav className="sidebar-nav" aria-label="Primary">
       {productArea === "models" ? (
         <>
-          <div className="sidebar-model-project-picker">
+          {!["datasets", "graders", "experiments"].includes(activePage) ? <div className="sidebar-model-project-picker">
             <span className="sidebar-nav-group-label">Model</span>
             <DropdownSelect
               label="Model"
@@ -138,9 +138,9 @@ export function SidebarNavigation({
               ]}
               onChange={(id) => void selectModelProject(id)}
             />
-          </div>
+          </div> : null}
           {MODELS_PAGES.filter(page => page !== "tasksets" && page !== "evaluations").map((page) => {
-            const Icon = { "get-started": Boxes, models: Activity, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
+            const Icon = { "get-started": Boxes, models: Activity, datasets: Boxes, graders: Shield, experiments: CheckCircle2, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
             return (
               <button
                 className={`nav-command ${view === "labs" && (activePage === page || (page === "runs" && activePage === "evaluations")) ? "active" : ""}`}
