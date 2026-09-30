@@ -162,3 +162,23 @@ Node subprocess for hosts without Node worker APIs. It strips authored TypeScrip
 inside its deadline, evaluates the verified source in the same deterministic
 isolate, and exits before success, failure or cancellation settles. Importing
 the metrics entrypoint does not require Node's type-stripping API on the host.
+
+## Portable Experiment comparison
+
+`verifyExperimentEvidence` verifies the manifest hash, result hash, complete
+case population and exact evaluator bindings. Historical runs without a whole
+execution ceiling report `maximumCostUsd: null`. Dataset-authored graders retain
+their actual version string and implementation hash; reusable Rewards retain
+their numeric release revision. Authored fixture checks use a fixture target.
+
+Hosts can pin package, runtime and metric-policy hashes in `execution`. Shared
+comparison requires equal dataset version, population, evaluators and execution
+contract. Harness comparison also requires the same component, evaluation
+definition and environment; candidate source/Harness revisions can differ.
+
+`compareExperiments` aligns cases and reports per-feedback eligibility, exclusion
+reasons and paired means/deltas. Only matching completed cases with scored
+numeric or Boolean feedback contribute. Failed, cancelled, absent or ungraded
+cases never become zero-valued measurements. Categorical feedback remains
+inspectable without a numeric delta. This operation reads retained evidence and
+has no execution, grading or billing authority.
