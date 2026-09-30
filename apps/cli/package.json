@@ -80,6 +80,7 @@
     "@openpond/local-server": "workspace:*",
     "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*",
+    "@openpond/taskset-sdk": "workspace:*",
     "@openpond/terminal": "workspace:*",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "24.13.3",
@@ -91,6 +92,7 @@
     "@openpond/contracts",
     "@openpond/local-server",
     "@openpond/runtime",
+    "@openpond/taskset-sdk",
     "openpond-sdk",
     "@openpond/terminal",
     "@openpond/persistence"

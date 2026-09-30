@@ -1,5 +1,6 @@
 export * from "./canonical-json.js";
 export * from "./drafts.js";
+export * from "./capture-workspace.js";
 export { learningVerifierModule, projectLearningBatchGraders } from "./learning-graders.js";
 export * from "./learning-batch.js";
 export * from "./graders.js";

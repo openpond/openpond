@@ -82,21 +82,27 @@ export async function hashTasksetDraftPackage(directory: string): Promise<string
   return hash.digest("hex");
 }
 
-export async function readTasksetDraftPackage(source: string): Promise<TasksetDraft> {
+export async function readTasksetDraftPackage(source: string, capturedFiles?: ReadonlyMap<string, Uint8Array>): Promise<TasksetDraft> {
   const manifestPath = path.basename(source) === "taskset.json"
     ? source
     : path.join(source, "taskset.json");
   const directory = path.dirname(manifestPath);
-  const parsed: unknown = JSON.parse(await readFile(manifestPath, "utf8"));
+  const read = async (file: string) => {
+    if (!capturedFiles) return readFile(file, "utf8");
+    const bytes = capturedFiles.get(path.relative(directory, file).replaceAll(path.sep, "/"));
+    if (!bytes) throw Object.assign(new Error("Authored file is absent."), { code: "ENOENT" });
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  };
+  const parsed: unknown = JSON.parse(await read(manifestPath));
   const draft = TasksetDraftSchema.safeParse(parsed);
   if (draft.success) {
     const [tasks, graders, fixtures, metrics, environment, review] = await Promise.all([
-      readOptionalJsonLines(path.join(directory, "tasks", "tasks.jsonl")),
-      readOptionalJson(path.join(directory, "graders", "graders.json")),
-      readOptionalJson(path.join(directory, "fixtures", "grader-fixtures.json")),
-      readOptionalJson(path.join(directory, "metrics", "policy.json")),
-      readOptionalJson(path.join(directory, "environment", "contract.json")),
-      readOptionalJson(path.join(directory, "comparisons", "policy.json")),
+      readOptionalJsonLines(path.join(directory, "tasks", "tasks.jsonl"), read),
+      readOptionalJson(path.join(directory, "graders", "graders.json"), read),
+      readOptionalJson(path.join(directory, "fixtures", "grader-fixtures.json"), read),
+      readOptionalJson(path.join(directory, "metrics", "policy.json"), read),
+      readOptionalJson(path.join(directory, "environment", "contract.json"), read),
+      readOptionalJson(path.join(directory, "comparisons", "policy.json"), read),
     ]);
     return TasksetDraftSchema.parse({
       ...draft.data,
@@ -148,18 +154,18 @@ async function packageFiles(directory: string): Promise<string[]> {
   return files;
 }
 
-async function readOptionalJson(file: string): Promise<unknown | null> {
+async function readOptionalJson(file: string, read = (file: string) => readFile(file, "utf8")): Promise<unknown | null> {
   try {
-    return JSON.parse(await readFile(file, "utf8"));
+    return JSON.parse(await read(file));
   } catch (error) {
     if (isMissingFile(error)) return null;
     throw error;
   }
 }
 
-async function readOptionalJsonLines(file: string): Promise<unknown[] | null> {
+async function readOptionalJsonLines(file: string, read = (file: string) => readFile(file, "utf8")): Promise<unknown[] | null> {
   try {
-    const content = await readFile(file, "utf8");
+    const content = await read(file);
     return content
       .split(/\r?\n/)
       .map((line) => line.trim())

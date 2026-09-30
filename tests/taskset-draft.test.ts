@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -14,11 +14,31 @@ import {
   tasksetDraftFromTaskset,
   validateTaskset,
   writeTasksetDraftPackage,
+  captureTasksetDraftWorkspace,
 } from "../packages/taskset-sdk/src/index.js";
 
 const NOW = "2026-08-24T12:00:00.000Z";
 
 describe("Taskset draft authoring", () => {
+  // Hosted upload must retain the parsed task and binary bytes from the same
+  // snapshot, with stable retry hashes and no linked files outside the folder.
+  it("captures authored folders with exact binary bytes and rejects symlink uploads", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "openpond-dataset-capture-"));
+    try {
+      await writeTasksetDraftPackage(completeDraft(), directory);
+      const bytes = Uint8Array.from([0, 255, 1, 128]);
+      await writeFile(path.join(directory, "assets", "capture.bin"), bytes);
+      const input = { directory, teamId: "hosted-team", expectedRevision: 0 };
+      const first = await captureTasksetDraftWorkspace(input);
+      const repeated = await captureTasksetDraftWorkspace(input);
+      expect(repeated.workspace.contentHash).toBe(first.workspace.contentHash);
+      expect(first.workspace.draft).toMatchObject({ profileId: "hosted-team", revision: 1, modelScope: null, tasks: completeDraft().tasks });
+      const asset = first.workspace.files.find(file => file.path === "assets/capture.bin")!;
+      expect(new Uint8Array(Buffer.from(asset.base64, "base64"))).toEqual(bytes);
+      await symlink(path.join(directory, "taskset.json"), path.join(directory, "assets", "linked.json"));
+      await expect(captureTasksetDraftWorkspace(input)).rejects.toThrow("regular files");
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
 
   it("initializes a valid empty draft without inventing tasks or graders", () => {
     const draft = createTasksetDraft({
