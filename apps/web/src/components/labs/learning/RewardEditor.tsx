@@ -13,6 +13,7 @@ import { RewardFixturesEditor } from "./RewardFixturesEditor";
 import { RewardCheckHistory } from "./RewardCheckHistory";
 import { TaskRatingDetails } from "./TaskRatingFields";
 
+type Fields = Parameters<typeof compileRewardAuthoring>[0]["fields"];
 type Kind = RewardRelease["implementation"]["kind"];
 const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "custom_verifier", label: "Code verifier · JavaScript" },
@@ -26,7 +27,7 @@ const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "human", label: "Human review rubric" },
 ];
 
-export function RewardEditor(props: { allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
+export function RewardEditor(props: { initialFields?: Partial<Fields>; allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
   const implementation = props.reward?.implementation;
   const assetId = implementation && "verifierRef" in implementation ? implementation.verifierRef.id
     : implementation && "rubricRef" in implementation ? implementation.rubricRef.id
@@ -37,7 +38,8 @@ export function RewardEditor(props: { allowedKinds?: readonly Kind[]; closeRef?:
   return <RewardEditorForm {...props} sourceAsset={asset.resource} fixtureAsset={fixtures.resource} />;
 }
 
-function RewardEditorForm({ allowedKinds, client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose, closeRef }: {
+function RewardEditorForm({ initialFields, allowedKinds, client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose, closeRef }: {
+  initialFields?: Partial<Fields>;
   allowedKinds?: readonly Kind[];
   closeRef?: Ref<DraftEditorHandle>;
   fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback };
@@ -48,7 +50,7 @@ function RewardEditorForm({ allowedKinds, client, reward, sourceAsset, fixtureAs
   const [id] = useState(() => authoringDraft?.targetId ?? reward?.id ?? `reward-${crypto.randomUUID()}`);
   const [initial] = useState(() => {
     const fields = rewardAuthoringFields(reward, sourceAsset, fixtureAsset);
-    if (!fromLabel) return fields;
+    if (!fromLabel) return !reward && !authoringDraft && initialFields ? { ...fields, ...initialFields } : fields;
     const fixture = rewardFixtureFromRating(fromLabel.evidence, fromLabel.feedback, reward?.rawScore);
     const rating = TaskRatingSchema.parse(fromLabel.feedback.submission.value);
     return { ...fields, ...(!reward ? { name: `Reward for ${fromLabel.evidence.submission.exampleId}`, kind: "model_judge" as const, rubric: rating.criteria } : {}), fixtures: [...(fields.fixtures ?? []).filter(item => item.id !== fixture.id), fixture] };
@@ -127,6 +129,7 @@ function RewardEditorForm({ allowedKinds, client, reward, sourceAsset, fixtureAs
     {fromLabel ? <section><h2>Retained label</h2><p>Attempt {fromLabel.evidence.submission.exampleId} · revision {fromLabel.evidence.revision}. {fromLabel.feedback.submittedBy ? `Submitted by ${fromLabel.feedback.submittedBy.id} (${fromLabel.feedback.submittedBy.role}).` : "Submitter not recorded."}</p><TaskRatingDetails value={fromLabel.feedback.submission.value} /><p>The fixture is an editable copy. The original label remains unchanged.</p></section> : null}
     {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
+    <label>Feedback key (optional)<input value={draft.feedbackKey ?? ""} placeholder="Generated from the grader ID" onChange={event => { const key = event.target.value; setDraft(value => { const { feedbackKey: _previous, ...fields } = value; return key ? { ...fields, feedbackKey: key } : fields; }); }} /><small>Results and comparisons use this key. Give each independent score a distinct key.</small></label>
     <label>Description (optional)<textarea maxLength={10_000} value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>
     <label>Reward type<select value={draft.kind} onChange={(event) => patch({ kind: event.target.value as Kind })}>{KINDS.filter(kind => !allowedKinds || allowedKinds.includes(kind.value) || kind.value === draft.kind).map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></label>
     {draft.kind === "custom_verifier" ? <>

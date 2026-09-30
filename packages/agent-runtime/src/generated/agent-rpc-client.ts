@@ -41,6 +41,8 @@ export class AgentRpcClient {
   profileEvaluationExecuteCase = (params: unknown) => this.#request("profile/evaluations/executeCase", params);
   profileEvaluationExecuteRun = (params: unknown) => this.#request("profile/evaluations/executeRun", params);
   profileEvaluationCompare = (params: unknown) => this.#request("profile/evaluations/compare", params);
+  experimentExecuteCase = (params: unknown) => this.#request("experiments/executeCase", params);
+  experimentCancelCase = (params: unknown) => this.#request("experiments/cancelCase", params);
   harnessInspect = (params: unknown = {}) => this.#request("harness/inspect", params);
   harnessProposalReview = (params: unknown = {}) => this.#request("harness/proposalReview", params);
   harnessReview = (params: unknown = {}) => this.#request("harness/review", params);

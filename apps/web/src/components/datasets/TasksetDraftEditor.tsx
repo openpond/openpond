@@ -153,8 +153,8 @@ export function TasksetDraftEditor({
   if (!draft) {
     return (
       <section className="taskset-draft-loading" aria-live="polite">
-        <strong>Creating an empty Taskset draft…</strong>
-        <span>The draft is saved locally before any tasks or assets are required.</span>
+        <strong>Creating an empty {owner === "hosted" ? "Dataset" : "Taskset"} draft…</strong>
+        <span>The draft is saved {owner === "hosted" ? "in the hosted workspace" : "locally"} before any tasks or assets are required.</span>
       </section>
     );
   }
@@ -204,10 +204,10 @@ export function TasksetDraftEditor({
             Back
           </button>
           <input
-            aria-label="Taskset name"
+            aria-label={owner === "hosted" ? "Dataset name" : "Taskset name"}
             className="taskset-draft-name"
             disabled={readOnly}
-            placeholder="Untitled Taskset"
+            placeholder={owner === "hosted" ? "Untitled Dataset" : "Untitled Taskset"}
             value={draft.name}
             onChange={(event) => update({ ...draft, name: event.target.value })}
           />
@@ -271,7 +271,7 @@ export function TasksetDraftEditor({
             type="button"
             onClick={() => void publish()}
           >
-            Publish Taskset
+            Publish {owner === "hosted" ? "Dataset" : "Taskset"}
           </button>
         </div>
       </header>
