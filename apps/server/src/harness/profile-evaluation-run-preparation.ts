@@ -23,6 +23,7 @@ const PrepareRequestSchema = z.object({
   /** Trusted embedding host's resolved model configuration receipt. Desktop
    * computes this itself and ignores the caller's value. */
   hostModelConfigurationHash: ReleaseHashSchema.optional(),
+  maximumSpendUsd: z.number().positive().max(10_000).optional(),
   expectedManifestHash: ReleaseHashSchema.optional(),
 }).strict();
 
@@ -91,6 +92,9 @@ export function createProfileEvaluationRunPreparationService(input: {
     if (!textCase && !workCase) {
       throw new Error("Profile evaluation supports text cases or Work cases with the built-in execution and output tools.");
     }
+    if (parsed.maximumSpendUsd !== undefined && !textCase) {
+      throw new Error("Bounded hosted Profile evaluation currently qualifies text cases without external compute.");
+    }
     if (taskset.tasks.some((task) => task.artifactRefs.length > CHAT_ATTACHMENT_LIMITS.maxAttachments
       || task.artifactRefs.some((asset) => asset.visibility !== "policy"
         || asset.mediaType !== "application/pdf"
@@ -143,7 +147,7 @@ export function createProfileEvaluationRunPreparationService(input: {
         maxTurns: 128,
         timeoutMs: taskset.environment.defaultTimeoutMs,
         maxOutputBytes: 250_000_000,
-        maximumSpendUsd: null,
+        maximumSpendUsd: parsed.maximumSpendUsd ?? null,
       },
       createdAt: parsed.createdAt,
       metadata: { sourceTasksetId: taskset.metadata.sourceTasksetId ?? taskset.id },

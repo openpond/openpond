@@ -36,6 +36,39 @@ const manifest = createTasksetRunManifest({
 });
 const { contentHash: _manifestHash, ...manifestContent } = manifest;
 
+// A bounded manifest must not start policy work on a missing or mismatched
+// host admission. Existing workflow tests do not exercise spend authority.
+test("bounded Profile cases require the exact host-authorized run ceiling before policy work", async () => {
+  const bounded = createTasksetRunManifest({ ...manifestContent, limits: { ...manifest.limits, maximumSpendUsd: 1 } });
+  const createSession = vi.fn(async () => ({ id: "evaluation-session" }) as Session);
+  const sendTurn = vi.fn(async () => ({ id: "evaluation-turn", status: "completed", startedAt: manifest.createdAt,
+    completedAt: manifest.createdAt, modelRef, harnessSnapshot: { harnessRelease } }) as Turn);
+  const execute = createProfileWorkflowEvaluationExecutor({ manifest: bounded, profileRef, binding, modelRef,
+    modelConfigurationHash, createSession, sendTurn, runtimeEventsForTurn: async () => [] });
+  const member = { task: { id: task.id, input: task.input, policyVisibleContext: {}, artifactRefs: [], tags: [] }, seed: "1", source };
+  vi.stubEnv("OPENPOND_API_KEY", "");
+  vi.stubEnv("OPENPOND_OPCHAT_API_URL", "");
+  try {
+    await expect(execute(member)).rejects.toThrow("admitted hosted spend ceiling");
+    expect(createSession).not.toHaveBeenCalled();
+    vi.stubEnv("OPENPOND_API_KEY", "test-host-scoped-credential");
+    vi.stubEnv("OPENPOND_OPCHAT_API_URL", "https://staging-api.openpond.ai/opchat/v1");
+    const fetchAuthority = vi.fn(async () => Response.json({ runId: bounded.id,
+      manifestHash: contentHash("another-source"), maximumCostUsd: 1 }));
+    vi.stubGlobal("fetch", fetchAuthority);
+    await expect(execute(member)).rejects.toThrow("differs from its admitted manifest");
+    expect(createSession).not.toHaveBeenCalled();
+    fetchAuthority.mockImplementation(async () => Response.json({ runId: bounded.id,
+      manifestHash: bounded.contentHash, maximumCostUsd: 1 }));
+    await execute(member);
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(sendTurn).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  }
+});
+
 test("workflow case runs in an exact source-bound app-server session", async () => {
   const createSession = vi.fn(async () => ({ id: "evaluation-session" }) as Session);
   const sendTurn = vi.fn(async (_sessionId: string, _request: unknown) => ({
