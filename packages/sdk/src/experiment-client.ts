@@ -55,7 +55,7 @@ export class OpenPondExperimentsClient {
   }
   async list(value: z.input<typeof ExperimentListQuerySchema> = {}, signal?: AbortSignal) {
     const query = ExperimentListQuerySchema.parse(value);
-    const params = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]));
+    const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
     const page = z.object({ items: z.array(z.unknown()).max(100), nextCursor: Id.nullable() }).strict().parse(await this.request(`?${params}`, "GET", undefined, signal));
     const items = page.items.map(value => this.definition(value));
     if (items.length > query.limit || new Set(items.map(item => item.id)).size !== items.length

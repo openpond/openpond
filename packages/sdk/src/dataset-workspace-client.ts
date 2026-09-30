@@ -1,4 +1,4 @@
-import { DatasetWorkspaceBeginVersionSchema, DatasetWorkspaceVersionsSchema, DatasetWorkspaceListSchema, DatasetWorkspacePublishSchema, DatasetWorkspaceReceiptSchema, DatasetWorkspaceValidationSchema, DatasetWorkspaceWriteSchema } from "./dataset-workspace-contracts.js";
+import { DatasetWorkspaceListQuerySchema, DatasetWorkspaceBeginVersionSchema, DatasetWorkspaceVersionsSchema, DatasetWorkspaceListSchema, DatasetWorkspacePublishSchema, DatasetWorkspaceReceiptSchema, DatasetWorkspaceValidationSchema, DatasetWorkspaceWriteSchema } from "./dataset-workspace-contracts.js";
 import { validateTasksetDraftWorkspace } from "./taskset-draft-workspace.js";
 import type { z } from "zod";
 import { DatasetWorkspaceOperationKindSchema, DatasetWorkspaceOperationResultSchema } from "./dataset-workspace-operations.js";
@@ -12,10 +12,12 @@ export class OpenPondDatasetWorkspaceClient {
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim()) throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");
   }
-  async list(options: { cursor?: string; projectId?: string; signal?: AbortSignal } = {}) {
-    const params = new URLSearchParams({ ...(options.cursor ? { cursor: options.cursor } : {}), ...(options.projectId ? { projectId: options.projectId } : {}) });
-    const result = DatasetWorkspaceListSchema.parse(await this.request(`?${params}`, "GET", undefined, options.signal));
-    if (result.teamId !== this.options.teamId) throw new Error("Dataset list workspace mismatch.");
+  async list(options: z.input<typeof DatasetWorkspaceListQuerySchema> & { signal?: AbortSignal } = {}) {
+    const { signal, ...input } = options;
+    const query = DatasetWorkspaceListQuerySchema.parse(input);
+    const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+    const result = DatasetWorkspaceListSchema.parse(await this.request(`?${params}`, "GET", undefined, signal));
+    if (result.teamId !== this.options.teamId || result.datasets.length > query.limit || new Set(result.datasets.map(item => item.id)).size !== result.datasets.length) throw new Error("Dataset list workspace/page mismatch.");
     return result;
   }
   async get(id: string, signal?: AbortSignal) { return this.readback(await this.request(`/${encodeURIComponent(id)}`, "GET", undefined, signal), id); }

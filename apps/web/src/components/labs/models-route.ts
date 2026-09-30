@@ -15,6 +15,9 @@ export interface ModelsRoute {
   projectId?: string | null;
   executionId?: string | null;
   passId?: string | null;
+  sort?: "id" | "name" | "updated";
+  revision?: number;
+  contentHash?: string;
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
@@ -70,7 +73,12 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   } else if (detailTab && !detailTabs[page]?.includes(detailTab)) return null;
   if (page === "serving" && detailTab) return null;
   const query = new URLSearchParams(input.search ?? "");
-  if ([...query.keys()].some((key) => !["model", "q", "after", "source", "project", "execution", "pass", "dataset"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
+  if ([...query.keys()].some((key) => !["model", "q", "after", "source", "project", "execution", "pass", "dataset", "revision", "hash", "sort"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
+  const sort = query.get("sort");
+  if (sort !== null && (page !== "datasets" || !["id", "name", "updated"].includes(sort))) return null;
+  const revision = query.has("revision") ? Number(query.get("revision")) : undefined;
+  const contentHash = query.get("hash") ?? undefined;
+  if ((revision !== undefined || contentHash !== undefined) && (!resourceId || !["datasets", "graders"].includes(page) || !Number.isSafeInteger(revision) || revision! <= 0 || !/^[a-f0-9]{64}$/.test(contentHash ?? ""))) return null;
   const sourceId = query.get("source");
   if (sourceId !== null && ((page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
   if (query.has("dataset") && (page !== "datasets" || !resourceId || query.get("dataset") !== "release")) return null;
@@ -89,7 +97,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const search = query.get("q") ?? "";
   const after = query.get("after");
   if ((modelId !== null && (!modelId.trim() || modelId.length > 500)) || search.length > 1_000 || (after !== null && (!after.trim() || after.length > 2_000))) return null;
-  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(query.get("dataset") === "release" ? { datasetKind: "release" } : {}), ...(encoded[0] === "console" ? { area: "console" } : {}), ...(hosted ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("execution") ? { executionId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
+  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(sort ? { sort: sort as "id" | "name" | "updated" } : {}), ...(revision !== undefined ? { revision, contentHash } : {}), ...(query.get("dataset") === "release" ? { datasetKind: "release" } : {}), ...(encoded[0] === "console" ? { area: "console" } : {}), ...(hosted ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("execution") ? { executionId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
 }
 
 export function modelsPath(route: ModelsRoute): string {
@@ -107,6 +115,8 @@ export function modelsPath(route: ModelsRoute): string {
   if (route.projectId) query.set("project", route.projectId);
   else if (route.projectId === null && ["datasets", "graders", "experiments"].includes(route.page)) query.set("project", "all");
   if (route.page === "datasets" && route.resourceId && route.datasetKind === "release") query.set("dataset", "release");
+  if (route.page === "datasets" && route.sort) query.set("sort", route.sort);
+  if (route.revision !== undefined && route.contentHash && route.resourceId && ["datasets", "graders"].includes(route.page)) { query.set("revision", String(route.revision)); query.set("hash", route.contentHash); }
   if (route.executionId) query.set("execution", route.executionId);
   if (route.passId) query.set("pass", route.passId);
   if (route.query) query.set("q", route.query);
@@ -120,5 +130,5 @@ export function changeModelsScope(route: ModelsRoute, modelId: string | null): M
 }
 
 export function modelsResourceLocation(route: ModelsRoute, resourceId: string | null, detailTab: string | null = null): ModelsRoute {
-  return { ...route, resourceId, detailTab, after: null };
+  return { ...route, resourceId, detailTab, after: null, ...(resourceId !== route.resourceId ? { revision: undefined, contentHash: undefined } : {}) };
 }

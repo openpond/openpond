@@ -5,6 +5,7 @@ export { compileTasksetDraftWorkspace } from "./taskset-draft-package-compiler.j
 
 const Id = z.string().trim().min(1).max(240);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
+export const DatasetWorkspaceListQuerySchema = z.object({ cursor: z.string().trim().min(1).max(2_000).optional(), projectId: Id.optional(), search: z.string().trim().max(100).optional(), sort: z.enum(["id", "name", "updated"]).default("id"), limit: z.number().int().min(1).max(100).default(100) }).strict();
 export const DatasetWorkspaceWriteSchema = z.object({
   operationId: Id, expectedRevision: z.number().int().nonnegative(), originProjectId: Id.optional(), workspace: TasksetDraftWorkspaceSchema,
   ownerScope: z.enum(["workspace", "personal"]).optional(),
@@ -31,5 +32,5 @@ export const DatasetWorkspaceListSchema = z.object({ teamId: Id, datasets: z.arr
   id: Id, revision: z.number().int().positive(), originProjectId: Id.optional(), name: z.string(), status: z.enum(["draft", "published"]),
   ownerScope: z.enum(["workspace", "personal"]).optional(),
   publication: DatasetWorkspaceReceiptSchema.shape.publication, updatedAt: z.string().datetime(),
-}).strict()).max(100), nextCursor: Id.nullable() }).strict();
+}).strict()).max(100), nextCursor: z.string().trim().min(1).max(2_000).nullable() }).strict();
 export const DatasetWorkspaceValidationSchema = z.object({ teamId: Id, datasetId: Id, revision: z.number().int().positive(), workspaceHash: Hash, packageHash: Hash, release: TasksetCatalogReleaseRefSchema }).strict();

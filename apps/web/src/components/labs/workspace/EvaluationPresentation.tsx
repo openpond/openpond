@@ -2,9 +2,11 @@ import { chatModelLabel } from "../../../lib/app-models";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { Check, Circle, LoaderCircle, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 dayjs.extend(relativeTime);
+export const evaluationRelativeTime = (value: string) => dayjs(value).isValid() ? dayjs(value).fromNow() : "Unknown time";
 
 export function EvaluationStatus({ status }: { status: string }) {
   const value = status.toLowerCase();
@@ -20,10 +22,29 @@ export function EvaluationModel({ name, onOpen }: { name: string; onOpen?: () =>
 }
 
 export function EvaluationTime({ value }: { value?: string | null }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const tooltipId = useId();
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const visible = hovered || focused;
+  useEffect(() => {
+    if (!visible) return;
+    const update = () => {
+      const rect = anchor.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(360, window.innerWidth - 24);
+      setPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), top: window.innerHeight - rect.bottom < 80 ? Math.max(12, rect.top - 72) : rect.bottom + 8 });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => { window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
+  }, [visible]);
   const date = value ? dayjs(value) : null;
   if (!date?.isValid()) return <span>Unknown</span>;
   const exact = `${date.format("MMM D, YYYY h:mm:ss A Z")} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`;
-  return <span className="evaluation-time" tabIndex={0} aria-label={exact}><time dateTime={date.toISOString()}>{date.fromNow()}</time><span role="tooltip">{exact}</span></span>;
+  return <span ref={anchor} className="evaluation-time" tabIndex={0} aria-label={exact} aria-describedby={visible ? tooltipId : undefined} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onKeyDown={event => { if (event.key === "Escape") { setHovered(false); setFocused(false); } }}><time dateTime={date.toISOString()}>{date.fromNow()}</time>{visible && position ? createPortal(<span id={tooltipId} className="evaluation-time-tooltip" role="tooltip" style={position}>{exact}</span>, document.body) : null}</span>;
 }
 
 export function EvaluationCard({ title, children }: { title: string; children: ReactNode }) {

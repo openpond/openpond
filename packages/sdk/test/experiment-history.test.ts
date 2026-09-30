@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { OpenPondExperimentHistoryClient } from "../src/experiment-history.js";
+import { OpenPondExperimentsClient } from "../src/experiment-client.js";
 
 describe("compact Experiment history boundary", () => {
+  // Passing an omitted Project as an explicit undefined property previously
+  // queried a literal "undefined" Project and hid authorized All-project rows.
+  it("omits absent scope and cursor values from both collection transports", async () => {
+    const urls: URL[] = [];
+    const options = { baseUrl: "https://example.test", apiKey: "test", teamId: "team-a", fetch: async (input: RequestInfo | URL) => { urls.push(new URL(String(input))); return Response.json({ items: [], nextCursor: null }); } };
+    await new OpenPondExperimentHistoryClient(options).list({ projectId: undefined, afterId: undefined, search: undefined, limit: 30 });
+    await new OpenPondExperimentsClient(options).list({ projectId: undefined, afterId: undefined, search: undefined, limit: 30 });
+    expect(urls.map(url => url.search)).toEqual(["?limit=30", "?limit=30"]);
+    await new OpenPondExperimentHistoryClient(options).list({ projectId: "project-a", afterId: "run-a", search: "pond & river" });
+    expect(Object.fromEntries(urls.at(-1)!.searchParams)).toEqual({ projectId: "project-a", afterId: "run-a", limit: "30", search: "pond & river" });
+  });
   // A history page must not leak case/private bytes, cross workspace rows, or
   // silently substitute a target or invalid continuation for its stored run.
   it("accepts exact retained identities and rejects private fields, foreign rows, target mismatch and invalid pages", async () => {

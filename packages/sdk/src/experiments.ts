@@ -7,3 +7,4 @@ export * from "./harness-experiment-policy.js";
 
 export * from "./experiment-inspection.js";
 export * from "./experiment-history.js";
+export * from "./dataset-grader-selection.js";

@@ -7,6 +7,7 @@ export class AgentHostStorageClient {
     resolve(value: unknown): void;
     reject(error: Error): void;
     timer: ReturnType<typeof setTimeout>;
+    maxResponseBytes: number;
   }>();
   #send: ((message: JsonRpcRequest) => Promise<void>) | null = null;
   #nextId = 1;
@@ -22,19 +23,21 @@ export class AgentHostStorageClient {
     if (this.#pending.size >= 32) throw new Error("Host storage request limit exceeded.");
     const id = `host-storage:${this.#nextId++}`;
     const message: JsonRpcRequest = { jsonrpc: "2.0", id, method: "host/storage", params };
-    if (Buffer.byteLength(JSON.stringify(message)) > (params.operation === "experiment/policy" ? 8_388_608 : 256_000)) {
+    const experiment = params.operation === "experiment/policy" || params.operation === "experiment/environment";
+    if (Buffer.byteLength(JSON.stringify(message)) > (experiment ? 8_388_608 : 256_000)) {
       throw new Error("Host storage request is too large.");
     }
     const response = new Promise<unknown>((resolve, reject) => {
       // Cold hosted sandbox provisioning can exceed the normal storage budget.
       // The sandbox adapter supplies its per-action limit; do not truncate it
       // to the generic 60-second storage cap before the host can respond.
-      const capMs = params.operation === "sandbox/request" || params.operation === "experiment/policy" ? 300_000 : 60_000;
+      const capMs = params.operation === "sandbox/request" || experiment ? 300_000 : 60_000;
       const timer = setTimeout(() => {
         this.#pending.delete(id);
         reject(new Error("Host storage request timed out."));
       }, Math.max(1, Math.min(capMs, timeoutMs)));
-      this.#pending.set(id, { resolve, reject, timer });
+      this.#pending.set(id, { resolve, reject, timer,
+        maxResponseBytes: params.operation === "experiment/environment" ? 1_600_000 : 1_000_000 });
     });
     try {
       await this.#send(message);
@@ -58,7 +61,7 @@ export class AgentHostStorageClient {
     if (!pending) return true;
     clearTimeout(pending.timer);
     this.#pending.delete(response.id);
-    if (Buffer.byteLength(JSON.stringify(response)) > 1_000_000) {
+    if (Buffer.byteLength(JSON.stringify(response)) > pending.maxResponseBytes) {
       pending.reject(new Error("Host storage response is too large."));
       return true;
     }
