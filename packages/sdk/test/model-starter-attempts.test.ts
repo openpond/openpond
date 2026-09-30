@@ -41,8 +41,14 @@ it("retains request identity, isolates fixture attribution and verifies returned
   returned = { ...mismatched, contentHash: await canonicalSha256(mismatched) };
   await expect(client.result("attempt")).rejects.toThrow("terminal attempt summary");
   expect(requests[0]).toBe("https://host.invalid/v1/model-starter-attempts");
-  returned = { modelProjectId: request.modelProjectId, taskset: request.taskset, available: true, unavailableReason: null, tasks: [{ id: "task", split: "train", inputPreview: "Example", fixtures: [{ id: "positive", label: "positive" }] }], models: [], nextCursor: null };
-  expect((await client.choices({ modelProjectId: request.modelProjectId, taskset: request.taskset })).tasks).toHaveLength(1);
+  // Published evaluation tasks use the canonical test split. A narrower choices
+  // response contract would reject them before Experiment setup can select a model.
+  const choices = { modelProjectId: request.modelProjectId, taskset: request.taskset, available: true, unavailableReason: null, tasks: [{ id: "task", split: "test", inputPreview: "Example", fixtures: [{ id: "positive", label: "positive" }] }], models: [], nextCursor: null };
+  returned = choices;
+  expect((await client.choices({ modelProjectId: request.modelProjectId, taskset: request.taskset })).tasks[0]!.split).toBe("test");
+  returned = { ...choices, tasks: [{ ...choices.tasks[0]!, split: "unrecognized" }] };
+  await expect(client.choices({ modelProjectId: request.modelProjectId, taskset: request.taskset })).rejects.toThrow();
+  returned = choices;
   returned = { ...returned as object, modelProjectId: "other" };
   await expect(client.choices({ modelProjectId: request.modelProjectId, taskset: request.taskset })).rejects.toThrow("choices differ");
   const input = { id: "A" }; const state = { count: 1 };
