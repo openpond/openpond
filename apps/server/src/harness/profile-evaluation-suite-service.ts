@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ChatModelRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash } from "@openpond/harness";
 import { createProfileEvaluationSuiteRun } from "@openpond/evals";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalProfileEvaluationRun } from "../store/store-evaluation-results.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
 import type { createProfileEvaluationRunPreparationService } from "./profile-evaluation-run-preparation.js";
@@ -23,12 +23,12 @@ type PreparedRun = Awaited<ReturnType<ReturnType<typeof createProfileEvaluationR
 /** Run every declared definition against its own frozen Taskset and retain a
  * suite receipt only after each member's complete run has been persisted. */
 export function createProfileEvaluationSuiteService(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   selectedWorkflows: () => Promise<{ profileRef: PreparedRun["profileRef"]; sourceRevision: string; harnessRelease: { id: string; contentHash: string } }>;
   prepareRun: (request: unknown) => Promise<PreparedRun>;
   executeRun: (request: PreparedRun) => Promise<LocalProfileEvaluationRun>;
 }) {
-  const inFlight = new Map<string, { requestHash: string; promise: Promise<Awaited<ReturnType<SqliteStore["saveProfileEvaluationSuiteRun"]>>> }>();
+  const inFlight = new Map<string, { requestHash: string; promise: Promise<Awaited<ReturnType<HarnessStateStore["saveProfileEvaluationSuiteRun"]>>> }>();
   const run = async (request: z.infer<typeof SuiteRequestSchema>) => {
     const selected = await input.selectedWorkflows();
     const discovered = await profileEvaluationsForRelease({

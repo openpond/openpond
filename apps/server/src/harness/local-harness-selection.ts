@@ -1,7 +1,7 @@
 import type { OpenPondProfileState } from "@openpond/contracts";
 import { assertContentHash } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalHarnessReleaseRecord } from "../store/store-harness-workspaces.js";
 import {
   createLocalHarnessWorkspace,
@@ -13,7 +13,7 @@ export const DESKTOP_PERSONAL_HARNESS_OWNER_ID = "desktop-personal";
 export const DEFAULT_LOCAL_HARNESS_WORKSPACE_ID = "personal-default";
 
 export async function ensureSelectedLocalHarnessWorkspace(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   loadProfileState: () => Promise<OpenPondProfileState>;
   now?: () => string;
@@ -80,7 +80,7 @@ export async function ensureSelectedLocalHarnessWorkspace(input: {
 }
 
 export async function resolveSelectedLocalHarnessRelease(
-  store: SqliteStore,
+  store: HarnessStateStore,
 ): Promise<LocalHarnessReleaseRecord | null> {
   const selected = await store.getSelectedHarnessWorkspace({
     ownerKind: "personal",
@@ -91,7 +91,7 @@ export async function resolveSelectedLocalHarnessRelease(
 }
 
 async function requireCurrentRelease(
-  store: SqliteStore,
+  store: HarnessStateStore,
   workspaceId: string,
   contentHash: string | null,
 ): Promise<LocalHarnessReleaseRecord> {

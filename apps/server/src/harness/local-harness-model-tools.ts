@@ -4,7 +4,7 @@ import path from "node:path";
 import { HarnessSourceManifestSchema } from "@openpond/contracts";
 
 import type { ModelToolDefinition } from "../openpond/model-tool-registry.js";
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { loadLocalHarnessRuntimeForAgentRun } from "./local-harness-run-overlay.js";
 import { inspectRefinerProfile, updateRefinerProfile } from "../refiner/refiner-profile-service.js";
 import { loadBundledAuthoringProfileSkill } from "../runtime/bundled-authoring-skills.js";
@@ -12,7 +12,7 @@ import { loadBundledAuthoringProfileSkill } from "../runtime/bundled-authoring-s
 const MAX_INSPECT_BYTES = 24_000;
 
 export function createLocalHarnessModelToolDefinitions(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
 }): ModelToolDefinition[] {
   return [
@@ -301,7 +301,7 @@ export function createLocalHarnessModelToolDefinitions(input: {
       execute: async (context) => {
         const runtime = await loadLocalHarnessRuntimeForAgentRun(input.store, context.session.id);
         if (!runtime) throw new Error("No Local Harness is selected for this run.");
-        const all = async (kind: Parameters<SqliteStore["listHarnessImprovementArtifacts"]>[1]) =>
+        const all = async (kind: Parameters<HarnessStateStore["listHarnessImprovementArtifacts"]>[1]) =>
           input.store.listHarnessImprovementArtifacts(runtime.workspace.id, kind, 200);
         const triggers = (await all("trigger_decision")).filter(
           (artifact): artifact is Extract<typeof artifact, { schemaVersion: "openpond.refinementTriggerDecision.v1" }> =>

@@ -6,14 +6,14 @@ import type {
 import { contentHash } from "@openpond/harness";
 import type { HarnessEvaluationReviewModelStream } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { resolveSelectedLocalHarnessRelease } from "./local-harness-selection.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./local-harness-evaluation-review.js";
 
 const SOURCE_POLICY_VERSION = "local-personal-work-v1";
 
 export async function reviewSelectedLocalHarnessEvaluationFromHost(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   workspaceId: string;
   maxEstimatedCostUsd: number;

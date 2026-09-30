@@ -4,11 +4,11 @@ import type {
   RefinementTriggerDecision,
 } from "@openpond/contracts";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessReviewStateStore } from "../store/harness-state-store.js";
 import { readBoundedRefinerSource } from "./local-harness-refiner-context.js";
 
 export async function loadRefinerReleaseContext(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   workspace: HarnessWorkspace;
   overlay: HarnessRunOverlay;
   trigger: RefinementTriggerDecision;

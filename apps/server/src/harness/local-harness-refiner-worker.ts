@@ -31,7 +31,7 @@ import {
   type LocalHarnessRefinerModelStream,
 } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessReviewStateStore } from "../store/harness-state-store.js";
 import {
   applyLocalHarnessRefinerProposal,
   validateLocalHarnessRefinerProposal,
@@ -72,8 +72,9 @@ export type LocalHarnessRefinerWorkerResult = {
 };
 
 export type LocalHarnessRefinerWorkerInput = {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   storeDir: string;
+  loadActiveRefinerRelease?: () => ReturnType<typeof loadActiveRefinerRelease>;
   trigger: RefinementTriggerDecision;
   additionalEvidence?: unknown;
   reviewScope?: "completed_turn" | "cross_run_candidate";
@@ -88,7 +89,7 @@ export type LocalHarnessRefinerWorkerInput = {
 };
 
 const activeRefinerInvocations = new WeakMap<
-  SqliteStore,
+  HarnessReviewStateStore,
   Map<string, Promise<LocalHarnessRefinerWorkerResult>>
 >();
 
@@ -131,8 +132,8 @@ async function executeLocalHarnessRefinerWorker(
   const workspace = await input.store.getHarnessWorkspace(
     overlay.workspace.workspaceId,
   );
-  if (!workspace || workspace.location !== "local") {
-    throw new Error("Local Harness Refiner requires a local Harness workspace.");
+  if (!workspace || workspace.location !== input.store.harnessStoragePlacement) {
+    throw new Error("Harness Refiner workspace does not match the admitted storage placement.");
   }
 
   const existingOutcome = await findRefinerOutcome(input.store, workspace.id, trigger);
@@ -234,7 +235,9 @@ async function executeLocalHarnessRefinerWorker(
     sourceCatalog: source.catalog,
     additionalEvidence: input.additionalEvidence ?? null,
   };
-  const activeRefinerRelease = await loadActiveRefinerRelease(input.storeDir);
+  const activeRefinerRelease = await (input.loadActiveRefinerRelease
+    ? input.loadActiveRefinerRelease()
+    : loadActiveRefinerRelease(input.storeDir));
   let decision: LocalHarnessRefinerDecisionV2;
   if (input.stream) {
     decision = await authorLocalHarnessRefinementWithModel({
@@ -393,7 +396,7 @@ async function executeLocalHarnessRefinerWorker(
 }
 
 async function finishPersistedProposal(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   storeDir: string;
   trigger: RefinementTriggerDecision;
   workspace: HarnessWorkspace;
@@ -511,7 +514,7 @@ async function finishPersistedProposal(input: {
 }
 
 async function finishMemoryProposal(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   workspace: HarnessWorkspace;
   overlay: HarnessRunOverlay;
   trigger: RefinementTriggerDecision;
@@ -600,7 +603,7 @@ async function finishMemoryProposal(input: {
 }
 
 async function persistNoAction(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   workspace: HarnessWorkspace;
   overlay: HarnessRunOverlay;
   trigger: RefinementTriggerDecision;
@@ -639,7 +642,7 @@ async function persistNoAction(input: {
 }
 
 async function persistExternalRoute(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   workspace: HarnessWorkspace;
   overlay: HarnessRunOverlay;
   trigger: RefinementTriggerDecision;

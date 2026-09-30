@@ -6,7 +6,7 @@ import type {
   Turn,
 } from "@openpond/contracts";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessReviewStateStore } from "../store/harness-state-store.js";
 import {
   DEFAULT_REFINEMENT_TRIGGER_POLICY,
   detectHarnessImprovementAtBoundary,
@@ -24,7 +24,7 @@ const HARNESS_IMPROVEMENT_EVENT_NAMES = [
 ] as const;
 
 export async function recordLocalHarnessImprovementBoundary(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   session: Session;
   turn: Turn;
   boundaryKind: ImprovementSafeBoundaryKind;

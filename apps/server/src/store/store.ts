@@ -179,6 +179,7 @@ type RuntimeEventRecentWindow = {
 };
 
 export class SqliteStore extends SqliteTaskInboxStore implements RuntimeHistoryStorage {
+  readonly harnessStoragePlacement = "local" as const;
   async snapshot(): Promise<StoreData> {
     await this.ready;
     await this.writeQueue;

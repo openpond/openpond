@@ -8,8 +8,6 @@ import {
   createProfileEvaluationSuiteRun,
   createProfileEvaluationComparison,
   TaskGradeSchema,
-  TasksetMetricResultSchema,
-  TasksetRunManifestSchema,
   assertTasksetMetricResult,
   verifyAttemptReceipt,
   type AttemptReceipt,
@@ -21,24 +19,13 @@ import {
   type ProfileEvaluationCatalog,
   type TaskGrade,
 } from "@openpond/evals";
-import { assertContentHash, contentHash, ImmutableReleaseRefSchema } from "@openpond/harness";
+import { assertContentHash, contentHash } from "@openpond/harness";
 import { OpenPondProfileRefSchema, type OpenPondProfileRef } from "@openpond/contracts";
-import { z } from "zod";
 
 import { SqliteDatasetStore } from "./store-datasets.js";
 
-export const LocalProfileEvaluationRunSchema = z.object({
-  profileRef: OpenPondProfileRefSchema,
-  manifest: TasksetRunManifestSchema,
-  metric: TasksetMetricResultSchema,
-  gradeRefs: z.array(ImmutableReleaseRefSchema),
-  receiptRefs: z.array(ImmutableReleaseRefSchema),
-  passRate: z.number().min(0).max(1),
-  passed: z.boolean(),
-  completedAt: z.string().datetime(),
-  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
-}).strict();
-export type LocalProfileEvaluationRun = z.infer<typeof LocalProfileEvaluationRunSchema>;
+import { LocalProfileEvaluationRunSchema, type LocalProfileEvaluationRun } from "./profile-evaluation-record.js";
+export { LocalProfileEvaluationRunSchema, type LocalProfileEvaluationRun } from "./profile-evaluation-record.js";
 
 export class SqliteEvaluationResultStore extends SqliteDatasetStore {
   async saveProfileEvaluationGrade(gradeInput: TaskGrade) {

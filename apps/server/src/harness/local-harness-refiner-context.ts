@@ -15,7 +15,7 @@ import {
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessReviewStateStore } from "../store/harness-state-store.js";
 import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 
 const MAX_REFINER_SOURCE_BYTES = 36_000;
@@ -41,7 +41,7 @@ const REFINER_CONTEXT_EVENT_NAMES = [
 const execFileAsync = promisify(execFile);
 
 export async function loadBoundedRefinerContext(
-  store: SqliteStore,
+  store: HarnessReviewStateStore,
   trigger: RefinementTriggerDecision,
   observations: ImprovementObservation[],
   workspaceId?: string,
@@ -378,7 +378,7 @@ function findFileOutputRefs(value: unknown, depth = 0): FileOutputRef[] {
 }
 
 async function loadRelevantPriorIncidentPackets(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   workspaceId: string;
   trigger: RefinementTriggerDecision;
   observations: ImprovementObservation[];
@@ -685,7 +685,7 @@ function assistantOutputForTurn(
 }
 
 export async function loadExactObservations(
-  store: SqliteStore,
+  store: HarnessReviewStateStore,
   workspaceId: string,
   trigger: RefinementTriggerDecision,
 ): Promise<ImprovementObservation[]> {

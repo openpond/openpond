@@ -18,7 +18,7 @@ import {
 import { parseProfileSkillMarkdown } from "@openpond/cloud";
 import { contentHash } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessReviewStateStore } from "../store/harness-state-store.js";
 import {
   compileLocalHarnessSource,
   localHarnessWorkspacePaths,
@@ -27,7 +27,7 @@ import {
 } from "./local-harness-workspace-service.js";
 
 export async function applyLocalHarnessRefinerProposal(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   storeDir: string;
   overlay: HarnessRunOverlay;
   proposal: HarnessImprovementProposal;
@@ -74,7 +74,7 @@ export async function applyLocalHarnessRefinerProposal(input: {
   if (overlay.status !== "frozen") throw new Error("Only a frozen run overlay can advance a Harness workspace.");
   const workspace = await input.store.getHarnessWorkspace(proposal.expectedWorkspace.workspaceId);
   if (!workspace) throw new Error(`Harness workspace ${proposal.expectedWorkspace.workspaceId} does not exist.`);
-  if (workspace.location !== "local") throw new Error("The local Refiner can only advance a local Harness workspace.");
+  if (workspace.location !== input.store.harnessStoragePlacement) throw new Error("Refiner workspace does not match the admitted storage placement.");
 
   const paths = localHarnessWorkspacePaths(input.storeDir, workspace.id);
   const current = await compileLocalHarnessSource({
@@ -192,7 +192,7 @@ export async function applyLocalHarnessRefinerProposal(input: {
 }
 
 export async function rollbackLocalHarnessWorkspaceRelease(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   storeDir: string;
   workspaceId: string;
   targetRelease: { id: string; contentHash: string };
@@ -201,7 +201,7 @@ export async function rollbackLocalHarnessWorkspaceRelease(input: {
   now?: () => string;
 }): Promise<{ workspace: HarnessWorkspace; receipt: HarnessAdvanceReceipt }> {
   const workspace = await input.store.getHarnessWorkspace(input.workspaceId);
-  if (!workspace || workspace.location !== "local") {
+  if (!workspace || workspace.location !== input.store.harnessStoragePlacement) {
     throw new Error(`Local Harness workspace ${input.workspaceId} does not exist.`);
   }
   if (
@@ -642,7 +642,7 @@ function memoryKeyFromTarget(target: string): string {
 }
 
 export async function recoverLocalHarnessSourceSwap(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   storeDir: string;
   workspaceId: string;
 }): Promise<"none" | "completed" | "restored"> {

@@ -17,7 +17,7 @@ import {
 } from "@openpond/harness";
 import { z } from "zod";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { createLocalHarnessDeepReviewContextLoader } from "./local-harness-evaluation-review-context.js";
 import { continueConfirmedLocalHarnessCandidate } from "./local-harness-cross-run-refinement.js";
 import {
@@ -73,10 +73,10 @@ type Candidate = {
   payload: Record<string, unknown>;
 };
 
-const activeReviews = new WeakMap<SqliteStore, Promise<HarnessEvaluationReviewReceipt>>();
+const activeReviews = new WeakMap<HarnessStateStore, Promise<HarnessEvaluationReviewReceipt>>();
 
 export function reviewSelectedLocalHarnessEvaluation(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   request: unknown;
   stream?: HarnessEvaluationReviewModelStream;
   signal?: AbortSignal;
@@ -96,7 +96,7 @@ export function reviewSelectedLocalHarnessEvaluation(input: {
 }
 
 async function runSelectedLocalHarnessEvaluation(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   request: unknown;
   stream?: HarnessEvaluationReviewModelStream;
   signal?: AbortSignal;
@@ -564,7 +564,7 @@ async function runSelectedLocalHarnessEvaluation(input: {
 }
 
 async function continueCandidateIfEnabled(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   continuation?: {
     storeDir: string;
     stream: HarnessEvaluationReviewModelStream;

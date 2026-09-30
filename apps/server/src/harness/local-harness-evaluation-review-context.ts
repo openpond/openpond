@@ -10,7 +10,7 @@ import type {
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { inspectBoundedPdfArtifactDiagnostics } from "./local-harness-refiner-context.js";
 
 export type LocalHarnessDeepReviewLimits = {
@@ -29,7 +29,7 @@ type SourcePolicy = {
 };
 
 export function createLocalHarnessDeepReviewContextLoader(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   workspace: HarnessWorkspace;
   sourcePolicies: Map<string, SourcePolicy>;
   observations: ImprovementObservation[];

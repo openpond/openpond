@@ -9,6 +9,7 @@ const artifactKind = z.enum([
 
 /** Scope is supplied by the host's fenced Work context, never by this payload. */
 export const RefinerStorageActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("active_release"), workspaceId: id }).strict(),
   z.object({
     action: z.literal("put_artifact"), workspaceId: id,
     kind: artifactKind,

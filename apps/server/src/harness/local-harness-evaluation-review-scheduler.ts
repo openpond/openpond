@@ -1,6 +1,6 @@
 import type { HarnessEvaluationReviewReceipt } from "@openpond/contracts";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type {
   HarnessEvaluationReviewCadence,
   HarnessEvaluationReviewSettings,
@@ -32,7 +32,7 @@ export function nextHarnessEvaluationReviewRunAt(
 }
 
 export function createLocalHarnessEvaluationReviewScheduler(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   storeDir: string;
   stream?: import("@openpond/harness").HarnessEvaluationReviewModelStream;
   isClosing: () => boolean;
@@ -144,7 +144,7 @@ export function createLocalHarnessEvaluationReviewScheduler(input: {
 }
 
 async function hasEventDrivenReviewBatch(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   workspaceId: string;
   batchSize: number;
 }): Promise<boolean> {

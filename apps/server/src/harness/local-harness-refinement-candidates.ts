@@ -11,7 +11,7 @@ import {
   createHarnessRefinementCandidateLifecycleReceipt,
 } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 
 const CANDIDATE_LIFETIME_MS = 90 * 24 * 60 * 60 * 1_000;
 
@@ -24,7 +24,7 @@ export type LocalHarnessCandidateReconciliation = {
 };
 
 export async function reconcileLocalHarnessRefinementCandidates(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   workspace: HarnessWorkspace;
   review: HarnessEvaluationReviewReceipt;
   sourcePolicies: Map<string, SourcePolicy>;
@@ -88,7 +88,7 @@ export async function reconcileLocalHarnessRefinementCandidates(input: {
 }
 
 export async function recordAppliedLocalHarnessRefinementCandidate(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   candidate: HarnessRefinementCandidate;
   review: HarnessEvaluationReviewReceipt;
   relatedHarnessRelease: { id: string; contentHash: string } | null;
@@ -130,7 +130,7 @@ export async function recordAppliedLocalHarnessRefinementCandidate(input: {
 }
 
 export async function resolveLocalHarnessRefinementCandidateFromLaterSuccess(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   candidate: HarnessRefinementCandidate;
   review: HarnessEvaluationReviewReceipt;
   evidence: HarnessReviewEvidenceRef[];

@@ -18,11 +18,12 @@ import type {
 
 import type { BackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
 import { startProviderRequestUsageRecorder } from "../runtime/model-usage-recorder.js";
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessReviewStateStore } from "../store/harness-state-store.js";
 import { event } from "../utils.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import { localHarnessRefinerActivityDisplay } from "./local-harness-refiner-activity.js";
 import { runLocalHarnessRefinerWorker } from "./local-harness-refiner-worker.js";
+import type { LocalHarnessRefinerWorkerInput } from "./local-harness-refiner-worker.js";
 
 type LocalHarnessImprovementBoundary = {
   session: Session;
@@ -39,12 +40,14 @@ export type LocalHarnessImprovementRuntime = ((
 };
 
 export function createLocalHarnessImprovementRuntime(input: {
-  store: SqliteStore;
+  store: HarnessReviewStateStore;
   storeDir: string;
   queue: BackgroundWorkerQueue;
   streamOpenPondHostedChatTurn: typeof defaultStreamOpenPondHostedChatTurn;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<unknown>;
   upsertModelUsageRecord: (record: ModelUsageRecord) => Promise<void>;
+  loadActiveRefinerRelease?: LocalHarnessRefinerWorkerInput["loadActiveRefinerRelease"];
+  prepareReview?: (trigger: RefinementTriggerDecision) => Promise<void>;
 }) {
   const jobs = new Set<string>();
 
@@ -163,9 +166,11 @@ export function createLocalHarnessImprovementRuntime(input: {
               },
             }),
           );
+          await input.prepareReview?.(trigger);
           const result = await runLocalHarnessRefinerWorker({
             store: input.store,
             storeDir: input.storeDir,
+            loadActiveRefinerRelease: input.loadActiveRefinerRelease,
             trigger,
             signal: new AbortController().signal,
             stream: async function* ({ messages, signal }) {

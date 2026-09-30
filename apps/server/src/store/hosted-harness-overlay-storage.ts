@@ -21,7 +21,7 @@ const frozenProposalSchema = versionedOverlaySchema.extend({
 
 /** Compare-and-set port for the active run overlay in the hosted workspace. */
 export class HostedHarnessOverlayStorage {
-  constructor(private readonly client: AgentHostStorageClient) {}
+  constructor(private readonly client: Pick<AgentHostStorageClient, "request">) {}
 
   async getHarnessRunOverlay(runId: string): Promise<HarnessRunOverlay | null> {
     const result = await this.client.request({

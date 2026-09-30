@@ -5,7 +5,7 @@ import {
 } from "@openpond/contracts";
 import { contentHash, type ImmutableReleaseRef } from "@openpond/harness";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import {
   loadLocalHarnessRuntimeFromRelease,
   loadSelectedLocalHarnessRuntime,
@@ -13,7 +13,7 @@ import {
 } from "./local-harness-skill-runtime.js";
 
 export async function loadLocalHarnessRuntimeForAgentRun(
-  store: SqliteStore,
+  store: HarnessStateStore,
   runId: string,
 ): Promise<SelectedLocalHarnessRuntime | null> {
   const overlay = await store.getHarnessRunOverlay(runId);
@@ -33,7 +33,7 @@ export async function loadLocalHarnessRuntimeForAgentRun(
 }
 
 export async function ensureLocalHarnessRunOverlay(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   runId: string;
   workspace: HarnessWorkspace;
   harnessRelease: ImmutableReleaseRef;

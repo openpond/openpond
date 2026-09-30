@@ -7,7 +7,7 @@ import { assertContentHash, sha256 } from "@openpond/harness";
 
 import type { ProfileSkillReadResult } from "../openpond/model-tool-registry.js";
 import type { ProfileSkillRuntime } from "../runtime/hosted-turn/native-tools-runtime.js";
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalHarnessReleaseRecord } from "../store/store-harness-workspaces.js";
 import {
   DESKTOP_PERSONAL_HARNESS_OWNER_ID,
@@ -22,13 +22,13 @@ export type SelectedLocalHarnessRuntime = {
 };
 
 export async function loadSelectedLocalHarnessSkillRuntime(
-  store: SqliteStore,
+  store: HarnessStateStore,
 ): Promise<ProfileSkillRuntime | null> {
   return (await loadSelectedLocalHarnessRuntime(store))?.skillRuntime ?? null;
 }
 
 export async function loadSelectedLocalHarnessRuntime(
-  store: SqliteStore,
+  store: HarnessStateStore,
   reference?: { id: string; contentHash: string } | null,
 ): Promise<SelectedLocalHarnessRuntime | null> {
   if (reference) {

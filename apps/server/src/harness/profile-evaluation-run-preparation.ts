@@ -11,7 +11,7 @@ import {
 } from "@openpond/evals";
 import { validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 
-import type { SqliteStore } from "../store/store.js";
+import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
 import { type ProfileWorkflow } from "@openpond/harness";
 
@@ -43,7 +43,7 @@ type SelectedWorkflows = {
 /** Build a complete, immutable run request from the selected released Profile
  * and the exact Taskset package named by its verifier-private definition. */
 export function createProfileEvaluationRunPreparationService(input: {
-  store: SqliteStore;
+  store: HarnessStateStore;
   selectedWorkflows: () => Promise<SelectedWorkflows>;
   loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
