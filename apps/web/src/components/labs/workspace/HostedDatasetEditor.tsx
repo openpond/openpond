@@ -24,7 +24,8 @@ export function HostedDatasetEditor({ api, existing, onClose, onSaved }: { api: 
       async refreshTasksetDraftModel() { throw new Error("Independent hosted datasets have no Model-owned draft source."); },
     };
   }, [api]);
-  const authoring: TasksetDraftAuthoringClient = { payload: { tasksetDrafts: draft ? [draft] : [], modelProjects: [] }, busyAction: busy ? `taskset-draft:${busy}` : null, actions, refresh: async () => { if (!receipt.current) return null; const value = await api.request<DatasetWorkspaceReceipt>("dataset", { id: receipt.current.datasetId }); receipt.current = value; setDraft(value.workspace.draft); return { tasksetDrafts: [value.workspace.draft], modelProjects: [] }; } };
+  const writing = busy && ["createDraft", "saveDraft", "saveDraftFile", "publishDraft"].includes(busy);
+  const authoring: TasksetDraftAuthoringClient = { payload: { tasksetDrafts: draft ? [draft] : [], modelProjects: [] }, busyAction: writing ? `taskset-draft:${busy}` : null, actions, refresh: async () => { if (!receipt.current) return null; const value = await api.request<DatasetWorkspaceReceipt>("dataset", { id: receipt.current.datasetId }); receipt.current = value; setDraft(value.workspace.draft); return { tasksetDrafts: [value.workspace.draft], modelProjects: [] }; } };
   const defaultModel: ChatModelRef = { providerId: "openpond", modelId: "openpond-chat" };
   return <WorkspacePanel action="dataset" label="Dataset editor"><header><h2>{existing ? "Edit dataset draft" : "Create dataset"}</h2></header>{error ? <p role="alert">{error}</p> : null}<TasksetDraftEditor owner="hosted" draftId={existing?.datasetId} defaultModel={defaultModel} training={authoring} onBack={() => onClose(receipt.current?.datasetId)} onPublished={() => { if (receipt.current) onSaved(receipt.current.datasetId); }} /></WorkspacePanel>;
 }

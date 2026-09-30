@@ -50,6 +50,11 @@ describe("Models page, scope and resource route boundary", () => {
     expect(modelsRouteFromLocation(new URL(modelsPath(releasedDataset), "https://local.invalid"))).toEqual(releasedDataset);
     expect(modelsRouteFromLocation({ pathname: "/console/graders/g", search: "?dataset=release" })).toBeNull();
     expect(modelsRouteFromLocation({ pathname: "/console/datasets", search: "?dataset=release" })).toBeNull();
+    const oldVersion = modelsLocation("datasets", null, { area: "console", resourceId: "dataset-a", projectId: "project-a", detailTab: "tasks", revision: 5, contentHash: "a".repeat(64), sort: "name" });
+    expect(modelsRouteFromLocation(new URL(modelsPath(oldVersion), "https://local.invalid"))).toEqual(oldVersion);
+    const oldGrader = modelsLocation("graders", null, { resourceId: "grader-a", revision: 2, contentHash: "b".repeat(64) });
+    expect(modelsRouteFromLocation(new URL(modelsPath(oldGrader), "https://local.invalid"))).toEqual(oldGrader);
+    for (const search of ["?revision=5", "?hash=" + "a".repeat(64), "?revision=0&hash=" + "a".repeat(64), "?revision=5&hash=invalid", "?sort=unknown"]) expect(modelsRouteFromLocation({ pathname: "/console/datasets/dataset-a/tasks", search })).toBeNull();
     for (const ref of ["model-run:same", "job:same", "reward-run:same"]) {
       const route = modelsLocation("runs", null, { resourceId: ref, detailTab: "metrics" });
       expect(modelsRouteFromLocation(new URL(modelsPath(route), "https://local.invalid"))).toEqual(route);

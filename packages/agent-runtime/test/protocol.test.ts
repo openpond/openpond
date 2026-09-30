@@ -48,6 +48,26 @@ function host(): AgentRuntimeHost {
 }
 
 describe("agent JSON-RPC protocol", () => {
+  // Failure story: a compute child must not choose its source/account, and an
+  // admitted large environment state must not relax ordinary storage limits.
+  test("bounds and isolates the admitted Experiment environment transport", async () => {
+    const request = { contractVersion: 1 as const, requestId: "environment-case-0",
+      operation: "experiment/environment" as const,
+      params: { caseId: "case-1", admissionHash: "a".repeat(64), definitionHash: "b".repeat(64),
+        ordinal: 0, operation: "create" as const, value: { input: {} }, timeoutMs: 1000 } };
+    for (const forged of [{ source: "export function create() {}" }, { sandboxId: "other" }, { teamId: "other" }]) {
+      expect(HostStorageRequestSchema.safeParse({ ...request, params: { ...request.params, ...forged } }).success).toBe(false);
+    }
+    const client = new AgentHostStorageClient();
+    client.bind(async message => {
+      client.accept({ jsonrpc: "2.0", id: message.id,
+        result: { state: { text: "x".repeat(1_048_576) }, observation: {} } });
+    });
+    await expect(client.request(request)).resolves.toMatchObject({ observation: {} });
+    await expect(client.request({ contractVersion: 1, requestId: "ordinary-storage",
+      operation: "settings/get", params: {} })).rejects.toThrow("response is too large");
+    client.close();
+  });
   test("admits the bounded continuation filter on event pages", () => {
     const request = { contractVersion: HOST_STORAGE_CONTRACT_VERSION,
       requestId: "continuation-page-1", operation: "events/page",

@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 
 import { HostedTasksetSummarySchema, OpenPondTasksetCatalogClient } from "../src/taskset-catalog.js";
+import { OpenPondDatasetWorkspaceClient } from "../src/dataset-workspace-client.js";
 
 const item = HostedTasksetSummarySchema.parse({
   schemaVersion: "openpond.hostedTasksetSummary.v1", id: "taskset-one", teamId: "team-one",
@@ -8,6 +9,19 @@ const item = HostedTasksetSummarySchema.parse({
   name: "Reviewed examples", description: "A published package", taskCount: 5,
   buildIntent: "demonstrations", methodHint: "sft", packageBytes: 1024, storedBytes: 512,
   createdAt: "2026-09-06T12:00:00.000Z",
+});
+
+// Collection filters must reach the host before paging; dropping Project or
+// search here would render a convincing but incomplete or wrongly scoped page.
+it("retains Project, search, sort and opaque continuation in both Dataset inventories", async () => {
+  const urls: URL[] = [];
+  const fetch: typeof globalThis.fetch = async input => { const url = new URL(String(input)); urls.push(url); return Response.json(url.pathname.includes("dataset-workspaces") ? { teamId: "team-one", datasets: [], nextCursor: null } : { items: [], nextCursor: null }); };
+  const options = { baseUrl: "https://api.example.test", apiKey: "test", teamId: "team-one", fetch };
+  const query = { projectId: "project/one", search: "pond & river", sort: "name" as const, limit: 1 };
+  await new OpenPondTasksetCatalogClient(options).list({ ...query, afterId: "opaque/+=" });
+  await new OpenPondDatasetWorkspaceClient(options).list({ ...query, cursor: "opaque/+=" });
+  expect(Object.fromEntries(urls[0]!.searchParams)).toEqual({ ...query, limit: "1", afterId: "opaque/+=" });
+  expect(Object.fromEntries(urls[1]!.searchParams)).toEqual({ ...query, limit: "1", cursor: "opaque/+=" });
 });
 
 // A bad cache/proxy must not return another workspace's inventory or a different
@@ -22,7 +36,7 @@ it("binds catalog responses to workspace, identity and bounded pages", async () 
     .mockResolvedValueOnce(Response.json({ ...item, release: { ...item.release, revision: 2 } }));
   const client = new OpenPondTasksetCatalogClient({ baseUrl: "https://api.example.test", apiKey: "test", teamId: "team-one", fetch });
   expect(await client.list({ limit: 1, modelProjectId: "model/one" })).toEqual({ items: [item], nextCursor: item.id });
-  expect(fetch.mock.calls[0]![0]).toBe("https://api.example.test/v1/taskset-catalog?limit=1&modelProjectId=model%2Fone");
+  expect(fetch.mock.calls[0]![0]).toBe("https://api.example.test/v1/taskset-catalog?limit=1&modelProjectId=model%2Fone&sort=id");
   expect(fetch.mock.calls[0]![1]).toMatchObject({ redirect: "error", headers: { Authorization: "Bearer test", "X-OpenPond-Team-Id": "team-one" } });
   expect(await client.get(item.id)).toEqual(item);
   await expect(client.get(item.id)).rejects.toMatchObject({ code: "catalog_identity_mismatch" });
