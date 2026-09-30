@@ -1,8 +1,9 @@
+import { compileTasksetDraftWorkspace } from "../src/dataset-workspaces.js";
 import { expect, it } from "vitest";
 import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
 import { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript-environment/node";
 import { prepareImportedTasksetPackage, prepareModelTasksetDraft, prepareTasksetDraftSource, materializeTasksetDraftWorkspace, compileModelTasksetDraftWorkspace, resolveTasksetPackageExecution } from "../src/taskset-packages.js";
-import { createTasksetDraftWorkspace, tasksetDraftFromTaskset, saveTasksetDraftWorkspaceDocument, saveTasksetDraftWorkspaceFile, readTasksetDraftWorkspaceFile } from "../src/taskset-drafts.js";
+import { createTasksetDraft, createTasksetDraftWorkspace, tasksetDraftFromTaskset, saveTasksetDraftWorkspaceDocument, saveTasksetDraftWorkspaceFile, readTasksetDraftWorkspaceFile } from "../src/taskset-drafts.js";
 import { ordinaryToolTaskset } from "./fixtures/ordinary-tool-taskset.js";
 import { createLearningTextAsset, learningRef, sealLearningContent } from "@openpond/evals/learning";
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
@@ -107,4 +108,25 @@ it("opens, edits and compiles ordinary source snapshots without changing earlier
     expectedModelRevision: 2, sourceDraft: tasksetDraftFromTaskset(reopened.taskset, now) }) });
   expect(readTasksetDraftWorkspaceFile(nextWorkspace, path).file.content.data).toContain("value: 2");
   expect(nextWorkspace.files.some(file => file.path.startsWith("source-artifacts/"))).toBe(true);
+});
+
+// Repackaging an unchanged judge rubric must retain its reusable private asset
+// identity. Otherwise exact Reward reuse rejects a valid dataset publication.
+it("preserves immutable judge rubric references and keeps changed rubrics private", () => {
+  const now = "2026-09-30T12:00:00.000Z";
+  const asset = createLearningTextAsset({ path: "rubric.md", mediaType: "text/markdown", visibility: "verifier", text: "Score one when the answer is pond, otherwise zero." });
+  const base = createTasksetDraft({ profileId: "workspace", id: "judge-reuse", name: "Judge reuse", now });
+  const draft = { ...base, objective: "Return pond.", tasks: [{ schemaVersion: "openpond.taskData.v1" as const, id: "pond", clusterKey: "pond", split: "test" as const, input: { prompt: "Return pond." }, expectedOutput: { text: "pond" }, policyVisibleContext: {}, privilegedContextRef: null, sourceRefs: [], tags: [], metadata: {} }],
+    graders: [{ id: "pond-judge", version: "1", label: "Pond judge", kind: "model_judge" as const, judge: { providerId: "openpond" as const, modelId: "openpond-chat" }, rubric: asset.text, temperature: 0, calibrationStatus: "passed" as const, calibrationFixtureRefs: ["match", "mismatch"], weight: 1, hardGate: false, rewardEligible: true, privileged: true, metadata: { portableRubricRef: asset.asset } }],
+    graderFixtures: [{ id: "match", taskId: "pond", label: "positive" as const, output: { text: "pond" }, infrastructureError: null, expectedPassed: true, expectedRewardEligible: true, metadata: {} }] };
+  const compile = (selected = draft) => compileTasksetDraftWorkspace({ workspace: createTasksetDraftWorkspace({ schemaVersion: "openpond.tasksetDraftWorkspace.v1", draft: selected, files: [] }), preparation: null, adapterId: "rubric-reuse", now });
+  const result = compile();
+  expect(result.taskset.graders[0]).toMatchObject({ kind: "model_judge", rubricRef: asset.asset });
+  const stored = result.files.find(file => file.asset.id === asset.asset.id)!;
+  expect(stored.asset).toEqual(asset.asset);
+  expect(Buffer.from(stored.base64, "base64").toString("utf8")).toBe(asset.text);
+  const changed = compile({ ...draft, graders: [{ ...draft.graders[0]!, rubric: "A revised rubric." }] });
+  expect(changed.taskset.graders[0]).not.toMatchObject({ rubricRef: asset.asset });
+  expect(changed.files.every(file => file.asset.visibility !== "policy")).toBe(true);
+  expect(() => compile({ ...draft, graders: [{ ...draft.graders[0]!, metadata: { portableRubricRef: { ...asset.asset, visibility: "policy" } } }] } as typeof draft)).toThrow(/policy-visible/);
 });

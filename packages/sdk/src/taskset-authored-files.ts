@@ -64,8 +64,13 @@ export function prepareAuthoredTasksetSource(tasksetInput: Taskset, sourceFiles:
       const content = new TextEncoder().encode(grader.rubric);
       const sourcePath = `graders/rubric-${sha256(content)}.md`;
       bytes.set(sourcePath, content);
-      const asset = ref(`rubric-${grader.id}`, sourcePath, "text/markdown", "verifier");
-      add(asset);
+      let asset = ref(`rubric-${grader.id}`, sourcePath, "text/markdown", "verifier");
+      const previous = ImmutableAssetRefSchema.safeParse(grader.metadata.portableRubricRef);
+      if (previous.success && previous.data.contentHash === asset.contentHash && previous.data.sizeBytes === asset.sizeBytes) {
+        if (previous.data.visibility === "policy") throw new Error("A grader rubric cannot become policy-visible.");
+        asset = previous.data;
+      }
+      add(asset, sourcePath);
       generatedFiles.push({ path: sourcePath, role: "verifier", content: grader.rubric });
       return { ...grader, metadata: { ...grader.metadata, portableRubricRef: asset } };
     }
