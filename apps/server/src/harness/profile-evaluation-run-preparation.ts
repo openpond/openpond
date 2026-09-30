@@ -25,6 +25,12 @@ const PrepareRequestSchema = z.object({
   hostModelConfigurationHash: ReleaseHashSchema.optional(),
   maximumSpendUsd: z.number().positive().max(10_000).optional(),
   expectedManifestHash: ReleaseHashSchema.optional(),
+  hostExperiment: z.object({
+    definition: z.object({ id: ReleaseIdSchema, revision: z.number().int().positive(), contentHash: ReleaseHashSchema }).strict(),
+    configurationHash: ReleaseHashSchema,
+    project: z.object({ id: ReleaseIdSchema, revision: z.number().int().positive(), contentHash: ReleaseHashSchema,
+      targetId: ReleaseIdSchema.nullable() }).strict().optional(),
+  }).strict().optional(),
 }).strict();
 
 type SelectedWorkflows = {
@@ -150,7 +156,15 @@ export function createProfileEvaluationRunPreparationService(input: {
         maximumSpendUsd: parsed.maximumSpendUsd ?? null,
       },
       createdAt: parsed.createdAt,
-      metadata: { sourceTasksetId: taskset.metadata.sourceTasksetId ?? taskset.id },
+      metadata: {
+        sourceTasksetId: taskset.metadata.sourceTasksetId ?? taskset.id,
+        ...(selected.profileRef.source === "openpond_git" ? { profileRepositoryId: selected.profileRef.repositoryId } : {}),
+        ...(parsed.hostExperiment ? {
+          experimentDefinition: parsed.hostExperiment.definition,
+          experimentConfigurationHash: parsed.hostExperiment.configurationHash,
+          ...(parsed.hostExperiment.project ? { project: parsed.hostExperiment.project } : {}),
+        } : {}),
+      },
     });
     assertProfileEvaluationRunAdmission(manifest, taskset, catalog);
     if (parsed.expectedManifestHash && manifest.contentHash !== parsed.expectedManifestHash) {
