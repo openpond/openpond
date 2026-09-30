@@ -26,7 +26,7 @@ Options:
 
 ```text
 Usage:
-  openpond experiments <save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--json]
+  openpond experiments <prepare-harness|save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--json]
 
 Options:
   --after-id <string>

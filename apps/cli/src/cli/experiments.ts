@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { OpenPondExperimentsClient, SaveExperimentSchema, StartExperimentSchema, ExperimentScoringRequestSchema, experimentDefinitionRef } from "openpond-sdk/experiments";
+import { OpenPondExperimentsClient, SaveExperimentSchema, StartExperimentSchema, PrepareHarnessExperimentSchema, ExperimentScoringRequestSchema, experimentDefinitionRef } from "openpond-sdk/experiments";
 import { loadConfig } from "../config";
 import { DEFAULT_OPENPOND_API_BASE_URL } from "../urls";
 import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl } from "./common";
@@ -7,13 +7,17 @@ import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl } f
 export async function runExperimentsCommand(options: Record<string, string | boolean>, rest: string[]) {
   const [action, id] = rest;
   const teamId = optionString(options, "team");
-  if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
+  if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <prepare-harness|save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
   const config = await loadConfig();
   const credentials = { teamId, apiKey: await ensureApiKey(config, resolveBaseUrl(config)),
     baseUrl: resolveApiBaseUrlOption(options) ?? config.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL };
   const definitions = new OpenPondExperimentsClient(credentials);
   let result: unknown;
-  if (action === "save") {
+  if (action === "prepare-harness") {
+    const file = optionString(options, "inputFile");
+    if (!file || id || (await stat(file)).size > 1_048_576) throw new Error("Harness preparation requires a bounded --input-file with its released target, model and ceiling.");
+    result = await definitions.prepareHarness(PrepareHarnessExperimentSchema.parse(JSON.parse(await readFile(file, "utf8"))));
+  } else if (action === "save") {
     const file = optionString(options, "inputFile");
     if (!file || id) throw new Error("Saving requires --input-file with the complete configuration and stable operationId.");
     if ((await stat(file)).size > 1_048_576) throw new Error("Experiment input exceeds one MiB.");
