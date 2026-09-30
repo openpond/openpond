@@ -11,8 +11,9 @@ export class OpenPondDatasetWorkspaceClient {
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim()) throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");
   }
-  async list(options: { cursor?: string; signal?: AbortSignal } = {}) {
-    const result = DatasetWorkspaceListSchema.parse(await this.request(`?${new URLSearchParams(options.cursor ? { cursor: options.cursor } : {})}`, "GET", undefined, options.signal));
+  async list(options: { cursor?: string; projectId?: string; signal?: AbortSignal } = {}) {
+    const params = new URLSearchParams({ ...(options.cursor ? { cursor: options.cursor } : {}), ...(options.projectId ? { projectId: options.projectId } : {}) });
+    const result = DatasetWorkspaceListSchema.parse(await this.request(`?${params}`, "GET", undefined, options.signal));
     if (result.teamId !== this.options.teamId) throw new Error("Dataset list workspace mismatch.");
     return result;
   }
