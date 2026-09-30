@@ -1,3 +1,4 @@
+import { HostedEvaluationWorkspace } from "./workspace/HostedEvaluationWorkspace";
 import { LabComparisonSeriesCreateDialog } from "./LabComparisonSeriesCreateDialog";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LearnedPreferenceRewardBinding, TasksetDraft } from "@openpond/contracts";
@@ -185,6 +186,7 @@ export function LabsRoute(props: LabsRouteProps) {
   let page: ReactNode;
   if (workspaceChanged) page = <p role="status">Loading workspace…</p>;
   else if (!route) page = unavailable("This Models location is unavailable.");
+  else if (["datasets", "graders", "experiments"].includes(route.page)) page = <HostedEvaluationWorkspace key={workspaceKey} connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`} route={route} onNavigate={open} onLocalDatasets={() => open(modelsLocation("tasksets"))} />;
   else if (route.modelId && !state) page = <p role="status">Loading model…</p>;
   else if (route.modelId && !selected) page = unavailable("This model is not available in the active profile and team.");
   else if (route.page === "get-started") {
@@ -260,7 +262,7 @@ export function LabsRoute(props: LabsRouteProps) {
       <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }
-  const tab: LabPrimaryTab = (route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page ?? "overview";
+  const tab: LabPrimaryTab = (route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page === "datasets" ? "tasksets" : route?.page === "graders" ? "rewards" : route?.page === "experiments" ? "evals" : route?.page ?? "overview";
   return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
     {hostedRefreshError ? <p role="status">{hostedRefreshError}</p> : null}
     {route && (route.page === "runs" || route.page === "evaluations") ? <ModelsRunViews route={route} /> : null}

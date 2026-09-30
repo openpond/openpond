@@ -1,3 +1,4 @@
+import { OpenPondExperimentError } from "openpond-sdk/experiments";
 import { OpenPondLearningError } from "openpond-sdk/learning";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -17,6 +18,16 @@ import {
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
+  if (request.method === "POST" && requestUrl.pathname === "/v1/training/evaluation-workspace") {
+    response.setHeader("Cache-Control", "no-store");
+    try { sendJson(response, 200, await deps.trainingPayload("evaluation_workspace", await readJson(request, { maxBytes: 67_108_864 }), requestUrl)); }
+    catch (error) {
+      if (error instanceof ZodError) sendJson(response, 400, { code: "evaluation_workspace_request_invalid", error: "The evaluation request does not match its contract." });
+      else if (error instanceof OpenPondExperimentError || error instanceof OpenPondLearningError) sendJson(response, error.status, { code: error.code, error: error.message });
+      else throw error;
+    }
+    return true;
+  }
   if (request.method === "POST" && ["/v1/training/models/batch-review", "/v1/training/models/batch-review/inspect"].includes(requestUrl.pathname)) {
     try {
       const result = await deps.trainingPayload(requestUrl.pathname.endsWith("/inspect") ? "inspect_model_batch_review" : "begin_model_batch_review", await readJson(request, { maxBytes: 16_777_216 }), requestUrl);

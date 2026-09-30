@@ -35,11 +35,13 @@ export const TrainingProjectContentSchema = z.object({
 });
 export const TrainingProjectSchema = z.object({
   schemaVersion: z.literal("openpond.trainingProject.v1"), id: Id, teamId: Id, creatorUserId: Id,
+  ownerScope: z.enum(["workspace", "personal"]).optional(),
   revision: Revision, content: TrainingProjectContentSchema, archived: z.boolean(),
   createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
 }).strict();
 export const TrainingProjectWriteSchema = z.object({
   operationId: Id, id: Id, expectedRevision: z.number().int().nonnegative(), content: TrainingProjectContentSchema,
+  ownerScope: z.enum(["workspace", "personal"]).optional(),
 }).strict();
 export const TrainingProjectArchiveSchema = z.object({ operationId: Id, expectedRevision: Revision, archived: z.boolean() }).strict();
 export const TrainingProjectListSchema = z.object({ teamId: Id, projects: z.array(TrainingProjectSchema).max(100), nextCursor: Id.nullable() }).strict();
