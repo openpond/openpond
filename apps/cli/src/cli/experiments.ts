@@ -7,7 +7,7 @@ import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl } f
 export async function runExperimentsCommand(options: Record<string, string | boolean>, rest: string[]) {
   const [action, id] = rest;
   const teamId = optionString(options, "team");
-  if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <save|read|list|executions|start|status|cancel|retry|score|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
+  if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
   const config = await loadConfig();
   const credentials = { teamId, apiKey: await ensureApiKey(config, resolveBaseUrl(config)),
     baseUrl: resolveApiBaseUrlOption(options) ?? config.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL };
@@ -47,6 +47,7 @@ export async function runExperimentsCommand(options: Record<string, string | boo
       if (request.execution.id !== id) throw new Error("Scoring input belongs to a different execution.");
       result = await definitions.score(request);
     }
+    else if (action === "passes") result = await definitions.scoringPasses(id, { afterId: optionString(options, "afterId") || undefined });
     else if (action === "pass") result = await definitions.scoringPass(id);
     else if (action === "cancel-pass") result = await definitions.cancelScoringPass(id);
     else if (action === "pass-result") result = await definitions.scoringResult(id);
