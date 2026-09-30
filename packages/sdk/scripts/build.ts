@@ -15,6 +15,7 @@ await mkdir(dist, { recursive: true });
 
 await build({
   entryPoints: {
+    experiments: path.join(root, "src/experiments.ts"),
     "dataset-workspaces": path.join(root, "src/dataset-workspaces.ts"),
     "training-projects": path.join(root, "src/training-projects.ts"),
     index: path.join(root, "src/index.ts"),

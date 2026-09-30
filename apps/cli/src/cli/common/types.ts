@@ -29,6 +29,7 @@ export type Command =
   | "continual"
   | "training"
   | "taskset"
+  | "experiments"
   | "desktop-test"
   | "project"
   | "agent"

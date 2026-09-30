@@ -10,6 +10,7 @@ import { OpenPondProfileActionsClient } from "./profile-actions.js";
 import { OpenPondWorkflowsClient } from "./workflows.js";
 import type { OpenPondClientOptions } from "./types.js";
 import { OpenPondLearningClient } from "./learning-client.js";
+import { OpenPondExperimentsClient } from "./experiment-client.js";
 import { configuredEndpoint, configuredKey } from "./work-sandbox.js";
 
 export class OpenPondClient {
@@ -19,6 +20,7 @@ export class OpenPondClient {
   readonly actions: OpenPondProjectActionsClient;
   readonly profileActions: OpenPondProfileActionsClient;
   readonly learning: (scope: string) => OpenPondLearningClient;
+  readonly experiments: (teamId: string) => OpenPondExperimentsClient;
 
   constructor(options: OpenPondClientOptions) {
     const apiKey = options.apiKey?.trim() ?? "";
@@ -37,6 +39,7 @@ export class OpenPondClient {
 
     const apiBaseUrl = options.baseUrl?.trim() || "https://api.openpond.ai";
     this.learning = (scope) => new OpenPondLearningClient({ apiKey, baseUrl: apiBaseUrl, scope });
+    this.experiments = (teamId) => new OpenPondExperimentsClient({ apiKey, baseUrl: apiBaseUrl, teamId });
     this.sandboxes = createOpenPondSandboxClient({
       apiKey: sandbox?.apiKey ?? apiKey,
       baseUrl: apiBaseUrl,
