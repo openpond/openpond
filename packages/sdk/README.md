@@ -14,6 +14,22 @@ npm install openpond-sdk
 
 Node.js 22.14 or newer is required. This package is server-only: never expose an OpenPond API key in browser code or a `NEXT_PUBLIC_*` environment variable.
 
+## Saved Experiments
+
+`OpenPondExperimentsClient` from `openpond-sdk/experiments` saves immutable named
+configuration revisions and starts separate executions. It is also available as
+`createOpenPondClient({ apiKey, baseUrl }).experiments(teamId)`. Saving does not
+start compute. Supply stable operation IDs for save and Start, and reuse them
+after transport failures. A new Start operation creates another execution from
+the exact definition reference; configuration updates require `expectedRevision`.
+
+`get` and `list` read saved configurations; `result` reads portable retained
+execution evidence. `compare` verifies both retained results and uses the shared
+Evals compatibility and score-eligibility rules without starting or regrading
+anything. Execution status and cancellation use `OpenPondModelTasksetRunsClient`.
+Host runtime readiness, permissions and whole-execution budgets remain enforced
+on Start. Unsupported runtime configurations fail admission before dispatch.
+
 ## Next.js route handler
 
 Sandbox and model configuration are independently optional. With only `apiKey`,

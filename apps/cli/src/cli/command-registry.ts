@@ -72,6 +72,12 @@ const PROFILE_SDK_OPTION_SCHEMA = {
 
 export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   {
+    name: "experiments",
+    usage: "openpond experiments <save|read|list|start|status|cancel|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--json]",
+    optionSchema: { team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", afterId: "string", limit: "integer", json: "boolean" },
+    handler: async ({ options, rest }) => (await import("./experiments")).runExperimentsCommand(options, rest),
+  },
+  {
     name: "home",
     usage: "openpond home [--home <directory>]",
     optionSchema: {},

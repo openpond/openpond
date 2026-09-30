@@ -3,6 +3,7 @@ import { EvaluationProjectContextSchema, EvaluationMessagesSchema } from "./eval
 export { EvaluationProjectContextSchema, EvaluationMessagesSchema, type EvaluationProjectContext } from "./evaluation-project-context.js";
 import { RewardCompositionSchema } from "@openpond/evals/rewards";
 import { TaskGradeSchema } from "@openpond/evals/graders";
+import { ExperimentAttemptGradeSchema } from "./experiment-grading-contracts.js";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { canonicalJson, canonicalSha256 } from "./protocol.js";
 
@@ -57,10 +58,17 @@ export const ModelStarterAttemptResultSchema = z.object({
   // Ordinary Tasksets have no Reward binding. Absence preserves the hash of
   // already retained v1 results; new producers explicitly return null or a grade.
   grade: TaskGradeSchema.nullable().optional(),
+  experimentGrade: ExperimentAttemptGradeSchema.nullable().optional(),
   environment: z.object({ status: z.enum(["completed", "budget_exhausted", "cancelled", "timed_out", "policy_failure", "environment_failure"]), collected: z.boolean(), definition: ModelProjectVersionedRefSchema, initialStateHash: HashSchema.nullable(), finalStateHash: HashSchema.nullable(), attemptHash: HashSchema }).strict(),
   providerRequestIds: z.array(IdSchema).max(1_001),
   contentHash: HashSchema,
 }).strict().superRefine((value, context) => {
+  if (value.experimentGrade) {
+    if (value.grade || value.composition) context.addIssue({ code: "custom", message: "Selected Experiment grading cannot claim another grade population." });
+    if (!["completed", "failed"].includes(value.attempt.status) || !value.attempt.resultAvailable || value.attempt.score !== value.experimentGrade.score
+      || value.attempt.gradingStatus !== value.experimentGrade.gradingStatus || value.attempt.passed !== (value.experimentGrade.score === null ? null : value.experimentGrade.passed))
+      context.addIssue({ code: "custom", message: "Experiment grading differs from its retained attempt summary." });
+  }
   if (!value.grade) return;
   if (value.composition) context.addIssue({ code: "custom", path: ["grade"], message: "An ordinary grade cannot also claim a Reward composition." });
   if (!["completed", "failed"].includes(value.attempt.status) || !value.attempt.resultAvailable || value.attempt.score !== value.grade.score || value.attempt.gradingStatus !== value.grade.gradingStatus || value.attempt.passed !== (value.grade.score === null ? null : value.grade.passed)) context.addIssue({ code: "custom", path: ["grade"], message: "Ordinary grade differs from its terminal attempt summary." });
