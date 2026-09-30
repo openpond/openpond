@@ -5,7 +5,7 @@ import { createProfileEvaluationSuiteRun } from "@openpond/evals";
 
 import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalProfileEvaluationRun } from "../store/store-evaluation-results.js";
-import { profileEvaluationsForRelease } from "./local-profile-evaluation-runtime.js";
+import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
 import type { createProfileEvaluationRunPreparationService } from "./profile-evaluation-run-preparation.js";
 
 const SuiteRequestSchema = z.object({
@@ -23,7 +23,8 @@ type PreparedRun = Awaited<ReturnType<ReturnType<typeof createProfileEvaluationR
 /** Run every declared definition against its own frozen Taskset and retain a
  * suite receipt only after each member's complete run has been persisted. */
 export function createProfileEvaluationSuiteService(input: {
-  store: HarnessStateStore;
+  store: Pick<HarnessStateStore, "getProfileEvaluationSuiteRun" | "getProfileEvaluationRun" | "saveProfileEvaluationSuiteRun">;
+  loadCatalog: ProfileEvaluationCatalogSource;
   selectedWorkflows: () => Promise<{ profileRef: PreparedRun["profileRef"]; sourceRevision: string; harnessRelease: { id: string; contentHash: string } }>;
   prepareRun: (request: unknown) => Promise<PreparedRun>;
   executeRun: (request: PreparedRun) => Promise<LocalProfileEvaluationRun>;
@@ -31,8 +32,8 @@ export function createProfileEvaluationSuiteService(input: {
   const inFlight = new Map<string, { requestHash: string; promise: Promise<Awaited<ReturnType<HarnessStateStore["saveProfileEvaluationSuiteRun"]>>> }>();
   const run = async (request: z.infer<typeof SuiteRequestSchema>) => {
     const selected = await input.selectedWorkflows();
-    const discovered = await profileEvaluationsForRelease({
-      store: input.store, ref: selected.profileRef,
+    const discovered = await input.loadCatalog({
+      ref: selected.profileRef,
       sourceRevision: selected.sourceRevision, harnessRelease: selected.harnessRelease,
     });
     const catalog = {
