@@ -34,7 +34,7 @@ const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
 
 export function modelsLocation(page: ModelsPage = "models", modelId: string | null = null, detail: Partial<Omit<ModelsRoute, "page" | "modelId">> = {}): ModelsRoute {
   if (page === "evaluations" && detail.collection === "review") return modelsLocation("labeling", modelId, { ...detail, collection: "default" });
-  return { page, modelId: page === "get-started" ? null : modelId, collection: page === "evaluations" ? "results" : "default", resourceId: null, detailTab: null, query: "", after: null, ...detail };
+  return { page, modelId: ["get-started", "datasets", "graders", "experiments"].includes(page) ? null : modelId, collection: page === "evaluations" ? "results" : "default", resourceId: null, detailTab: null, query: "", after: null, ...detail };
 }
 
 export function modelsRouteFromLocation(input: { pathname: string; search?: string }): ModelsRoute | null {
@@ -70,18 +70,19 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const sourceId = query.get("source");
   if (sourceId !== null && ((page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
   const hosted = ["datasets", "graders", "experiments"].includes(page);
-  const projectId = query.get("project");
+  const projectId = query.get("project") === "all" ? null : query.get("project");
   const executionId = query.get("execution");
   const passId = query.get("pass");
   if ([projectId, executionId, passId].some(id => id !== null && (!id.trim() || id.length > 240)) || (!hosted && (projectId || executionId || passId)) || (page !== "experiments" && (executionId || passId)) || (hosted && pathModelId)) return null;
   const legacyModelId = query.get("model");
+  if (hosted && legacyModelId !== null) return null;
   if (pathModelId && legacyModelId && pathModelId !== legacyModelId) return null;
   const modelId = pathModelId ?? legacyModelId;
   if (page === "get-started" && query.size !== 0) return null;
   const search = query.get("q") ?? "";
   const after = query.get("after");
   if ((modelId !== null && (!modelId.trim() || modelId.length > 500)) || search.length > 1_000 || (after !== null && (!after.trim() || after.length > 2_000))) return null;
-  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(hosted ? { projectId, executionId, passId } : {}), ...(sourceId !== null ? { sourceId } : {}) });
+  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(hosted ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("execution") ? { executionId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
 }
 
 export function modelsPath(route: ModelsRoute): string {
@@ -97,6 +98,7 @@ export function modelsPath(route: ModelsRoute): string {
   if (route.resourceId && route.detailTab) parts.push(encodeURIComponent(route.detailTab));
   const query = new URLSearchParams();
   if (route.projectId) query.set("project", route.projectId);
+  else if (route.projectId === null && ["datasets", "graders", "experiments"].includes(route.page)) query.set("project", "all");
   if (route.executionId) query.set("execution", route.executionId);
   if (route.passId) query.set("pass", route.passId);
   if (route.query) query.set("q", route.query);
@@ -106,7 +108,7 @@ export function modelsPath(route: ModelsRoute): string {
 }
 
 export function changeModelsScope(route: ModelsRoute, modelId: string | null): ModelsRoute {
-  return modelsLocation(route.page, modelId, { collection: route.collection === "new" || route.collection === "drafts" ? "default" : route.collection });
+  return modelsLocation(route.page, modelId, { ...(["datasets", "graders", "experiments"].includes(route.page) && route.projectId !== undefined ? { projectId: route.projectId } : {}), collection: route.collection === "new" || route.collection === "drafts" ? "default" : route.collection });
 }
 
 export function modelsResourceLocation(route: ModelsRoute, resourceId: string | null, detailTab: string | null = null): ModelsRoute {
