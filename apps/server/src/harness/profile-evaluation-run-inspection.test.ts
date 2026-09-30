@@ -48,7 +48,7 @@ describe("Profile evaluation run inspection", () => {
   // The existing summary boundary does not resolve retained policy turns.
   it("reads the exact retained policy turn and rejects foreign or changed evidence", async () => {
     const harnessRelease = { id: "harness", contentHash: contentHash("harness") };
-    const manifest = { ...run.manifest, profileEvaluation: { sourceRevision: "revision", harnessRelease, target: { kind: "profile" } },
+    const manifest = { ...run.manifest, profileEvaluation: { sourceRevision: "revision", harnessRelease, target: { kind: "profile" as const } },
       policy: { kind: "model", model: { provider: "openpond", model: "test-model" } } };
     const events = [{ id: "event", turnId: "turn", name: "assistant.delta", output: "pond" },
       { id: "completed", turnId: "turn", name: "turn.completed", output: "" }];
