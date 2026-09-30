@@ -3,6 +3,8 @@ import type { OpenPondProfileRef } from "@openpond/contracts";
 
 import { inspectProfileEvaluationRun } from "./profile-evaluation-run-inspection.js";
 import { readProfileEvaluationPolicyEvidence } from "./profile-evaluation-policy-evidence.js";
+import { createAttemptReceipt, createTasksetRunManifest, tasksetRunMetricPolicy } from "@openpond/evals";
+import { genericToolConformance } from "@openpond/evals/conformance";
 import { contentHash } from "@openpond/harness";
 
 describe("Profile evaluation run inspection", () => {
@@ -46,7 +48,7 @@ describe("Profile evaluation run inspection", () => {
   // The existing summary boundary does not resolve retained policy turns.
   it("reads the exact retained policy turn and rejects foreign or changed evidence", async () => {
     const harnessRelease = { id: "harness", contentHash: contentHash("harness") };
-    const manifest = { ...run.manifest, profileEvaluation: { sourceRevision: "revision", harnessRelease, target: { kind: "profile" } },
+    const manifest = { ...run.manifest, profileEvaluation: { sourceRevision: "revision", harnessRelease, target: { kind: "profile" as const } },
       policy: { kind: "model", model: { provider: "openpond", model: "test-model" } } };
     const events = [{ id: "event", turnId: "turn", name: "assistant.delta", output: "pond" },
       { id: "completed", turnId: "turn", name: "turn.completed", output: "" }];
@@ -72,5 +74,30 @@ describe("Profile evaluation run inspection", () => {
       runtimeEventsForTurn: async () => [{ ...events[0], output: "changed" }] as never } })).rejects.toThrow("immutable receipt");
     await expect(readProfileEvaluationPolicyEvidence({ ...input, receipt: { ...input.receipt,
       outputHash: contentHash({ text: "different" }) } })).rejects.toThrow("output differs");
+
+    // Cancellation can retain a completed case before a full run record exists.
+    // A pinned manifest still cannot read a case from a different repository.
+    const partialManifest = createTasksetRunManifest({ schemaVersion: "openpond.tasksetRunManifest.v1", id: "run-1",
+      tasksetRelease: { id: genericToolConformance.taskset.id, contentHash: genericToolConformance.taskset.contentHash },
+      packageHash: contentHash("package"), execution: { kind: "harness", harnessRelease },
+      profileEvaluation: { ...manifest.profileEvaluation, profileId: "default", catalogHash: contentHash("catalog"),
+        definitionId: "check", definitionHash: contentHash("definition"), environmentHash: contentHash("environment") },
+      policy: { kind: "model", model: { provider: "openpond", model: "test-model", revision: null, artifactHash: null, tokenizerRevision: null, chatTemplateHash: null }, configurationHash: contentHash("model") },
+      gradingRole: "evaluation", metricPolicy: tasksetRunMetricPolicy(genericToolConformance.taskset),
+      population: [{ receiptId: receipt.id, taskId: receipt.taskId, seed: receipt.seed, fixtureId: null }],
+      runtimeTarget: genericToolConformance.manifest.runtimeTarget, limits: genericToolConformance.manifest.limits,
+      createdAt: turn.startedAt, metadata: { profileRepositoryId: "repo-a" } });
+    const partialReceipt = createAttemptReceipt({ schemaVersion: "openpond.attemptReceipt.v1", id: receipt.id,
+      taskId: receipt.taskId, seed: receipt.seed, runManifest: { id: partialManifest.id, contentHash: partialManifest.contentHash },
+      terminal: true, failureClass: null, outputHash: retainedReceipt.outputHash, traceHash: retainedReceipt.traceHash,
+      artifactRefs: [], graderEvidenceRefs: receipt.graderEvidenceRefs, startedAt: turn.startedAt, completedAt: turn.completedAt,
+      latencyMs: 1_000, costUsd: null, metadata: retainedReceipt.metadata });
+    const partialStore = { ...store, getProfileEvaluationRun: async () => null,
+      getProfileEvaluationReceipt: async () => partialReceipt, getProfileEvaluationGrade: async () => grade,
+      getSession: async () => ({ ...session, metadata: { ...session.metadata,
+        profileEvaluationRun: { id: partialManifest.id, contentHash: partialManifest.contentHash } } }) };
+    const inspection = { store: partialStore, profileRef, runId: partialManifest.id, receiptId: receipt.id, manifest: partialManifest } as unknown as Parameters<typeof inspectProfileEvaluationRun>[0];
+    expect(await inspectProfileEvaluationRun(inspection)).toMatchObject({ cases: [{ evidence: { output: { text: "pond" } } }] });
+    await expect(inspectProfileEvaluationRun({ ...inspection, profileRef: otherProfileRef })).rejects.toThrow("selected Profile");
   });
 });

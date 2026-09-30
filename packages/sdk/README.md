@@ -30,6 +30,14 @@ anything. Execution status and cancellation use `OpenPondModelTasksetRunsClient`
 Host runtime readiness, permissions and whole-execution budgets remain enforced
 on Start. Unsupported runtime configurations fail admission before dispatch.
 
+Released Profile, Workflow, Skill and Agent-action targets use the
+`hosted_harness` policy with an exact `profileRepositoryId`, native `source`,
+`packageHash` and `modelConfigurationHash`. The host resolves these pins through
+the authorized native runtime; callers cannot replace released behavior with
+Chat messages. Native receipt IDs belong to each execution, while the saved
+definition retains the same task/seed population. Clients verify repository,
+source, package, model and case identities before accepting a run.
+
 ## Next.js route handler
 
 Sandbox and model configuration are independently optional. With only `apiKey`,
