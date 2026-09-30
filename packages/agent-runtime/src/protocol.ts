@@ -27,6 +27,8 @@ export const AGENT_RPC_METHODS = [
   "profile/evaluations/executeRun",
   "profile/evaluations/compare",
   "profile/evaluations/report",
+  "experiments/executeCase",
+  "experiments/cancelCase",
   "harness/inspect",
   "harness/proposalReview",
   "harness/review",
@@ -124,6 +126,8 @@ export type AgentRuntimeHost = {
   profileEvaluationExecuteRun(params: unknown): Promise<unknown>;
   profileEvaluationCompare(params: unknown): Promise<unknown>;
   profileEvaluationReport(params: unknown): Promise<unknown>;
+  experimentExecuteCase?(params: unknown): Promise<unknown>;
+  experimentCancelCase?(params: unknown): Promise<unknown>;
   harnessInspect(params: unknown): Promise<unknown>;
   harnessProposalReview(params: unknown): Promise<unknown>;
   harnessReview(params: unknown): Promise<unknown>;
@@ -218,6 +222,14 @@ export class AgentJsonRpcDispatcher {
       case "profile/trainingSource": return this.#host.profileTrainingSource(params);
       case "profile/evaluations/prepare": return this.#host.profileEvaluationPrepare(params);
       case "profile/evaluations/run": return this.#host.profileEvaluationRun(params);
+      case "experiments/executeCase": {
+        if (!this.#host.experimentExecuteCase) throw new Error("Experiment execution is unavailable in this runtime.");
+        return this.#host.experimentExecuteCase(params);
+      }
+      case "experiments/cancelCase": {
+        if (!this.#host.experimentCancelCase) throw new Error("Experiment cancellation is unavailable in this runtime.");
+        return this.#host.experimentCancelCase(params);
+      }
       case "profile/evaluations/runSuite": return this.#host.profileEvaluationRunSuite(params);
       case "profile/evaluations/executeCase": return this.#host.profileEvaluationExecuteCase(params);
       case "profile/evaluations/executeRun": return this.#host.profileEvaluationExecuteRun(params);

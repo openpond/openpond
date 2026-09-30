@@ -22,14 +22,14 @@ export class AgentHostStorageClient {
     if (this.#pending.size >= 32) throw new Error("Host storage request limit exceeded.");
     const id = `host-storage:${this.#nextId++}`;
     const message: JsonRpcRequest = { jsonrpc: "2.0", id, method: "host/storage", params };
-    if (Buffer.byteLength(JSON.stringify(message)) > 256_000) {
+    if (Buffer.byteLength(JSON.stringify(message)) > (params.operation === "experiment/policy" ? 8_388_608 : 256_000)) {
       throw new Error("Host storage request is too large.");
     }
     const response = new Promise<unknown>((resolve, reject) => {
       // Cold hosted sandbox provisioning can exceed the normal storage budget.
       // The sandbox adapter supplies its per-action limit; do not truncate it
       // to the generic 60-second storage cap before the host can respond.
-      const capMs = params.operation === "sandbox/request" ? 300_000 : 60_000;
+      const capMs = params.operation === "sandbox/request" || params.operation === "experiment/policy" ? 300_000 : 60_000;
       const timer = setTimeout(() => {
         this.#pending.delete(id);
         reject(new Error("Host storage request timed out."));

@@ -32,6 +32,7 @@ type ParsedCliArgs = {
   printAccessUrl: boolean;
   storeDir: string | null;
   hostedCacheHome?: string;
+  experimentOwner?: boolean;
   sourceBrowserState?: string;
   profileSource?: ProfileSourceCliOptions;
   admittedProfileRelease?: AdmittedHostedProfileRelease;
@@ -68,6 +69,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let printAccessUrl = false;
   let storeDir: string | null = null;
   let hostedCacheHome: string | undefined;
+  let experimentOwner=false;
   let sourceBrowserState: string | undefined;
   let profileSourceRoot: string | null = null;
   let profileRepositoryId: string | null = null;
@@ -117,6 +119,8 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       i += 1;
     } else if (arg === "--hosted-cache-home") {
       hostedCacheHome = path.resolve(requireValue(args, i, arg)); i += 1;
+    } else if (arg === "--experiment-owner") {
+      experimentOwner=true;
     } else if (arg === "--runtime-storage") {
       const value = requireValue(args, i, arg);
       if (value !== "hosted-postgres") throw new Error("Unsupported app-server runtime storage.");
@@ -169,11 +173,13 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
     throw new Error("Hosted Profile release requires hosted Postgres app-server mode.");
   }
   if (hostedCacheHome && runtimeStorage !== "hosted_postgres") throw new Error("Hosted cache home requires hosted Postgres mode.");
+  if(experimentOwner && (mode!=="app-server" || runtimeStorage!=="sqlite_bundle" || profileFlags || !storeDir)) throw new Error("Experiment owner mode requires an isolated app-server home without Profile selection.");
   return {
     mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, runtimeStorage, sourceBrowserState,
     ...(profileFlags ? { profileSource: { repoPath: profileSourceRoot!, repositoryId: profileRepositoryId!, profileId: profileId!, sourceRevision: profileRevision! } } : {}),
     ...(admittedProfileRelease ? { admittedProfileRelease } : {}),
     ...(hostedCacheHome ? { hostedCacheHome } : {}),
+    ...(experimentOwner ? {experimentOwner:true} : {}),
     help: false,
   };
 }
@@ -279,7 +285,7 @@ export async function runOpenPondServerCli(factories: ServerCliFactories): Promi
 
   if (args.mode === "app-server") {
     await runAgentServer(factories.createOpenPondAppServer, args.storeDir, args.profileSource, args.runtimeStorage,
-      args.admittedProfileRelease, args.hostedCacheHome);
+      args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner);
     return;
   }
 
@@ -360,7 +366,7 @@ export async function runOpenPondAppServerCli(
     throw new Error("The app-server entrypoint only accepts the app-server command.");
   }
   await runAgentServer(createOpenPondAppServer, args.storeDir, args.profileSource,
-    args.runtimeStorage, args.admittedProfileRelease, args.hostedCacheHome);
+    args.runtimeStorage, args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner);
 }
 
 async function runAgentServer(
@@ -370,6 +376,7 @@ async function runAgentServer(
   runtimeStorage: ParsedCliArgs["runtimeStorage"] = "sqlite_bundle",
   admittedProfileRelease?: AdmittedHostedProfileRelease,
   hostedCacheHome?: string,
+  experimentOwner=false,
 ): Promise<void> {
   const hostStorageClient = new AgentHostStorageClient();
   if (runtimeStorage === "hosted_postgres") {
@@ -394,6 +401,9 @@ async function runAgentServer(
   const appServer = await createOpenPondAppServer({
     ...(storeDir ? { storeDir } : {}),
     ...(profileSource ? { profileSource } : {}),
+    ...(experimentOwner?{experimentPolicyClient:hostStorageClient,
+      services:{webSearch:false,scheduling:false,connectedApps:false,tasksets:false,projectActions:false,profileActions:false,backgroundReview:false},
+    }:{}),
     hostStorageClient,
   });
   await runAppServerJsonl({

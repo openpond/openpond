@@ -13,6 +13,7 @@ import type { LabDetailKind, LabDetailLocation } from "./lab-detail-navigation";
 import type { LabSkillSourceSelection } from "./lab-skill-source";
 
 export type LabsRouteProps = {
+  onEvaluationSidebarControl?: (control: import("./workspace/WorkspacePanel").EvaluationSidebarControl | null) => void;
   account: AccountState | null;
   closeDetailKind: LabDetailKind | null;
   closeDetailRequestId: number;

@@ -1,6 +1,7 @@
 import { DatasetWorkspaceBeginVersionSchema, DatasetWorkspaceVersionsSchema, DatasetWorkspaceListSchema, DatasetWorkspacePublishSchema, DatasetWorkspaceReceiptSchema, DatasetWorkspaceValidationSchema, DatasetWorkspaceWriteSchema } from "./dataset-workspace-contracts.js";
 import { validateTasksetDraftWorkspace } from "./taskset-draft-workspace.js";
 import type { z } from "zod";
+import { DatasetWorkspaceOperationKindSchema, DatasetWorkspaceOperationResultSchema } from "./dataset-workspace-operations.js";
 
 /** Hosted independent authoring. Writes use explicit revision/operation identity;
  * callers retain the operation ID when retrying an uncertain response. */
@@ -18,6 +19,18 @@ export class OpenPondDatasetWorkspaceClient {
     return result;
   }
   async get(id: string, signal?: AbortSignal) { return this.readback(await this.request(`/${encodeURIComponent(id)}`, "GET", undefined, signal), id); }
+  /** Recover only this actor's retained operation; base bytes allow adapters to
+   * reconstruct and verify the identical original CAS request before replay. */
+  async operationResult(operationId: string, options: { datasetId?: string; kind: z.infer<typeof DatasetWorkspaceOperationKindSchema>; requestHash?: string; signal?: AbortSignal }) {
+    const kind = DatasetWorkspaceOperationKindSchema.parse(options.kind);
+    const params = new URLSearchParams({ kind, ...(options.datasetId ? { datasetId: options.datasetId } : {}) });
+    const raw = await this.request(`/operations/${encodeURIComponent(operationId)}?${params}`, "GET", undefined, options.signal, 132 * 1024 * 1024);
+    if (raw === null) return null;
+    const value = DatasetWorkspaceOperationResultSchema.parse(raw);
+    this.readback(value.receipt, value.receipt.datasetId); if (value.base) this.readback(value.base, value.receipt.datasetId);
+    if (value.operationId !== operationId || value.kind !== kind || options.datasetId && value.receipt.datasetId !== options.datasetId || options.requestHash && value.requestHash !== options.requestHash) throw new Error("Dataset operation recovery identity/request mismatch.");
+    return value;
+  }
   async beginVersion(id: string, input: z.input<typeof DatasetWorkspaceBeginVersionSchema>, signal?: AbortSignal) {
     const request = DatasetWorkspaceBeginVersionSchema.parse(input);
     const result = this.readback(await this.request(`/${encodeURIComponent(id)}/begin-version`, "POST", request, signal), id);
@@ -62,12 +75,19 @@ export class OpenPondDatasetWorkspaceClient {
     if (result.datasetId !== id || result.teamId !== this.options.teamId) throw new Error("Dataset identity mismatch.");
     return result;
   }
-  private async request(path: string, method: string, body?: unknown, signal?: AbortSignal): Promise<unknown> {
+  private async request(path: string, method: string, body?: unknown, signal?: AbortSignal, maxResponseBytes?: number): Promise<unknown> {
     const response = await (this.options.fetch ?? fetch)(`${this.baseUrl}/v1/dataset-workspaces${path}`, {
       method, signal, redirect: "error", headers: { Authorization: `Bearer ${this.options.apiKey}`, "X-OpenPond-Team-Id": this.options.teamId, "Content-Type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) throw new Error(`Dataset request failed (${response.status}).`);
+    if (maxResponseBytes !== undefined) {
+      if (!response.body) throw new Error("Dataset response is empty.");
+      const reader = response.body.getReader(), chunks: Uint8Array[] = []; let length = 0;
+      try { while (true) { const part = await reader.read(); if (part.done) break; length += part.value.byteLength; if (length > maxResponseBytes) throw new Error("Dataset recovery exceeds its bounded response."); chunks.push(part.value); } } finally { await reader.cancel(); }
+      const bytes = new Uint8Array(length); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+      return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    }
     return response.json();
   }
 }

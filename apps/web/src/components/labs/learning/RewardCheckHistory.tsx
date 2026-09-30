@@ -1,3 +1,4 @@
+import { EvaluationTime } from "../workspace/EvaluationPresentation";
 import { useState } from "react";
 import { learningRef, sameLearningRef, type AuthoringDraftFor, type LearningRevisionRef, type OpenPondLearningClient, type RewardCheckRun } from "openpond-sdk/learning";
 import { LearningActions, LearningError } from "./LearningFields";
@@ -32,7 +33,7 @@ export function RewardCheckHistory({ client, targetId, draft, published, unchang
       const current = draft && unchanged && sameLearningRef(check.draft, learningRef(draft));
       return <li key={check.id}><div>
         <strong>{check.status === "completed" ? check.matchesExpectations ? "All fixtures matched" : "Fixture mismatch" : check.status}</strong>
-        <p>{current ? "Current saved draft" : published && sameLearningRef(published, check.reward) ? `Published release ${published.revision}` : `Earlier draft revision ${check.draft.revision}`} · {new Date(check.createdAt).toLocaleString()}</p>
+        <p>{current ? "Current saved draft" : published && sameLearningRef(published, check.reward) ? `Published release ${published.revision}` : `Earlier draft revision ${check.draft.revision}`} · <EvaluationTime value={check.createdAt} /></p>
         {check.failure ? <p role="status">{check.failure}</p> : null}
         <RewardCheckDetails client={client} check={check} />
       </div>{!readOnly && ["queued", "running"].includes(check.status) ? <button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void cancel(check); }}>Cancel check</button> : null}</li>;

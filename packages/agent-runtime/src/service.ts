@@ -35,6 +35,8 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   loadProfileTrainingSource(): Promise<unknown>;
   prepareProfileEvaluationRun(params: unknown): Promise<unknown>;
   runPreparedProfileEvaluation(params: unknown): Promise<unknown>;
+  executeExperimentCase?(params: unknown): Promise<unknown>;
+  cancelExperimentCase?(params: unknown): Promise<unknown>;
   runProfileEvaluationSuite(params: unknown): Promise<unknown>;
   executeProfileEvaluationCase(params: unknown): Promise<unknown>;
   executeProfileEvaluationRun(params: unknown): Promise<unknown>;
@@ -61,6 +63,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
 
 export type AgentRuntimeTelemetryEvent = {
   method: "runtime/capabilities" | "thread/start" | "thread/read" | "thread/resume" |
+    "experiments/executeCase" | "experiments/cancelCase" |
     "turn/start" | "turn/steer" | "turn/interrupt" | "task/inbox" | "task/queue" | "task/inputUpdate" | "approval/resolve" |
     "userInput/resolve" | "profile/workflows" | "profile/evaluations" | "profile/trainingSource" | "profile/evaluations/prepare" | "profile/evaluations/run" | "profile/evaluations/runSuite" | "profile/evaluations/executeCase" | "profile/evaluations/executeRun" | "profile/evaluations/compare" | "profile/evaluations/report" | "harness/inspect" | "harness/proposalReview" |
     "harness/review" | "harness/acceptEvaluationReview" |
@@ -183,6 +186,8 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
     profileTrainingSource: () => run("profile/trainingSource", null, () => ports.loadProfileTrainingSource()),
     profileEvaluationPrepare: (params) => run("profile/evaluations/prepare", null, () => ports.prepareProfileEvaluationRun(params)),
     profileEvaluationRun: (params) => run("profile/evaluations/run", null, () => ports.runPreparedProfileEvaluation(params)),
+    ...(ports.executeExperimentCase ? {experimentExecuteCase: (params:unknown) => run("experiments/executeCase",null,() => ports.executeExperimentCase!(params))} : {}),
+    ...(ports.cancelExperimentCase ? {experimentCancelCase: (params:unknown) => run("experiments/cancelCase",null,() => ports.cancelExperimentCase!(params))} : {}),
     profileEvaluationRunSuite: (params) => run("profile/evaluations/runSuite", null, () => ports.runProfileEvaluationSuite(params)),
     profileEvaluationExecuteCase: (params) => run("profile/evaluations/executeCase", null, () => ports.executeProfileEvaluationCase(params)),
     profileEvaluationExecuteRun: (params) => run("profile/evaluations/executeRun", null, () => ports.executeProfileEvaluationRun(params)),
