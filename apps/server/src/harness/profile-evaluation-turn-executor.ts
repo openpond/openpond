@@ -3,6 +3,7 @@ import { FileOutputRefSchema, type ChatAttachment, type FileOutputRef, type Open
 import type { TasksetRunManifest } from "@openpond/evals";
 import type { RequiredOutputContract } from "@openpond/evals";
 import type { executeProfileEvaluationRun } from "@openpond/evals";
+import { assertProfileEvaluationSpendAuthority } from "./profile-evaluation-spend-authority.js";
 
 type ExecuteCase = Parameters<typeof executeProfileEvaluationRun>[0]["execute"];
 
@@ -43,14 +44,12 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     || policy.configurationHash !== input.modelConfigurationHash) {
     throw new Error("Workflow evaluation model differs from its admitted configuration.");
   }
-  if (input.manifest.limits.maximumSpendUsd !== null) {
-    throw new Error("Profile evaluation cannot enforce a spend limit in the current app-server runtime.");
-  }
   return async (member) => {
     if (contentHash(member.source) !== contentHash(source)) {
       throw new Error("Workflow evaluation case differs from its admitted Profile source.");
     }
     member.signal?.throwIfAborted();
+    await assertProfileEvaluationSpendAuthority(input.manifest, member.signal);
     const workCase = Boolean(input.attachments?.length || input.requiredOutputs?.length);
     const session = await input.createSession({
       ...(workCase ? { experience: "work" } : {}),
