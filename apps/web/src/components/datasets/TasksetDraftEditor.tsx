@@ -8,7 +8,7 @@ import type {
   TasksetDraft,
 } from "@openpond/contracts";
 
-import type { useTraining } from "../../hooks/useTraining";
+import type { TasksetDraftAuthoringClient } from "./taskset-draft-authoring-client";
 import {
   EditorSection,
   Field,
@@ -42,10 +42,12 @@ export function TasksetDraftEditor({
   onUseExistingTaskset,
   modelProjectId,
   closeRef,
+  owner = "local",
 }: {
+  owner?: "local" | "hosted";
   draftId?: string | null;
   defaultModel: ChatModelRef;
-  training: ReturnType<typeof useTraining>;
+  training: TasksetDraftAuthoringClient;
   onBack: () => void;
   onOpenChat?: (draft: TasksetDraft) => void;
   onPublished: (tasksetId: string) => void;
@@ -138,7 +140,7 @@ export function TasksetDraftEditor({
     setDraft(result.draft);
     setSavedSnapshot(JSON.stringify(result.draft));
     setNotice(
-      result.hostedSync.state === "synced"
+      owner === "hosted" ? "Published to the hosted workspace." : result.hostedSync.state === "synced"
         ? "Published locally and synced to the hosted Model Project."
         : result.hostedSync.state === "sync_failed"
           ? "Published locally. Hosted sync failed and can be retried from the Taskset."
