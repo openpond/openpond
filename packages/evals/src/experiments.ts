@@ -22,6 +22,7 @@ export const ExperimentTargetSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("harness"),
     source: ProfileEvaluationRunSourceSchema,
+    model: z.object({ modelId: ReleaseIdSchema, configurationHash: ReleaseHashSchema }).strict(),
   }).strict(),
   z.object({ kind: z.literal("fixture"), configurationHash: ReleaseHashSchema }).strict(),
 ]);
