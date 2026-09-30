@@ -37,6 +37,7 @@ test("released workflow evaluation executes policy-visible cases and grades with
   const execute = vi.fn(async (_member: { task: { input: Record<string, unknown> } }) => ({
     evidence: { output: { text: "done" }, runtimeEventRefs: [], artifactRefs: [] },
     traceHash: contentHash("real-model-trace"), artifactRefs: [],
+    retainedEvidenceRef: { sessionId: "policy-session", turnId: "policy-turn" },
     startedAt: manifest.createdAt, completedAt: manifest.createdAt,
     latencyMs: 0, costUsd: null, terminal: true,
   }));
@@ -60,6 +61,7 @@ test("released workflow evaluation executes policy-visible cases and grades with
   expect(result.passed).toBe(true);
   expect(result.receipts[0]!.graderEvidenceRefs[0]!.contentHash).toBe(grades[0]);
   expect(receipts).toEqual([result.receipts[0]!.contentHash]);
+  expect(result.receipts[0]!.metadata.retainedEvidenceRef).toEqual({ sessionId: "policy-session", turnId: "policy-turn" });
 });
 
 test("resumes a retained member after interruption without executing or grading it again", async () => {

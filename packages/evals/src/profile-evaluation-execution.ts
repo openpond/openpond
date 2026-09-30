@@ -6,6 +6,14 @@ import { createAttemptReceipt, verifyAttemptReceipt, type AttemptReceipt } from 
 import { assertProfileEvaluationRunAdmission, type TasksetRunManifest } from "./taskset-run-contract.js";
 import { policyTaskView, type TasksetRelease } from "./tasksets.js";
 import type { ProfileEvaluationCatalog, ProfileEvaluationRunSource } from "./profile-evaluations.js";
+import { z } from "zod";
+
+/** An installation-owned policy trace. Access remains with that installation;
+ * the immutable receipt binds the reference without copying private graders. */
+export const ProfileEvaluationEvidenceRefSchema = z.object({
+  sessionId: z.string().trim().min(1).max(500),
+  turnId: z.string().trim().min(1).max(500),
+}).strict();
 
 type PolicyTask = ReturnType<typeof policyTaskView>;
 
@@ -23,6 +31,7 @@ export async function executeProfileEvaluationRun(input: {
   }) => Promise<{
     evidence: AttemptEvidence;
     traceHash: string;
+    retainedEvidenceRef?: z.infer<typeof ProfileEvaluationEvidenceRefSchema>;
     artifactRefs: ImmutableArtifactRef[];
     startedAt: string;
     completedAt: string;
@@ -121,6 +130,9 @@ export async function executeProfileEvaluationRun(input: {
         sourceRevision: source.sourceRevision,
         definitionHash: source.definitionHash,
         environmentHash: source.environmentHash,
+        ...(execution.retainedEvidenceRef ? {
+          retainedEvidenceRef: ProfileEvaluationEvidenceRefSchema.parse(execution.retainedEvidenceRef),
+        } : {}),
       },
     });
     await input.saveReceipt(receipt);
