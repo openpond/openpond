@@ -56,7 +56,8 @@ export class OpenPondExperimentsClient {
     if (contentHash(experimentDefinitionRef(definition)) !== contentHash(request.definition)) throw new Error("Experiment Start revision mismatch.");
     const result = await verifyModelTasksetRunDetails(response.run);
     if (result.summary.teamId !== this.options.teamId || result.request.operationId !== request.operationId
-      || contentHash(result.request) !== contentHash({ ...definition.request, operationId: request.operationId })
+      || contentHash(savedRequestPopulation(result.request))
+        !== contentHash(savedRequestPopulation({ ...definition.request, operationId: request.operationId }))
       || contentHash(result.manifest.metadata.experimentDefinition) !== contentHash(request.definition)
       || result.manifest.metadata.experimentConfigurationHash !== contentHash({ definition: request.definition, maximumCostUsd: definition.maximumCostUsd, graders: definition.graders }))
       throw new Error("Experiment execution differs from its saved configuration.");
@@ -156,4 +157,12 @@ export class OpenPondExperimentsClient {
     }
     return value;
   }
+}
+
+/** Native Harness assigns receipt IDs when sealing each new execution. Its
+ * saved population still pins every task/seed; Model receipts stay exact. */
+function savedRequestPopulation(request: z.infer<typeof SaveExperimentSchema>["request"]) {
+  return request.policy.kind === "hosted_harness" ? {
+    ...request, population: request.population.map(({ receiptId: _id, ...member }) => member),
+  } : request;
 }

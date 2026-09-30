@@ -1,17 +1,20 @@
 import { z } from "zod";
 import { EvaluationProjectContextSchema } from "./evaluation-project-context.js";
-import { assertContentHash } from "@openpond/harness";
+import { assertContentHash, contentHash } from "@openpond/harness";
 import { TasksetRunManifestSchema, TasksetRunMemberSchema, TasksetMetricResultSchema, assertTasksetMetricResult, orderTasksetRunReceipts } from "@openpond/evals/metrics";
 import { AttemptReceiptSchema } from "@openpond/evals/runs";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { ModelStarterAttemptPolicySchema, ModelStarterAttemptSummarySchema } from "./model-starter-attempts.js";
 import { canonicalJson, canonicalSha256 } from "./protocol.js";
+import { HarnessExperimentPolicySchema } from "./harness-experiment-policy.js";
+export { HarnessExperimentPolicySchema, type HarnessExperimentPolicy } from "./harness-experiment-policy.js";
 
 const IdSchema = z.string().trim().min(1).max(200);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const ModelTasksetRunPolicySchema = z.discriminatedUnion("kind", [
   ModelStarterAttemptPolicySchema.options[0],
   z.object({ kind: z.literal("fixture") }).strict(),
+  HarnessExperimentPolicySchema,
 ]);
 export const ModelTasksetRunRequestSchema = z.object({
   schemaVersion: z.literal("openpond.modelTasksetRunRequest.v1"),
@@ -24,6 +27,11 @@ export const ModelTasksetRunRequestSchema = z.object({
   if (new Set(value.population.map(member => member.receiptId)).size !== value.population.length) context.addIssue({ code: "custom", path: ["population"], message: "Run receipt identities must be unique." });
   if (value.population.some(member => (member.fixtureId !== null) !== (value.policy.kind === "fixture"))) context.addIssue({ code: "custom", path: ["population"], message: "Only fixture runs require a fixture identity for every member." });
   if (value.population.some(member => !/^(0|[1-9][0-9]*)$/.test(member.seed) || Number(member.seed) > 2_147_483_647)) context.addIssue({ code: "custom", path: ["population"], message: "Hosted environment seeds must be integers from 0 to 2147483647." });
+  if (value.policy.kind === "hosted_harness" && value.modelProjectId !== null)
+    context.addIssue({ code: "custom", path: ["modelProjectId"], message: "A Harness target retains its released Profile binding separately from Model artifacts." });
+  if (value.policy.kind === "hosted_harness"
+    && new Set(value.population.map(member => canonicalJson([member.taskId, member.seed]))).size !== value.population.length)
+    context.addIssue({ code: "custom", path: ["population"], message: "Harness case identities must be unique for each task and seed." });
 });
 export type ModelTasksetRunRequest = z.infer<typeof ModelTasksetRunRequestSchema>;
 export const ModelTasksetRunSummarySchema = z.object({
@@ -31,7 +39,7 @@ export const ModelTasksetRunSummarySchema = z.object({
   id: IdSchema, revision: z.number().int().positive(), teamId: IdSchema, modelProjectId: IdSchema.nullable(),
   name: z.string().trim().min(1).max(200).optional(),
   project: EvaluationProjectContextSchema.optional(),
-  operationId: IdSchema, taskset: ModelProjectVersionedRefSchema, policyKind: z.enum(["hosted_chat", "fixture"]),
+  operationId: IdSchema, taskset: ModelProjectVersionedRefSchema, policyKind: z.enum(["hosted_chat", "fixture", "hosted_harness"]),
   manifestHash: HashSchema,
   status: z.enum(["queued", "running", "cancelling", "completed", "failed", "cancelled"]),
   totalCount: z.number().int().min(1).max(10_000),
@@ -85,6 +93,19 @@ export async function verifyModelTasksetRunDetails(value: unknown): Promise<Mode
     || canonicalJson(manifest.population) !== canonicalJson(request.population)) throw new Error("Evaluation run differs from its admitted request or manifest.");
   if (request.policy.kind === "fixture") {
     if (manifest.policy.kind !== "fixture" || policySnapshot !== null) throw new Error("Fixture checks cannot claim a model identity.");
+  } else if (request.policy.kind === "hosted_harness") {
+    const policy = request.policy;
+    if (manifest.execution.kind !== "harness"
+      || canonicalJson(manifest.profileEvaluation) !== canonicalJson(policy.source)
+      || canonicalJson(manifest.execution.harnessRelease) !== canonicalJson(policy.source.harnessRelease)
+      || manifest.metadata.profileRepositoryId !== policy.profileRepositoryId
+      || manifest.packageHash !== policy.packageHash || manifest.policy.kind !== "model"
+      || manifest.policy.model.provider !== "openpond" || manifest.policy.model.model !== policy.modelId
+      || manifest.policy.model.revision !== null || manifest.policy.model.artifactHash !== null
+      || manifest.policy.model.tokenizerRevision !== null || manifest.policy.model.chatTemplateHash !== null
+      || manifest.policy.configurationHash !== policy.modelConfigurationHash || policySnapshot !== null
+      || manifest.population.some(member => member.receiptId !== `evaluation-${contentHash([manifest.id, member.taskId, member.seed]).slice(0, 32)}`))
+      throw new Error("Harness evaluation differs from its admitted source, package or model configuration.");
   } else if (manifest.policy.kind !== "model" || !policySnapshot || policySnapshot.modelId !== request.policy.modelId
     || manifest.policy.model.provider !== policySnapshot.provider || manifest.policy.model.model !== policySnapshot.upstreamModelId
     || manifest.policy.model.revision !== null || manifest.policy.model.artifactHash !== null || manifest.policy.model.tokenizerRevision !== null || manifest.policy.model.chatTemplateHash !== null
