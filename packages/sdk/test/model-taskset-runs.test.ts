@@ -4,6 +4,8 @@ import { createAttemptReceipt } from "@openpond/evals/runs";
 import { aggregateTasksetRunReceipts, createTasksetRunManifest, tasksetRunMetricPolicy } from "@openpond/evals/metrics";
 import { ModelTasksetRunRequestSchema, ModelTasksetRunSummarySchema, OpenPondModelTasksetRunsClient, type ModelTasksetRunDetails } from "../src/model-taskset-runs.js";
 import { canonicalSha256 } from "../src/protocol.js";
+import { contentHash } from "@openpond/harness";
+import { OpenPondExperimentsClient, experimentDefinitionRef, verifyExperimentDefinition } from "../src/experiments.js";
 
 const seal = async <T extends object>(content: T) => ({ ...content, contentHash: await canonicalSha256(content) });
 
@@ -107,4 +109,62 @@ it("binds SDK transport and terminal results to the exact scoped evaluation popu
   await expect(client.list({ projectId: "project" })).rejects.toThrow("another identity or workspace");
   returned = { ...modelDetails, policySnapshot: { ...snapshot, configurationHash: await canonicalSha256("changed-provider") } };
   await expect(client.get("run")).rejects.toThrow("admitted policy");
+
+  // A native Profile result must bind its repository/source and package, not
+  // merely borrow a matching model name from an unrelated Harness execution.
+  const source = { profileId: "profile", sourceRevision: "a".repeat(40), harnessRelease: legacy.harnessRelease,
+    catalogHash: await canonicalSha256("catalog"), definitionId: "check", definitionHash: await canonicalSha256("definition"),
+    target: { kind: "profile" as const }, environmentHash: await canonicalSha256("environment") };
+  const harnessRequest = ModelTasksetRunRequestSchema.parse({ ...modelRequest, modelProjectId: null,
+    population: [{ taskId: taskset.tasks[0]!.id, seed: "0", fixtureId: null,
+      receiptId: `evaluation-${contentHash([manifest.id, taskset.tasks[0]!.id, "0"]).slice(0, 32)}` }], policy: {
+    kind: "hosted_harness", modelId: "catalog-model", profileRepositoryId: "profile-repo", source,
+    packageHash: manifest.packageHash, modelConfigurationHash: snapshot.configurationHash,
+  } });
+  const harnessManifest = createTasksetRunManifest({ ...manifestContent, population: harnessRequest.population,
+    profileEvaluation: source, metadata: { profileRepositoryId: "profile-repo" }, policy: { kind: "model",
+      model: { provider: "openpond", model: "catalog-model", revision: null, artifactHash: null, tokenizerRevision: null, chatTemplateHash: null },
+      configurationHash: snapshot.configurationHash } });
+  const harnessDetails = { ...details, request: harnessRequest, manifest: harnessManifest, policySnapshot: null,
+    summary: { ...summary, modelProjectId: null, policyKind: "hosted_harness", manifestHash: harnessManifest.contentHash,
+      totalCount: 1, counts: { pending: 1, running: 0, completed: 0, failed: 0, cancelled: 0 } } };
+  returned = harnessDetails;
+  expect((await client.create(harnessRequest)).manifest.profileEvaluation).toEqual(source);
+  for (const policy of [
+    { ...harnessRequest.policy, profileRepositoryId: "another-repo" },
+    { ...harnessRequest.policy, source: { ...source, sourceRevision: "b".repeat(40) } },
+    { ...harnessRequest.policy, packageHash: await canonicalSha256("changed-package") },
+    { ...harnessRequest.policy, modelConfigurationHash: await canonicalSha256("changed-model") },
+  ]) {
+    returned = { ...harnessDetails, request: { ...harnessRequest, policy } };
+    await expect(client.get("run")).rejects.toThrow("admitted source");
+  }
+  expect(ModelTasksetRunRequestSchema.safeParse({ ...harnessRequest, modelProjectId: "model" }).success).toBe(false);
+  const definitionContent = { schemaVersion: "openpond.experimentDefinition.v1", id: "exp-native", teamId: "team", revision: 1,
+    request: { ...harnessRequest, population: harnessRequest.population.map(member => ({ ...member, receiptId: "saved-member" })) },
+    maximumCostUsd: 1, graders: [{ id: "grader", version: "1", contentHash: contentHash("grader"), feedbackKey: "accuracy", release: null }],
+    createdAt: manifest.createdAt, updatedAt: manifest.createdAt };
+  const definition = verifyExperimentDefinition({ ...definitionContent, contentHash: contentHash(definitionContent) });
+  const reference = experimentDefinitionRef(definition);
+  const { contentHash: _nativeManifestHash, ...harnessManifestContent } = harnessManifest;
+  const startedManifest = createTasksetRunManifest({ ...harnessManifestContent, metadata: { ...harnessManifest.metadata,
+    experimentDefinition: reference, experimentConfigurationHash: contentHash({ definition: reference, maximumCostUsd: 1, graders: definition.graders }) } });
+  const startedRun = { ...harnessDetails, manifest: startedManifest, summary: { ...harnessDetails.summary, manifestHash: startedManifest.contentHash } };
+  returned = { definition, run: startedRun };
+  const experiments = new OpenPondExperimentsClient({ baseUrl: "https://host.invalid", apiKey: "test", teamId: "team",
+    fetch: async () => Response.json(returned) });
+  const preparation = { request: harnessRequest, manifest: { ...harnessManifest, limits: { ...harnessManifest.limits, maximumSpendUsd: 1 } },
+    maximumCostUsd: 1, graders: definition.graders };
+  const { contentHash: _prepareHash, ...prepareContent } = preparation.manifest;
+  returned = { ...preparation, manifest: createTasksetRunManifest(prepareContent) };
+  const preparationRequest = { operationId: "op", profileRepositoryId: "profile-repo", definitionId: "check", modelId: "catalog-model", maximumCostUsd: 1 };
+  expect((await experiments.prepareHarness(preparationRequest)).request.policy.kind).toBe("hosted_harness");
+  await expect(experiments.prepareHarness({ ...preparationRequest, profileRepositoryId: "another-repo" })).rejects.toThrow("requested scope");
+  returned = { definition, run: startedRun };
+  expect((await experiments.start({ operationId: "op", definition: reference })).request.population).toEqual(harnessRequest.population);
+  const changedDefinitionContent = { ...definitionContent, request: { ...definitionContent.request,
+    population: definitionContent.request.population.map(member => ({ ...member, seed: "1" })) } };
+  const changedDefinition = verifyExperimentDefinition({ ...changedDefinitionContent, contentHash: contentHash(changedDefinitionContent) });
+  returned = { definition: changedDefinition, run: startedRun };
+  await expect(experiments.start({ operationId: "op", definition: experimentDefinitionRef(changedDefinition) })).rejects.toThrow("saved configuration");
 });
