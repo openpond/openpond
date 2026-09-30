@@ -1,3 +1,4 @@
+import { createHostedEvaluationWorkspace } from "./hosted-evaluation-workspace.js";
 import {
   ModelProjectSchema,
   PolicyOptimizationMetricSchema,
@@ -561,7 +562,7 @@ export function createModelProjectHostingService(input: {
     return payload as T;
   }
 
-  return { listProjects, openProject, pullProject, publishTaskset, syncProject, tasksetRuns: createModelTasksetRunHostingService(input), learning: createModelLearningHostingService(input) };
+  return { listProjects, openProject, pullProject, publishTaskset, syncProject, tasksetRuns: createModelTasksetRunHostingService(input), evaluationWorkspace: createHostedEvaluationWorkspace(input), learning: createModelLearningHostingService(input) };
 
   async function recordTasksetSync(value: {
     projectId: string;
