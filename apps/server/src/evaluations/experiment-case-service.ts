@@ -10,6 +10,7 @@ export type ExperimentCasePolicy = Parameters<typeof runJavaScriptEnvironmentAtt
  * spend authority, immutable storage and private grading in existing services. */
 export function createExperimentCaseService(deps: {
   resolvePolicy(input: ExperimentModelCase): Promise<ExperimentCasePolicy>;
+  resolveEnvironment?(input: ExperimentModelCase): Promise<typeof executeJavaScriptEnvironmentInProcess>;
   executeProfile(request: unknown): Promise<unknown>;
 }) {
   const active = new Map<string,{hash:string;controller:AbortController;result:Promise<unknown>}>();
@@ -36,11 +37,13 @@ export function createExperimentCaseService(deps: {
     const signal = AbortSignal.any([parentSignal,AbortSignal.timeout(input.timeoutMs)]);
     signal.throwIfAborted();
     if(input.environment.kind === "javascript") {
+      const execute = deps.resolveEnvironment
+        ? await deps.resolveEnvironment(input) : executeJavaScriptEnvironmentInProcess;
       return runJavaScriptEnvironmentAttempt({
         taskId:input.taskId,instructions:`${input.instructions}\n${JSON.stringify({policyVisibleContext:input.policyVisibleContext})}`,input:input.input,
         definition:input.environment.definition,asset:input.environment.asset,
         initialState:input.environment.initialState,seed:input.environment.seed,
-        timeoutMs:input.timeoutMs,execute:executeJavaScriptEnvironmentInProcess,policy,signal,
+        timeoutMs:input.timeoutMs,execute,policy,signal,
       });
     }
     const messages: JavaScriptEnvironmentPolicyMessage[] = [

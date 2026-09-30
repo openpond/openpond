@@ -22,7 +22,7 @@ export class OpenPondExperimentHistoryClient {
   }
   async list(input: z.input<typeof ExperimentHistoryQuerySchema> = {}, signal?: AbortSignal): Promise<ExperimentHistoryPage> {
     const query = ExperimentHistoryQuerySchema.parse(input);
-    const params = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]));
+    const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
     const response = await (this.options.fetch ?? fetch)(`${this.baseUrl}/v1/experiments/executions?${params}`, { signal, redirect: "error", headers: { Authorization: `Bearer ${this.options.apiKey}`, "X-OpenPond-Team-Id": this.options.teamId, Accept: "application/json" } });
     if (!response.ok) throw new Error(`Experiment history request failed (${response.status}).`);
     if (!response.body) throw new Error("Experiment history response is empty.");

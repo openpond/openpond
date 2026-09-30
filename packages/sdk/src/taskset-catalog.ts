@@ -21,13 +21,16 @@ export const HostedTasksetSummarySchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
 }).strict();
 export const TasksetCatalogQuerySchema = z.object({
-  afterId: IdSchema.optional(),
+  afterId: z.string().trim().min(1).max(2_000).optional(),
   limit: z.number().int().min(1).max(100).default(30),
   modelProjectId: IdSchema.optional(),
+  projectId: IdSchema.optional(),
+  search: z.string().trim().max(100).optional(),
+  sort: z.enum(["id", "name", "updated"]).default("id"),
 }).strict();
 export const TasksetCatalogPageSchema = z.object({
   items: z.array(HostedTasksetSummarySchema).max(100),
-  nextCursor: IdSchema.nullable(),
+  nextCursor: z.string().trim().min(1).max(2_000).nullable(),
 }).strict();
 export const TasksetCatalogErrorSchema = z.object({
   code: z.string().min(1),
@@ -64,8 +67,11 @@ export class OpenPondTasksetCatalogClient {
     const search = new URLSearchParams({ limit: String(parsed.limit) });
     if (parsed.afterId) search.set("afterId", parsed.afterId);
     if (parsed.modelProjectId) search.set("modelProjectId", parsed.modelProjectId);
+    if (parsed.projectId) search.set("projectId", parsed.projectId);
+    if (parsed.search !== undefined) search.set("search", parsed.search);
+    search.set("sort", parsed.sort);
     const page = TasksetCatalogPageSchema.parse(await this.#request(`?${search}`, options.signal));
-    if (page.items.length > parsed.limit || page.items.some((item) => item.teamId !== this.#options.teamId)) throw new OpenPondTasksetCatalogError(502, "catalog_scope_mismatch", "Taskset inventory did not match the requested workspace or page size.");
+    if (page.items.length > parsed.limit || new Set(page.items.map(item => item.id)).size !== page.items.length || page.items.some((item) => item.teamId !== this.#options.teamId)) throw new OpenPondTasksetCatalogError(502, "catalog_scope_mismatch", "Taskset inventory did not match the requested workspace or page size.");
     return page;
   }
 
