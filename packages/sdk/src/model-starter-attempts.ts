@@ -3,6 +3,7 @@ import { EvaluationProjectContextSchema, EvaluationMessagesSchema } from "./eval
 export { EvaluationProjectContextSchema, EvaluationMessagesSchema, type EvaluationProjectContext } from "./evaluation-project-context.js";
 import { RewardCompositionSchema } from "@openpond/evals/rewards";
 import { TaskGradeSchema } from "@openpond/evals/graders";
+import { TaskSplitSchema } from "@openpond/evals/tasksets";
 import { ExperimentAttemptGradeSchema } from "./experiment-grading-contracts.js";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { canonicalJson, canonicalSha256 } from "./protocol.js";
@@ -28,7 +29,7 @@ export const ModelStarterAttemptChoicesQuerySchema = z.object({ modelProjectId: 
 export const ModelStarterAttemptChoicesSchema = z.object({
   modelProjectId: IdSchema.nullable(), taskset: ModelProjectVersionedRefSchema, available: z.boolean(), unavailableReason: z.string().max(1_000).nullable(),
   models: z.array(z.object({ id: IdSchema, name: z.string().max(500) }).strict()).max(200),
-  tasks: z.array(z.object({ id: IdSchema, split: z.enum(["train", "validation", "frozen_eval"]), inputPreview: z.string().max(500), fixtures: z.array(z.object({ id: IdSchema, label: z.string().max(200) }).strict()).max(1_000) }).strict()).max(100),
+  tasks: z.array(z.object({ id: IdSchema, split: TaskSplitSchema, inputPreview: z.string().max(500), fixtures: z.array(z.object({ id: IdSchema, label: z.string().max(200) }).strict()).max(1_000) }).strict()).max(100),
   nextCursor: IdSchema.nullable(),
 }).strict();
 export const ModelStarterAttemptSummarySchema = z.object({
