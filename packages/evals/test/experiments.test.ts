@@ -131,6 +131,16 @@ describe("portable experiment evidence", () => {
       cases: [{ ...original.result.cases[0]!, feedback: [{ ...original.result.cases[0]!.feedback[0]!, evaluator: importedEvaluator.release }] }],
     }, manifest);
     expect(verifyExperimentEvidence({ manifest, result })).toEqual({ manifest, result });
+    const native = createExperimentManifest({ ...manifestContent, target: { kind: "harness",
+      source: { profileId: "default", sourceRevision: "revision-one", harnessRelease: { id: "harness", contentHash: hash("a") },
+        catalogHash: hash("b"), definitionId: "check", definitionHash: hash("c"), target: { kind: "profile" }, environmentHash: hash("d") },
+      model: { modelId: "model-a", configurationHash: hash("e") } } });
+    expect(native.target).toMatchObject({ kind: "harness", model: { modelId: "model-a", configurationHash: hash("e") } });
+    expect(() => verifyExperimentEvidence({ manifest: native, result })).toThrow();
+    const nativeTarget = native.target as Extract<typeof native.target, { kind: "harness" }>;
+    const { model: _model, ...withoutModel } = nativeTarget;
+    expect(() => createExperimentManifest({ ...manifestContent, target: withoutModel as never })).toThrow();
+
     expect(() => createExperimentManifest({ ...manifestContent,
       lineage: { definition: null, execution: { id: "another-run", contentHash: hash("d") }, scoringPassId: null },
     })).toThrow();
