@@ -21,6 +21,10 @@ export const DatasetWorkspaceReceiptSchema = z.object({
   if (value.workspace.draft.id !== value.datasetId || value.workspace.draft.profileId !== value.teamId || value.workspace.draft.revision !== value.revision || value.workspace.draft.modelScope !== null) ctx.addIssue({ code: "custom", message: "Dataset workspace scope/revision mismatch." });
 });
 export const DatasetWorkspacePublishSchema = z.object({ operationId: Id, expectedRevision: z.number().int().positive(), workspaceHash: Hash, packageHash: Hash }).strict();
+export const DatasetWorkspaceBeginVersionSchema = z.object({ operationId: Id, expectedRevision: z.number().int().positive() }).strict();
+export const DatasetWorkspaceVersionsSchema = z.object({ teamId: Id, datasetId: Id, items: z.array(z.object({
+  workspaceRevision: z.number().int().positive(), publication: DatasetWorkspaceReceiptSchema.shape.publication.unwrap(), publishedAt: z.iso.datetime(),
+}).strict()).max(25), nextBeforeRevision: z.number().int().positive().nullable() }).strict();
 export type DatasetWorkspaceReceipt = z.infer<typeof DatasetWorkspaceReceiptSchema>;
 
 export const DatasetWorkspaceListSchema = z.object({ teamId: Id, datasets: z.array(z.object({

@@ -10,7 +10,7 @@ import { OpenPondDatasetWorkspaceClient, DatasetWorkspaceWriteSchema, DatasetWor
 
 const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
-  "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "case", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "saveDataset", "validateDataset", "publishDataset", "definition", "save", "prepareHarness", "start", "executions", "execution", "result", "cancel", "retry", "score", "passes", "pass", "passResult", "cancelPass", "compare",
+  "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "case", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "definition", "save", "prepareHarness", "start", "executions", "execution", "result", "cancel", "retry", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
 const Identity = z.object({ id: Id }).passthrough();
 
@@ -59,10 +59,13 @@ export function createHostedEvaluationWorkspace(input: { resolveAccess: () => Pr
       return { teamId: access.teamId, apiOrigin: new URL(access.apiBaseUrl).origin, projects: projectPage, datasets: { ...datasetPage, datasets: datasetPage.datasets.filter(dataset => !request.projectId || dataset.originProjectId === request.projectId) }, experiments: experimentPage };
     }
     if (request.operation === "saveDataset") { const write = DatasetWorkspaceWriteSchema.parse(request.value); if (request.projectId !== (write.originProjectId ?? null)) throw new Error("Dataset origin differs from the selected Project."); return datasets.save(write); }
-    if (["dataset", "validateDataset", "publishDataset"].includes(request.operation)) {
+    if (["dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "validateDataset", "publishDataset"].includes(request.operation)) {
       const data = Identity.parse(request.value); const result = await datasets.get(data.id);
       assertProject(result.originProjectId ? { id: result.originProjectId } : undefined);
       if (request.operation === "dataset") return result;
+      if (request.operation === "datasetVersions") return datasets.versions(data.id, { beforeRevision: data.beforeRevision === undefined ? undefined : z.number().int().positive().parse(data.beforeRevision) });
+      if (request.operation === "datasetVersion") return datasets.version(data.id, z.number().int().positive().parse(data.revision));
+      if (request.operation === "beginDatasetVersion") return datasets.beginVersion(data.id, z.object({ operationId: Id, expectedRevision: z.number().int().positive() }).strict().parse(data.request));
       if (request.operation === "validateDataset") return datasets.validate(data.id, z.number().int().positive().parse(data.expectedRevision));
       return datasets.publish(data.id, DatasetWorkspacePublishSchema.parse(data.request));
     }
