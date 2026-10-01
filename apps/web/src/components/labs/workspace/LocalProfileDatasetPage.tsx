@@ -174,8 +174,8 @@ export function LocalProfileDatasetPage({
       {task && "input" in task ? <WorkspacePanel action="task" label="Task inspector" onRequestClose={() => setInspection(null)}>
         <header><h2>{task.id}</h2></header>
         <EvaluationCard title="Input"><pre>{JSON.stringify(task.input, null, 2)}</pre></EvaluationCard>
-        <EvaluationCard title="Policy context"><pre>{JSON.stringify(task.policyVisibleContext, null, 2)}</pre></EvaluationCard>
-        <EvaluationCard title="Policy artifacts"><pre>{JSON.stringify(task.artifacts, null, 2)}</pre></EvaluationCard>
+        {"policyVisibleContext" in task ? <EvaluationCard title="Policy context"><pre>{JSON.stringify(task.policyVisibleContext, null, 2)}</pre></EvaluationCard> : null}
+        {"artifacts" in task ? <EvaluationCard title="Policy artifacts"><pre>{JSON.stringify(task.artifacts, null, 2)}</pre></EvaluationCard> : null}
       </WorkspacePanel> : null}
     </>
   );
