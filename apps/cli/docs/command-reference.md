@@ -26,17 +26,24 @@ Options:
 
 ```text
 Usage:
-  openpond experiments <prepare-harness|save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--json]
+  openpond experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]
 
 Options:
   --after-id <string>
+  --after-sequence <integer>
+  --content-hash <string>
   --dataset-hash <string>
   --input-file <string>
   --json
   --limit <integer>
+  --local
   --operation-id <string>
   --project <string>
+  --receipt-id <string>
+  --revision <integer>
   --search <string>
+  --server-url <string>
+  --status <string>
   --team <string>
 ```
 ## home

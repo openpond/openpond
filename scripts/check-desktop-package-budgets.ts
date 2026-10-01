@@ -15,10 +15,11 @@ type PlatformBudget = {
 const MIB = 1024 * 1024;
 const MAX_ASAR_BYTES = 2 * MIB;
 const MAX_RESOURCES_BYTES = 32 * MIB;
-// v0.2.42's model-case runtime and native Dataset/Grader authoring stage
-// measures 26.24 MiB. Retain about 128 KiB of headroom and enforce the
-// artifact, resources, ASAR, and exact inventory gates on every build.
-const MAX_STAGED_RUNTIME_BYTES = 26 * MIB + 384 * 1024;
+// Flat local/hosted Experiments stage at 26.46 MiB across the same251files.
+// The +199 KiB is required server/renderer code; native modules, skills and
+// the Work archive are unchanged. Retain about170 KiB of headroom while
+// keeping artifact, resources, ASAR and exact-inventory gates unchanged.
+const MAX_STAGED_RUNTIME_BYTES = 26 * MIB + 640 * 1024;
 const MAX_LINUX_X64_UNPACKED_BYTES = 400 * MIB;
 // The required server and web runtime grew past 339 MiB on ARM64 while the
 // compressed artifact, resources, ASAR, and staged runtime remain in budget.

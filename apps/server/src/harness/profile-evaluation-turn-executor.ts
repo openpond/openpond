@@ -5,6 +5,7 @@ import type { RequiredOutputContract } from "@openpond/evals";
 import type { executeProfileEvaluationRun } from "@openpond/evals";
 import { assertProfileEvaluationSpendAuthority } from "./profile-evaluation-spend-authority.js";
 import { profileEvaluationOutput } from "./profile-evaluation-policy-evidence.js";
+import { awaitProfileEvaluationTurn } from "./profile-evaluation-owned-turn.js";
 
 type ExecuteCase = Parameters<typeof executeProfileEvaluationRun>[0]["execute"];
 
@@ -23,6 +24,15 @@ export function createProfileWorkflowEvaluationExecutor(input: {
   runtimeEventsForTurn: (turnId: string) => Promise<RuntimeEvent[]>;
   attachments?: ChatAttachment[];
   requiredOutputs?: RequiredOutputContract[];
+  /** Trusted execution owner, never supplied by a public case payload. */
+  assertSpendAuthority?:typeof assertProfileEvaluationSpendAuthority;
+  ownedSessionMetadata?:Record<string,unknown>;
+  admitSession?:(session:Session)=>Promise<void>;
+  validateTerminalTurn?:(session:Session,turn:Turn)=>Promise<void>;
+  maximumOutputBytes?:number;
+  onInterrupt?:(kind:"cancelled"|"timed_out")=>void;
+  retainOutputLimitEvidence?:boolean;
+  onOutputLimit?:(outputHash:string)=>void;
 }): ExecuteCase {
   const source = input.manifest.profileEvaluation;
   const policy = input.manifest.policy;
@@ -50,7 +60,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       throw new Error("Workflow evaluation case differs from its admitted Profile source.");
     }
     member.signal?.throwIfAborted();
-    await assertProfileEvaluationSpendAuthority(input.manifest, member.signal);
+    await (input.assertSpendAuthority??assertProfileEvaluationSpendAuthority)(input.manifest, member.signal);
     const workCase = Boolean(input.attachments?.length || input.requiredOutputs?.length);
     const session = await input.createSession({
       ...(workCase ? { experience: "work" } : {}),
@@ -66,6 +76,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
         taskId: member.task.id,
         seed: member.seed,
         ...(workCase && input.profileRef.source === "local" ? { workspaceTarget: "local" } : {}),
+        ...input.ownedSessionMetadata,
       },
     });
     const prompt = [
@@ -74,7 +85,11 @@ export function createProfileWorkflowEvaluationExecutor(input: {
         ? [`Policy-visible task context:\n${JSON.stringify(member.task.policyVisibleContext)}`]
         : []),
     ].join("\n\n") || " ";
-    const sendTurn = input.sendTurn(session.id, {
+    await input.admitSession?.(session);
+    const turn = await awaitProfileEvaluationTurn({signal:member.signal,timeoutMs:input.manifest.limits.timeoutMs,
+      onInterrupt:input.onInterrupt,
+      ...(input.interruptSessionTurn?{interrupt:(reason:string)=>input.interruptSessionTurn!(session.id,reason)}:{}),
+      send:()=>input.sendTurn(session.id, {
       prompt,
       ...(input.binding.schemaVersion === "openpond.profileWorkflowBinding.v1"
         ? { workflowInput: {} }
@@ -84,34 +99,11 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       approvalPolicy: "on-request",
       ...(workCase ? { sandbox: "workspace-write", codexPermissionMode: "default" } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-    });
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    let onAbort: (() => void) | undefined;
-    const turn = await Promise.race([
-      sendTurn,
-      new Promise<Turn>((_, reject) => {
-        timeout = setTimeout(() => {
-          const reason = `Profile evaluation case exceeded its ${input.manifest.limits.timeoutMs}ms timeout.`;
-          void input.interruptSessionTurn?.(session.id, reason).catch(() => {});
-          reject(new Error(reason));
-        }, input.manifest.limits.timeoutMs);
-      }),
-      new Promise<Turn>((_, reject) => {
-        if (!member.signal) return;
-        onAbort = () => {
-          void input.interruptSessionTurn?.(session.id, "Profile evaluation run cancelled.").catch(() => {});
-          reject(member.signal?.reason ?? new Error("Profile evaluation run cancelled."));
-        };
-        if (member.signal.aborted) onAbort();
-        else member.signal.addEventListener("abort", onAbort, { once: true });
-      }),
-    ]).finally(() => {
-      if (timeout) clearTimeout(timeout);
-      if (onAbort) member.signal?.removeEventListener("abort", onAbort);
-    });
+    })});
     if (turn.status === "in_progress" || !turn.completedAt) {
       throw new Error("Workflow evaluation turn did not settle.");
     }
+    await input.validateTerminalTurn?.(session,turn);
     if (!turn.harnessSnapshot
       || turn.harnessSnapshot.harnessRelease.id !== source.harnessRelease.id
       || turn.harnessSnapshot.harnessRelease.contentHash !== source.harnessRelease.contentHash) {
@@ -157,15 +149,20 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       throw new Error("Profile evaluation produced more than 10,000 substantive evidence references.");
     }
     const output = profileEvaluationOutput(events, source.target.kind);
-    if (Buffer.byteLength(output, "utf8") > input.manifest.limits.maxOutputBytes) {
-      throw new Error(`Profile evaluation case exceeded its ${input.manifest.limits.maxOutputBytes}-byte output limit.`);
+    const maxOutputBytes=Math.min(input.manifest.limits.maxOutputBytes,input.maximumOutputBytes??input.manifest.limits.maxOutputBytes);
+    if (!Number.isSafeInteger(maxOutputBytes)||maxOutputBytes<1)throw new Error("Profile evaluation requires a positive bounded output limit.");
+    const outputOverflow=Buffer.byteLength(output,"utf8")>maxOutputBytes;
+    if(outputOverflow&&!input.retainOutputLimitEvidence) {
+      throw new Error(`Profile evaluation case exceeded its ${maxOutputBytes}-byte output limit.`);
     }
+    if(outputOverflow)input.onOutputLimit?.(contentHash(output));
     return {
       evidence: {
-        output: { text: output },
+        output: { text: outputOverflow?"":output },
         runtimeEventRefs,
         artifactRefs: artifactRefs.map((artifact) => artifact.id),
-        ...(turn.status !== "completed" ? { infrastructureError: turn.error ?? `Workflow evaluation turn ${turn.status}.` } : {}),
+        ...(outputOverflow?{infrastructureError:`Profile evaluation case exceeded its ${maxOutputBytes}-byte output limit.`}
+          :turn.status !== "completed" ? { infrastructureError: turn.error ?? `Workflow evaluation turn ${turn.status}.` } : {}),
       },
       traceHash: contentHash(events),
       retainedEvidenceRef: { sessionId: session.id, turnId: turn.id },
@@ -174,8 +171,8 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       completedAt: turn.completedAt,
       latencyMs: Math.max(0, Date.parse(turn.completedAt) - Date.parse(turn.startedAt)),
       costUsd: null,
-      terminal: turn.status === "completed",
-      failureClass: turn.status === "completed" ? null : turn.status === "interrupted" ? "cancelled" : "infrastructure_failure",
+      terminal: turn.status === "completed"&&!outputOverflow,
+      failureClass: turn.status === "completed"&&!outputOverflow ? null : turn.status === "interrupted" ? "cancelled" : "infrastructure_failure",
     };
   };
 }

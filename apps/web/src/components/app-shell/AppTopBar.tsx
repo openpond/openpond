@@ -9,20 +9,13 @@ import type {
   WorkspaceToolResult,
 } from "@openpond/contracts";
 import { lazy, Suspense, useEffect, useState, type MouseEvent } from "react";
-import { PageChromeTitleTarget, PageChromeActionsTarget } from "./PageChrome";
 import {
-  ArrowLeft,
-  ChevronRight,
-  PanelLeft,
-  PanelRight,
-  Search,
-  SquareTerminal,
-} from "../icons";
-import {
-  WindowControls,
-  isDesktopShell,
-  isMacPlatform,
-} from "./WindowControls";
+  PageChromeTitleTarget,
+  PageChromeActionsTarget,
+  PageChromeActivityTarget,
+} from "./PageChrome";
+import { ArrowLeft, ChevronRight, PanelLeft, PanelRight, Search, SquareTerminal } from "../icons";
+import { WindowControls, isDesktopShell, isMacPlatform } from "./WindowControls";
 import type { CommitNextStep } from "../workspace/WorkspaceGitDialogs";
 import type { ClientConnection } from "../../api";
 import { copyToClipboard } from "../../lib/clipboard";
@@ -31,7 +24,7 @@ import { CollaborationHeaderActions } from "../collaboration/CollaborationHeader
 const WorkspaceEnvironmentMenu = lazy(() =>
   import("../chat/WorkspaceEnvironmentMenu").then((module) => ({
     default: module.WorkspaceEnvironmentMenu,
-  }))
+  })),
 );
 
 export type TopBarBreadcrumb = {
@@ -108,7 +101,7 @@ export function AppTopBar({
   onRunTerminalCommand: (command: string) => void;
   onWorkspaceToolAction: (
     action: WorkspaceToolRequest["action"],
-    args?: Record<string, unknown>
+    args?: Record<string, unknown>,
   ) => Promise<WorkspaceToolResult | null>;
   onOpenCommitDialog: (nextStep?: CommitNextStep) => void;
   onWorkspaceBranchChange?: (branch: string) => void;
@@ -133,9 +126,7 @@ export function AppTopBar({
     showWorkspaceControls ||
     rightSidebarAvailable ||
     showWindowControls;
-  const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(
-    null
-  );
+  const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!titleMenu) return;
@@ -170,11 +161,7 @@ export function AppTopBar({
     <header className="app-titlebar">
       <div className="titlebar-left">
         {!sidebarOpen && (
-          <button
-            className="titlebar-icon"
-            title="Show sidebar"
-            onClick={onShowSidebar}
-          >
+          <button className="titlebar-icon" title="Show sidebar" onClick={onShowSidebar}>
             <PanelLeft size={16} />
           </button>
         )}
@@ -190,44 +177,42 @@ export function AppTopBar({
           </button>
         ) : null}
         <PageChromeTitleTarget>
-        {breadcrumbs?.length ? (
-          <nav className="titlebar-breadcrumbs" aria-label="Breadcrumb">
-            {breadcrumbs.map((item, index) => {
-              const isLast = index === breadcrumbs.length - 1;
-              return (
-                <div
-                  className="titlebar-breadcrumb-item"
-                  key={`${item.label}-${index}`}
-                >
-                  {item.onSelect && !isLast ? (
-                    <button type="button" onClick={item.onSelect}>
-                      {item.label}
-                    </button>
-                  ) : (
-                    <strong>{item.label}</strong>
-                  )}
-                  {!isLast && <ChevronRight size={14} />}
-                </div>
-              );
-            })}
-          </nav>
-        ) : (
-          <div className="titlebar-title">
-            <strong
-              className="titlebar-copy-target"
-              title="Double-click to select; right-click for copy options"
-              onContextMenu={openTitleMenu}
-            >
-              {title}
-            </strong>
-            {workspaceName && <span>{workspaceName}</span>}
-          </div>
-        )}
+          {breadcrumbs?.length ? (
+            <nav className="titlebar-breadcrumbs" aria-label="Breadcrumb">
+              {breadcrumbs.map((item, index) => {
+                const isLast = index === breadcrumbs.length - 1;
+                return (
+                  <div className="titlebar-breadcrumb-item" key={`${item.label}-${index}`}>
+                    {item.onSelect && !isLast ? (
+                      <button type="button" onClick={item.onSelect}>
+                        {item.label}
+                      </button>
+                    ) : (
+                      <strong>{item.label}</strong>
+                    )}
+                    {!isLast && <ChevronRight size={14} />}
+                  </div>
+                );
+              })}
+            </nav>
+          ) : (
+            <div className="titlebar-title">
+              <strong
+                className="titlebar-copy-target"
+                title="Double-click to select; right-click for copy options"
+                onContextMenu={openTitleMenu}
+              >
+                {title}
+              </strong>
+              {workspaceName && <span>{workspaceName}</span>}
+            </div>
+          )}
         </PageChromeTitleTarget>
       </div>
       {showRightControls && (
         <div className="titlebar-right">
           <PageChromeActionsTarget className="page-chrome-actions" />
+          {!showWorkspaceControls ? <PageChromeActivityTarget /> : null}
           <CollaborationHeaderActions
             activeView={collaborationView}
             onDiscoverCommunities={onDiscoverCommunities}
@@ -261,6 +246,7 @@ export function AppTopBar({
                   onOpenSandboxWorkspace={onOpenSandboxWorkspace}
                 />
               </Suspense>
+              <PageChromeActivityTarget />
               <button
                 type="button"
                 className="titlebar-icon"
@@ -283,9 +269,7 @@ export function AppTopBar({
               {showDiffControls && (
                 <button
                   type="button"
-                  className={`topbar-diff-button ${
-                    rightSidebarOpen ? "active" : ""
-                  }`}
+                  className={`topbar-diff-button ${rightSidebarOpen ? "active" : ""}`}
                   title={`${rightSidebarOpen ? "Hide" : "Show"} sidebar${
                     filesChanged ? `, ${filesChanged} changed files` : ""
                   }`}
@@ -298,15 +282,11 @@ export function AppTopBar({
               )}
             </div>
           )}
-          {rightSidebarAvailable &&
-          onToggleRightSidebar &&
-          !showDiffControls ? (
+          {rightSidebarAvailable && onToggleRightSidebar && !showDiffControls ? (
             <div className="titlebar-actions">
               <button
                 type="button"
-                className={`topbar-diff-button ${
-                  rightSidebarOpen ? "active" : ""
-                }`}
+                className={`topbar-diff-button ${rightSidebarOpen ? "active" : ""}`}
                 title={`${rightSidebarOpen ? "Hide" : "Show"} sidebar`}
                 aria-label={`${rightSidebarOpen ? "Hide" : "Show"} sidebar`}
                 aria-pressed={rightSidebarOpen}
@@ -327,19 +307,11 @@ export function AppTopBar({
           style={{ left: titleMenu.x, top: titleMenu.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => copyTitleValue(title)}
-          >
+          <button type="button" role="menuitem" onClick={() => copyTitleValue(title)}>
             Copy title
           </button>
           {conversationId && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => copyTitleValue(conversationId)}
-            >
+            <button type="button" role="menuitem" onClick={() => copyTitleValue(conversationId)}>
               Copy conversation ID
             </button>
           )}

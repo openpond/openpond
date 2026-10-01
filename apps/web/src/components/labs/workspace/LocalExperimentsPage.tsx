@@ -1,0 +1,278 @@
+import { useRef, useState } from "react";
+import type { ModelsRoute } from "../models-route";
+import { useEvaluationSetup } from "./EvaluationSetupState";
+import { useWorkspaceActions, useWorkspaceResourceName } from "./WorkspacePanel";
+import {
+  EvaluationCard,
+  EvaluationModel,
+  EvaluationStatus,
+  EvaluationTime,
+} from "./EvaluationPresentation";
+import { ExperimentOverview } from "./ExperimentOverview";
+import { useLocalExperimentDetail } from "./useLocalExperimentDetail";
+import { LocalExperimentCollection } from "./LocalExperimentCollection";
+import { LocalExperimentCases } from "./LocalExperimentCases";
+import { LocalExperimentCompare } from "./LocalExperimentCompare";
+import { LocalExperimentGrading } from "./LocalExperimentGrading";
+import { LocalExperimentUsage } from "./LocalExperimentUsage";
+import type { WorkspaceApi } from "./workspace-api";
+export function LocalExperimentsPage({
+  api,
+  route,
+  navigate,
+}: {
+  api: WorkspaceApi;
+  route: ModelsRoute;
+  navigate: (route: ModelsRoute) => void;
+}) {
+  const setup = useEvaluationSetup(),
+    detail = useLocalExperimentDetail(api, route),
+    execution = detail.execution.data,
+    tab = route.detailTab ?? "overview";
+  const [error, setError] = useState<string | null>(null),
+    [busy, setBusy] = useState(false),
+    active = useRef(false);
+  useWorkspaceResourceName(execution?.configuration.request.name ?? null);
+  const select = useWorkspaceActions([
+    {
+      id: "experiment",
+      label: "Experiment",
+      onSelect: () =>
+        setup.open(
+          execution
+            ? {
+                id: execution.id,
+                request: execution.configuration.request,
+                graders: execution.graders,
+                maximumCostUsd: execution.configuration.maximumCostUsd,
+                packageHash: execution.packageHash,
+              }
+            : null,
+        ),
+    },
+  ]);
+  async function mutate(action: () => Promise<void>) {
+    if (active.current) return;
+    active.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await detail.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      active.current = false;
+      setBusy(false);
+    }
+  }
+  const failure =
+    error ??
+    detail.execution.error?.message ??
+    detail.result.error?.message ??
+    detail.passes.error?.message ??
+    detail.selectedPass.error?.message;
+  const pass = route.passId ? detail.result.data?.execution : null;
+  const total = execution ? Object.values(execution.counts).reduce((a, b) => a + b, 0) : 0;
+  return (
+    <>
+      <header className="evaluation-workspace-header">
+        <h1 className="sr-only">{execution?.configuration.request.name ?? "Local Experiments"}</h1>
+        <button className="training-button" disabled={busy} onClick={() => select("experiment")}>
+          {execution ? "Duplicate and edit" : "Run experiment"}
+        </button>
+      </header>
+      <p>Local · Executed and retained on this Desktop server using its signed-in account.</p>
+      {failure ? <p role="alert">{failure}</p> : null}
+      {!route.resourceId ? (
+        <LocalExperimentCollection key={api.key} api={api} route={route} navigate={navigate} />
+      ) : execution ? (
+        <>
+          <nav className="evaluation-workspace-tabs" aria-label="Experiment tabs">
+            {["overview", "cases", "compare", "configuration"].map((value) => (
+              <button
+                key={value}
+                aria-selected={tab === value}
+                onClick={() => navigate({ ...route, detailTab: value })}
+              >
+                {value[0]!.toUpperCase() + value.slice(1)}
+              </button>
+            ))}
+          </nav>
+          <div className="evaluation-workspace-scope">
+            <EvaluationModel
+              name={execution.model.modelId}
+              onOpen={() => navigate({ ...route, detailTab: "configuration" })}
+            />
+            <EvaluationStatus status={execution.status} />
+            <span>
+              {execution.counts.completed} completed · {execution.counts.failed} failed ·{" "}
+              {execution.counts.running} running · {execution.counts.pending} pending / {total}{" "}
+              attempts
+            </span>
+            <EvaluationTime value={execution.createdAt} />
+            {!execution.completedAt ? (
+              <button
+                className="training-button secondary"
+                disabled={busy || execution.status === "cancelling"}
+                onClick={() =>
+                  void mutate(async () => {
+                    await api.local("cancel", { id: execution.id });
+                  })
+                }
+              >
+                Cancel Experiment
+              </button>
+            ) : null}
+          </div>
+          {detail.passes.data?.pages.some((page) => page.items.length) ? (
+            <label>
+              Grading
+              <select
+                value={route.passId ?? ""}
+                onChange={(event) => navigate({ ...route, passId: event.target.value || null })}
+              >
+                <option value="">Original Experiment grading</option>
+                {detail.passes.data.pages
+                  .flatMap((page) => page.items)
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.status} · {item.id}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : null}
+          {detail.passes.hasNextPage ? (
+            <button onClick={() => void detail.passes.fetchNextPage()}>More scoring passes</button>
+          ) : null}
+          {pass ? (
+            <EvaluationCard title="Selected scoring pass">
+              <EvaluationStatus status={pass.status} />
+              {!pass.completedAt ? (
+                <button
+                  disabled={busy || pass.status === "cancelling"}
+                  onClick={() =>
+                    void mutate(async () => {
+                      await api.local("cancel", { id: pass.id });
+                    })
+                  }
+                >
+                  Cancel scoring pass
+                </button>
+              ) : null}
+            </EvaluationCard>
+          ) : null}
+          {tab === "overview" ? (
+            <ExperimentOverview
+              runs={[
+                {
+                  id: execution.id,
+                  name: execution.configuration.request.name ?? "Experiment",
+                  model: execution.model.modelId,
+                  status: execution.status,
+                  createdAt: execution.createdAt,
+                  total,
+                  completed: execution.counts.completed,
+                  failed: execution.counts.failed,
+                },
+              ]}
+              tokens={[]}
+              loading={detail.result.isFetching}
+              error={detail.result.error?.message}
+              retry={() => void detail.result.refetch()}
+              onSelect={() => navigate({ ...route, detailTab: "cases" })}
+              onConfiguration={() => navigate({ ...route, detailTab: "configuration" })}
+              tokenNote="This local result contract does not retain token counts. Usage stays unknown; measured spend is shown separately."
+            />
+          ) : null}
+          {tab === "configuration" ? (
+            <>
+              <EvaluationCard title="Immutable run configuration">
+                <dl>
+                  <dt>Model</dt>
+                  <dd>{execution.model.modelId}</dd>
+                  <dt>Dataset</dt>
+                  <dd>
+                    Version {execution.configuration.request.taskset.revision} ·{" "}
+                    {execution.configuration.request.taskset.id}
+                  </dd>
+                  <dt>Whole-run spending cap</dt>
+                  <dd>${execution.configuration.maximumCostUsd}</dd>
+                  <dt>Graders</dt>
+                  <dd>
+                    {execution.graders.map((grader) => grader.name ?? "Dataset grader").join(", ")}
+                  </dd>
+                </dl>
+                <details>
+                  <summary>Advanced configuration</summary>
+                  <pre>
+                    {JSON.stringify(
+                      {
+                        configuration: execution.configuration,
+                        configurationHash: execution.configurationHash,
+                        packageHash: execution.packageHash,
+                        model: execution.model,
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                </details>
+              </EvaluationCard>
+              {pass ? (
+                <EvaluationCard title="Selected grading configuration">
+                  <pre>
+                    {JSON.stringify(
+                      {
+                        id: pass.id,
+                        executionHash: pass.executionHash,
+                        source: pass.sourceExecution,
+                        graders: detail.selectedPass.data?.graders,
+                        maximumCostUsd: pass.maximumCostUsd,
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                </EvaluationCard>
+              ) : null}
+            </>
+          ) : null}
+          {tab !== "configuration" ? <LocalExperimentUsage execution={pass ?? execution} /> : null}
+          <LocalExperimentGrading
+            key={execution.id}
+            api={api}
+            definition={execution}
+            execution={execution}
+            busy={busy}
+            onApply={(action) =>
+              void mutate(async () => {
+                const next = await action();
+                navigate({ ...route, passId: next.id, detailTab: "cases" });
+              })
+            }
+          />
+          {tab === "compare" ? (
+            <LocalExperimentCompare
+              key={`${detail.resultId}:compare`}
+              api={api}
+              baselineId={detail.resultId}
+            />
+          ) : null}
+          {detail.result.data ? (
+            <div hidden={tab !== "cases"}>
+              <LocalExperimentCases key={detail.resultId} api={api} result={detail.result.data} />
+            </div>
+          ) : tab === "cases" ? (
+            <p role="status">Waiting for retained case results…</p>
+          ) : null}
+        </>
+      ) : (
+        <p role="status">
+          {detail.execution.isPending ? "Loading Experiment…" : "This Experiment is unavailable."}
+        </p>
+      )}
+    </>
+  );
+}

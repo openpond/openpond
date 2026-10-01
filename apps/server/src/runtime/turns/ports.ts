@@ -476,6 +476,10 @@ export type TurnRunnerDependencies = {
   appendHostedContextUsage: TurnEventSink["appendHostedContextUsage"];
   streamLocalByokChatTurn?: ProviderRuntime["streamLocalByokChatTurn"];
   streamOpenPondHostedChatTurn?: ProviderRuntime["streamOpenPondHostedChatTurn"];
+  /** A trusted execution owner can bind a fresh evaluation session to its
+   * durable admission and budget. This is never a renderer request field. */
+  resolveSessionModelStream?: (session: Session, turn: Turn) =>
+    Promise<NonNullable<ProviderRuntime["streamOpenPondHostedChatTurn"]> | null>;
   runLocalCreatePipelineChecks?: (
     input: LocalCreatePipelineCheckInput
   ) => Promise<LocalCreatePipelineCheckResult>;

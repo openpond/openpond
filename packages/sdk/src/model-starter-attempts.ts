@@ -7,11 +7,13 @@ import { TaskSplitSchema } from "@openpond/evals/tasksets";
 import { ExperimentAttemptGradeSchema } from "./experiment-grading-contracts.js";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { canonicalJson, canonicalSha256 } from "./protocol.js";
+import { StandaloneHarnessExperimentSourceSchema, NativeHarnessExperimentEvidenceSchema } from "@openpond/evals/experiments";
+import { contentHash } from "@openpond/harness";
 
 const IdSchema = z.string().trim().min(1).max(200);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const ModelStarterAttemptPolicySchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("hosted_chat"), modelId: IdSchema, messages: EvaluationMessagesSchema.optional(), maxOutputTokens: z.number().int().min(1).max(4_096).default(1_024), temperature: z.number().min(0).max(2).default(0), topP: z.number().gt(0).max(1).default(1) }).strict(),
+  z.object({ kind: z.literal("hosted_chat"), modelId: IdSchema, harness: StandaloneHarnessExperimentSourceSchema.optional(), messages: EvaluationMessagesSchema.optional(), maxOutputTokens: z.number().int().min(1).max(4_096).default(1_024), temperature: z.number().min(0).max(2).default(0), topP: z.number().gt(0).max(1).default(1) }).strict(),
   z.object({ kind: z.literal("fixture"), fixtureId: IdSchema }).strict(),
 ]);
 /** The server resolves task input, private state, verifier and fixture script.
@@ -61,9 +63,19 @@ export const ModelStarterAttemptResultSchema = z.object({
   grade: TaskGradeSchema.nullable().optional(),
   experimentGrade: ExperimentAttemptGradeSchema.nullable().optional(),
   environment: z.object({ status: z.enum(["completed", "budget_exhausted", "cancelled", "timed_out", "policy_failure", "environment_failure"]), collected: z.boolean(), definition: ModelProjectVersionedRefSchema, initialStateHash: HashSchema.nullable(), finalStateHash: HashSchema.nullable(), attemptHash: HashSchema }).strict(),
+  native: NativeHarnessExperimentEvidenceSchema.optional(),
   providerRequestIds: z.array(IdSchema).max(1_001),
   contentHash: HashSchema,
 }).strict().superRefine((value, context) => {
+  const source = value.attempt.request.policy.kind === "hosted_chat" ? value.attempt.request.policy.harness : undefined;
+  if (Boolean(source) !== Boolean(value.native))
+    context.addIssue({ code: "custom", path: ["native"], message: "Standalone Harness results require their exact native evidence." });
+  if (value.native && (!source || contentHash(source) !== contentHash(value.native.source)
+    || value.native.modelConfigurationHash !== value.attempt.policySnapshot?.configurationHash
+    || value.environment.initialStateHash !== null || value.environment.finalStateHash !== null
+    || (value.environment.status === "completed" && (!value.environment.collected || value.output === null
+      || value.native.partialOutputAvailable || value.native.outputHash !== contentHash(value.output)))))
+    context.addIssue({ code: "custom", path: ["native"], message: "Native evidence differs from the admitted source, model or output." });
   if (value.experimentGrade) {
     if (value.grade || value.composition) context.addIssue({ code: "custom", message: "Selected Experiment grading cannot claim another grade population." });
     if (!["completed", "failed"].includes(value.attempt.status) || !value.attempt.resultAvailable || value.attempt.score !== value.experimentGrade.score

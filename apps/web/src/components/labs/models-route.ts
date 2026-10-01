@@ -1,6 +1,6 @@
 export const MODELS_PAGES = ["get-started", "models", "datasets", "graders", "experiments", "tasks", "tasksets", "labeling", "rewards", "evaluations", "runs", "versions", "serving"] as const;
 export type ModelsPage = (typeof MODELS_PAGES)[number];
-export type ModelsCollection = "default" | "history" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers" | "combined";
+export type ModelsCollection = "default" | "results" | "review" | "series" | "drafts" | "new" | "formats" | "batches" | "comparisons" | "scorers" | "combined";
 export interface ModelsRoute {
   page: ModelsPage;
   area?: "console";
@@ -13,18 +13,18 @@ export interface ModelsRoute {
   sourceId?: string | null;
   datasetKind?: "release";
   projectId?: string | null;
-  executionId?: string | null;
+  executionId?: null;
   passId?: string | null;
   sort?: "id" | "name" | "updated";
   revision?: number;
   contentHash?: string;
+  executionLocation?: "local" | "hosted";
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
   "get-started": "Get started", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Runs", versions: "Versions", serving: "Serving",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
-  experiments: ["history"],
   tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
 };
 const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
@@ -59,11 +59,11 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   let collection: ModelsCollection = page === "evaluations" ? "results" : "default";
   if (collections[page]?.includes(parts[0] as ModelsCollection)) collection = parts.shift() as ModelsCollection;
   else if (page === "evaluations" && parts.length) return null;
+  if (page === "experiments" && parts[0] === "history") return null;
   const resourceId = parts.shift() ?? null;
   const detailTab = parts.shift() ?? null;
   if (parts.length || (detailTab && !resourceId)) return null;
   if ((page === "models" || page === "get-started") && resourceId) return null;
-  if (collection === "history" && (resourceId || detailTab)) return null;
   if (collection === "drafts" || collection === "new") {
     if (!resourceId || detailTab) return null;
   } else if (collection === "series") {
@@ -73,22 +73,24 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   } else if (detailTab && !detailTabs[page]?.includes(detailTab)) return null;
   if (page === "serving" && detailTab) return null;
   const query = new URLSearchParams(input.search ?? "");
-  if ([...query.keys()].some((key) => !["model", "q", "after", "source", "project", "execution", "pass", "dataset", "revision", "hash", "sort"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
+  if ([...query.keys()].some((key) => !["model", "q", "after", "source", "project", "pass", "dataset", "revision", "hash", "sort", "location"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
   const sort = query.get("sort");
   if (sort !== null && (page !== "datasets" || !["id", "name", "updated"].includes(sort))) return null;
   const revision = query.has("revision") ? Number(query.get("revision")) : undefined;
   const contentHash = query.get("hash") ?? undefined;
-  if ((revision !== undefined || contentHash !== undefined) && (!resourceId || !["datasets", "graders"].includes(page) || !Number.isSafeInteger(revision) || revision! <= 0 || !/^[a-f0-9]{64}$/.test(contentHash ?? ""))) return null;
+  const permitsReleasePin=["datasets","graders"].includes(page);
+  if ((revision !== undefined || contentHash !== undefined) && (!resourceId || !permitsReleasePin || !Number.isSafeInteger(revision) || revision! <= 0 || !/^[a-f0-9]{64}$/.test(contentHash ?? ""))) return null;
   const sourceId = query.get("source");
   if (sourceId !== null && ((page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
   if (query.has("dataset") && (page !== "datasets" || !resourceId || query.get("dataset") !== "release")) return null;
   const hosted = ["datasets", "graders", "experiments"].includes(page);
+  const executionLocation=query.get("location");
+  if(executionLocation!==null&&(!hosted||!["local","hosted"].includes(executionLocation)))return null;
   if (encoded[0] === "console" && !hosted) return null;
   const projectId = query.get("project") === "all" ? null : query.get("project");
-  const executionId = query.get("execution");
   const passId = query.get("pass");
-  if ([projectId, executionId, passId].some(id => id !== null && (!id.trim() || id.length > 240)) || (!hosted && (projectId || executionId || passId)) || (page !== "experiments" && (executionId || passId)) || (hosted && pathModelId)) return null;
-  if (collection === "history" && (executionId || passId)) return null;
+  if ([projectId, passId].some(id => id !== null && (!id.trim() || id.length > 240)) || (!hosted && (projectId || passId)) || (page !== "experiments" && passId) || (hosted && pathModelId)) return null;
+  if (passId && !resourceId) return null;
   const legacyModelId = query.get("model");
   if (hosted && legacyModelId !== null) return null;
   if (pathModelId && legacyModelId && pathModelId !== legacyModelId) return null;
@@ -97,7 +99,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const search = query.get("q") ?? "";
   const after = query.get("after");
   if ((modelId !== null && (!modelId.trim() || modelId.length > 500)) || search.length > 1_000 || (after !== null && (!after.trim() || after.length > 2_000))) return null;
-  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(sort ? { sort: sort as "id" | "name" | "updated" } : {}), ...(revision !== undefined ? { revision, contentHash } : {}), ...(query.get("dataset") === "release" ? { datasetKind: "release" } : {}), ...(encoded[0] === "console" ? { area: "console" } : {}), ...(hosted ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("execution") ? { executionId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
+  return modelsLocation(page, modelId, { collection, resourceId, detailTab, query: search, after, ...(executionLocation?{executionLocation:executionLocation as "local"|"hosted"}:{}), ...(sort ? { sort: sort as "id" | "name" | "updated" } : {}), ...(revision !== undefined ? { revision, contentHash } : {}), ...(query.get("dataset") === "release" ? { datasetKind: "release" } : {}), ...(encoded[0] === "console" ? { area: "console" } : {}), ...(hosted ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
 }
 
 export function modelsPath(route: ModelsRoute): string {
@@ -112,12 +114,12 @@ export function modelsPath(route: ModelsRoute): string {
   if (route.resourceId) parts.push(encodeURIComponent(route.resourceId));
   if (route.resourceId && route.detailTab) parts.push(encodeURIComponent(route.detailTab));
   const query = new URLSearchParams();
+  if(route.executionLocation)query.set("location",route.executionLocation);
   if (route.projectId) query.set("project", route.projectId);
   else if (route.projectId === null && ["datasets", "graders", "experiments"].includes(route.page)) query.set("project", "all");
   if (route.page === "datasets" && route.resourceId && route.datasetKind === "release") query.set("dataset", "release");
   if (route.page === "datasets" && route.sort) query.set("sort", route.sort);
   if (route.revision !== undefined && route.contentHash && route.resourceId && ["datasets", "graders"].includes(route.page)) { query.set("revision", String(route.revision)); query.set("hash", route.contentHash); }
-  if (route.executionId) query.set("execution", route.executionId);
   if (route.passId) query.set("pass", route.passId);
   if (route.query) query.set("q", route.query);
   if (route.after) query.set("after", route.after);

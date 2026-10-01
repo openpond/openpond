@@ -8,12 +8,16 @@ export function useDatasetTaskSelection(release: DatasetRelease | null) {
   useEffect(() => { if (release) state.activate(release); }, [identity]);
   return state;
 }
-export function DatasetTaskSelection({ release, count, route }: { release: DatasetRelease; count: number; route: ModelsRoute }) {
-  const state = useEvaluationSetup();
-  const controls = useWorkspacePanelControls();
-  return <div className="evaluation-workspace-scope" aria-label="Experiment task selection"><span>{state.count(release, count)} of {count} tasks selected{state.selection?.mode !== "subset" && !state.selection?.ids.length ? " · All tasks in this release" : ""}</span><button type="button" className="training-button secondary" onClick={() => state.selectAll(release, true)}>Select all {count} tasks</button><button type="button" className="training-button secondary" onClick={() => state.selectAll(release, false)}>Clear selection</button><button type="button" className="training-button" disabled={!state.count(release, count)} onClick={() => { state.open(null, release, route); controls?.select({ id: "experiment", label: "Experiment", onSelect: () => {} }); }}>Create Experiment</button></div>;
+function useSelectionAction(release: DatasetRelease, route: ModelsRoute) {
+  const state = useEvaluationSetup(), controls = useWorkspacePanelControls();
+  return { state, show: () => { state.openSelection(release, route); controls?.select({ id: "experiment", label: "Experiment", onSelect: () => {} }); } };
 }
-export function DatasetTaskCheckbox({ release, id }: { release: DatasetRelease; id: string }) {
-  const selection = useEvaluationSetup();
-  return <td onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}><input type="checkbox" aria-label={`Select task ${id}`} checked={selection.selected(release, id)} onChange={event => selection.toggle(release, id, event.target.checked)} /></td>;
+export function DatasetTaskSelection({ release, count, route }: { release: DatasetRelease; count: number; route: ModelsRoute }) {
+  const { state, show } = useSelectionAction(release, route);
+  const selected = state.count(release, count);
+  return <input type="checkbox" aria-label="Select all tasks in this Dataset version" disabled={!count} checked={Boolean(count && selected === count)} ref={node => { if(node) node.indeterminate = selected > 0 && selected < count; }} onChange={event => { state.selectAll(release, event.target.checked); if(event.target.checked) show(); }} />;
+}
+export function DatasetTaskCheckbox({ release, id, route }: { release: DatasetRelease; id: string; route: ModelsRoute }) {
+  const { state, show } = useSelectionAction(release, route);
+  return <td onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}><input type="checkbox" aria-label={`Select task ${id}`} checked={state.selected(release, id)} onChange={event => { state.toggle(release, id, event.target.checked); show(); }} /></td>;
 }

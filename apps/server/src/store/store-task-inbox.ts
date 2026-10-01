@@ -4,7 +4,7 @@ import {
   type TaskInboxSnapshot, type TaskInput, type TaskInputAdmission, type TaskInputMutation, type TaskWait,
 } from "@openpond/contracts";
 import { recoverTaskInboxOwners } from "./task-inbox-recovery.js";
-import { SqliteChatWorkflowStore } from "./store-chat-workflows.js";
+import { SqliteLocalExperimentStore } from "./store-local-experiments.js";
 import { subagentRunParams } from "./store-codecs.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import {
@@ -14,7 +14,7 @@ import {
 
 const LEASE_MS = 90_000;
 
-export class SqliteTaskInboxStore extends SqliteChatWorkflowStore {
+export class SqliteTaskInboxStore extends SqliteLocalExperimentStore {
   private async inboxWrite<T>(operation: (db: OpenPondSqliteConnection) => T): Promise<T> {
     await this.ready;
     const write = this.writeQueue.then(() => {

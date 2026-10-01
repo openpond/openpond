@@ -59,6 +59,8 @@ export type OpenPondServerOptions = {
   httpEnabled?: boolean;
   maxHostedWorkspaceToolRounds?: number;
   streamOpenPondHostedChatTurn?: typeof streamOpenPondHostedChatTurn;
+  /** Trusted execution-owner callback; never accepted from renderer requests. */
+  resolveSessionModelStream?: (session:Session,turn:Turn)=>Promise<typeof streamOpenPondHostedChatTurn|null>;
 };
 
 export type OpenPondServerInstance = {

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { OpenPondProfileRefSchema, type ProviderSettings, type RuntimeEvent } from "@openpond/contracts";
+import { OpenPondProfileRefSchema, type ProviderSettings, type RuntimeEvent, type OpenPondProfileRef } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import {
   collectProfileSourceUploadEntries,
@@ -14,6 +14,7 @@ import {
   loadLocalProfileRepo,
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
+  loadOpenPondProfileStateForRef,
   removeOpenPondProfile,
   renameActiveProfileAgent,
   runProfileCheck,
@@ -50,7 +51,8 @@ import {
   profileStateForClient,
 } from "./client-payload-projection.js";
 import type { SqliteStore } from "../store/store.js";
-import { ensureLocalProfileWorkflows } from "../harness/local-profile-workflow-runtime.js";
+import { resolveLocalProfileExperimentSource } from "../evaluations/local-experiment-profile-source.js";
+import { ensureLocalProfileWorkflows, profileWorkflowsForRelease } from "../harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "../harness/local-profile-evaluation-runtime.js";
 import { createProfileEvaluationRunPreparationService } from "../harness/profile-evaluation-run-preparation.js";
 import { loadLocalProfileEvaluationTaskset } from "../harness/local-profile-evaluation-taskset.js";
@@ -74,19 +76,23 @@ export function createProfilePayloads(deps: {
     return profileLibraryForClient(await loadOpenPondProfileLibrary());
   }
 
-  async function profileWorkflowsPayload() {
-    const [library, profile] = await Promise.all([
-      loadOpenPondProfileLibrary(),
-      loadOpenPondProfileState(),
-    ]);
-    const ref = library.lastUsed;
+  async function profileWorkflowsPayload(explicitRef?: OpenPondProfileRef,source?:{sourceRevision:string;harnessRelease:{id:string;contentHash:string}}) {
+    const library = await loadOpenPondProfileLibrary();
+    const ref = explicitRef ?? library.lastUsed;
     if (!ref) throw new Error("Select a Profile before loading its workflows.");
+    if (explicitRef && !library.profiles.some(entry => contentHash(entry.ref) === contentHash(explicitRef)))
+      throw new Error("The requested Profile is not in this device's accepted library.");
+    if(source) {
+      if(!explicitRef||explicitRef.source!=="local")throw new Error("An immutable local Profile source needs an explicit accepted local reference.");
+      const runtime=await resolveLocalProfileExperimentSource(deps.store,source.harnessRelease,explicitRef);
+      const metadata=runtime.release.harnessRelease.metadata.profile as {id?:string;sourceRevision?:string};
+      if(metadata.id!==explicitRef.profileId||metadata.sourceRevision!==source.sourceRevision)throw new Error("The retained Profile source differs from its immutable reference.");
+      return profileWorkflowsForRelease({store:deps.store,release:runtime.release,ref:explicitRef,sourceRevision:source.sourceRevision});
+    }
+    const profile = await loadOpenPondProfileStateForRef(ref);
     return ensureLocalProfileWorkflows({
-      store: deps.store,
-      storeDir: deps.storeDir,
-      ref,
-      profile,
-      reloadProfile: loadOpenPondProfileState,
+      store: deps.store, storeDir: deps.storeDir, ref, profile,
+      reloadProfile: () => loadOpenPondProfileStateForRef(ref),
     });
   }
 

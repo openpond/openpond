@@ -12,6 +12,9 @@ export function createExperimentCaseService(deps: {
   resolvePolicy(input: ExperimentModelCase): Promise<ExperimentCasePolicy>;
   resolveEnvironment?(input: ExperimentModelCase): Promise<typeof executeJavaScriptEnvironmentInProcess>;
   executeProfile(request: unknown): Promise<unknown>;
+  /** Supplied only by an owner that has admitted the exact source and a
+   * durable native-turn budget. Missing adapters reject before dispatch. */
+  executeHarness?(input: ExperimentModelCase, signal: AbortSignal): Promise<unknown>;
 }) {
   const active = new Map<string,{hash:string;controller:AbortController;result:Promise<unknown>}>();
   async function execute(raw: unknown) {
@@ -32,9 +35,16 @@ export function createExperimentCaseService(deps: {
     finally { active.delete(input.id); }
   }
   async function run(input: ExperimentModelCase, parentSignal: AbortSignal) {
+    const signal = AbortSignal.any([parentSignal,AbortSignal.timeout(input.timeoutMs)]);
+    signal.throwIfAborted();
+    if (input.harness) {
+      if (!deps.executeHarness || input.environment.kind !== "text") {
+        throw new Error("The selected standalone Harness has no compatible native Experiment adapter.");
+      }
+      return deps.executeHarness(input, signal);
+    }
     // Resolve the exact admitted model before creating any environment.
     const policy = await deps.resolvePolicy(input);
-    const signal = AbortSignal.any([parentSignal,AbortSignal.timeout(input.timeoutMs)]);
     signal.throwIfAborted();
     if(input.environment.kind === "javascript") {
       const execute = deps.resolveEnvironment
