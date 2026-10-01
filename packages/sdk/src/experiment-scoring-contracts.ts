@@ -8,6 +8,8 @@ const Id = z.string().trim().min(1).max(200);
 export const ExperimentScoringRequestSchema = z.object({
   operationId: Id,
   execution: ImmutableReleaseRefSchema,
+  /** Recorded executions retain observed evidence and never invoke a target. */
+  executionKind: z.literal("recorded_evidence").optional(),
   graders: z.array(RewardReleaseRefSchema).min(1).max(100),
   maximumCostUsd: z.number().finite().min(0.000001).max(10_000),
   mappings: z.array(z.object({ graderId: Id, fields: ExperimentFieldMappingsSchema }).strict()).max(100).optional(),

@@ -1,3 +1,6 @@
+import {readLocalProfileArtifacts} from "./local-profile-artifacts.js";
+import { ScheduledTransportNotInvokedError, currentScheduledAdmissionGuard,type ScheduledAdmissionGuard } from "./evaluation-schedule-admission-guard.js";
+import {retainClaudeProcessEvidence} from "./claude-process-evidence.js";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { LocalExperimentRetainedScoreSchema, LocalExperimentSourceChoicesSchema, LocalExperimentRecordReadSchema, type LocalExperimentRecord, type LocalExperimentSourceChoices } from "@openpond/contracts";
@@ -21,18 +24,21 @@ import type { LocalProfileOwner } from "./local-experiment-profile.js";
 import type { LocalEnvironmentOwner } from "./local-experiment-environment.js";
 import { LocalExperimentSaveFromReleaseSchema, LocalExperimentReadSchema, LocalExperimentListSchema,
   LocalExperimentError,
-  type LocalExperimentExecution, type LocalExperimentAdmission } from "./local-experiment-contract.js";
+  type LocalExperimentDefinition, type LocalExperimentExecution, type LocalExperimentAdmission } from "./local-experiment-contract.js";
 
-export function createLocalExperimentService(deps:{store:SqliteLocalExperimentStore;teamId:()=>Promise<string>;actorId:()=>Promise<string>;
+export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:string)=>Promise<import("@openpond/contracts").RuntimeEvent[]>;storeDir?:string;store:SqliteLocalExperimentStore;teamId:()=>Promise<string>;actorId:()=>Promise<string>;
   stream?:typeof streamOpenPondHostedChatTurn;catalog?:typeof loadOpenPondHostedModels;ownerId?:string;
   nativeHarness?:QualifiedLocalNativeHarness;
-  sourceChoices?:()=>Promise<LocalExperimentSourceChoices>;
+  resolveSelectedRewards?:import("./local-reward-grading.js").LocalRewardGradingResolver;sourceChoices?:()=>Promise<LocalExperimentSourceChoices>;
   sourceDataset?:(payload:unknown,teamId:string)=>Promise<unknown>;
   environment?:LocalEnvironmentOwner;
   profile?:LocalProfileOwner;
   authorizeProject?:(configuration:import("./local-experiment-contract.js").LocalExperimentDefinition["configuration"])=>Promise<void>;
+  localInference?:{prepare(configuration:LocalExperimentDefinition["configuration"]):Promise<LocalModelAdmission>;choices():Promise<unknown>;claudeReadiness?():Promise<unknown>;claudeControl?(teamId:string,raw:unknown):Promise<unknown>};
+  readHumanTaskPackage?:(scope:string,projectId:string,release:{id:string;revision:number;contentHash:string})=>Promise<TasksetPackage>;
   resolvePackage?:(input:z.infer<typeof LocalExperimentSaveFromReleaseSchema>)=>Promise<TasksetPackage>}) {
   const ownerId=deps.ownerId??randomUUID(),active=new Map<string,Promise<void>>();
+  const scheduledGuards=new Map<string,ScheduledAdmissionGuard>();
   const controllers=new Map<string,AbortController>();
   const projectScope=new AsyncLocalStorage<string|null>();
   const scopes=new Map<string,{execution:LocalExperimentExecution;admission:LocalExperimentAdmission;model:LocalModelAdmission}>();
@@ -43,7 +49,7 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
       const scope=scopes.get(request.id);
       if(!scope || contentHash(scope.admission.request)!==contentHash(request))throw new LocalExperimentError("local_case_admission_missing","Only the durable local execution owner may dispatch a case.");
       return createLocalExperimentPolicy({request,stream:createLocalBudgetedModelStream({store:deps.store,ownerId,
-        teamId:scope.execution.teamId,executionId:scope.execution.id,caseId:scope.admission.receiptId,admission:scope.model,stream:streamForActor(scope.execution.ownerActorId,scope.execution.teamId)})});
+        teamId:scope.execution.teamId,executionId:scope.execution.id,caseId:scope.admission.receiptId,admission:modelForActor(scope.model,scope.execution.ownerActorId,scope.execution.teamId,scope.execution.id),stream:streamForActor(scope.execution.ownerActorId,scope.execution.teamId,scope.execution.id)})});
     },
     executeProfile:async()=>{throw new LocalExperimentError("local_profile_not_qualified","Profile targets require the shared released-target adapter.",422);},
     resolveEnvironment:deps.environment?async request=> {
@@ -59,7 +65,7 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
         throw new LocalExperimentError("local_native_owner_missing","Only the durable case owner may dispatch the admitted native Harness.",422);
       const owned=await native.execute({executionId:scope.execution.id,request,source:request.harness,
         stream:createLocalBudgetedModelStream({store:deps.store,ownerId,teamId:scope.execution.teamId,
-          executionId:scope.execution.id,caseId:scope.admission.receiptId,admission:scope.model,stream:streamForActor(scope.execution.ownerActorId,scope.execution.teamId)}),
+          executionId:scope.execution.id,caseId:scope.admission.receiptId,admission:modelForActor(scope.model,scope.execution.ownerActorId,scope.execution.teamId,scope.execution.id),stream:streamForActor(scope.execution.ownerActorId,scope.execution.teamId,scope.execution.id)}),
         signal,maxOutputBytes:262_144});
       const attempt=localRetainedAttempt(owned.attempt),evidence=attempt.native;
       if(attempt.taskId!==request.taskId||!evidence||evidence.admissionHash!==request.admissionHash
@@ -76,9 +82,24 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
   async function requireActor(ownerActorId:string) {
     if(await deps.actorId()!==ownerActorId)throw new LocalExperimentError("local_resource_denied","This local resource is unavailable to the current account.",404);
   }
-  function streamForActor(ownerActorId:string,teamId:string):typeof streamOpenPondHostedChatTurn {
+  async function beforeTransport(actorId:string,teamId:string,executionId:string|undefined,request:Parameters<typeof streamOpenPondHostedChatTurn>[0]) {
+    const scheduled=executionId?scheduledGuards.get(executionId):undefined;
+    try {
+      await requireActor(actorId);await requireTeam(teamId);
+      if(scheduled&&executionId){request.signal?.throwIfAborted();scheduled.assertExecution(executionId);}
+    } catch(error) {
+      if(scheduled&&executionId&&request.requestId)throw new ScheduledTransportNotInvokedError(executionId,request.requestId,error);
+      throw error;
+    }
+  }
+  function modelForActor(admission:LocalModelAdmission,actorId:string,teamId:string,executionId?:string):LocalModelAdmission {
+    if(admission.streamFactory){const factory=admission.streamFactory;return{...admission,streamFactory:scope=>{const stream=factory(scope);return async function*(request){await beforeTransport(actorId,teamId,executionId,request);yield* stream(request);};}};}
+    if(!admission.stream)return admission;
+    const transport=admission.stream;return{...admission,stream:async function*(request){await beforeTransport(actorId,teamId,executionId,request);yield* transport(request);}};
+  }
+  function streamForActor(ownerActorId:string,teamId:string,executionId?:string):typeof streamOpenPondHostedChatTurn {
     return async function*(request) {
-      await requireActor(ownerActorId);await requireTeam(teamId);
+      await beforeTransport(ownerActorId,teamId,executionId,request);
       yield* (deps.stream??streamOpenPondHostedChatTurn)(request);
     };
   }
@@ -109,7 +130,7 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
     if(!deps.profile)throw new LocalExperimentError("local_profile_not_qualified","This local server has no qualified exact Profile owner.",422);
     await deps.profile.resolve(configuration,value);return true;
   }
-  const admission=createLocalExperimentRunAdmission({store:deps.store,ownerId,catalog:deps.catalog,actorId:deps.actorId,
+  const admission=createLocalExperimentRunAdmission({localInference:deps.localInference,store:deps.store,ownerId,catalog:deps.catalog,actorId:deps.actorId,
     requireActor,requireTeam,ownedRecord,closing:()=>closing,
     assertScope:configuration=>{if(projectScope.getStore()&&configuration.request.project?.id!==projectScope.getStore())
       throw new LocalExperimentError("local_project_resource_denied","This Experiment does not belong to the selected Project.",404);},
@@ -127,7 +148,8 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
     },
     schedule:(execution,admissions,model)=>{
       if(active.has(execution.id))return;
-      const work=executeAdmissions(execution,admissions,model).finally(()=>{active.delete(execution.id);controllers.delete(execution.id);});
+      const scheduled=currentScheduledAdmissionGuard();if(scheduled)scheduledGuards.set(execution.id,scheduled);
+      const work=executeAdmissions(execution,admissions,model).finally(()=>{active.delete(execution.id);controllers.delete(execution.id);scheduledGuards.delete(execution.id);});
       active.set(execution.id,work);
     },
   });
@@ -144,11 +166,12 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
         let attempt:unknown|null=null;
         try {
           controller.signal.throwIfAborted();
-          const result=definition.configuration.request.policy.kind==="hosted_harness"&&deps.profile
+          let result=definition.configuration.request.policy.kind==="hosted_harness"&&deps.profile
             ?await deps.profile.execute({executionId:execution.id,admission,configuration:definition.configuration,package:packageValue,
               stream:createLocalBudgetedModelStream({store:deps.store,ownerId,teamId:execution.teamId,executionId:execution.id,
-                caseId:admission.receiptId,admission:model,stream:streamForActor(execution.ownerActorId,execution.teamId)}),signal:controller.signal})
+                caseId:admission.receiptId,admission:modelForActor(model,execution.ownerActorId,execution.teamId,execution.id),stream:streamForActor(execution.ownerActorId,execution.teamId,execution.id)}),signal:controller.signal})
             :await cases.execute(admission.request);attempt=result;
+          if(definition.model.providerId==="claude-code")result=await retainClaudeProcessEvidence({store:deps.store,teamId:execution.teamId,executionId:execution.id,caseId:admission.receiptId,attempt:result});attempt=result;
           const outcome=localRetainedAttempt(result);
           if(definition.configuration.request.policy.kind==="hosted_harness") {
             const evidence=outcome.profileNative;
@@ -158,17 +181,18 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
               throw new LocalExperimentError("local_profile_receipt_conflict","Profile output or trace differs from the exact admitted case.");
           }
           const task=packageValue.taskset.tasks.find(task=>task.id===admission.taskId)!;
+          const artifacts=await readLocalProfileArtifacts({storeDir:deps.storeDir,attempt:outcome,events:async id=>{if(!deps.runtimeEventsForTurn)throw new Error("The actual artifact trace owner is unavailable.");return deps.runtimeEventsForTurn(id);},authorize:async()=>{await requireActor(execution.ownerActorId);await requireTeam(execution.teamId);controller.signal.throwIfAborted();}});
           const grade=await gradeLocalExperimentCase({store:deps.store,ownerId,teamId:execution.teamId,executionId:execution.id,caseId:admission.receiptId,
-            package:packageValue,task,evidence:{output:{text:outcome.output??""},runtimeEventRefs:outcome.native?.runtimeEventRefs??outcome.profileNative?.runtimeEventRefs??[],artifactRefs:[],infrastructureError:outcome.status==="completed"?null:outcome.error??outcome.status},
+            package:packageValue,task,evidence:{output:{text:outcome.output??"",...(artifacts.length?{artifacts}:{})},runtimeEventRefs:outcome.native?.runtimeEventRefs??outcome.profileNative?.runtimeEventRefs??outcome.externalProcess?.runtimeEventRefs??[],artifactRefs:artifacts.map(artifact=>artifact.reference.id),infrastructureError:outcome.status==="completed"?null:outcome.error??outcome.status},
             evaluatorContext:localEvaluatorContext(outcome),
-            graders:definition.graders,signal:controller.signal,judgeProvider:createLearningHostedJudgeProvider({stream:streamForActor(execution.ownerActorId,execution.teamId),catalog:deps.catalog})});
+            graders:definition.graders,signal:controller.signal,beforeDispatch:async()=>{await requireActor(execution.ownerActorId);await requireTeam(execution.teamId);controller.signal.throwIfAborted();if(definition.configuration.request.policy.kind==="hosted_harness"&&deps.profile)await deps.profile.resolve(definition.configuration,packageValue);controller.signal.throwIfAborted();},judgeProvider:createLearningHostedJudgeProvider({stream:streamForActor(execution.ownerActorId,execution.teamId,execution.id),catalog:deps.catalog})});
           await deps.store.settleLocalCase({teamId:execution.teamId,id:execution.id,receiptId:admission.receiptId,ownerId,
             status:outcome.status==="completed"?"completed":outcome.status==="cancelled"?"cancelled":"failed",result:sealLocalRetainedCase(result,grade),error:outcome.error});
           if(outcome.status!=="completed")error=outcome.error??outcome.status;
         } catch(cause) {
           error=message(cause);
           let retained:unknown|null=null;
-          if(attempt) {try{retained=sealLocalRetainedCase(attempt,null);}catch{cleanupComplete=false;}}
+          if(attempt) {try{if(definition.model.providerId==="claude-code")attempt=await retainClaudeProcessEvidence({store:deps.store,teamId:execution.teamId,executionId:execution.id,caseId:admission.receiptId,attempt});retained=sealLocalRetainedCase(attempt,null);}catch{cleanupComplete=false;}}
           else cleanupComplete=false;
           await deps.store.settleLocalCase({teamId:execution.teamId,id:execution.id,receiptId:admission.receiptId,ownerId,
             status:controller.signal.aborted?"cancelled":"failed",result:retained,error});
@@ -215,6 +239,7 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
       output:value.result?localRetainedCase(value.result).attempt.output:null,
       messages:value.result?localRetainedCase(value.result).attempt.messages:[],grade:value.result?localRetainedCase(value.result).grade:null,error:value.error,
       ...(value.result&&localRetainedCase(value.result).attempt.native?{native:localRetainedCase(value.result).attempt.native}:{}),
+      ...(value.result&&localRetainedCase(value.result).attempt.externalProcess?{externalProcess:localRetainedCase(value.result).attempt.externalProcess}:{}),
       ...(value.result&&localRetainedCase(value.result).attempt.profileNative?{profileNative:localRetainedCase(value.result).attempt.profileNative}:{})}))};
     return {...content,contentHash:contentHash(content)};
   }
@@ -251,15 +276,18 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
     });
   }
   async function request(raw:unknown) {
-    const command=z.object({teamId:z.string().min(1).max(200),projectId:z.string().min(1).max(200).nullable().optional(),action:z.enum(["sourceDataset","sourceChoices","prepareHarness","run","runFromRelease","read","get","list","status","cancel","result","score","scoreRetained","passes","pass","compare","feedbackSummary","case"]),payload:z.unknown()}).strict().parse(raw);
+    const command=z.object({teamId:z.string().min(1).max(200),projectId:z.string().min(1).max(200).nullable().optional(),action:z.enum(["claudeReadiness","claudeControl","localInferenceChoices","sourceDataset","sourceChoices","prepareHarness","run","runFromRelease","read","get","list","status","cancel","result","score","scoreRetained","passes","pass","compare","feedbackSummary","case"]),payload:z.unknown()}).strict().parse(raw);
     const actor=await deps.actorId();
     if(!actor.trim())throw new LocalExperimentError("local_account_required","Sign in before accessing local Experiments.",403);
     const reply=await projectScope.run(command.projectId??null,()=>handleCommand(command));
     await requireTeam(command.teamId);await requireActor(actor);return reply;
   }
-  async function handleCommand(command:{teamId:string;projectId?:string|null;action:"sourceDataset"|"sourceChoices"|"prepareHarness"|"run"|"runFromRelease"|"read"|"get"|"list"|"status"|"cancel"|"result"|"score"|"scoreRetained"|"passes"|"pass"|"compare"|"feedbackSummary"|"case";payload:unknown}) {
+  async function handleCommand(command:{teamId:string;projectId?:string|null;action:"claudeReadiness"|"claudeControl"|"localInferenceChoices"|"sourceDataset"|"sourceChoices"|"prepareHarness"|"run"|"runFromRelease"|"read"|"get"|"list"|"status"|"cancel"|"result"|"score"|"scoreRetained"|"passes"|"pass"|"compare"|"feedbackSummary"|"case";payload:unknown}) {
     await requireTeam(command.teamId);
     const scoped=()=>({...z.record(z.string(),z.unknown()).parse(command.payload),teamId:command.teamId,...(command.projectId&&command.action==="list"?{projectId:command.projectId}:{})});
+    if(command.action==="claudeReadiness"){if(!deps.localInference?.claudeReadiness)throw new LocalExperimentError("claude_runtime_unavailable","Claude process owner is unavailable.",503);return deps.localInference.claudeReadiness();}
+    if(command.action==="claudeControl"){const input=z.object({id:z.string().min(1)}).passthrough().parse(command.payload);await ownedExecution(command.teamId,input.id);if(!deps.localInference?.claudeControl)throw new LocalExperimentError("claude_runtime_unavailable","Claude process owner is unavailable.",503);return deps.localInference.claudeControl(command.teamId,command.payload);}
+    if(command.action==="localInferenceChoices") {if(!deps.localInference)throw new LocalExperimentError("local_inference_unavailable","Local inference owner is unavailable.",503);return deps.localInference.choices();}
     if(command.action==="sourceDataset") {
       const actor=await deps.actorId();
       if(!deps.sourceDataset)throw new LocalExperimentError("local_source_catalog_unavailable","The local source catalog is unavailable.",503);
@@ -297,7 +325,16 @@ export function createLocalExperimentService(deps:{store:SqliteLocalExperimentSt
       pass:async(input:unknown)=>{const pass=await scoring.pass(input);const {definition,...execution}=pass.execution;void definition;return {...pass,execution};},compare,feedbackSummary,case:inspectCase};
     return methods[command.action](scoped());
   }
-  return {run:admission.run,runFromRelease:admission.runFromRelease,read,list,status,cancel,result,inspectCase,compare,score:scoring.score,passes:scoring.passes,pass:scoring.pass,request,
+  async function readHumanTaskPackage(scope:string,projectId:string,release:{id:string;revision:number;contentHash:string}) {
+    await requireTeam(scope);const actor=await deps.actorId();if(!deps.readHumanTaskPackage)throw new LocalExperimentError("human_task_source_unavailable","The exact task release resolver is unavailable.",503);
+    const value=validateTasksetPackage(await deps.readHumanTaskPackage(scope,projectId,release));await requireTeam(scope);await requireActor(actor);
+    if(contentHash({id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash})!==contentHash(release))throw new LocalExperimentError("human_task_release_changed","The Dataset release changed.",409);return value;
+  }
+  async function findRunOperation(scope:string,operationId:string) {
+    await requireTeam(scope);const record=await deps.store.findLocalExperimentRunOperation(scope,operationId);if(!record)return null;
+    const current=await ownedRecord(scope,record.id);if(current.operationId!==operationId)throw new LocalExperimentError("local_operation_conflict","Original operation identity changed.",409);return current;
+  }
+  return {authorize:admission.authorize,findRunOperation,readHumanTaskPackage,run:admission.run,runFromRelease:admission.runFromRelease,read,list,status,cancel,result,inspectCase,compare,score:scoring.score,scoreSelected:async(teamId:string,payload:unknown)=>{if(closing)throw new LocalExperimentError("local_runtime_closing","The local owner is closing.",503);const score=await scoring.scoreSelected(payload,teamId);return publicExecution(teamId,score.id);},passes:scoring.passes,pass:scoring.pass,request,
     async recover(){
       await deps.store.claimLocalExperimentOwner(ownerId);
       const recovered=await deps.store.recoverLocalExperiments(ownerId);

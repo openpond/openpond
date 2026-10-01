@@ -107,12 +107,13 @@ export class OpenPondExperimentsClient {
   async scoringPass(id: string, signal?: AbortSignal) {
     return this.pass(await this.request(`/scoring-passes/${encodeURIComponent(Id.parse(id))}`, "GET", undefined, signal), id);
   }
-  async scoringPasses(executionId: string, options: { afterId?: string; signal?: AbortSignal } = {}) {
+  async scoringPasses(executionId: string, options: { afterId?: string; executionKind?: "recorded_evidence"; signal?: AbortSignal } = {}) {
     const params = new URLSearchParams(options.afterId ? { afterId: Id.parse(options.afterId) } : {});
+    if (options.executionKind) params.set("executionKind", z.literal("recorded_evidence").parse(options.executionKind));
     const page = z.object({ items: z.array(z.unknown()).max(30), nextCursor: Id.nullable() }).strict().parse(
       await this.request(`/${encodeURIComponent(Id.parse(executionId))}/scoring-passes?${params}`, "GET", undefined, options.signal));
     const items = page.items.map(value => this.pass(value));
-    if (items.some(item => item.request.execution.id !== executionId) || new Set(items.map(item => item.id)).size !== items.length)
+    if (items.some(item => item.request.execution.id !== executionId || item.request.executionKind !== options.executionKind) || new Set(items.map(item => item.id)).size !== items.length)
       throw new Error("Scoring pass page differs from its execution ownership.");
     return { items, nextCursor: page.nextCursor };
   }

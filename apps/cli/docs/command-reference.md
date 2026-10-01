@@ -22,6 +22,83 @@ Options:
   --team <string>
   --workspace-hash <string>
 ```
+## connected-evidence
+
+```text
+Usage:
+  openpond connected-evidence <list|collection|recorded-list|recorded|import-receipt|summary|case|unmapped|capture|selection|publish|prepare-recorded|upload-part|preview|commit|set-collection> [id] --team <id> [--input-file <path>] [--project <id>] [--cursor <id>] [--limit <n>]
+
+Options:
+  --cursor <string>
+  --input-file <string>
+  --limit <integer>
+  --project <string>
+  --team <string>
+```
+## improve
+
+```text
+Usage:
+  openpond improve <list|read|instructions|request> [id] --team <id> --actor <owner-id> [--input-file <path>] [--cursor <id>] [--limit <n>] [--local --server-url <loopback-origin>]
+
+Options:
+  --actor <string>
+  --cursor <string>
+  --input-file <string>
+  --limit <integer>
+  --local
+  --server-url <string>
+  --team <string>
+```
+## evaluation-schedules
+
+```text
+Usage:
+  openpond evaluation-schedules <list|read|request> [id] --team <id> --actor <id> --local [--server-url <loopback-origin>] [--project <id>] [--input-file <path>] [--cursor <id>] [--limit <n>]
+
+Options:
+  --actor <string>
+  --cursor <string>
+  --input-file <string>
+  --limit <integer>
+  --local
+  --project <string>
+  --server-url <string>
+  --team <string>
+```
+## evaluate-refiner
+
+```text
+Usage:
+  openpond evaluate-refiner <list|read|cancel|resume|request> [id] --team <id> --actor <id> --local [--server-url <loopback-origin>] [--project <id>] [--input-file <path>]
+
+Options:
+  --actor <string>
+  --input-file <string>
+  --local
+  --project <string>
+  --server-url <string>
+  --team <string>
+```
+## human-review
+
+```text
+Usage:
+  openpond human-review <read|inbox|inspect|results|request> [id] --team <id> [--input-file <path>] [--view <mine|team|approval>] [--status <active|history>] [--project <id>] [--revision <n>] [--slot <0|1>] [--after-id <id>] [--limit <n>] [--local --server-url <loopback-origin>]
+
+Options:
+  --after-id <string>
+  --input-file <string>
+  --limit <integer>
+  --local
+  --project <string>
+  --revision <integer>
+  --server-url <string>
+  --slot <integer>
+  --status <string>
+  --team <string>
+  --view <string>
+```
 ## experiments
 
 ```text

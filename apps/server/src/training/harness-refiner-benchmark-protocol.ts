@@ -54,6 +54,12 @@ export function createHarnessRefinerExecutionPlan(input: {
   taskset: Taskset;
   seeds: number[];
   repetitions: number;
+  selectedPopulation?: {
+    adaptationTaskIds: string[];
+    holdoutTaskIds: string[];
+    adaptationSplit: string;
+    holdoutSplit: string;
+  };
 }): HarnessRefinerExecutionPlanItem[] {
   if (input.seeds.length !== 1 || input.repetitions !== 1) {
     throw new Error(
@@ -61,23 +67,63 @@ export function createHarnessRefinerExecutionPlan(input: {
     );
   }
   const benchmark = input.taskset.benchmark;
-  if (!benchmark) throw new Error("Harness Refiner Taskset has no benchmark definition.");
-  const heldOut = taskIdsForSplit(input.taskset, benchmark.evaluationSplit);
-  const adaptation = taskIdsForSplit(input.taskset, benchmark.adaptationSplit);
+  if (!benchmark)
+    throw new Error("Harness Refiner Taskset has no benchmark definition.");
+  const selected = input.selectedPopulation;
+  const heldOut =
+    selected?.holdoutTaskIds ??
+    taskIdsForSplit(input.taskset, benchmark.evaluationSplit);
+  const adaptation =
+    selected?.adaptationTaskIds ??
+    taskIdsForSplit(input.taskset, benchmark.adaptationSplit);
+  if (selected) {
+    if (
+      selected.adaptationSplit !== benchmark.adaptationSplit ||
+      selected.holdoutSplit !== benchmark.evaluationSplit
+    )
+      throw new Error("The advanced plan changed its exact split binding.");
+    const adapted = new Set<string>();
+    for (const id of adaptation) {
+      const task = input.taskset.tasks.find((task) => task.id === id);
+      if (!task || task.split !== selected.adaptationSplit)
+        throw new Error("An admitted adaptation task changed its split.");
+      adapted.add(task.clusterKey);
+    }
+    for (const id of heldOut) {
+      const task = input.taskset.tasks.find((task) => task.id === id);
+      if (
+        !task ||
+        task.split !== selected.holdoutSplit ||
+        adapted.has(task.clusterKey)
+      )
+        throw new Error(
+          "An admitted private holdout overlaps adaptation families.",
+        );
+    }
+  }
   const multiplier = input.seeds.length * input.repetitions;
   return [
     planItem("adaptation", benchmark.adaptationSplit, adaptation, multiplier),
     planItem("baseline", benchmark.evaluationSplit, heldOut, multiplier),
-    planItem("candidate_adaptation", benchmark.adaptationSplit, adaptation, multiplier),
+    planItem(
+      "candidate_adaptation",
+      benchmark.adaptationSplit,
+      adaptation,
+      multiplier,
+    ),
     planItem("candidate", benchmark.evaluationSplit, heldOut, multiplier),
   ];
 }
 
-export function totalPlannedAttempts(plan: HarnessRefinerExecutionPlanItem[]): number {
+export function totalPlannedAttempts(
+  plan: HarnessRefinerExecutionPlanItem[],
+): number {
   return plan.reduce((total, item) => total + item.attemptCount, 0);
 }
 
-export function totalPlannedTasks(plan: HarnessRefinerExecutionPlanItem[]): number {
+export function totalPlannedTasks(
+  plan: HarnessRefinerExecutionPlanItem[],
+): number {
   return new Set(plan.flatMap((item) => item.taskIds)).size;
 }
 
@@ -86,8 +132,11 @@ export function completedBeforeStage(
   stage: HarnessRefinerBenchmarkStage,
 ): number {
   const index = plan.findIndex((item) => item.stage === stage);
-  if (index < 0) throw new Error(`Benchmark execution plan has no ${stage} stage.`);
-  return plan.slice(0, index).reduce((total, item) => total + item.attemptCount, 0);
+  if (index < 0)
+    throw new Error(`Benchmark execution plan has no ${stage} stage.`);
+  return plan
+    .slice(0, index)
+    .reduce((total, item) => total + item.attemptCount, 0);
 }
 
 export class BenchmarkSpendBudget {
@@ -96,10 +145,14 @@ export class BenchmarkSpendBudget {
 
   constructor(maximumSpendUsd: number, observedSpendUsd = 0) {
     if (!Number.isFinite(maximumSpendUsd) || maximumSpendUsd <= 0) {
-      throw new Error("Benchmark maximum spend must be a positive finite number.");
+      throw new Error(
+        "Benchmark maximum spend must be a positive finite number.",
+      );
     }
     if (!Number.isFinite(observedSpendUsd) || observedSpendUsd < 0) {
-      throw new Error("Observed benchmark spend must be a non-negative finite number.");
+      throw new Error(
+        "Observed benchmark spend must be a non-negative finite number.",
+      );
     }
     this.maximumSpendUsd = maximumSpendUsd;
     this.#observedSpendUsd = observedSpendUsd;
@@ -118,8 +171,14 @@ export class BenchmarkSpendBudget {
   }
 
   charge(costUsd: number | null | undefined, label: string): void {
-    if (typeof costUsd !== "number" || !Number.isFinite(costUsd) || costUsd < 0) {
-      throw new Error(`Benchmark cost for ${label} is unavailable; the spend ceiling cannot be enforced.`);
+    if (
+      typeof costUsd !== "number" ||
+      !Number.isFinite(costUsd) ||
+      costUsd < 0
+    ) {
+      throw new Error(
+        `Benchmark cost for ${label} is unavailable; the spend ceiling cannot be enforced.`,
+      );
     }
     const next = this.#observedSpendUsd + costUsd;
     if (next > this.maximumSpendUsd + 1e-9) {
@@ -168,7 +227,9 @@ export class BenchmarkEvidenceSnapshot {
     for (const observation of observations) {
       const key = observationKey(observation);
       if (this.#observations.has(key)) {
-        throw new Error(`Frozen web evidence contains duplicate observation ${key}.`);
+        throw new Error(
+          `Frozen web evidence contains duplicate observation ${key}.`,
+        );
       }
       this.#observations.set(key, structuredClone(observation));
     }
@@ -227,7 +288,7 @@ export class BenchmarkEvidenceSnapshot {
 
   manifest(): BenchmarkEvidenceSnapshotManifest {
     const observations = [...this.#observations.values()].sort((left, right) =>
-      JSON.stringify(left).localeCompare(JSON.stringify(right))
+      JSON.stringify(left).localeCompare(JSON.stringify(right)),
     );
     const core = {
       schemaVersion: "openpond.benchmarkEvidenceSnapshot.v1" as const,
@@ -238,10 +299,12 @@ export class BenchmarkEvidenceSnapshot {
   }
 }
 
-function observationKey(input: Pick<
-  FrozenToolObservation,
-  "cohort" | "taskId" | "toolName" | "ordinal"
->): string {
+function observationKey(
+  input: Pick<
+    FrozenToolObservation,
+    "cohort" | "taskId" | "toolName" | "ordinal"
+  >,
+): string {
   return `${input.cohort}:${input.taskId}:${input.toolName}:${input.ordinal}`;
 }
 
@@ -252,12 +315,14 @@ export function benchmarkEfficiency(input: {
   graderTokens: number;
   amortizedReuseCount?: number;
 }) {
-  const grossForegroundTokenSavings = input.baselineTokens - input.candidateTokens;
+  const grossForegroundTokenSavings =
+    input.baselineTokens - input.candidateTokens;
   const overheadTokens = input.refinerTokens + input.graderTokens;
   const firstPassNetTokenSavings = grossForegroundTokenSavings - overheadTokens;
-  const breakEvenReuseCount = grossForegroundTokenSavings > 0
-    ? Math.ceil(overheadTokens / grossForegroundTokenSavings)
-    : null;
+  const breakEvenReuseCount =
+    grossForegroundTokenSavings > 0
+      ? Math.ceil(overheadTokens / grossForegroundTokenSavings)
+      : null;
   const amortizedReuseCount = input.amortizedReuseCount ?? 10;
   return {
     grossForegroundTokenSavings,
@@ -282,9 +347,10 @@ export function benchmarkAttemptsInfrastructureValid(
     "timeout",
     "cancelled",
   ]);
-  return attempts.every((attempt) =>
-    typeof attempt.grade.score === "number"
-    && !infrastructureFailures.has(attempt.grade.failureClass ?? "")
+  return attempts.every(
+    (attempt) =>
+      typeof attempt.grade.score === "number" &&
+      !infrastructureFailures.has(attempt.grade.failureClass ?? ""),
   );
 }
 
@@ -292,7 +358,8 @@ function taskIdsForSplit(taskset: Taskset, split: string): string[] {
   const taskIds = taskset.tasks
     .filter((task) => task.split === split)
     .map((task) => task.id);
-  if (!taskIds.length) throw new Error(`Harness Refiner split ${split} has no cases.`);
+  if (!taskIds.length)
+    throw new Error(`Harness Refiner split ${split} has no cases.`);
   return taskIds;
 }
 

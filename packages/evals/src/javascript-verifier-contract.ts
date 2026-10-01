@@ -1,11 +1,11 @@
 import { z } from "zod";
 
 export const JavaScriptVerifierResultSchema = z.object({
-  score: z.number().finite().min(0).max(1),
+  score: z.number().finite().min(0).max(1).nullable(),
   passed: z.boolean(),
   feedback: z.string().max(20_000),
   evidenceRefs: z.array(z.string().max(240)).max(1_000).default([]),
-}).strict();
+}).strict().refine(value => value.score !== null || !value.passed, { message: "Unscorable verifiers cannot pass.", path: ["passed"] });
 export type JavaScriptVerifierResult = z.infer<typeof JavaScriptVerifierResultSchema>;
 /** A process checker must never silently execute under different semantics. */
 export function assertIsolatedVerifierRuntime(runtime?: "isolated_javascript" | "sandbox_process"): void {

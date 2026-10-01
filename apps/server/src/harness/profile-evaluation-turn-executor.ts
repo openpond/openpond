@@ -27,6 +27,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
   /** Trusted execution owner, never supplied by a public case payload. */
   assertSpendAuthority?:typeof assertProfileEvaluationSpendAuthority;
   ownedSessionMetadata?:Record<string,unknown>;
+  settleSession?:(id:string)=>void;
   admitSession?:(session:Session)=>Promise<void>;
   validateTerminalTurn?:(session:Session,turn:Turn)=>Promise<void>;
   maximumOutputBytes?:number;
@@ -86,6 +87,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
         : []),
     ].join("\n\n") || " ";
     await input.admitSession?.(session);
+    try {
     const turn = await awaitProfileEvaluationTurn({signal:member.signal,timeoutMs:input.manifest.limits.timeoutMs,
       onInterrupt:input.onInterrupt,
       ...(input.interruptSessionTurn?{interrupt:(reason:string)=>input.interruptSessionTurn!(session.id,reason)}:{}),
@@ -174,6 +176,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       terminal: turn.status === "completed"&&!outputOverflow,
       failureClass: turn.status === "completed"&&!outputOverflow ? null : turn.status === "interrupted" ? "cancelled" : "infrastructure_failure",
     };
+    }finally{input.settleSession?.(session.id);}
   };
 }
 

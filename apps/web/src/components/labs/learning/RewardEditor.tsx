@@ -11,6 +11,7 @@ import { LearningActions, LearningError, LearningJsonField } from "./LearningFie
 import { useLearningMutation, useLearningResource } from "./useLearningResources";
 import { RewardFixturesEditor } from "./RewardFixturesEditor";
 import { RewardCheckHistory } from "./RewardCheckHistory";
+import { NativeHumanFormEditor } from "../../human-review/HumanFormEditor";
 import { TaskRatingDetails } from "./TaskRatingFields";
 
 type Fields = Parameters<typeof compileRewardAuthoring>[0]["fields"];
@@ -151,7 +152,7 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
     {draft.kind === "runtime_event" ? <label>Required events<input value={draft.events} onChange={(event) => patch({ events: event.target.value })} /><small>Separate event references with commas.</small></label> : null}
     {draft.kind === "model_judge" || draft.kind === "human" ? <label>Rubric<textarea rows={10} value={draft.rubric} onChange={(event) => patch({ rubric: event.target.value })} /></label> : null}
     {draft.kind === "model_judge" ? <>{embedded && models ? <label>Judge model<select value={draft.providerId === "openpond" ? draft.modelId : ""} onChange={event => patch({ providerId: "openpond", modelId: event.target.value, temperature: "0" })}><option value="">Choose model</option>{models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}</select></label> : null}{!embedded ? modelIdentity : null}<p>Changing the rubric or model requires calibration before this judge can grade examples.</p></> : null}
-    {draft.kind === "human" ? <label>Reviewer role<input value={draft.reviewerRole} onChange={(event) => patch({ reviewerRole: event.target.value })} /></label> : null}
+    {draft.kind === "human" ? <><label>Reviewer role<input value={draft.reviewerRole} onChange={(event) => patch({ reviewerRole: event.target.value })} /></label><NativeHumanFormEditor value={draft.humanForm ?? ""} rubric={draft.rubric} onChange={humanForm => patch({ humanForm })} /></> : null}
     {draft.kind === "learned_model" ? <><label>Model version<input value={draft.learnedId} onChange={(event) => patch({ learnedId: event.target.value })} /></label><label>Model version content hash<input value={draft.learnedHash} onChange={(event) => patch({ learnedHash: event.target.value })} /></label><LearningJsonField label="Model input contract" value={draft.inputContract} onChange={(inputContract) => patch({ inputContract })} /><label>Raw score minimum<input type="number" value={draft.minimum} onChange={(event) => patch({ minimum: event.target.value })} /></label><label>Raw score maximum<input type="number" value={draft.maximum} onChange={(event) => patch({ maximum: event.target.value })} /></label></> : null}
     <RewardFixturesEditor fixtures={draft.fixtures ?? []} onChange={fixtures => patch({ fixtures })} />
     {draft.kind === "model_judge" ? <p>Check a passing and a failing example before publishing a calibrated judge. Publishing without a matching check keeps the judge pending.</p> : null}

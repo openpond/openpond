@@ -1,3 +1,4 @@
+import {candidateFileToolDefinitions} from "../../harness/experiment-candidate-tool-catalog.js";
 import type {
   HarnessActionBinding,
   OpenPondActionCatalogEntry,
@@ -42,6 +43,10 @@ export function createCapabilityCatalogRuntime(deps: {
   executeProfileAction: TurnRunnerDependencies["executeProfileAction"];
   executeProjectAction: TurnRunnerDependencies["executeProjectAction"];
   loadOpenPondProfileStateForRef: TurnRunnerDependencies["loadOpenPondProfileStateForRef"];
+  resolveCandidateProfile?: TurnRunnerDependencies["resolveCandidateProfile"];
+  executeCandidateAgentCommand?: TurnRunnerDependencies["executeCandidateAgentCommand"];
+  executeCandidateCommand?: TurnRunnerDependencies["executeCandidateCommand"];
+  executeCandidateImage?: TurnRunnerDependencies["executeCandidateImage"];
 }) {
   return function createNativeModelToolDefinitions(
     openPondActionCatalog: OpenPondActionCatalogEntry[],
@@ -49,6 +54,7 @@ export function createCapabilityCatalogRuntime(deps: {
     profileSkillRuntime: ProfileSkillRuntime,
     connectedApps: ResolvedConnectedAppContext[],
     options: {
+      candidateAuthoring?: boolean;
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
@@ -63,6 +69,12 @@ export function createCapabilityCatalogRuntime(deps: {
     } = {}
   ): ModelToolDefinition[] {
     const definitions: ModelToolDefinition[] = [];
+    if(options.candidateAuthoring){
+      const authoring=createAuthoringModelToolDefinitions({loadProfileState:deps.loadOpenPondProfileStateForRef,resolveCandidateProfile:deps.resolveCandidateProfile,executeCandidateAgentCommand:deps.executeCandidateAgentCommand});
+      return [...authoring,...candidateFileToolDefinitions(deps.executeWorkspaceTool),
+        createCommandModelToolDefinition({executeCommand:deps.executeOpenPondCommand??(async()=>{throw new Error("Candidate command executor is unavailable.");}),executeCandidateCommand:deps.executeCandidateCommand}),
+        createLocalImageModelToolDefinition({executeCandidateImage:deps.executeCandidateImage})];
+    }
     if (options.trainingHarness) {
       return createOpenPondActionModelToolDefinitions({
         actionCatalog: openPondActionCatalog,
@@ -100,6 +112,8 @@ export function createCapabilityCatalogRuntime(deps: {
     definitions.push(
       ...createAuthoringModelToolDefinitions({
         loadProfileState: deps.loadOpenPondProfileStateForRef,
+        resolveCandidateProfile: deps.resolveCandidateProfile,
+        executeCandidateAgentCommand: deps.executeCandidateAgentCommand,
       })
     );
     definitions.push(
@@ -131,9 +145,10 @@ export function createCapabilityCatalogRuntime(deps: {
       definitions.push(
         createCommandModelToolDefinition({
           executeCommand: deps.executeOpenPondCommand,
+          executeCandidateCommand: deps.executeCandidateCommand,
         })
       );
-      definitions.push(createLocalImageModelToolDefinition());
+      definitions.push(createLocalImageModelToolDefinition({ executeCandidateImage: deps.executeCandidateImage }));
     }
     if (deps.hostedToolFlags.resourceTools) {
       definitions.push(

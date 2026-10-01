@@ -1,3 +1,5 @@
+import { currentAdvancedRefinerBoundary } from "./advanced-refiner-paid-boundary.js";
+import { createAdvancedLocalWorkTools } from "./advanced-refiner-local-work-tools.js";
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
@@ -27,6 +29,7 @@ type LocalTasksetWorkRuntimeDeps = {
 export function createLocalTasksetWorkRuntime(
   deps: LocalTasksetWorkRuntimeDeps,
 ): TasksetWorkAttemptRuntime {
+  const advancedTools=createAdvancedLocalWorkTools();
   return {
     createSession: async (payload) => {
       const input = record(payload);
@@ -49,7 +52,10 @@ export function createLocalTasksetWorkRuntime(
       if (!session.cwd) {
         throw new Error("Local Taskset Work requires an isolated Desktop workspace.");
       }
+      const guard=currentAdvancedRefinerBoundary();
+      if(guard){await guard.authorize();guard.signal.throwIfAborted();}
       return executeLocalWorkspaceTool({
+        advancedTools,
         deps,
         session,
         payload,
@@ -77,10 +83,11 @@ function benchmarkSessionTitle(input: Record<string, unknown>): string {
     .replace(/^(?:adaptation|frozen)-/, "")
     .replaceAll("-", " ")
     .replace(/^./, (character) => character.toUpperCase());
-  return `Benchmark · ${label}`;
+  return `Benchmark / ${label}`;
 }
 
 async function executeLocalWorkspaceTool(input: {
+  advancedTools:ReturnType<typeof createAdvancedLocalWorkTools>;
   deps: LocalTasksetWorkRuntimeDeps;
   session: Session;
   payload: unknown;
@@ -92,6 +99,8 @@ async function executeLocalWorkspaceTool(input: {
   const root = path.resolve(input.session.cwd!);
   await ensureLayout(root);
 
+  const advanced=currentAdvancedRefinerBoundary();
+  const confined=()=>input.advancedTools({session:input.session,root,turnId:input.turnId,action,args,maximumBytes:action==="sandbox_read_file"?1000000:WORK_OUTPUT_MAX_BYTES});
   try {
     if (action === "sandbox_create" || action === "sandbox_start") {
       return ok(action, "Local Desktop Work is ready.", localStatus(root));
@@ -121,6 +130,7 @@ async function executeLocalWorkspaceTool(input: {
       await fs.writeFile(target, bytes, { mode: 0o600 });
       return ok(action, `Uploaded ${relative(root, target)}.`, fileData(target, bytes));
     }
+    if(advanced&&["sandbox_list_files","sandbox_read_file","sandbox_write_file","sandbox_edit_file","sandbox_delete_file","sandbox_exec"].includes(action)){const result=await confined();return ok(action,result.bytes?result.bytes.toString("utf8"):JSON.stringify(result.data),result.data);}
     if (action === "sandbox_list_files") {
       const target = localPath(root, string(args.path));
       const files = await listFiles(root, target, args.recursive !== false);
@@ -182,7 +192,7 @@ async function executeLocalWorkspaceTool(input: {
     }
     if (action === "sandbox_save_output") {
       const source = localPath(root, string(args.path));
-      const bytes = await fs.readFile(source);
+      const bytes = advanced ? (await confined()).bytes! : await fs.readFile(source);
       if (bytes.byteLength > WORK_OUTPUT_MAX_BYTES) {
         return fail(action, `Work output exceeds ${WORK_OUTPUT_MAX_BYTES.toLocaleString()} bytes.`);
       }

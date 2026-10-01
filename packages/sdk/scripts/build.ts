@@ -15,6 +15,13 @@ await mkdir(dist, { recursive: true });
 
 await build({
   entryPoints: {
+    "human-review": path.join(root, "src/human-review.ts"),
+    "connected-evidence": path.join(root, "src/connected-evidence.ts"),
+    "post-training": path.join(root, "src/post-training.ts"),
+    "candidate-evaluations": path.join(root, "src/candidate-evaluations.ts"),
+    "experiment-improvements": path.join(root, "src/experiment-improvements.ts"),
+    "experiment-evaluation-schedules": path.join(root, "src/experiment-evaluation-schedules.ts"),
+    "advanced-refiner-evaluations": path.join(root, "src/advanced-refiner-evaluations.ts"),
     experiments: path.join(root, "src/experiments.ts"),
     "dataset-marketplace": path.join(root, "src/dataset-marketplace.ts"),
     "dataset-workspaces": path.join(root, "src/dataset-workspaces.ts"),
@@ -53,6 +60,14 @@ await build({
   sourcemap: true,
   logLevel: "info",
 });
+
+// Splitting moves a repeated external wildcard barrel into a shared chunk.
+// Preserve its public runtime exports at both advertised entry points; their
+// emitted declarations expose the same portable Human contracts.
+for (const entry of ["human-review", "index"]) {
+  const file=path.join(dist, `${entry}.js`);
+  await writeFile(file, `${await readFile(file,"utf8")}\nexport * from "@openpond/evals/human-review";\n`);
+}
 
 await run(process.execPath, [createRequire(import.meta.url).resolve("typescript/bin/tsc"), "--build", "tsconfig.build.json", "--force"]);
 

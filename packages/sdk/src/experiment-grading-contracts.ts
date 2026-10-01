@@ -5,7 +5,7 @@ import { TaskGradeSchema } from "@openpond/evals/graders";
 export const ExperimentAttemptGradeSchema = z.object({
   schemaVersion: z.literal("openpond.experimentAttemptGrade.v1"), selectionHash: z.string().regex(/^[a-f0-9]{64}$/),
   grades: z.array(TaskGradeSchema).min(1).max(100), score: z.number().min(0).max(1).nullable(),
-  passed: z.boolean(), rewardEligible: z.boolean(), gradingStatus: z.enum(["scored", "unscorable", "not_configured"]),
+  passed: z.boolean(), rewardEligible: z.boolean(), gradingStatus: z.enum(["scored", "pending", "unscorable", "not_configured"]),
   failureClass: FailureClassSchema.nullable(), contentHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict().superRefine((grade, context) => {
   const { contentHash: actual, ...body } = grade;

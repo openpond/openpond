@@ -1,3 +1,5 @@
+import { AdvancedRefinerEvaluationControl } from "./AdvancedRefinerEvaluationControl";
+import { ReviewedExperimentScheduleControl } from "./ReviewedExperimentScheduleControl";
 import { useRef, useState } from "react";
 import type { ModelsRoute } from "../models-route";
 import { useEvaluationSetup } from "./EvaluationSetupState";
@@ -19,14 +21,17 @@ import { LocalExperimentCompare } from "./LocalExperimentCompare";
 import { LocalExperimentGrading } from "./LocalExperimentGrading";
 import { LocalExperimentUsage } from "./LocalExperimentUsage";
 import type { WorkspaceApi } from "./workspace-api";
+import {ExperimentImproveSidebar} from "./ExperimentImproveSidebar";
 export function LocalExperimentsPage({
   api,
   route,
   navigate,
+  onOpenWork,
 }: {
   api: WorkspaceApi;
   route: ModelsRoute;
   navigate: (route: ModelsRoute) => void;
+  onOpenWork?: (id:string)=>void;
 }) {
   const setup = useEvaluationSetup(),
     detail = useLocalExperimentDetail(api, route),
@@ -73,6 +78,7 @@ export function LocalExperimentsPage({
     error ??
     detail.execution.error?.message ??
     detail.result.error?.message ??
+    detail.evidence.error?.message ??
     detail.passes.error?.message ??
     detail.selectedPass.error?.message;
   const pass = route.passId ? detail.result.data?.execution : null;
@@ -99,7 +105,7 @@ export function LocalExperimentsPage({
           {execution ? "Duplicate and edit" : "Run experiment"}
         </button>
       </header>
-      <p>Local · Executed and retained on this Desktop server using its signed-in account.</p>
+      <p>Local / Executed and retained on this Desktop server using its signed-in account.</p>
       {failure ? <p role="alert">{failure}</p> : null}
       {!route.resourceId ? (
         <LocalExperimentCollection key={api.key} api={api} route={route} navigate={navigate} />
@@ -287,6 +293,10 @@ export function LocalExperimentsPage({
                 key={detail.resultId}
                 api={api}
                 result={detail.result.data}
+                humanDataset={execution.configuration.request.taskset}
+                humanContext={api.humanContext ?? undefined}
+                projectId={execution.configuration.request.project?.id}
+                humanGraders={execution.graders.map(pin => ({ id: pin.id, name: pin.name ?? pin.id }))}
                 graders={graders}
                 onOpenGrader={openGrader}
               />
@@ -305,6 +315,9 @@ export function LocalExperimentsPage({
           {detail.execution.isPending ? "Loading Experiment…" : "This Experiment is unavailable."}
         </p>
       )}
+      <AdvancedRefinerEvaluationControl api={api} evidence={detail.evidence.data?.result.status==="completed"?{id:detail.evidence.data.manifest.id,contentHash:detail.evidence.data.result.contentHash}:null}/>
+      <ReviewedExperimentScheduleControl api={api} configuration={execution?.configuration??null} onOpenExperiment={id=>navigate({...route,page:"experiments",resourceId:id,passId:null,detailTab:"overview"})}/>
+      <ExperimentImproveSidebar api={api} evidence={detail.evidence.data??null} onOpenWork={onOpenWork}/>
     </>
   );
 }

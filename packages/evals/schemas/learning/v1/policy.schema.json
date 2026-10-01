@@ -2,12 +2,487 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "origin": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "openpond.trainingHandoffOrigin.v1"
+        },
+        "teamId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "projectId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema0"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "configurationId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "executionId": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "passId": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema0"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "manifestHash": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "resultHash": {
+              "$ref": "#/$defs/__schema1"
+            }
+          },
+          "required": [
+            "executionId",
+            "passId",
+            "manifestHash",
+            "resultHash"
+          ],
+          "additionalProperties": false
+        },
+        "dataset": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "contentHash": {
+              "$ref": "#/$defs/__schema1"
+            }
+          },
+          "required": [
+            "id",
+            "revision",
+            "contentHash"
+          ],
+          "additionalProperties": false
+        },
+        "target": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "model"
+                },
+                "modelId": {
+                  "$ref": "#/$defs/__schema2"
+                },
+                "configurationHash": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "kind",
+                "modelId",
+                "configurationHash"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "harness"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "profileId": {
+                      "$ref": "#/$defs/__schema2"
+                    },
+                    "sourceRevision": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "harnessRelease": {
+                      "$ref": "#/$defs/__schema4"
+                    },
+                    "catalogHash": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "definitionId": {
+                      "$ref": "#/$defs/__schema2"
+                    },
+                    "definitionHash": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "target": {
+                      "$ref": "#/$defs/__schema5"
+                    },
+                    "environmentHash": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "externalDatasetBinding": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "string",
+                          "const": "openpond.profileExternalDatasetBinding.v1"
+                        },
+                        "dataset": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "$ref": "#/$defs/__schema2"
+                            },
+                            "contentHash": {
+                              "$ref": "#/$defs/__schema3"
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "contentHash",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "packageHash": {
+                          "$ref": "#/$defs/__schema3"
+                        },
+                        "profileId": {
+                          "$ref": "#/$defs/__schema2"
+                        },
+                        "target": {
+                          "$ref": "#/$defs/__schema5"
+                        },
+                        "declaredProfileCatalogHash": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/__schema3"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "protectedProfileClosureHash": {
+                          "$ref": "#/$defs/__schema3"
+                        },
+                        "recordedOrigin": {
+                          "type": "object",
+                          "properties": {
+                            "execution": {
+                              "$ref": "#/$defs/__schema4"
+                            },
+                            "originalEvidence": {
+                              "$ref": "#/$defs/__schema4"
+                            },
+                            "members": {
+                              "minItems": 1,
+                              "maxItems": 500,
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/__schema6"
+                              }
+                            }
+                          },
+                          "required": [
+                            "execution",
+                            "originalEvidence",
+                            "members"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "gradingSource": {
+                          "type": "object",
+                          "properties": {
+                            "pass": {
+                              "$ref": "#/$defs/__schema4"
+                            },
+                            "evidence": {
+                              "$ref": "#/$defs/__schema4"
+                            }
+                          },
+                          "required": [
+                            "pass",
+                            "evidence"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "split": {
+                          "type": "string",
+                          "enum": [
+                            "train",
+                            "validation",
+                            "test",
+                            "frozen_eval"
+                          ]
+                        },
+                        "population": {
+                          "minItems": 1,
+                          "maxItems": 10000,
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema7"
+                          }
+                        },
+                        "evaluators": {
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema8"
+                          }
+                        },
+                        "fieldMappingsHash": {
+                          "$ref": "#/$defs/__schema3"
+                        },
+                        "fieldMappings": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema10"
+                          }
+                        },
+                        "environmentHash": {
+                          "$ref": "#/$defs/__schema3"
+                        },
+                        "privateDatasetClosureHash": {
+                          "$ref": "#/$defs/__schema3"
+                        },
+                        "criterion": {
+                          "type": "object",
+                          "properties": {
+                            "minimumPassRate": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "requireComplete": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "minimumPassRate",
+                            "requireComplete"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "contentHash": {
+                          "$ref": "#/$defs/__schema3"
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "dataset",
+                        "packageHash",
+                        "profileId",
+                        "target",
+                        "declaredProfileCatalogHash",
+                        "protectedProfileClosureHash",
+                        "split",
+                        "population",
+                        "evaluators",
+                        "fieldMappingsHash",
+                        "fieldMappings",
+                        "environmentHash",
+                        "privateDatasetClosureHash",
+                        "criterion",
+                        "contentHash"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "sourceCandidate": {
+                      "type": "object",
+                      "properties": {
+                        "candidateId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "frozenRevision": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "frozenHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "harnessRelease": {
+                          "$ref": "#/$defs/__schema4"
+                        },
+                        "protectedClosureHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "candidateId",
+                        "frozenRevision",
+                        "frozenHash",
+                        "harnessRelease",
+                        "protectedClosureHash"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "profileId",
+                    "sourceRevision",
+                    "harnessRelease",
+                    "catalogHash",
+                    "definitionId",
+                    "definitionHash",
+                    "target",
+                    "environmentHash"
+                  ],
+                  "additionalProperties": false
+                },
+                "model": {
+                  "type": "object",
+                  "properties": {
+                    "modelId": {
+                      "$ref": "#/$defs/__schema2"
+                    },
+                    "configurationHash": {
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "required": [
+                    "modelId",
+                    "configurationHash"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "source",
+                "model"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "agent"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "harnessRelease": {
+                      "$ref": "#/$defs/__schema4"
+                    },
+                    "agentSnapshot": {
+                      "$ref": "#/$defs/__schema4"
+                    },
+                    "sourcePackageHash": {
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "required": [
+                    "harnessRelease",
+                    "agentSnapshot",
+                    "sourcePackageHash"
+                  ],
+                  "additionalProperties": false
+                },
+                "model": {
+                  "type": "object",
+                  "properties": {
+                    "modelId": {
+                      "$ref": "#/$defs/__schema2"
+                    },
+                    "configurationHash": {
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "required": [
+                    "modelId",
+                    "configurationHash"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "source",
+                "model"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "fixture"
+                },
+                "configurationHash": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "kind",
+                "configurationHash"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "graders": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema14"
+          }
+        },
+        "contentHash": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "teamId",
+        "projectId",
+        "configurationId",
+        "source",
+        "dataset",
+        "target",
+        "graders",
+        "contentHash"
+      ],
+      "additionalProperties": false
+    },
     "schemaVersion": {
       "type": "string",
       "const": "openpond.learningPolicy.v1"
     },
     "id": {
-      "$ref": "#/$defs/__schema0"
+      "$ref": "#/$defs/__schema2"
     },
     "revision": {
       "type": "integer",
@@ -15,7 +490,7 @@
       "maximum": 9007199254740991
     },
     "modelProjectId": {
-      "$ref": "#/$defs/__schema0"
+      "$ref": "#/$defs/__schema2"
     },
     "executionOwner": {
       "type": "string",
@@ -32,14 +507,14 @@
       "maxItems": 100,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema1"
+        "$ref": "#/$defs/__schema15"
       }
     },
     "taskDefinition": {
-      "$ref": "#/$defs/__schema1"
+      "$ref": "#/$defs/__schema15"
     },
     "rewardBinding": {
-      "$ref": "#/$defs/__schema1"
+      "$ref": "#/$defs/__schema15"
     },
     "admission": {
       "type": "object",
@@ -54,7 +529,7 @@
         "qualification": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema3"
+              "$ref": "#/$defs/__schema4"
             },
             {
               "type": "null"
@@ -153,7 +628,7 @@
               "const": "upstream_accepted"
             },
             "modelProjectId": {
-              "$ref": "#/$defs/__schema0"
+              "$ref": "#/$defs/__schema2"
             }
           },
           "required": [
@@ -165,12 +640,12 @@
       ]
     },
     "trainingParent": {
-      "$ref": "#/$defs/__schema3"
+      "$ref": "#/$defs/__schema4"
     },
     "teacher": {
       "anyOf": [
         {
-          "$ref": "#/$defs/__schema3"
+          "$ref": "#/$defs/__schema4"
         },
         {
           "type": "null"
@@ -194,16 +669,16 @@
           ]
         },
         "recipe": {
-          "$ref": "#/$defs/__schema3"
+          "$ref": "#/$defs/__schema4"
         },
         "retentionEvaluation": {
-          "$ref": "#/$defs/__schema3"
+          "$ref": "#/$defs/__schema4"
         },
         "replayBatches": {
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema3"
+            "$ref": "#/$defs/__schema4"
           }
         }
       },
@@ -302,7 +777,7 @@
         "rollbackVersion": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema3"
+              "$ref": "#/$defs/__schema4"
             },
             {
               "type": "null"
@@ -319,7 +794,7 @@
       "additionalProperties": false
     },
     "contentHash": {
-      "$ref": "#/$defs/__schema2"
+      "$ref": "#/$defs/__schema3"
     }
   },
   "required": [
@@ -347,16 +822,369 @@
     "__schema0": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 240
+      "maxLength": 200
     },
     "__schema1": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "__schema2": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "__schema3": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "__schema4": {
       "type": "object",
       "properties": {
         "id": {
-          "$ref": "#/$defs/__schema0"
+          "$ref": "#/$defs/__schema2"
         },
         "contentHash": {
+          "$ref": "#/$defs/__schema3"
+        }
+      },
+      "required": [
+        "id",
+        "contentHash"
+      ],
+      "additionalProperties": false
+    },
+    "__schema5": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "profile"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "workflow"
+            },
+            "workflowId": {
+              "$ref": "#/$defs/__schema2"
+            }
+          },
+          "required": [
+            "kind",
+            "workflowId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "skill"
+            },
+            "skillPath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "kind",
+            "skillPath"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "agent_action"
+            },
+            "actionId": {
+              "$ref": "#/$defs/__schema2"
+            }
+          },
+          "required": [
+            "kind",
+            "actionId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema6": {
+      "type": "object",
+      "properties": {
+        "caseId": {
           "$ref": "#/$defs/__schema2"
+        },
+        "seed": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "fixtureId": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "sourceId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "snapshotHash": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "boundaryRevisionHash": {
+          "$ref": "#/$defs/__schema3"
+        }
+      },
+      "required": [
+        "caseId",
+        "seed",
+        "fixtureId",
+        "sourceId",
+        "snapshotHash",
+        "boundaryRevisionHash"
+      ],
+      "additionalProperties": false
+    },
+    "__schema7": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "seed": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "fixtureId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "taskId",
+        "seed",
+        "fixtureId"
+      ],
+      "additionalProperties": false
+    },
+    "__schema8": {
+      "type": "object",
+      "properties": {
+        "release": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "contentHash": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "contentHash",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        "feedbackKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "configurationHash": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "output": {
+          "type": "string",
+          "enum": [
+            "boolean",
+            "score",
+            "category"
+          ]
+        },
+        "categories": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema9"
+          }
+        }
+      },
+      "required": [
+        "release",
+        "feedbackKey",
+        "configurationHash",
+        "output",
+        "categories"
+      ],
+      "additionalProperties": false
+    },
+    "__schema9": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "__schema10": {
+      "type": "object",
+      "properties": {
+        "graderId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "fields": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema11"
+          }
+        }
+      },
+      "required": [
+        "graderId",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "__schema11": {
+      "type": "object",
+      "properties": {
+        "destination": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "path": {
+          "minItems": 1,
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema13"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "sourcePath": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema13"
+          }
+        }
+      },
+      "required": [
+        "destination",
+        "path",
+        "source",
+        "sourcePath"
+      ],
+      "additionalProperties": false
+    },
+    "__schema12": {
+      "type": "string",
+      "enum": [
+        "input",
+        "output",
+        "expectedOutput",
+        "evaluatorContext"
+      ]
+    },
+    "__schema13": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "__schema14": {
+      "type": "object",
+      "properties": {
+        "feedbackKey": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "evaluator": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "contentHash": {
+              "$ref": "#/$defs/__schema1"
+            }
+          },
+          "required": [
+            "id",
+            "contentHash"
+          ],
+          "additionalProperties": false
+        },
+        "expectedCount": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "scoredCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "feedbackKey",
+        "evaluator",
+        "expectedCount",
+        "scoredCount",
+        "score"
+      ],
+      "additionalProperties": false
+    },
+    "__schema15": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/__schema3"
         },
         "revision": {
           "type": "integer",
@@ -368,26 +1196,6 @@
         "id",
         "contentHash",
         "revision"
-      ],
-      "additionalProperties": false
-    },
-    "__schema2": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
-    },
-    "__schema3": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/__schema0"
-        },
-        "contentHash": {
-          "$ref": "#/$defs/__schema2"
-        }
-      },
-      "required": [
-        "id",
-        "contentHash"
       ],
       "additionalProperties": false
     }

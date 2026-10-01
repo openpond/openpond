@@ -20,7 +20,7 @@ export async function prepareLocalProfileExperiment(input:{raw:unknown;teamId:st
   if(request.profileRef.repositoryId!==request.profileRepositoryId)throw new LocalExperimentError("local_profile_origin_not_qualified","Choose an accepted device-local Profile repository.",403);
   if(request.reasoningEffort)throw new LocalExperimentError("local_profile_sampling_not_qualified","This local Profile owner does not admit reasoning overrides.",422);
   const prepared=await input.prepare({id:`local-profile-review-${contentHash([input.teamId,request.operationId]).slice(0,40)}`,
-    createdAt:"1970-01-01T00:00:00.000Z",profileRef:request.profileRef,...(request.profileSource?{profileSource:request.profileSource}:{}),definitionId:request.definitionId,modelRef:{providerId:"openpond",modelId:request.modelId},maximumSpendUsd:request.maximumCostUsd});
+    createdAt:"1970-01-01T00:00:00.000Z",profileRef:request.profileRef,...(request.profileSource?{profileSource:request.profileSource}:{}),definitionId:request.definitionId,externalDatasetBinding:request.externalDatasetBinding,modelRef:{providerId:"openpond",modelId:request.modelId},maximumSpendUsd:request.maximumCostUsd});
   const source=prepared.manifest.profileEvaluation!;
   const value=await input.loadPackage(prepared);
   const policy={kind:"hosted_harness" as const,modelId:request.modelId,profileRepositoryId:request.profileRepositoryId,

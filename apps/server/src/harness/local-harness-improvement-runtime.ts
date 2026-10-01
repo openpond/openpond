@@ -369,6 +369,7 @@ export function createLocalHarnessImprovementRuntime(input: {
 }
 
 function parentModelRunOwnsRefinement(session: Session): boolean {
+  if(session.metadata?.source === "experiment-improvement" && typeof session.metadata.refinementCandidate === "object")return true;
   return session.metadata?.automatedTasksetWorkAttempt === true
     && typeof session.metadata.parentModelRunId === "string"
     && session.metadata.parentModelRunId.trim().length > 0;

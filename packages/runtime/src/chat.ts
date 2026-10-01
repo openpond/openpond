@@ -616,7 +616,9 @@ function opChatHeaders(
   headers.set("Content-Type", "application/json");
   headers.set("Accept", accept);
   headers.set("x-openpond-client", "openpond-app");
-  headers.set("x-openpond-request-id", requestId || randomUUID());
+  const operationRequestId = requestId || randomUUID();
+  headers.set("x-openpond-request-id", operationRequestId);
+  headers.set("x-request-id", operationRequestId);
   return headers;
 }
 

@@ -1,0 +1,19 @@
+.execution-activity { position: relative; flex-shrink: 0; }
+.execution-activity-trigger { display: flex; align-items: center; gap: 12px; height: 32px; width: 268px; box-sizing: border-box; padding: 0 12px; border: 0; border-radius: 6px; background: var(--panel-soft, #262626); color: var(--text, #e8e8e8); font: inherit; font-size: 12px; cursor: pointer; }
+.execution-activity-trigger:hover, .execution-activity-trigger:active { background: var(--panel-hover, #303030); }
+.execution-activity-trigger:focus-visible, .execution-activity-list button:focus-visible { outline: 2px solid var(--ring, #777); outline-offset: 2px; }
+.execution-activity-ring { display: block; width: 14px; height: 14px; flex-shrink: 0; border: 2px solid currentColor; border-radius: 50%; opacity: .4; }
+.execution-activity-ring.is-active { opacity: 1; border-right-color: transparent; animation: execution-activity-spin 1s linear infinite; }
+.execution-activity-training { width: 82px; flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.execution-activity-experiments { width: 110px; flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.execution-activity-list { position: absolute; top: calc(100% + 6px); left: 0; z-index: 80; width: 320px; padding: 12px; border: 1px solid var(--border, #3b3b3b); border-radius: 8px; background: var(--panel-soft, #232323); color: var(--text, #e8e8e8); box-shadow: 0 2px 4px #0002; }
+.execution-activity-list[hidden] { display: none; }
+.execution-activity-list ul { max-height: 320px; overflow: auto; list-style: none; padding: 0; margin: 0; }
+.execution-activity-list li + li { border-top: 1px solid var(--border, #3b3b3b); }
+.execution-activity-list li button { display: block; width: 100%; padding: 8px 4px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.execution-activity-list li button:hover { background: var(--panel-hover, #303030); }
+.execution-activity-list li span, .execution-activity-list li small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.execution-activity-list li small, .execution-activity-list p { font-size: 12px; color: var(--muted, #aaa); }
+.execution-activity-list p { margin: 6px 0; }
+@keyframes execution-activity-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .execution-activity-ring.is-active { animation: none; } }

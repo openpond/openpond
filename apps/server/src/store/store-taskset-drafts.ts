@@ -321,6 +321,15 @@ export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
     ));
   }
 
+  /** Exact authored source only. Portable task metadata supplies this original
+   * published identity; a matching name or current draft is insufficient. */
+  async readHumanPublishedTasksetDraft(profileId:string,reference:{id:string;revision:number;contentHash:string}) {
+    const matches=(await this.listTasksetDrafts(profileId)).filter(draft=>draft.status==="published"&&draft.modelScope===null&&contentHash(draft.publishedTasksetRef)===contentHash(reference));
+    if(matches.length!==1)return null;
+    const draft=matches[0]!,workspace=await this.getTasksetDraftWorkspace(draft.id);
+    return workspace?{draft,workspace}:null;
+  }
+
   async getTasksetDraftWorkspace(id: string): Promise<TasksetDraftWorkspace | null> {
     const stored = await this.getParsedPayload(
       "SELECT payload FROM taskset_drafts WHERE id = ?",

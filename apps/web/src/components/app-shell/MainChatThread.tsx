@@ -15,6 +15,7 @@ import {
   isLatestAssistantMessageForTurn,
   latestAssistantMessageIdsByTurn,
 } from "../../lib/chat-timeline-rows";
+import { ConversationFormalReview } from "../human-review/ConversationFormalReview";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
 
 const TrainingStatusReceipt = lazy(() =>
@@ -26,6 +27,10 @@ const TrainingStatusReceipt = lazy(() =>
 type MessageRowProps = ComponentProps<typeof MessageRow>;
 
 export function MainChatThread({
+  formalReviewTeamId,
+  formalReviewActorId,
+  formalReviewScopeKey,
+  onFormalReviewOpen,
   accountBaseUrl,
   activeWorkspaceAppId,
   billingOrganizationSlug,
@@ -47,6 +52,10 @@ export function MainChatThread({
   threadRef,
   workspaceRootPath,
 }: {
+  formalReviewTeamId?: string | null;
+  formalReviewActorId?: string | null;
+  formalReviewScopeKey?: string;
+  onFormalReviewOpen?: () => void;
   accountBaseUrl: string | null;
   activeWorkspaceAppId: string | null;
   billingOrganizationSlug: string | null;
@@ -126,6 +135,7 @@ export function MainChatThread({
           showFooter={row.showFooter}
         />
       ))}
+      {connection && formalReviewTeamId && formalReviewActorId && formalReviewScopeKey && sessionId && onFormalReviewOpen ? <ConversationFormalReview key={formalReviewScopeKey + sessionId} connection={connection} teamId={formalReviewTeamId} actorId={formalReviewActorId} scopeKey={formalReviewScopeKey} sessionId={sessionId} running={turnRunning} onOpen={onFormalReviewOpen} /> : null}
       {creation ? (
         <Suspense fallback={null}>
           <TrainingStatusReceipt creation={creation} />
