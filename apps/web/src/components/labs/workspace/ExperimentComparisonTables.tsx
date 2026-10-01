@@ -1,3 +1,11 @@
+import {useState} from "react";
+import {HumanReviewLaunch} from "../../human-review/HumanReviewLaunch";
+import {LocalPublishedHumanResults} from "../../human-review/LocalPublishedHumanResults";
+import {HumanReviewInspector} from "../../human-review/HumanReviewInspector";
+import {useHumanGraderChoices} from "../../human-review/useHumanGraderChoices";
+import type {HumanInboxContext} from "../../human-review/api";
+import type {HumanReviewView} from "@openpond/evals/human-review";
+import {WorkspacePanel} from "./WorkspacePanel";
 import type { compareExperiments } from "@openpond/evals/experiments";
 import type { ExperimentGraderPin } from "openpond-sdk/experiments";
 import { EvaluationTableState } from "./EvaluationTableState";
@@ -14,8 +22,9 @@ export function ExperimentComparisonTables({
   graders,
   onOpenGrader,
   feedbackKey,
-  onFeedbackKey,
+  onFeedbackKey,human,
 }: {
+  human?:{context:HumanInboxContext;projectId:string;dataset:{id:string;revision:number;contentHash:string};selections:(identity:Comparison["cases"][number]["identity"])=>{executionId:string;receiptId:string}[]};
   data?: Comparison;
   loading: boolean;
   error?: string | null;
@@ -25,6 +34,7 @@ export function ExperimentComparisonTables({
   feedbackKey: string;
   onFeedbackKey: (key: string) => void;
 }) {
+  const [review,setReview]=useState<HumanReviewView|null>(null),choices=useHumanGraderChoices(human?.context,human?.projectId,human?.dataset);
   const selectedKey = data?.metrics.some((metric) => metric.feedbackKey === feedbackKey)
     ? feedbackKey
     : (data?.metrics[0]?.feedbackKey ?? "");
@@ -107,7 +117,8 @@ export function ExperimentComparisonTables({
             return (
               <tr key={JSON.stringify(row.identity)}>
                 <td>
-                  {row.identity.caseId} · Seed {row.identity.seed}
+                  {row.identity.caseId} / Seed {row.identity.seed}
+                  {human&&row.baseline&&row.candidate?<HumanReviewLaunch context={human.context} projectId={human.projectId} selections={human.selections(row.identity)} graders={choices.choices.filter(c=>c.mode==="pairwise")} onOpenReview={setReview}/>:null}
                 </td>
                 <td>{number(feedback?.baseline ?? null)}</td>
                 <td>{number(feedback?.candidate ?? null)}</td>
@@ -137,6 +148,8 @@ export function ExperimentComparisonTables({
           </button>
         </p>
       ) : null}
+      {human?.context.location==="local"&&data?.cases[0]?human.selections(data.cases[0].identity).map(selection=><LocalPublishedHumanResults key={selection.executionId} context={human.context} executionId={selection.executionId} onOpenReview={setReview}/>):null}
+      {human&&review?<WorkspacePanel action="human-review" label={review.title} onRequestClose={()=>setReview(null)}><HumanReviewInspector context={review.evidence?.publication&&review.evidence.attempts.some(attempt=>attempt.localSource)?{...human.context,location:"hosted"}:human.context} record={review} onChanged={setReview} onClose={()=>setReview(null)}/></WorkspacePanel>:null}
     </>
   );
 }

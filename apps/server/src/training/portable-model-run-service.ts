@@ -1,3 +1,4 @@
+import {bindTrainingActivityAuthority,TrainingActivityAuthoritySchema,type ResolveTrainingActivityAuthority} from "./training-activity-authority.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -56,6 +57,7 @@ export function createPortableModelRunService(deps: {
     maximumSpendUsd?: number | null;
     retentionDays?: number | null;
   }): Promise<TrainingPreparationPlan>;
+  resolveActivityAuthority?:ResolveTrainingActivityAuthority;
   prepareStart(input: {
     modelId: string;
     tasksetId: string;
@@ -328,6 +330,8 @@ export function createPortableModelRunService(deps: {
       startedAt: approval.approvedAt,
       comparisonSeriesEntry,
     });
+    const activityAuthority=deps.resolveActivityAuthority?TrainingActivityAuthoritySchema.parse(await deps.resolveActivityAuthority(sourceProject.id)):null;
+    if(activityAuthority)bindTrainingActivityAuthority(resolvedPlan,activityAuthority);
     let executionRef;
     try {
       executionRef = TrainingExecutionRefSchema.parse(await engineAdapter.launch(resolvedPlan));
@@ -362,6 +366,7 @@ export function createPortableModelRunService(deps: {
       ...launched,
       metadata: {
         ...launched.metadata,
+        ...(activityAuthority?{activityAuthority}:{}),
         modelRunId,
         modelProjectId: sourceProject.id,
         harnessRunManifestId: graph.manifest.id,

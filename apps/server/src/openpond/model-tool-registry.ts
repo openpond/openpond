@@ -561,6 +561,7 @@ export function createResourceModelToolDefinitions(deps: {
 
 export function createCommandModelToolDefinition(deps: {
   executeCommand: (input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
+  executeCandidateCommand?: (context: ModelToolExecutionContext, input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
 }): ModelToolDefinition {
   return {
     name: "exec_command",
@@ -595,7 +596,7 @@ export function createCommandModelToolDefinition(deps: {
       return target.target !== "sandbox";
     },
     execute: async (context) => {
-      const result = await deps.executeCommand({
+      const commandInput: OpenPondCommandExecutionInput = {
         session: context.session,
         turnId: context.turnId,
         providerRequestId: context.callId,
@@ -604,8 +605,11 @@ export function createCommandModelToolDefinition(deps: {
         timeoutSeconds: typeof context.args.timeoutSeconds === "number" ? context.args.timeoutSeconds : null,
         source: "model_tool",
         signal: context.signal,
-      });
-      const artifacts = result.ok ? await discoverCommandArtifacts(result) : [];
+      };
+      const candidate = context.turnMetadata.source === "experiment-improvement" || context.turnMetadata.refinementCandidate !== undefined;
+      if (candidate && !deps.executeCandidateCommand) throw new Error("Candidate commands require an admitted filesystem-confined executor.");
+      const result = candidate ? await deps.executeCandidateCommand!(context, commandInput) : await deps.executeCommand(commandInput);
+      const artifacts = result.ok && !candidate ? await discoverCommandArtifacts(result) : [];
       return {
         toolCallId: context.callId,
         name: "exec_command",

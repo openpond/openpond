@@ -494,6 +494,8 @@ export function createWorkOutputService(input: {
     readWorkOutput,
     saveAllWorkOutputs,
     saveLocalWorkOutput,
+    /** Internal trusted byte owner; no filesystem path or public route is accepted. */
+    saveOwnedOutputBytes:persistWorkOutputBytes,
     saveWorkOutput,
     workInputsForSession,
   };

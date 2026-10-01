@@ -13,7 +13,7 @@ export async function runSandboxedVerifier(input: {
   allowedRoot: string;
   signal?: AbortSignal;
   evaluatorContext?: Record<string, unknown>;
-}): Promise<{ score: number; passed: boolean; feedback: string; evidenceRefs?: string[] }> {
+}): Promise<{ score: number | null; passed: boolean; feedback: string; evidenceRefs?: string[] }> {
   const root = await realpath(input.allowedRoot);
   const modulePath = await realpath(path.resolve(root, input.grader.module));
   if (modulePath !== root && !modulePath.startsWith(`${root}${path.sep}`)) throw new Error("Verifier module is outside the approved Taskset root.");

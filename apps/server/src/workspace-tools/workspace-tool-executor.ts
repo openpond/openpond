@@ -226,6 +226,10 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
     let executionTarget: WorkspaceExecutionTarget | null = null;
     try {
       let result: WorkspaceToolResult;
+      const candidateResult = await deps.executeCandidateWorkspaceTool?.({ session, turnId: options.turnId, request: input });
+      const candidateMetadata = session.metadata ?? {};
+      if (!candidateResult && (candidateMetadata.source === "experiment-improvement" || candidateMetadata.refinementCandidate !== undefined))
+        throw new Error("Candidate Work requires an admitted isolated workspace executor.");
       const localProjectId =
         session.workspaceKind === "local_project" && session.workspaceId
           ? session.workspaceId
@@ -243,7 +247,9 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
         args: input.args,
       });
       if (experienceBlockedMessage) throw new Error(experienceBlockedMessage);
-      if (
+      if (candidateResult) {
+        result = WorkspaceToolResultSchema.parse(candidateResult);
+      } else if (
         input.action === "work_agent_package_install" ||
         input.action === "work_output_delete" ||
         input.action === "work_output_read"

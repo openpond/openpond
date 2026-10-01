@@ -138,6 +138,9 @@ importers:
       '@openpond/evals':
         specifier: workspace:*
         version: link:../../packages/evals
+      '@openpond/harness':
+        specifier: workspace:*
+        version: link:../../packages/harness
       '@openpond/local-server':
         specifier: workspace:*
         version: link:../server

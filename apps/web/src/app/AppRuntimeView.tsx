@@ -71,7 +71,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
   const [evaluationSidebar, setEvaluationSidebar] = useState<import("../components/labs/workspace/WorkspacePanel").EvaluationSidebarControl | null>(null);
   const desktopRoute = useDesktopRoute();
-  const hostedEvaluationRoute = desktopRoute?.kind === "models" && ["datasets", "graders", "experiments"].includes(desktopRoute.route.page);
+  const hostedEvaluationRoute = desktopRoute?.kind === "models" && ["home", "inbox", "datasets", "graders", "experiments"].includes(desktopRoute.route.page);
   const {
     composerDraftStore,
     appDispatch,
@@ -1126,6 +1126,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           managedWorkspace,
           workspaceBusy,
           defaultTeamId: appDefaults.defaultTeamId,
+          activityActorId: bootstrap?.account.profile?.id ?? null,
+          activityProjectId: desktopRoute?.kind === "models" ? desktopRoute.route.projectId ?? null : null,
           showDiffControls:
             view === "chat" && activeExperience === "development",
           diffPanelOpen,

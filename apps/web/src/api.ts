@@ -1127,6 +1127,10 @@ export const api = {
     apiFetch<ProfileWorkflowDiscovery>(connection, "/v1/profile/workflows"),
   profileEvaluations: (connection: ClientConnection) =>
     apiFetch<ProfileEvaluationDiscovery>(connection, "/v1/profile/evaluations"),
+  profileEvaluationDiscovery: (connection:ClientConnection,profileRef:OpenPondProfileRef,signal?:AbortSignal) =>
+    apiFetch<ProfileEvaluationDiscovery>(connection,"/v1/profile/evaluations/discover",{
+      method:"POST",body:JSON.stringify({profileRef}),signal,
+    }),
   profileEvaluationPrepare: (connection: ClientConnection, request: ProfileEvaluationRunRequest) =>
     apiFetch<ProfileEvaluationPreparedRun>(connection, "/v1/profile/evaluations/prepare", {
       method: "POST",

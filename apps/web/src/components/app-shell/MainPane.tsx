@@ -1731,6 +1731,10 @@ export function MainPane({
           >
             <Suspense fallback={null}>
               <MainChatThread
+                formalReviewTeamId={appPreferences.defaultTeamId ?? null}
+                formalReviewActorId={bootstrap?.account.profile?.id ?? null}
+                formalReviewScopeKey={accountTeamScopeKey}
+                onFormalReviewOpen={() => setView("labs")}
                 accountBaseUrl={accountBaseUrl}
                 activeWorkspaceAppId={activeWorkspaceAppId}
                 billingOrganizationSlug={billingTarget.organizationSlug}

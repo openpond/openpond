@@ -18,6 +18,22 @@
     "MODEL_STARTERS.md"
   ],
   "exports": {
+    "./experiment-improvements": {
+      "types": "./dist/types/packages/sdk/src/experiment-improvements.d.ts",
+      "import": "./dist/experiment-improvements.js"
+    },
+    "./candidate-evaluations": {
+      "types": "./dist/types/packages/sdk/src/candidate-evaluations.d.ts",
+      "import": "./dist/candidate-evaluations.js"
+    },
+    "./connected-evidence": {
+      "types": "./dist/types/packages/sdk/src/connected-evidence.d.ts",
+      "import": "./dist/connected-evidence.js"
+    },
+    "./post-training": {
+      "types": "./dist/types/packages/sdk/src/post-training.d.ts",
+      "import": "./dist/post-training.js"
+    },
     "./model-taskset-runs": {
       "types": "./dist/types/packages/sdk/src/model-taskset-runs.d.ts",
       "import": "./dist/model-taskset-runs.js"
@@ -114,6 +130,18 @@
     "./dataset-marketplace": {
       "types": "./dist/types/packages/sdk/src/dataset-marketplace.d.ts",
       "import": "./dist/dataset-marketplace.js"
+    },
+    "./human-review": {
+      "types": "./dist/types/packages/sdk/src/human-review.d.ts",
+      "import": "./dist/human-review.js"
+    },
+    "./experiment-evaluation-schedules": {
+      "types": "./dist/types/packages/sdk/src/experiment-evaluation-schedules.d.ts",
+      "import": "./dist/experiment-evaluation-schedules.js"
+    },
+    "./advanced-refiner-evaluations": {
+      "types": "./dist/types/packages/sdk/src/advanced-refiner-evaluations.d.ts",
+      "import": "./dist/advanced-refiner-evaluations.js"
     }
   },
   "publishConfig": {

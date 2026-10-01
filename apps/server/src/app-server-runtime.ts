@@ -1,3 +1,6 @@
+import {createProfilePrivateGradingOwner,preflightProfilePrivateGrading} from "./harness/profile-private-grading.js";
+import {createWorkOutputService} from "./work/work-output-service.js";
+import {randomUUID} from "node:crypto";
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
 import { experimentSessionStreamResolver } from "./runtime/experiment-session-stream.js";
 import { createExperimentCaseService } from "./evaluations/experiment-case-service.js";
@@ -53,6 +56,8 @@ import { PROFILE_HARNESS_WORKSPACE_PREFIX } from "./harness/profile-harness-work
 import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
 import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
 import { profileTrainingSource } from "./harness/profile-training-source.js";
+import {createHostProfileExternalDataset,type HostProfileExternalDataset} from "./harness/host-profile-external-dataset.js";
+import {createHostProfileEvaluationTools} from "./harness/host-profile-evaluation-tools.js";
 import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
 import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
 import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
@@ -168,6 +173,8 @@ export type OpenPondAppServerOptions = {
   /** Trusted source directory containing harness.json and declared assets. Immutable per workspace ID. */
   harness?: { sourceDirectory: string; workspaceId: string; name: string };
   /** Authorized Profile repository bytes and accepted revision supplied by the embedding host. */
+  profileExternalDataset?:HostProfileExternalDataset;
+  profileExternalDatasetClient?:import("@openpond/agent-runtime").AgentHostStorageClient;
   profileSource?: { repoPath: string; repositoryId: string; profileId: string; sourceRevision: string };
   /** Explicit embedding enables native-only, allowlisted tools and disables hosted services by default. */
   embedding?: AppServerEmbeddingOptions;
@@ -444,22 +451,17 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   }) : undefined;
   await harnessImprovement?.reconcilePending();
 
+  const externalDataset=options.profileExternalDataset?await (explicitProfileRelease&&options.profileExternalDatasetClient?createHostProfileExternalDataset({value:options.profileExternalDataset,release:explicitProfileRelease,sourceRevision:options.profileSource!.sourceRevision,client:options.profileExternalDatasetClient}):Promise.reject(new Error("External Dataset execution requires an explicit private Profile source owner."))):null;
+  const evaluationOutputOwner=createWorkOutputService({deviceId:`evaluation-${contentHash(storeDir).slice(0,24)}`,storeDir,runtimeEventsForSession:id=>coreStore.runtimeEventsForSession(id)});
+  const isolatedProfileTools=externalDataset&&explicitProfileRelease?createHostProfileEvaluationTools({storeDir,release:explicitProfileRelease,getTurn:id=>coreStore.getTurn(id),getSession,saveOutput:evaluationOutputOwner.saveOwnedOutputBytes,recordOutput:async(sessionId,turnId,data)=>{await appendRuntimeEvent({id:randomUUID(),timestamp:new Date().toISOString(),name:"workspace_action_result",source:"server",sessionId,turnId,action:"work_output_save",status:"completed",output:`Saved ${data.outputRef.title} as immutable case output.`,data});},authorize:externalDataset.authorize}):null;
+  const embeddedToolResolver=options.embedding ? createEmbeddingToolResolver(options.embedding, async (turnId,bindings)=>{const turn=await coreStore.getTurn(turnId);if(!turn)throw new Error("Embedded turn is unavailable.");const session=await getSession(turn.sessionId),previous=session.metadata?.embeddingToolBindings,admittedBindings=[...bindings].sort((a,b)=>a.name.localeCompare(b.name));if(previous!==undefined&&contentHash(previous)!==contentHash(admittedBindings))throw new Error("Embedded tool bindings changed; start a new thread.");await updateSession(session.id,{metadata:{...session.metadata,embeddingToolBindings:admittedBindings}});await coreStore.updateTurn(turnId,current=>({...current,metadata:{...current.metadata,toolBindings:admittedBindings}}));}):undefined;
   const turnRunner = createTurnRunner({
     storageHome: storeDir,
     workInputsForSession: options.workInputsForSession,
     finalizeWorkTurn: options.finalizeWorkTurn,
-    resolveModelTools: options.embedding ? createEmbeddingToolResolver(options.embedding, async (turnId, bindings) => {
-      const turn = await coreStore.getTurn(turnId);
-      if (!turn) throw new Error("Embedded turn is unavailable.");
-      const session = await getSession(turn.sessionId);
-      const previous = session.metadata?.embeddingToolBindings;
-      const admittedBindings = [...bindings].sort((a, b) => a.name.localeCompare(b.name));
-      if (previous !== undefined && contentHash(previous) !== contentHash(admittedBindings)) {
-        throw new Error("Embedded tool bindings changed; start a new thread.");
-      }
-      await updateSession(session.id, { metadata: { ...session.metadata, embeddingToolBindings: admittedBindings } });
-      await coreStore.updateTurn(turnId, current => ({ ...current, metadata: { ...current.metadata, toolBindings: admittedBindings } }));
-    }) : undefined,
+    isolatedProfileEvaluationForTurn:isolatedProfileTools?async(session)=>{if(!isolatedProfileTools.ownsSession(session.id))throw new Error("An external Dataset target has no actual admitted case owner.");return true;}:undefined,
+    executeProfileEvaluationAction:isolatedProfileTools?.executeAction,
+    resolveModelTools:isolatedProfileTools?context=>isolatedProfileTools.resolveTools(context):embeddedToolResolver,
     ...(embedded ? { hostedToolFlags: { toolMode: "native" as const, nativeToolTransport: true, nativeToolProviderDenylist: [], textToolFallback: false } } : {}),
     attachmentRootDir: path.join(storeDir, "attachments"),
     store: coreStore,
@@ -578,7 +580,10 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     return library.lastUsed && profile.git?.head && !profile.git.dirty
       ? { ref: library.lastUsed, sourceRevision: profile.git.head } : null;
   };
+
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
+    resolveExternalDataset:externalDataset?.resolveExternalDataset,
+    admitSession:isolatedProfileTools?.admitSession,settleSession:isolatedProfileTools?.settleSession,
     loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
     loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({ store: store, storeDir: storeDir, definition, profileId, harnessRelease }),
     store,
@@ -602,6 +607,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     return ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
   };
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
+    privateGradingPreflight:value=>preflightProfilePrivateGrading(value,false),
+    resolveExternalDataset:externalDataset?.resolveExternalDataset,sourceCandidate:externalDataset?.sourceCandidate,
     loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
     selectedWorkflows: listProfileWorkflows,
     loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({
@@ -616,6 +623,9 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     placement: "remote",
   });
   const executeProfileEvaluationRun = createProfileEvaluationRunService({
+    loadTasksetPackage:(definition,profileId,harnessRelease)=>loadLocalProfileEvaluationTaskset({store,storeDir,definition,profileId,harnessRelease}),
+    privateGrading:async(manifest,packageValue,signal)=>createProfilePrivateGradingOwner({manifest,packageValue,signal,authorize:async()=>{const selected=await selectedEvaluationProfile(),source=manifest.profileEvaluation;if(!selected||!source||selected.ref.profileId!==source.profileId||selected.sourceRevision!==source.sourceRevision)throw new Error("The current private Profile source changed.");if(externalDataset)await externalDataset.authorize({bindingHash:source.externalDatasetBinding!.contentHash,manifestHash:manifest.contentHash});const discovered=await profileEvaluationsForRelease({ref:selected.ref,sourceRevision:selected.sourceRevision,harnessRelease:source.harnessRelease,store});if(!source.externalDatasetBinding&&discovered.catalogHash!==source.catalogHash)throw new Error("The current private evaluation catalog changed.");}}),
+    resolveExternalDataset:externalDataset?.resolveExternalDataset,
     loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
     store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
   });
@@ -789,6 +799,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       closing = true;
       await experimentCases.close();
       await turnRunner.close();
+      isolatedProfileTools?.close();
       await Promise.all([
         turnFollowUpQueue.drain(),
         subagentQueue.drain(),

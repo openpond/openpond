@@ -1,3 +1,5 @@
+import { currentAdvancedRefinerBoundary } from "./advanced-refiner-paid-boundary.js";
+import { inspectRefinerProfile } from "../refiner/refiner-profile-service.js";
 import {
   TurnSchema,
   type ChatModelRef,
@@ -34,6 +36,7 @@ import {
 } from "./harness-refiner-benchmark-service-support.js";
 
 type BenchmarkRefinerModelStream = (input: {
+  requestId?: string;
   model: ChatModelRef;
   messages: HarnessRefinerMessage[];
   signal: AbortSignal;
@@ -92,8 +95,8 @@ export function benchmarkRefinerRewardPacket(input: {
       status: input.rewardReceipt.outcomeClass,
       infrastructureError: input.attempt.infrastructureError,
       outputPresent:
-        typeof input.attempt.output.text === "string"
-        && input.attempt.output.text.trim().length > 0,
+        typeof input.attempt.output.text === "string" &&
+        input.attempt.output.text.trim().length > 0,
       artifactCount: input.artifactCount,
       runtimeEventCount: input.attempt.runtimeEventRefs.length,
       modelRequestCount: Array.isArray(input.attempt.metadata.usage)
@@ -131,7 +134,9 @@ export async function materializeBenchmarkRefinerBoundary(input: {
     },
     admittedAt: attempt.startedAt,
   });
-  const task = input.taskset.tasks.find((candidate) => candidate.id === attempt.taskId);
+  const task = input.taskset.tasks.find(
+    (candidate) => candidate.id === attempt.taskId,
+  );
   if (!task) return null;
   const turn = TurnSchema.parse({
     id: turnId,
@@ -168,24 +173,28 @@ export async function materializeBenchmarkRefinerBoundary(input: {
   if (!existingTurn) {
     await input.store.insertTurn(turn);
   } else {
-    await input.store.updateTurn(turn.id, (current) => TurnSchema.parse({
-      ...current,
-      modelRef: turn.modelRef,
-      metadata: { ...current.metadata, ...turn.metadata },
-      harnessSnapshot: turn.harnessSnapshot,
-    }));
+    await input.store.updateTurn(turn.id, (current) =>
+      TurnSchema.parse({
+        ...current,
+        modelRef: turn.modelRef,
+        metadata: { ...current.metadata, ...turn.metadata },
+        harnessSnapshot: turn.harnessSnapshot,
+      }),
+    );
   }
   const assistantOutput = attempt.output.text;
   if (typeof assistantOutput === "string" && assistantOutput.trim()) {
-    await input.store.appendRuntimeEvent(event({
-      sessionId: session.id,
-      turnId: turn.id,
-      name: "assistant.delta",
-      source: "server",
-      appId: session.appId,
-      status: "completed",
-      output: assistantOutput,
-    }));
+    await input.store.appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId: turn.id,
+        name: "assistant.delta",
+        source: "server",
+        appId: session.appId,
+        status: "completed",
+        output: assistantOutput,
+      }),
+    );
   }
   const rewardPacket = benchmarkRefinerRewardPacket({
     attempt,
@@ -194,35 +203,38 @@ export async function materializeBenchmarkRefinerBoundary(input: {
     artifactCount: input.result.artifacts.length,
   });
   const rewardEvidence = JSON.stringify(rewardPacket);
-  const rewardPassed = input.result.rewardReceipt.status === "scored"
-    && input.result.rewardReceipt.passed;
-  await input.store.appendRuntimeEvent(event({
-    sessionId: session.id,
-    turnId: turn.id,
-    name: "diagnostic",
-    source: "server",
-    appId: session.appId,
-    action: "taskset_grade",
-    status: rewardPassed ? "completed" : "failed",
-    output: rewardEvidence,
-    error: rewardPassed ? undefined : rewardEvidence,
-    data: {
-      result: {
-        output: rewardEvidence,
-        passed: rewardPassed,
-        status: input.result.rewardReceipt.status,
-        reward: input.result.rewardReceipt.reward,
-        rewardReceiptRef: {
-          id: input.result.rewardReceipt.id,
-          contentHash: input.result.rewardReceipt.contentHash,
-        },
-        artifactManifestRef: {
-          id: input.result.artifactManifest.id,
-          contentHash: input.result.artifactManifest.contentHash,
+  const rewardPassed =
+    input.result.rewardReceipt.status === "scored" &&
+    input.result.rewardReceipt.passed;
+  await input.store.appendRuntimeEvent(
+    event({
+      sessionId: session.id,
+      turnId: turn.id,
+      name: "diagnostic",
+      source: "server",
+      appId: session.appId,
+      action: "taskset_grade",
+      status: rewardPassed ? "completed" : "failed",
+      output: rewardEvidence,
+      error: rewardPassed ? undefined : rewardEvidence,
+      data: {
+        result: {
+          output: rewardEvidence,
+          passed: rewardPassed,
+          status: input.result.rewardReceipt.status,
+          reward: input.result.rewardReceipt.reward,
+          rewardReceiptRef: {
+            id: input.result.rewardReceipt.id,
+            contentHash: input.result.rewardReceipt.contentHash,
+          },
+          artifactManifestRef: {
+            id: input.result.artifactManifest.id,
+            contentHash: input.result.artifactManifest.contentHash,
+          },
         },
       },
-    },
-  }));
+    }),
+  );
   return { session, turn, result: input.result };
 }
 
@@ -240,7 +252,9 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
   signal: AbortSignal;
   now: () => string;
 }): Promise<{
-  detection: NonNullable<Awaited<ReturnType<typeof recordLocalHarnessImprovementBoundary>>>;
+  detection: NonNullable<
+    Awaited<ReturnType<typeof recordLocalHarnessImprovementBoundary>>
+  >;
   result: Awaited<ReturnType<typeof runLocalHarnessRefinerWorker>> | null;
   invocation?: {
     usage: RefinerUsage;
@@ -252,7 +266,9 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
 }> {
   const boundary = await materializeBenchmarkRefinerBoundary(input);
   if (!boundary) {
-    throw new Error(`Adaptation attempt ${input.result.attempt.id} has no Refiner boundary.`);
+    throw new Error(
+      `Adaptation attempt ${input.result.attempt.id} has no Refiner boundary.`,
+    );
   }
   const existingTrigger = await queuedTriggerForTurn({
     store: input.store,
@@ -269,7 +285,9 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
         now: input.now,
       });
   if (!detection) {
-    throw new Error(`Adaptation attempt ${input.result.attempt.id} produced no Refiner detection.`);
+    throw new Error(
+      `Adaptation attempt ${input.result.attempt.id} produced no Refiner detection.`,
+    );
   }
   if (detection.trigger.decision !== "queue_refiner") {
     return { detection, result: null };
@@ -281,13 +299,30 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
   let requestsWithAuthoritativeCost = 0;
   let estimatedCostUsd = 0;
   const startedAt = input.now();
-  let result: Awaited<ReturnType<typeof runLocalHarnessRefinerWorker>> | null = null;
+  let result: Awaited<ReturnType<typeof runLocalHarnessRefinerWorker>> | null =
+    null;
   let failure: unknown = null;
   try {
     result = await runLocalHarnessRefinerWorker({
       store: input.store,
       storeDir: input.storeDir,
       trigger: detection.trigger,
+      ...(currentAdvancedRefinerBoundary()
+        ? {
+            loadActiveRefinerRelease: async () => {
+              const pin = currentAdvancedRefinerBoundary()!.pin;
+              const history = await inspectRefinerProfile(input.storeDir);
+              const release = history.releases.find(
+                (item) =>
+                  item.id === pin.refinerRelease.id &&
+                  item.contentHash === pin.refinerRelease.contentHash,
+              );
+              if (!release)
+                throw new Error("The admitted Refiner release is unavailable.");
+              return release;
+            },
+          }
+        : {}),
       stream: async function* (streamInput) {
         providerInvoked = true;
         providerRequestCount += 1;
@@ -301,8 +336,10 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
             ...streamInput,
             model: input.model,
             pricing: input.admittedPricing,
+            requestId: `advanced-refiner:${input.modelRun.id}:${detection.trigger.id}:${providerRequestCount}`,
           })) {
-            if (typeof delta.costUsd === "number") requestHadAuthoritativeCost = true;
+            if (typeof delta.costUsd === "number")
+              requestHadAuthoritativeCost = true;
             if (delta.usage !== undefined || delta.costUsd !== undefined) {
               addUsage(usage, delta.usage, delta.costUsd);
             }
@@ -321,15 +358,17 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
   }
   const completedAt = input.now();
   const costBasis = providerInvoked
-    ? usage.costUsd !== null && requestsWithAuthoritativeCost === providerRequestCount
-      ? "authoritative" as const
-      : "estimated" as const
-    : "none" as const;
-  const chargedCost = costBasis === "authoritative"
-    ? usage.costUsd
-    : costBasis === "estimated"
-      ? Math.max(usage.costUsd ?? 0, estimatedCostUsd)
-      : null;
+    ? usage.costUsd !== null &&
+      requestsWithAuthoritativeCost === providerRequestCount
+      ? ("authoritative" as const)
+      : ("estimated" as const)
+    : ("none" as const);
+  const chargedCost =
+    costBasis === "authoritative"
+      ? usage.costUsd
+      : costBasis === "estimated"
+        ? Math.max(usage.costUsd ?? 0, estimatedCostUsd)
+        : null;
   if (providerInvoked) {
     try {
       input.budget.charge(chargedCost, "Refiner");
@@ -344,41 +383,51 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
     }
   }
   if (failure) {
-    const message = failure instanceof Error ? failure.message : String(failure);
+    const message =
+      failure instanceof Error ? failure.message : String(failure);
     const failureKind = benchmarkRefinerFailureKind(failure, input.signal);
     const retryable = failureKind !== "cancelled";
-    await input.store.appendRuntimeEvent(event({
-      sessionId: boundary.session.id,
-      turnId: boundary.turn.id,
-      name: "harness.refiner.failed",
-      source: "server",
-      appId: boundary.session.appId,
-      status: "failed",
-      output: message,
-      data: {
-        trigger: {
-          id: detection.trigger.id,
-          contentHash: detection.trigger.contentHash,
-        },
-        benchmark: true,
-        modelRunId: input.modelRun.id,
-        attemptId: input.result.attempt.id,
-        failureKind,
-        retryable,
+    await input.store
+      .appendRuntimeEvent(
+        event({
+          sessionId: boundary.session.id,
+          turnId: boundary.turn.id,
+          name: "harness.refiner.failed",
+          source: "server",
+          appId: boundary.session.appId,
+          status: "failed",
+          output: message,
+          data: {
+            trigger: {
+              id: detection.trigger.id,
+              contentHash: detection.trigger.contentHash,
+            },
+            benchmark: true,
+            modelRunId: input.modelRun.id,
+            attemptId: input.result.attempt.id,
+            failureKind,
+            retryable,
+            costBasis,
+            estimatedCostUsd:
+              costBasis === "estimated" ? estimatedCostUsd : null,
+          },
+        }),
+      )
+      .catch(() => undefined);
+    throw new BenchmarkRefinerInvocationError(
+      message,
+      {
+        trigger: detection.trigger,
+        usage,
         costBasis,
         estimatedCostUsd: costBasis === "estimated" ? estimatedCostUsd : null,
+        failureKind,
+        retryable,
+        startedAt,
+        completedAt,
       },
-    })).catch(() => undefined);
-    throw new BenchmarkRefinerInvocationError(message, {
-      trigger: detection.trigger,
-      usage,
-      costBasis,
-      estimatedCostUsd: costBasis === "estimated" ? estimatedCostUsd : null,
-      failureKind,
-      retryable,
-      startedAt,
-      completedAt,
-    }, { cause: failure });
+      { cause: failure },
+    );
   }
   return {
     detection,
@@ -398,14 +447,17 @@ async function queuedTriggerForTurn(input: {
   workspaceId: string;
   turnId: string;
 }): Promise<RefinementTriggerDecision | null> {
-  const triggers = await input.store.listHarnessImprovementArtifacts(
+  const triggers = (await input.store.listHarnessImprovementArtifacts(
     input.workspaceId,
     "trigger_decision",
     1_000,
-  ) as RefinementTriggerDecision[];
-  return triggers.find(
-    (trigger) => trigger.turnId === input.turnId && trigger.decision === "queue_refiner",
-  ) ?? null;
+  )) as RefinementTriggerDecision[];
+  return (
+    triggers.find(
+      (trigger) =>
+        trigger.turnId === input.turnId && trigger.decision === "queue_refiner",
+    ) ?? null
+  );
 }
 
 function conservativeRefinerRequestCost(
@@ -418,9 +470,10 @@ function conservativeRefinerRequestCost(
   );
   const estimatedInputTokens = Math.ceil(inputCharacters / 3);
   return (
-    estimatedInputTokens * pricing.inputUsdPerMillionTokens
-    + DEFAULT_REFINER_MAX_OUTPUT_TOKENS * pricing.outputUsdPerMillionTokens
-  ) / 1_000_000;
+    (estimatedInputTokens * pricing.inputUsdPerMillionTokens +
+      DEFAULT_REFINER_MAX_OUTPUT_TOKENS * pricing.outputUsdPerMillionTokens) /
+    1_000_000
+  );
 }
 
 function benchmarkRefinerFailureKind(

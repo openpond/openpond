@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LocalExperimentRecordSchema, LocalExperimentExecutionPageSchema, LocalExperimentResultSchema, LocalExperimentScoringPassSchema } from "@openpond/contracts";
+import { LocalExperimentRecordSchema, LocalExperimentExecutionPageSchema, LocalExperimentResultSchema, LocalExperimentScoringPassSchema,LocalExperimentComparisonSchema } from "@openpond/contracts";
 import { localRequest } from "./local-workspace-api";
 import type { WorkspaceApi } from "./workspace-api";
 import type { ModelsRoute } from "../models-route";
@@ -35,5 +35,7 @@ export function useLocalExperimentDetail(api: WorkspaceApi, route: ModelsRoute) 
       return value;
     },refetchInterval:query=>query.state.data?.execution.completedAt?false:1000,
   });
-  return {execution,executionId,passes,result,resultId,selectedPass,refresh:()=>queryClient.invalidateQueries({queryKey:base})};
+  const evidence=useQuery({queryKey:[...base,"portable-evidence",resultId],enabled:Boolean(result.data?.execution.completedAt&&resultId),
+    queryFn:async({signal})=>(await localRequest(api,LocalExperimentComparisonSchema,"compare",{baselineId:resultId,candidateId:resultId},signal)).baseline});
+  return {execution,executionId,passes,result,resultId,selectedPass,evidence,refresh:()=>queryClient.invalidateQueries({queryKey:base})};
 }

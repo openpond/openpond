@@ -5,6 +5,7 @@ import { runAppServerJsonl, type AppServerInstance } from "@openpond/app-server"
 import { AgentHostStorageClient } from "@openpond/agent-runtime";
 import { createHostedRuntimeCoreStorage } from "./store/hosted-turn-repository.js";
 import { HostedTaskInboxStorage } from "./store/hosted-task-inbox-storage.js";
+import {readHostProfileExternalDataset} from "./harness/host-profile-external-dataset.js";
 import { createHostedModelStreamFromEnvironment } from "./runtime/hosted-model-stream.js";
 import { AdmittedHostedProfileReleaseSchema, type AdmittedHostedProfileRelease } from "./store/hosted-profile-source.js";
 import type { OpenPondAppServerOptions } from "./app-server-runtime.js";
@@ -36,6 +37,7 @@ type ParsedCliArgs = {
   hostedCacheHome?: string;
   experimentOwner?: boolean;
   experimentHarnessPackage?: string;
+  profileExternalDatasetPackage?:string;
   sourceBrowserState?: string;
   profileSource?: ProfileSourceCliOptions;
   admittedProfileRelease?: AdmittedHostedProfileRelease;
@@ -74,6 +76,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let hostedCacheHome: string | undefined;
   let experimentOwner=false;
   let experimentHarnessPackage: string | undefined;
+  let profileExternalDatasetPackage:string|undefined;
   let sourceBrowserState: string | undefined;
   let profileSourceRoot: string | null = null;
   let profileRepositoryId: string | null = null;
@@ -133,6 +136,8 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       if (value !== "hosted-postgres") throw new Error("Unsupported app-server runtime storage.");
       runtimeStorage = "hosted_postgres";
       i += 1;
+    } else if(arg === "--profile-external-dataset-package"){
+      if(profileExternalDatasetPackage)throw new Error("Duplicate private external Dataset package.");profileExternalDatasetPackage=path.resolve(requireValue(args,i,arg));i+=1;
     } else if (arg === "--profile-source-root") {
       profileSourceRoot = path.resolve(requireValue(args, i, arg)); i += 1;
     } else if (arg === "--profile-repository-id") {
@@ -185,6 +190,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
     throw new Error("Experiment Harness source must be provisioned directly inside its isolated owner home.");
   return {
     mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, runtimeStorage, sourceBrowserState,
+    ...(profileExternalDatasetPackage?{profileExternalDatasetPackage}:{}),
     ...(profileFlags ? { profileSource: { repoPath: profileSourceRoot!, repositoryId: profileRepositoryId!, profileId: profileId!, sourceRevision: profileRevision! } } : {}),
     ...(admittedProfileRelease ? { admittedProfileRelease } : {}),
     ...(hostedCacheHome ? { hostedCacheHome } : {}),
@@ -295,7 +301,7 @@ export async function runOpenPondServerCli(factories: ServerCliFactories): Promi
 
   if (args.mode === "app-server") {
     await runAgentServer(factories.createOpenPondAppServer, args.storeDir, args.profileSource, args.runtimeStorage,
-      args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner,args.experimentHarnessPackage);
+      args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner,args.experimentHarnessPackage,args.profileExternalDatasetPackage);
     return;
   }
 
@@ -376,7 +382,7 @@ export async function runOpenPondAppServerCli(
     throw new Error("The app-server entrypoint only accepts the app-server command.");
   }
   await runAgentServer(createOpenPondAppServer, args.storeDir, args.profileSource,
-    args.runtimeStorage, args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner,args.experimentHarnessPackage);
+    args.runtimeStorage, args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner,args.experimentHarnessPackage,args.profileExternalDatasetPackage);
 }
 
 async function runAgentServer(
@@ -388,6 +394,7 @@ async function runAgentServer(
   hostedCacheHome?: string,
   experimentOwner=false,
   experimentHarnessPackage?: string,
+  profileExternalDatasetPackage?:string,
 ): Promise<void> {
   const hostStorageClient = new AgentHostStorageClient();
   if (runtimeStorage === "hosted_postgres") {
@@ -420,9 +427,12 @@ async function runAgentServer(
     experimentHarnessSource = { ownerId: "host-experiment-case", sourcePackage: validateHarnessSourcePackage(
       JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readFile(experimentHarnessPackage)))) };
   }
+  const externalDataset=profileExternalDatasetPackage?await (storeDir&&profileSource&&!experimentOwner?readHostProfileExternalDataset(profileExternalDatasetPackage,storeDir):Promise.reject(new Error("External Dataset bootstrap requires a private explicit Profile owner."))):undefined;
+  const externalStream=externalDataset?createHostedModelStreamFromEnvironment():undefined;
   const appServer = await createOpenPondAppServer({
     ...(storeDir ? { storeDir } : {}),
     ...(profileSource ? { profileSource } : {}),
+    ...(externalDataset?{profileExternalDataset:externalDataset,profileExternalDatasetClient:hostStorageClient,streamOpenPondHostedChatTurn:async function*(input){const fence=async()=>{await hostStorageClient.request({contractVersion:1,requestId:crypto.randomUUID(),operation:"profile.externalDataset.authorize",params:{bindingHash:externalDataset.binding.contentHash}});};await fence();const controller=new AbortController();let checking=false;const timer=setInterval(()=>{if(checking||controller.signal.aborted)return;checking=true;void fence().catch(error=>controller.abort(error)).finally(()=>{checking=false;});},2000);try{const signal=AbortSignal.any([...(input.signal?[input.signal]:[]),controller.signal]);signal.throwIfAborted();for await(const chunk of externalStream!({...input,signal})){await fence();signal.throwIfAborted();yield chunk;}}finally{clearInterval(timer);controller.abort();}},services:{webSearch:false,scheduling:false,connectedApps:false,tasksets:false,projectActions:false,profileActions:false,backgroundReview:false}}:{}),
     ...(experimentHarnessSource ? { experimentHarnessSource } : {}),
     ...(experimentOwner?{experimentPolicyClient:hostStorageClient,
       services:{webSearch:false,scheduling:false,connectedApps:false,tasksets:false,projectActions:false,profileActions:false,backgroundReview:false},

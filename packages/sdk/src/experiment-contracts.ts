@@ -1,9 +1,11 @@
+import { ProfileExternalDatasetBindingSchema } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 import { FeedbackKeySchema } from "@openpond/evals/rewards";
 import { ModelTasksetRunRequestSchema } from "./model-taskset-runs-contracts.js";
 import { TasksetRunManifestSchema } from "@openpond/evals/metrics";
 import { z } from "zod";
 import { ExperimentFieldMappingsSchema } from "./experiment-field-mappings.js";
+import {HarnessExperimentPolicySchema} from "./harness-experiment-policy.js";
 
 const Id = z.string().trim().min(1).max(200);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -64,6 +66,8 @@ export const PrepareHarnessExperimentSchema = z.object({
   operationId: Id, profileRepositoryId: Id, definitionId: Id, modelId: Id,
   reasoningEffort: z.enum(["off", "low", "medium", "high", "xhigh", "max"]).optional(),
   maximumCostUsd: z.number().finite().positive().max(10_000),
+  externalDatasetBinding: ProfileExternalDatasetBindingSchema.optional(),
+  sourceCandidate:HarnessExperimentPolicySchema.shape.sourceCandidate,
 }).strict();
 export const PreparedHarnessExperimentSchema = z.object({
   request: ModelTasksetRunRequestSchema, manifest: TasksetRunManifestSchema,

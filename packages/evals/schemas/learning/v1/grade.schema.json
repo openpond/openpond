@@ -79,6 +79,7 @@
                   "type": "string",
                   "enum": [
                     "scored",
+                    "pending",
                     "unscorable",
                     "not_configured"
                   ]
@@ -120,6 +121,7 @@
                   "type": "string",
                   "enum": [
                     "scored",
+                    "pending",
                     "unscorable",
                     "not_configured"
                   ]
@@ -399,6 +401,15 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "scored",
+                "pending",
+                "unavailable",
+                "failed"
+              ]
             },
             "score": {
               "anyOf": [

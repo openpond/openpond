@@ -21,8 +21,9 @@ export const RewardAuthoringFieldsSchema = z.object({
   kind: z.enum(["custom_verifier", "state", "content", "schema", "artifact", "runtime_event", "model_judge", "learned_model", "human"]),
   fields: z.string(), outputField: z.string(), expectedField: z.string(), expectedValue: z.string(),
   schema: z.string(), reference: z.string(), events: z.string(), code: z.string(), exportName: z.string(), timeout: z.string(),
+  verifierRuntime: z.enum(["isolated_javascript", "sandbox_process"]).optional(),
   rubric: z.string(), providerId: z.string(), modelId: z.string(), modelRevision: z.string(), temperature: z.string(),
-  reviewerRole: z.string(), learnedId: z.string(), learnedHash: z.string(), inputContract: z.string(), minimum: z.string(), maximum: z.string(),
+  reviewerRole: z.string(), humanForm: z.string().max(131_072).optional(), learnedId: z.string(), learnedHash: z.string(), inputContract: z.string(), minimum: z.string(), maximum: z.string(),
   fixtures: z.array(RewardFixtureAuthoringFieldsSchema).max(50).optional(),
 }).strict();
 export const TaskFormatAuthoringFieldsSchema = z.object({

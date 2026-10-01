@@ -78,6 +78,7 @@
     "@openpond/continual-support": "workspace:*",
     "@openpond/contracts": "workspace:*",
     "@openpond/evals": "workspace:*",
+    "@openpond/harness": "workspace:*",
     "@openpond/local-server": "workspace:*",
     "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*",
@@ -97,6 +98,7 @@
     "openpond-sdk",
     "@openpond/terminal",
     "@openpond/persistence",
-    "@openpond/evals"
+    "@openpond/evals",
+    "@openpond/harness"
   ]
 }

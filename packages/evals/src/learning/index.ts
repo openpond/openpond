@@ -35,3 +35,5 @@ export * from "./task-queue-inspection.js";
 
 export * from "./acceptance-plan.js";
 export * from "./acceptance-group.js";
+
+export { TrainingHandoffOriginSchema, type TrainingHandoffOrigin } from "./training-handoff.js";

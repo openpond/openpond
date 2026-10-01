@@ -84,7 +84,7 @@ export function verifyHarnessExperimentManifest(request: ModelTasksetRunRequest,
     || manifest.metadata.profileRepositoryId !== policy.profileRepositoryId
     || manifest.packageHash !== policy.packageHash || manifest.policy.kind !== "model"
     || manifest.policy.model.provider !== "openpond" || manifest.policy.model.model !== policy.modelId
-    || manifest.policy.model.revision !== null || manifest.policy.model.artifactHash !== null
+    || manifest.policy.model.revision !== null || manifest.policy.model.artifactHash !== (policy.candidate?.contentHash??null)
     || manifest.policy.model.tokenizerRevision !== null || manifest.policy.model.chatTemplateHash !== null
     || manifest.policy.configurationHash !== policy.modelConfigurationHash
     || manifest.tasksetRelease.id !== request.taskset.id || manifest.tasksetRelease.contentHash !== request.taskset.contentHash
@@ -116,7 +116,7 @@ export async function verifyModelTasksetRunDetails(value: unknown): Promise<Mode
     if (policySnapshot !== null) throw new Error("Harness evaluations retain the native host model configuration.");
   } else if (manifest.policy.kind !== "model" || !policySnapshot || policySnapshot.modelId !== request.policy.modelId
     || manifest.policy.model.provider !== policySnapshot.provider || manifest.policy.model.model !== policySnapshot.upstreamModelId
-    || manifest.policy.model.revision !== null || manifest.policy.model.artifactHash !== null || manifest.policy.model.tokenizerRevision !== null || manifest.policy.model.chatTemplateHash !== null
+    || manifest.policy.model.revision !== null || manifest.policy.model.artifactHash !== (request.policy.candidate?.contentHash ?? null) || manifest.policy.model.tokenizerRevision !== null || manifest.policy.model.chatTemplateHash !== null
     || manifest.policy.configurationHash !== await canonicalSha256({ policy: request.policy, snapshot: policySnapshot })) throw new Error("Evaluation model differs from its admitted policy.");
   return result;
 }

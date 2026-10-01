@@ -98,8 +98,8 @@ export const RewardCompositionContentSchema = z.object({
   taskHash: ReleaseHashSchema,
   outputHash: ReleaseHashSchema,
   results: z.array(BoundRewardResultSchema).max(100),
-  training: z.object({ status: z.enum(["scored", "unscorable", "not_configured"]), score: z.number().min(0).max(1).nullable(), passed: z.boolean().nullable() }).strict(),
-  evaluation: z.object({ status: z.enum(["scored", "unscorable", "not_configured"]), score: z.number().min(0).max(1).nullable(), passed: z.boolean().nullable() }).strict(),
+  training: z.object({ status: z.enum(["scored", "pending", "unscorable", "not_configured"]), score: z.number().min(0).max(1).nullable(), passed: z.boolean().nullable() }).strict(),
+  evaluation: z.object({ status: z.enum(["scored", "pending", "unscorable", "not_configured"]), score: z.number().min(0).max(1).nullable(), passed: z.boolean().nullable() }).strict(),
 }).strict();
 export const RewardCompositionSchema = RewardCompositionContentSchema.extend({ contentHash: ReleaseHashSchema }).strict();
 
@@ -229,7 +229,8 @@ export function composeBoundRewards(input: { binding: RewardBinding; taskHash: s
   function aggregate(role: "training" | "evaluation"): RewardComposition["training"] {
     const selected = binding.sources.filter((source) => source.role === role).map((source) => ({ source, result: results.find((candidate) => candidate.graderId === source.graderId)! }));
     if (!selected.length) return { status: "not_configured", score: null, passed: null };
-    if (selected.some(({ source, result }) => source.required && result.status !== "scored")) return { status: "unscorable", score: null, passed: null };
+    if (selected.some(({ source, result }) => source.required && result.status !== "scored" && result.status !== "pending")) return { status: "unscorable", score: null, passed: null };
+    if (selected.some(({ source, result }) => source.required && result.status === "pending")) return { status: "pending", score: null, passed: null };
     const scored = selected.filter(({ result }) => result.status === "scored");
     const weight = scored.reduce((sum, { source }) => sum + source.weight, 0);
     if (weight === 0) return { status: "unscorable", score: null, passed: null };

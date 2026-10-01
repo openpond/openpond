@@ -22,6 +22,7 @@ export const GraderEvidenceContentSchema = z.object({
   schemaVersion: z.literal("openpond.graderEvidence.v1"),
   graderId: ReleaseIdSchema,
   graderVersion: z.string().trim().min(1).max(100),
+  status: z.enum(["scored", "pending", "unavailable", "failed"]).optional(),
   score: z.number().min(0).max(1).nullable(),
   passed: z.boolean(),
   rewardEligible: z.boolean(),
@@ -73,7 +74,7 @@ export async function gradeEvidence(input: {
       if (!input.customVerifier) return evidence(grader, unavailable("Custom verifier is unavailable."));
       return evidence(grader, await input.customVerifier({ grader, task: input.task, evidence: input.evidence }));
     }
-    if (grader.kind === "human") return evidence(grader, unavailable("Human review is pending."));
+    if (grader.kind === "human") return evidence(grader, { score: null, passed: false, rewardEligible: false, failureClass: null, status: "pending", feedback: ["Human review is pending."], visibleEvidenceRefs: [], privilegedEvidenceRefs: [] });
     return evidence(grader, gradeDeterministic(grader, input.task, input.evidence));
   }));
 }
@@ -111,14 +112,14 @@ export type GraderEvidence = z.infer<typeof GraderEvidenceSchema>;
 const GradeSummarySchema = z.object({
   score: z.number().min(0).max(1).nullable(), passed: z.boolean(),
   rewardEligible: z.boolean(), failureClass: FailureClassSchema.nullable(),
-  gradingStatus: z.enum(["scored", "unscorable", "not_configured"]),
+  gradingStatus: z.enum(["scored", "pending", "unscorable", "not_configured"]),
 }).strict();
 
 /** Shared ordinary grading policy. Results must match the declared population;
  * missing checks cannot disappear from the denominator or the hard gates. */
 export function aggregateGraderScores(input: {
   graders: ReadonlyArray<Pick<GraderSpec, "id" | "version" | "weight" | "hardGate" | "rewardEligible">>;
-  components: ReadonlyArray<Pick<GraderEvidence, "graderId" | "graderVersion" | "score" | "passed" | "rewardEligible" | "failureClass">>;
+  components: ReadonlyArray<Pick<GraderEvidence, "graderId" | "graderVersion" | "score" | "passed" | "rewardEligible" | "failureClass" | "status">>;
   infrastructureError?: string | null;
 }): z.infer<typeof GradeSummarySchema> {
   const ids = new Set(input.graders.map(grader => grader.id));
@@ -126,24 +127,26 @@ export function aggregateGraderScores(input: {
   const components = new Map(input.components.map(item => [item.graderId, item]));
   if (components.size !== input.components.length) throw new Error("Grade population contains duplicate graders.");
   let weighted = 0; let totalWeight = 0; let hardGateFailed = false; let passed = true; let eligible = false; let unavailable = false;
+  let pending = false;
   let infrastructure = !!input.infrastructureError;
   for (const grader of input.graders) {
     const item = components.get(grader.id);
     if (!item || item.graderVersion !== grader.version) throw new Error("Grade identity differs from its declared grader.");
     if (!Number.isFinite(grader.weight) || grader.weight < 0 || (item.score !== null && (!Number.isFinite(item.score) || item.score < 0 || item.score > 1))) throw new Error("Grade scores and weights must be finite and within their declared range.");
     infrastructure ||= item.failureClass === "infrastructure_failure";
-    unavailable ||= item.score === null || (item.failureClass !== null && item.failureClass !== "policy_failure");
+    pending ||= item.status === "pending";
+    unavailable ||= item.status !== "pending" && (item.score === null || (item.failureClass !== null && item.failureClass !== "policy_failure"));
     hardGateFailed ||= grader.hardGate && !item.passed;
     passed &&= item.passed;
     eligible ||= grader.rewardEligible && item.rewardEligible;
     totalWeight += grader.weight;
     weighted += (item.score ?? 0) * grader.weight;
   }
-  const score = infrastructure || unavailable || totalWeight <= 0 ? null : hardGateFailed ? 0 : weighted / totalWeight;
+  const score = infrastructure || unavailable || pending || totalWeight <= 0 ? null : hardGateFailed ? 0 : weighted / totalWeight;
   passed = score !== null && !hardGateFailed && passed;
   return GradeSummarySchema.parse({ score, passed, rewardEligible: score !== null && eligible,
-    failureClass: infrastructure ? "infrastructure_failure" : score === null ? "grader_failure" : passed ? null : "policy_failure",
-    gradingStatus: !input.graders.length && !infrastructure ? "not_configured" : score === null ? "unscorable" : "scored" });
+    failureClass: infrastructure ? "infrastructure_failure" : pending && !unavailable ? null : score === null ? "grader_failure" : passed ? null : "policy_failure",
+    gradingStatus: !input.graders.length && !infrastructure ? "not_configured" : pending && !unavailable && !infrastructure ? "pending" : score === null ? "unscorable" : "scored" });
 }
 
 export const TaskGradeSchema = /* @__PURE__ */ (() => GradeSummarySchema.extend({

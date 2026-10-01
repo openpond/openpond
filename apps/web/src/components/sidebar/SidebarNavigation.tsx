@@ -1,3 +1,4 @@
+import { Home, Inbox } from "lucide-react";
 import { type Dispatch, type SetStateAction } from "react";
 import type {
   Experience,
@@ -98,7 +99,7 @@ export function SidebarNavigation({
   }
 
   async function selectModelsPage(page: ModelsPage) {
-    if (!await navigateModelsRoute(modelsLocation(page, ["datasets", "graders", "experiments"].includes(page) ? null : selectedModelProjectId, { ...(productArea === "console" ? { area: "console" } : {}), ...(modelsRoute?.projectId !== undefined ? { projectId: modelsRoute.projectId } : {}) }))) return;
+    if (!await navigateModelsRoute(modelsLocation(page, ["home", "inbox", "datasets", "graders", "experiments"].includes(page) ? null : selectedModelProjectId, { ...(productArea === "console" ? { area: "console" } : {}), ...(modelsRoute?.projectId !== undefined ? { projectId: modelsRoute.projectId } : {}) }))) return;
     clearWorkspaceSelection();
     setView("labs");
   }
@@ -123,7 +124,7 @@ export function SidebarNavigation({
     <nav className="sidebar-nav" aria-label="Primary">
       {productArea !== "chat" ? (
         <>
-          {!["datasets", "graders", "experiments"].includes(activePage) ? <div className="sidebar-model-project-picker">
+          {!["home", "inbox", "datasets", "graders", "experiments"].includes(activePage) ? <div className="sidebar-model-project-picker">
             <span className="sidebar-nav-group-label">Model</span>
             <DropdownSelect
               label="Model"
@@ -139,8 +140,8 @@ export function SidebarNavigation({
               onChange={(id) => void selectModelProject(id)}
             />
           </div> : null}
-          {MODELS_PAGES.filter(page => productArea === "console" ? ["datasets", "graders", "experiments"].includes(page) : page !== "tasksets" && page !== "evaluations").map((page) => {
-            const Icon = { "get-started": Boxes, models: Activity, datasets: Boxes, graders: Shield, experiments: CheckCircle2, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
+          {MODELS_PAGES.filter(page => productArea === "console" ? ["home", "inbox", "datasets", "graders", "experiments"].includes(page) : page !== "home" && page !== "tasksets" && page !== "evaluations").map((page) => {
+            const Icon = { "get-started": Boxes, home:Home, inbox: Inbox, models: Activity, datasets: Boxes, graders: Shield, experiments: CheckCircle2, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
             return (
               <button
                 className={`nav-command ${view === "labs" && (activePage === page || (page === "runs" && activePage === "evaluations")) ? "active" : ""}`}

@@ -1,3 +1,4 @@
+import {ClaudeCodeRuntimeSchema} from "./claude-code-runtime.js";
 import { z } from "zod";
 import { EvaluationProjectContextSchema, EvaluationMessagesSchema } from "./evaluation-project-context.js";
 export { EvaluationProjectContextSchema, EvaluationMessagesSchema, type EvaluationProjectContext } from "./evaluation-project-context.js";
@@ -13,7 +14,7 @@ import { contentHash } from "@openpond/harness";
 const IdSchema = z.string().trim().min(1).max(200);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const ModelStarterAttemptPolicySchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("hosted_chat"), modelId: IdSchema, harness: StandaloneHarnessExperimentSourceSchema.optional(), messages: EvaluationMessagesSchema.optional(), maxOutputTokens: z.number().int().min(1).max(4_096).default(1_024), temperature: z.number().min(0).max(2).default(0), topP: z.number().gt(0).max(1).default(1) }).strict(),
+  z.object({ kind: z.literal("hosted_chat"), modelId: IdSchema, localRuntime:z.union([z.object({providerId:z.literal("custom-openai-compatible"),configurationHash:HashSchema,maximumRequestCostUsd:z.number().finite().positive().max(10000),requestTimeoutMs:z.number().int().min(1000).max(300000)}).strict(),ClaudeCodeRuntimeSchema]).optional(), candidate: z.object({ artifactId: IdSchema, contentHash: HashSchema, preparationId: IdSchema, dispatchId: IdSchema, baseProfileId: IdSchema, workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/) }).strict().optional(), harness: StandaloneHarnessExperimentSourceSchema.optional(), messages: EvaluationMessagesSchema.optional(), maxOutputTokens: z.number().int().min(1).max(4_096).default(1_024), temperature: z.number().min(0).max(2).default(0), topP: z.number().gt(0).max(1).default(1) }).strict(),
   z.object({ kind: z.literal("fixture"), fixtureId: IdSchema }).strict(),
 ]);
 /** The server resolves task input, private state, verifier and fixture script.
@@ -41,7 +42,7 @@ export const ModelStarterAttemptSummarySchema = z.object({
   policySnapshot: z.object({ modelId: IdSchema, provider: IdSchema, upstreamModelId: z.string().min(1).max(500), configurationHash: HashSchema }).strict().nullable(),
   createdAt: z.iso.datetime(), startedAt: z.iso.datetime().nullable(), completedAt: z.iso.datetime().nullable(),
   cleanupComplete: z.boolean(), resultAvailable: z.boolean(), score: z.number().min(0).max(1).nullable(),
-  gradingStatus: z.enum(["not_started", "scored", "unscorable", "not_configured"]).default("not_started"),
+  gradingStatus: z.enum(["not_started", "pending", "scored", "unscorable", "not_configured"]).default("not_started"),
   passed: z.boolean().nullable(), outputPreview: z.string().max(500).nullable(),
   error: z.object({ code: IdSchema, message: z.string().max(2_000) }).strict().nullable(),
 }).strict().superRefine((value, context) => {

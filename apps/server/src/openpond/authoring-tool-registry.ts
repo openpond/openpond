@@ -13,6 +13,7 @@ import type { NativeModelToolResult } from "./native-tool-calls.js";
 
 type LoadProfileState = (
   ref: OpenPondProfileRef | null | undefined,
+  context?: ModelToolExecutionContext,
 ) => Promise<OpenPondProfileState>;
 
 type AgentSdkToolName =
@@ -25,21 +26,42 @@ type AgentSdkToolName =
   | "agent_check";
 
 type AgentSdkCommand = "inspect" | "build" | "validate" | "eval" | "run" | "traces";
+export type CandidateAgentCommandInput = { context: ModelToolExecutionContext; command: AgentSdkCommand; args?: string[]; cwd: string; timeoutMs: number; maxOutputBytes: number };
+type AgentCommandRunner = (input: CandidateAgentCommandInput) => ReturnType<typeof runAgentSdkProjectCommand>;
 
 export function createAuthoringModelToolDefinitions(deps: {
   loadProfileState?: LoadProfileState;
+  /** Trusted admission resolver; must read the durable candidate and its turn/source authority. */
+  resolveCandidateProfile?: (context: ModelToolExecutionContext) => Promise<OpenPondProfileState>;
+  executeCandidateAgentCommand?: AgentCommandRunner;
 }): ModelToolDefinition[] {
   const definitions: ModelToolDefinition[] = [askUserDefinition()];
   if (!deps.loadProfileState) return definitions;
+  const loadProfileState: LoadProfileState = async (ref, context) => {
+    if (context?.turnMetadata.source === "experiment-improvement" || context?.turnMetadata.refinementCandidate !== undefined) {
+      if (!deps.resolveCandidateProfile) throw new Error("Candidate authoring requires an admitted isolated Profile resolver.");
+      const profile = await deps.resolveCandidateProfile(context);
+      assertEditableProfile(profile);
+      return profile;
+    }
+    return deps.loadProfileState!(ref, context);
+  };
+  const runCommand: AgentCommandRunner = async input => {
+    if (input.context.turnMetadata.source === "experiment-improvement" || input.context.turnMetadata.refinementCandidate !== undefined) {
+      if (!deps.executeCandidateAgentCommand) throw new Error("Candidate Agent commands require filesystem-confined execution.");
+      return deps.executeCandidateAgentCommand(input);
+    }
+    return runAgentSdkProjectCommand({ ...input, throwOnFailure: false });
+  };
   definitions.push(
-    getProfileDefinition(deps.loadProfileState),
-    agentCommandDefinition(deps.loadProfileState, "agent_inspect", "inspect"),
-    agentCommandDefinition(deps.loadProfileState, "agent_build", "build"),
-    agentCommandDefinition(deps.loadProfileState, "agent_validate", "validate"),
-    agentCommandDefinition(deps.loadProfileState, "agent_eval", "eval"),
-    agentRunDefinition(deps.loadProfileState),
-    agentCommandDefinition(deps.loadProfileState, "agent_traces", "traces"),
-    agentCheckDefinition(deps.loadProfileState),
+    getProfileDefinition(loadProfileState),
+    agentCommandDefinition(loadProfileState, runCommand, "agent_inspect", "inspect"),
+    agentCommandDefinition(loadProfileState, runCommand, "agent_build", "build"),
+    agentCommandDefinition(loadProfileState, runCommand, "agent_validate", "validate"),
+    agentCommandDefinition(loadProfileState, runCommand, "agent_eval", "eval"),
+    agentRunDefinition(loadProfileState, runCommand),
+    agentCommandDefinition(loadProfileState, runCommand, "agent_traces", "traces"),
+    agentCheckDefinition(loadProfileState, runCommand),
   );
   return definitions;
 }
@@ -120,7 +142,7 @@ function getProfileDefinition(loadProfileState: LoadProfileState): ModelToolDefi
     },
     execute: async (context) => {
       const profileRef = selectedProfileRef(context);
-      const profile = await loadProfileState(profileRef);
+      const profile = await loadProfileState(profileRef, context);
       const data = profileProjection(profile, context.turnMetadata, profileRef);
       return modelResult(context.callId, "get_profile", !profile.error, profile.error ?? "Resolved selected Profile.", data);
     },
@@ -129,6 +151,7 @@ function getProfileDefinition(loadProfileState: LoadProfileState): ModelToolDefi
 
 function agentCommandDefinition(
   loadProfileState: LoadProfileState,
+  runCommand: AgentCommandRunner,
   toolName: Exclude<AgentSdkToolName, "agent_run" | "agent_check">,
   command: Exclude<AgentSdkCommand, "run">,
 ): ModelToolDefinition {
@@ -138,7 +161,7 @@ function agentCommandDefinition(
     parameters: agentTargetParameters(),
     execute: async (context) => {
       const target = await resolveAgentTarget(loadProfileState, context);
-      const result = await executeAgentCommand(command, target.cwd);
+      const result = await executeAgentCommand(runCommand, context, command, target.cwd);
       return modelResult(
         context.callId,
         toolName,
@@ -152,7 +175,7 @@ function agentCommandDefinition(
   };
 }
 
-function agentRunDefinition(loadProfileState: LoadProfileState): ModelToolDefinition {
+function agentRunDefinition(loadProfileState: LoadProfileState, runCommand: AgentCommandRunner): ModelToolDefinition {
   return {
     name: "agent_run",
     description:
@@ -171,13 +194,12 @@ function agentRunDefinition(loadProfileState: LoadProfileState): ModelToolDefini
       const target = await resolveAgentTarget(loadProfileState, context);
       const action = stringArg(context.args, "action");
       const actionInput = recordArg(context.args, "input") ?? {};
-      const result = await runAgentSdkProjectCommand({
+      const result = await runCommand({ context,
         command: "run",
         args: [action, "--json", "--input", JSON.stringify(actionInput), "--cwd", target.cwd],
         cwd: target.cwd,
         timeoutMs: 120_000,
         maxOutputBytes: 250_000,
-        throwOnFailure: false,
       });
       return modelResult(
         context.callId,
@@ -198,7 +220,7 @@ function agentRunDefinition(loadProfileState: LoadProfileState): ModelToolDefini
   };
 }
 
-function agentCheckDefinition(loadProfileState: LoadProfileState): ModelToolDefinition {
+function agentCheckDefinition(loadProfileState: LoadProfileState, runCommand: AgentCommandRunner): ModelToolDefinition {
   return {
     name: "agent_check",
     description:
@@ -208,7 +230,7 @@ function agentCheckDefinition(loadProfileState: LoadProfileState): ModelToolDefi
       const target = await resolveAgentTarget(loadProfileState, context);
       const steps: Array<{ command: "inspect" | "build" | "validate" | "eval"; receipt: unknown }> = [];
       for (const command of ["inspect", "build", "validate", "eval"] as const) {
-        const result = await executeAgentCommand(command, target.cwd);
+        const result = await executeAgentCommand(runCommand, context, command, target.cwd);
         const receipt = commandReceipt(result);
         steps.push({ command, receipt });
         if (result.code !== 0 || result.timedOut) {
@@ -221,7 +243,7 @@ function agentCheckDefinition(loadProfileState: LoadProfileState): ModelToolDefi
           );
         }
       }
-      const refreshedProfile = await loadProfileState(selectedProfileRef(context));
+      const refreshedProfile = await loadProfileState(selectedProfileRef(context), context);
       return modelResult(
         context.callId,
         "agent_check",
@@ -249,7 +271,7 @@ async function resolveAgentTarget(
   context: ModelToolExecutionContext,
 ): Promise<{ profile: OpenPondProfileState; agentId: string; cwd: string }> {
   const agentId = stringArg(context.args, "agentId");
-  const profile = await loadProfileState(selectedProfileRef(context));
+  const profile = await loadProfileState(selectedProfileRef(context), context);
   assertEditableProfile(profile);
   const authoring = recordArg(context.turnMetadata, "authoringIntent");
   if (
@@ -275,17 +297,18 @@ async function resolveAgentTarget(
 }
 
 async function executeAgentCommand(
+  runCommand: AgentCommandRunner,
+  context: ModelToolExecutionContext,
   command: Exclude<AgentSdkCommand, "run">,
   cwd: string,
 ) {
   const json = command === "inspect" || command === "validate" || command === "eval" || command === "traces";
-  return runAgentSdkProjectCommand({
+  return runCommand({ context,
     command,
     args: json ? ["--json"] : [],
     cwd,
     timeoutMs: command === "eval" ? 180_000 : 120_000,
     maxOutputBytes: 250_000,
-    throwOnFailure: false,
   });
 }
 

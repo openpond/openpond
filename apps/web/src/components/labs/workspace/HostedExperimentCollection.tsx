@@ -78,7 +78,7 @@ export function HostedExperimentCollection({
             {scoreColumns.map((grader) => (
               <th key={graderColumnKey(grader)}>
                 {grader.name ?? "Grader"}
-                <small>Mean score · this run</small>
+                <small>Mean score / this run</small>
               </th>
             ))}
           </tr>
@@ -149,7 +149,7 @@ export function HostedExperimentCollection({
                 <EvaluationStatus status={item.summary.status} />
               </td>
               <td>
-                {item.summary.counts.completed} completed · {item.summary.counts.failed} failed /{" "}
+                {item.summary.counts.completed} completed / {item.summary.counts.failed} failed /{" "}
                 {item.summary.totalCount}
               </td>
               <td>

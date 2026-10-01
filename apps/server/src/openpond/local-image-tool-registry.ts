@@ -8,7 +8,7 @@ const SAMPLE_WIDTH = 12;
 const SAMPLE_HEIGHT = 8;
 const LUMINANCE_RAMP = " .:-=+*#%@";
 
-export function createLocalImageModelToolDefinition(): ModelToolDefinition {
+export function createLocalImageModelToolDefinition(deps: { executeCandidateImage?: ModelToolDefinition["execute"] } = {}): ModelToolDefinition {
   return {
     name: "view_image",
     description:
@@ -31,6 +31,10 @@ export function createLocalImageModelToolDefinition(): ModelToolDefinition {
       return resolveWorkspaceExecutionTarget({ session: context.session }).target !== "sandbox";
     },
     execute: async (context) => {
+      if (context.turnMetadata.source === "experiment-improvement" || context.turnMetadata.refinementCandidate !== undefined) {
+        if (!deps.executeCandidateImage) throw new Error("Candidate image inspection requires its confined filesystem executor.");
+        return deps.executeCandidateImage(context);
+      }
       const requestedPath = stringArg(context.args.path, "path");
       const imagePath = path.isAbsolute(requestedPath)
         ? path.resolve(requestedPath)
@@ -73,9 +77,10 @@ export function createLocalImageModelToolDefinition(): ModelToolDefinition {
   };
 }
 
-async function inspectImagePixels(
+export async function inspectImagePixels(
   imagePath: string,
   signal: AbortSignal,
+  execute: typeof runImageCommand = runImageCommand,
 ): Promise<{
   format: string;
   width: number;
@@ -83,14 +88,14 @@ async function inspectImagePixels(
   luminanceMap: string[];
   colorMap: string[][];
 }> {
-  const identity = await runImageCommand(
+  const identity = await execute(
     "identify",
     ["-format", "%m %w %h", imagePath],
     signal,
   );
   const match = /^(\S+)\s+(\d+)\s+(\d+)/.exec(identity.trim());
   if (!match) throw new Error("Image metadata could not be decoded.");
-  const pixels = await runImageCommand(
+  const pixels = await execute(
     "convert",
     [imagePath, "-resize", `${SAMPLE_WIDTH}x${SAMPLE_HEIGHT}!`, "-depth", "8", "txt:-"],
     signal,

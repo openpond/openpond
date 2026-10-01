@@ -1,10 +1,12 @@
+import { ScheduledTransportNotInvokedError, currentScheduledAdmissionGuard } from "../evaluations/evaluation-schedule-admission-guard.js";
+import { readLocalExecutionActivity } from "./local-execution-activity.js";
 import { contentHash } from "@openpond/harness";
 import { validateTasksetPackage } from "openpond-sdk/taskset-packages";
 import { JudgeCallReservationSchema, type JudgeBudgetState, type JudgeCallReservation } from "@openpond/evals/learning";
 import { SqliteChatWorkflowStore } from "./store-chat-workflows.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { LOCAL_EXPERIMENT_SCHEMA_SQL } from "./store-local-experiment-schema.js";
-import { EVALUATION_OPERATION_SCHEMA_SQL,prepareEvaluationOperation,acknowledgeEvaluationOperation,type EvaluationOperationScope } from "./store-evaluation-operation-intents.js";
+import { EVALUATION_OPERATION_SCHEMA_SQL,prepareEvaluationOperation,acknowledgeEvaluationOperation,retainEvaluationOperation,pendingEvaluationOperations,readPendingEvaluationOperation } from "./store-evaluation-operation-intents.js";
 import { claimLocalExperimentOwner,requireLocalRuntimeOwner,renewLocalExperimentOwner } from "./local-experiment-owner.js";
 import { localCases, localDefinition, localExecution, localOperation, refreshLocalExecution, writeLocalDefinition } from "./local-experiment-records.js";
 import {localFlatRecord,localFlatSnapshot,writeLocalFlatSnapshot} from "./local-experiment-flat-records.js";
@@ -27,8 +29,11 @@ export class SqliteLocalExperimentStore extends SqliteChatWorkflowStore {
     });
     this.writeQueue=write.then(()=>{},()=>{});return write;
   }
-  async prepareEvaluationOperation(input:EvaluationOperationScope) {return this.localWrite(db=>prepareEvaluationOperation(db,input));}
-  async acknowledgeEvaluationOperation(input:EvaluationOperationScope&{id:string}) {return this.localWrite(db=>acknowledgeEvaluationOperation(db,input));}
+  async prepareEvaluationOperation(input:Parameters<typeof prepareEvaluationOperation>[1]) {return this.localWrite(db=>prepareEvaluationOperation(db,input));}
+  async retainEvaluationOperation(input:Parameters<typeof retainEvaluationOperation>[1]) {return this.localWrite(db=>retainEvaluationOperation(db,input));}
+  async readPendingEvaluationOperation(input:Parameters<typeof readPendingEvaluationOperation>[1]) {return this.localWrite(db=>readPendingEvaluationOperation(db,input));}
+  async pendingEvaluationOperations(input:Parameters<typeof pendingEvaluationOperations>[1]) {return this.localWrite(db=>pendingEvaluationOperations(db,input));}
+  async acknowledgeEvaluationOperation(input:Parameters<typeof acknowledgeEvaluationOperation>[1]) {return this.localWrite(db=>acknowledgeEvaluationOperation(db,input));}
   async claimLocalExperimentOwner(ownerId:string,pid=process.pid) {return this.localWrite(db=>claimLocalExperimentOwner(db,ownerId,pid));}
   async renewLocalExperimentOwner(ownerId:string) {return this.localWrite(db=>renewLocalExperimentOwner(db,ownerId));}
   async releaseLocalExperimentOwner(ownerId:string) {return this.localWrite(db=>db.run("DELETE FROM local_experiment_owner WHERE singleton=1 AND owner_id=?",[ownerId]));}
@@ -90,7 +95,8 @@ export class SqliteLocalExperimentStore extends SqliteChatWorkflowStore {
   }
   async admitLocalExperimentRun(input:{intentHash:string;ownerId:string;definition:LocalExperimentDefinition;
     snapshot:LocalExperimentConfigurationSnapshot;package:unknown;execution:LocalExperimentExecution;admissions:LocalExperimentAdmission[]}) {
-    return this.localWrite(db=>localOperation(db,input.execution.teamId,input.execution.operationId,"run",input.intentHash,()=> {
+    const guard=currentScheduledAdmissionGuard();
+    const apply=(db:OpenPondSqliteConnection)=>localOperation(db,input.execution.teamId,input.execution.operationId,"run",input.intentHash,()=> {
       requireLocalRuntimeOwner(db,input.ownerId);
       const value=LocalExperimentExecutionSchema.parse(input.execution),definition=LocalExperimentDefinitionSchema.parse(input.definition);
       const snapshot=LocalExperimentConfigurationSnapshotSchema.parse(input.snapshot),ref=value.definition,packageValue=validateTasksetPackage(input.package);
@@ -112,10 +118,22 @@ export class SqliteLocalExperimentStore extends SqliteChatWorkflowStore {
       input.admissions.forEach((admission,ordinal)=>db.run("INSERT INTO local_experiment_cases(team_id,execution_id,receipt_id,ordinal,status,admission) VALUES(?,?,?,?,?,?)",
         [value.teamId,value.id,admission.receiptId,ordinal,"pending",JSON.stringify(admission)]));
       return localFlatRecord(db,value.teamId,value.id);
-    }));
+    });
+    return this.localWrite(db=> {
+      // Replay is a read of the original sealed operation, never a fresh admission.
+      const existing=db.get("SELECT receipt FROM local_experiment_operations WHERE team_id=? AND operation_id=? AND kind='run'",[input.execution.teamId,input.execution.operationId]);
+      return guard&&!existing?guard.withAdmission(()=>apply(db)):apply(db);
+    });
+  }
+  async findLocalExperimentRunOperation(teamId:string,operationId:string) {
+    return this.localWrite(db=>{const row=db.get<{receipt:string}>("SELECT receipt FROM local_experiment_operations WHERE team_id=? AND operation_id=? AND kind='run'",[teamId,operationId]);if(!row)return null;const receipt=JSON.parse(row.receipt) as {id:string};return localFlatRecord(db,teamId,receipt.id);});
   }
   async readLocalExperimentRecord(teamId:string,id:string) {return this.localWrite(db=>localFlatRecord(db,teamId,id));}
   async readLocalExperimentSnapshot(teamId:string,id:string) {return this.localWrite(db=>localFlatSnapshot(db,localExecution(db,teamId,id)));}
+  async readExecutionActivity(input:{teamId:string;actorId:string;projectId:string|null;limit?:number}) {
+    if(!input.actorId.trim()||!input.teamId.trim())throw new LocalExperimentError("local_activity_scope_missing","Activity requires a signed-in workspace owner.",403);
+    return this.localWrite(db=>readLocalExecutionActivity(db,{...input,limit:Math.min(100,Math.max(1,input.limit??100))}));
+  }
   async listLocalExperimentRecords(input:{teamId:string;ownerActorId:string;projectId?:string;status?:LocalExperimentExecution["status"];datasetHash?:string;search?:string;afterId?:string;limit:number}) {
     return this.localWrite(db=> {
       const rows=db.all<{id:string}>(`SELECT e.id FROM local_experiment_executions e
@@ -303,7 +321,9 @@ export class SqliteLocalExperimentStore extends SqliteChatWorkflowStore {
     });
   }
   async markLocalChargeDispatched(teamId:string,id:string,requestId:string,ownerId:string) {
+    const scheduled=currentScheduledAdmissionGuard();
     return this.localWrite(db=> {
+      scheduled?.assertExecution(id);
       this.requireLocalOwner(db,teamId,id,ownerId);
       const row=db.get<{status:string}>("SELECT status FROM local_experiment_charges WHERE team_id=? AND execution_id=? AND request_id=?",[teamId,id,requestId]);
       if(row?.status!=="reserved")throw new LocalExperimentError("local_dispatch_not_reserved","Target dispatch requires a fresh durable reservation.");
@@ -311,14 +331,17 @@ export class SqliteLocalExperimentStore extends SqliteChatWorkflowStore {
       refreshLocalExecution(db,teamId,id);
     });
   }
-  async settleLocalCharge(input:{teamId:string;id:string;requestId:string;ownerId:string;costUsd:number|null;usage:unknown|null;notDispatched?:boolean}) {
+  async settleLocalCharge(input:{teamId:string;id:string;requestId:string;ownerId:string;costUsd:number|null;usage:unknown|null;notDispatched?:boolean;confirmedTransportNotInvoked?:ScheduledTransportNotInvokedError}) {
     const settled=await this.localWrite(db=> {
       this.requireLocalOwner(db,input.teamId,input.id,input.ownerId);
       const row=db.get<{status:string;maximum_usd:number;cost_usd:number|null;usage:string|null}>("SELECT status,maximum_usd,cost_usd,usage FROM local_experiment_charges WHERE team_id=? AND execution_id=? AND request_id=?",[input.teamId,input.id,input.requestId]);
       if(!row)throw new LocalExperimentError("local_charge_not_reserved","The charge does not belong to this execution.");
       if(input.costUsd!==null&&(!Number.isFinite(input.costUsd)||input.costUsd<0))throw new LocalExperimentError("local_charge_invalid","Measured charge must be finite and nonnegative.");
       const exceedsBound=input.costUsd!==null&&input.costUsd>row.maximum_usd+1e-12;
-      const status=input.notDispatched&&row.status==="reserved"?"released":input.costUsd===null?"unknown":"settled";
+      const provenNotInvoked=input.confirmedTransportNotInvoked instanceof ScheduledTransportNotInvokedError
+        &&input.confirmedTransportNotInvoked.executionId===input.id&&input.confirmedTransportNotInvoked.requestId===input.requestId
+        &&input.costUsd===null&&input.usage===null&&row.status==="dispatched";
+      const status=(input.notDispatched&&row.status==="reserved"||provenNotInvoked)?"released":input.costUsd===null?"unknown":"settled";
       if(["released","settled"].includes(row.status)) {
         if(row.status!==status || row.cost_usd!==input.costUsd || (row.usage?contentHash(JSON.parse(row.usage)):null)!==(input.usage?contentHash(input.usage):null))throw new LocalExperimentError("local_charge_receipt_conflict","A sealed charge receipt is immutable.");
         return {execution:refreshLocalExecution(db,input.teamId,input.id),exceedsBound};

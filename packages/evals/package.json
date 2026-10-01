@@ -19,6 +19,14 @@
     "LICENSE"
   ],
   "exports": {
+    "./human-review": {
+      "types": "./dist/types/human-review/index.d.ts",
+      "import": "./dist/human-review/index.js"
+    },
+    "./connected-evidence": {
+      "types": "./dist/types/connected-evidence/index.d.ts",
+      "import": "./dist/connected-evidence/index.js"
+    },
     "./metrics/node": {
       "types": "./dist/types/metrics-node.d.ts",
       "import": "./dist/metrics-node.js"

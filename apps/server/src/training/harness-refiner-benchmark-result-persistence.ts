@@ -204,7 +204,7 @@ async function listFiles(root: string, relative = ""): Promise<string[]> {
 
 export async function ensureBaseVersion(input: {
   store: SqliteStore;
-  project: ModelProject;
+  project: Pick<ModelProject,"id"|"profileId">;
   modelRun: ModelRun;
   model: ChatModelRef;
   baseline: EvaluationAttempt | BenchmarkAttemptEvidence;

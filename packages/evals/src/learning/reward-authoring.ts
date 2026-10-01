@@ -4,6 +4,7 @@ import { RewardAuthoringFieldsSchema, RewardFixtureAuthoringFieldsSchema, type A
 import { createLearningTextAsset, verifyLearningTextAsset, type LearningTextAsset } from "./assets.js";
 import { LearningJsonObjectSchema } from "./contracts.js";
 import { LearningDomainError } from "./errors.js";
+import { HumanFormSchema } from "../human-review/contracts.js";
 
 export type RewardAuthoringFields = AuthoringDraftFor<"reward">["fields"];
 export const DEFAULT_REWARD_VERIFIER_SOURCE = `export function verify({ output, expectedOutput }) {
@@ -27,11 +28,11 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
   if (fields.kind === "custom_verifier") {
     asset = createLearningTextAsset({ text: fields.code, path: "verifier.mjs", mediaType: "application/javascript", visibility: "verifier" });
     implementation = { kind: fields.kind, verifierRef: asset.asset, exportName: fields.exportName, timeoutMs: authoringNumber(fields.timeout, "Time limit"), networkPolicy: "none",
-      ...(base?.implementation.kind === "custom_verifier" && base.implementation.runtime !== undefined ? { runtime: base.implementation.runtime } : {}) };
+      ...((fields.verifierRuntime ?? (base?.implementation.kind === "custom_verifier" ? base.implementation.runtime : undefined)) ? { runtime: fields.verifierRuntime ?? (base?.implementation.kind === "custom_verifier" ? base.implementation.runtime : undefined) } : {}) };
   } else if (fields.kind === "model_judge" || fields.kind === "human") {
     if (!fields.rubric.trim()) throw new LearningDomainError("reward_rubric_required", 422, "Write the rubric before checking or publishing this Reward.");
     asset = createLearningTextAsset({ text: fields.rubric, path: "rubric.md", mediaType: "text/markdown", visibility: "verifier" });
-    if (fields.kind === "human") implementation = { kind: fields.kind, rubricRef: asset.asset, reviewerRole: fields.reviewerRole };
+    if (fields.kind === "human") implementation = { kind: fields.kind, rubricRef: asset.asset, reviewerRole: fields.reviewerRole, form: HumanFormSchema.parse(JSON.parse(fields.humanForm || JSON.stringify({ schemaVersion: "openpond.humanForm.v1", mode: "individual", instructions: fields.rubric, criteria: [{ id: "quality", label: "Quality", instructions: fields.rubric, required: true, allowAbstain: true, kind: "score", minimum: 0, maximum: 1, step: 0.1 }] }))) };
     else {
       const model = { providerId: fields.providerId, modelId: fields.modelId, revision: fields.modelRevision.trim() || null };
       const temperature = authoringNumber(fields.temperature, "Temperature");
@@ -79,6 +80,7 @@ export function rewardAuthoringFields(reward: RewardRelease | null, sourceAsset:
     schema: JSON.stringify(config.jsonSchema ?? { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] }, null, 2),
     reference: text(config.refIncludes), events: strings(config.requiredEvents).join(", "),
     code: implementation?.kind === "custom_verifier" ? source : DEFAULT_REWARD_VERIFIER_SOURCE,
+    verifierRuntime: implementation?.kind === "custom_verifier" ? implementation.runtime ?? "isolated_javascript" : "isolated_javascript",
     exportName: implementation?.kind === "custom_verifier" ? implementation.exportName ?? "verify" : "verify",
     timeout: String(implementation?.kind === "custom_verifier" ? implementation.timeoutMs : 5_000),
     rubric: implementation?.kind === "model_judge" || implementation?.kind === "human" ? source : "",
@@ -87,6 +89,7 @@ export function rewardAuthoringFields(reward: RewardRelease | null, sourceAsset:
     modelRevision: implementation?.kind === "model_judge" ? implementation.model?.revision ?? "" : "",
     temperature: String(implementation?.kind === "model_judge" ? implementation.temperature ?? 0 : 0),
     reviewerRole: implementation?.kind === "human" ? implementation.reviewerRole : "Subject matter reviewer",
+    humanForm: implementation?.kind === "human" && implementation.form ? JSON.stringify(implementation.form, null, 2) : "",
     learnedId: implementation?.kind === "learned_model" ? implementation.modelVersion.id : "",
     learnedHash: implementation?.kind === "learned_model" ? implementation.modelVersion.contentHash : "",
     inputContract: implementation?.kind === "learned_model" ? source : "{}",

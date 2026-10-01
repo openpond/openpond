@@ -1,3 +1,4 @@
+import { WorkspaceHeaderControls } from "./WorkspaceHeaderControls";
 import type {
   BootstrapPayload,
   LocalProject,
@@ -12,7 +13,6 @@ import { lazy, Suspense, useEffect, useState, type MouseEvent } from "react";
 import {
   PageChromeTitleTarget,
   PageChromeActionsTarget,
-  PageChromeActivityTarget,
 } from "./PageChrome";
 import { ArrowLeft, ChevronRight, PanelLeft, PanelRight, Search, SquareTerminal } from "../icons";
 import { WindowControls, isDesktopShell, isMacPlatform } from "./WindowControls";
@@ -49,6 +49,8 @@ export function AppTopBar({
   managedWorkspace,
   workspaceBusy,
   defaultTeamId,
+  activityActorId,
+  activityProjectId,
   showDiffControls,
   diffPanelOpen,
   terminalOpen,
@@ -89,6 +91,8 @@ export function AppTopBar({
   managedWorkspace: boolean;
   workspaceBusy: boolean;
   defaultTeamId?: string | null;
+  activityActorId?: string | null;
+  activityProjectId?: string | null;
   showDiffControls: boolean;
   diffPanelOpen: boolean;
   terminalOpen: boolean;
@@ -212,7 +216,7 @@ export function AppTopBar({
       {showRightControls && (
         <div className="titlebar-right">
           <PageChromeActionsTarget className="page-chrome-actions" />
-          {!showWorkspaceControls ? <PageChromeActivityTarget /> : null}
+          <WorkspaceHeaderControls connection={connection} teamId={defaultTeamId ?? null} actorId={activityActorId ?? null} projectId={activityProjectId ?? null}/>
           <CollaborationHeaderActions
             activeView={collaborationView}
             onDiscoverCommunities={onDiscoverCommunities}
@@ -246,7 +250,6 @@ export function AppTopBar({
                   onOpenSandboxWorkspace={onOpenSandboxWorkspace}
                 />
               </Suspense>
-              <PageChromeActivityTarget />
               <button
                 type="button"
                 className="titlebar-icon"
