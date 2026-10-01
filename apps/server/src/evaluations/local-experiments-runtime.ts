@@ -1,3 +1,4 @@
+import { createLocalProfileOriginAdapter } from "./local-experiment-profile-origin.js";
 import { contentHash } from "@openpond/harness";
 import { streamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { SqliteStore } from "../store/store.js";
@@ -24,15 +25,23 @@ export function createLocalExperimentsRuntime(deps: {
 }) {
   const {store,storeDir}=deps;
   const sourceAccess=async()=>({...await deps.resolveAccess(),teamId:await deps.teamId(),actorId:await deps.actorId()});
+  const origins=createLocalProfileOriginAdapter({store,storeDir,resolveAccess:sourceAccess});
+  const workflows:SourceDeps["workflows"]=async(ref,source)=>ref?.source==="openpond_git"?origins.workflows(ref,source):deps.workflows(ref,source);
+  const prepare:ProfileDeps["prepare"]=async(raw,options)=> {
+    const ref=(raw as {profileRef?:import("@openpond/contracts").OpenPondProfileRef}).profileRef;
+    if(ref?.source!=="openpond_git")return deps.prepare(raw,options);
+    const source=(raw as {profileSource?:{sourceRevision:string;harnessRelease:{id:string;contentHash:string}}}).profileSource;
+    return deps.prepare(raw,{...options,selectedWorkflows:await origins.workflows(ref,source)});
+  };
   const localNativeOwner=createLocalNativeExperimentOwner({...deps,authorizeRemote:createLocalExperimentRemoteSourceAuthority({resolveAccess:sourceAccess})});
-  const localProfileOwner=createLocalProfileExperimentOwner({...deps,loadPackage:async prepared=> {
+  const localProfileOwner=createLocalProfileExperimentOwner({...deps,prepare,authorizeOrigin:origins.authority,resolveProfileRef:origins.resolveRef,loadPackage:async prepared=> {
     const source=prepared.manifest.profileEvaluation!;
     const catalog=await profileEvaluationsForRelease({store,ref:prepared.profileRef,sourceRevision:source.sourceRevision,harnessRelease:source.harnessRelease});
     const definition=catalog.definitions.find(item=>item.id===source.definitionId&&contentHash(item)===source.definitionHash);
     if(!definition)throw new Error("The exact local Profile Dataset definition is unavailable.");
     return loadLocalProfileEvaluationTaskset({store,storeDir,definition,profileId:source.profileId,harnessRelease:source.harnessRelease});
   }});
-  const localSourceChoices=createLocalExperimentSourceChoices({store,native:localNativeOwner.native,workflows:deps.workflows,
+  const localSourceChoices=createLocalExperimentSourceChoices({store,native:localNativeOwner.native,workflows,originProfiles:origins.discover,authorizeOrigin:origins.authority,
     loadPackage:(definition,profileId,harnessRelease)=>loadLocalProfileEvaluationTaskset({store,storeDir,definition,profileId,harnessRelease}),
     remoteSource:createLocalExperimentRemoteSourceLookup({resolveAccess:sourceAccess})});
   const remotePackage=createLocalExperimentPackageResolver({resolveAccess:deps.resolveAccess});

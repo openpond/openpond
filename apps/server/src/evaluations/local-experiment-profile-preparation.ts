@@ -17,7 +17,7 @@ export async function prepareLocalProfileExperiment(input:{raw:unknown;teamId:st
   resolve:LocalProfileOwner["resolve"];
 }) {
   const request=PrepareHarnessExperimentSchema.extend({profileRef:OpenPondProfileRefSchema,profileSource:z.object({sourceRevision:z.string().min(1).max(500),harnessRelease:z.object({id:z.string().min(1),contentHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict()}).strict().optional()}).parse(input.raw);
-  if(request.profileRef.source!=="local"||request.profileRef.repositoryId!==request.profileRepositoryId)throw new LocalExperimentError("local_profile_origin_not_qualified","Choose an accepted device-local Profile repository.",403);
+  if(request.profileRef.repositoryId!==request.profileRepositoryId)throw new LocalExperimentError("local_profile_origin_not_qualified","Choose an accepted device-local Profile repository.",403);
   if(request.reasoningEffort)throw new LocalExperimentError("local_profile_sampling_not_qualified","This local Profile owner does not admit reasoning overrides.",422);
   const prepared=await input.prepare({id:`local-profile-review-${contentHash([input.teamId,request.operationId]).slice(0,40)}`,
     createdAt:"1970-01-01T00:00:00.000Z",profileRef:request.profileRef,...(request.profileSource?{profileSource:request.profileSource}:{}),definitionId:request.definitionId,modelRef:{providerId:"openpond",modelId:request.modelId},maximumSpendUsd:request.maximumCostUsd});
