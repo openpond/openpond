@@ -17,6 +17,7 @@ export const ExperimentGraderPinSchema = z.object({
   release: ExperimentDefinitionRefSchema.nullable(),
   mappings: ExperimentFieldMappingsSchema.optional(),
 }).strict();
+export type ExperimentGraderPin = z.infer<typeof ExperimentGraderPinSchema>;
 export const ExperimentGraderSelectionSchema = z.object({ id: Id, version: z.string().min(1).max(200), contentHash: Hash, mappings: ExperimentFieldMappingsSchema }).strict();
 export const SaveExperimentSchema = z.object({
   operationId: Id,
