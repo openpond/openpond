@@ -242,6 +242,7 @@ jobs:
 
       - run: pnpm run build:artifacts
       - run: pnpm run cli:build:from-web
+      - run: pnpm run cli:distribution:check
 
       - name: Stage release source artifacts
         run: pnpm run release:source-artifacts:stage
@@ -434,7 +435,8 @@ jobs:
 
   npm_publish:
     name: Publish stable CLI package to npm
-    needs: [meta, build]
+    # Publish the qualified CLI independently; desktop release still requires every platform.
+    needs: [meta, source_artifacts]
     if: needs.meta.outputs.should_release == 'true' && needs.meta.outputs.channel == 'stable'
     runs-on: ubuntu-latest
     environment: npm-production
