@@ -69,8 +69,8 @@ export function createNativeToolRuntime(deps: {
       throwIfInterrupted(params.signal);
       if(deps.authorizeCandidateTool){
         const candidate=await deps.authorizeCandidateTool({sessionId:params.session.id,turnId:params.turnId,name:toolCall.name});
-        if(!candidate&&(params.turnMetadata.source==="experiment-improvement"||params.turnMetadata.refinementCandidate!==undefined))throw new Error("Candidate tool call has no current durable admission.");
-      }else if(params.turnMetadata.source==="experiment-improvement"||params.turnMetadata.refinementCandidate!==undefined)throw new Error("Candidate tool dispatch requires its actual source authority.");
+        if(!candidate&&(params.turnMetadata?.source==="experiment-improvement"||params.turnMetadata?.refinementCandidate!==undefined||params.session.metadata?.source==="experiment-improvement"||params.session.metadata?.refinementCandidate!==undefined))throw new Error("Candidate tool call has no current durable admission.");
+      }else if(params.turnMetadata?.source==="experiment-improvement"||params.turnMetadata?.refinementCandidate!==undefined||params.session.metadata?.source==="experiment-improvement"||params.session.metadata?.refinementCandidate!==undefined)throw new Error("Candidate tool dispatch requires its actual source authority.");
       if (await deps.hasPendingSteering?.(params.session.id, params.turnId)) {
         const result: NativeModelToolResult = {
           toolCallId: toolCall.id, name: toolCall.name, ok: false,
