@@ -67,6 +67,7 @@ jobs:
           INPUT_TARGET: ${{ github.event.inputs.target }}
           INPUT_CHANNEL: ${{ github.event.inputs.channel }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
@@ -84,12 +85,12 @@ jobs:
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/master" ]]; then
             channel="stable"
             raw_version="$(node -p "require('./${manifest}').version")"
-            if ! git cat-file -e "${GITHUB_SHA}^:${manifest}"; then
-              echo "Cannot resolve the previous ${target} version from ${GITHUB_SHA}^." >&2
+            if ! git cat-file -e "${RELEASE_BEFORE}:${manifest}"; then
+              echo "Cannot resolve the previous ${target} version from ${RELEASE_BEFORE}." >&2
               exit 1
             fi
             previous_version="$(
-              git show "${GITHUB_SHA}^:${manifest}" \
+              git show "${RELEASE_BEFORE}:${manifest}" \
                 | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).version)"
             )"
             if [[ "${raw_version}" == "${previous_version}" ]]; then
@@ -106,6 +107,7 @@ jobs:
           fi
 
           if [[ "${channel}" == "stable" ]]; then
+            test "${GITHUB_REF}" = "refs/heads/master"
             if [[ -z "${raw_version}" ]]; then
               raw_version="${INPUT_VERSION}"
             fi
@@ -154,8 +156,10 @@ jobs:
 
           if [[ "${channel}" == "stable" && "${should_release}" == "true" ]]; then
             if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
-              echo "Release tag ${tag} already exists. Rerun its failed workflow instead of creating another release." >&2
-              exit 1
+              if [[ "${target}" != "cli" || "$(git rev-list -n 1 "${tag}")" != "${ref}" ]]; then
+                echo "Release tag ${tag} already exists on another source or is a Desktop release." >&2
+                exit 1
+              fi
             fi
             if [[ "${target}" == "cli" ]]; then
               latest_stable_tag="$(git tag --list 'cli-v*' --sort=-version:refname | head -n 1)"
@@ -166,7 +170,7 @@ jobs:
               latest_stable_version="${latest_stable_tag#cli-}"
               latest_stable_version="${latest_stable_version#v}"
               highest_version="$(printf '%s\n%s\n' "${latest_stable_version}" "${version}" | sort -V | tail -n 1)"
-              if [[ "${highest_version}" != "${version}" || "${latest_stable_version}" == "${version}" ]]; then
+              if [[ "${highest_version}" != "${version}" || ( "${latest_stable_version}" == "${version}" && "${target}" != "cli" ) ]]; then
                 echo "Stable release ${version} must be newer than ${latest_stable_version}." >&2
                 exit 1
               fi
@@ -470,6 +474,10 @@ jobs:
     if: needs.meta.outputs.should_release == 'true' && needs.meta.outputs.channel == 'stable' && needs.meta.outputs.target == 'cli'
     runs-on: ubuntu-latest
     environment: npm-production
+    # One lock across push/manual runs; check registry latest after acquiring it.
+    concurrency:
+      group: openpond-cli-npm-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -489,40 +497,14 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
-      - name: Publish exact stable npm package through OIDC
-        run: |
-          set -euo pipefail
-          test "$(node -p "require('./apps/cli/package.json').version")" = "${{ needs.meta.outputs.version }}"
-          npm install --global npm@11.18.0
-          version="${{ needs.meta.outputs.version }}"
-          if [[ "$(npm view "openpond@${version}" version 2>/dev/null || true)" == "${version}" ]]; then
-            echo "openpond@${version} already exists; verify it without republishing."
-          else
-            npm publish ./apps/cli --access public --ignore-scripts
-          fi
-
-      - name: Verify installable CLI release and provenance
+      - name: Publish and verify the exact CLI artifact through OIDC
         env:
           VERSION: ${{ needs.meta.outputs.version }}
-        shell: bash
+          RELEASE_SHA: ${{ needs.meta.outputs.ref }}
         run: |
           set -euo pipefail
-          consumer_dir="$(mktemp -d)"
-          trap 'rm -rf "${consumer_dir}"' EXIT
-          for attempt in {1..120}; do
-            if [[ "$(npm view "openpond@${VERSION}" version 2>/dev/null || true)" == "${VERSION}" ]]; then
-              if npm install --prefix "${consumer_dir}" --ignore-scripts --no-audit --no-fund "openpond@${VERSION}" &&
-                (cd "${consumer_dir}" && npm audit signatures) &&
-                [[ "$(node "${consumer_dir}/node_modules/openpond/dist/cli.js" --version)" == "${VERSION}" ]]; then
-                echo "Verified installable openpond@${VERSION} and provenance."
-                exit 0
-              fi
-            fi
-            echo "Waiting for CLI registry availability (attempt ${attempt}/120)."
-            sleep 10
-          done
-          echo "openpond@${VERSION} is not verifiable yet." >&2
-          exit 1
+          npm install --global npm@11.18.0
+          node scripts/publish-cli-release.mjs
 
   cli_release:
     name: Publish CLI GitHub release
@@ -542,7 +524,7 @@ jobs:
           TAG: ${{ needs.meta.outputs.tag }}
           RELEASE_SHA: ${{ needs.meta.outputs.ref }}
           RELEASE_NAME: ${{ needs.meta.outputs.release_name }}
-        run: gh release create "${TAG}" --target "${RELEASE_SHA}" --title "${RELEASE_NAME}" --generate-notes --latest=false
+        run: node scripts/publish-cli-github-release.mjs
 
   release:
     name: Publish GitHub Release
