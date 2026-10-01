@@ -18,6 +18,7 @@ export function createLocalTaskGradeExecutor(repository: LearningRepository, pro
         binding: input.binding, rewards: input.rewards,
         task: taskRecordFromEvidence(input.evidence, input.definition),
         evidence: taskAttemptEvidence(input.evidence, input.run.output),
+        evaluatorContext: input.evidence.submission.evaluatorContext,
         signal: input.signal,
         modelJudge: createBoundModelJudgeRunner({
           readRubric: reference => repository.transaction(input.scope, async tx => verifyLearningTextAsset(

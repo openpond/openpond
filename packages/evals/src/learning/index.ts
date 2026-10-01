@@ -19,6 +19,7 @@ export * from "./grade-judge-budget.js";
 export * from "./budgeted-reward-fixtures.js";
 export * from "./reward-checks.js";
 export * from "./reward-calibration.js";
+export * from "./reward-calibration-closure.js";
 export * from "./reward-check-worker.js";
 export * from "./reward-fixture-executor.js";
 export * from "./iteration-reservation-contracts.js";
