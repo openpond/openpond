@@ -2,7 +2,7 @@ import type { SizeSnapshot } from "./size-snapshot.ts";
 
 const KiB = 1024;
 // Warn only when both the absolute and proportional growth are meaningful.
-// These are advisory; broad ceilings and runtime checks enforce the hard limits.
+// Size growth is advisory; package integrity and runtime checks still fail on errors.
 const metrics = [
   { key: "packed", label: "npm tarball", bytes: 256 * KiB, ratio: 0.05 },
   { key: "unpacked", label: "npm unpacked", bytes: 1024 * KiB, ratio: 0.05 },
@@ -17,7 +17,7 @@ export function compareSizes(head: SizeSnapshot, base?: SizeSnapshot) {
   const warnings: string[] = [];
   const lines = ["## Package size", "", `Build: ${head.revision}`, ""];
   if (base) lines.push(`Base: ${base.revision}`, "");
-  else lines.push("No base comparison for this build. PR comparisons appear in the Package size comparison job.", "");
+  else lines.push("No base comparison for this build. Supply a base snapshot to compare growth.", "");
   lines.push("| Metric | Base | Current | Change |", "| --- | ---: | ---: | ---: |");
   for (const metric of metrics) {
     const current = head.metrics[metric.key];
@@ -39,7 +39,7 @@ export function compareSizes(head: SizeSnapshot, base?: SizeSnapshot) {
   for (const file of [...head.files].sort((a, b) => b.size - a.size).slice(0, 10)) {
     lines.push(`| ${escapeCell(file.path)} | ${formatBytes(file.size)} | ${formatBytes(file.gzip)} |`);
   }
-  lines.push("", "Content hashes are removed for asset comparisons; anonymous runtime chunks are grouped to avoid misleading churn when code is split differently. Individual gzip sizes explain contributors but do not sum to the npm tarball size. HTML entry assets match the existing loading budget; they exclude dynamically loaded screens and workers.", "");
+  lines.push("", "Content hashes are removed for asset comparisons; anonymous runtime chunks are grouped to avoid misleading churn when code is split differently. Individual gzip sizes explain contributors but do not sum to the npm tarball size. HTML entry assets match the loading measurement; they exclude dynamically loaded screens and workers.", "");
   return { markdown: lines.join("\n"), warnings };
 }
 

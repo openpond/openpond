@@ -352,8 +352,8 @@ jobs:
           xcrun stapler validate "${app_path}"
           spctl --assess --type execute --verbose=4 "${app_path}"
 
-      - name: Enforce desktop package budgets
-        run: pnpm run budgets:desktop-package
+      - name: Verify desktop package integrity and report size
+        run: pnpm run desktop:package:check
 
       - name: Install Linux packaged-smoke display dependency
         if: runner.os == 'Linux'

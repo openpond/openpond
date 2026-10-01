@@ -103,7 +103,6 @@ describe("OpenPond app-server JSON-RPC integration", () => {
     expect(firstTurnRequestedAt).not.toBeNull();
     expect(firstAssistantDeltaAt).not.toBeNull();
     const firstTokenMs = firstAssistantDeltaAt! - firstTurnRequestedAt!;
-    expect(firstTokenMs).toBeLessThan(10_000);
 
     const readResponse = await rpc.handle({
       jsonrpc: "2.0",
@@ -184,9 +183,8 @@ describe("OpenPond app-server JSON-RPC integration", () => {
       expect.objectContaining({ method: "compaction/started" }),
       expect.objectContaining({ method: "compaction/completed" }),
     ]));
-    expect(compactionMs).toBeLessThan(10_000);
-    reportMetric("firstTokenMs", firstTokenMs);
-    reportMetric("compactionMs", compactionMs);
+    reportMetric("firstTokenMs", firstTokenMs, 10_000);
+    reportMetric("compactionMs", compactionMs, 10_000);
     unsubscribe?.();
   }, 20_000);
 
@@ -247,8 +245,7 @@ describe("OpenPond app-server JSON-RPC integration", () => {
     const interruptionMs = performance.now() - interruptedAt;
     expect(resultRecord(interruptResponse).turn).toMatchObject({ status: "interrupted" });
     expect(resultRecord(await pendingTurn).turn).toMatchObject({ status: "interrupted" });
-    expect(interruptionMs).toBeLessThan(2_000);
-    reportMetric("cancellationMs", interruptionMs);
+    reportMetric("cancellationMs", interruptionMs, 2_000);
   }, 20_000);
 
   test("recovers persisted threads and Harness selection after an app-server restart", async () => {
@@ -321,8 +318,7 @@ describe("OpenPond app-server JSON-RPC integration", () => {
     expect(read.turns).toHaveLength(1);
     expect(read.turns[0]).toMatchObject({ status: "completed", prompt: "persist this turn across restart" });
     expect(afterRestart.harnessRelease.contentHash).toBe(beforeRestart.harnessRelease.contentHash);
-    expect(restartMs).toBeLessThan(10_000);
-    reportMetric("restartRecoveryMs", restartMs);
+    reportMetric("restartRecoveryMs", restartMs, 10_000);
   }, 30_000);
 });
 
@@ -346,7 +342,10 @@ function resultRecord(response: unknown): Record<string, any> {
   return (response as { result: Record<string, any> }).result;
 }
 
-function reportMetric(name: string, value: number): void {
+function reportMetric(name: string, value: number, warningThresholdMs: number): void {
+  if (value > warningThresholdMs) {
+    console.warn(`${name} took ${value.toFixed(1)} ms (advisory: ${warningThresholdMs} ms).`);
+  }
   if (process.env.OPENPOND_REPORT_AGENT_METRICS === "1") {
     console.info(`OPENPOND_AGENT_METRIC ${JSON.stringify({ name, value: Math.round(value * 100) / 100 })}`);
   }

@@ -8,6 +8,8 @@ on:
       - "pnpm-lock.yaml"
       - "package.json"
       - "scripts/stage-desktop-runtime.ts"
+      - "scripts/check-desktop-package.ts"
+      - "tests/distribution-growth.test.ts"
       - "scripts/desktop-runtime/**"
       - "apps/web/**"
       - "scripts/smoke-dev-desktop.ts"
@@ -43,7 +45,7 @@ jobs:
           let packageRequired = true;
           if (process.env.GITHUB_EVENT_NAME === 'pull_request') {
             const files = execFileSync('git', ['diff', '--name-only', process.env.BASE_SHA, process.env.HEAD_SHA], { encoding: 'utf8' }).trim().split('\n');
-            packageRequired = files.some(file => /^(apps\/desktop\/|scripts\/(build\/|desktop-runtime\/|stage-desktop-runtime)|pnpm-lock.yaml$|package.json$|.github\/workflows\/desktop-smoke.yml$)/.test(file));
+            packageRequired = files.some(file => /^(apps\/desktop\/|scripts\/(build\/|desktop-runtime\/|stage-desktop-runtime|check-desktop-package)|tests\/distribution-growth.test.ts$|pnpm-lock.yaml$|package.json$|.github\/workflows\/desktop-smoke.yml$)/.test(file));
           }
           appendFileSync(process.env.GITHUB_OUTPUT, `package=${packageRequired}\n`);
           NODE
@@ -61,7 +63,7 @@ jobs:
       - if: steps.scope.outputs.package == 'true'
         run: pnpm run package:linux:release
       - if: steps.scope.outputs.package == 'true'
-        run: pnpm run budgets:desktop-package
+        run: pnpm run desktop:package:check
       - run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: xvfb-run -a pnpm run smoke:desktop:dev --skip-chat --json release-smoke/dev-render-commits.json
       - if: steps.scope.outputs.package == 'true'

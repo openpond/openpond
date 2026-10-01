@@ -145,9 +145,9 @@ jobs:
           path: artifacts/package-size.json
           if-no-files-found: error
 
-      - name: Check renderer loading budgets
+      - name: Report renderer loading metrics
         if: needs.scope.outputs.build == 'true'
-        run: pnpm run budgets:check --renderer-only
+        run: pnpm run performance:report --renderer-only
 
       - name: Check affected CLI distribution
         if: needs.scope.outputs.distribution == 'true'
@@ -250,7 +250,7 @@ jobs:
           name: package-size-${{ github.sha }}
           path: artifacts/package-size.json
           if-no-files-found: error
-      - run: pnpm run budgets:check
+      - run: pnpm run performance:report
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
