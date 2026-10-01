@@ -4,13 +4,13 @@ import type { WorkspaceApi } from "./workspace-api";
 
 /** Collect only released task identities for setup; authoring drafts never
  * provide executable population membership. Every page retains the same pin. */
-export function useDatasetPopulation(api: WorkspaceApi, release: DatasetPopulationPage["release"] | null) {
-  return useQuery({ queryKey: ["evaluation-workspace", api.key, "setup-population", release?.contentHash], enabled: Boolean(release), queryFn: async ({ signal }) => {
+export function useDatasetPopulation(api: WorkspaceApi, release: DatasetPopulationPage["release"] | null, localSourceId?:string, ready=true) {
+  return useQuery({ queryKey: ["evaluation-workspace", api.key, "setup-population", release?.contentHash,localSourceId], enabled: Boolean(release)&&ready, queryFn: async ({ signal }) => {
     const items: DatasetPopulationPage["items"] = [];
     let afterId: string | undefined;
     let first: DatasetPopulationPage | null = null;
     do {
-      const page = await api.request<DatasetPopulationPage>("datasetPopulation", { release, view: "ids", limit: 10_000, ...(afterId ? { afterId } : {}) }, signal);
+      const page = localSourceId?await api.local<DatasetPopulationPage>("sourceDataset",{id:localSourceId,view:"ids",limit:10_000,...(afterId?{afterId}:{})},signal):await api.request<DatasetPopulationPage>("datasetPopulation", { release, view: "ids", limit: 10_000, ...(afterId ? { afterId } : {}) }, signal);
       if (page.taskCount > 10_000) throw new Error("Choose a Dataset version with at most 10,000 tasks for one Experiment.");
       if (first && (page.taskCount !== first.taskCount || JSON.stringify(page.graders) !== JSON.stringify(first.graders))) throw new Error("The released Dataset population changed between pages.");
       first ??= page;

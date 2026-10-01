@@ -1,8 +1,13 @@
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
+import { experimentSessionStreamResolver } from "./runtime/experiment-session-stream.js";
 import { createExperimentCaseService } from "./evaluations/experiment-case-service.js";
 import { createLocalExperimentPolicy } from "./evaluations/local-experiment-policy.js";
 import { createHostExperimentPolicy } from "./evaluations/host-experiment-policy.js";
 import { createHostExperimentEnvironment } from "./evaluations/host-experiment-environment.js";
+import { createHostExperimentNativeStream } from "./evaluations/host-experiment-native-stream.js";
+import { installPublishedExperimentSource } from "./harness/published-experiment-source.js";
+import { createStandaloneExperimentTurnOwner } from "./harness/standalone-experiment-turn-owner.js";
+import { standaloneExperimentToolDeclarations } from "./harness/standalone-experiment-tools.js";
 import { z } from "zod";
 import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
 import { initializeHome, readPreferences } from "@openpond/persistence";
@@ -30,6 +35,7 @@ import {
 } from "@openpond/cloud";
 import { createLogger } from "@openpond/logging";
 import { contentHash } from "@openpond/harness";
+import { STANDALONE_EXPERIMENT_MAX_POLICY_CALLS } from "@openpond/evals/experiments";
 import {
   getBundledRuntimeVersion,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
@@ -140,6 +146,8 @@ export type AppServerRuntimeCoreStorage = TurnRunnerDependencies["store"] & Pick
 export type OpenPondAppServerOptions = {
   /** Dedicated host-admitted case runtime; credentials/spend remain at its owner. */
   experimentPolicyClient?: import("@openpond/agent-runtime").AgentHostStorageClient;
+  /** Trusted host-provisioned published closure; never a caller permission grant. */
+  experimentHarnessSource?: { ownerId: string; sourcePackage: import("@openpond/harness").HarnessSourcePackage };
   hostStorageClient?: import("@openpond/agent-runtime").AgentHostStorageClient;
   /** Select all mutable runtime domains together after host capability negotiation. */
   runtimeStorage?: {
@@ -154,6 +162,8 @@ export type OpenPondAppServerOptions = {
   version?: string;
   maxHostedWorkspaceToolRounds?: number;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
+  /** Internal native Experiment authority, bound before session admission. */
+  resolveSessionModelStream?: (session:import("@openpond/contracts").Session,turn:import("@openpond/contracts").Turn)=>Promise<typeof defaultStreamOpenPondHostedChatTurn|null>;
   sandboxRequest?: AppServerSandboxRequest;
   /** Trusted source directory containing harness.json and declared assets. Immutable per workspace ID. */
   harness?: { sourceDirectory: string; workspaceId: string; name: string };
@@ -277,6 +287,19 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     throw new Error("Configure either an explicit Harness source or Profile source for this app-server.");
   }
   let explicitProfileRelease: LocalHarnessReleaseRecord | null = null;
+  let publishedExperimentSource: Awaited<ReturnType<typeof installPublishedExperimentSource>> | undefined;
+  let standaloneExperimentOwner: ReturnType<typeof createStandaloneExperimentTurnOwner> | undefined;
+  if (options.experimentHarnessSource) {
+    if (!options.experimentPolicyClient || options.profileSource || options.harness || options.runtimeStorage)
+      throw new Error("A published standalone Experiment source requires its isolated policy owner and local case store.");
+    const source = options.experimentHarnessSource.sourcePackage;
+    publishedExperimentSource = await installPublishedExperimentSource({
+      store, storeDir, ownerId: options.experimentHarnessSource.ownerId, sourcePackage: source,
+      reference: { harnessRelease: { id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash },
+        agentSnapshot: { id: source.agentSnapshot.id, contentHash: source.agentSnapshot.contentHash }, sourcePackageHash: source.contentHash },
+      createdAt: now(),
+    });
+  }
   if (options.profileSource) {
     const source = options.profileSource;
     if (!source.repositoryId.trim() || !source.profileId.trim() || !source.sourceRevision.trim()) {
@@ -505,10 +528,13 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     appendHostedContextUsage: hostedTurnHelpers.appendHostedContextUsage,
     streamOpenPondHostedChatTurn,
     turnFollowUpQueue,
+    resolveSessionModelStream:experimentSessionStreamResolver(async (session, turn) =>
+      await standaloneExperimentOwner?.resolveSessionModelStream(session, turn)
+      ?? await options.resolveSessionModelStream?.(session, turn) ?? null),
     subagentQueue,
-    maxHostedWorkspaceToolRounds: resolveMaxHostedWorkspaceToolRounds(
-      options.maxHostedWorkspaceToolRounds,
-    ),
+    maxHostedWorkspaceToolRounds: options.experimentHarnessSource
+      ? STANDALONE_EXPERIMENT_MAX_POLICY_CALLS
+      : resolveMaxHostedWorkspaceToolRounds(options.maxHostedWorkspaceToolRounds),
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
   });
   onStartupFailure(() => turnRunner.close());
@@ -599,6 +625,15 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     prepareRun: prepareProfileEvaluationRun, executeRun: executeProfileEvaluationRun,
   });
   const experimentCases=createExperimentCaseService({
+    ...(publishedExperimentSource && options.experimentPolicyClient ? {
+      executeHarness: async (request: import("./evaluations/experiment-case-contract.js").ExperimentModelCase, signal: AbortSignal) => {
+        if (!request.harness || !standaloneExperimentOwner) throw new Error("Standalone Experiment source owner is unavailable.");
+        const result = await standaloneExperimentOwner.execute({ executionId: request.id, request, source: request.harness,
+          stream: createHostExperimentNativeStream(options.experimentPolicyClient!, request,
+            standaloneExperimentToolDeclarations(publishedExperimentSource!.release)), signal, maxOutputBytes: 262_144 });
+        return result.attempt;
+      },
+    } : {}),
     ...(options.experimentPolicyClient ? {
       resolveEnvironment: async (request: import("./evaluations/experiment-case-contract.js").ExperimentModelCase) =>
         createHostExperimentEnvironment(options.experimentPolicyClient!, request),
@@ -611,6 +646,19 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       return executeProfileEvaluationCase(request);
     },
   });
+  if (publishedExperimentSource) {
+    const retained = publishedExperimentSource;
+    standaloneExperimentOwner = createStandaloneExperimentTurnOwner({
+      store, createSession, sendTurn: turnRunner.sendTurn, interruptSessionTurn: turnRunner.interruptSessionTurn,
+      authorizeWorkspace: async (reference, workspace) => {
+        if (workspace.id !== retained.workspace.id || contentHash(workspace.ownerScope) !== contentHash(retained.workspace.ownerScope)
+          || reference.sourcePackageHash !== retained.workspace.metadata.experimentSourcePackageHash
+          || reference.harnessRelease.id !== retained.release.harnessRelease.id
+          || reference.harnessRelease.contentHash !== retained.release.harnessRelease.contentHash)
+          throw new Error("Standalone Experiment source differs from this execution owner's admitted closure.");
+      },
+    });
+  }
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",

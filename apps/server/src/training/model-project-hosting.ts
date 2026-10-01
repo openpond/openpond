@@ -163,6 +163,7 @@ type HostedManagedJobDetail = z.infer<typeof HostedManagedJobDetailSchema>["job"
 export function createModelProjectHostingService(input: {
   store: SqliteStore;
   resolveAccess: () => Promise<HostedAccess>;
+  resolveActorId?:()=>Promise<string>;
   resolveReleasedHarness?: ReleasedTrainingHarnessResolver;
   env?: NodeJS.ProcessEnv;
   fetch?: typeof fetch;

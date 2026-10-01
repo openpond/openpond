@@ -114,6 +114,7 @@ export type HttpRouteDeps = {
     requestUrl?: URL,
     signal?: AbortSignal,
   ) => Promise<unknown>;
+  localExperimentPayload?: (payload:unknown) => Promise<unknown>;
   learningProducerPayload?: (endpoint: "commands" | "source-config", apiKey: string, payload: unknown) => Promise<unknown>;
   datasetStoragePayload: (action: "state" | "update", payload?: unknown) => Promise<unknown>;
   listLocalAgentSchedulesPayload: (payload?: unknown) => Promise<unknown>;

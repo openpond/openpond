@@ -31,6 +31,7 @@ export function createHostedCompactionRuntime(deps: {
   appendRuntimeEvent: TurnRunnerDependencies["appendRuntimeEvent"];
   runtimeEventsForSession: TurnRunnerDependencies["store"]["runtimeEventsForSession"];
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
+  resolveSessionModelStream?: TurnRunnerDependencies["resolveSessionModelStream"];
   upsertModelUsageRecord(record: ModelUsageRecord): Promise<void>;
   throwIfInterrupted(signal: AbortSignal): void;
   interruptedError(): Error;
@@ -330,7 +331,9 @@ export function createHostedCompactionRuntime(deps: {
           if (streamInput.provider !== "openpond") {
             throw new Error(`Context compaction stream is not configured for ${streamInput.provider}.`);
           }
-          for await (const delta of streamOpenPondHostedChatTurn({
+          const stream = await deps.resolveSessionModelStream?.(input.session, input.turn)
+            ?? streamOpenPondHostedChatTurn;
+          for await (const delta of stream({
             model: streamInput.model,
             messages: streamInput.messages,
             requestId: streamInput.requestId,

@@ -68,7 +68,7 @@ async function main(): Promise<void> {
           'import { OpenPondModelStarterCatalogClient } from "openpond-sdk/model-starter-catalog";',
           'import { OpenPondModelStarterAttemptsClient, ModelStarterAttemptRequestSchema } from "openpond-sdk/model-starter-attempts";',
           'import { OpenPondModelTasksetRunsClient, ModelTasksetRunRequestSchema, verifyModelTasksetRunResult } from "openpond-sdk/model-taskset-runs";',
-          'import { OpenPondExperimentsClient, SaveExperimentSchema, verifyExperimentDefinition, ExperimentScoringRequestSchema, ExperimentAttemptGradeSchema } from "openpond-sdk/experiments"; if (!ExperimentAttemptGradeSchema || ExperimentScoringRequestSchema.safeParse({}).success || typeof OpenPondExperimentsClient.prototype.scoringPasses !== "function" || typeof OpenPondExperimentsClient !== "function" || typeof verifyExperimentDefinition !== "function" || SaveExperimentSchema.safeParse({}).success) throw new Error("Packed Experiment boundary is unavailable");',
+          'import { OpenPondExperimentsClient, RunExperimentSchema, verifyExperimentRunDetails, ExperimentScoringRequestSchema, ExperimentAttemptGradeSchema } from "openpond-sdk/experiments"; if (!ExperimentAttemptGradeSchema || ExperimentScoringRequestSchema.safeParse({}).success || typeof OpenPondExperimentsClient.prototype.scoringPasses !== "function" || typeof OpenPondExperimentsClient !== "function" || typeof verifyExperimentRunDetails !== "function" || typeof OpenPondExperimentsClient.prototype.run !== "function" || RunExperimentSchema.safeParse({}).success) throw new Error("Packed Experiment boundary is unavailable");',
           'if (!OpenPondModelTasksetRunsClient || !ModelTasksetRunRequestSchema || !verifyModelTasksetRunResult) throw new Error("Packed evaluation run exports are missing");',
           'if (!OpenPondModelStarterAttemptsClient || !ModelStarterAttemptRequestSchema) throw new Error("Packed starter attempt exports are missing");',
           'import { OpenPondTasksetCatalogClient, HostedTasksetSummarySchema } from "openpond-sdk/taskset-catalog";',
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
       { cwd: consumer, stdio: "inherit" },
     );
     await writeFile(path.join(consumer, "verify-types.mts"), [
-      'import { OpenPondExperimentsClient, type ExperimentDefinition } from "openpond-sdk/experiments"; declare const experiments: OpenPondExperimentsClient; const savedDefinition: Promise<ExperimentDefinition> = experiments.get("exp_test"); void savedDefinition;',
+      'import { OpenPondExperimentsClient, type ExperimentRunDetails } from "openpond-sdk/experiments"; declare const experiments: OpenPondExperimentsClient; const experiment: Promise<ExperimentRunDetails> = experiments.get("mrun_test"); void experiment;',
       'import { createOpenPondClient } from "openpond-sdk"; const workClient = createOpenPondClient({ sandbox: { endpoint: "https://runtime.invalid", apiKey: "runtime" }, model: { endpoint: "https://model.invalid/v1", apiKey: "model", model: "test" } });',
       'type NotAny<T> = 0 extends (1 & T) ? false : true; const sandboxTypesSurvivePacking: NotAny<Awaited<ReturnType<typeof workClient.sandboxes.get>>> = true; void sandboxTypesSurvivePacking;',
       'const sandboxId: Promise<string> = workClient.sandboxes.get("id").then(record => record.id); void sandboxId;',

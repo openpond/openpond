@@ -6,6 +6,11 @@ import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import type { TasksetRelease } from "@openpond/evals/tasksets";
 import { canonicalJson } from "./protocol.js";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
+export {
+  NativeHarnessExperimentAttemptSchema,
+  verifyNativeHarnessExperimentAttempt,
+  type NativeHarnessExperimentAttempt,
+} from "@openpond/evals/experiments";
 
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const ModelStarterEnvironmentAttemptSchema = /* @__PURE__ */ (() => z.object({

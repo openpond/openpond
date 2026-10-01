@@ -1,4 +1,5 @@
 import { ProfileEvaluationRunSourceSchema } from "@openpond/evals";
+import { StandaloneHarnessExperimentSourceSchema } from "@openpond/evals/experiments";
 import { z } from "zod";
 import { ImmutableReleaseRefSchema, contentHash } from "@openpond/harness";
 
@@ -13,6 +14,7 @@ export const TrainingTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("model"), providerId: Id, modelId: Id, artifact: ImmutableReleaseRefSchema.nullable(),
     messages: z.array(z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().max(100_000) }).strict()).max(100) }).strict(),
   z.object({ kind: z.literal("harness"), profileRepositoryId: Id, source: ProfileEvaluationRunSourceSchema }).strict(),
+  z.object({ kind: z.literal("agent"), source: StandaloneHarnessExperimentSourceSchema }).strict(),
   z.object({ kind: z.literal("suite"), profileRepositoryId: Id, suiteId: Id, sources: z.array(ProfileEvaluationRunSourceSchema).min(1).max(1_000) }).strict().superRefine((value, ctx) => {
     const first = value.sources[0]!;
     const identities = new Set<string>();

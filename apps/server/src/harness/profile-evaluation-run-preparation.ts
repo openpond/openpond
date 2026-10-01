@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { ChatModelRefSchema, ModelRefSchema, ProfileComponentBindingSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash, type ChatModelRef } from "@openpond/harness";
-import { CHAT_ATTACHMENT_LIMITS, type OpenPondProfileRef } from "@openpond/contracts";
+import { CHAT_ATTACHMENT_LIMITS, OpenPondProfileRefSchema, type OpenPondProfileRef } from "@openpond/contracts";
 import {
   assertProfileEvaluationRunAdmission,
   createTasksetRunManifest,
@@ -18,6 +18,8 @@ const PrepareRequestSchema = z.object({
   id: ReleaseIdSchema,
   createdAt: ReleaseTimestampSchema,
   definitionId: ReleaseIdSchema,
+  profileRef: OpenPondProfileRefSchema.optional(),
+  profileSource:z.object({sourceRevision:z.string().min(1).max(500),harnessRelease:z.object({id:ReleaseIdSchema,contentHash:ReleaseHashSchema}).strict()}).strict().optional(),
   modelRef: ChatModelRefSchema,
   /** Trusted embedding host's resolved model configuration receipt. Desktop
    * computes this itself and ignores the caller's value. */
@@ -25,7 +27,7 @@ const PrepareRequestSchema = z.object({
   maximumSpendUsd: z.number().positive().max(10_000).optional(),
   expectedManifestHash: ReleaseHashSchema.optional(),
   hostExperiment: z.object({
-    definition: z.object({ id: ReleaseIdSchema, revision: z.number().int().positive(), contentHash: ReleaseHashSchema }).strict(),
+    definition: z.object({ id: ReleaseIdSchema, revision: z.number().int().positive(), contentHash: ReleaseHashSchema }).strict().nullable(),
     configurationHash: ReleaseHashSchema,
     project: z.object({ id: ReleaseIdSchema, revision: z.number().int().positive(), contentHash: ReleaseHashSchema,
       targetId: ReleaseIdSchema.nullable() }).strict().optional(),
@@ -50,7 +52,7 @@ type SelectedWorkflows = {
  * and the exact Taskset package named by its verifier-private definition. */
 export function createProfileEvaluationRunPreparationService(input: {
   loadCatalog: ProfileEvaluationCatalogSource;
-  selectedWorkflows: () => Promise<SelectedWorkflows>;
+  selectedWorkflows: (ref?: OpenPondProfileRef,source?:{sourceRevision:string;harnessRelease:{id:string;contentHash:string}}) => Promise<SelectedWorkflows>;
   loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
   placement: "local" | "remote" | "colocated";
@@ -60,7 +62,10 @@ export function createProfileEvaluationRunPreparationService(input: {
     if (options?.requireExpectedManifestHash && !parsed.expectedManifestHash) {
       throw new Error("Profile evaluation execution requires the reviewed manifest hash.");
     }
-    const selected = await input.selectedWorkflows();
+    if(parsed.profileSource&&!parsed.profileRef)throw new Error("An exact Profile source requires its accepted Profile reference.");
+    const selected = await input.selectedWorkflows(parsed.profileRef,parsed.profileSource);
+    if(parsed.profileRef&&contentHash(parsed.profileRef)!==contentHash(selected.profileRef))throw new Error("Profile preparation did not resolve the explicitly selected Profile.");
+    if(parsed.profileSource&&(selected.sourceRevision!==parsed.profileSource.sourceRevision||contentHash(selected.harnessRelease)!==contentHash(parsed.profileSource.harnessRelease)))throw new Error("Profile preparation changed its explicitly pinned source.");
     const discovered = await input.loadCatalog({
       ref: selected.profileRef,
       sourceRevision: selected.sourceRevision,

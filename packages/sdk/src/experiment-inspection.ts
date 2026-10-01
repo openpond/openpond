@@ -15,7 +15,7 @@ export class OpenPondExperimentInspectionClient {
   /** Retained, policy-facing evidence only. Reading a page never dispatches. */
   async case(executionId: string, receiptId: string, options: { manifestHash?: string; afterId?: string; signal?: AbortSignal } = {}) {
     const params = new URLSearchParams(options.afterId ? { afterId: Id.parse(options.afterId) } : {});
-    const response = await (this.options.fetch ?? fetch)(`${this.baseUrl}/v1/experiments/executions/${encodeURIComponent(Id.parse(executionId))}/cases/${encodeURIComponent(Id.parse(receiptId))}?${params}`, { signal: options.signal, redirect: "error", headers: { Authorization: `Bearer ${this.options.apiKey}`, "X-OpenPond-Team-Id": this.options.teamId, Accept: "application/json" } });
+    const response = await (this.options.fetch ?? fetch)(`${this.baseUrl}/v1/experiments/${encodeURIComponent(Id.parse(executionId))}/cases/${encodeURIComponent(Id.parse(receiptId))}?${params}`, { signal: options.signal, redirect: "error", headers: { Authorization: `Bearer ${this.options.apiKey}`, "X-OpenPond-Team-Id": this.options.teamId, Accept: "application/json" } });
     const value: unknown = await response.json();
     if (!response.ok) throw new Error(z.object({ message: z.string() }).parse(value).message);
     const result = ExperimentCaseInspectionSchema.parse(value);

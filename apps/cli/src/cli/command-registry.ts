@@ -79,8 +79,8 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "experiments",
-    usage: "openpond experiments <prepare-harness|save|read|list|executions|start|status|cancel|retry|score|passes|pass|cancel-pass|pass-result|result|compare> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--json]",
-    optionSchema: { team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", afterId: "string", limit: "integer", json: "boolean" },
+    usage: "openpond experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]",
+    optionSchema: { team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", status: "string", afterId: "string", limit: "integer", json: "boolean",local:"boolean",serverUrl:"string",receiptId:"string",afterSequence:"integer",revision:"integer",contentHash:"string" },
     handler: async ({ options, rest }) => (await import("./experiments")).runExperimentsCommand(options, rest),
   },
   {

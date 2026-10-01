@@ -1,3 +1,4 @@
+import { useWorkspacePanelBody } from "../labs/workspace/WorkspacePanel";
 import { TasksetDraftMetricsSection } from "./TasksetDraftMetricsSection";
 import { TasksetDraftFilesEditor } from "./TasksetDraftFilesEditor";
 import type { TasksetDraftFileInfo } from "openpond-sdk/model-taskset-authoring";
@@ -109,6 +110,7 @@ export function TasksetDraftEditor({
   const modelChanged = Boolean(owningModel && owningModel.revision !== draft?.modelScope?.expectedModelRevision);
   const busy = training.busyAction?.includes("taskset-draft") ?? false;
   const draftNavigation = useDraftNavigation({ dirty: draft !== null && draft.status !== "published" && JSON.stringify(draft) !== savedSnapshot, busy, name: "Taskset draft", save: async () => Boolean(await save()) });
+  const panelBody = useWorkspacePanelBody();
   useImperativeHandle(closeRef, () => ({ requestClose: () => {
     if (busy) return;
     if (section) setSection(null);
@@ -200,9 +202,11 @@ export function TasksetDraftEditor({
     <main className="taskset-draft-editor" aria-label="Taskset draft editor">
       <header className="taskset-draft-header">
         <div>
+          {!panelBody ? <>
           <button className="training-text-button" type="button" onClick={() => { void draftNavigation.requestLeave(() => { draftNavigation.allowNextNavigation(); onBack(); }); }}>
             Back
           </button>
+          </> : null}
           <input
             aria-label={owner === "hosted" ? "Dataset name" : "Taskset name"}
             className="taskset-draft-name"

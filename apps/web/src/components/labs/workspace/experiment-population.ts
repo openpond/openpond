@@ -1,8 +1,7 @@
-import type { ExperimentDefinition } from "openpond-sdk/experiments";
-import type { DatasetRelease } from "./EvaluationSetupState";
+import type { DatasetRelease, ExperimentSetupDefinition } from "./EvaluationSetupState";
 /** Editing a non-cartesian retained population must not silently add target
  * calls. Only an explicit seed change creates a new task/seed cross product. */
-export function experimentPopulation(input: { existing: ExperimentDefinition | null; release: DatasetRelease; taskIds: string[]; seedText: string; createReceiptId: (taskId: string, seed: string) => string }) {
+export function experimentPopulation(input: { existing: ExperimentSetupDefinition | null; release: DatasetRelease; taskIds: string[]; seedText: string; createReceiptId: (taskId: string, seed: string) => string }) {
   const seeds = [...new Set(input.seedText.split(/[\s,]+/).filter(Boolean))];
   if (!seeds.length || seeds.some(value => !/^(0|[1-9][0-9]*)$/.test(value) || Number(value) > 2_147_483_647)) throw new Error("Enter integer environment seeds from 0 to 2147483647, separated by commas.");
   const tasks = new Set(input.taskIds);
