@@ -79,14 +79,16 @@ test("installed Profile origin remains exact and owner-authorized across SQLite 
       commitSha: revision,
       entries,
       truncated: false,
-      selectedFile: {
-        path: name,
-        sizeBytes: entry.sizeBytes,
-        contents: files.get(name),
-        encoding: "utf8",
-        isBinary: false,
-        truncated: false,
-      },
+      selectedFile: entry
+        ? {
+            path: name,
+            sizeBytes: entry.sizeBytes,
+            contents: files.get(name),
+            encoding: "utf8",
+            isBinary: false,
+            truncated: false,
+          }
+        : null,
     });
   };
   const adapter = () =>
