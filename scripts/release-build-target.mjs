@@ -8,6 +8,7 @@ export function resolveReleaseBuildTarget(input) {
   if (input.event === "schedule") return "desktop";
   if (input.event === "workflow_dispatch") {
     const target = input.target || "desktop";
+    if (input.channel === "stable" && input.ref !== "refs/heads/master") throw new Error("Stable releases require refs/heads/master.");
     if (!["cli", "desktop"].includes(target)) throw new Error(`Unsupported release target: ${target}`);
     if (target === "cli" && input.channel !== "stable") throw new Error("CLI-only releases require the stable channel.");
     return target;
@@ -22,10 +23,15 @@ export function resolveReleaseBuildTarget(input) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const version = (target) => JSON.parse(readFileSync(`apps/${target}/package.json`, "utf8")).version;
-  const previous = (target) => JSON.parse(execFileSync("git", ["show", `HEAD^:apps/${target}/package.json`], { encoding: "utf8" })).version;
+  const before = process.env.RELEASE_BEFORE;
+  const previous = (target) => {
+    if (!/^[0-9a-f]{40}$/.test(before || "") || /^0+$/.test(before)) throw new Error("A valid push before SHA is required.");
+    execFileSync("git", ["merge-base", "--is-ancestor", before, "HEAD"]);
+    return JSON.parse(execFileSync("git", ["show", `${before}:apps/${target}/package.json`], { encoding: "utf8" })).version;
+  };
   const event = process.env.GITHUB_EVENT_NAME;
   console.log(resolveReleaseBuildTarget({
-    event, target: process.env.INPUT_TARGET, channel: process.env.INPUT_CHANNEL,
+    event, target: process.env.INPUT_TARGET, channel: process.env.INPUT_CHANNEL, ref: process.env.GITHUB_REF,
     cliVersion: version("cli"), desktopVersion: version("desktop"),
     ...(event === "push" ? { previousCliVersion: previous("cli"), previousDesktopVersion: previous("desktop") } : {}),
   }));
