@@ -57,13 +57,13 @@ export function createProfileEvaluationRunPreparationService(input: {
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
   placement: "local" | "remote" | "colocated";
 }) {
-  return async (request: unknown, options?: { requireExpectedManifestHash?: boolean }) => {
+  return async (request: unknown, options?: { requireExpectedManifestHash?: boolean; selectedWorkflows?: SelectedWorkflows }) => {
     const parsed = PrepareRequestSchema.parse(request);
     if (options?.requireExpectedManifestHash && !parsed.expectedManifestHash) {
       throw new Error("Profile evaluation execution requires the reviewed manifest hash.");
     }
     if(parsed.profileSource&&!parsed.profileRef)throw new Error("An exact Profile source requires its accepted Profile reference.");
-    const selected = await input.selectedWorkflows(parsed.profileRef,parsed.profileSource);
+    const selected = options?.selectedWorkflows ?? await input.selectedWorkflows(parsed.profileRef,parsed.profileSource);
     if(parsed.profileRef&&contentHash(parsed.profileRef)!==contentHash(selected.profileRef))throw new Error("Profile preparation did not resolve the explicitly selected Profile.");
     if(parsed.profileSource&&(selected.sourceRevision!==parsed.profileSource.sourceRevision||contentHash(selected.harnessRelease)!==contentHash(parsed.profileSource.harnessRelease)))throw new Error("Profile preparation changed its explicitly pinned source.");
     const discovered = await input.loadCatalog({
