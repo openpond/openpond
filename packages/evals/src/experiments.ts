@@ -267,7 +267,10 @@ export function compareExperiments(
   if (baseline.manifest.target.kind === "harness" && candidate.manifest.target.kind === "harness") {
     const a = baseline.manifest.target.source; const b = candidate.manifest.target.source;
     if (a.profileId !== b.profileId || contentHash(a.target) !== contentHash(b.target)) reasons.push("different_component");
-    if (a.environmentHash !== b.environmentHash) reasons.push("different_environment");
+    const sharedEnvironment = baseline.manifest.execution?.compatibility
+      && candidate.manifest.execution?.compatibility
+      && baseline.manifest.execution.packageHash === candidate.manifest.execution.packageHash;
+    if (a.environmentHash !== b.environmentHash && !sharedEnvironment) reasons.push("different_environment");
     if (a.definitionId !== b.definitionId || a.definitionHash !== b.definitionHash) reasons.push("different_evaluation_definition");
   }
   const orderedEvaluators = (manifest: ExperimentManifest) => [...manifest.evaluators].sort((a, b) => a.feedbackKey.localeCompare(b.feedbackKey));
