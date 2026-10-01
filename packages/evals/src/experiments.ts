@@ -89,7 +89,17 @@ export const ExperimentManifestContentSchema = z.object({
   maximumCostUsd: MoneySchema.nullable(),
   dataset: ImmutableReleaseRefSchema.extend({ revision: z.number().int().positive() }).strict(),
   target: ExperimentTargetSchema,
-  execution: z.object({ packageHash: ReleaseHashSchema, runtimeTargetHash: ReleaseHashSchema, metricPolicyHash: ReleaseHashSchema }).strict().optional(),
+  execution: z.object({
+    packageHash: ReleaseHashSchema,
+    /** Exact placement/adapter evidence; retained even across compatible locations. */
+    runtimeTargetHash: ReleaseHashSchema,
+    metricPolicyHash: ReleaseHashSchema,
+    /** Only qualified shared executors declare this placement-independent protocol. */
+    compatibility: z.object({
+      protocol: z.literal("openpond.evaluation-execution.v1"),
+      targetKind: z.enum(["model", "agent", "harness", "fixture"]),
+    }).strict().optional(),
+  }).strict().optional(),
   lineage: z.object({
     definition: ImmutableReleaseRefSchema.extend({ revision: z.number().int().positive() }).strict().nullable(),
     execution: ImmutableReleaseRefSchema,
@@ -99,6 +109,8 @@ export const ExperimentManifestContentSchema = z.object({
   population: z.array(ExperimentCaseIdentitySchema).min(1).max(10_000),
   createdAt: ReleaseTimestampSchema,
 }).strict().superRefine((value, context) => {
+  if (value.execution?.compatibility && value.execution.compatibility.targetKind !== value.target.kind)
+    context.addIssue({ code: "custom", path: ["execution", "compatibility"], message: "Execution compatibility differs from its admitted target kind." });
   if (value.lineage && value.id !== (value.lineage.scoringPassId ?? value.lineage.execution.id))
     context.addIssue({ code: "custom", path: ["lineage"], message: "Experiment identity must match its execution or independent scoring pass." });
   if (new Set(value.population.map(experimentCaseKey)).size !== value.population.length)
@@ -245,7 +257,13 @@ export function compareExperiments(
     || baseline.manifest.dataset.contentHash !== candidate.manifest.dataset.contentHash
     || baseline.manifest.dataset.revision !== candidate.manifest.dataset.revision) reasons.push("different_dataset_version");
   if (baseline.manifest.target.kind !== candidate.manifest.target.kind) reasons.push("different_target_kind");
-  if (contentHash(baseline.manifest.execution ?? null) !== contentHash(candidate.manifest.execution ?? null)) reasons.push("different_execution_contract");
+  const executionContract = (manifest: ExperimentManifest) => {
+    const execution = manifest.execution;
+    if (!execution?.compatibility) return execution ?? null;
+    const { runtimeTargetHash: _placementEvidence, ...semantic } = execution;
+    return semantic;
+  };
+  if (contentHash(executionContract(baseline.manifest)) !== contentHash(executionContract(candidate.manifest))) reasons.push("different_execution_contract");
   if (baseline.manifest.target.kind === "harness" && candidate.manifest.target.kind === "harness") {
     const a = baseline.manifest.target.source; const b = candidate.manifest.target.source;
     if (a.profileId !== b.profileId || contentHash(a.target) !== contentHash(b.target)) reasons.push("different_component");
