@@ -166,11 +166,13 @@ jobs:
             else
               latest_stable_tag="$(bash scripts/latest-stable-release-tag.sh)"
             fi
+            # CLI publisher checks registry latest under its lock for new
+            # publication; exact existing-version recovery never touches latest.
             if [[ -n "${latest_stable_tag}" ]]; then
               latest_stable_version="${latest_stable_tag#cli-}"
               latest_stable_version="${latest_stable_version#v}"
               highest_version="$(printf '%s\n%s\n' "${latest_stable_version}" "${version}" | sort -V | tail -n 1)"
-              if [[ "${highest_version}" != "${version}" || ( "${latest_stable_version}" == "${version}" && "${target}" != "cli" ) ]]; then
+              if [[ "${target}" != "cli" && ( "${highest_version}" != "${version}" || "${latest_stable_version}" == "${version}" ) ]]; then
                 echo "Stable release ${version} must be newer than ${latest_stable_version}." >&2
                 exit 1
               fi
