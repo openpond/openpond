@@ -1,3 +1,4 @@
+import type { ProfileOriginAuthority } from "./local-experiment-profile-origin.js";
 import { z } from "zod";
 import { DatasetPopulationPageSchema } from "openpond-sdk/dataset-workspaces";
 import { validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
@@ -23,6 +24,8 @@ export function createLocalExperimentSourceChoices(deps: {
   store: HarnessStateStore; native: QualifiedLocalNativeHarness; workflows: Workflows;
   remoteSource?: (workspace: Awaited<ReturnType<HarnessStateStore["getHarnessWorkspace"]>> & {}, release: {id:string;contentHash:string}) => Promise<StandaloneHarnessExperimentSource>;
   library?: typeof loadOpenPondProfileLibrary;
+  originProfiles?:()=>Promise<Array<{ref:OpenPondProfileRef;name:string}>>;
+  authorizeOrigin?:ProfileOriginAuthority;
   loadPackage:(definition:ProfileEvaluationDefinition,profileId:string,harnessRelease:{id:string;contentHash:string})=>Promise<TasksetPackage>;
 }) {
   async function discover():Promise<{choices:LocalExperimentSourceChoices;packages:Map<string,TasksetPackage>}> {
@@ -53,11 +56,11 @@ export function createLocalExperimentSourceChoices(deps: {
       }
     }
     const library=await (deps.library??loadOpenPondProfileLibrary)();
-    for (const entry of library.profiles) {
-      if (entry.ref.source !== "local" || profiles.length >= 100) continue;
+    for (const entry of [...library.profiles.filter(entry=>entry.ref.source==="local"),...await deps.originProfiles?.()??[]]) {
+      if (profiles.length >= 100) continue;
       try {
         const workflows=await deps.workflows(entry.ref as OpenPondProfileRef);
-        await resolveLocalProfileExperimentSource(deps.store,workflows.harnessRelease,entry.ref);
+        await resolveLocalProfileExperimentSource(deps.store,workflows.harnessRelease,entry.ref,deps.authorizeOrigin);
         const catalog=await profileEvaluationsForRelease({store:deps.store,ref:entry.ref,sourceRevision:workflows.sourceRevision,harnessRelease:workflows.harnessRelease});
         for (const definition of catalog.definitions) {
           if (profiles.length>=100) break;

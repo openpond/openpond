@@ -6,25 +6,26 @@ import type { OpenPondProfileRef } from "@openpond/contracts";
 import { PROFILE_HARNESS_WORKSPACE_PREFIX } from "../harness/profile-harness-workspace-identity.js";
 import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { loadLocalHarnessRuntimeFromRelease } from "../harness/local-harness-skill-runtime.js";
+import type { ProfileOriginAuthority } from "./local-experiment-profile-origin.js";
 import { LocalExperimentError } from "./local-experiment-contract.js";
 
 /** Validate persisted device authority before reading immutable Profile bytes.
  * The canonical source runtime then checks program/dependency compatibility. */
-export async function resolveLocalProfileExperimentSource(store:HarnessStateStore,reference:{id:string;contentHash:string},profileRef?:OpenPondProfileRef) {
+export async function resolveLocalProfileExperimentSource(store:HarnessStateStore,reference:{id:string;contentHash:string},profileRef?:OpenPondProfileRef,authorizeOrigin?:ProfileOriginAuthority) {
   const release=await store.getHarnessReleaseRecord(reference.contentHash);
   const workspace=release&&await store.getHarnessWorkspace(release.workspaceId);
-  if(!release||!workspace||release.harnessRelease.id!==reference.id||workspace.location!=="local"
-    ||workspace.ownerScope.kind!=="personal"||workspace.ownerScope.id!=="desktop-personal"
-    ||workspace.metadata.sourceLayout!=="openpond.harnessSourceManifest.v1"
-    ||typeof release.harnessRelease.metadata.profileRepositoryId==="string"||typeof release.agentSnapshot.metadata.profileRepositoryId==="string")
-    throw new LocalExperimentError("local_profile_source_unavailable","The exact device-owned Profile Harness is unavailable.",403);
-  const provenance=release.harnessRelease.metadata.profile as {id?:string;sourceRevision?:string;repositoryId?:string}|undefined;
-  if(profileRef&&(profileRef.source!=="local"||provenance?.id!==profileRef.profileId
-    ||provenance.repositoryId&&provenance.repositoryId!==profileRef.repositoryId))
-    throw new LocalExperimentError("local_profile_origin_access_denied","The retained Harness differs from this exact Profile reference.",403);
-  if(workspace.metadata.selectionEligible===false) {
-    if(!profileRef||!provenance?.repositoryId||provenance.repositoryId!==profileRef.repositoryId||workspace.id!==`${PROFILE_HARNESS_WORKSPACE_PREFIX}${contentHash({ref:profileRef,sourceRevision:provenance.sourceRevision}).slice(0,24)}`)
-      throw new LocalExperimentError("local_profile_origin_access_denied","This explicit Profile release requires its canonical accepted Profile reference.",403);
+  if(!release||!workspace||release.harnessRelease.id!==reference.id||workspace.location!=="local"||workspace.metadata.sourceLayout!=="openpond.harnessSourceManifest.v1")
+    throw new LocalExperimentError("local_profile_source_unavailable","The exact Profile Harness is unavailable.",403);
+  const remote=workspace.metadata.profileExperimentOrigin!==undefined;
+  if(remote) {
+    if(!authorizeOrigin||!profileRef)throw new LocalExperimentError("local_profile_origin_access_denied","This source requires its authenticated origin.",403);
+    await authorizeOrigin(workspace,reference,profileRef);
+  } else {
+    if(workspace.ownerScope.kind!=="personal"||workspace.ownerScope.id!=="desktop-personal"||typeof release.harnessRelease.metadata.profileRepositoryId==="string"||typeof release.agentSnapshot.metadata.profileRepositoryId==="string")
+      throw new LocalExperimentError("local_profile_origin_access_denied","The Profile is not device-owned.",403);
+    const provenance=release.harnessRelease.metadata.profile as {id?:string;sourceRevision?:string;repositoryId?:string}|undefined;
+    if(profileRef&&(profileRef.source!=="local"||provenance?.id!==profileRef.profileId||provenance.repositoryId&&provenance.repositoryId!==profileRef.repositoryId))throw new LocalExperimentError("local_profile_origin_access_denied","The retained Harness differs from this exact Profile reference.",403);
+    if(workspace.metadata.selectionEligible===false&&(!profileRef||!provenance?.repositoryId||provenance.repositoryId!==profileRef.repositoryId||workspace.id!==`${PROFILE_HARNESS_WORKSPACE_PREFIX}${contentHash({ref:profileRef,sourceRevision:provenance.sourceRevision}).slice(0,24)}`))throw new LocalExperimentError("local_profile_origin_access_denied","This explicit Profile release requires its canonical accepted reference.",403);
   }
   const runtime=await loadLocalHarnessRuntimeFromRelease({workspace,release});
   const files=new Map<string,Uint8Array>();
@@ -36,7 +37,8 @@ export async function resolveLocalProfileExperimentSource(store:HarnessStateStor
     tools:declarations.map(tool=>({name:tool.name,inputSchema:tool.inputSchema,
       definition:{type:"function",function:{name:tool.name,description:tool.description,parameters:tool.inputSchema}}}))});
   const current=await store.getHarnessWorkspace(workspace.id);
-  if(!current||contentHash(current.ownerScope)!==contentHash(workspace.ownerScope))
+  if(!current||contentHash(current.ownerScope)!==contentHash(workspace.ownerScope)||contentHash(current.metadata)!==contentHash(workspace.metadata))
     throw new LocalExperimentError("local_profile_origin_access_denied","Profile source ownership changed during admission.",403);
+  if(remote)await authorizeOrigin!(workspace,reference,profileRef!);
   return runtime;
 }
