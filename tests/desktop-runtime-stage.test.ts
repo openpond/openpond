@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import {
   artifactArchitectureLabel,
   unpackedPackageCandidates
-} from "../scripts/check-desktop-package-budgets";
+} from "../scripts/check-desktop-package";
 import { runtimeInventoryVerification } from "../scripts/desktop-runtime-inventory";
 import {
   assertStandaloneDesktopBundle,

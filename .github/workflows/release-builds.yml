@@ -3,6 +3,14 @@ name: Release builds
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: Release artifact
+        required: true
+        default: desktop
+        type: choice
+        options:
+          - desktop
+          - cli
       channel:
         description: Release channel
         required: true
@@ -22,13 +30,14 @@ on:
       - master
     paths:
       - "apps/desktop/package.json"
+      - "apps/cli/package.json"
 
 permissions:
   contents: read
   checks: read
 
 concurrency:
-  group: release-builds-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}', github.ref, inputs.channel) || github.ref }}
+  group: release-builds-${{ github.event_name == 'push' && github.sha || format('{0}-{1}-{2}', github.ref, inputs.target || 'desktop', inputs.channel || 'nightly') }}
   cancel-in-progress: ${{ github.event_name == 'schedule' }}
 
 jobs:
@@ -36,6 +45,7 @@ jobs:
     name: Resolve release metadata
     runs-on: ubuntu-latest
     outputs:
+      target: ${{ steps.release.outputs.target }}
       channel: ${{ steps.release.outputs.channel }}
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
@@ -54,11 +64,15 @@ jobs:
         name: Resolve channel and version
         shell: bash
         env:
+          INPUT_TARGET: ${{ github.event.inputs.target }}
           INPUT_CHANNEL: ${{ github.event.inputs.channel }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
+          target="$(node scripts/release-build-target.mjs)"
+          manifest="apps/${target}/package.json"
           short_sha="$(git rev-parse --short HEAD)"
           ref="${GITHUB_SHA}"
           should_release="true"
@@ -70,13 +84,13 @@ jobs:
             channel="${INPUT_CHANNEL:-nightly}"
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/master" ]]; then
             channel="stable"
-            raw_version="$(node -p "require('./apps/desktop/package.json').version")"
-            if ! git cat-file -e "${GITHUB_SHA}^:apps/desktop/package.json"; then
-              echo "Cannot resolve the previous Desktop version from ${GITHUB_SHA}^." >&2
+            raw_version="$(node -p "require('./${manifest}').version")"
+            if ! git cat-file -e "${RELEASE_BEFORE}:${manifest}"; then
+              echo "Cannot resolve the previous ${target} version from ${RELEASE_BEFORE}." >&2
               exit 1
             fi
             previous_version="$(
-              git show "${GITHUB_SHA}^:apps/desktop/package.json" \
+              git show "${RELEASE_BEFORE}:${manifest}" \
                 | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).version)"
             )"
             if [[ "${raw_version}" == "${previous_version}" ]]; then
@@ -93,6 +107,7 @@ jobs:
           fi
 
           if [[ "${channel}" == "stable" ]]; then
+            test "${GITHUB_REF}" = "refs/heads/master"
             if [[ -z "${raw_version}" ]]; then
               raw_version="${INPUT_VERSION}"
             fi
@@ -132,16 +147,32 @@ jobs:
             exit 1
           fi
 
+          tag="v${version}"
+          if [[ "${target}" == "cli" ]]; then
+            tag="cli-v${version}"
+            release_name="OpenPond CLI v${version}"
+            make_latest="false"
+          fi
+
           if [[ "${channel}" == "stable" && "${should_release}" == "true" ]]; then
-            if git rev-parse --verify --quiet "refs/tags/v${version}" >/dev/null; then
-              echo "Stable tag v${version} already exists. Rerun its failed workflow instead of creating another release." >&2
-              exit 1
+            if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
+              if [[ "${target}" != "cli" || "$(git rev-list -n 1 "${tag}")" != "${ref}" ]]; then
+                echo "Release tag ${tag} already exists on another source or is a Desktop release." >&2
+                exit 1
+              fi
             fi
-            latest_stable_tag="$(bash scripts/latest-stable-release-tag.sh)"
+            if [[ "${target}" == "cli" ]]; then
+              latest_stable_tag="$(git tag --list 'cli-v*' --sort=-version:refname | head -n 1)"
+            else
+              latest_stable_tag="$(bash scripts/latest-stable-release-tag.sh)"
+            fi
+            # CLI publisher checks registry latest under its lock for new
+            # publication; exact existing-version recovery never touches latest.
             if [[ -n "${latest_stable_tag}" ]]; then
-              latest_stable_version="${latest_stable_tag#v}"
+              latest_stable_version="${latest_stable_tag#cli-}"
+              latest_stable_version="${latest_stable_version#v}"
               highest_version="$(printf '%s\n%s\n' "${latest_stable_version}" "${version}" | sort -V | tail -n 1)"
-              if [[ "${highest_version}" != "${version}" || "${latest_stable_version}" == "${version}" ]]; then
+              if [[ "${target}" != "cli" && ( "${highest_version}" != "${version}" || "${latest_stable_version}" == "${version}" ) ]]; then
                 echo "Stable release ${version} must be newer than ${latest_stable_version}." >&2
                 exit 1
               fi
@@ -149,9 +180,10 @@ jobs:
           fi
 
           {
+            echo "target=${target}"
             echo "channel=${channel}"
             echo "version=${version}"
-            echo "tag=v${version}"
+            echo "tag=${tag}"
             echo "release_name=${release_name}"
             echo "prerelease=${prerelease}"
             echo "make_latest=${make_latest}"
@@ -179,7 +211,7 @@ jobs:
 
       - name: Verify stable source version
         if: steps.release.outputs.channel == 'stable' && steps.release.outputs.should_release == 'true'
-        run: pnpm run release:version:check --version "${{ steps.release.outputs.version }}"
+        run: pnpm run release:version:check --version "${{ steps.release.outputs.version }}" --target "${{ steps.release.outputs.target }}"
 
   ci_gate:
     name: Require green CI
@@ -238,9 +270,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Prepare release build config
+        if: needs.meta.outputs.target == 'desktop'
         run: pnpm exec tsx scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
-      - run: pnpm run build:artifacts
+      - if: needs.meta.outputs.target == 'desktop'
+        run: pnpm run build:artifacts
+      - if: needs.meta.outputs.target == 'cli'
+        run: pnpm run bundle:server && pnpm run build:web
       - run: pnpm run cli:build:from-web
       - run: pnpm run cli:distribution:check
 
@@ -256,7 +292,7 @@ jobs:
   build:
     name: ${{ matrix.name }}
     needs: [meta, source_artifacts]
-    if: needs.meta.outputs.should_release == 'true'
+    if: needs.meta.outputs.target == 'desktop' && needs.meta.outputs.should_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -353,8 +389,8 @@ jobs:
           xcrun stapler validate "${app_path}"
           spctl --assess --type execute --verbose=4 "${app_path}"
 
-      - name: Enforce desktop package budgets
-        run: pnpm run budgets:desktop-package
+      - name: Verify desktop package integrity and report size
+        run: pnpm run desktop:package:check
 
       - name: Install Linux packaged-smoke display dependency
         if: runner.os == 'Linux'
@@ -435,11 +471,15 @@ jobs:
 
   npm_publish:
     name: Publish stable CLI package to npm
-    # Publish the qualified CLI independently; desktop release still requires every platform.
+    # CLI-only publication keeps the existing npm trusted-publisher identity.
     needs: [meta, source_artifacts]
-    if: needs.meta.outputs.should_release == 'true' && needs.meta.outputs.channel == 'stable'
+    if: needs.meta.outputs.should_release == 'true' && needs.meta.outputs.channel == 'stable' && needs.meta.outputs.target == 'cli'
     runs-on: ubuntu-latest
     environment: npm-production
+    # One lock across push/manual runs; check registry latest after acquiring it.
+    concurrency:
+      group: openpond-cli-npm-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -459,21 +499,43 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
-      - name: Publish exact stable npm package through OIDC
+      - name: Publish and verify the exact CLI artifact through OIDC
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          RELEASE_SHA: ${{ needs.meta.outputs.ref }}
         run: |
           set -euo pipefail
-          test "$(node -p "require('./apps/cli/package.json').version")" = "${{ needs.meta.outputs.version }}"
           npm install --global npm@11.18.0
-          npm publish ./apps/cli --access public --ignore-scripts
+          node scripts/publish-cli-release.mjs
+
+  cli_release:
+    name: Publish CLI GitHub release
+    needs: [meta, npm_publish]
+    if: needs.meta.outputs.target == 'cli' && needs.npm_publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+          fetch-depth: 0
+      - name: Create independent CLI release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          RELEASE_SHA: ${{ needs.meta.outputs.ref }}
+          RELEASE_NAME: ${{ needs.meta.outputs.release_name }}
+        run: node scripts/publish-cli-github-release.mjs
 
   release:
     name: Publish GitHub Release
-    needs: [meta, build, npm_publish]
+    needs: [meta, build]
     if: >-
       always()
       && needs.meta.outputs.should_release == 'true'
       && needs.build.result == 'success'
-      && (needs.meta.outputs.channel != 'stable' || needs.npm_publish.result == 'success')
+      && needs.meta.outputs.target == 'desktop'
     runs-on: ubuntu-latest
     permissions:
       contents: write

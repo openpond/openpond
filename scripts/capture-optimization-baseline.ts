@@ -30,7 +30,7 @@ import { collectProjectSourceUploadEntries } from "../apps/cli/src/cli/project-a
 import {
   collectRendererBundleMetrics,
   measureServerStartup,
-} from "./check-performance-budgets";
+} from "./report-performance";
 import { clearWorkspaceDiffCacheForTests, loadWorkspaceDiffAtPath } from "../apps/server/src/workspace/workspace-diff";
 
 type BaselineOptions = {

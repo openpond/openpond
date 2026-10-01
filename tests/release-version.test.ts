@@ -37,6 +37,10 @@ async function createReleaseFixture(): Promise<string> {
     version: "0.0.23",
     openpondReleaseVersioned: true,
   });
+  await writeJson(path.join(root, "apps", "cli", "package.json"), {
+    name: "openpond",
+    version: "9.0.0",
+  });
   await writeJson(path.join(root, "packages", "independent", "package.json"), {
     name: "independent",
     version: "4.2.0",
@@ -72,6 +76,8 @@ describe("release source versions", () => {
         await readFile(path.join(root, "packages", "independent", "package.json"), "utf8"),
       ) as { version: string };
       expect(independent.version).toBe("4.2.0");
+      const cli = JSON.parse(await readFile(path.join(root, "apps", "cli", "package.json"), "utf8"));
+      expect(cli.version).toBe("9.0.0");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

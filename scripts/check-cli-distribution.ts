@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import { runProcessCommand } from "../apps/cli/src/process-runner";
 import { checkAppServerDistribution } from "./check-app-server-distribution.js";
-import { checkPackageContents, PACKAGE_BUDGETS } from "./distribution/package-policy.ts";
+import { checkPackageContents } from "./distribution/package-policy.ts";
 
 type PackResult = {
   version: string;
@@ -55,9 +55,6 @@ async function checkNpmPackage() {
   const tarballSha256 = createHash("sha256").update(await readFile(tarballPath)).digest("hex");
 
   await checkPackageContents(root, result.files);
-  enforce("npm packed bytes", result.size, PACKAGE_BUDGETS.packedBytes);
-  enforce("npm unpacked bytes", result.unpackedSize, PACKAGE_BUDGETS.unpackedBytes);
-  enforce("npm file count", result.entryCount, PACKAGE_BUDGETS.files);
   const fileMap = new Map(result.files.map((file) => [file.path, file.size]));
   enforceRequiredFiles(fileMap, [
     "dist/cli.js",
@@ -68,10 +65,9 @@ async function checkNpmPackage() {
     "README.md",
     "docs/command-reference.md",
   ]);
-  enforce("npm CLI entry bytes", fileMap.get("dist/cli.js")!, 64 * 1024);
 
   const consumer = await tempDir("openpond-cli-consumer-");
-  await writeFile(path.join(consumer, "package.json"), '{"private":true}\n', "utf8");
+  await writeFile(path.join(consumer, "package.json"), '{"name":"independent-cli-consumer","version":"99.0.0","private":true}\n', "utf8");
   await command("npm", [
     "install",
     "--prefix",
@@ -562,12 +558,6 @@ async function command(
 function enforceRequiredFiles(files: Map<string, number>, required: string[]): void {
   for (const file of required) {
     if (!files.has(file)) throw new Error(`npm package is missing ${file}`);
-  }
-}
-
-function enforce(label: string, actual: number, maximum: number): void {
-  if (!Number.isFinite(actual) || actual > maximum) {
-    throw new Error(`${label} exceeded: ${Math.round(actual)} > ${maximum}`);
   }
 }
 

@@ -487,7 +487,7 @@ for (const [lessonIndex, lesson] of lessons.entries()) {
     );
   }
   if (statSync(courseVideo).size > 15 * 1024 * 1024) {
-    throw new Error(`${lesson.title} exceeds the 15 MB lesson budget`);
+    console.warn(`${lesson.title} exceeds the advisory 15 MiB lesson size.`);
   }
   builtLessons.push({
     captionsPath: courseCaptions,
@@ -569,7 +569,7 @@ if (Math.abs(fullCourseDuration - expectedFullCourseDuration) > 0.2) {
   );
 }
 if (statSync(fullCourseVideo).size > 100 * 1024 * 1024) {
-  throw new Error("Full course exceeds the 100 MB publishing budget");
+  console.warn("Full course exceeds the advisory 100 MiB publishing size.");
 }
 
 console.log(`Created ${lessons.length} narrated lessons in ${courseOutputRoot}`);

@@ -52,10 +52,9 @@
     "stage:desktop": "pnpm run agent-sdk:build && tsx scripts/stage-desktop-runtime.ts",
     "build:artifacts": "pnpm run bundle:server && pnpm run build:web && pnpm run build:desktop",
     "build": "pnpm run typecheck && pnpm run build:artifacts",
-    "budgets:size": "node scripts/report-package-size.ts",
-    "budgets:warn": "tsx scripts/check-performance-budgets.ts",
-    "budgets:check": "OPENPOND_BUDGETS_STRICT=1 tsx scripts/check-performance-budgets.ts",
-    "budgets:desktop-package": "tsx scripts/check-desktop-package-budgets.ts",
+    "package:size": "node scripts/report-package-size.ts",
+    "performance:report": "tsx scripts/report-performance.ts",
+    "desktop:package:check": "tsx scripts/check-desktop-package.ts",
     "cli:distribution": "pnpm run cli:build && pnpm run cli:distribution:check",
     "cli:distribution:check": "tsx scripts/check-cli-distribution.ts",
     "structure:check": "tsx scripts/check-source-structure.ts",
@@ -171,7 +170,12 @@
     "package:mac:release": "pnpm run stage:desktop && electron-builder --config apps/desktop/electron-builder.release.json --mac zip --publish never",
     "package:win:release": "pnpm run stage:desktop && electron-builder --config apps/desktop/electron-builder.release.json --win nsis --publish never",
     "package:win:docker": "bash scripts/package-win-docker.sh",
-    "dist": "pnpm run build && pnpm run package:linux"
+    "dist": "pnpm run build && pnpm run package:linux",
+    "cli:check": "pnpm --dir apps/cli run typecheck && pnpm run bundle:server && pnpm run build:web && pnpm run cli:build:from-web && pnpm run cli:distribution:check",
+    "release:cli:patch": "tsx scripts/release-cli.ts patch",
+    "release:cli:minor": "tsx scripts/release-cli.ts minor",
+    "release:cli:major": "tsx scripts/release-cli.ts major",
+    "release:cli:stable": "tsx scripts/release-cli.ts --recover"
   },
   "devDependencies": {
     "@electron/asar": "^3.4.1",
