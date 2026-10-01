@@ -176,6 +176,13 @@ comparison requires equal dataset version, population, evaluators and execution
 contract. Harness comparison also requires the same component, evaluation
 definition and environment; candidate source/Harness revisions can differ.
 
+Qualified shared executors may declare `execution.compatibility` with the same
+protocol and target kind. For those pairs, comparison matches the package and
+metric policy while retaining each exact `runtimeTargetHash` as placement
+evidence. A missing declaration keeps the original exact-runtime comparison.
+The declaration must match the admitted target kind; it does not bypass dataset,
+population, evaluator, component, definition or environment checks.
+
 `compareExperiments` aligns cases and reports per-feedback eligibility, exclusion
 reasons and paired means/deltas. Only matching completed cases with scored
 numeric or Boolean feedback contribute. Failed, cancelled, absent or ungraded
