@@ -190,7 +190,12 @@ jobs:
       - name: Check selected package
         env:
           RELEASE_PACKAGE: ${{ needs.scope.outputs.release_package }}
-        run: pnpm --dir "packages/${RELEASE_PACKAGE}" run check
+        run: |
+          if [[ "${RELEASE_PACKAGE}" == "cli" ]]; then
+            pnpm run cli:check
+          else
+            pnpm --dir "packages/${RELEASE_PACKAGE}" run check
+          fi
 
   quality:
     name: Static quality

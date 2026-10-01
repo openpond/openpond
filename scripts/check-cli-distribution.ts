@@ -67,7 +67,7 @@ async function checkNpmPackage() {
   ]);
 
   const consumer = await tempDir("openpond-cli-consumer-");
-  await writeFile(path.join(consumer, "package.json"), '{"private":true}\n', "utf8");
+  await writeFile(path.join(consumer, "package.json"), '{"name":"independent-cli-consumer","version":"99.0.0","private":true}\n', "utf8");
   await command("npm", [
     "install",
     "--prefix",

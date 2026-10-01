@@ -3,10 +3,11 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readPackageRelease } from "./package-release-scope.mjs";
+import { readPackageRelease, packageReleaseManifest } from "./package-release-scope.mjs";
 
 type ReleaseKind = "patch" | "minor" | "major";
 const packages = {
+  cli: { name: "openpond", prerequisite: null },
   evals: { name: "@openpond/evals", prerequisite: "harness" },
   harness: { name: "@openpond/harness", prerequisite: null },
   sdk: { name: "openpond-sdk", prerequisite: null },
@@ -31,7 +32,7 @@ export async function preparePackageRelease(key: keyof typeof packages): Promise
   run("git", ["fetch", "origin", "master", "--tags"]);
   if (output("git", ["rev-parse", "HEAD"]) !== output("git", ["rev-parse", "origin/master"])) throw new Error("Local master must exactly match origin/master.");
   const config = packages[key];
-  const manifestPath = `packages/${key}/package.json`;
+  const manifestPath = packageReleaseManifest(key);
   const manifest = JSON.parse(await readFile(path.join(root, manifestPath), "utf8"));
   if (manifest.name !== config.name) throw new Error(`Unexpected package name in ${manifestPath}`);
   const match = String(manifest.version).match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
@@ -60,5 +61,5 @@ export async function preparePackageRelease(key: keyof typeof packages): Promise
     await writeFile(bodyFile, `Publishes \`${config.name}@${version}\` after this PR merges and the current commit's CI passes.\n\n${lane}\n`);
     run("gh", ["pr", "create", "--base", "master", "--head", branch, "--title", title, "--body-file", bodyFile]);
   } finally { await rm(temp, { recursive: true, force: true }); }
-  console.log(`Merge the release PR after CI passes. release-${key}.yml will publish ${config.name}@${version}.`);
+  console.log(`Merge the release PR after CI passes. ${key === "cli" ? "release-builds.yml (CLI only)" : `release-${key}.yml`} will publish ${config.name}@${version}.`);
 }

@@ -13,8 +13,8 @@ export function getInstalledCliVersion(): string {
     try {
       const packageJsonPath = new URL(candidatePath, import.meta.url);
       const raw = readFileSync(packageJsonPath, "utf-8");
-      const parsed = JSON.parse(raw) as { version?: unknown };
-      if (typeof parsed.version === "string") {
+      const parsed = JSON.parse(raw) as { name?: unknown; version?: unknown };
+      if (parsed.name === "openpond" && typeof parsed.version === "string") {
         return parsed.version;
       }
     } catch {
@@ -23,8 +23,8 @@ export function getInstalledCliVersion(): string {
   }
   try {
     const raw = readFileSync(path.join(path.dirname(process.execPath), "package.json"), "utf-8");
-    const parsed = JSON.parse(raw) as { version?: unknown };
-    if (typeof parsed.version === "string") {
+    const parsed = JSON.parse(raw) as { name?: unknown; version?: unknown };
+    if (parsed.name === "openpond" && typeof parsed.version === "string") {
       return parsed.version;
     }
   } catch {

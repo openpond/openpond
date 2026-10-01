@@ -1,10 +1,11 @@
+import { resolveReleaseBuildTarget } from "../scripts/release-build-target.mjs";
 import { describe, expect, test } from "vitest";
-import { classifyPackageRelease, isTrustedCiProof, readPackageRelease, releasePackages } from "../scripts/package-release-scope.mjs";
+import { classifyPackageRelease, isTrustedCiProof, readPackageRelease, releasePackages, packageReleaseManifest } from "../scripts/package-release-scope.mjs";
 
 // Accidental fast-lane selection could publish application-consuming changes
 // without application checks. Exercise that security boundary, not YAML text.
 describe("package release eligibility", () => {
-  const change = (key = "evals") => ({ status: "M", path: `packages/${key}/package.json`,
+  const change = (key = "evals") => ({ status: "M", path: packageReleaseManifest(key),
     before: JSON.stringify({ name: releasePackages[key], version: "1.2.3", dependencies: { zod: "^4" } }),
     after: JSON.stringify({ dependencies: { zod: "^4" }, version: "1.2.4", name: releasePackages[key] }),
   });
@@ -37,5 +38,21 @@ describe("package release eligibility", () => {
       expect(isTrustedCiProof({ ...run, ...patch }, jobs, sha, repo)).toBe(false);
     }
     for (const badJobs of [[], [...jobs, ...jobs], [{ ...jobs[0], conclusion: "skipped" }]]) expect(isTrustedCiProof(run, badJobs, sha, repo)).toBe(false);
+  });
+});
+
+// A package release must not allocate unrelated Desktop jobs, or silently drop
+// one artifact when both owners have changed versions.
+describe("release artifact ownership", () => {
+  test("separates CLI/Desktop pushes, schedules and explicit recovery", () => {
+    const push = { event: "push", cliVersion: "1.1.0", previousCliVersion: "1.0.0", desktopVersion: "9.0.0", previousDesktopVersion: "9.0.0" };
+    expect(resolveReleaseBuildTarget(push)).toBe("cli");
+    expect(resolveReleaseBuildTarget({ ...push, cliVersion: "1.0.0", desktopVersion: "9.1.0" })).toBe("desktop");
+    expect(() => resolveReleaseBuildTarget({ ...push, desktopVersion: "9.1.0" })).toThrow(/separate CLI and Desktop/);
+    expect(() => resolveReleaseBuildTarget({ ...push, previousCliVersion: undefined })).toThrow(/Previous release versions/);
+    expect(resolveReleaseBuildTarget({ event: "workflow_dispatch", target: "cli", channel: "stable" })).toBe("cli");
+    expect(() => resolveReleaseBuildTarget({ event: "workflow_dispatch", target: "cli", channel: "nightly" })).toThrow(/stable channel/);
+    expect(() => resolveReleaseBuildTarget({ event: "workflow_dispatch", target: "other", channel: "stable" })).toThrow(/Unsupported release target/);
+    expect(resolveReleaseBuildTarget({ event: "schedule" })).toBe("desktop");
   });
 });
