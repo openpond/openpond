@@ -672,6 +672,11 @@ export async function removeOpenPondProfile(
   return loadOpenPondProfileLibrary();
 }
 
+/** Inspect an explicit server-owned source tree without selecting or registering it. */
+export async function inspectOpenPondProfileSource(repoPath: string, profile: string): Promise<OpenPondProfileState> {
+  return loadOpenPondProfileStateForConfig({ mode: "local", repoPath, profile });
+}
+
 async function loadOpenPondProfileStateForConfig(
   active: LocalOpenPondProfileConfig
 ): Promise<OpenPondProfileState> {

@@ -89,6 +89,9 @@ export async function importProfileIntoLocalHarnessWorkspace(input: {
   sourceRevision?: string;
   repositoryId?: string;
   selectionEligible?: boolean;
+  /** Trusted server materialization only; never accepted from a renderer request. */
+  originOwnerScope?: HarnessWorkspace["ownerScope"];
+  originMetadata?: HarnessWorkspace["metadata"];
   now?: () => string;
 }): Promise<{ workspace: HarnessWorkspace; release: LocalHarnessReleaseRecord }> {
   if (input.profile.mode !== "local" || !input.profile.sourcePath) {
@@ -207,6 +210,9 @@ async function createLocalHarnessWorkspaceFromInitializer(input: {
   initializeSource: (sourceDir: string) => Promise<void>;
   compilationWorkspaceId?: string;
   selectionEligible?: boolean;
+  /** Trusted server materialization only; never accepted from a renderer request. */
+  originOwnerScope?: HarnessWorkspace["ownerScope"];
+  originMetadata?: HarnessWorkspace["metadata"];
   now?: () => string;
 }): Promise<{ workspace: HarnessWorkspace; release: LocalHarnessReleaseRecord }> {
   const now = input.now ?? (() => new Date().toISOString());
@@ -238,7 +244,7 @@ async function createLocalHarnessWorkspaceFromInitializer(input: {
     const workspace = HarnessWorkspaceSchema.parse({
       schemaVersion: "openpond.harnessWorkspace.v1",
       id: input.id,
-      ownerScope: { kind: "personal", id: input.ownerId },
+      ownerScope: input.originOwnerScope ?? { kind: "personal", id: input.ownerId },
       name: input.name,
       location: "local",
       sourceRevision: compiled.sourceRevision,
@@ -255,6 +261,7 @@ async function createLocalHarnessWorkspaceFromInitializer(input: {
       createdAt: timestamp,
       updatedAt: timestamp,
       metadata: {
+        ...input.originMetadata,
         sourceLayout: "openpond.harnessSourceManifest.v1",
         ...(input.selectionEligible === false ? { selectionEligible: false } : {}),
       },
