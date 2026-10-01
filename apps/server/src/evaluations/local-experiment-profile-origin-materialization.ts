@@ -48,7 +48,11 @@ export async function materializeProfileOrigin(input: {
   read: ProfileOriginReader;
 }) {
   const tree = responseSchema.parse(
-    await input.read({ branch: input.revision, maxEntries: 5000 }),
+    await input.read({
+      branch: input.revision,
+      path: "__openpond_profile_origin_tree_only__",
+      maxEntries: 5000,
+    }),
   );
   if (tree.commitSha !== input.revision || tree.truncated)
     throw new Error("Profile origin tree is incomplete or changed its commit.");
