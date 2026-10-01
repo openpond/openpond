@@ -1,6 +1,6 @@
 import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "./taskset-authored-contracts.js";
 import { createEnvironmentRelease } from "@openpond/evals";
-import { JavaScriptEnvironmentDefinitionSchema } from "@openpond/evals/javascript-environment";
+import { JavaScriptEnvironmentDefinitionSchema } from "@openpond/evals/javascript-environment/contracts";
 import { learningRef, sealLearningContent } from "@openpond/evals/learning";
 import { contentHash, type ImmutableAssetRef } from "@openpond/harness";
 import { computeTasksetHash } from "./taskset-authored-validation.js";

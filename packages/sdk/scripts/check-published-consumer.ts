@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -56,6 +57,34 @@ async function main(): Promise<void> {
       cwd: consumer,
       stdio: "inherit",
     });
+    // UI consumers need these actual named contracts without importing the
+    // private JavaScript executor. Node-only import checks miss that boundary.
+    const browser = await build({
+      stdin: {
+        contents: [
+          'export { ConnectedHomeSummarySchema, ConnectedSourceSummarySchema, ConnectedCaseRefSchema, ConnectedCaseReadbackSchema } from "openpond-sdk/connected-evidence";',
+          'export { ExperimentImprovementCommandSchema, ExperimentImprovementOptionsSchema, verifyExperimentImprovementState } from "openpond-sdk/experiment-improvements";',
+          'export { HumanReviewCommandSchema } from "openpond-sdk/human-review";',
+          'export { RunExperimentSchema, ExperimentScoringRequestSchema } from "openpond-sdk/experiments";',
+          'export { DatasetWorkspaceReceiptSchema } from "openpond-sdk/dataset-workspaces";',
+          'export { PostTrainingAttachmentSchema, PostTrainingControlSchema, createPostTrainingClient } from "openpond-sdk/post-training";',
+          'export { CandidateEvaluationRequestSchema, createCandidateEvaluationClient } from "openpond-sdk/candidate-evaluations";',
+          'export { ExperimentEvaluationScheduleCommandSchema, ExperimentEvaluationScheduleInputSchema, OpenPondExperimentEvaluationScheduleClient } from "openpond-sdk/experiment-evaluation-schedules";',
+        ].join("\n"),
+        resolveDir: consumer,
+        sourcefile: "packed-browser-contracts.js",
+      },
+      bundle: true,
+      platform: "browser",
+      format: "esm",
+      treeShaking: true,
+      write: false,
+      metafile: true,
+      logLevel: "silent",
+    });
+    if (Object.keys(browser.metafile.inputs).some((file) => /(?:^|\/)(?:quickjs-emscripten-core|@jitl)(?:\/|$)/.test(file))) {
+      throw new Error("Packed browser contracts include the private JavaScript execution runtime.");
+    }
     execFileSync(
       process.execPath,
       [
