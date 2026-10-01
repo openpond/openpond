@@ -1,3 +1,8 @@
+import {EvaluationOperationRecoveryPageSchema} from "@openpond/contracts";
+import {validateReviewedEvaluationIntent,validateReviewedEvaluationCommand} from "./reviewed-evaluation-operation.js";
+import {OpenPondProfileEvaluationDiscoveryClient} from "openpond-sdk/experiments";
+import { connectedWorkspaceOperations, connectedWorkspaceRequest } from "./connected-workspace.js";
+import { ConnectedEvidenceClient } from "openpond-sdk/connected-evidence";
 import { listOpChatModels } from "@openpond/cloud/hosted-chat";
 import { contentHash } from "@openpond/harness";
 import type { SqliteStore } from "../store/store.js";
@@ -19,7 +24,8 @@ import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 
 const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
-  "prepareOperation", "acknowledgeOperation", "feedbackSummary", "harnessSources",
+  ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution",
+  "prepareOperation", "acknowledgeOperation", "retainOperation", "pendingOperations", "feedbackSummary", "harnessSources", "profileEvaluationDiscovery",
   "datasetExperiments", "experiments", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
 const Identity = z.object({ id: Id }).passthrough();
@@ -27,7 +33,7 @@ const Identity = z.object({ id: Id }).passthrough();
 /** The Desktop process owns credentials; the hosted service owns all dispatch,
  * accounting, immutable evidence and authorization. A transport retry carries
  * its original operation ID and never becomes another execution locally. */
-export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,"prepareEvaluationOperation"|"acknowledgeEvaluationOperation">;
+export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,"prepareEvaluationOperation"|"acknowledgeEvaluationOperation"|"retainEvaluationOperation"|"pendingEvaluationOperations"|"readPendingEvaluationOperation">;
   resolveAccess: () => Promise<{ apiBaseUrl: string; token: string; teamId: string }>;resolveActorId?:()=>Promise<string>; fetch?: typeof fetch }) {
   const readFeedback=createFeedbackSummaryReader();
   return { async request(value: unknown) {
@@ -36,22 +42,41 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     if (request.teamId !== access.teamId) throw new Error("The active workspace changed. Refresh before continuing.");
     const options = { baseUrl: access.apiBaseUrl, apiKey: access.token, teamId: access.teamId, fetch: input.fetch };
     const experiments = new OpenPondExperimentsClient(options);
+    const connected = new ConnectedEvidenceClient(options);
     const projects = new OpenPondTrainingProjectClient(options);
     const datasets = new OpenPondDatasetWorkspaceClient(options);
     const catalog = new OpenPondTasksetCatalogClient(options);
+    if(["prepareOperation","acknowledgeOperation","retainOperation","pendingOperations"].includes(request.operation)) {
+      const actorId=await input.resolveActorId?.();
+      if(!actorId?.trim())throw new Error("An authenticated account identity is required to retain operation recovery.");
+      const scopeHash=contentHash({actorId,apiOrigin:new URL(access.apiBaseUrl).origin,teamId:access.teamId,projectId:request.projectId});
+      const fence=async()=> {if(await input.resolveActorId?.()!==actorId||contentHash(await input.resolveAccess())!==contentHash(access))throw new Error("Reviewed operation authority changed.");};
+      const Action=z.enum(["advanced-refiner-start","experiment-evaluation-schedule"]);
+      if(request.operation==="pendingOperations") {
+        const data=z.object({action:Action,cursor:z.string().optional(),limit:z.number().int().min(1).max(100).default(100)}).strict().parse(request.value);
+        const result=EvaluationOperationRecoveryPageSchema.parse(await input.store.pendingEvaluationOperations({...data,scopeHash}));await fence();return result;
+      }
+      const data=z.object({action:z.string().trim().min(1).max(100),intentHash:z.string().regex(/^[a-f0-9]{64}$/),
+        ...(request.operation!=="prepareOperation"?{id:z.uuid()}:{}),
+        ...(request.operation==="acknowledgeOperation"?{expectedPhase:z.literal("reviewed").optional()}:{}),
+        ...(request.operation==="prepareOperation"?{reviewedIntent:z.unknown().optional()}:{}),
+        ...(request.operation==="retainOperation"?{command:z.unknown(),phase:z.enum(["reviewed","dispatching"]).default("reviewed")}:{}),}).strict().parse(request.value);
+      const scope={scopeHash,action:data.action,intentHash:data.intentHash};
+      await fence();
+      if(request.operation==="retainOperation") {
+        Action.parse(data.action);const id=z.uuid().parse("id" in data?data.id:undefined),command="command" in data?data.command:undefined;
+        const original=await input.store.readPendingEvaluationOperation({...scope,id});await fence();
+        const validated=validateReviewedEvaluationCommand({...scope,id,actorId,teamId:access.teamId,projectId:request.projectId,intent:original.reviewedIntent,command});
+        const result=await input.store.retainEvaluationOperation({...scope,id,command:validated,phase:z.enum(["reviewed","dispatching"]).parse("phase" in data?data.phase:"reviewed")});await fence();return result;
+      }
+      const result=request.operation==="prepareOperation"?await input.store.prepareEvaluationOperation({...scope,...("reviewedIntent" in data&&data.reviewedIntent!==undefined?{reviewedIntent:validateReviewedEvaluationIntent(data.action,data.reviewedIntent)}:{})})
+        :await input.store.acknowledgeEvaluationOperation({...scope,id:z.uuid().parse("id" in data?data.id:undefined),...("expectedPhase" in data&&data.expectedPhase!==undefined?{expectedPhase:z.literal("reviewed").parse(data.expectedPhase)}:{})});
+      await fence();return result;
+    }
     const selectedProject = request.projectId ? await projects.get(request.projectId) : null;
     if (selectedProject) {
       const project = selectedProject;
       if (project.archived) throw new Error("This Project is archived. Select an available Project or All projects.");
-    }
-    if(request.operation==="prepareOperation"||request.operation==="acknowledgeOperation") {
-      const actorId=await input.resolveActorId?.();
-      if(!actorId?.trim())throw new Error("An authenticated account identity is required to retain operation recovery.");
-      const data=z.object({action:z.string().trim().min(1).max(100),intentHash:z.string().regex(/^[a-f0-9]{64}$/),
-        ...(request.operation==="acknowledgeOperation"?{id:z.uuid()}:{}),}).strict().parse(request.value);
-      const scope={scopeHash:contentHash({actorId,apiOrigin:new URL(access.apiBaseUrl).origin,teamId:access.teamId,projectId:request.projectId}),action:data.action,intentHash:data.intentHash};
-      return request.operation==="prepareOperation"?input.store.prepareEvaluationOperation(scope)
-        :input.store.acknowledgeEvaluationOperation({...scope,id:z.uuid().parse("id" in data?data.id:undefined)});
     }
     const assertProject = (project: { id: string } | undefined) => {
       if (request.projectId && project?.id !== request.projectId) throw new Error("This resource belongs to another Project.");
@@ -62,7 +87,25 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
       return result;
     };
     const ownedExecution = async (id: string) => { const result = await experiments.get(id); assertProject(result.request.project); return result; };
-    const ownedPass = async (id: string) => { const result = await experiments.scoringPass(id); await ownedExecution(result.request.execution.id); return result; };
+    const ownedRecorded = async (id: string) => { const result = await connected.recordedExecution(id); assertProject({id:result.request.projectId}); return result; };
+    const ownedPass = async (id: string) => { const result = await experiments.scoringPass(id);
+      if(result.request.executionKind === "recorded_evidence") await ownedRecorded(result.request.execution.id);
+      else await ownedExecution(result.request.execution.id); return result; };
+    const connectedResult = await connectedWorkspaceRequest(connected,request.operation,request.value,request.projectId,requireDataset);
+    if (connectedResult) return connectedResult.value;
+    if (request.operation === "connectedSummary") {
+      const value = z.object({from:z.iso.datetime(),to:z.iso.datetime(),projectId:Id.optional()}).strict().parse(request.value);
+      if (request.projectId && value.projectId !== request.projectId) throw new Error("This summary belongs to another Project.");
+      return connected.homeSummary(value);
+    }
+    if(request.operation === "recordedExecution") return ownedRecorded(Identity.parse(request.value).id);
+    if (request.operation === "profileEvaluationDiscovery") {
+      const data=z.object({profileRepositoryId:Id}).strict().parse(request.value);
+      if(selectedProject&&!selectedProject.content.targets.some(item =>
+        (item.target.kind==="harness"||item.target.kind==="suite")&&item.target.profileRepositoryId===data.profileRepositoryId))
+        throw new Error("This Profile evaluation source is not selected in the current Project.");
+      return new OpenPondProfileEvaluationDiscoveryClient(options).read({...data,...(request.projectId?{trainingProjectId:request.projectId}:{})});
+    }
     if (request.operation === "harnessSources") return experiments.harnessSources(
       z.object({cursor:z.string().min(1).max(8192).optional()}).strict().parse(request.value??{}),
     );
@@ -134,7 +177,7 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     }
     if (request.operation === "prepareHarness") return experiments.prepareHarness(PrepareHarnessExperimentSchema.parse(request.value));
     if (request.operation === "run") { const data = RunExperimentSchema.parse(request.value); assertProject(data.request.project); if (data.sourceExperimentId) await ownedExecution(data.sourceExperimentId); return experiments.run(data); }
-    if (request.operation === "score") { const data = ExperimentScoringRequestSchema.parse(request.value); await ownedExecution(data.execution.id); return experiments.score(data); }
+    if (request.operation === "score") { const data = ExperimentScoringRequestSchema.parse(request.value); if(data.executionKind === "recorded_evidence") await ownedRecorded(data.execution.id); else await ownedExecution(data.execution.id); return experiments.score(data); }
     if (request.operation === "compare") {
       const data = z.object({ baselineId: Id, candidateId: Id }).parse(request.value);
       await Promise.all([data.baselineId, data.candidateId].map(id => id.startsWith("score_") ? ownedPass(id) : ownedExecution(id)));
@@ -142,6 +185,9 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     }
     const data = Identity.parse(request.value);
     if (["pass", "passResult", "cancelPass"].includes(request.operation)) { const result = await ownedPass(data.id); return request.operation === "pass" ? result : request.operation === "passResult" ? experiments.scoringResult(data.id) : experiments.cancelScoringPass(data.id); }
+    if(request.operation === "passes" && data.executionKind === "recorded_evidence") {
+      await ownedRecorded(data.id); return experiments.scoringPasses(data.id,{executionKind:"recorded_evidence",afterId:typeof data.afterId==="string"?data.afterId:undefined});
+    }
     const result = await ownedExecution(data.id);
     if (request.operation === "experiment") return result;
     if (request.operation === "result") return experiments.result(data.id);

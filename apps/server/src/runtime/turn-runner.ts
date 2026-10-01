@@ -1,3 +1,4 @@
+import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -525,6 +526,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     profileSkillBodyFromReadResult,
     readProfileSkillForModel,
   } = createNativeToolRuntime({
+    authorizeCandidateTool:deps.authorizeCandidateTool,
     hasPendingSteering: async (sessionId, turnId) => (await inboxStore.pendingTaskInputs(sessionId, turnId)).some((input) => input.kind === "steer"),
     maxRepeatedInvalidToolRequests,
     appendRuntimeEvent,
@@ -554,6 +556,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     throwIfInterrupted,
   });
   const { runHostedToolLoop } = createHostedToolLoopRuntime({
+    candidateAuthoringForTurn:deps.candidateAuthoringForTurn,
+    isolatedProfileEvaluationForTurn:deps.isolatedProfileEvaluationForTurn,
+    authorizeCandidateTool:deps.authorizeCandidateTool,
     taskInbox, inboxStore,
     resolveModelTools: deps.resolveModelTools,
     assertExecutionAllowed: (turnId) => assertTurnConfiguration(deps.storageHome, turnId),
@@ -800,6 +805,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeProfileAction,
     executeProjectAction,
     loadOpenPondProfileStateForRef,
+    resolveCandidateProfile: deps.resolveCandidateProfile,
+    executeCandidateAgentCommand: deps.executeCandidateAgentCommand,
+    executeCandidateCommand: deps.executeCandidateCommand,
+    executeCandidateImage: deps.executeCandidateImage,
   });
 
   function createNativeModelToolDefinitions(
@@ -808,6 +817,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     profileSkillRuntime: ProfileSkillRuntime,
     connectedApps: ResolvedConnectedAppContext[],
     options: {
+      candidateAuthoring?: boolean;
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
@@ -821,6 +831,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       }>;
     } = {}
   ) {
+    if(options.candidateAuthoring)return capabilityCatalogDefinitions(openPondActionCatalog,runtimeEvents,profileSkillRuntime,connectedApps,options);
     return [
       ...capabilityCatalogDefinitions(
       openPondActionCatalog,
@@ -833,7 +844,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ...(deps.harnessModelTools ?? []),
     ];
   }
-  async function sendTurn(sessionId: string, payload: unknown, reservedTurnId?: string): Promise<Turn> {
+  async function sendTurn(sessionId: string, payload: unknown, reservedTurnId?: string, admission?: StoredTurnAdmission): Promise<Turn> {
     const finish = turnRunnerLifecycle.beginSendTurn();
     const turnId = reservedTurnId ?? randomUUID();
     let owned = false;
@@ -848,7 +859,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         });
       }, 20_000);
       heartbeat.unref();
-      const result = await executeTurn(sessionId, payload, turnId);
+      const result = await executeTurn(sessionId, payload, turnId, admission);
       outcome = result.status === "in_progress" ? "failed" : result.status;
       return result;
     } finally {
@@ -862,6 +873,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     sessionId: string,
     payload: unknown,
     turnId: string,
+    admission?: StoredTurnAdmission,
   ): Promise<Turn> {
     const input = SendTurnRequestSchema.parse(payload);
     let turnPermissions = turnPermissionsFromSendTurnInput(input);
@@ -872,8 +884,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    const candidateSession=session.metadata?.source==="experiment-improvement"||session.metadata?.refinementCandidate!==undefined;
+    if(candidateSession&&(!admission||session.experience!=="work"||session.profileWorkflowBinding||session.profileComponentBinding||input.createImproveRun||input.mentionedAppIds?.length||input.mentionedConnectedApps?.length||input.openPondActionCatalog?.length||input.attachments?.length||input.cwd))throw new Error("Candidate Work requires its private owner admission and isolated source context.");
     const explicitModelChoice = Boolean(input.modelRef || input.model);
-    const admittedConfiguration = deps.storageHome ? await admitTurnConfiguration(deps.storageHome, session, input, payload as Record<string, unknown>) : null;
+    const admittedConfiguration = !candidateSession && deps.storageHome ? await admitTurnConfiguration(deps.storageHome, session, input, payload as Record<string, unknown>) : null;
     if (admittedConfiguration) {
       turnPermissions.codexPermissionMode = admittedConfiguration.preferences.codexPermissionMode;
       turnPermissions.codexReasoningEffort = admittedConfiguration.preferences.codexReasoningEffort;
@@ -927,7 +941,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     // default. A stored null is an explicit choice and must not acquire a
     // mutable personal Profile when an independent Harness case starts.
     const selectedProfileRef = session.currentProfile ?? null;
-    const selectedProfile = !selectedProfileRef || session.profileWorkflowBinding || session.profileComponentBinding ? null : loadOpenPondProfileStateForRef
+    const selectedProfile = candidateSession || !selectedProfileRef || session.profileWorkflowBinding || session.profileComponentBinding ? null : loadOpenPondProfileStateForRef
       ? await loadOpenPondProfileStateForRef(selectedProfileRef)
       : loadOpenPondProfileState
       ? await loadOpenPondProfileState()
@@ -935,7 +949,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     // Resolve the movable current channel exactly once at turn admission. All
     // later Skill reads use this immutable bundle even if another Work advances
     // the channel while this turn is running.
-    const selectedHarness = loadSelectedHarnessRuntime
+    const selectedHarness = !candidateSession && loadSelectedHarnessRuntime
       ? await loadSelectedHarnessRuntime(session)
       : null;
     let profileWorkflowInputHash: string | null = null;
@@ -968,7 +982,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             admittedAt: now(),
           })
         : null;
-    let subagentContinuation = await prepareSubagentContinuationTurn({
+    let subagentContinuation = candidateSession?null:await prepareSubagentContinuationTurn({
       session,
       request: input,
       requestedTurnPermissions: turnPermissions,
@@ -985,7 +999,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       session.modelRef?.modelId ??
       null;
     const appPreferences = admittedConfiguration?.preferences ?? await loadAppPreferences();
-    const subagentDelegation = resolveSubagentDelegation(
+    const subagentDelegation = candidateSession?null:resolveSubagentDelegation(
       session,
       appPreferences
     );
@@ -1006,6 +1020,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ? null
       : input.createImproveRun;
     const profileSkillCommand =
+      !admission &&
       !authoringRoute &&
       experienceAllowsProfileSkills(session.experience) &&
       executeProfileSkillCommand
@@ -1125,7 +1140,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       } };
     }
     await insertStoredTurn(turn);
-    const initialCwd =
+    await admitStoredTurn({session,turn,admission,failTurn});
+    const isolatedProfileEvaluation=await deps.isolatedProfileEvaluationForTurn?.(session,turn)??false;
+    const candidateAuthoring=await deps.candidateAuthoringForTurn?.(session.id,turn.id)??false;
+    if(candidateSession&&!candidateAuthoring){await failTurn(session,turn.id,"The candidate Work owner did not admit this stored turn.");throw new Error("Candidate Work has no trusted authoring authority.");}
+    const initialCwd = candidateAuthoring?session.cwd:
       (authoringRoute && selectedProfile?.mode === "local"
         ? selectedProfile.repoPath
         : null) ??
@@ -1221,7 +1240,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (selectedHarness?.workflowAction) {
         const bundlePath = selectedHarness.release.bundlePath;
         if (!bundlePath) throw new Error("Bound Profile action lacks its released source bundle.");
-        const result = await executeReleasedProfileWorkflowAction({
+        const result = isolatedProfileEvaluation
+          ? await (deps.executeProfileEvaluationAction??(async()=>{throw new Error("The isolated target Agent executor is unavailable.");}))({session,turn,action:selectedHarness.workflowAction,value:input.workflowInput,signal:controller.signal})
+          : await executeReleasedProfileWorkflowAction({
           action: selectedHarness.workflowAction,
           releaseBundlePath: bundlePath,
           value: input.workflowInput,
@@ -1281,15 +1302,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           signal: controller.signal,
         });
       }
-      const initialWorkspaceDiff = await workspaceDiffBaseline(session);
+      const initialWorkspaceDiff = candidateAuthoring||isolatedProfileEvaluation?null:await workspaceDiffBaseline(session);
       const mentionedApps =
-        sessionUsesRepositoryWork(session)
+        !candidateAuthoring && !isolatedProfileEvaluation && sessionUsesRepositoryWork(session)
           ? await resolveMentionedAppsForTurn(
               input.mentionedAppIds,
               findOpenPondApp
             )
           : [];
-      const connectedApps = session.metadata?.standaloneExperiment === undefined && session.metadata?.localProfileExperiment === undefined
+      const connectedApps = !candidateAuthoring && !isolatedProfileEvaluation && session.metadata?.standaloneExperiment === undefined && session.metadata?.localProfileExperiment === undefined
         && experienceAllowsConnectedApps(session.experience)
         ? await connectedAppsForTurn({
             refs: input.mentionedConnectedApps,
@@ -1298,19 +1319,19 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             turnId: turn.id,
           })
         : [];
-      session = await maybeCreateScaffoldForTurn(
+      session = candidateAuthoring||isolatedProfileEvaluation?session:await maybeCreateScaffoldForTurn(
         session,
         turn.id,
         providerPrompt
       );
       activeTurn.session = session;
       throwIfInterrupted(controller.signal);
-      const personalizationSoul = admittedConfiguration?.instructions.personality ?? await loadPersonalizationSoul();
-      const shouldLoadProfileSkills =
+      const personalizationSoul = candidateAuthoring||isolatedProfileEvaluation?"":admittedConfiguration?.instructions.personality ?? await loadPersonalizationSoul();
+      const shouldLoadProfileSkills = !candidateAuthoring &&
         (selectedHarness !== null || experienceAllowsProfileSkills(session.experience)) &&
         (session.provider === "openpond" ||
           isOpenAiCompatibleProviderId(session.provider));
-      if (authoringRoute && !shouldLoadProfileSkills) {
+      if (authoringRoute && !shouldLoadProfileSkills && !candidateAuthoring) {
         throw new Error(
           `${
             authoringRoute.intent.artifact === "agent"
@@ -1358,7 +1379,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           {
             mentionedApps,
             openPondActionCatalog:
-              sessionUsesRepositoryWork(session)
+              !candidateAuthoring && !isolatedProfileEvaluation && sessionUsesRepositoryWork(session)
                 ? input.openPondActionCatalog
                 : [],
             openPondProfileSkills: profileSkillRuntime.skills,
@@ -1375,7 +1396,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               profileSkillRuntime
             ),
             browserControlAvailable:
-              sessionUsesRepositoryWork(session) &&
+              !candidateAuthoring && !isolatedProfileEvaluation && sessionUsesRepositoryWork(session) &&
               browserControlAvailable(session),
             extraSystemContext,
             userInstructionContext: admittedConfiguration?.instructions.userContext,
@@ -1495,7 +1516,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           {
             mentionedApps,
             openPondActionCatalog:
-              sessionUsesRepositoryWork(session)
+              !candidateAuthoring && !isolatedProfileEvaluation && sessionUsesRepositoryWork(session)
                 ? input.openPondActionCatalog
                 : [],
             openPondProfileSkills: profileSkillRuntime.skills,
@@ -1513,7 +1534,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
                 profileSkillRuntime
               ),
             browserControlAvailable:
-              sessionUsesRepositoryWork(session) &&
+              !candidateAuthoring && !isolatedProfileEvaluation && sessionUsesRepositoryWork(session) &&
               browserControlAvailable(session),
             extraSystemContext,
             userInstructionContext: admittedConfiguration?.instructions.userContext,

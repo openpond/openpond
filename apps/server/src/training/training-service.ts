@@ -1,3 +1,4 @@
+import type {ResolveTrainingActivityAuthority} from "./training-activity-authority.js";
 import { createManagedCandidateReviewService } from "./managed-candidate-review.js";
 import { createHostedRunCandidateReviewService } from "./hosted-run-candidate-review.js";
 import { createHostedModelRunEvidence } from "./hosted-model-run-evidence.js";
@@ -59,6 +60,7 @@ export function createTrainingService(deps: {
   store: SqliteStore;
   storeDir: string;
   registerDestinations?: (registry: TrainingDestinationRegistry) => void;
+  resolveActivityAuthority?:ResolveTrainingActivityAuthority;
   resolveApprovalActor?: () => Promise<string | null>;
   gradeTaskAttempt?: (input: {
     tasksetId: string;
@@ -134,6 +136,7 @@ export function createTrainingService(deps: {
     store: deps.store,
     storeDir: deps.storeDir,
     resolveManagedAccess: deps.resolveManagedTrainingAccess,
+    resolveActivityAuthority:deps.resolveActivityAuthority,
     catalog: () => portableCatalog(),
   });
   deps.registerPortableAdapters?.(portableAdapters);
@@ -163,6 +166,7 @@ export function createTrainingService(deps: {
     storeDir: deps.storeDir,
     registry,
     projectArtifactRows,
+    resolveActivityAuthority:deps.resolveActivityAuthority,
   });
 
   async function deleteTaskset(tasksetId: string) {
@@ -198,6 +202,7 @@ export function createTrainingService(deps: {
     adapters: portableAdapters,
     catalog: portableCatalog,
     prepare: prepareModelRun,
+    resolveActivityAuthority:deps.resolveActivityAuthority,
     prepareStart,
     approve,
     resolveReleasedHarness: async ({ taskset, modelProject }) => {

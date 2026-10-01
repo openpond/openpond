@@ -1,3 +1,4 @@
+import { currentAdvancedRefinerBoundary } from "./advanced-refiner-paid-boundary.js";
 import path from "node:path";
 import {
   TaskAttemptResultSchema,
@@ -183,7 +184,8 @@ export async function runTasksetWorkAttempt(input: {
 
   try {
     throwIfAborted(controller.signal);
-    const assets = await resolveTasksetWorkAssets({
+    const advanced = currentAdvancedRefinerBoundary();
+    const assets = advanced ? await advanced.resolveWorkAssets(input.taskset,input.task) : await resolveTasksetWorkAssets({
       storeDir: input.storeDir,
       taskset: input.taskset,
       task: input.task,

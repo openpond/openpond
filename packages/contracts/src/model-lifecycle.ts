@@ -1,3 +1,4 @@
+import { AdvancedRefinerEvaluationPinSchema,AdvancedRefinerEvaluationAccountingSchema, AdvancedRefinerReviewReceiptSchema } from "openpond-sdk/advanced-refiner-evaluations";
 import { z } from "zod";
 
 import {
@@ -562,6 +563,7 @@ export const ModelComparisonBenchmarkReceiptSchema = z.object({
 });
 
 const HarnessRefinerEvaluationConfigurationSchema = z.object({
+  advancedEvaluation: AdvancedRefinerEvaluationPinSchema.optional(),
   benchmarkId: z.literal("harness-refiner"),
   model: ChatModelRefSchema,
   upstreamModel: z.object({
@@ -685,6 +687,7 @@ export const ModelRunSchema = z
       completedAttempts: z.number().int().nonnegative(),
       totalAttempts: z.number().int().positive(),
       accounting: ModelEvaluationAccountingSchema.nullable().default(null),
+      advancedAccounting: AdvancedRefinerEvaluationAccountingSchema.optional(),
       evidenceSnapshot: ModelEvaluationEvidenceSnapshotSchema.nullable().default(null),
     }).strict().nullable().default(null),
     reward: z
@@ -699,6 +702,7 @@ export const ModelRunSchema = z
       ModelEvaluationReceiptSchema,
       ModelEvaluationStopReceiptSchema,
       ModelComparisonBenchmarkReceiptSchema,
+      AdvancedRefinerReviewReceiptSchema,
     ]).nullable(),
     adapterArtifactLineageId: ReleaseIdSchema.nullable(),
     failure: z.string().trim().min(1).max(5_000).nullable(),
@@ -735,6 +739,7 @@ export const ModelRunSchema = z
       && run.receipt.schemaVersion !== "openpond.modelEvaluationReceipt.v1"
       && run.receipt.schemaVersion !== "openpond.modelEvaluationStopReceipt.v1"
       && run.receipt.schemaVersion !== "openpond.modelComparisonBenchmarkReceipt.v1"
+      && run.receipt.schemaVersion !== "openpond.advancedRefinerReviewReceipt.v1"
     ) {
       context.addIssue({
         code: "custom",

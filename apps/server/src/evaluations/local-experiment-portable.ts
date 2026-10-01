@@ -51,9 +51,9 @@ export function localPortableExperiment(input: {
     dataset: definition.configuration.request.taskset, target,
     execution: {
       packageHash: value.contentHash,
-      runtimeTargetHash: contentHash({ adapter: target.kind === "model" ? "openpond.local-model-case.v1"
+      runtimeTargetHash: contentHash({ adapter: target.kind === "model" ? definition.model.providerId === "claude-code" ? "openpond.local-claude-process.v1" : "openpond.local-model-case.v1"
         : target.kind === "agent" ? "openpond.local-native-harness-case.v1" : "openpond.local-profile-case.v1",
-        placement: "local", environment: value.taskset.environment,
+        placement: "local", ...(definition.configuration.request.policy.kind === "hosted_chat" && definition.configuration.request.policy.localRuntime ? {runtime:definition.configuration.request.policy.localRuntime} : {}), environment: value.taskset.environment,
         tools: value.taskset.tools, capabilities: value.taskset.capabilities,
         source: target.kind === "agent" || target.kind === "harness" ? target.source : null }),
       metricPolicyHash: contentHash(tasksetRunMetricPolicy(value.taskset)),
@@ -81,7 +81,7 @@ export function localPortableExperiment(input: {
       const retained = row.result ? localRetainedCase(row.result) : null;
       if (retained?.grade && retained.grade.selectionHash !== contentHash(input.graders))
         throw new LocalExperimentError("local_portable_grader_conflict", "Retained grades differ from their exact selected grader pins.");
-      const native = retained?.attempt.native ?? retained?.attempt.profileNative;
+      const native = retained?.attempt.native ?? retained?.attempt.profileNative ?? retained?.attempt.externalProcess;
       const completed = row.status === "completed" && retained?.attempt.status === "completed" && row.error === null;
       const components = new Map(retained?.grade?.grades.flatMap(grade => grade.components).map(component => [component.graderId, component]));
       return {
@@ -93,7 +93,7 @@ export function localPortableExperiment(input: {
           const grade = components.get(input.graders[index]!.id);
           const scored = completed && grade?.score !== null && grade?.score !== undefined;
           return { feedbackKey: evaluator.feedbackKey, evaluator: evaluator.release,
-            status: scored ? "scored" as const : "unavailable" as const,
+            status: completed && grade?.status === "pending" ? "pending" as const : scored ? "scored" as const : "unavailable" as const,
             value: scored ? grade!.score : null, passed: scored ? grade!.passed : null,
             reasoning: grade?.feedback.join("\n").slice(0, 20_000) ?? null, evidenceRefs: [] };
         }),

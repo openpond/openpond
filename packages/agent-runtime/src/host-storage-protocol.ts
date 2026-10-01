@@ -26,6 +26,7 @@ export const HostStorageScopeSchema = z.object({
 }).strict();
 
 export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
+  z.object({contractVersion:z.literal(HOST_STORAGE_CONTRACT_VERSION),requestId:id,operation:z.literal("profile.externalDataset.authorize"),params:z.object({bindingHash:z.string().regex(/^[a-f0-9]{64}$/),manifestHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),taskId:id.optional(),seed:z.string().min(1).max(500).optional()}).strict().refine(value=>Boolean(value.taskId)===Boolean(value.seed),"Case authority requires both task and seed.")}).strict(),
   z.object({
     contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id,
     operation: z.literal("experiment/environment"), params: ExperimentEnvironmentParamsSchema,

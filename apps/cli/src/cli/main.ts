@@ -61,6 +61,16 @@ async function runEmbeddedCompanion(argv: string[]): Promise<boolean> {
       .runHostedProfileEvaluationCli(argv.slice(1));
     return true;
   }
+  if (argv[0] === "__hosted-experiment-improvement") {
+    await (await import("@openpond/local-server/hosted-experiment-improvement"))
+      .runHostedExperimentImprovementCli(argv.slice(1));
+    return true;
+  }
+  if (argv[0] === "__compile-hosted-profile-candidate") {
+    await (await import("@openpond/local-server/hosted-profile-candidate"))
+      .runHostedProfileCandidateCli(argv.slice(1));
+    return true;
+  }
   if (argv[0] === "__compile-hosted-profile") {
     await (await import("@openpond/local-server/hosted-profile-compiler"))
       .runHostedProfileCompilerCli(argv.slice(1));

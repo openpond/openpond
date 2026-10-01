@@ -8,6 +8,7 @@ import { CHAT_ATTACHMENT_LIMITS, ChatAttachmentSchema, OpenPondProfileRefSchema,
 import { TasksetReleaseSchema, TasksetRunManifestSchema, assertProfileEvaluationRunAdmission, policyTaskView } from "@openpond/evals";
 import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
 
+import {admitProfileExternalDataset,type ProfileExternalDatasetResolver} from "./profile-external-dataset-admission.js";
 import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
 import type { ProfileEvaluationDefinition } from "@openpond/evals";
@@ -33,6 +34,9 @@ export function createProfileEvaluationCaseService(input: {
   storeDir?: string;
   loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
   loadCatalog: ProfileEvaluationCatalogSource;
+  resolveExternalDataset?:ProfileExternalDatasetResolver;
+  admitSession?:(session:Session,manifest:import("@openpond/evals").TasksetRunManifest,taskId:string,seed:string)=>Promise<void>;
+  settleSession?:(id:string)=>void;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   createSession: (request: unknown) => Promise<Session>;
   sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
@@ -53,13 +57,14 @@ export function createProfileEvaluationCaseService(input: {
       harnessRelease: parsed.binding.harnessRelease,
     });
     const source = parsed.manifest.profileEvaluation;
-    const definition = discovered.definitions.find((item) => item.id === source?.definitionId);
-    assertProfileEvaluationRunAdmission(parsed.manifest, parsed.taskset, {
+    const external=await admitProfileExternalDataset({manifest:parsed.manifest,taskset:parsed.taskset,selected:{profileRef:selected.ref,sourceRevision:selected.sourceRevision,harnessRelease:parsed.binding.harnessRelease},loadCatalog:input.loadCatalog,resolveExternalDataset:input.resolveExternalDataset});
+    const definition = external?.definition??discovered.definitions.find((item) => item.id === source?.definitionId);
+    assertProfileEvaluationRunAdmission(parsed.manifest, parsed.taskset, external?.catalog??{
       schemaVersion: "openpond.profileEvaluations.v1",
       definitions: discovered.definitions,
       suites: discovered.suites,
     });
-    if (!source || !definition || discovered.catalogHash !== source.catalogHash
+    if (!source || !definition || (external?contentHash(external.catalog):discovered.catalogHash) !== source.catalogHash
       || contentHash(definition) !== source.definitionHash
       || contentHash(definition.target) !== contentHash(source.target)
       || definition.tasksetRelease.id !== parsed.manifest.tasksetRelease.id
@@ -78,9 +83,9 @@ export function createProfileEvaluationCaseService(input: {
     if (policyTask.artifactRefs.length && !input.storeDir) {
       throw new Error("Evaluation case attachment storage is unavailable.");
     }
-    const releasedPackage = policyTask.artifactRefs.length ? await input.loadTasksetPackage(
+    const releasedPackage = external?.packageValue??(policyTask.artifactRefs.length ? await input.loadTasksetPackage(
       definition, selected.ref.profileId, parsed.binding.harnessRelease,
-    ) : null;
+    ) : null);
     if (releasedPackage && (releasedPackage.contentHash !== parsed.manifest.packageHash
       || releasedPackage.taskset.contentHash !== parsed.taskset.contentHash)) {
       throw new Error("Evaluation case Taskset differs from its frozen package or admitted manifest.");
@@ -103,10 +108,14 @@ export function createProfileEvaluationCaseService(input: {
       manifest: parsed.manifest, profileRef: selected.ref, binding: parsed.binding,
       modelRef: parsed.modelRef, modelConfigurationHash: parsed.modelConfigurationHash,
       createSession: input.createSession, sendTurn: input.sendTurn,
+      ...(input.admitSession?{admitSession:(session:Session)=>input.admitSession!(session,parsed.manifest,parsed.taskId,parsed.seed)}:{}),
+      ...(input.settleSession?{settleSession:input.settleSession}:{}),
       interruptSessionTurn: input.interruptSessionTurn,
       runtimeEventsForTurn: (turnId) => input.store.runtimeEventsForTurn(turnId),
       attachments, requiredOutputs: task.requiredOutputs ?? [],
     });
+    if(external)await external.authorize();
+    signal?.throwIfAborted();
     return execute({ task: policyTask, seed: parsed.seed, source,
       ...(signal ? { signal } : {}) });
   };

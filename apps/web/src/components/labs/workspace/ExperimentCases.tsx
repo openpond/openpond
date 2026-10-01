@@ -1,3 +1,9 @@
+import {useHumanGraderChoices} from "../../human-review/useHumanGraderChoices";
+import {HumanReviewLaunch} from "../../human-review/HumanReviewLaunch";
+import {HumanResultControls} from "../../human-review/HumanResultControls";
+import {HumanReviewInspector} from "../../human-review/HumanReviewInspector";
+import {humanApi,type HumanInboxContext} from "../../human-review/api";
+import type {HumanReviewView} from "@openpond/evals/human-review";
 import { EvaluationTableState } from "./EvaluationTableState";
 import { ExperimentGraderLabel, experimentGraderName } from "./ExperimentGraderLabel";
 import type { ExperimentGraderPin } from "openpond-sdk/experiments";
@@ -27,9 +33,10 @@ export function ExperimentCases({
   onScore,
   onSelectPass,
   graders = saved.graders,
-  onOpenGrader,
+  onOpenGrader, humanContext:contextInput, projectId:projectInput,
 }: {
   evidence: ExperimentEvidence;
+  humanContext?:HumanInboxContext; projectId?:string; humanGraders?:{id:string;name:string}[]; humanDataset?:{id:string;revision:number;contentHash:string};
   api: WorkspaceApi;
   execution: ModelTasksetRunDetails | null;
   saved: {
@@ -43,6 +50,10 @@ export function ExperimentCases({
   onScore: (action: () => Promise<void>) => void;
   onSelectPass: (id: string) => void;
 }) {
+  const humanContext=contextInput??api.humanContext??undefined,projectId=projectInput??api.projectId??undefined;
+  const humanChoices=useHumanGraderChoices(humanContext,projectId,saved.request.taskset),humanGraders=humanChoices.choices;
+  const [humanReview,setHumanReview]=useState<HumanReviewView|null>(null),[humanError,setHumanError]=useState<string|null>(null);
+  async function openHuman(id:string){if(!humanContext)return;try{setHumanReview(await humanApi.get(humanContext,id));}catch(e){setHumanError(e instanceof Error?e.message:"Review unavailable.");}}
   const controls = useWorkspacePanelControls();
   const [selected, setSelected] = useState<string | null>(null);
   const [selectingGrader, setSelectingGrader] = useState(false);
@@ -149,11 +160,11 @@ export function ExperimentCases({
     <>
       {gradingGuard.dialog}
       <p>
-        {cases.length} retained cases ·{" "}
+        {cases.length} retained cases,{" "}
         {totalTokens === null
           ? "Tokens unknown"
           : `${totalTokens.toLocaleString()} recorded tokens`}{" "}
-        · {cost === null ? "Spend unknown" : `$${cost.toFixed(6)} recorded spend`}
+       , {cost === null ? "Spend unknown" : `$${cost.toFixed(6)} recorded spend`}
       </p>
       <button
         className="training-button secondary"
@@ -197,7 +208,7 @@ export function ExperimentCases({
           </header>
           <EvaluationCard title="Retained Experiment">
             <p>
-              {saved.request.name} · {execution?.summary.id}
+              {saved.request.name}, {execution?.summary.id}
             </p>
             <p>Dataset revision {execution?.summary.taskset.revision}</p>
           </EvaluationCard>
@@ -268,7 +279,7 @@ export function ExperimentCases({
                 }}
               >
                 <td>
-                  {row.identity.caseId} · Seed {row.identity.seed}
+                  {row.identity.caseId}, Seed {row.identity.seed}
                 </td>
                 <td>
                   <EvaluationStatus status={row.status} />
@@ -310,6 +321,7 @@ export function ExperimentCases({
         >
           <header>
             <h2>{item.identity.caseId}</h2>
+          {humanContext && projectId && execution && population?<HumanReviewLaunch context={humanContext} projectId={projectId} selections={[{executionId:execution.summary.id,receiptId:population.receiptId}]} graders={humanGraders} onOpenReview={setHumanReview}/>:null}
           </header>
           <p>
             <EvaluationStatus status={item.status} />
@@ -341,12 +353,12 @@ export function ExperimentCases({
                 Feedback key: <code>{feedback.feedbackKey}</code>
               </p>
               <p>
-                {feedback.status} · {feedback.value === null ? "No score" : String(feedback.value)}
+                {feedback.status}, {feedback.value === null ? "No score" : String(feedback.value)}
                 {feedback.passed === null || feedback.passed === undefined
                   ? ""
                   : feedback.passed
-                    ? " · Pass"
-                    : " · Fail"}
+                    ? ", Pass"
+                    : ", Fail"}
               </p>
               {feedback.reasoning ? <p>{feedback.reasoning}</p> : null}
             </EvaluationCard>
@@ -405,6 +417,9 @@ export function ExperimentCases({
           </EvaluationCard>
         </WorkspacePanel>
       ) : null}
+      {humanError?<p role="alert">{humanError}</p>:null}
+      {humanContext && execution ? <HumanResultControls context={humanContext} executionId={execution!.summary.id} onOpenReview={id=>void openHuman(id)}/>:null}
+      {humanContext&&humanReview?<WorkspacePanel action="human-review" label={humanReview.title} onRequestClose={()=>setHumanReview(null)}><HumanReviewInspector context={humanContext} record={humanReview} onChanged={setHumanReview} onClose={()=>setHumanReview(null)}/></WorkspacePanel>:null}
     </>
   );
 }

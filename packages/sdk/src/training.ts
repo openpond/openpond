@@ -1,18 +1,67 @@
 import { createTrainingAcceptanceClient } from "./training-acceptance.js";
-export { TrainingAcceptanceGroupReferenceSchema, TrainingAcceptanceGroupSummarySchema, TrainingAcceptanceGroupPageSchema, TrainingAcceptanceGroupQuerySchema, type TrainingAcceptanceGroupReference, type TrainingAcceptanceGroupSummary, type TrainingAcceptanceGroupPage, type TrainingAcceptanceGroupQuery, type TrainingAcceptanceTarget } from "./training-acceptance.js";
+import { TrainingHandoffOriginSchema } from "./post-training.js";
+import { createPostTrainingClient } from "./post-training.js";
+export {
+  TrainingAcceptanceGroupReferenceSchema,
+  TrainingAcceptanceGroupSummarySchema,
+  TrainingAcceptanceGroupPageSchema,
+  TrainingAcceptanceGroupQuerySchema,
+  type TrainingAcceptanceGroupReference,
+  type TrainingAcceptanceGroupSummary,
+  type TrainingAcceptanceGroupPage,
+  type TrainingAcceptanceGroupQuery,
+  type TrainingAcceptanceTarget,
+} from "./training-acceptance.js";
 import { z } from "zod";
 import { createTrainingPreparationClient } from "./training-preparations.js";
-export { TrainingPreparationRequestSchema, TrainingPreparationPlanContentSchema, TrainingPreparationPlanSchema, TrainingPreparationReceiptSchema, TrainingPreparationControlSchema, parseAndVerifyTrainingPreparationReceipt, type TrainingPreparationRequest, type TrainingPreparationPlan, type TrainingPreparationReceipt, type TrainingPreparationControl } from "./training-preparations.js";
-export { TrainingPreparationListQuerySchema, TrainingPreparationPageSchema, type TrainingPreparationListQuery, type TrainingPreparationPage } from "./training-preparations.js";
+export {
+  TrainingPreparationRequestSchema,
+  TrainingPreparationPlanContentSchema,
+  TrainingPreparationPlanSchema,
+  TrainingPreparationReceiptSchema,
+  TrainingPreparationControlSchema,
+  parseAndVerifyTrainingPreparationReceipt,
+  type TrainingPreparationRequest,
+  type TrainingPreparationPlan,
+  type TrainingPreparationReceipt,
+  type TrainingPreparationControl,
+} from "./training-preparations.js";
+export {
+  TrainingPreparationListQuerySchema,
+  TrainingPreparationPageSchema,
+  type TrainingPreparationListQuery,
+  type TrainingPreparationPage,
+} from "./training-preparations.js";
 import { createTrainingHarnessSourceClient } from "./training-harness-sources.js";
 export { TrainingHarnessSourcePublicationSchema } from "./training-harness-sources.js";
 import { createTrainingCandidateDecisionClient } from "./training-candidate-decisions.js";
-export { TrainingCandidateDecisionRequestSchema, TrainingCandidateDecisionSchema, trainingCandidateDecisionHash, parseAndVerifyTrainingCandidateDecision, type TrainingCandidateDecisionRequest, type TrainingCandidateDecision, type TrainingCandidateDecisionTarget } from "./training-candidate-decisions.js";
+export {
+  TrainingCandidateDecisionRequestSchema,
+  TrainingCandidateDecisionSchema,
+  trainingCandidateDecisionHash,
+  parseAndVerifyTrainingCandidateDecision,
+  type TrainingCandidateDecisionRequest,
+  type TrainingCandidateDecision,
+  type TrainingCandidateDecisionTarget,
+} from "./training-candidate-decisions.js";
 import { parseAndVerifyTrainingEvaluationTaskPage } from "./training-evaluation-results.js";
 
 export { deterministicTrainingRewardSource } from "./training-grading-plan.js";
-export { TRAINING_EVALUATION_SOURCE_PATH, TrainingEvaluationSourceSchema, assertTrainingEvaluationIsolation, trainingEvaluationSourceRef, type TrainingEvaluationSource } from "./training-evaluation-source.js";
-export { TrainingEvaluationTaskResultSchema, TrainingEvaluationTaskPageSchema, trainingEvaluationTaskPageHash, parseAndVerifyTrainingEvaluationTaskPage, type TrainingEvaluationTaskResult, type TrainingEvaluationTaskPage } from "./training-evaluation-results.js";
+export {
+  TRAINING_EVALUATION_SOURCE_PATH,
+  TrainingEvaluationSourceSchema,
+  assertTrainingEvaluationIsolation,
+  trainingEvaluationSourceRef,
+  type TrainingEvaluationSource,
+} from "./training-evaluation-source.js";
+export {
+  TrainingEvaluationTaskResultSchema,
+  TrainingEvaluationTaskPageSchema,
+  trainingEvaluationTaskPageHash,
+  parseAndVerifyTrainingEvaluationTaskPage,
+  type TrainingEvaluationTaskResult,
+  type TrainingEvaluationTaskPage,
+} from "./training-evaluation-results.js";
 
 import {
   ModelProjectBaseModelSchema,
@@ -88,11 +137,7 @@ export async function trainingInputArtifactUploadHash(
 export async function parseAndVerifyTrainingInputArtifactUpload(
   value: unknown,
 ): Promise<TrainingInputArtifactUpload> {
-  assertCanonicalPayloadSize(
-    value,
-    TRAINING_INPUT_ARTIFACT_MAX_BYTES,
-    "Training input artifact",
-  );
+  assertCanonicalPayloadSize(value, TRAINING_INPUT_ARTIFACT_MAX_BYTES, "Training input artifact");
   const parsed = TrainingInputArtifactUploadSchema.parse(value);
   const expectedHash = await trainingInputArtifactUploadHash(parsed);
   if (parsed.contentHash !== expectedHash) {
@@ -104,10 +149,7 @@ export async function parseAndVerifyTrainingInputArtifactUpload(
   return parsed;
 }
 
-export const TrainingJobKindSchema = z.enum([
-  "reward_model_train",
-  "policy_optimize",
-]);
+export const TrainingJobKindSchema = z.enum(["reward_model_train", "policy_optimize"]);
 
 export const TrainingJobStateSchema = z.enum([
   "queued",
@@ -131,6 +173,7 @@ export const TrainingCapabilityRequirementSchema = z
 
 export const TrainingJobSourceSchema = z
   .object({
+    origin: TrainingHandoffOriginSchema.optional(),
     modelProject: z
       .object({
         id: IdSchema,
@@ -143,10 +186,14 @@ export const TrainingJobSourceSchema = z
     harnessRelease: ModelProjectImmutableRefSchema,
     taskset: ModelProjectVersionedRefSchema,
     tasksetRelease: ModelProjectImmutableRefSchema,
-    evaluation: z.object({
-      taskset: ModelProjectVersionedRefSchema,
-      dataset: ModelProjectImmutableRefSchema,
-    }).strict().nullable().optional(),
+    evaluation: z
+      .object({
+        taskset: ModelProjectVersionedRefSchema,
+        dataset: ModelProjectImmutableRefSchema,
+      })
+      .strict()
+      .nullable()
+      .optional(),
     dataset: ModelProjectImmutableRefSchema,
     evidenceSets: z.array(ModelProjectImmutableRefSchema).max(10_000),
   })
@@ -181,10 +228,7 @@ const LearnedRewardSourceSchema = z
     kind: z.literal("learned_reward"),
     rewardModelVersion: ModelProjectImmutableRefSchema,
     qualificationReport: ModelProjectImmutableRefSchema.nullable().default(null),
-    evaluationReferences: z
-      .array(ModelProjectImmutableRefSchema)
-      .max(1_000)
-      .default([]),
+    evaluationReferences: z.array(ModelProjectImmutableRefSchema).max(1_000).default([]),
     scorerArtifact: z
       .object({
         artifactRef: z.string().trim().min(1).max(2_000),
@@ -233,9 +277,7 @@ export const TrainingJobSubmissionSchema = z
     name: z.string().trim().min(1).max(200),
     source: TrainingJobSourceSchema,
     job: TrainingJobRequestSchema,
-    requestedCapabilities: z
-      .array(TrainingCapabilityRequirementSchema)
-      .max(1_000),
+    requestedCapabilities: z.array(TrainingCapabilityRequirementSchema).max(1_000),
     placementObjective: z.enum(["fast", "balanced", "economical"]),
     budget: z
       .object({
@@ -267,11 +309,7 @@ export async function trainingJobSubmissionHash(
 export async function parseAndVerifyTrainingJobSubmission(
   value: unknown,
 ): Promise<TrainingJobSubmission> {
-  assertCanonicalPayloadSize(
-    value,
-    TRAINING_JOB_SUBMISSION_MAX_BYTES,
-    "Training Job submission",
-  );
+  assertCanonicalPayloadSize(value, TRAINING_JOB_SUBMISSION_MAX_BYTES, "Training Job submission");
   const parsed = TrainingJobSubmissionSchema.parse(value);
   const expectedHash = await trainingJobSubmissionHash(parsed);
   if (parsed.contentHash !== expectedHash) {
@@ -355,15 +393,7 @@ export const TrainingJobOutputSchema = z
     schemaVersion: z.literal("openpond.trainingJobOutput.v2"),
     id: IdSchema,
     jobId: IdSchema,
-    kind: z.enum([
-      "checkpoint",
-      "adapter",
-      "scorer",
-      "metrics",
-      "evaluation",
-      "trace",
-      "receipt",
-    ]),
+    kind: z.enum(["checkpoint", "adapter", "scorer", "metrics", "evaluation", "trace", "receipt"]),
     artifactRef: z.string().trim().min(1).max(2_000),
     contentHash: HashSchema,
     sizeBytes: z.number().int().nonnegative(),
@@ -484,9 +514,7 @@ export const TrainingCapabilitiesSchema = z
     capabilityHash: HashSchema,
     jobKinds: z.array(TrainingJobKindSchema),
     methods: z.array(z.string().trim().min(1).max(200)),
-    placements: z.array(
-      z.enum(["local", "remote", "colocated", "provider_native"]),
-    ),
+    placements: z.array(z.enum(["local", "remote", "colocated", "provider_native"])),
     controls: z
       .object({
         cancel: z.boolean(),
@@ -506,12 +534,8 @@ export const TrainingCapabilitiesSchema = z
   })
   .strict();
 
-export type TrainingJobSubmission = z.infer<
-  typeof TrainingJobSubmissionSchema
->;
-export type TrainingInputArtifactUpload = z.infer<
-  typeof TrainingInputArtifactUploadSchema
->;
+export type TrainingJobSubmission = z.infer<typeof TrainingJobSubmissionSchema>;
+export type TrainingInputArtifactUpload = z.infer<typeof TrainingInputArtifactUploadSchema>;
 export type TrainingInputArtifact = z.infer<typeof TrainingInputArtifactSchema>;
 export type TrainingJob = z.infer<typeof TrainingJobSchema>;
 export type TrainingJobPage = z.infer<typeof TrainingJobPageSchema>;
@@ -519,9 +543,7 @@ export type TrainingJobEvent = z.infer<typeof TrainingJobEventSchema>;
 export type TrainingJobLog = z.infer<typeof TrainingJobLogSchema>;
 export type TrainingJobOutput = z.infer<typeof TrainingJobOutputSchema>;
 export type TrainingJobOutputs = z.infer<typeof TrainingJobOutputsSchema>;
-export type TrainingExecutionReceipt = z.infer<
-  typeof TrainingExecutionReceiptSchema
->;
+export type TrainingExecutionReceipt = z.infer<typeof TrainingExecutionReceiptSchema>;
 export type TrainingCapabilities = z.infer<typeof TrainingCapabilitiesSchema>;
 
 function headersRecord(headers: HeadersInit | undefined): Record<string, string> {
@@ -540,16 +562,18 @@ export function createTrainingClient(input: {
   const fetchImpl = input.fetch ?? fetch;
   const baseUrl = input.baseUrl.replace(/\/$/, "");
 
-  async function request(pathname: string, init?: RequestInit, responseLimit = TRAINING_API_RESPONSE_MAX_BYTES): Promise<unknown> {
+  async function request(
+    pathname: string,
+    init?: RequestInit,
+    responseLimit = TRAINING_API_RESPONSE_MAX_BYTES,
+  ): Promise<unknown> {
     const readOnly = init?.method === undefined || init.method.toUpperCase() === "GET";
     const maximumAttempts = readOnly ? 3 : 1;
     for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
       let response: Response;
       try {
         const configuredHeaders =
-          typeof input.headers === "function"
-            ? await input.headers()
-            : (input.headers ?? {});
+          typeof input.headers === "function" ? await input.headers() : (input.headers ?? {});
         response = await fetchImpl(`${baseUrl}${pathname}`, {
           ...init,
           headers: {
@@ -570,17 +594,10 @@ export function createTrainingClient(input: {
         await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
         continue;
       }
-      const body = parseBoundedJson(
-        await response.text(),
-        responseLimit,
-        "Training API response",
-      );
+      const body = parseBoundedJson(await response.text(), responseLimit, "Training API response");
       if (response.ok) return body;
       const error = trainingApiError(body, response.status);
-      if (
-        attempt === maximumAttempts ||
-        !trainingReadFailureIsRetryable(response.status, error)
-      ) {
+      if (attempt === maximumAttempts || !trainingReadFailureIsRetryable(response.status, error)) {
         throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
@@ -592,6 +609,7 @@ export function createTrainingClient(input: {
   }
 
   return {
+    postTraining: createPostTrainingClient({ request }),
     ...createTrainingPreparationClient(request),
     ...createTrainingAcceptanceClient(request),
     ...createTrainingHarnessSourceClient(request),
@@ -625,11 +643,13 @@ export function createTrainingClient(input: {
         ),
       );
     },
-    async listJobs(options: {
-      modelProjectId?: string;
-      cursor?: string;
-      limit?: number;
-    } = {}) {
+    async listJobs(
+      options: {
+        modelProjectId?: string;
+        cursor?: string;
+        limit?: number;
+      } = {},
+    ) {
       const parameters = new URLSearchParams();
       if (options.modelProjectId) {
         parameters.set("modelProjectId", IdSchema.parse(options.modelProjectId));
@@ -638,15 +658,10 @@ export function createTrainingClient(input: {
         parameters.set("cursor", z.string().trim().min(1).max(2_000).parse(options.cursor));
       }
       if (options.limit !== undefined) {
-        parameters.set(
-          "limit",
-          String(z.number().int().min(1).max(1_000).parse(options.limit)),
-        );
+        parameters.set("limit", String(z.number().int().min(1).max(1_000).parse(options.limit)));
       }
       const query = parameters.size > 0 ? `?${parameters.toString()}` : "";
-      return TrainingJobPageSchema.parse(
-        await request(`/v1/training/jobs${query}`),
-      );
+      return TrainingJobPageSchema.parse(await request(`/v1/training/jobs${query}`));
     },
     async getJob(jobId: string) {
       return TrainingJobSchema.parse(
@@ -660,10 +675,10 @@ export function createTrainingClient(input: {
       const control = TrainingJobControlRequestSchema.parse({ expectedVersion });
       return TrainingJobSchema.parse(
         unwrapObject(
-          await request(
-            `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/cancel`,
-            { method: "POST", body: JSON.stringify(control) },
-          ),
+          await request(`/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/cancel`, {
+            method: "POST",
+            body: JSON.stringify(control),
+          }),
           "job",
         ),
       );
@@ -685,18 +700,14 @@ export function createTrainingClient(input: {
         .array(TrainingJobEventSchema)
         .parse(
           unwrapObject(
-            await request(
-              `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/events`,
-            ),
+            await request(`/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/events`),
             "events",
           ),
         );
     },
     async outputs(jobId: string) {
       return TrainingJobOutputsSchema.parse(
-        await request(
-          `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/outputs`,
-        ),
+        await request(`/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/outputs`),
       );
     },
     async evaluationTasks(
@@ -707,25 +718,36 @@ export function createTrainingClient(input: {
       const id = IdSchema.parse(jobId);
       const reference = ModelProjectImmutableRefSchema.parse(evaluation);
       const parameters = new URLSearchParams();
-      const cursor = options.cursor === undefined ? undefined : z.string().regex(/^[1-9]\d*$/).parse(options.cursor);
-      const offset = cursor === undefined ? 0 : z.number().int().min(1).max(9_999).parse(Number(cursor));
+      const cursor =
+        options.cursor === undefined
+          ? undefined
+          : z
+              .string()
+              .regex(/^[1-9]\d*$/)
+              .parse(options.cursor);
+      const offset =
+        cursor === undefined ? 0 : z.number().int().min(1).max(9_999).parse(Number(cursor));
       if (cursor !== undefined) parameters.set("cursor", cursor);
-      if (options.limit !== undefined) parameters.set("limit", String(z.number().int().min(1).max(100).parse(options.limit)));
+      if (options.limit !== undefined)
+        parameters.set("limit", String(z.number().int().min(1).max(100).parse(options.limit)));
       const query = parameters.size ? `?${parameters.toString()}` : "";
       return parseAndVerifyTrainingEvaluationTaskPage(
-        await request(`/v1/training/jobs/${encodeURIComponent(id)}/evaluations/${encodeURIComponent(reference.id)}/tasks${query}`),
+        await request(
+          `/v1/training/jobs/${encodeURIComponent(id)}/evaluations/${encodeURIComponent(reference.id)}/tasks${query}`,
+        ),
         { jobId: id, evaluation: reference, offset },
       );
     },
     async logs(jobId: string) {
-      return z.array(TrainingJobLogSchema).max(100_000).parse(
-        unwrapObject(
-          await request(
-            `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/logs`,
+      return z
+        .array(TrainingJobLogSchema)
+        .max(100_000)
+        .parse(
+          unwrapObject(
+            await request(`/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/logs`),
+            "logs",
           ),
-          "logs",
-        ),
-      );
+        );
     },
   };
 }

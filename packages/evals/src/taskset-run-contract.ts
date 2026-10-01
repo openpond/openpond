@@ -1,3 +1,4 @@
+import { verifyProfileExternalDatasetBinding,externalDatasetDefinitionId } from "./profile-external-evaluation.js";
 import { z } from "zod";
 import { assertContentHash, contentHash, ImmutableReleaseRefSchema, MetadataSchema, ModelRefSchema, ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema } from "@openpond/harness";
 import { RunLimitsSchema, RuntimeTargetBindingSchema, verifyAttemptReceipt, type AttemptReceipt } from "./runs.js";
@@ -104,6 +105,15 @@ export function assertProfileEvaluationRunAdmission(
   const tasks = new Map(taskset.tasks.map((task) => [task.id, task]));
   if (definition.taskIds.some((id) => tasks.get(id)?.split !== definition.split)) {
     throw new Error("Profile evaluation case is absent from its declared Taskset split.");
+  }
+  if(source.externalDatasetBinding){
+    const binding=verifyProfileExternalDatasetBinding(source.externalDatasetBinding);
+    if(source.definitionId!==externalDatasetDefinitionId(binding)||binding.dataset.id!==taskset.id||binding.dataset.revision!==taskset.revision||binding.dataset.contentHash!==taskset.contentHash
+      ||binding.packageHash!==manifest.packageHash||binding.profileId!==source.profileId||contentHash(binding.target)!==contentHash(source.target)||binding.split!==definition.split
+      ||binding.environmentHash!==contentHash(taskset.environment)||binding.population.length!==manifest.population.length
+      ||binding.population.some((member,index)=>contentHash(member)!==contentHash({taskId:manifest.population[index]!.taskId,seed:manifest.population[index]!.seed,fixtureId:manifest.population[index]!.fixtureId})))
+      throw new Error("Profile external Dataset execution differs from its exact admitted recipe.");
+    return;
   }
   const expected = new Set(definition.taskIds.flatMap((taskId) => definition.seeds.map((seed) => JSON.stringify([taskId, seed]))));
   const actual = new Set(manifest.population.map(({ taskId, seed }) => JSON.stringify([taskId, seed])));

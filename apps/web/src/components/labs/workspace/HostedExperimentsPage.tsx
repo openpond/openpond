@@ -1,4 +1,10 @@
+import { RunExperimentSchema } from "openpond-sdk/experiments";
+import { AdvancedRefinerEvaluationControl } from "./AdvancedRefinerEvaluationControl";
+import { ReviewedExperimentScheduleControl } from "./ReviewedExperimentScheduleControl";
 import { ExperimentOverview } from "./ExperimentOverview";
+import { RecordedExperimentDetail } from "./RecordedExperimentDetail";
+import { RecordedExperimentCollection } from "./RecordedExperimentCollection";
+import { ExperimentTrainingPanel } from "./ExperimentTrainingPanel";
 import { EvaluationModel, EvaluationStatus, EvaluationTime } from "./EvaluationPresentation";
 import { ExperimentCompare } from "./ExperimentCompare";
 import { HostedExperimentCollection } from "./HostedExperimentCollection";
@@ -14,6 +20,7 @@ import { ExperimentConfiguration } from "./ExperimentConfiguration";
 import { ScoringPassStatus } from "./ScoringPassStatus";
 import { useHostedExperimentDetail } from "./useHostedExperimentDetail";
 import type { Inventory, WorkspaceApi } from "./workspace-api";
+import {ExperimentImproveSidebar} from "./ExperimentImproveSidebar";
 export function HostedExperimentsPage({
   api,
   inventory,
@@ -22,6 +29,7 @@ export function HostedExperimentsPage({
   refresh,
   inventoryError,
   inventoryLoading,
+  onOpenWork,
 }: {
   api: WorkspaceApi;
   inventory: Inventory | null;
@@ -30,6 +38,7 @@ export function HostedExperimentsPage({
   refresh: () => void;
   inventoryError?: string;
   inventoryLoading?: boolean;
+  onOpenWork?: (id:string)=>void;
 }) {
   const setup = useEvaluationSetup(),
     detail = useHostedExperimentDetail(api, route),
@@ -79,10 +88,11 @@ export function HostedExperimentsPage({
         ]
       : [],
   );
-  useWorkspaceResourceName(run?.request.name ?? null);
+  useWorkspaceResourceName(run?.request.name ?? detail.recorded.data?.request.name ?? null);
   const failure =
     error ??
     detail.execution.error?.message ??
+    detail.recorded.error?.message ??
     detail.passes.error?.message ??
     detail.selectedPass.error?.message ??
     detail.evidence.error?.message;
@@ -103,7 +113,7 @@ export function HostedExperimentsPage({
   return (
     <>
       <header className="evaluation-workspace-header">
-        <h1 className="sr-only">{run?.request.name ?? "Experiments"}</h1>
+        <h1 className="sr-only">{run?.request.name ?? detail.recorded.data?.request.name ?? "Experiments"}</h1>
         {!route.resourceId ? (
           <input
             aria-label="Search experiments"
@@ -136,7 +146,14 @@ export function HostedExperimentsPage({
               More Experiments
             </button>
           ) : null}
+          <RecordedExperimentCollection api={api} route={route} navigate={navigate}/>
         </>
+      ) : detail.recorded.data ? (
+        <RecordedExperimentDetail api={api} inventory={inventory} route={route} navigate={navigate}
+          execution={detail.recorded.data} detail={detail} busy={busy}
+          onCancel={() => void mutate(async () => {
+            if (detail.selectedPass.data) await api.request("cancelPass", { id: detail.selectedPass.data.id });
+          })} />
       ) : run ? (
         <>
           <nav className="evaluation-workspace-tabs" aria-label="Experiment tabs">
@@ -159,8 +176,8 @@ export function HostedExperimentsPage({
             />
             <EvaluationStatus status={run.summary.status} />
             <span>
-              {run.summary.counts.completed} completed · {run.summary.counts.failed} failed ·{" "}
-              {run.summary.counts.running} running · {run.summary.counts.pending} pending /{" "}
+              {run.summary.counts.completed} completed / {run.summary.counts.failed} failed /{" "}
+              {run.summary.counts.running} running / {run.summary.counts.pending} pending /{" "}
               {run.summary.totalCount} attempts
             </span>
             <EvaluationTime value={run.summary.startedAt ?? run.summary.createdAt} />
@@ -178,6 +195,7 @@ export function HostedExperimentsPage({
               </button>
             ) : null}
           </div>
+          {detail.evidence.data ? <ExperimentTrainingPanel api={api} executionId={run.summary.id} passId={route.passId} navigate={navigate}/> : null}
           {detail.passItems.length ? (
             <label>
               Grading
@@ -188,7 +206,7 @@ export function HostedExperimentsPage({
                 <option value="">Original Experiment grading</option>
                 {detail.passItems.map((pass) => (
                   <option key={pass.id} value={pass.id}>
-                    {pass.status} · {pass.id}
+                    {pass.status} / {pass.id}
                   </option>
                 ))}
               </select>
@@ -233,7 +251,7 @@ export function HostedExperimentsPage({
               tokens={
                 detail.evidence.data?.result.cases.slice(0, 20).map((item) => ({
                   id: JSON.stringify(item.identity),
-                  label: `${item.identity.caseId} · ${item.identity.seed}`,
+                  label: `${item.identity.caseId} / ${item.identity.seed}`,
                   value: item.usage.totalTokens,
                 })) ?? []
               }
@@ -270,6 +288,9 @@ export function HostedExperimentsPage({
                 api={api}
                 execution={run}
                 saved={run.configuration}
+                humanContext={api.humanContext ?? undefined}
+                projectId={run.request.project?.id}
+                humanGraders={run.configuration.graders.map(pin => ({ id: pin.id, name: pin.name ?? pin.id }))}
                 graders={selectedGraders}
                 onOpenGrader={openGrader}
                 busy={busy}
@@ -298,11 +319,14 @@ export function HostedExperimentsPage({
         </>
       ) : (
         <p role="status">
-          {detail.execution.isPending
+          {!failure && (detail.execution.isFetching || detail.recorded.isFetching || detail.selectedPass.isFetching)
             ? "Loading Experiment…"
             : "This Experiment is unavailable in the selected workspace."}
         </p>
       )}
+      <AdvancedRefinerEvaluationControl api={api} evidence={detail.evidence.data?.result.status==="completed"?{id:detail.evidence.data.manifest.id,contentHash:detail.evidence.data.result.contentHash}:null}/>
+      <ReviewedExperimentScheduleControl api={api} configuration={run?RunExperimentSchema.parse({...run.configuration,operationId:run.configuration.request.operationId,graders:run.configuration.graders.map(grader=>({...grader,mappings:grader.mappings??[]}))}):null} onOpenExperiment={id=>navigate({...route,page:"experiments",resourceId:id,passId:null,detailTab:"overview"})}/>
+      <ExperimentImproveSidebar api={api} evidence={detail.evidence.data??null} onOpenWork={onOpenWork}/>
     </>
   );
 }

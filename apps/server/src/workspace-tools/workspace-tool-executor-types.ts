@@ -8,6 +8,7 @@ import type {
   WorkspaceDiffSummary,
   WorkspaceState,
   WorkspaceToolRequest,
+  WorkspaceToolResult,
 } from "@openpond/contracts";
 import type { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { CheckResult } from "./workspace-tool-common.js";
@@ -40,6 +41,8 @@ export type WorkflowResult = {
 };
 
 export type WorkspaceToolExecutorDeps = {
+  /** This trusted router reads durable turn admission. Candidate commands never reach live handlers. */
+  executeCandidateWorkspaceTool?: (input: { session: Session; turnId?: string; request: WorkspaceToolRequest }) => Promise<WorkspaceToolResult | null>;
   logger: WorkspaceToolLogger;
   truncateLogValue: (value: unknown) => unknown;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;

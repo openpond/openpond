@@ -48,6 +48,7 @@ export type ProfileOriginAuthority = (
   workspace: HarnessWorkspace,
   reference: { id: string; contentHash: string },
   ref: OpenPondProfileRef,
+  options?:{requireCurrentRevision?:boolean},
 ) => Promise<void>;
 
 /** Source origin is persisted by this trusted factory, never by run payloads.
@@ -107,6 +108,7 @@ export function createLocalProfileOriginAdapter(deps: {
   async function authorize(
     origin: ProfileOrigin,
     workspace?: HarnessWorkspace,
+    options:{requireCurrentRevision?:boolean}={},
   ) {
     const access = await deps.resolveAccess();
     if (
@@ -138,7 +140,7 @@ export function createLocalProfileOriginAdapter(deps: {
     if (
       result.project.id !== origin.projectId ||
       result.project.teamId !== origin.teamId ||
-      available.revision !== origin.sourceRevision ||
+      (options.requireCurrentRevision!==false&&available.revision !== origin.sourceRevision) ||
       !available.profiles.includes(origin.ref.profileId)
     )
       throw new LocalExperimentError(
@@ -182,13 +184,14 @@ export function createLocalProfileOriginAdapter(deps: {
     workspace,
     reference,
     ref,
+    options,
   ) => {
     const origin = originSchema.parse(
       workspace.metadata.profileExperimentOrigin,
     );
     if (contentHash(origin.ref) !== contentHash(ref))
       throw new Error("Profile origin reference was substituted.");
-    await authorize(origin, workspace);
+    await authorize(origin, workspace,options);
     const expectedId = `profile-origin-${contentHash([origin.apiBaseUrl, origin.actorId, origin.teamId, origin.ref, origin.sourceRevision]).slice(0, 40)}`;
     if (
       workspace.id !== expectedId ||
@@ -229,7 +232,7 @@ export function createLocalProfileOriginAdapter(deps: {
       throw new Error(
         "Installed Profile source differs from its original compiler identity.",
       );
-    await authorize(origin, workspace);
+    await authorize(origin, workspace,options);
   };
   async function workflows(
     ref: OpenPondProfileRef,
@@ -345,7 +348,7 @@ export function createLocalProfileOriginAdapter(deps: {
       .parse(
         await request(
           access,
-          `/v1/projects?teamId=${encodeURIComponent(access.teamId)}`,
+          `/v1/projects?teamId=${encodeURIComponent(access.teamId)}&role=profile`,
         ),
       );
     const entries: Array<{ ref: OpenPondProfileRef; name: string }> = [];
@@ -365,7 +368,7 @@ export function createLocalProfileOriginAdapter(deps: {
           await workflows(ref);
           entries.push({
             ref,
-            name: `${project.name} · ${profileId} (installed origin)`,
+            name: `${project.name} / ${profileId} (installed origin)`,
           });
         }
       } catch {

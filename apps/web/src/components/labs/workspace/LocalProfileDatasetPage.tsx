@@ -1,3 +1,4 @@
+import {DatasetAssignments} from "../../human-review/DatasetAssignments";
 import { DatasetExperiments } from "./DatasetExperiments";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -96,8 +97,9 @@ export function LocalProfileDatasetPage({
         </button>
       </header>
       <p>
-        Released on this computer · {release?.id} · Revision {release?.revision}
+        Released on this computer, {release?.id}, Revision {release?.revision}
       </p>
+      {tab==="tasks"&&release?<DatasetAssignments api={api} release={release} route={route} navigate={navigate} localSourceId={route.resourceId??undefined}/>:null}
       <nav className="evaluation-workspace-tabs" aria-label="Dataset sections">
         {["tasks", "experiments", "graders", "versions"].map((value) => (
           <button

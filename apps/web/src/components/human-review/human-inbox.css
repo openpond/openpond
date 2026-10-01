@@ -1,0 +1,10 @@
+.human-inbox{display:flex;flex-direction:column;gap:16px;min-width:0}
+.human-inbox header h1{font-size:22px;margin:0 0 8px}
+.human-inbox header p{margin:0;color:var(--muted-strong)}
+.human-inbox-views,.human-inbox-filters{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.human-inbox-views button[aria-pressed=true]{border-color:#22d3ee;color:var(--text)}
+.human-inbox-filters label{display:grid;gap:6px;min-width:180px}
+.human-inbox-filters label.human-inbox-history{display:flex;align-items:center;gap:8px;min-width:0}
+.human-inbox-history input{width:auto}
+.human-inbox table{min-width:520px}
+.human-inbox p[role=alert]{margin:0;border:1px solid var(--border);padding:12px;border-radius:6px}

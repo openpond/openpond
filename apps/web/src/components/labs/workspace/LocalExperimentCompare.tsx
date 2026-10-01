@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { compareExperiments } from "@openpond/evals/experiments";
 import {
-  LocalExperimentComparisonSchema,
+  LocalExperimentComparisonSchema, LocalExperimentResultSchema,
   LocalExperimentRecordPageSchema,
   type LocalExperimentRecord,
 } from "@openpond/contracts";
@@ -54,11 +54,15 @@ export function LocalExperimentCompare({
         { baselineId, candidateId },
         signal,
       );
-      return compareExperiments(evidence.baseline, evidence.candidate);
+      return {evidence,comparison:compareExperiments(evidence.baseline, evidence.candidate)};
     },
   });
   const candidate = executions.find((item) => item.id === candidateId);
-  const data = comparison.data;
+  const retained=comparison.data?.evidence,data=comparison.data?.comparison;
+  const sourceIds=retained?[retained.baseline.execution.sourceExecution?.id??retained.baseline.execution.id,retained.candidate.execution.sourceExecution?.id??retained.candidate.execution.id]:null;
+  const members=useQuery({queryKey:["local-experiments",api.key,"human-comparison-members",sourceIds],enabled:Boolean(sourceIds&&api.humanContext),queryFn:({signal})=>Promise.all(sourceIds!.map(id=>localRequest(api,LocalExperimentResultSchema,"result",{id},signal)))});
+  const human=api.humanContext&&api.projectId&&retained&&members.data?{context:api.humanContext,projectId:api.projectId,dataset:retained.baseline.manifest.dataset,selections:(identity:NonNullable<typeof data>["cases"][number]["identity"])=>members.data!.flatMap((result,index)=>{const member=result.cases.find(row=>row.taskId===identity.caseId&&row.seed===identity.seed);return member?[{executionId:sourceIds![index]!,receiptId:member.receiptId}]:[];})}:undefined;
+
 
   return (
     <EvaluationCard title="Compare retained local results">
@@ -76,7 +80,7 @@ export function LocalExperimentCompare({
             .filter((item) => item.id !== baselineId && item.completedAt && item.cleanupComplete)
             .map((item) => (
               <option key={item.id} value={item.id}>
-                {evaluationRelativeTime(item.createdAt)} · {item.status} · {item.id}
+                {evaluationRelativeTime(item.createdAt)}, {item.status}, {item.id}
               </option>
             ))}
         </select>
@@ -112,6 +116,7 @@ export function LocalExperimentCompare({
         </>
       ) : null}
       <ExperimentComparisonTables
+        human={human}
         data={data}
         loading={comparison.isFetching}
         error={comparison.error?.message}

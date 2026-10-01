@@ -1,5 +1,6 @@
 export * from "./taskset-draft-dataset-artifacts.js";
 export * from "./taskset-draft-dataset-sources.js";
+export * from "./connected-dataset-source.js";
 export * from "./taskset-draft-harness-actions.js";
 export * from "./taskset-draft-core.js";
 export * from "./taskset-draft-document.js";

@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import {
   ROOT_IMAGE_TESTS,
   ROOT_MEMORY_TESTS,
+  ROOT_QUALIFICATION_TESTS,
   ROOT_SYSTEM_TESTS,
 } from "./test-suite-manifest";
 
@@ -30,7 +31,7 @@ async function main(): Promise<void> {
   const systemTests = new Set(
     ROOT_SYSTEM_TESTS.filter((entry) => !entry.includes("*")),
   );
-  const specialTests = new Set([...ROOT_MEMORY_TESTS, ...ROOT_IMAGE_TESTS]);
+  const specialTests = new Set([...ROOT_MEMORY_TESTS, ...ROOT_IMAGE_TESTS, ...ROOT_QUALIFICATION_TESTS]);
   const failures: string[] = [];
 
   for (const listed of [...systemTests, ...specialTests]) {

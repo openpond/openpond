@@ -91,6 +91,7 @@
     "test:unit": "tsx scripts/run-tests.ts unit",
     "test:performance": "OPENPOND_CHECK_PERFORMANCE=1 vitest run --project root-memory --project root-system tests/runtime-event-lists-performance.test.ts tests/agent-app-server-cli.test.ts",
     "test:system": "tsx scripts/run-tests.ts system",
+    "test:qualification": "vitest run --project root-qualification",
     "test:integration": "tsx scripts/run-tests.ts integration",
     "test:image": "tsx scripts/run-tests.ts image",
     "test:python": "pnpm run test:python:datasets && pnpm run test:python:evals",

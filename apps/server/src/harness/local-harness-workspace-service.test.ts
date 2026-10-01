@@ -17,6 +17,7 @@ import { genericToolConformance } from "@openpond/evals/conformance";
 import { createTasksetPackage } from "openpond-sdk/taskset-packages";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { materializeExperimentCandidateSource, writeManualCandidateInstructions, freezeExperimentCandidateSource } from "./experiment-candidate-source.js";
 import { SqliteStore } from "../store/store.js";
 import {
   compileAndRegisterLocalHarnessRelease,
@@ -900,6 +901,14 @@ describe("local Harness workspace service", () => {
       },
     };
 
+    // Failure story: a root Agent must not duplicate private eval bytes under a policy Agent prefix.
+    const rootAgent = await compileProfileHarnessSource({ storeDir: directory, workspaceId: "root-agent-partition", name: "Root Agent",
+      profile: { ...profile, agents: [{ id: "default", name: "Default", path: ".", enabled: true }] } });
+    expect(rootAgent.manifest.files.some(file => file.path.startsWith("agents/default/evals/"))).toBe(false);
+    expect(rootAgent.manifest.files.some(file => file.path === "agents/default/agent/agent.ts" && file.visibility === "policy")).toBe(true);
+    expect(rootAgent.manifest.files.some(file => file.path === "evals/catalog.json" && file.visibility === "verifier")).toBe(true);
+    expect(rootAgent.sourceFiles.filter(file => file.asset.visibility === "policy").some(file => file.bytes.toString() === evaluationSource)).toBe(false);
+
     const imported = await importProfileIntoLocalHarnessWorkspace({
       store,
       storeDir: directory,
@@ -909,6 +918,19 @@ describe("local Harness workspace service", () => {
       profile,
       now: () => NOW,
     });
+    const candidate = await materializeExperimentCandidateSource({storeDir:directory,candidateId:"manual-private-boundary",base:imported.release,
+      component:{kind:"skill",path:"skills/documents/SKILL.md"}});
+    expect(await fs.readdir(candidate.sourceRoot)).not.toContain("evals");
+    expect(candidate.publicManifest.files.every(file=>file.visibility==="policy")).toBe(true);
+    const edited = "---\nname: documents\ndescription: Create documents.\n---\n\nValidate the document before returning it.\n";
+    await writeManualCandidateInstructions({storeDir:directory,candidateId:"manual-private-boundary",expectedHash:candidate.publicHashes["skills/documents/SKILL.md"]!,text:edited});
+    const frozen = await freezeExperimentCandidateSource({storeDir:directory,candidateId:"manual-private-boundary",base:imported.release,workspaceId:imported.workspace.id,createdAt:LATER});
+    expect(frozen.diff.map(file=>file.path)).toEqual(["skills/documents/SKILL.md"]);
+    expect(frozen.release.harnessRelease.files.filter(file=>file.visibility==="verifier")).toEqual(imported.release.harnessRelease.files.filter(file=>file.visibility==="verifier"));
+    expect(await fs.readFile(path.join(localHarnessWorkspacePaths(directory,imported.workspace.id).source,"skills/documents/SKILL.md"),"utf8")).not.toBe(edited);
+    await fs.chmod(path.join(candidate.sourceRoot,"program.json"),0o600);
+    await fs.writeFile(path.join(candidate.sourceRoot,"program.json"),"{}");
+    await expect(freezeExperimentCandidateSource({storeDir:directory,candidateId:"manual-private-boundary",base:imported.release,workspaceId:imported.workspace.id,createdAt:LATER})).rejects.toThrow("outside its selected component");
     expect(imported.release.agentSnapshot.skills).toHaveLength(1);
     expect(imported.release.agentSnapshot.agents).toHaveLength(1);
     expect(imported.release.harnessRelease.files).toEqual(

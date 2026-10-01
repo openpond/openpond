@@ -96,3 +96,5 @@ export * from "./task-inbox.js";
 export * from "./local-experiments.js";
 export * from "./local-experiment-sources.js";
 export * from "./local-experiment-runs.js";
+
+export * from "./evaluation-operation-recovery.js";

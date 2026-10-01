@@ -8,22 +8,26 @@ import {
   resolveProfileEvaluationRunSource,
   tasksetRunMetricPolicy,
   type ProfileEvaluationDefinition,
+  ProfileExternalDatasetBindingSchema, verifyProfileExternalDatasetBinding,
 } from "@openpond/evals";
 import { validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 
 import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
+import {externalProfileEvaluationDefinition,type ProfileExternalDatasetResolver} from "./profile-external-dataset-admission.js";
 import { type ProfileWorkflow } from "@openpond/harness";
 
 const PrepareRequestSchema = z.object({
   id: ReleaseIdSchema,
   createdAt: ReleaseTimestampSchema,
   definitionId: ReleaseIdSchema,
+  externalDatasetBinding: ProfileExternalDatasetBindingSchema.optional(),
   profileRef: OpenPondProfileRefSchema.optional(),
   profileSource:z.object({sourceRevision:z.string().min(1).max(500),harnessRelease:z.object({id:ReleaseIdSchema,contentHash:ReleaseHashSchema}).strict()}).strict().optional(),
   modelRef: ChatModelRefSchema,
   /** Trusted embedding host's resolved model configuration receipt. Desktop
    * computes this itself and ignores the caller's value. */
   hostModelConfigurationHash: ReleaseHashSchema.optional(),
+  hostArtifactHash:ReleaseHashSchema.optional(),
   maximumSpendUsd: z.number().positive().max(10_000).optional(),
   expectedManifestHash: ReleaseHashSchema.optional(),
   hostExperiment: z.object({
@@ -52,8 +56,14 @@ type SelectedWorkflows = {
  * and the exact Taskset package named by its verifier-private definition. */
 export function createProfileEvaluationRunPreparationService(input: {
   loadCatalog: ProfileEvaluationCatalogSource;
+  /** Trusted actual private grader owner, never a request capability. */
+  privateGradingPreflight?:(packageValue:TasksetPackage)=>Promise<void>;
+  /** Private host resolver verified this frozen source before preparation. */
+  sourceCandidate?:import("@openpond/evals").ProfileSourceCandidate;
   selectedWorkflows: (ref?: OpenPondProfileRef,source?:{sourceRevision:string;harnessRelease:{id:string;contentHash:string}}) => Promise<SelectedWorkflows>;
   loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
+  /** Trusted current Dataset/Profile ownership and actual published-package resolver; no client marker grants authority. */
+  resolveExternalDataset?: ProfileExternalDatasetResolver;
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
   placement: "local" | "remote" | "colocated";
 }) {
@@ -66,18 +76,16 @@ export function createProfileEvaluationRunPreparationService(input: {
     const selected = options?.selectedWorkflows ?? await input.selectedWorkflows(parsed.profileRef,parsed.profileSource);
     if(parsed.profileRef&&contentHash(parsed.profileRef)!==contentHash(selected.profileRef))throw new Error("Profile preparation did not resolve the explicitly selected Profile.");
     if(parsed.profileSource&&(selected.sourceRevision!==parsed.profileSource.sourceRevision||contentHash(selected.harnessRelease)!==contentHash(parsed.profileSource.harnessRelease)))throw new Error("Profile preparation changed its explicitly pinned source.");
-    const discovered = await input.loadCatalog({
-      ref: selected.profileRef,
-      sourceRevision: selected.sourceRevision,
-      harnessRelease: selected.harnessRelease,
-    });
-    const catalog = {
-      schemaVersion: "openpond.profileEvaluations.v1" as const,
-      definitions: discovered.definitions,
-      suites: discovered.suites,
-    };
-    const definition = discovered.definitions.find((item) => item.id === parsed.definitionId);
-    if (!definition) throw new Error(`Evaluation ${parsed.definitionId} is absent from the selected Profile release.`);
+    const external=parsed.externalDatasetBinding?verifyProfileExternalDatasetBinding(parsed.externalDatasetBinding):null;
+    const authorizedExternal=external?await (input.resolveExternalDataset?input.resolveExternalDataset(external,selected):Promise.reject(new Error("This host has not qualified external Dataset Profile execution."))):null;
+    if(authorizedExternal){await authorizedExternal.authorize();if(contentHash(verifyProfileExternalDatasetBinding(authorizedExternal.binding))!==contentHash(external))throw new Error("External Dataset admission differs from the actual authorized recipe.");}
+    const discovered = await input.loadCatalog({ref:selected.profileRef,sourceRevision:selected.sourceRevision,harnessRelease:selected.harnessRelease});
+    if(external&&external.declaredProfileCatalogHash!==discovered.catalogHash)throw new Error("The original Profile verifier catalog changed.");
+    const externalDefinition:ProfileEvaluationDefinition|null=external?externalProfileEvaluationDefinition(external):null;
+    if(externalDefinition&&parsed.definitionId!==externalDefinition.id)throw new Error("Use the external recipe's own definition identity.");
+    const catalog={schemaVersion:"openpond.profileEvaluations.v1" as const,definitions:externalDefinition?[externalDefinition]:discovered.definitions,suites:externalDefinition?[]:discovered.suites};
+    const definition=externalDefinition??discovered.definitions.find(item=>item.id===parsed.definitionId);
+    if(!definition)throw new Error(`Evaluation ${parsed.definitionId} is absent from the selected Profile release.`);
     const target = definition.target;
     const binding = target.kind === "workflow"
       ? selected.workflows.find((entry) => entry.binding.workflowId === target.workflowId)?.binding
@@ -89,7 +97,7 @@ export function createProfileEvaluationRunPreparationService(input: {
         target,
       });
     if (!binding) throw new Error(`Evaluation workflow ${target.kind === "workflow" ? target.workflowId : ""} is absent from the selected Profile release.`);
-    const packageValue = validateTasksetPackage(await input.loadTasksetPackage(definition, selected.profileRef.profileId, selected.harnessRelease));
+    const packageValue = validateTasksetPackage(authorizedExternal?.packageValue??await input.loadTasksetPackage(definition, selected.profileRef.profileId, selected.harnessRelease));
     const taskset = packageValue.taskset;
     if (taskset.id !== definition.tasksetRelease.id || taskset.contentHash !== definition.tasksetRelease.contentHash) {
       throw new Error("Evaluation Taskset package differs from its released definition.");
@@ -110,10 +118,11 @@ export function createProfileEvaluationRunPreparationService(input: {
         || asset.sizeBytes > CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes))) {
       throw new Error("Profile evaluation accepts only bounded policy-visible PDF task attachments.");
     }
-    if (taskset.graders.some((grader) => grader.kind === "model_judge" || grader.kind === "custom_verifier")
-      || taskset.metrics?.aggregation === "custom") {
+    if (!external && !input.privateGradingPreflight && (taskset.graders.some((grader) => grader.kind === "model_judge" || grader.kind === "custom_verifier")
+      || taskset.metrics?.aggregation === "custom")) {
       throw new Error("Profile evaluation cannot run this Taskset's model judge, custom verifier, or custom metric in the current app-server runtime.");
     }
+    await input.privateGradingPreflight?.(packageValue);
     const runtimeTarget = {
       adapterId: target.kind === "workflow" ? "openpond.profile-workflow" : "openpond.profile-component",
       placement: input.placement,
@@ -124,17 +133,20 @@ export function createProfileEvaluationRunPreparationService(input: {
         connectedAppScopes: taskset.policy.connectedAppScopes,
       }),
     } as const;
-    const source = resolveProfileEvaluationRunSource({
+    const declaredSource = resolveProfileEvaluationRunSource({
       catalog, definitionId: definition.id,
       profileId: selected.profileRef.profileId,
       sourceRevision: selected.sourceRevision,
       harnessRelease: selected.harnessRelease,
       environmentHash: contentHash({ packageHash: packageValue.contentHash, runtimeTarget }),
     });
+    const source={...declaredSource,...(external?{externalDatasetBinding:external}:{}),...(input.sourceCandidate?{sourceCandidate:input.sourceCandidate}:{})};
+    if(external&&(external.packageHash!==packageValue.contentHash||external.environmentHash!==contentHash(taskset.environment)||external.privateDatasetClosureHash!==contentHash(packageValue.files.filter(file=>file.asset.visibility!=="policy").map(file=>file.asset))))
+      throw new Error("External Dataset package/environment/private closure changed.");
     const model = ModelRefSchema.parse({
       provider: parsed.modelRef.providerId,
       model: parsed.modelRef.modelId,
-      revision: null, artifactHash: null, tokenizerRevision: null, chatTemplateHash: null,
+      revision: null, artifactHash: parsed.hostArtifactHash??null, tokenizerRevision: null, chatTemplateHash: null,
     });
     const modelConfigurationHash = await input.modelConfigurationHash(parsed.modelRef, parsed);
     const manifest = createTasksetRunManifest({
@@ -147,7 +159,7 @@ export function createProfileEvaluationRunPreparationService(input: {
       policy: { kind: "model", model, configurationHash: modelConfigurationHash },
       gradingRole: "evaluation",
       metricPolicy: tasksetRunMetricPolicy(taskset),
-      population: definition.taskIds.flatMap((taskId) => definition.seeds.map((seed) => ({
+      population: external ? external.population.map(member=>({...member,receiptId:`evaluation-${contentHash([parsed.id,member.taskId,member.seed,member.fixtureId]).slice(0,32)}`})) : definition.taskIds.flatMap((taskId) => definition.seeds.map((seed) => ({
         receiptId: `evaluation-${contentHash([parsed.id, taskId, seed]).slice(0, 32)}`,
         taskId, seed, fixtureId: null,
       }))),
@@ -170,6 +182,7 @@ export function createProfileEvaluationRunPreparationService(input: {
       },
     });
     assertProfileEvaluationRunAdmission(manifest, taskset, catalog);
+    if(authorizedExternal)await authorizedExternal.authorize();
     if (parsed.expectedManifestHash && manifest.contentHash !== parsed.expectedManifestHash) {
       throw new Error("Profile evaluation setup changed since preview; prepare the run again.");
     }

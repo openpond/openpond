@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {ProfileSourceCandidateSchema} from "./profile-source-candidate.js";
 
 import {
   ImmutableReleaseRefSchema, ReleaseHashSchema, ReleaseIdSchema, contentHash,
@@ -7,20 +8,10 @@ import {
 } from "@openpond/harness";
 import { TaskSplitSchema } from "./tasksets.js";
 
-const RelativePathSchema = z.string().min(1).max(2_000).refine((value) =>
-  !value.includes("\\") && !value.includes(":") && !value.startsWith("/")
-  && value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
-  "evaluation paths must be portable and relative",
-);
-
-/** Portable selection only. Taskset releases own task data and graders; run
- * manifests and evidence stay in the installation's evaluation store. */
-export const ProfileEvaluationTargetSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("profile") }).strict(),
-  z.object({ kind: z.literal("workflow"), workflowId: ReleaseIdSchema }).strict(),
-  z.object({ kind: z.literal("skill"), skillPath: RelativePathSchema }).strict(),
-  z.object({ kind: z.literal("agent_action"), actionId: ReleaseIdSchema }).strict(),
-]);
+import { ProfileEvaluationTargetSchema } from "./profile-evaluation-target.js";
+import { ProfileExternalDatasetBindingSchema } from "./profile-external-evaluation.js";
+export { ProfileEvaluationTargetSchema } from "./profile-evaluation-target.js";
+export * from "./profile-external-evaluation.js";
 
 export const ProfileEvaluationDefinitionSchema = z.object({
   id: ReleaseIdSchema,
@@ -71,6 +62,8 @@ export const ProfileEvaluationRunSourceSchema = z.object({
   definitionHash: ReleaseHashSchema,
   target: ProfileEvaluationTargetSchema,
   environmentHash: ReleaseHashSchema,
+  externalDatasetBinding: ProfileExternalDatasetBindingSchema.optional(),
+  sourceCandidate:ProfileSourceCandidateSchema.optional(),
 }).strict();
 export type ProfileEvaluationRunSource = z.infer<typeof ProfileEvaluationRunSourceSchema>;
 

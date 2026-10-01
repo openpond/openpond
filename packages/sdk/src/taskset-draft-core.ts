@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { ChatModelRefSchema } from "@openpond/harness/models";
 import { CustomVerifierRuntimeSchema } from "@openpond/evals/tasksets";
+import { HumanFormSchema } from "@openpond/evals/human-review";
 import { DatasetSplitSchema } from "./taskset-draft-dataset-artifacts.js";
 import { ExternalDatasetSourceRefSchema } from "./taskset-draft-dataset-sources.js";
+import { ConnectedDatasetSourceRefSchema } from "./connected-dataset-source.js";
 import { HarnessActionBindingSchema } from "./taskset-draft-harness-actions.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
@@ -102,6 +104,7 @@ export const TrainingSourceRefSchema = z.object({
 export const TasksetSourceRefSchema = z.union([
   TrainingSourceRefSchema,
   ExternalDatasetSourceRefSchema,
+  ConnectedDatasetSourceRefSchema,
 ]);
 
 export const TaskPolicyBoundarySchema = z.object({
@@ -301,6 +304,7 @@ export const RubricGraderSpecSchema = GraderBaseSchema.extend({
 
 export const HumanGraderSpecSchema = GraderBaseSchema.extend({
   kind: z.literal("human"),
+  form: HumanFormSchema.optional(),
   rubric: z.string().trim().min(1).max(50_000),
   reviewerRole: z.string().trim().min(1).max(500),
 });

@@ -16,7 +16,7 @@ export async function resolveLocalProfileExperimentSource(store:HarnessStateStor
   const workspace=release&&await store.getHarnessWorkspace(release.workspaceId);
   if(!release||!workspace||release.harnessRelease.id!==reference.id||workspace.location!=="local"||workspace.metadata.sourceLayout!=="openpond.harnessSourceManifest.v1")
     throw new LocalExperimentError("local_profile_source_unavailable","The exact Profile Harness is unavailable.",403);
-  const remote=workspace.metadata.profileExperimentOrigin!==undefined;
+  const remote=workspace.metadata.profileExperimentOrigin!==undefined||workspace.metadata.experimentCandidateOrigin!==undefined;
   if(remote) {
     if(!authorizeOrigin||!profileRef)throw new LocalExperimentError("local_profile_origin_access_denied","This source requires its authenticated origin.",403);
     await authorizeOrigin(workspace,reference,profileRef);

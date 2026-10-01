@@ -103,6 +103,10 @@ export async function handleCoreRoutes({
     sendJson(response, 200, await profileEvaluationsPayload());
     return true;
   }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/evaluations/discover") {
+    sendJson(response, 200, await profileEvaluationsPayload(await readJson(request)));
+    return true;
+  }
   if (request.method === "POST" && requestUrl.pathname === "/v1/profile/evaluations/prepare") {
     sendJson(response, 200, await profileEvaluationPreparePayload(await readJson(request)));
     return true;

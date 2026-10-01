@@ -47,7 +47,9 @@ test("durable evaluation intent survives restart and fences acknowledgement scop
     expect(await prepare()).toEqual(first);
     expect(await service.request({teamId,operation:"acknowledgeOperation",value:{...value,id:first.id}})).toEqual({acknowledged:true});
     const explicitNext=await prepare();expect(explicitNext.id).not.toBe(first.id);
-    await expect(service.request({teamId,operation:"acknowledgeOperation",value:{...value,id:first.id}})).rejects.toThrow("does not own");
+    // A lost acknowledgement can replay its immutable old identity without
+    // consuming the next prepared Start in the same actor/workspace scope.
+    expect(await service.request({teamId,operation:"acknowledgeOperation",value:{...value,id:first.id}})).toEqual({acknowledged:true});
     expect(await prepare()).toEqual(explicitNext);
   } finally {await Promise.all(servers.map(server=>new Promise<void>(resolve=>server.close(()=>resolve()))));await store.close();await rm(home,{recursive:true,force:true});}
 });

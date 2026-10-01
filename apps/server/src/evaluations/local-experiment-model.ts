@@ -1,3 +1,4 @@
+import { ScheduledTransportNotInvokedError, currentScheduledAdmissionGuard } from "./evaluation-schedule-admission-guard.js";
 import { contentHash } from "@openpond/harness";
 import { loadOpenPondHostedModels, streamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { HostedChatUsage } from "@openpond/cloud";
@@ -7,7 +8,8 @@ import { hostedTokenPricingFromCatalog, hostedUsageCostUsd, type HostedTokenPric
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 import type { SqliteLocalExperimentStore } from "../store/store-local-experiments.js";
 
-export type LocalModelAdmission={model:LocalExperimentDefinition["model"];pricing:HostedTokenPricing;maximumChargeUsd:number};
+export type LocalModelStreamScope={store:SqliteLocalExperimentStore;ownerId:string;teamId:string;executionId:string;caseId:string};
+export type LocalModelAdmission={model:LocalExperimentDefinition["model"];pricing:HostedTokenPricing|null;maximumChargeUsd:number;stream?:typeof streamOpenPondHostedChatTurn;streamFactory?:(scope:LocalModelStreamScope)=>typeof streamOpenPondHostedChatTurn};
 export async function prepareLocalExperimentModel(policy:LocalExperimentDefinition["configuration"]["request"]["policy"],catalog=loadOpenPondHostedModels,nativeHarnessAdmitted=false):Promise<LocalModelAdmission> {
   if(policy.kind==="hosted_harness")return prepareLocalExperimentModel({kind:"hosted_chat",modelId:policy.modelId,maxOutputTokens:4096,temperature:0,topP:1},catalog);
   if(policy.kind!=="hosted_chat")throw new LocalExperimentError("local_target_not_qualified","Select an explicit model target for local execution.",422);
@@ -32,24 +34,27 @@ export async function prepareLocalExperimentModel(policy:LocalExperimentDefiniti
  * and measured-or-unknown accounting; it never retries a dispatch. */
 export function createLocalBudgetedModelStream(input:{store:SqliteLocalExperimentStore;ownerId:string;teamId:string;executionId:string;caseId:string;
   admission:LocalModelAdmission;stream?:typeof streamOpenPondHostedChatTurn}):typeof streamOpenPondHostedChatTurn {
-  const stream=input.stream??streamOpenPondHostedChatTurn;
+  const stream=input.admission.streamFactory?.(input)??input.admission.stream??input.stream??streamOpenPondHostedChatTurn;
   return async function* (request) {
     if(!request.requestId)throw new LocalExperimentError("local_request_identity_missing","Every local model dispatch requires a stable request identity.");
     const model=input.admission.model;
     if(request.model!==model.modelId || request.maxTokens!==model.maxOutputTokens
       || request.temperature!==model.temperature || request.topP!==model.topP)
       throw new LocalExperimentError("local_model_configuration_conflict","The native model request changed its admitted model, output limit or sampling configuration.",422);
+    const scheduled=currentScheduledAdmissionGuard();scheduled?.assertExecution(input.executionId);
     const base={teamId:input.teamId,id:input.executionId,ownerId:input.ownerId,requestId:request.requestId};
     await input.store.reserveLocalCharge({...base,caseId:input.caseId,maximumUsd:input.admission.maximumChargeUsd});
     if(request.signal?.aborted) {
       await input.store.settleLocalCharge({...base,costUsd:null,usage:null,notDispatched:true});
       request.signal.throwIfAborted();
     }
-    await input.store.markLocalChargeDispatched(base.teamId,base.id,base.requestId,base.ownerId);
+    try {await input.store.markLocalChargeDispatched(base.teamId,base.id,base.requestId,base.ownerId);}
+    catch(error){if(scheduled)await input.store.settleLocalCharge({...base,costUsd:null,usage:null,notDispatched:true});throw error;}
     await input.store.appendLocalExperimentEvent({...base,caseId:input.caseId,type:"model.dispatch",payload:{requestId:base.requestId,model:request.model,messages:request.messages}});
-    let usage:HostedChatUsage|null=null,finished=false;
+    let usage:HostedChatUsage|null=null,finished=false,emitted=false,confirmedTransportNotInvoked:ScheduledTransportNotInvokedError|undefined;
     try {
       for await(const delta of stream(request)) {
+        emitted=true;
         if(delta.type==="usage")usage=delta.usage;
         if(delta.type==="finish")finished=true;
         const payload=delta.type==="text_delta"?{requestId:base.requestId,text:delta.text}
@@ -59,10 +64,13 @@ export function createLocalBudgetedModelStream(input:{store:SqliteLocalExperimen
         if(payload)await input.store.appendLocalExperimentEvent({...base,caseId:input.caseId,type:`model.${delta.type}`,payload});
         yield delta;
       }
+    } catch(error) {
+      if(!emitted&&error instanceof ScheduledTransportNotInvokedError&&error.executionId===base.id&&error.requestId===base.requestId)confirmedTransportNotInvoked=error;
+      throw error;
     } finally {
       const tokens=normalizeModelUsageTokens(usage);
-      const costUsd=finished&&tokens.promptTokens!==null&&tokens.completionTokens!==null?hostedUsageCostUsd(usage,input.admission.pricing):null;
-      await input.store.settleLocalCharge({...base,costUsd,usage:usage===null?null:{promptTokens:tokens.promptTokens,completionTokens:tokens.completionTokens,
+      const costUsd=input.admission.pricing&&finished&&tokens.promptTokens!==null&&tokens.completionTokens!==null?hostedUsageCostUsd(usage,input.admission.pricing):null;
+      await input.store.settleLocalCharge({...base,costUsd,confirmedTransportNotInvoked,usage:usage===null?null:{promptTokens:tokens.promptTokens,completionTokens:tokens.completionTokens,
         cachedPromptTokens:tokens.cachedPromptTokens,uncachedPromptTokens:tokens.uncachedPromptTokens}});
     }
   };

@@ -41,3 +41,6 @@ const executeMetric: TasksetMetricExecutor = async ({ source, module, exportName
 const executeProcessMetric: TasksetMetricExecutor = ({ source, module, exportName, scores, timeoutMs, signal }) =>
   executeJavaScriptIsolateInProcess({ source, exportName, value: scores, timeoutMs, signal, stripTypeScript: /\.[cm]?ts$/.test(module),
     maxResultBytes: 1_024, deterministic: true, errorPrefix: "metric" });
+
+/** Trusted host port for a frozen private metric; callers retain source and receipt ownership. */
+export const executeTasksetMetricWorker: TasksetMetricExecutor = executeMetric;

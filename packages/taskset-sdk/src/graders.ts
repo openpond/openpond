@@ -21,7 +21,7 @@ export type CustomVerifierRunner = (input: {
   task: TaskDataRecord;
   attempt: TaskAttemptResult;
   signal?: AbortSignal;
-}) => Promise<{ score: number; passed: boolean; feedback: string; evidenceRefs?: string[] }>;
+}) => Promise<{ score: number | null; passed: boolean; feedback: string; evidenceRefs?: string[] }>;
 
 export async function gradeAttempt(input: {
   task: TaskDataRecord;

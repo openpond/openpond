@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {contentHash} from "@openpond/harness";
-import { SaveExperimentSchema,RunExperimentSchema, ExperimentDefinitionRefSchema, ExperimentGraderPinSchema, ExperimentGraderSelectionSchema, ExperimentAttemptGradeSchema } from "openpond-sdk/experiments";
+import { ClaudeProcessEvidenceSchema, SaveExperimentSchema,RunExperimentSchema, ExperimentDefinitionRefSchema, ExperimentGraderPinSchema, ExperimentGraderSelectionSchema, ExperimentAttemptGradeSchema } from "openpond-sdk/experiments";
 import { TasksetPackageSchema } from "openpond-sdk/taskset-packages";
 import { NativeHarnessExperimentEvidenceSchema, ExperimentManifestSchema, ExperimentResultSchema, verifyExperimentEvidence } from "@openpond/evals/experiments";
 import { ProfileEvaluationRunSourceSchema } from "@openpond/evals";
@@ -11,7 +11,7 @@ const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const LocalExperimentStatusSchema=z.enum(["queued","running","cancelling","completed","failed","cancelled","interrupted"]);
 
 export const ExperimentModelConfigurationSchema = z.object({
-  providerId: z.literal("openpond"), modelId: z.string().trim().min(1).max(500), configurationHash: Hash,
+  providerId: z.enum(["openpond","custom-openai-compatible","claude-code"]), modelId: z.string().trim().min(1).max(500), configurationHash: Hash,
   maxOutputTokens: z.number().int().positive().max(262_144),
   temperature: z.number().min(0).max(2).optional(),
   topP: z.number().positive().max(1).optional(),
@@ -126,6 +126,7 @@ export const LocalExperimentCaseResultSchema = z.object({
   grade:ExperimentAttemptGradeSchema.nullable(),error:z.string().nullable(),
   native:LocalExperimentNativeEvidenceSchema.optional(),
   profileNative:LocalExperimentProfileEvidenceSchema.optional(),
+  externalProcess:ClaudeProcessEvidenceSchema.optional(),
 }).strict();
 export const LocalExperimentResultSchema = z.object({
   execution:z.union([LocalExperimentRecordSchema,LocalExperimentPublicExecutionSchema]),cases:z.array(LocalExperimentCaseResultSchema).max(10_000),contentHash:Hash,

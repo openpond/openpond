@@ -28,3 +28,5 @@ export * from "./tasksets.js";
 export * from "./task-schema.js";
 export * from "./rewards.js";
 export * from "./learning/index.js";
+
+export * from "./profile-source-candidate.js";

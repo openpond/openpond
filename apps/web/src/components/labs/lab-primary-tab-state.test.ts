@@ -11,7 +11,7 @@ describe("Models page, scope and resource route boundary", () => {
       const original = modelsLocation(page, "model A");
       const url = new URL(modelsPath(original), "https://local.invalid");
       expect(url.searchParams.has("model")).toBe(false);
-      if (["datasets", "graders", "experiments"].includes(page)) expect(url.pathname).toBe(`/models/${page}`);
+      if (["home", "inbox", "datasets", "graders", "experiments"].includes(page)) expect(url.pathname).toBe(`/models/${page}`);
       else if (page !== "get-started") expect(url.pathname).toContain("/models/model%20A");
       expect(modelsRouteFromLocation(url)).toEqual(original);
       expect(changeModelsScope(original, "model B")).toEqual(modelsLocation(page, "model B"));

@@ -11,6 +11,7 @@ import {
   contentHash,
 } from "@openpond/harness";
 import { TasksetMetricPolicySchema } from "./metric-policy.js";
+import { HumanFormSchema } from "./human-review/contracts.js";
 
 export const TaskSplitSchema = z.enum(["train", "validation", "test", "frozen_eval"]);
 export const RequiredOutputContractSchema = z.object({
@@ -72,6 +73,7 @@ export const HumanGraderSpecSchema = GraderBaseSchema.extend({
   kind: z.literal("human"),
   rubricRef: ImmutableAssetRefSchema,
   reviewerRole: z.string().trim().min(1).max(500),
+  form: HumanFormSchema.optional(),
 }).strict();
 export const GraderSpecSchema = z.union([
   DeterministicGraderSpecSchema,

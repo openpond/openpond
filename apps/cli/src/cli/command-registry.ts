@@ -78,6 +78,36 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({ options, rest }) => (await import("./datasets")).runDatasetsCommand(options, rest),
   },
   {
+    name: "connected-evidence",
+    usage: "openpond connected-evidence <list|collection|recorded-list|recorded|import-receipt|summary|case|unmapped|capture|selection|publish|prepare-recorded|upload-part|preview|commit|set-collection> [id] --team <id> [--input-file <path>] [--project <id>] [--cursor <id>] [--limit <n>]",
+    optionSchema: {team:"string",inputFile:"string",project:"string",cursor:"string",limit:"integer"},
+    handler:async({options,rest})=>(await import("./connected-evidence")).runConnectedEvidenceCommand(options,rest),
+  },
+  {
+    name: "improve",
+    usage: "openpond improve <list|read|instructions|request> [id] --team <id> --actor <owner-id> [--input-file <path>] [--cursor <id>] [--limit <n>] [--local --server-url <loopback-origin>]",
+    optionSchema:{team:"string",actor:"string",inputFile:"string",cursor:"string",limit:"integer",local:"boolean",serverUrl:"string"},
+    handler:async({options,rest})=>(await import("./experiment-improvements")).runExperimentImprovementsCommand(options,rest),
+  },
+  {
+    name:"evaluation-schedules",
+    usage:"openpond evaluation-schedules <list|read|request> [id] --team <id> --actor <id> --local [--server-url <loopback-origin>] [--project <id>] [--input-file <path>] [--cursor <id>] [--limit <n>]",
+    optionSchema:{team:"string",actor:"string",local:"boolean",serverUrl:"string",project:"string",inputFile:"string",cursor:"string",limit:"integer"},
+    handler:async({options,rest})=>(await import("./evaluation-coordination")).runEvaluationCoordinationCommand("schedule",options,rest),
+  },
+  {
+    name:"evaluate-refiner",
+    usage:"openpond evaluate-refiner <list|read|cancel|resume|request> [id] --team <id> --actor <id> --local [--server-url <loopback-origin>] [--project <id>] [--input-file <path>]",
+    optionSchema:{team:"string",actor:"string",local:"boolean",serverUrl:"string",project:"string",inputFile:"string"},
+    handler:async({options,rest})=>(await import("./evaluation-coordination")).runEvaluationCoordinationCommand("refiner",options,rest),
+  },
+  {
+    name: "human-review",
+    usage: "openpond human-review <read|inbox|inspect|results|request> [id] --team <id> [--input-file <path>] [--view <mine|team|approval>] [--status <active|history>] [--project <id>] [--revision <n>] [--slot <0|1>] [--after-id <id>] [--limit <n>] [--local --server-url <loopback-origin>]",
+    optionSchema:{team:"string",inputFile:"string",view:"string",status:"string",project:"string",revision:"integer",slot:"integer",afterId:"string",limit:"integer",local:"boolean",serverUrl:"string"},
+    handler:async({options,rest})=>(await import("./human-review")).runHumanReviewCommand(options,rest),
+  },
+  {
     name: "experiments",
     usage: "openpond experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]",
     optionSchema: { team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", status: "string", afterId: "string", limit: "integer", json: "boolean",local:"boolean",serverUrl:"string",receiptId:"string",afterSequence:"integer",revision:"integer",contentHash:"string" },

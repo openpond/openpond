@@ -1,8 +1,7 @@
+import {resolveOpenPondHome, storagePaths} from "@openpond/persistence";
 import { readFile } from "node:fs/promises";
 import { request as requestHttp } from "node:http";
 import { randomUUID } from "node:crypto";
-import os from "node:os";
-import path from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import {
@@ -148,14 +147,11 @@ export async function createLocalAuthenticatedRequest(
   const url = new URL(baseUrl);
   if (
     url.protocol !== "http:"
-    || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)
+    || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
   ) {
     return fetch;
   }
-  const appHome =
-    process.env.OPENPOND_HOME?.trim()
-    || path.join(os.homedir(), ".openpond", "openpond-app");
-  const token = (await readFile(path.join(appHome, "token"), "utf8")).trim();
+  const token = (await readFile(storagePaths(resolveOpenPondHome()).token, "utf8")).trim();
   if (!token) {
     throw new Error("OpenPond local capability token is empty.");
   }
@@ -167,12 +163,15 @@ export async function createLocalAuthenticatedRequest(
       resource instanceof Request
         ? new URL(resource.url)
         : new URL(String(resource));
+    if (target.origin !== url.origin || target.username || target.password)
+      throw new Error("Local capability requests must remain on the selected server origin.");
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${token}`);
     const nodeHeaders: Record<string, string> = {};
     headers.forEach((value, name) => {
       nodeHeaders[name] = value;
     });
+    const requestSignal = init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000);
     return new Promise<Response>((resolve, reject) => {
       let settled = false;
       const request = requestHttp(
@@ -183,7 +182,15 @@ export async function createLocalAuthenticatedRequest(
         },
         (response) => {
           const chunks: Buffer[] = [];
-          response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          let responseBytes = 0;
+          response.on("data", (chunk: Buffer) => {
+            responseBytes += chunk.byteLength;
+            if (responseBytes > 8_388_608) {
+              response.destroy(new Error("Local evaluation response exceeds 8 MiB."));
+              return;
+            }
+            chunks.push(chunk);
+          });
           response.once("error", rejectOnce);
           response.once("end", () => {
             if (settled) return;
@@ -212,15 +219,15 @@ export async function createLocalAuthenticatedRequest(
         reject(error);
       };
       request.once("error", rejectOnce);
-      if (init.signal) {
+      if (requestSignal) {
         const abort = () =>
           request.destroy(
-            init.signal?.reason instanceof Error
-              ? init.signal.reason
+            requestSignal.reason instanceof Error
+              ? requestSignal.reason
               : new Error("Training API request aborted."),
           );
-        if (init.signal.aborted) abort();
-        else init.signal.addEventListener("abort", abort, { once: true });
+        if (requestSignal.aborted) abort();
+        else requestSignal.addEventListener("abort", abort, { once: true });
       }
       if (init.body !== undefined && init.body !== null) {
         if (

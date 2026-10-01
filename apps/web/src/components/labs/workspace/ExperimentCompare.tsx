@@ -1,3 +1,5 @@
+import type { ConnectedRecordedExecution } from "openpond-sdk/connected-evidence";
+import { experimentCaseKey } from "@openpond/evals/experiments";
 import { useState } from "react";
 import { EvaluationCard, EvaluationTime, evaluationRelativeTime } from "./EvaluationPresentation";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -6,6 +8,7 @@ import type { ExperimentRunDetails } from "openpond-sdk/experiments";
 import type { Inventory, WorkspaceApi } from "./workspace-api";
 type Comparison = Awaited<ReturnType<OpenPondExperimentsClient["compare"]>>;
 import { ExperimentComparisonTables } from "./ExperimentComparisonTables";
+import { useRecordedExperimentHistory } from "./RecordedExperimentCollection";
 import type { ExperimentGraderPin } from "openpond-sdk/experiments";
 export function ExperimentCompare({
   api,
@@ -22,6 +25,9 @@ export function ExperimentCompare({
 }) {
   const [candidateExecution, setCandidateExecution] = useState("");
   const [candidatePass, setCandidatePass] = useState("");
+  const [candidateKind,setCandidateKind]=useState<"model"|"recorded_evidence">("model");
+  const recordedHistory=useRecordedExperimentHistory(api);
+  const recordedItems=[...new Map((recordedHistory.data?.pages.flatMap(page=>page.items)??[]).map(item=>[item.id,item])).values()];
   const history = useInfiniteQuery({
     queryKey: ["evaluation-workspace", api.key, "compareCandidates"],
     initialPageParam: undefined as string | undefined,
@@ -35,7 +41,7 @@ export function ExperimentCompare({
       ),
   });
   const passes = useInfiniteQuery({
-    queryKey: ["evaluation-workspace", api.key, "comparePasses", candidateExecution],
+    queryKey: ["evaluation-workspace", api.key, "comparePasses", candidateExecution,candidateKind],
     enabled: Boolean(candidateExecution),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page: { items: ExperimentScoringPass[]; nextCursor: string | null }) =>
@@ -43,7 +49,7 @@ export function ExperimentCompare({
     queryFn: ({ signal, pageParam }) =>
       api.request<{ items: ExperimentScoringPass[]; nextCursor: string | null }>(
         "passes",
-        { id: candidateExecution, ...(pageParam ? { afterId: pageParam } : {}) },
+        { id: candidateExecution, ...(candidateKind==="recorded_evidence"?{executionKind:candidateKind}:{}), ...(pageParam ? { afterId: pageParam } : {}) },
         signal,
       ),
   });
@@ -58,12 +64,29 @@ export function ExperimentCompare({
     ).values(),
   ];
   const selectedCandidate = executionItems.find((run) => run.summary.id === candidateExecution);
-  const candidateId = candidatePass || candidateExecution;
+  const candidateId = candidatePass || (candidateKind==="model"?candidateExecution:"");
   const comparison = useQuery({
     queryKey: ["evaluation-workspace", api.key, "comparison", baselineId, candidateId],
     enabled: false,
-    queryFn: ({ signal }) =>
-      api.request<Comparison>("compare", { baselineId, candidateId }, signal),
+    queryFn: async ({ signal }) => {
+      const evidence = await api.request<Comparison>("compare", { baselineId, candidateId }, signal);
+      const reviewSources = await Promise.all([evidence.baseline, evidence.candidate].map(async result => {
+        const id = result.manifest.lineage?.execution.id;
+        if (!id) throw new Error("This retained result does not name its original execution.");
+        const passId=result.manifest.lineage?.scoringPassId;
+        const pass=passId?await api.request<ExperimentScoringPass>("pass",{id:passId},signal):null;
+        if(pass?.request.executionKind==="recorded_evidence") {
+          const source=await api.request<ConnectedRecordedExecution>("recordedExecution",{id},signal);
+          if(source.manifest.contentHash!==pass.request.execution.contentHash)throw new Error("Recorded comparison source differs from its scoring pass.");
+          return {id,projectId:source.request.projectId,dataset:source.request.dataset,
+            population:source.manifest.population.map((identity,index)=>({...identity,receiptId:source.sources[index]!.boundaryId}))};
+        }
+        const source=await api.request<ExperimentRunDetails>("experiment",{id},signal);
+        return {id,projectId:source.request.project?.id,dataset:source.request.taskset,
+          population:source.request.population.map(member=>({caseId:member.taskId,seed:member.seed,fixtureId:member.fixtureId,receiptId:member.receiptId}))};
+      }));
+      return { ...evidence, reviewSources };
+    },
   });
   const [feedbackKey, setFeedbackKey] = useState("");
   const data = comparison.data?.comparison;
@@ -74,6 +97,7 @@ export function ExperimentCompare({
         use the same comparison rules as the API and CLI.
       </p>
       <div className="evaluation-workspace-scope">
+        <label>Candidate source<select value={candidateKind} onChange={event=>{setCandidateKind(event.target.value as typeof candidateKind);setCandidateExecution("");setCandidatePass("");}}><option value="model">Target execution</option><option value="recorded_evidence">Recorded evidence</option></select></label>
         <label>
           Candidate Experiment
           <select
@@ -84,13 +108,13 @@ export function ExperimentCompare({
             }}
           >
             <option value="">Choose retained Experiment</option>
-            {executionItems.map((run) => (
+            {candidateKind==="recorded_evidence"?recordedItems.map(item=><option key={item.id} value={item.id}>{item.name} / {item.caseCount} frozen cases</option>):executionItems.map((run) => (
               <option
                 key={run.summary.id}
                 value={run.summary.id}
                 disabled={!run.summary.resultAvailable}
               >
-                {evaluationRelativeTime(run.summary.createdAt)} · {run.summary.status} ·{" "}
+                {evaluationRelativeTime(run.summary.createdAt)} / {run.summary.status} /{" "}
                 {"modelId" in run.request.policy
                   ? run.request.policy.modelId
                   : run.request.policy.kind}
@@ -113,10 +137,10 @@ export function ExperimentCompare({
               value={candidatePass}
               onChange={(event) => setCandidatePass(event.target.value)}
             >
-              <option value="">Original grading</option>
+              <option value="">{candidateKind==="recorded_evidence"?"Choose a completed scoring pass":"Original grading"}</option>
               {passItems.map((pass) => (
                 <option value={pass.id} key={pass.id} disabled={!pass.resultAvailable}>
-                  {pass.id} · {pass.status}
+                  {pass.id} / {pass.status}
                 </option>
               ))}
             </select>
@@ -135,6 +159,8 @@ export function ExperimentCompare({
           More experiments
         </button>
       ) : null}
+      {candidateKind==="recorded_evidence"&&recordedHistory.hasNextPage?<button disabled={recordedHistory.isFetchingNextPage} onClick={()=>void recordedHistory.fetchNextPage()}>More recorded Experiments</button>:null}
+      {recordedHistory.error&&candidateKind==="recorded_evidence"?<p role="alert">{recordedHistory.error.message}</p>:null}
       {passes.hasNextPage ? (
         <button disabled={passes.isFetchingNextPage} onClick={() => void passes.fetchNextPage()}>
           Older scoring passes
@@ -165,6 +191,15 @@ export function ExperimentCompare({
       )}
       <ExperimentComparisonTables
         data={data}
+        human={api.humanContext && comparison.data?.reviewSources[0]?.projectId &&
+          comparison.data.reviewSources.every(source => source.projectId === comparison.data!.reviewSources[0]!.projectId && source.dataset.contentHash === comparison.data!.reviewSources[0]!.dataset.contentHash)
+          ? { context: api.humanContext, projectId: comparison.data.reviewSources[0].projectId,
+              dataset: comparison.data.reviewSources[0].dataset,
+              selections: identity => comparison.data!.reviewSources.flatMap(source => {
+                const member = source.population.find(item => experimentCaseKey(item) === experimentCaseKey(identity));
+                return member ? [{executionId:source.id,receiptId:member.receiptId}] : [];
+              }) }
+          : undefined}
         loading={comparison.isFetching}
         error={comparison.error?.message}
         retry={() => void comparison.refetch()}

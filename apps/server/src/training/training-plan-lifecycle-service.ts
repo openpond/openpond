@@ -1,3 +1,4 @@
+import {TrainingActivityAuthoritySchema,type ResolveTrainingActivityAuthority} from "./training-activity-authority.js";
 import path from "node:path";
 import {
   TrainingApprovalSchema,
@@ -49,6 +50,7 @@ export function createTrainingPlanLifecycleService(deps: {
   projectArtifactRows: ReturnType<
     typeof createTrainingDatasetSelection
   >["projectArtifactRows"];
+  resolveActivityAuthority?:ResolveTrainingActivityAuthority;
   revalidateCompute?: () => Promise<void>;
 }) {
   async function createPlan(
@@ -240,9 +242,11 @@ export function createTrainingPlanLifecycleService(deps: {
         return existing;
       }
     }
-    const job = await deps.registry
+    const activityAuthority=deps.resolveActivityAuthority?TrainingActivityAuthoritySchema.parse(await deps.resolveActivityAuthority(plan.modelId)):null;
+    const launched = await deps.registry
       .get(plan.destinationId)
       .launch(plan, approval);
+    const job=activityAuthority?{...launched,metadata:{...launched.metadata,activityAuthority,modelProjectId:plan.modelId}}:launched;
     await deps.store.saveTrainingJob(job);
     return job;
   }
