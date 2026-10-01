@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
-import { loadLocalProfileEvaluationTaskset } from "./harness/local-profile-evaluation-taskset.js";
+import { createLocalExperimentsRuntime } from "./evaluations/local-experiments-runtime.js";
+import { createProfileEvaluationRuntime } from "./harness/profile-evaluation-runtime.js";
 import { createConfigurationPayloads } from "./api/configuration-payloads.js";
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
 import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
@@ -39,9 +39,6 @@ import {
 import { runOpenPondServerCliEntrypoint } from "./server-cli-entrypoint.js";
 import { createOpenPondAppServer } from "./app-server-runtime.js";
 import { loadLocalHarnessRuntimeForSession } from "./harness/local-profile-workflow-runtime.js";
-import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
-import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
-import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
 import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
 import { profileTrainingSource } from "./harness/profile-training-source.js";
 import { buildProfileEvaluationReport } from "./harness/profile-evaluation-report-service.js";
@@ -127,6 +124,7 @@ import {
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
+import { experimentSessionStreamResolver } from "./runtime/experiment-session-stream.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
@@ -708,6 +706,11 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   const modelProjectHosting = createModelProjectHostingService({
     store,
     resolveAccess: resolveManagedTrainingAccess,
+    resolveActorId:async()=> {
+      const account=(await bootstrapPayload()).account;
+      if(account.state!=="signed_in"||!account.profile?.id)throw new Error("Sign in to retain evaluation operation recovery.");
+      return account.profile.id;
+    },
     resolveReleasedHarness,
     env: process.env,
   });
@@ -789,6 +792,13 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     judgeProvider: createLearningHostedJudgeProvider({ stream: streamOpenPondHostedChatTurn }),
   });
   const trainingPayload = trainingApi.request;
+  const {localExperiments,localNativeOwner,localProfileOwner}=createLocalExperimentsRuntime({store,storeDir,ownerId:serverId,
+    resolveAccess:resolveHostedApiAccess,prepare:prepareProfileEvaluationRun,workflows:profileWorkflowsPayload,
+    actorId:async()=>{const account=(await bootstrapPayload()).account;if(account.state!=="signed_in"||!account.profile?.id)throw new Error("Sign in before accessing local Experiments.");return account.profile.id;},
+    teamId:async()=>{const teamId=(await loadAppPreferences()).defaultTeamId?.trim();if(!teamId)throw new Error("Select an OpenPond workspace for local Experiments.");return teamId;},
+    createSession,sendTurn:(...args)=>turnRunner.sendTurn(...args),interruptSessionTurn:(...args)=>turnRunner.interruptSessionTurn(...args)});
+  await localExperiments.recover();
+  onStartupFailure(()=>localExperiments.close());
   trainingApi.learning.start();
   onStartupFailure(() => trainingApi.learning.close());
   const teamChatAiExecutions = createTeamChatAiExecutionService({
@@ -1148,6 +1158,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       }
     },
     streamOpenPondHostedChatTurn: streamSelectedOpenPondChatTurn,
+    resolveSessionModelStream:experimentSessionStreamResolver(async(session,turn)=>
+      await localNativeOwner.resolveSessionModelStream(session,turn)??await localProfileOwner.resolveSessionModelStream(session,turn)??await options.resolveSessionModelStream?.(session,turn)??null),
     subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
     maxHostedWorkspaceToolRounds,
@@ -1587,29 +1599,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   });
   onStartupFailure(() => harnessEvaluationReviewScheduler.stop());
 
-  const selectedEvaluationProfile = async () => {
-    const workflows = await profileWorkflowsPayload();
-    return { ref: workflows.profileRef, sourceRevision: workflows.sourceRevision };
-  };
-  const executeProfileEvaluationCase = createProfileEvaluationCaseService({
-    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
-    loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({ store: store, storeDir: storeDir, definition, profileId, harnessRelease }),
-    store, storeDir, selectedProfile: selectedEvaluationProfile,
-    createSession: createSessionWithAutoTitle, sendTurn,
-    interruptSessionTurn: turnRunner.interruptSessionTurn,
-  });
-  const executeProfileEvaluationRun = createProfileEvaluationRunService({
-    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
-    store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
-  });
-  const profileEvaluationRunPayload = async (request: unknown) =>
-    executeProfileEvaluationRun(await prepareProfileEvaluationRun(request, { requireExpectedManifestHash: true }));
-  const profileEvaluationRunSuitePayload = createProfileEvaluationSuiteService({
-    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
-    store,
-    selectedWorkflows: profileWorkflowsPayload,
-    prepareRun: prepareProfileEvaluationRun,
-    executeRun: executeProfileEvaluationRun,
+  const {selectedEvaluationProfile,executeProfileEvaluationCase,executeProfileEvaluationRun,
+    profileEvaluationRunPayload,profileEvaluationRunSuitePayload}=createProfileEvaluationRuntime({
+    store,storeDir,workflows:profileWorkflowsPayload,prepare:prepareProfileEvaluationRun,
+    createSession:createSessionWithAutoTitle,sendTurn,interruptSessionTurn:turnRunner.interruptSessionTurn,
   });
 
   const agentRuntime = createAppServer({
@@ -1749,6 +1742,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       usageRecordsPayload: usageRecordsRoutePayload,
       usageTurnCachePayload: usageTurnCacheRoutePayload,
       trainingPayload,
+      localExperimentPayload:localExperiments.request,
       learningProducerPayload: (endpoint, apiKey, payload) => trainingApi.learning.producerRequest(endpoint, apiKey, payload),
       datasetStoragePayload,
       listLocalAgentSchedulesPayload,
@@ -1921,6 +1915,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     terminalWebSockets,
     runtimeClosers: [
       trainingApi.learning.close,
+      localExperiments.close,
       waitForOpenPondRefresh,
       turnRunner.close,
       closeCoordination,

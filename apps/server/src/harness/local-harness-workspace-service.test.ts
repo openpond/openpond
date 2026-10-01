@@ -999,6 +999,10 @@ describe("local Harness workspace service", () => {
     const prepared = await prepareRun({
       id: "prepared-document-run", createdAt: NOW, definitionId: "document-check", modelRef,
     });
+    // An explicit Profile request must never inherit another incidental selection.
+    await expect(prepareRun({id:"explicit-other-profile",createdAt:NOW,definitionId:"document-check",modelRef,
+      profileRef:{...profileRef,profileId:"other-profile"}})).rejects.toThrow("explicitly selected Profile");
+    expect((await prepareRun({id:"explicit-profile",createdAt:NOW,definitionId:"document-check",modelRef,profileRef})).profileRef).toEqual(profileRef);
     expect(prepared.manifest.tasksetRelease).toEqual({ id: evaluationTaskset.id, contentHash: evaluationTaskset.contentHash });
     expect(prepared.manifest.packageHash).toBe(evaluationPackage.contentHash);
     expect(prepared.manifest.population).toEqual([expect.objectContaining({ taskId: frozenTask.id, seed: "1" })]);

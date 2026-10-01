@@ -135,6 +135,9 @@ importers:
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@openpond/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
       '@openpond/local-server':
         specifier: workspace:*
         version: link:../server

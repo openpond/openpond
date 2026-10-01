@@ -10,6 +10,7 @@ import { canonicalSha256 } from "./protocol.js";
 import { ModelStarterExecutionSchema, validateModelStarterExecution } from "./model-starter-execution.js";
 
 export { ModelStarterExecutionSchema, ModelStarterEnvironmentAttemptSchema, verifyModelStarterEnvironmentAttempt, ModelStarterToolFixtureScriptSchema, createModelStarterExecutionAsset, modelStarterExecutionAssetId, resolveModelStarterExecutionAsset, type ModelStarterExecution, type ModelStarterExecutionContext } from "./model-starter-execution.js";
+export { NativeHarnessExperimentAttemptSchema, verifyNativeHarnessExperimentAttempt, type NativeHarnessExperimentAttempt } from "./model-starter-execution.js";
 export { ModelTasksetDerivationSchema, ModelTasksetPackageSchema, deriveModelTaskset, validateModelTasksetPackage, type ModelTasksetPackage } from "./model-taskset-derivation.js";
 export { ModelTasksetExecutionResourcesSchema, createModelTasksetExecutionResourcesAsset, modelTasksetExecutionResourcesAssetId, resolveModelTasksetExecutionResourcesAsset } from "./model-taskset-resources.js";
 export { prepareModelTrainingDefaults } from "./model-training-defaults.js";

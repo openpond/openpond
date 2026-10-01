@@ -261,7 +261,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeDatasetBuilderAction,
     loadOpenPondProfileState,
     loadOpenPondProfileStateForRef,
-    loadOpenPondProfileLibrary,
     readOpenPondProfileSkill,
     loadSelectedHarnessRuntime,
     ensureHarnessRunOverlay,
@@ -351,7 +350,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     turn: Turn;
     boundaryKind: import("@openpond/contracts").ImprovementSafeBoundaryKind;
   }): Promise<void> {
-    if (!processHarnessImprovementBoundary || !input.turn.harnessSnapshot) return;
+    if (!processHarnessImprovementBoundary || !input.turn.harnessSnapshot
+      || input.session.metadata?.standaloneExperiment !== undefined
+      || input.session.metadata?.localProfileExperiment !== undefined) return;
     try {
       await processHarnessImprovementBoundary(input);
     } catch (error) {
@@ -512,6 +513,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     runtimeEventsForSession: (sessionId, query) =>
       store.runtimeEventsForSession(sessionId, query),
     streamOpenPondHostedChatTurn,
+    resolveSessionModelStream: deps.resolveSessionModelStream,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
     throwIfInterrupted,
     interruptedError,
@@ -921,17 +923,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         "/goal is only available in repository-aware Work with the Codex provider."
       );
     }
-    const selectedProfileRef =
-      session.currentProfile ??
-      (loadOpenPondProfileLibrary
-        ? (await loadOpenPondProfileLibrary()).lastUsed
-        : null);
-    if (!session.currentProfile && selectedProfileRef) {
-      session = await updateSession(sessionId, {
-        currentProfile: selectedProfileRef,
-      });
-    }
-    const selectedProfile = session.profileWorkflowBinding || session.profileComponentBinding ? null : loadOpenPondProfileStateForRef
+    // Session creation already resolves an omitted Profile to its admitted
+    // default. A stored null is an explicit choice and must not acquire a
+    // mutable personal Profile when an independent Harness case starts.
+    const selectedProfileRef = session.currentProfile ?? null;
+    const selectedProfile = !selectedProfileRef || session.profileWorkflowBinding || session.profileComponentBinding ? null : loadOpenPondProfileStateForRef
       ? await loadOpenPondProfileStateForRef(selectedProfileRef)
       : loadOpenPondProfileState
       ? await loadOpenPondProfileState()
@@ -1293,7 +1289,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               findOpenPondApp
             )
           : [];
-      const connectedApps = experienceAllowsConnectedApps(session.experience)
+      const connectedApps = session.metadata?.standaloneExperiment === undefined && session.metadata?.localProfileExperiment === undefined
+        && experienceAllowsConnectedApps(session.experience)
         ? await connectedAppsForTurn({
             refs: input.mentionedConnectedApps,
             prompt: providerPrompt,
@@ -1419,7 +1416,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           workspaceDiffBaseline: initialWorkspaceDiff,
           signal: controller.signal,
           stream: async function* (loopMessages, options) {
-            for await (const delta of streamOpenPondHostedChatTurn({
+            const stream = await deps.resolveSessionModelStream?.(session, turn)
+              ?? streamOpenPondHostedChatTurn;
+            for await (const delta of stream({
               model,
               messages: loopMessages,
               tools: options?.tools,

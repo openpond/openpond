@@ -27,7 +27,7 @@ function excludeLocalVideosFromProduction(): Plugin {
 }
 
 export default defineConfig({
-  base: "./",
+  base: "/",
   plugins: [react(), excludeLocalVideosFromProduction()],
   server: {
     host: "127.0.0.1",

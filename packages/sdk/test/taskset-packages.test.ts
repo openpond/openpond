@@ -69,6 +69,39 @@ function fixture() {
   return createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files });
 }
 
+// A private independent Dataset read must verify the actor workspace and exact
+// immutable release/package rather than accepting a valid but substituted graph.
+it("retains private package closure and rejects substituted independent release readbacks", async () => {
+  const value = fixture();
+  const release = learningRef(value.taskset);
+  let reply: unknown = { schemaVersion: "openpond.tasksetReleasePackageReadback.v1", teamId: "team-a", release, package: value };
+  const requests: string[] = [];
+  const client = new OpenPondTasksetPackageClient({ baseUrl: "https://example.test", apiKey: "fixture-token", teamId: "team-a",
+    fetch: async (url, options) => {
+      requests.push(String(url));
+      expect(new Headers(options?.headers).get("X-OpenPond-Team-Id")).toBe("team-a");
+      return Response.json(reply);
+    },
+  });
+  expect(await client.getByRelease(release, { expectedPackageHash: value.contentHash })).toEqual(value);
+  expect(requests[0]).toBe(`https://example.test/v1/taskset-packages/releases/${release.id}/${release.revision}/${release.contentHash}/package`);
+  for (const substitution of [
+    { teamId: "team-b" },
+    { release: { ...release, revision: release.revision + 1 } },
+    { release: { ...release, contentHash: "a".repeat(64) } },
+  ]) {
+    reply = { schemaVersion: "openpond.tasksetReleasePackageReadback.v1", teamId: "team-a", release, package: value, ...substitution };
+    await expect(client.getByRelease(release)).rejects.toMatchObject({ code: "package_readback_mismatch" });
+  }
+  reply = { schemaVersion: "openpond.tasksetReleasePackageReadback.v1", teamId: "team-a", release, package: value };
+  await expect(client.getByRelease(release, { expectedPackageHash: "b".repeat(64) })).rejects.toMatchObject({ code: "package_readback_mismatch" });
+  const { contentHash: _hash, ...content } = value;
+  const { contentHash: _taskHash, ...taskContent } = value.taskset;
+  const altered = createTasksetPackage({ ...content, taskset: sealLearningContent({ ...taskContent, revision: value.taskset.revision + 1 }) });
+  reply = { schemaVersion: "openpond.tasksetReleasePackageReadback.v1", teamId: "team-a", release, package: altered };
+  await expect(client.getByRelease(release)).rejects.toMatchObject({ code: "package_readback_mismatch" });
+});
+
 // Selecting a reusable Reward must not rewrite requests, lose binary/private
 // assets, mutate shared history, or claim the old checker's qualification.
 it("binds ordinary packages while retaining exact task and execution data", () => {

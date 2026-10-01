@@ -262,6 +262,7 @@ function packagedRuntime(packaged: PackagedDesktopHarness): HarnessRuntime {
   return {
     connection: packaged.connection,
     cdp: packaged.cdp,
+    restart: packaged.restart,
     close: packaged.close,
   };
 }

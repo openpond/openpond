@@ -14,28 +14,29 @@ npm install openpond-sdk
 
 Node.js 22.14 or newer is required. This package is server-only: never expose an OpenPond API key in browser code or a `NEXT_PUBLIC_*` environment variable.
 
-## Saved Experiments
+## Experiments
 
-`OpenPondExperimentsClient` from `openpond-sdk/experiments` saves immutable named
-configuration revisions and starts separate executions. It is also available as
-`createOpenPondClient({ apiKey, baseUrl }).experiments(teamId)`. Saving does not
-start compute. Supply stable operation IDs for save and Start, and reuse them
-after transport failures. A new Start operation creates another execution from
-the exact definition reference; configuration updates require `expectedRevision`.
+`OpenPondExperimentsClient` from `openpond-sdk/experiments` admits one run and its
+immutable configuration with `run(configuration)`. It is also available as
+`createOpenPondClient({ apiKey, baseUrl }).experiments(teamId)`. The request includes
+one stable operation ID (also on its nested request), dataset/population,
+target/settings, selected graders and spending cap. Reuse the same operation ID
+after a transport failure; it returns the same Experiment without duplicate work.
 
-`get` and `list` read saved configurations; `result` reads portable retained
-execution evidence. `compare` verifies both retained results and uses the shared
-Evals compatibility and score-eligibility rules without starting or regrading
-anything. Execution status and cancellation use `OpenPondModelTasksetRunsClient`.
-Host runtime readiness, permissions and whole-execution budgets remain enforced
-on Start. Unsupported runtime configurations fail admission before dispatch.
+`get` and `list` return runs with their resolved `configuration`; each run ID is
+its Experiment ID. `cancel` stops it. `duplicate(id, newOperationId)` starts a new
+Experiment with copied settings; edit the snapshot and call `run` to change them.
+Original results remain immutable. `result` reads portable evidence; `score`
+grades retained output. `compare` uses shared Evals compatibility and score rules
+without starting or regrading anything. Host runtime readiness, permissions and
+the whole Experiment spending cap remain enforced before dispatch.
 
 Released Profile, Workflow, Skill and Agent-action targets use the
 `hosted_harness` policy with an exact `profileRepositoryId`, native `source`,
 `packageHash` and `modelConfigurationHash`. The host resolves these pins through
 the authorized native runtime; callers cannot replace released behavior with
-Chat messages. Native receipt IDs belong to each execution, while the saved
-definition retains the same task/seed population. Clients verify repository,
+Chat messages. Native receipt IDs belong to each Experiment; admission retains the
+reviewed task/seed population. Clients verify repository,
 source, package, model and case identities before accepting a run.
 
 ## Next.js route handler

@@ -39,6 +39,7 @@ export type PackagedDesktopHarness = {
   appPath: string;
   connection: DesktopHarnessConnection;
   cdp: CdpClient;
+  restart(): Promise<{ connection: DesktopHarnessConnection; cdp: CdpClient }>;
   close(): Promise<void>;
 };
 
@@ -143,25 +144,29 @@ export async function launchPackagedDesktopHarness(input: {
 
   try {
     const target = resolvePackagedLaunchTarget(input.repoRoot, input.appPath);
-    desktop = launchPackagedElectron({
-      target,
-      appHome,
-      userData,
-      devtoolsPort,
-      repoRoot: input.repoRoot,
-    });
-    const devtoolsTarget = await waitForDevtoolsTarget(devtoolsPort, input.timeoutMs, () => true);
-    cdp = await CdpClient.connect(devtoolsTarget.webSocketDebuggerUrl);
-    await waitForRendererBridge(cdp, input.timeoutMs);
-    const connection = await rendererConnection(cdp);
-    if (!connection.token) throw new Error("Packaged renderer connection did not expose a capability token.");
+    const startDesktop = async () => {
+      desktop = launchPackagedElectron({target,appHome,userData,devtoolsPort,repoRoot:input.repoRoot});
+      const devtoolsTarget=await waitForDevtoolsTarget(devtoolsPort,input.timeoutMs,()=>true);
+      cdp=await CdpClient.connect(devtoolsTarget.webSocketDebuggerUrl);
+      await waitForRendererBridge(cdp,input.timeoutMs);
+      const connection=await rendererConnection(cdp);
+      if(!connection.token)throw new Error("Packaged renderer connection did not expose a capability token.");
+      return {connection,cdp};
+    };
+    const started=await startDesktop();
     return {
       appHome,
       userData,
       devtoolsPort,
       appPath: target.appPath,
-      connection,
-      cdp,
+      connection:started.connection,
+      cdp:started.cdp,
+      restart:async()=> {
+        cdp?.close();
+        await stopDesktopHarnessProcess(desktop);
+        desktop=null;cdp=null;
+        return startDesktop();
+      },
       close: async () => {
         cdp?.close();
         await stopDesktopHarnessProcess(desktop);
