@@ -150,6 +150,8 @@ export async function executeRewardBinding(input: {
   rewards: RewardRelease[];
   task: TaskRecord;
   evidence: AttemptEvidence;
+  /** Private owner-resolved context for grading, excluded from the policy task. */
+  evaluatorContext?: Record<string, unknown> | null;
   modelJudge?: ModelJudgeRunner;
   customVerifier?: CustomVerifierRunner;
   learnedReward?: LearnedRewardRunner;
@@ -173,7 +175,7 @@ export async function executeRewardBinding(input: {
           Object.assign(result, { status: "scored", ...scored });
         }
       } else {
-        const [evidence] = await gradeEvidence({ task: input.task, evidence: input.evidence, graders: [compileSource(source, reward)], modelJudge: input.modelJudge, customVerifier: input.customVerifier, purpose: input.purpose, signal: input.signal });
+        const [evidence] = await gradeEvidence({ task: input.task, evidence: input.evidence, evaluatorContext: input.evaluatorContext, graders: [compileSource(source, reward)], modelJudge: input.modelJudge, customVerifier: input.customVerifier, purpose: input.purpose, signal: input.signal });
         if (!evidence) throw new LearningDomainError("reward_evidence_missing");
         Object.assign(result, { status: evidence.score === null ? "unavailable" : "scored", rawScore: evidence.score, passed: evidence.score === null ? null : evidence.passed, evidenceHashes: [evidence.contentHash], graderEvidence: evidence, message: evidence.feedback.join("\n") });
       }

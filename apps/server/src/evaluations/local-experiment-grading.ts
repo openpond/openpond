@@ -37,7 +37,7 @@ export async function gradeLocalExperimentCase(input:{store:SqliteLocalExperimen
       output:input.evidence.output,evaluatorContext:input.evaluatorContext},pin.mappings??[]);
     const mappedTask={...input.task,input:fields.input,expectedOutput:fields.expectedOutput},evidence={...input.evidence,output:fields.output};
     await input.beforeDispatch?.();
-    const grade=await gradeTaskEvidence({task:mappedTask,evidence,graders:[spec],signal:input.signal,
+    const grade=await gradeTaskEvidence({task:mappedTask,evidence,evaluatorContext:fields.evaluatorContext,graders:[spec],signal:input.signal,
       modelJudge:createBoundModelJudgeRunner({readRubric:readPrivate,async executeBudgeted(request,signal) {
         const prepared=await provider.prepare(request,{scope:input.teamId,run:{id:input.executionId,requestedBy:"local-capability-owner"}});
         const execute=createBudgetedJudgeExecutor({maximumCharge:()=>prepared.maximumChargeUsd,dispatch:async(_request,signal)=>{await input.beforeDispatch?.();signal?.throwIfAborted();return prepared.dispatch(signal);},

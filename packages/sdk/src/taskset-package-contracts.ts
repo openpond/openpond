@@ -9,6 +9,7 @@ import { TasksetPackageLearningResourcesSchema, learningPackageContextFiles, val
 import { assertModelTasksetAuthoring } from "./model-taskset-authoring-lineage.js";
 import { resolveTasksetPackageExecution } from "./taskset-package-execution.js";
 import { MAX_TASKSET_PACKAGE_BYTES, TasksetPackageFileSchema, decodeTasksetPackageFile } from "./taskset-package-files.js";
+import { assertTasksetCalibrationClosures } from "./taskset-calibration-fixtures.js";
 export { MAX_TASKSET_PACKAGE_BYTES, TasksetPackageFileSchema, decodeTasksetPackageFile } from "./taskset-package-files.js";
 export { resolveTasksetPackageExecution, createTasksetPackageExecutionFile } from "./taskset-package-execution.js";
 
@@ -110,6 +111,7 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
   }
   resolveTasksetPackageExecution(result);
   resolveTasksetPackageInstructions(result);
+  assertTasksetCalibrationClosures(result);
   return result;
 }
 

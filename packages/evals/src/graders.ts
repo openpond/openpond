@@ -5,6 +5,14 @@ import type { DeterministicGraderSpec, GraderSpec, TaskRecord } from "./tasksets
 import { evaluateDeterministicGrader } from "./deterministic-graders.js";
 export { evaluateDeterministicGrader, portableDeterministicCheck } from "./deterministic-graders.js";
 
+export const ModelJudgeTransportPolicySchema = z.object({
+  schemaVersion: z.literal("openpond.modelJudgeTransportPolicy.v1"),
+  responseFormat: z.literal("judgment_json_schema"),
+  reasoningEffort: z.enum(["off", "low", "medium", "high", "xhigh", "max"]),
+  maximumOutputTokens: z.number().int().positive().max(1_000_000),
+}).strict();
+export type ModelJudgeTransportPolicy = z.infer<typeof ModelJudgeTransportPolicySchema>;
+
 export const ModelJudgeReceiptSchema = z.object({
   schemaVersion: z.literal("openpond.modelJudgeReceipt.v1"),
   providerId: z.string().trim().min(1).max(200),
@@ -16,6 +24,10 @@ export const ModelJudgeReceiptSchema = z.object({
   inputTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),
   costUsd: z.number().finite().nonnegative().nullable(),
+  transportPolicy: ModelJudgeTransportPolicySchema.optional(),
+  effectiveRequestHash: ReleaseHashSchema.optional(),
+  finishReason: z.string().trim().min(1).max(200).nullable().optional(),
+  reasoningTokens: z.number().int().nonnegative().nullable().optional(),
 }).strict();
 
 export const GraderEvidenceContentSchema = z.object({
@@ -40,12 +52,14 @@ export type AttemptEvidence = {
   artifactRefs: string[];
   infrastructureError?: string | null;
 };
-export type ModelJudgeRunner = (input: { grader: Extract<GraderSpec, { kind: "model_judge" }>; task: TaskRecord; evidence: AttemptEvidence; signal?: AbortSignal }) => Promise<Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash">>;
+export type ModelJudgeRunner = (input: { grader: Extract<GraderSpec, { kind: "model_judge" }>; task: TaskRecord; evidence: AttemptEvidence; evaluatorContext?: Record<string, unknown> | null; signal?: AbortSignal }) => Promise<Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash">>;
 export type CustomVerifierRunner = (input: { grader: Extract<GraderSpec, { kind: "custom_verifier" }>; task: TaskRecord; evidence: AttemptEvidence }) => Promise<Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash">>;
 
 export async function gradeEvidence(input: {
   task: TaskRecord;
   evidence: AttemptEvidence;
+  /** Resolved by the authorized grading owner; never part of the policy task view. */
+  evaluatorContext?: Record<string, unknown> | null;
   graders: GraderSpec[];
   modelJudge?: ModelJudgeRunner;
   customVerifier?: CustomVerifierRunner;
@@ -67,7 +81,7 @@ export async function gradeEvidence(input: {
     if (grader.kind === "model_judge") {
       if (!input.modelJudge || (grader.calibrationStatus !== "passed" && input.purpose !== "fixture_calibration")) return evidence(grader, unavailable("Model judge is unavailable or uncalibrated."));
       input.signal?.throwIfAborted();
-      const result = await input.modelJudge({ grader, task: input.task, evidence: input.evidence, signal: input.signal });
+      const result = await input.modelJudge({ grader, task: input.task, evidence: input.evidence, evaluatorContext: input.evaluatorContext, signal: input.signal });
       return evidence(grader, { ...result, rewardEligible: input.purpose === "fixture_calibration" ? false : result.rewardEligible });
     }
     if (grader.kind === "custom_verifier") {
