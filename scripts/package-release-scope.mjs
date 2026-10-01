@@ -2,11 +2,13 @@ import { execFileSync } from "node:child_process";
 import { isDeepStrictEqual } from "node:util";
 
 export const releasePackages = {
+  cli: "openpond",
   evals: "@openpond/evals",
   harness: "@openpond/harness",
   sdk: "openpond-sdk",
   "agent-sdk": "openpond-agent-sdk",
 };
+export const packageReleaseManifest = (key) => key === "cli" ? "apps/cli/package.json" : `packages/${key}/package.json`;
 const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 // Failure story: a dependency/export/source change must never inherit the
@@ -14,7 +16,7 @@ const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export function classifyPackageRelease(changes) {
   if (changes.length !== 1) return "";
   const [{ status, path, before, after }] = changes;
-  const key = Object.keys(releasePackages).find((name) => path === `packages/${name}/package.json`);
+  const key = Object.keys(releasePackages).find((name) => path === packageReleaseManifest(name));
   if (!key || status !== "M") return "";
   try {
     const { version: oldVersion, ...oldManifest } = JSON.parse(before);
@@ -41,7 +43,7 @@ export function readPackageRelease(base, head, cwd = process.cwd(), staged = fal
     const entries = git(["diff", "--name-status", "--no-renames", "-z", ...diff]).split("\0").filter(Boolean);
     if (entries.length !== 2 || entries[0] !== "M") return "";
     const [status, path] = entries;
-    if (!Object.keys(releasePackages).some((key) => path === `packages/${key}/package.json`)) return "";
+    if (!Object.keys(releasePackages).some((key) => path === packageReleaseManifest(key))) return "";
     return classifyPackageRelease([{ status, path, before: git(["show", `${base}:${path}`]), after: git(["show", staged ? `:${path}` : `${head}:${path}`]) }]);
   } catch {
     return "";

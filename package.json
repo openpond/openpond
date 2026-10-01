@@ -170,7 +170,12 @@
     "package:mac:release": "pnpm run stage:desktop && electron-builder --config apps/desktop/electron-builder.release.json --mac zip --publish never",
     "package:win:release": "pnpm run stage:desktop && electron-builder --config apps/desktop/electron-builder.release.json --win nsis --publish never",
     "package:win:docker": "bash scripts/package-win-docker.sh",
-    "dist": "pnpm run build && pnpm run package:linux"
+    "dist": "pnpm run build && pnpm run package:linux",
+    "cli:check": "pnpm --dir apps/cli run typecheck && pnpm run bundle:server && pnpm run build:web && pnpm run cli:build:from-web && pnpm run cli:distribution:check",
+    "release:cli:patch": "tsx scripts/release-cli.ts patch",
+    "release:cli:minor": "tsx scripts/release-cli.ts minor",
+    "release:cli:major": "tsx scripts/release-cli.ts major",
+    "release:cli:stable": "tsx scripts/release-cli.ts --recover"
   },
   "devDependencies": {
     "@electron/asar": "^3.4.1",
