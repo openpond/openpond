@@ -10,3 +10,4 @@ export * from "./dataset-grader-selection.js";
 export * from "./experiment-execution-selection.js";
 export * from "./experiment-run-contracts.js";
 export * from "./experiment-run-details.js";
+export * from "./experiment-harness-catalog.js";

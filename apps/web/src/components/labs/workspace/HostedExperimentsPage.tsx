@@ -6,6 +6,9 @@ import { useWorkspaceActions, useWorkspaceResourceName } from "./WorkspacePanel"
 import { useRef, useState } from "react";
 import type { ModelsRoute } from "../models-route";
 import { useEvaluationSetup } from "./EvaluationSetupState";
+import { CaseTableState } from "./CaseTableState";
+import { ExperimentGraderLabel } from "./ExperimentGraderLabel";
+import type { ExperimentGraderPin } from "openpond-sdk/experiments";
 import { ExperimentCases } from "./ExperimentCases";
 import { ExperimentConfiguration } from "./ExperimentConfiguration";
 import { ScoringPassStatus } from "./ScoringPassStatus";
@@ -83,6 +86,20 @@ export function HostedExperimentsPage({
     detail.passes.error?.message ??
     detail.selectedPass.error?.message ??
     detail.evidence.error?.message;
+  const openGrader = (release: NonNullable<ExperimentGraderPin["release"]>) =>
+    navigate({
+      ...route,
+      page: "graders",
+      resourceId: release.id,
+      revision: release.revision,
+      contentHash: release.contentHash,
+      datasetKind: undefined,
+      detailTab: "overview",
+      passId: null,
+      after: null,
+    });
+  const selectedGraders =
+    detail.selectedPass.data?.graders ?? (route.passId ? [] : (run?.configuration.graders ?? []));
   return (
     <>
       <header className="evaluation-workspace-header">
@@ -229,7 +246,11 @@ export function HostedExperimentsPage({
             />
           ) : null}
           {tab === "configuration" ? (
-            <ExperimentConfiguration execution={run} pass={detail.selectedPass.data ?? null} />
+            <ExperimentConfiguration
+              execution={run}
+              pass={detail.selectedPass.data ?? null}
+              onOpenGrader={openGrader}
+            />
           ) : null}
           {tab === "compare" ? (
             <ExperimentCompare
@@ -237,6 +258,8 @@ export function HostedExperimentsPage({
               api={api}
               inventory={inventory}
               baselineId={route.passId ?? run.summary.id}
+              graders={selectedGraders}
+              onOpenGrader={openGrader}
             />
           ) : null}
           {detail.evidence.data ? (
@@ -247,13 +270,30 @@ export function HostedExperimentsPage({
                 api={api}
                 execution={run}
                 saved={run.configuration}
+                graders={selectedGraders}
+                onOpenGrader={openGrader}
                 busy={busy}
                 onScore={(action) => void mutate(action)}
                 onSelectPass={(passId) => navigate({ ...route, passId, detailTab: "cases" })}
               />
             </div>
           ) : tab === "cases" ? (
-            <p role="status">Waiting for retained case results…</p>
+            <CaseTableState
+              headers={[
+                "Case",
+                "Status",
+                ...selectedGraders.map((grader) => (
+                  <ExperimentGraderLabel key={grader.id} grader={grader} onOpen={openGrader} />
+                )),
+                "Tokens",
+                "Spend",
+              ]}
+              loading={
+                detail.evidence.isPending && Boolean(run.summary.resultAvailable || route.passId)
+              }
+              error={detail.evidence.error?.message}
+              retry={() => void detail.evidence.refetch()}
+            />
           ) : null}
         </>
       ) : (

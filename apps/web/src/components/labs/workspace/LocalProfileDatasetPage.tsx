@@ -1,13 +1,16 @@
 import { DatasetExperiments } from "./DatasetExperiments";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LocalExperimentSourceChoicesSchema } from "@openpond/contracts";
-import { DatasetPopulationPageSchema } from "openpond-sdk/dataset-workspaces";
+import { DatasetPopulationPageSchema, type DatasetPopulationPage } from "openpond-sdk/dataset-workspaces";
 import type { WorkspaceApi } from "./workspace-api";
 import type { ModelsRoute } from "../models-route";
-import { DatasetTaskCheckbox, DatasetTaskSelection } from "./DatasetTaskSelection";
+import { DatasetTaskCheckbox, DatasetTaskSelection, useDatasetTaskSelection } from "./DatasetTaskSelection";
 import { useEvaluationSetup } from "./EvaluationSetupState";
-import { useWorkspaceActions, useWorkspaceResourceName } from "./WorkspacePanel";
+import { WorkspacePanel, useWorkspaceActions, useWorkspaceResourceName, useWorkspacePanelControls } from "./WorkspacePanel";
 import { EvaluationTableState } from "./EvaluationTableState";
+import { EvaluationCard } from "./EvaluationPresentation";
+import { LocalProfileDatasetGraders, LocalProfileDatasetVersions } from "./LocalProfileDatasetEvidence";
 
 /** Device-owned released Profile Dataset review uses the same selection state
  * and policy-only population contract; private package bytes stay in server. */
@@ -21,6 +24,13 @@ export function LocalProfileDatasetPage({
   navigate: (route: ModelsRoute) => void;
 }) {
   const setup = useEvaluationSetup();
+  const controls = useWorkspacePanelControls();
+  const taskScope = JSON.stringify([api.key, route.resourceId, route.revision, route.contentHash]);
+  const [inspection, setInspection] = useState<{
+    scope: string;
+    task: DatasetPopulationPage["items"][number];
+  } | null>(null);
+  const task = inspection?.scope === taskScope ? inspection.task : null;
   const choices = useQuery({
     queryKey: ["evaluation-workspace", api.key, "localSources"],
     queryFn: async ({ signal }) =>
@@ -33,6 +43,8 @@ export function LocalProfileDatasetPage({
       api.key,
       "localProfileDataset",
       route.resourceId,
+      route.revision,
+      route.contentHash,
       route.after,
     ],
     queryFn: async ({ signal }) =>
@@ -50,18 +62,25 @@ export function LocalProfileDatasetPage({
       ),
   });
   const select = useWorkspaceActions(
-    source
-      ? [
+    [
+      ...(source ? [
           {
             id: "experiment",
             label: "Experiment",
             onSelect: () => setup.openSelection(source.taskset, route),
           },
-        ]
-      : [],
+        ] : []),
+      ...(task ? [{ id: "task", label: "Task", onSelect: () => {} }] : []),
+    ],
   );
   useWorkspaceResourceName(source?.name ?? null);
   const release = page.data?.release;
+  useDatasetTaskSelection(release ?? null);
+  const tab = route.detailTab ?? "tasks";
+  function inspectTask(value: DatasetPopulationPage["items"][number]) {
+    setInspection({ scope: taskScope, task: value });
+    controls?.select({ id: "task", label: "Task", onSelect: () => {} });
+  }
   if (
     release &&
     ((route.contentHash && route.contentHash !== release.contentHash) ||
@@ -80,17 +99,17 @@ export function LocalProfileDatasetPage({
         Released on this computer · {release?.id} · Revision {release?.revision}
       </p>
       <nav className="evaluation-workspace-tabs" aria-label="Dataset sections">
-        {["tasks", "experiments"].map((tab) => (
+        {["tasks", "experiments", "graders", "versions"].map((value) => (
           <button
-            key={tab}
-            aria-selected={(route.detailTab ?? "tasks") === tab}
-            onClick={() => navigate({ ...route, detailTab: tab, after: null })}
+            key={value}
+            aria-selected={tab === value}
+            onClick={() => navigate({ ...route, detailTab: value, after: null })}
           >
-            {tab === "tasks" ? "Tasks" : "Experiments"}
+            {value[0]!.toUpperCase() + value.slice(1)}
           </button>
         ))}
       </nav>
-      <div hidden={route.detailTab === "experiments"}>
+      <div hidden={tab !== "tasks"}>
         <table className="training-data-table evaluation-workspace-table">
           <thead>
             <tr>
@@ -110,7 +129,8 @@ export function LocalProfileDatasetPage({
           </thead>
           <tbody>
             {page.data?.items.map((task) => (
-              <tr key={task.id}>
+              <tr key={task.id} tabIndex={0} onClick={() => inspectTask(task)}
+                onKeyDown={(event) => { if (event.key === "Enter") inspectTask(task); }}>
                 <DatasetTaskCheckbox release={release!} id={task.id} route={route} />
                 <td>{task.id}</td>
                 <td>{"input" in task ? JSON.stringify(task.input) : ""}</td>
@@ -137,7 +157,7 @@ export function LocalProfileDatasetPage({
           </button>
         ) : null}
       </div>
-      {route.detailTab === "experiments" ? (
+      {tab === "experiments" ? (
         <DatasetExperiments
           api={api}
           releaseHash={release?.contentHash ?? source?.taskset.contentHash ?? null}
@@ -145,6 +165,18 @@ export function LocalProfileDatasetPage({
           navigate={navigate}
         />
       ) : null}
+      {tab === "graders" ? <LocalProfileDatasetGraders population={page.data}
+        loading={page.isPending} error={page.error?.message} retry={() => void page.refetch()} /> : null}
+      {tab === "versions" ? <LocalProfileDatasetVersions source={source}
+        sources={choices.data?.profiles ?? []} population={page.data} route={route} navigate={navigate}
+        loading={choices.isPending || page.isPending} error={choices.error?.message ?? page.error?.message}
+        retry={() => { void choices.refetch(); void page.refetch(); }} /> : null}
+      {task && "input" in task ? <WorkspacePanel action="task" label="Task inspector" onRequestClose={() => setInspection(null)}>
+        <header><h2>{task.id}</h2></header>
+        <EvaluationCard title="Input"><pre>{JSON.stringify(task.input, null, 2)}</pre></EvaluationCard>
+        <EvaluationCard title="Policy context"><pre>{JSON.stringify(task.policyVisibleContext, null, 2)}</pre></EvaluationCard>
+        <EvaluationCard title="Policy artifacts"><pre>{JSON.stringify(task.artifacts, null, 2)}</pre></EvaluationCard>
+      </WorkspacePanel> : null}
     </>
   );
 }

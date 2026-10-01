@@ -11,6 +11,9 @@ import {
 import { ExperimentOverview } from "./ExperimentOverview";
 import { useLocalExperimentDetail } from "./useLocalExperimentDetail";
 import { LocalExperimentCollection } from "./LocalExperimentCollection";
+import { CaseTableState } from "./CaseTableState";
+import { ExperimentGraderLabel } from "./ExperimentGraderLabel";
+import type { ExperimentGraderPin } from "openpond-sdk/experiments";
 import { LocalExperimentCases } from "./LocalExperimentCases";
 import { LocalExperimentCompare } from "./LocalExperimentCompare";
 import { LocalExperimentGrading } from "./LocalExperimentGrading";
@@ -73,6 +76,20 @@ export function LocalExperimentsPage({
     detail.passes.error?.message ??
     detail.selectedPass.error?.message;
   const pass = route.passId ? detail.result.data?.execution : null;
+  const graders = route.passId
+    ? (detail.selectedPass.data?.graders ?? [])
+    : (execution?.graders ?? []);
+  const openGrader = (release: NonNullable<ExperimentGraderPin["release"]>) =>
+    navigate({
+      ...route,
+      page: "graders",
+      resourceId: release.id,
+      revision: release.revision,
+      contentHash: release.contentHash,
+      datasetKind: undefined,
+      detailTab: "overview",
+      passId: null,
+    });
   const total = execution ? Object.values(execution.counts).reduce((a, b) => a + b, 0) : 0;
   return (
     <>
@@ -201,7 +218,9 @@ export function LocalExperimentsPage({
                   <dd>${execution.configuration.maximumCostUsd}</dd>
                   <dt>Graders</dt>
                   <dd>
-                    {execution.graders.map((grader) => grader.name ?? "Dataset grader").join(", ")}
+                    {execution.graders.map((grader) => (
+                      <ExperimentGraderLabel key={grader.id} grader={grader} onOpen={openGrader} />
+                    ))}
                   </dd>
                 </dl>
                 <details>
@@ -258,14 +277,27 @@ export function LocalExperimentsPage({
               key={`${detail.resultId}:compare`}
               api={api}
               baselineId={detail.resultId}
+              graders={graders}
+              onOpenGrader={openGrader}
             />
           ) : null}
           {detail.result.data ? (
             <div hidden={tab !== "cases"}>
-              <LocalExperimentCases key={detail.resultId} api={api} result={detail.result.data} />
+              <LocalExperimentCases
+                key={detail.resultId}
+                api={api}
+                result={detail.result.data}
+                graders={graders}
+                onOpenGrader={openGrader}
+              />
             </div>
           ) : tab === "cases" ? (
-            <p role="status">Waiting for retained case results…</p>
+            <CaseTableState
+              headers={["Task", "Seed", "Status", "Overall score"]}
+              loading={detail.result.isFetching}
+              error={detail.result.error?.message}
+              retry={() => void detail.result.refetch()}
+            />
           ) : null}
         </>
       ) : (
