@@ -57,6 +57,44 @@ function fixture(modelId: string, datasetHash = hash("a")) {
 }
 
 describe("portable experiment evidence", () => {
+  // Failure story: qualified local/hosted executions must be comparable without
+  // erasing placement evidence or admitting another package or metric.
+  it("compares shared execution semantics while retaining exact runtime evidence", () => {
+    const original = fixture("model-a");
+    const withExecution = (runtime: string, change: Record<string, unknown> = {}) => {
+      const {contentHash: _manifestHash, ...content} = original.manifest;
+      const manifest = createExperimentManifest({...content, execution: {
+        packageHash: hash("a"), runtimeTargetHash: hash(runtime), metricPolicyHash: hash("b"),
+        compatibility: {protocol: "openpond.evaluation-execution.v1", targetKind: "model"}, ...change,
+      }});
+      const {contentHash: _resultHash, ...resultContent} = original.result;
+      return {manifest, result: createExperimentResult({...resultContent,
+        manifest: {id: manifest.id, contentHash: manifest.contentHash}}, manifest)};
+    };
+    const local = withExecution("c"), hosted = withExecution("d");
+    const before = JSON.stringify([local, hosted]);
+    expect(compareExperiments(local, hosted).comparable).toBe(true);
+    expect(JSON.stringify([local, hosted])).toBe(before);
+    expect(compareExperiments(local, withExecution("d", {packageHash: hash("e")})).reasons).toContain("different_execution_contract");
+    expect(compareExperiments(local, withExecution("d", {metricPolicyHash: hash("e")})).reasons).toContain("different_execution_contract");
+    expect(compareExperiments(local, withExecution("d", {compatibility: undefined})).reasons).toContain("different_execution_contract");
+    expect(() => withExecution("d", {compatibility: {protocol: "openpond.evaluation-execution.v1", targetKind: "agent"}})).toThrow();
+    const profile = (base: typeof local, environmentHash: string) => {
+      const {contentHash: _hash, ...content} = base.manifest;
+      const manifest = createExperimentManifest({...content, target: {kind: "harness",
+        source: {profileId: "default", sourceRevision: "revision-one", harnessRelease: {id: "harness", contentHash: hash("a")},
+          catalogHash: hash("b"), definitionId: "check", definitionHash: hash("c"), target: {kind: "profile"}, environmentHash},
+        model: {modelId: "model-a", configurationHash: hash("e")}},
+        execution: {...content.execution!, compatibility: {protocol: "openpond.evaluation-execution.v1", targetKind: "harness"}}});
+      const {contentHash: _resultHash, ...result} = base.result;
+      return {manifest, result: createExperimentResult({...result, manifest: {id: manifest.id, contentHash: manifest.contentHash}}, manifest)};
+    };
+    expect(compareExperiments(profile(local, hash("c")), profile(hosted, hash("d"))).comparable).toBe(true);
+    expect(compareExperiments(profile(local, hash("c")), profile(withExecution("d", {packageHash: hash("e")}), hash("d"))).reasons)
+      .toContain("different_environment");
+
+  });
+
   it("aligns two retained model runs without changing their evidence", () => {
     const baseline = fixture("model-a");
     const candidate = fixture("model-b");
