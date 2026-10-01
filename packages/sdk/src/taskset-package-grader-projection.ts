@@ -42,7 +42,7 @@ export function projectLearningBatchGraders(binding: RewardBinding, rewards: Rew
       const fields = RewardFixtureAuthoringFieldsSchema.array().min(1).max(50).parse(JSON.parse(verifyLearningTextAsset(fixtures, reward.fixtureSetRef)));
       return GraderSpecSchema.parse({ ...base, rubric: verifyLearningTextAsset(rubric, grader.rubricRef), judge: grader.model,
         temperature: grader.temperature ?? 0, calibrationFixtureRefs: fields.map(fixture => fixture.id),
-        metadata: { ...base.metadata, portableRubricRef: grader.rubricRef,
+        metadata: { ...base.metadata, portableGrader: grader, portableRubricRef: grader.rubricRef,
           calibrationEvidenceHash: reward.calibrationCheckRef.contentHash, calibrationCheckRef: reward.calibrationCheckRef },
       });
     }

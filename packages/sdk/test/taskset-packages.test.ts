@@ -6,7 +6,7 @@ import { createTasksetPackage, decodeTasksetPackageFile, validateTasksetPackage,
 import { HostedModelProjectTrainingSetupSchema } from "../src/model-projects.js";
 import { prepareModelTasksetDraft, publishModelTasksetDraftPackage, ModelTasksetAuthoringSchema } from "../src/taskset-packages.js";
 import { createLearningTextAsset, learningRef, sealLearningContent } from "@openpond/evals/learning";
-import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
+import { compileBoundGraders, createRewardBinding, RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 import { bindOrdinaryModelTasksetReward } from "../src/taskset-packages.js";
 import { deriveModelTaskset } from "../src/model-taskset-derivation.js";
 import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
@@ -290,4 +290,160 @@ it("binds the complete evaluation package to the selected reference and receipt"
   await expect(client.publish({ ...publication, modelConfiguration: { ...modelConfiguration, trainingSetup: { ...modelConfiguration.trainingSetup, evaluationTasksetRef: { ...ref, contentHash: "c".repeat(64) } } } })).rejects.toThrow();
   await expect(client.publish({ ...publication, modelConfiguration: undefined })).rejects.toThrow();
   expect(requests).toBe(before);
+});
+
+
+// A metadata hash cannot authorize independent private calibration. Admission
+// must retain the original executed fixture closure and keep it out of targets.
+it("admits retained independent calibration and refuses substituted or exposed closure assets", async () => {
+  const { compileRewardCheck, executeRewardFixture, matchRewardFixture, rewardAuthoringFields, AuthoringDraftSchema } = await import("@openpond/evals/learning");
+  const { createRewardCalibrationClosure, verifyRewardCalibrationClosure, rewardCalibrationClosureAsset } = await import("@openpond/evals/learning/reward-calibration-closure");
+  const { resolveTasksetCalibrationFixture } = await import("../src/taskset-calibration-fixtures.js");
+  const at = "2026-10-01T00:00:00.000Z";
+  const draft = AuthoringDraftSchema.parse(sealLearningContent({
+    schemaVersion: "openpond.authoringDraft.v1", id: "calibration-draft", revision: 1, targetKind: "reward", targetId: "calibration-reward",
+    editorVersion: "openpond.modelsEditor.v1", baseRelease: null, status: "draft", publishedRelease: null, createdAt: at, updatedAt: at,
+    fields: { ...rewardAuthoringFields(null, null), name: "Retained state comparison", kind: "state", fields: "answer", fixtures: [
+      { id: "positive", name: "Positive", input: JSON.stringify({ prompt: "Independent fixture request" }), output: JSON.stringify({ answer: "correct" }),
+        expectedOutput: JSON.stringify({ answer: "correct" }), evaluatorContext: JSON.stringify({ privateCriterion: "retained grader only" }),
+        artifactRefs: [], runtimeEventRefs: [], infrastructureError: "", expectedStatus: "scored", minimumScore: "1", maximumScore: "1", expectedPassed: "true" },
+    ] },
+  }));
+  if (draft.targetKind !== "reward") throw new Error("Wrong fixture draft kind");
+  const compiled = compileRewardCheck(draft, null);
+  const independent = compiled.fixtures[0]!;
+  const retained = matchRewardFixture(independent, await executeRewardFixture({ reward: compiled.reward, fixture: independent }));
+  const check = { schemaVersion: "openpond.rewardCheckRun.v1" as const, id: "actual-check", revision: 2,
+    draft: learningRef(draft), reward: learningRef(compiled.reward), snapshotHash: compiled.snapshotHash, fixtureRefs: compiled.fixtureRefs,
+    status: "completed" as const, runtime: { id: "actual-deterministic-test-owner", packageVersion: "source", engine: "node" }, results: [retained], matchesExpectations: true, failure: null,
+    timeoutMs: 1000, maximumSpendUsd: 0, leaseOwner: null, leaseExpiresAt: null, attemptCount: 1, createdAt: at, updatedAt: at };
+  const closure = createRewardCalibrationClosure({ schemaVersion: "openpond.rewardCalibrationClosure.v1", reward: compiled.reward,
+    draft, base: null, check, assets: compiled.assets });
+  const privateAsset = rewardCalibrationClosureAsset(closure);
+  const binding = createRewardBinding({ schemaVersion: "openpond.rewardBinding.v1", id: "calibration-binding", revision: 1,
+    sources: [{ graderId: compiled.reward.id, reward: learningRef(compiled.reward), role: "evaluation", normalization: { kind: "identity" },
+      weight: 1, required: true, hardGate: false, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }, [compiled.reward]);
+  const original = fixture();
+  const grader = compileBoundGraders(binding, [compiled.reward])[0]!;
+  const { contentHash: _verifierHash, ...verifierBody } = original.verifierSet;
+  const verifierSet = createVerifierSetRelease({ ...verifierBody, graders: [grader], calibrationReceiptRefs: [] });
+  const id = `calibration-${contentHash([learningRef(compiled.reward), independent.id])}`;
+  const authored = { id, taskId: id, label: "positive", output: independent.output, infrastructureError: null,
+    expectedPassed: true, expectedRewardEligible: false, metadata: { rewardCalibration: {
+      schemaVersion: "openpond.connectedRewardCalibrationProjection.v1", sourceReward: learningRef(compiled.reward), fixtureSet: compiled.reward.fixtureSetRef,
+      calibrationCheck: { id: check.id, revision: check.revision, contentHash: contentHash(check) }, fixture: independent,
+      fixtureHash: contentHash(independent), checkResultHash: contentHash(retained), independentCalibrationTask: true, closureRef: privateAsset.asset,
+    } } };
+  const { contentHash: _originalHash, ...originalTaskset } = original.taskset;
+  const taskset = bindTasksetExecutionReleases({ taskset: sealLearningContent({ ...originalTaskset, graders: [grader],
+    policy: { ...original.taskset.policy, hiddenGraderRefs: [grader.id] }, metadata: { ordinaryAuthoring: { graderFixtures: [authored] } } }),
+    environment: original.environment, verifierSet });
+  const files = [...original.files, ...compiled.assets, privateAsset].map(file => "base64" in file ? file
+    : { asset: file.asset, base64: Buffer.from(file.text).toString("base64") });
+  const value = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment: original.environment, verifierSet, files });
+  const resolved = resolveTasksetCalibrationFixture(value, id);
+  expect(resolved.evaluatorContext).toEqual(independent.evaluatorContext);
+  expect(resolved.task.expectedOutput).toEqual(independent.expectedOutput);
+  expect(resolved.grader.rewardEligible).toBe(false);
+  expect(value.taskset.tasks).toEqual(original.taskset.tasks);
+  const { contentHash: _packageHash, ...packageBody } = value;
+  const { contentHash: _tasksetHash, ...tasksetBody } = taskset;
+  const reseal = (patch: Partial<typeof value>) => sealLearningContent({ ...packageBody, ...patch });
+  expect(() => validateTasksetPackage(reseal({ files: files.filter(file => file.asset.id !== privateAsset.id) }))).toThrow(/calibration_closure_asset_changed/);
+  expect(() => validateTasksetPackage(reseal({ files: [...files, { asset: { ...privateAsset.asset, id: "visible-alias", path: "shared/copied.json", visibility: "policy" }, base64: Buffer.from(privateAsset.text).toString("base64") }] }))).toThrow(/calibration_closure_visible_alias/);
+  const { closureRef: _ref, ...unclosed } = authored.metadata.rewardCalibration;
+  const unclosedTaskset = sealLearningContent({ ...tasksetBody, metadata: { ordinaryAuthoring: { graderFixtures: [{ ...authored, metadata: { rewardCalibration: unclosed } }] } } });
+  const readableHistory = validateTasksetPackage(reseal({ taskset: unclosedTaskset, files: files.filter(file => file.asset.id !== privateAsset.id) }));
+  expect(readableHistory.taskset.tasks).toEqual(original.taskset.tasks);
+  expect(() => resolveTasksetCalibrationFixture(readableHistory, id)).toThrow();
+  const { contentHash: _closureHash, ...closureBody } = closure;
+  const changed = sealLearningContent({ ...closureBody, check: { ...check, results: [{ ...retained, result: { ...retained.result, rawScore: 0 } }] } });
+  expect(() => verifyRewardCalibrationClosure(changed)).toThrow(/grader_evidence_hash_mismatch|bound_reward|reward_calibration_closure_fixture_mismatch/);
+  const aliasedTaskset = sealLearningContent({ ...tasksetBody, tasks: taskset.tasks.map(task => ({ ...task, privilegedContextRef: privateAsset.id })) });
+  expect(() => validateTasksetPackage(reseal({ taskset: aliasedTaskset }))).toThrow(/calibration_closure_task_alias/);
+  const environmentAlias = sealLearningContent({ ...tasksetBody, metadata: { ...tasksetBody.metadata,
+    environmentResources: [{ id: privateAsset.id, path: privateAsset.asset.path, visibility: "privileged" }] } });
+  expect(() => validateTasksetPackage(reseal({ taskset: environmentAlias }))).toThrow(/calibration_closure_environment_resource_alias/);
+});
+
+// Connected publication remaps authored fixture IDs, but must retain the exact
+// executable rubric/model and original private calibration authority.
+it("retains qualified projected judge pins and refuses changed model, rubric or fixture membership", async () => {
+  const learning = await import("@openpond/evals/learning");
+  const { createRewardCalibrationClosure, rewardCalibrationClosureAsset } = await import("@openpond/evals/learning/reward-calibration-closure");
+  const { projectLearningBatchGraders } = await import("../src/taskset-package-grader-projection.js");
+  const { prepareImportedTasksetPackage } = await import("../src/taskset-package-projection.js");
+  const { materializePortableTasksetRelease } = await import("../src/taskset-authored-portable-release.js");
+  const { computeTasksetHash } = await import("../src/taskset-authored-validation.js");
+  const { resolveTasksetCalibrationFixture } = await import("../src/taskset-calibration-fixtures.js");
+  const at = "2026-10-01T00:00:00.000Z";
+  const draft = learning.AuthoringDraftSchema.parse(sealLearningContent({
+    schemaVersion: "openpond.authoringDraft.v1", id: "judge-draft", revision: 1, targetKind: "reward", targetId: "retained-judge",
+    editorVersion: "openpond.modelsEditor.v1", baseRelease: null, status: "draft", publishedRelease: null, createdAt: at, updatedAt: at,
+    fields: { ...learning.rewardAuthoringFields(null, null), name: "Pinned judge", kind: "model_judge", rubric: "Compare the retained criterion.",
+      providerId: "openai", modelId: "source-test-judge", modelRevision: "pinned-v1", fixtures: [true, false].map(passed => ({
+        id: passed ? "positive" : "negative", name: passed ? "Positive" : "Negative", input: "{}", output: JSON.stringify({ passed }),
+        expectedOutput: "", evaluatorContext: JSON.stringify({ privateCriterion: "retained grader only" }), artifactRefs: [], runtimeEventRefs: [],
+        infrastructureError: "", expectedStatus: "scored", minimumScore: passed ? "1" : "0", maximumScore: passed ? "1" : "0", expectedPassed: passed ? "true" : "false",
+      })) },
+  }));
+  if (draft.targetKind !== "reward") throw new Error("Wrong fixture draft kind");
+  const compiled = learning.compileRewardCheck(draft, null);
+  let calls: import("@openpond/evals/learning").JudgeCallReservation[] = [];
+  const results: ReturnType<typeof learning.matchRewardFixture>[] = [];
+  for (const independent of compiled.fixtures) {
+    const execute = learning.createBudgetedJudgeExecutor({ maximumCharge: () => 0.01,
+      store: { async transaction(_intent, update) { const next = update({ maximumSpendUsd: 1, calls }); calls = next.calls; return next.result; } },
+      async dispatch(request) { const passed = Boolean(JSON.parse(request.data).attempt.output.passed); return {
+        text: JSON.stringify({ score: passed ? 1 : 0, passed, feedback: "Source boundary response" }), modelId: request.modelId,
+        modelRevision: request.revision, responseId: `source-test-${independent.id}`, inputTokens: 5, outputTokens: 5, costUsd: 0,
+      }; },
+    });
+    const modelJudge = learning.createBoundModelJudgeRunner({ readRubric: async () => draft.fields.rubric,
+      executeBudgeted: (request, signal) => execute(`fixture-${contentHash([independent, compiled.reward.contentHash])}`, request, signal) });
+    results.push(learning.matchRewardFixture(independent, await learning.executeRewardFixture({ reward: compiled.reward, fixture: independent, modelJudge })));
+  }
+  const check = learning.RewardCheckRunSchema.parse({ schemaVersion: "openpond.rewardCheckRun.v1", id: "judge-check", revision: 2,
+    draft: learningRef(draft), reward: learningRef(compiled.reward), snapshotHash: compiled.snapshotHash, fixtureRefs: compiled.fixtureRefs,
+    status: "completed", runtime: { id: "source-test-owner", packageVersion: "source", engine: "node" }, results, judgeCalls: calls,
+    matchesExpectations: true, failure: null, timeoutMs: 1000, maximumSpendUsd: 1, leaseOwner: null, leaseExpiresAt: null,
+    attemptCount: 1, createdAt: at, updatedAt: at });
+  const reward = learning.qualifyRewardCheck(draft, null, check).reward;
+  const closure = createRewardCalibrationClosure({ schemaVersion: "openpond.rewardCalibrationClosure.v1", reward, draft, base: null, check, assets: compiled.assets });
+  const asset = rewardCalibrationClosureAsset(closure);
+  const binding = createRewardBinding({ schemaVersion: "openpond.rewardBinding.v1", id: "judge-binding", revision: 1,
+    sources: [{ graderId: reward.id, reward: learningRef(reward), role: "evaluation", normalization: { kind: "identity" },
+      weight: 1, required: true, hardGate: false, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }, [reward]);
+  const fixtures = compiled.fixtures.map((fixture, index) => { const id = `calibration-${contentHash([learningRef(reward), fixture.id])}`;
+    return { id, taskId: id, label: fixture.expected.status === "scored" && fixture.expected.passed ? "positive" as const : "negative" as const,
+      output: fixture.output, infrastructureError: null, expectedPassed: index === 0, expectedRewardEligible: false,
+      metadata: { rewardCalibration: { schemaVersion: "openpond.connectedRewardCalibrationProjection.v1", sourceReward: learningRef(reward),
+        fixtureSet: reward.fixtureSetRef, calibrationCheck: reward.calibrationCheckRef, fixture, fixtureHash: contentHash(fixture),
+        checkResultHash: contentHash(results[index]), independentCalibrationTask: true, closureRef: asset.asset, graderId: reward.id } } }; });
+  const projected = projectLearningBatchGraders(binding, [reward], compiled.assets)[0]!;
+  if (projected.kind !== "model_judge") throw new Error("Wrong projected grader kind");
+  const grader = { ...projected, calibrationFixtureRefs: fixtures.map(fixture => fixture.id), metadata: { ...projected.metadata,
+    sourceCalibrationFixtureRefs: projected.calibrationFixtureRefs, sourceReward: learningRef(reward) } };
+  const original = fixture();
+  const imported = prepareImportedTasksetPackage({ package: original, profileId: "source-test", name: "Connected projection", createdAt: at }).taskset;
+  const { derivedPortableMetadata: _sourceMetadata, ...metadata } = imported.metadata;
+  const authored = { ...imported, graders: [grader], graderFixtures: fixtures, metadata,
+    policy: { ...imported.policy, hiddenGraderRefs: [grader.id] }, environment: { ...imported.environment, metadata: {} } };
+  const releases = materializePortableTasksetRelease({ taskset: { ...authored, contentHash: computeTasksetHash(authored) }, adapterId: "source-test" });
+  const value = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset: releases.tasksetRelease,
+    environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease,
+    files: [...original.files, ...compiled.assets, asset].map(file => "base64" in file ? file : { asset: file.asset, base64: Buffer.from(file.text).toString("base64") }) });
+  expect(resolveTasksetCalibrationFixture(value, fixtures[0]!.id).grader).toMatchObject({ kind: "model_judge", model: { revision: "pinned-v1" } });
+  const portable = value.taskset.graders[0]!;
+  if (portable.kind !== "model_judge") throw new Error("Wrong portable grader kind");
+  const { contentHash: _packageHash, ...body } = value;
+  const { contentHash: _taskHash, ...taskBody } = value.taskset;
+  for (const replacement of [{ ...portable, model: { ...portable.model!, modelId: "substituted" } },
+    { ...portable, rubricRef: { ...portable.rubricRef, contentHash: "a".repeat(64) } }]) {
+    const changed = sealLearningContent({ ...body, taskset: sealLearningContent({ ...taskBody, graders: [replacement] }) });
+    expect(() => resolveTasksetCalibrationFixture(changed, fixtures[0]!.id)).toThrow(/calibration_grader_changed/);
+  }
+  const changed = sealLearningContent({ ...body, taskset: sealLearningContent({ ...taskBody, metadata: { ...taskBody.metadata,
+    ordinaryAuthoring: { graderFixtures: fixtures, judgeCalibrationFixtures: { [grader.id]: [fixtures[0]!.id] } } } }) });
+  expect(() => resolveTasksetCalibrationFixture(changed, fixtures[0]!.id)).toThrow(/calibration_judge_membership_changed/);
 });

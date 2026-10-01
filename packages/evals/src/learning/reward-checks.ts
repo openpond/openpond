@@ -81,6 +81,7 @@ export async function executeRewardFixture(input: {
     aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required",
   }, [input.reward]);
   const composition = await executeRewardBinding({ binding, rewards: [input.reward], task,
+    evaluatorContext: fixture.evaluatorContext,
     evidence: { output: fixture.output, artifactRefs: fixture.artifactRefs, runtimeEventRefs: fixture.runtimeEventRefs, infrastructureError: fixture.infrastructureError },
     signal: input.signal, customVerifier: input.customVerifier, modelJudge: input.modelJudge, purpose: "fixture_calibration",
   });
