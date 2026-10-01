@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.9.9",
+  "version": "0.10.0",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
