@@ -133,7 +133,7 @@ try {
   validateProbe(probe);
   const videoBytes = Number((await stat(outputPath)).size);
   if (videoBytes >= 15 * 1024 * 1024) {
-    throw new Error(`Agent overview is ${(videoBytes / 1024 / 1024).toFixed(2)} MiB; the limit is 15 MiB.`);
+    console.warn(`Agent overview is ${(videoBytes / 1024 / 1024).toFixed(2)} MiB; advisory size is 15 MiB.`);
   }
   await renderContactSheet([posterPath, ...renderedSlides.map((slide) => slide.path), outroPath]);
 

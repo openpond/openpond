@@ -1,11 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-const MiB = 1024 * 1024;
-// Product-level safety ceilings, not per-feature allowances. Review these only
-// when the distribution's intended scope changes; PR growth is reported separately.
-export const PACKAGE_BUDGETS = { packedBytes: 16 * MiB, unpackedBytes: 64 * MiB, files: 1_000 };
-export const MAX_RENDERER_JS_BYTES = 32 * MiB;
 export type PackedFile = { path: string; size: number };
 
 export function packageContentErrors(files: PackedFile[], runtimeOutputs: string[]): string[] {

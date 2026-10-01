@@ -60,7 +60,7 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
     || file.startsWith("scripts/distribution/")
     || file === "scripts/report-package-size.ts"
     || file === "scripts/check-cli-distribution.ts"
-    || file === "scripts/check-performance-budgets.ts"
+    || file === "scripts/report-performance.ts"
     || /^packages\/[^/]+\/(?:package\.json|src\/)/.test(file)
   ));
 

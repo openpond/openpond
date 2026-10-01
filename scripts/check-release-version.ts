@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +18,12 @@ if (!version) {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 try {
-  await assertReleaseVersion(root, version);
+  if (readArg("target") === "cli") {
+    const manifest = JSON.parse(await readFile(path.join(root, "apps/cli/package.json"), "utf8"));
+    if (manifest.name !== "openpond" || manifest.version !== version) throw new Error(`CLI source version does not match ${version}.`);
+  } else {
+    await assertReleaseVersion(root, version);
+  }
   console.log(`Release source versions match ${version}.`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

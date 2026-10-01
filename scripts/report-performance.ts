@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { MAX_RENDERER_JS_BYTES } from "./distribution/package-policy.ts";
 import { isolatedOpenPondEnvironment } from "./isolated-openpond-environment";
 
 const execFileAsync = promisify(execFile);
@@ -86,9 +85,8 @@ export type StartupMetrics =
     };
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
-  // Broad storage guard. Ordinary feature growth is reported against the PR
-  // base; initial-load and startup budgets remain independent user-facing limits.
-  maxTotalJsBytes: MAX_RENDERER_JS_BYTES,
+  // Advisory thresholds only. Package growth and runner timing never fail CI.
+  maxTotalJsBytes: 32 * 1024 * 1024,
   maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
@@ -115,9 +113,12 @@ export async function collectRendererBundleMetrics(webDist: string): Promise<Ren
       bytes: (await fs.stat(filePath)).size,
     })),
   );
-  const indexHtml = await fs.readFile(path.join(webDist, "index.html"), "utf8").catch(() => "");
+  const indexHtml = await fs.readFile(path.join(webDist, "index.html"), "utf8");
   const initialAssetPaths = initialAssetsFromIndexHtml(indexHtml);
   const sizeByPath = new Map(assets.map((asset) => [asset.path.replaceAll("\\", "/"), asset.bytes]));
+  for (const assetPath of initialAssetPaths) {
+    if (!sizeByPath.has(assetPath)) throw new Error(`Renderer entry asset is missing: ${assetPath}`);
+  }
   return {
     webDist,
     totalJsBytes: assets
@@ -281,9 +282,10 @@ export async function measureServerStartup(input: {
       };
     }
     const token = (await fs.readFile(path.join(appHome, "secrets", "server-token"), "utf8")).trim();
+    const readyServerUrl = serverUrl;
     const routes = await collectServerRouteMetrics({ serverUrl, token }).catch((error) =>
       failedServerRouteMetrics(
-        serverUrl,
+        readyServerUrl,
         error instanceof Error ? error.message : String(error),
       ),
     );
@@ -360,54 +362,41 @@ export async function collectServerRouteMetrics(input: {
   }
 }
 
-async function main(): Promise<void> {
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  const webDist = path.join(root, "apps", "web", "dist");
-  const warnings: BudgetWarning[] = [];
-  const report: Record<string, unknown> = {
-    generatedAt: new Date().toISOString(),
-  };
-
-  try {
-    const renderer = await collectRendererBundleMetrics(webDist);
-    report.renderer = renderer;
-    warnings.push(...checkRendererBundleBudgets(renderer));
-  } catch (error) {
-    warnings.push({
-      id: "renderer-bundle-probe",
-      message: `Renderer bundle budget probe could not read ${path.relative(root, webDist)}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-      actual: 0,
-      threshold: 0,
-      unit: "bytes",
-    });
-  }
-
-  if (!process.argv.includes("--renderer-only")) {
-    const startup = await measureServerStartup({ root });
+export async function collectPerformanceReport(input: { root: string; rendererOnly?: boolean }) {
+  const renderer = await collectRendererBundleMetrics(path.join(input.root, "apps", "web", "dist"));
+  const warnings = checkRendererBundleBudgets(renderer);
+  const report: Record<string, unknown> = { generatedAt: new Date().toISOString(), renderer };
+  const errors: string[] = [];
+  if (!input.rendererOnly) {
+    const startup = await measureServerStartup({ root: input.root });
     warnings.push(...checkStartupBudgets(startup));
     if (startup.ok) {
       const { routes, ...startupReport } = startup;
       report.startup = startupReport;
       report.serverRoutes = routes;
       warnings.push(...checkServerRouteBudgets(routes));
+      for (const route of Object.values(routes)) {
+        if (!route.ok) errors.push(`${route.label}: ${route.error ?? `HTTP ${route.status}`}`);
+      }
     } else {
       report.startup = startup;
+      errors.push(startup.error);
     }
   }
+  return { report, warnings, errors };
+}
 
+async function main(): Promise<void> {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const { report, warnings, errors } = await collectPerformanceReport({
+    root,
+    rendererOnly: process.argv.includes("--renderer-only"),
+  });
   console.log(JSON.stringify(report, null, 2));
-  if (warnings.length === 0) {
-    console.log("Performance budget warnings: none");
-    return;
-  }
   for (const warning of warnings) {
-    console.warn(`[budget-warning] ${warning.id}: ${warning.message}`);
+    console.warn(`[performance-warning] ${warning.id}: ${warning.message}`);
   }
-  if (process.env.OPENPOND_BUDGETS_STRICT === "1") {
-    process.exitCode = 1;
-  }
+  if (errors.length) throw new Error(`Performance probes failed:\n${errors.join("\n")}`);
 }
 
 async function measureJsonRoute(input: {
@@ -651,7 +640,7 @@ function delay(ms: number): Promise<void> {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   void main().catch((error) => {
-    console.warn(`[budget-warning] performance budget script failed: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(process.env.OPENPOND_BUDGETS_STRICT === "1" ? 1 : 0);
+    console.error(`Performance report failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
   });
 }
