@@ -1,3 +1,5 @@
+import { ExperimentGraderLabel } from "./ExperimentGraderLabel";
+import type { ExperimentGraderPin } from "openpond-sdk/experiments";
 import { EvaluationTableState } from "./EvaluationTableState";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -13,9 +15,13 @@ import type { WorkspaceApi } from "./workspace-api";
 export function LocalExperimentCases({
   api,
   result,
+  graders = [],
+  onOpenGrader,
 }: {
   api: WorkspaceApi;
   result: LocalExperimentResult;
+  graders?: ExperimentGraderPin[];
+  onOpenGrader?: (release: NonNullable<ExperimentGraderPin["release"]>) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null),
     [after, setAfter] = useState<number>();
@@ -52,7 +58,7 @@ export function LocalExperimentCases({
             <th>Task</th>
             <th>Seed</th>
             <th>Status</th>
-            <th>Score</th>
+            <th>Overall score</th>
           </tr>
         </thead>
         <tbody>
@@ -73,14 +79,19 @@ export function LocalExperimentCases({
               <td>{row.grade?.score ?? "Unavailable"}</td>
             </tr>
           ))}
-          <EvaluationTableState columns={4} empty={!result.cases.length}>Start an execution to retain case results here.</EvaluationTableState>
+          <EvaluationTableState columns={4} empty={!result.cases.length}>
+            Run an Experiment to retain case results here.
+          </EvaluationTableState>
         </tbody>
       </table>
       {member ? (
-        <WorkspacePanel action="case" label="Local case inspector" onRequestClose={() => setSelected(null)}>
+        <WorkspacePanel
+          action="case"
+          label="Local case inspector"
+          onRequestClose={() => setSelected(null)}
+        >
           <header>
             <h2>{member.taskId}</h2>
-
           </header>
           <EvaluationCard title="Retained input">
             <pre>
@@ -96,6 +107,9 @@ export function LocalExperimentCases({
             {member.error ? <p role="alert">{member.error}</p> : null}
           </EvaluationCard>
           <EvaluationCard title="Grading">
+            {graders.map((grader) => (
+              <ExperimentGraderLabel key={grader.id} grader={grader} onOpen={onOpenGrader} />
+            ))}
             <pre>{JSON.stringify(member.grade, null, 2)}</pre>
           </EvaluationCard>
           <EvaluationCard title="Available trace">
@@ -126,7 +140,11 @@ export function LocalExperimentCases({
                 Next trace page
               </button>
             ) : null}
-            {member.profileNative ? <EvaluationCard title="Profile execution evidence"><pre>{JSON.stringify(member.profileNative,null,2)}</pre></EvaluationCard> : null}
+            {member.profileNative ? (
+              <EvaluationCard title="Profile execution evidence">
+                <pre>{JSON.stringify(member.profileNative, null, 2)}</pre>
+              </EvaluationCard>
+            ) : null}
             {member.native ? (
               <details>
                 <summary>Native turn evidence</summary>

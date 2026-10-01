@@ -7,6 +7,7 @@ import { experimentConfigurationRequest, verifyExperimentRunDetails } from "./ex
 import { PrepareHarnessExperimentSchema, PreparedHarnessExperimentSchema } from "./experiment-contracts.js";
 import { verifyHarnessExperimentManifest } from "./model-taskset-runs-contracts.js";
 import { ExperimentScoringRequestSchema, verifyExperimentScoringPass, type ExperimentScoringRequest } from "./experiment-scoring-contracts.js";
+import { ExperimentHarnessCatalogSchema } from "./experiment-harness-catalog.js";
 
 const Id = z.string().trim().min(1).max(200);
 export class OpenPondExperimentError extends Error {
@@ -21,6 +22,18 @@ export class OpenPondExperimentsClient {
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim())
       throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");
+  }
+  /** Discover released workspace Harnesses independently of Project targets. */
+  async harnessSources(options: {cursor?: string; signal?: AbortSignal} = {}) {
+    const cursor = options.cursor === undefined ? undefined : z.string().min(1).max(8192).parse(options.cursor);
+    const query = new URLSearchParams(cursor ? {cursor} : {});
+    const page = ExperimentHarnessCatalogSchema.parse(await this.request(`/harness-sources?${query}`,"GET",undefined,options.signal));
+    if (page.teamId !== this.options.teamId
+      || new Set(page.items.map(item=>contentHash(item.source))).size !== page.items.length
+      || page.nextCursor !== null && page.nextCursor === cursor
+      || page.items.some(item=>item.ready !== (item.reason === null)))
+      throw new Error("Harness catalog differs from its workspace, readiness or continuation.");
+    return page;
   }
   /** Resolves a released target without saving a definition or dispatching it. */
   async prepareHarness(value: z.input<typeof PrepareHarnessExperimentSchema>, signal?: AbortSignal) {
