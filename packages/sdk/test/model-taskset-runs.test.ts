@@ -5,7 +5,7 @@ import { aggregateTasksetRunReceipts, createTasksetRunManifest, tasksetRunMetric
 import { ModelTasksetRunRequestSchema, ModelTasksetRunSummarySchema, OpenPondModelTasksetRunsClient, type ModelTasksetRunDetails } from "../src/model-taskset-runs.js";
 import { canonicalSha256 } from "../src/protocol.js";
 import { contentHash } from "@openpond/harness";
-import { OpenPondExperimentsClient, experimentDefinitionRef, verifyExperimentDefinition } from "../src/experiments.js";
+import { OpenPondExperimentsClient, RunExperimentSchema, experimentRunConfigurationHash } from "../src/experiments.js";
 
 const seal = async <T extends object>(content: T) => ({ ...content, contentHash: await canonicalSha256(content) });
 
@@ -140,31 +140,31 @@ it("binds SDK transport and terminal results to the exact scoped evaluation popu
     await expect(client.get("run")).rejects.toThrow("admitted source");
   }
   expect(ModelTasksetRunRequestSchema.safeParse({ ...harnessRequest, modelProjectId: "model" }).success).toBe(false);
-  const definitionContent = { schemaVersion: "openpond.experimentDefinition.v1", id: "exp-native", teamId: "team", revision: 1,
-    request: { ...harnessRequest, population: harnessRequest.population.map(member => ({ ...member, receiptId: "saved-member" })) },
-    maximumCostUsd: 1, graders: [{ id: "grader", version: "1", contentHash: contentHash("grader"), feedbackKey: "accuracy", release: null }],
-    createdAt: manifest.createdAt, updatedAt: manifest.createdAt };
-  const definition = verifyExperimentDefinition({ ...definitionContent, contentHash: contentHash(definitionContent) });
-  const reference = experimentDefinitionRef(definition);
-  const { contentHash: _nativeManifestHash, ...harnessManifestContent } = harnessManifest;
-  const startedManifest = createTasksetRunManifest({ ...harnessManifestContent, metadata: { ...harnessManifest.metadata,
-    experimentDefinition: reference, experimentConfigurationHash: contentHash({ definition: reference, maximumCostUsd: 1, graders: definition.graders }) } });
-  const startedRun = { ...harnessDetails, manifest: startedManifest, summary: { ...harnessDetails.summary, manifestHash: startedManifest.contentHash } };
-  returned = { definition, run: startedRun };
-  const experiments = new OpenPondExperimentsClient({ baseUrl: "https://host.invalid", apiKey: "test", teamId: "team",
-    fetch: async () => Response.json(returned) });
-  const preparation = { request: harnessRequest, manifest: { ...harnessManifest, limits: { ...harnessManifest.limits, maximumSpendUsd: 1 } },
-    maximumCostUsd: 1, graders: definition.graders };
-  const { contentHash: _prepareHash, ...prepareContent } = preparation.manifest;
-  returned = { ...preparation, manifest: createTasksetRunManifest(prepareContent) };
-  const preparationRequest = { operationId: "op", profileRepositoryId: "profile-repo", definitionId: "check", modelId: "catalog-model", maximumCostUsd: 1 };
+  const graders = [{id:"grader",version:"1",contentHash:contentHash("grader"),feedbackKey:"accuracy",release:null}];
+  const submitted = RunExperimentSchema.parse({operationId:"op",request:{...harnessRequest,
+    population:harnessRequest.population.map(member=>({...member,receiptId:"setup-member"}))},maximumCostUsd:1});
+  const configurationContent = {request:harnessRequest,maximumCostUsd:1,graders,admissionRequestHash:contentHash(submitted)};
+  const configuration = {...configurationContent,configurationHash:experimentRunConfigurationHash(configurationContent)};
+  const context = {definition:null,configurationHash:configuration.configurationHash,
+    admissionRequestHash:configuration.admissionRequestHash,maximumCostUsd:1,graders};
+  const {contentHash:_nativeManifestHash,...harnessManifestContent} = harnessManifest;
+  const startedManifest = createTasksetRunManifest({...harnessManifestContent,
+    limits:{...harnessManifest.limits,maximumSpendUsd:1},metadata:{...harnessManifest.metadata,
+      experimentDefinition:null,experimentConfigurationHash:contentHash(context)}});
+  const startedRun = {...harnessDetails,manifest:startedManifest,configuration,
+    summary:{...harnessDetails.summary,manifestHash:startedManifest.contentHash}};
+  const experiments = new OpenPondExperimentsClient({baseUrl:"https://host.invalid",apiKey:"test",teamId:"team",fetch:async()=>Response.json(returned)});
+  const preparation = {request:harnessRequest,manifest:{...harnessManifest,limits:{...harnessManifest.limits,maximumSpendUsd:1}},maximumCostUsd:1,graders};
+  const {contentHash:_prepareHash,...prepareContent} = preparation.manifest;
+  returned = {...preparation,manifest:createTasksetRunManifest(prepareContent)};
+  const preparationRequest = {operationId:"op",profileRepositoryId:"profile-repo",definitionId:"check",modelId:"catalog-model",maximumCostUsd:1};
   expect((await experiments.prepareHarness(preparationRequest)).request.policy.kind).toBe("hosted_harness");
-  await expect(experiments.prepareHarness({ ...preparationRequest, profileRepositoryId: "another-repo" })).rejects.toThrow("requested scope");
-  returned = { definition, run: startedRun };
-  expect((await experiments.start({ operationId: "op", definition: reference })).request.population).toEqual(harnessRequest.population);
-  const changedDefinitionContent = { ...definitionContent, request: { ...definitionContent.request,
-    population: definitionContent.request.population.map(member => ({ ...member, seed: "1" })) } };
-  const changedDefinition = verifyExperimentDefinition({ ...changedDefinitionContent, contentHash: contentHash(changedDefinitionContent) });
-  returned = { definition: changedDefinition, run: startedRun };
-  await expect(experiments.start({ operationId: "op", definition: experimentDefinitionRef(changedDefinition) })).rejects.toThrow("saved configuration");
+  await expect(experiments.prepareHarness({...preparationRequest,profileRepositoryId:"another-repo"})).rejects.toThrow("requested scope");
+  returned = startedRun;
+  expect((await experiments.run(submitted)).request.population).toEqual(harnessRequest.population);
+  await expect(experiments.run({...submitted,request:{...submitted.request,
+    population:submitted.request.population.map(member=>({...member,seed:"1"}))}})).rejects.toThrow("submitted configuration");
+  returned = {...startedRun,configuration:{...configuration,graders:[{...graders[0],feedbackKey:"different"}]}};
+  await expect(experiments.get("run")).rejects.toThrow("retained run");
+
 });

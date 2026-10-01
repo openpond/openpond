@@ -10,6 +10,25 @@ import {
 } from "@openpond/harness";
 import { ProfileEvaluationRunSourceSchema } from "./profile-evaluations.js";
 import { FeedbackKeySchema } from "./rewards.js";
+import { StandaloneHarnessExperimentSourceSchema } from "./harness-experiment-source.js";
+export {
+  StandaloneHarnessExperimentSourceSchema,
+  STANDALONE_EXPERIMENT_MAX_POLICY_CALLS,
+  STANDALONE_EXPERIMENT_READ_TOOLS,
+  standaloneHarnessExperimentTools,
+  harnessExperimentSourceRequiresProfile,
+  harnessExperimentReadToolDeclarations,
+  type StandaloneHarnessExperimentSource,
+} from "./harness-experiment-source.js";
+export {
+  NativeHarnessExperimentEvidenceSchema,
+  NativeHarnessExperimentAttemptContentSchema,
+  NativeHarnessExperimentAttemptSchema,
+  createNativeHarnessExperimentAttempt,
+  verifyNativeHarnessExperimentAttempt,
+  type NativeHarnessExperimentEvidence,
+  type NativeHarnessExperimentAttempt,
+} from "./native-harness-experiment-attempt.js";
 
 const MoneySchema = z.number().finite().nonnegative();
 
@@ -22,6 +41,11 @@ export const ExperimentTargetSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("harness"),
     source: ProfileEvaluationRunSourceSchema,
+    model: z.object({ modelId: ReleaseIdSchema, configurationHash: ReleaseHashSchema }).strict(),
+  }).strict(),
+  z.object({
+    kind: z.literal("agent"),
+    source: StandaloneHarnessExperimentSourceSchema,
     model: z.object({ modelId: ReleaseIdSchema, configurationHash: ReleaseHashSchema }).strict(),
   }).strict(),
   z.object({ kind: z.literal("fixture"), configurationHash: ReleaseHashSchema }).strict(),

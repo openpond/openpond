@@ -12,6 +12,7 @@ export const ExperimentDefinitionRefSchema = z.object({
 }).strict();
 export const ExperimentGraderPinSchema = z.object({
   id: Id, version: z.string().min(1).max(200), contentHash: Hash,
+  name: z.string().trim().min(1).max(500).optional(),
   feedbackKey: FeedbackKeySchema,
   release: ExperimentDefinitionRefSchema.nullable(),
   mappings: ExperimentFieldMappingsSchema.optional(),
@@ -43,12 +44,19 @@ export type ExperimentDefinitionRef = z.infer<typeof ExperimentDefinitionRefSche
 export const StartExperimentSchema = z.object({ operationId: Id, definition: ExperimentDefinitionRefSchema }).strict();
 export const ExperimentListQuerySchema = z.object({
   projectId: Id.optional(), datasetHash: Hash.optional(), search: z.string().trim().max(200).optional(),
+  status: z.enum(["queued", "running", "cancelling", "completed", "failed", "cancelled"]).optional(),
   afterId: Id.optional(), limit: z.number().int().min(1).max(100).default(30),
 }).strict();
 export const ExperimentExecutionContextSchema = z.object({
-  definition: ExperimentDefinitionRefSchema, maximumCostUsd: z.number().finite().positive().max(10_000),
+  /** Only historical runs retain a saved-definition reference. */
+  definition: ExperimentDefinitionRefSchema.nullable(),
+  configurationHash: Hash.optional(), admissionRequestHash: Hash.optional(), sourceExperimentId: Id.optional(),
+  maximumCostUsd: z.number().finite().positive().max(10_000),
   graders: z.array(ExperimentGraderPinSchema).min(1).max(100),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.definition === null && (!value.configurationHash || !value.admissionRequestHash))
+    context.addIssue({code:"custom",path:["configurationHash"],message:"A flat Experiment requires its sealed configuration hash."});
+});
 export type ExperimentExecutionContext = z.infer<typeof ExperimentExecutionContextSchema>;
 
 export const PrepareHarnessExperimentSchema = z.object({

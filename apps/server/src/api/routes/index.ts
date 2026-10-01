@@ -19,6 +19,7 @@ import { handleSettingsRoutes } from "./settings-routes.js";
 import { handleUsageRoutes } from "./usage-routes.js";
 import { handleTeamChatRoutes } from "./team-chat-routes.js";
 import { handleTrainingRoutes } from "./training-routes.js";
+import { handleLocalExperimentRoutes } from "./local-experiment-routes.js";
 import { handleLearningRoutes } from "./learning-routes.js";
 import { handleWorkspaceRoutes } from "./workspace-routes.js";
 import { handleWorkOutputRoutes } from "./work-output-routes.js";
@@ -32,6 +33,7 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "harness", handle: handleHarnessRoutes },
   { id: "refiner", handle: handleRefinerRoutes },
   { id: "training", handle: handleTrainingRoutes },
+  { id: "local-experiments", handle: handleLocalExperimentRoutes },
   { id: "learning", handle: handleLearningRoutes },
   { id: "create-improve", handle: handleCreateImproveRoutes },
   { id: "communities", handle: handleCommunityRoutes },

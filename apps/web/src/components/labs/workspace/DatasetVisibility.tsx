@@ -22,22 +22,22 @@ export function DatasetVisibility({ api, dataset, onClose }: { api: WorkspaceApi
     if (!state.data || busy) return; setBusy(true); setError(null);
     try {
       const input = { tasksetId: publication.tasksetId, release: publication.release, packageHash: publication.packageHash, expectedVisibilityRevision: state.data.visibilityRevision, metadata: CatalogMetadata.parse({ ...metadata, sourceUrl: metadata.sourceUrl.trim() || null }), distributionConsent: true };
-      const operation = api.operation("marketplacePublish", input);
+      const operation = await api.operation("marketplacePublish", input);
       await api.request("marketplacePublish", { ...input, operationId: operation.id });
-      operation.acknowledge(); await state.refetch(); setConsent(false); setFields(null);
+      await operation.acknowledge(); await state.refetch(); setConsent(false); setFields(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setBusy(false); }
   }
   async function withdraw() {
     if (!state.data?.summary || busy) return; setBusy(true); setError(null);
     try {
       const input = { releaseId: state.data.summary.id, expectedVisibilityRevision: state.data.visibilityRevision, visibility: "private" };
-      const operation = api.operation("marketplaceChangeVisibility", input);
+      const operation = await api.operation("marketplaceChangeVisibility", input);
       await api.request("marketplaceChangeVisibility", { ...input, operationId: operation.id });
-      operation.acknowledge(); await state.refetch();
+      await operation.acknowledge(); await state.refetch();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setBusy(false); }
   }
-  return <>{guard.dialog}<WorkspacePanel action="visibility" label="Dataset marketplace visibility">
-    <header><h2>Marketplace visibility</h2><button disabled={busy} onClick={() => void guard.requestLeave(onClose)}>Close</button></header>
+  return <>{guard.dialog}<WorkspacePanel action="visibility" label="Dataset marketplace visibility" onRequestClose={() => void guard.requestLeave(onClose)}>
+    <header><h2>Marketplace visibility</h2></header>
     {state.error || error ? <p role="alert">{error ?? state.error?.message}</p> : null}
     {state.isPending ? <p role="status">Loading released Dataset…</p> : null}
     {state.data ? <>

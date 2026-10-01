@@ -36,6 +36,33 @@ const manifest = createTasksetRunManifest({
 });
 const { contentHash: _manifestHash, ...manifestContent } = manifest;
 
+// A local budget owner must retain authority while native cancellation settles;
+// ordinary successful-turn tests cannot detect an early cleanup acknowledgement.
+test("trusted local Profile authority waits for both native cancellation and turn settlement", async()=>{
+  const controller=new AbortController();
+  let finishTurn!:(turn:Turn)=>void,finishCleanup!:(turn:Turn)=>void;
+  const terminal={id:"owned-profile-turn",status:"interrupted",error:"cancelled",startedAt:manifest.createdAt,
+    completedAt:manifest.createdAt,modelRef,harnessSnapshot:{harnessRelease}} as Turn;
+  const sendTurn=vi.fn(()=>new Promise<Turn>(resolve=>{finishTurn=resolve;}));
+  const interrupt=vi.fn(()=>new Promise<Turn>(resolve=>{finishCleanup=resolve;}));
+  const authority=vi.fn(async()=>{}),admit=vi.fn(async()=>{});
+  const createSession=vi.fn(async()=>({id:"owned-profile-session"}) as Session);
+  const execute=createProfileWorkflowEvaluationExecutor({manifest,profileRef,binding,modelRef,modelConfigurationHash,
+    assertSpendAuthority:authority,ownedSessionMetadata:{localProfileExperiment:{executionId:"owned-run"}},
+    admitSession:admit,createSession,sendTurn,interruptSessionTurn:interrupt,runtimeEventsForTurn:async()=>[]});
+  let settled=false;
+  const work=execute({task:{id:task.id,input:task.input,policyVisibleContext:{},artifactRefs:[],tags:[]},seed:"1",source,signal:controller.signal})
+    .finally(()=>{settled=true;});
+  await vi.waitFor(()=>expect(sendTurn).toHaveBeenCalledTimes(1));
+  expect(authority).toHaveBeenCalledTimes(1);expect(admit).toHaveBeenCalledTimes(1);
+  expect(createSession).toHaveBeenCalledWith(expect.objectContaining({currentProfile:profileRef,
+    metadata:expect.objectContaining({localProfileExperiment:{executionId:"owned-run"}})}));
+  controller.abort();finishTurn(terminal);
+  await Promise.resolve();await Promise.resolve();expect(settled).toBe(false);
+  finishCleanup(terminal);expect((await work).failureClass).toBe("cancelled");
+  expect(interrupt).toHaveBeenCalledTimes(1);
+});
+
 // A bounded manifest must not start policy work on a missing or mismatched
 // host admission. Existing workflow tests do not exercise spend authority.
 test("bounded Profile cases require the exact host-authorized run ceiling before policy work", async () => {
@@ -125,6 +152,15 @@ test("long streamed workflow turns keep complete output and bounded grader evide
   expect(result.evidence.output).toEqual({ text: "done" });
   expect(result.evidence.runtimeEventRefs).toEqual(["action-result", "delta-10000"]);
   expect(result.traceHash).toBe(contentHash(events));
+  let overflowHash:string|undefined;
+  const bounded=createProfileWorkflowEvaluationExecutor({manifest,profileRef,binding,modelRef,modelConfigurationHash,
+    createSession:async()=>({id:"bounded-profile-session"}) as Session,
+    sendTurn:async()=>({id:"bounded-profile-turn",status:"completed",startedAt:manifest.createdAt,completedAt:manifest.createdAt,
+      modelRef,harnessSnapshot:{harnessRelease}}) as Turn,runtimeEventsForTurn:async()=>events,
+    maximumOutputBytes:3,retainOutputLimitEvidence:true,onOutputLimit:hash=>{overflowHash=hash;}});
+  const retained=await bounded({task:{id:task.id,input:task.input,policyVisibleContext:{},artifactRefs:[],tags:[]},seed:"1",source});
+  expect(retained.terminal).toBe(false);expect(retained.evidence.output).toEqual({text:""});
+  expect(retained.traceHash).toBe(result.traceHash);expect(overflowHash).toBe(contentHash("done"));
 });
 
 test("workflow case rejects a turn on a different released Harness", async () => {

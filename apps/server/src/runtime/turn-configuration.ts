@@ -3,7 +3,7 @@ import { promises as fs, realpathSync, watch } from "node:fs";
 import path from "node:path";
 import {
   resolveEffectiveConfig, assertConfigRunCurrent, getLocalRecord, putLocalRecord,
-  effectivePreferences, type ConfigContext, type EffectiveConfig,
+  effectivePreferences, configToPreferences, type ConfigContext, type EffectiveConfig,
 } from "@openpond/persistence";
 import type { SendTurnRequest, Session } from "@openpond/contracts";
 import { sessionUsesRepositoryWork } from "./experience-policy.js";
@@ -39,8 +39,22 @@ export async function admitTurnConfiguration(home: string, session: Session, inp
     input.modelRef = { providerId: model.provider_id, modelId: model.model_id };
     input.model = model.model_id;
   }
-  const instructions = await snapshotInstructions(home, snapshot.document, sessionUsesRepositoryWork(session) && session.workspaceKind === "local_project" ? input.cwd ?? session.cwd : null);
-  return { context, snapshot, preferences: effectivePreferences(snapshot), instructions };
+  const standaloneExperiment = (session.metadata?.standaloneExperiment !== undefined || session.metadata?.localProfileExperiment !== undefined);
+  // Keep credential/configuration revocation fences, but do not admit personal
+  // instructions, delegation or automatic extra model work into a released
+  // standalone Harness case. The execution owner pins its model/settings.
+  const instructions = standaloneExperiment
+    ? { personality: "", userContext: "", repository: null, sources: [] }
+    : await snapshotInstructions(home, snapshot.document, sessionUsesRepositoryWork(session) && session.workspaceKind === "local_project" ? input.cwd ?? session.cwd : null);
+  const preferences = standaloneExperiment ? configToPreferences({
+    schema_version: 1,
+    ...(model ? { chat: { model } } : {}),
+    permissions: { command_access: "disabled", codex_mode: "default" },
+    subagents: { enabled: false, delegation_mode: "manual" },
+    context_compaction: { auto_enabled: false },
+    personalization: { mode: "disabled" },
+  }) : effectivePreferences(snapshot);
+  return { context, snapshot, preferences, instructions };
 }
 export function saveTurnConfiguration(home: string, turnId: string, admission: Awaited<ReturnType<typeof admitTurnConfiguration>>): void {
   putLocalRecord(home, "config_run_snapshots", turnId, { context: admission.context, snapshot: admission.snapshot, instructionSources: admission.instructions.sources, capturedAt: new Date().toISOString() }, null);

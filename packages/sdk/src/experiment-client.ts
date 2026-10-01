@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { compareExperiments, verifyExperimentEvidence } from "@openpond/evals/experiments";
-import { ExperimentDefinitionRefSchema, ExperimentListQuerySchema, SaveExperimentSchema, StartExperimentSchema, experimentDefinitionRef,
-  verifyExperimentDefinition, type ExperimentDefinitionRef } from "./experiment-contracts.js";
+import { ExperimentListQuerySchema } from "./experiment-contracts.js";
+import { RunExperimentSchema } from "./experiment-run-contracts.js";
+import { experimentConfigurationRequest, verifyExperimentRunDetails } from "./experiment-run-details.js";
 import { PrepareHarnessExperimentSchema, PreparedHarnessExperimentSchema } from "./experiment-contracts.js";
-import { verifyHarnessExperimentManifest, verifyModelTasksetRunDetails } from "./model-taskset-runs-contracts.js";
+import { verifyHarnessExperimentManifest } from "./model-taskset-runs-contracts.js";
 import { ExperimentScoringRequestSchema, verifyExperimentScoringPass, type ExperimentScoringRequest } from "./experiment-scoring-contracts.js";
 
 const Id = z.string().trim().min(1).max(200);
@@ -12,7 +13,7 @@ export class OpenPondExperimentError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); this.name = "OpenPondExperimentError"; }
 }
 
-/** Saved configuration and execution identities share the host's service. */
+/** One Experiment is one run with its immutable configuration and results. */
 export class OpenPondExperimentsClient {
   private readonly baseUrl: string;
   constructor(private readonly options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof fetch }) {
@@ -35,84 +36,58 @@ export class OpenPondExperimentsClient {
       throw new Error("Harness preparation differs from its requested scope or configuration.");
     return result;
   }
-  async save(value: z.input<typeof SaveExperimentSchema>, signal?: AbortSignal) {
-    const request = SaveExperimentSchema.parse(value);
+  async run(value: z.input<typeof RunExperimentSchema>, signal?: AbortSignal) {
+    const request = RunExperimentSchema.parse(value);
     if (request.request.teamId !== this.options.teamId) throw new Error("Experiment workspace mismatch.");
-    const result = this.definition(await this.request("", "POST", request, signal), request.id);
-    if (result.revision !== request.expectedRevision + 1 || contentHash(result.request) !== contentHash(request.request)
-      || result.maximumCostUsd !== request.maximumCostUsd) throw new Error("Experiment save receipt differs from its submitted configuration.");
-    if (request.graders && contentHash(request.graders) !== contentHash(result.graders.map(grader => ({ id: grader.id, version: grader.version, contentHash: grader.contentHash, mappings: grader.mappings ?? [] }))))
-      throw new Error("Experiment save receipt differs from its selected graders or mappings.");
+    const result = await this.details(await this.request("", "POST", request, signal));
+    if (contentHash(experimentConfigurationRequest(result.request)) !== contentHash(experimentConfigurationRequest(request.request))
+      || result.configuration.maximumCostUsd !== request.maximumCostUsd
+      || result.configuration.sourceExperimentId !== request.sourceExperimentId
+      || result.configuration.admissionRequestHash !== contentHash(request))
+      throw new Error("Experiment admission differs from its submitted configuration.");
+    if (request.graders && contentHash(request.graders) !== contentHash(result.configuration.graders.map(grader => ({
+      id:grader.id,version:grader.version,contentHash:grader.contentHash,mappings:grader.mappings ?? [],
+    })))) throw new Error("Experiment admission differs from its selected graders or mappings.");
     return result;
   }
-  async get(id: string, options: { reference?: ExperimentDefinitionRef; signal?: AbortSignal } = {}) {
-    const reference = options.reference ? ExperimentDefinitionRefSchema.parse(options.reference) : undefined;
-    if (reference && reference.id !== id) throw new Error("Experiment reference identity mismatch.");
-    const suffix = reference ? `?${new URLSearchParams({ revision: String(reference.revision), contentHash: reference.contentHash })}` : "";
-    const result = this.definition(await this.request(`/${encodeURIComponent(Id.parse(id))}${suffix}`, "GET", undefined, options.signal), id);
-    if (options.reference && contentHash(experimentDefinitionRef(result)) !== contentHash(options.reference)) throw new Error("Experiment revision mismatch.");
-    return result;
+  async get(id: string, options: {signal?: AbortSignal} = {}) {
+    return this.details(await this.request(`/${encodeURIComponent(Id.parse(id))}`, "GET", undefined, options.signal), id);
   }
   async list(value: z.input<typeof ExperimentListQuerySchema> = {}, signal?: AbortSignal) {
     const query = ExperimentListQuerySchema.parse(value);
-    const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
-    const page = z.object({ items: z.array(z.unknown()).max(100), nextCursor: Id.nullable() }).strict().parse(await this.request(`?${params}`, "GET", undefined, signal));
-    const items = page.items.map(value => this.definition(value));
-    if (items.length > query.limit || new Set(items.map(item => item.id)).size !== items.length
-      || items.some(item => query.projectId && item.request.project?.id !== query.projectId || query.datasetHash && item.request.taskset.contentHash !== query.datasetHash))
+    const params = new URLSearchParams(Object.entries(query).filter(([,value])=>value!==undefined).map(([key,value])=>[key,String(value)]));
+    const page = z.object({items:z.array(z.unknown()).max(100),nextCursor:Id.nullable()}).strict().parse(await this.request(`?${params}`,"GET",undefined,signal));
+    const items = await Promise.all(page.items.map(value=>this.details(value)));
+    if (items.length > query.limit || new Set(items.map(item=>item.summary.id)).size !== items.length
+      || page.nextCursor !== null && page.nextCursor !== items.at(-1)?.summary.id
+      || items.some(item => query.projectId && item.request.project?.id !== query.projectId
+        || query.datasetHash && item.request.taskset.contentHash !== query.datasetHash
+        || query.status && item.summary.status !== query.status))
       throw new Error("Experiment page differs from its selected scope.");
-    return { items, nextCursor: page.nextCursor };
-  }
-  async start(value: z.input<typeof StartExperimentSchema>, signal?: AbortSignal) {
-    const request = StartExperimentSchema.parse(value);
-    const response = z.object({ definition: z.unknown(), run: z.unknown() }).strict().parse(
-      await this.request(`/${encodeURIComponent(request.definition.id)}/start`, "POST", request, signal));
-    const definition = this.definition(response.definition, request.definition.id);
-    if (contentHash(experimentDefinitionRef(definition)) !== contentHash(request.definition)) throw new Error("Experiment Start revision mismatch.");
-    const result = await verifyModelTasksetRunDetails(response.run);
-    if (result.summary.teamId !== this.options.teamId || result.request.operationId !== request.operationId
-      || contentHash(savedRequestPopulation(result.request))
-        !== contentHash(savedRequestPopulation({ ...definition.request, operationId: request.operationId }))
-      || contentHash(result.manifest.metadata.experimentDefinition) !== contentHash(request.definition)
-      || result.manifest.metadata.experimentConfigurationHash !== contentHash({ definition: request.definition, maximumCostUsd: definition.maximumCostUsd, graders: definition.graders }))
-      throw new Error("Experiment execution differs from its saved configuration.");
-    return result;
+    return {items,nextCursor:page.nextCursor};
   }
   async result(executionId: string, signal?: AbortSignal) {
     const value = z.object({ executionId: Id, passId: Id.nullable(), manifest: z.unknown(), result: z.unknown() }).strict()
-      .parse(await this.request(`/executions/${encodeURIComponent(Id.parse(executionId))}/result`, "GET", undefined, signal));
+      .parse(await this.request(`/${encodeURIComponent(Id.parse(executionId))}/result`, "GET", undefined, signal));
     const evidence = verifyExperimentEvidence(value);
     if (value.executionId !== executionId || evidence.manifest.teamId !== this.options.teamId
       || evidence.manifest.lineage?.execution.id !== executionId
       || evidence.manifest.lineage.scoringPassId !== value.passId) throw new Error("Experiment result identity mismatch.");
     return { ...evidence, executionId, passId: value.passId };
   }
-  async executions(definitionId: string, options: { afterId?: string; signal?: AbortSignal } = {}) {
-    const params = new URLSearchParams(options.afterId ? { afterId: Id.parse(options.afterId) } : {});
-    const page = z.object({ items: z.array(z.unknown()).max(30), nextCursor: Id.nullable() }).strict().parse(
-      await this.request(`/${encodeURIComponent(Id.parse(definitionId))}/executions?${params}`, "GET", undefined, options.signal));
-    const items = await Promise.all(page.items.map(value => verifyModelTasksetRunDetails(value)));
-    if (items.some(item => item.summary.teamId !== this.options.teamId
-      || ExperimentDefinitionRefSchema.parse(item.manifest.metadata.experimentDefinition).id !== definitionId)
-      || new Set(items.map(item => item.summary.id)).size !== items.length)
-      throw new Error("Experiment execution page has invalid ownership or repeated identities.");
-    return { items, nextCursor: page.nextCursor };
-  }
-  async execution(id: string, signal?: AbortSignal) {
-    return this.executionDetails(await this.request(`/executions/${encodeURIComponent(Id.parse(id))}`, "GET", undefined, signal), id);
-  }
   async cancel(id: string, signal?: AbortSignal) {
-    return this.executionDetails(await this.request(`/executions/${encodeURIComponent(Id.parse(id))}/cancel`, "POST", {}, signal), id);
+    return this.details(await this.request(`/${encodeURIComponent(Id.parse(id))}/cancel`, "POST", {}, signal), id);
   }
-  /** Retry intentionally creates another execution; a transport retry reuses the same operation id. */
-  async retry(id: string, operationId: string, signal?: AbortSignal) {
-    const result = await this.executionDetails(await this.request(`/executions/${encodeURIComponent(Id.parse(id))}/retry`, "POST", { operationId: Id.parse(operationId) }, signal));
-    if (result.request.operationId !== operationId) throw new Error("Experiment retry operation mismatch.");
+  /** Duplicate uses the original run snapshot; edits are submitted with run(). */
+  async duplicate(id: string, operationId: string, signal?: AbortSignal) {
+    const result = await this.details(await this.request(`/${encodeURIComponent(Id.parse(id))}/duplicate`, "POST", {operationId:Id.parse(operationId)}, signal));
+    if (result.request.operationId !== operationId || result.configuration.sourceExperimentId !== id || result.summary.id === id)
+      throw new Error("Duplicate Experiment admission differs from its source or operation.");
     return result;
   }
   async score(value: ExperimentScoringRequest, signal?: AbortSignal) {
     const request = ExperimentScoringRequestSchema.parse(value);
-    const pass = this.pass(await this.request(`/executions/${encodeURIComponent(request.execution.id)}/scoring-passes`, "POST", request, signal));
+    const pass = this.pass(await this.request(`/${encodeURIComponent(request.execution.id)}/scoring-passes`, "POST", request, signal));
     if (contentHash(pass.request) !== contentHash(request)) throw new Error("Scoring admission differs from its submitted inputs.");
     return pass;
   }
@@ -122,7 +97,7 @@ export class OpenPondExperimentsClient {
   async scoringPasses(executionId: string, options: { afterId?: string; signal?: AbortSignal } = {}) {
     const params = new URLSearchParams(options.afterId ? { afterId: Id.parse(options.afterId) } : {});
     const page = z.object({ items: z.array(z.unknown()).max(30), nextCursor: Id.nullable() }).strict().parse(
-      await this.request(`/executions/${encodeURIComponent(Id.parse(executionId))}/scoring-passes?${params}`, "GET", undefined, options.signal));
+      await this.request(`/${encodeURIComponent(Id.parse(executionId))}/scoring-passes?${params}`, "GET", undefined, options.signal));
     const items = page.items.map(value => this.pass(value));
     if (items.some(item => item.request.execution.id !== executionId) || new Set(items.map(item => item.id)).size !== items.length)
       throw new Error("Scoring pass page differs from its execution ownership.");
@@ -145,15 +120,11 @@ export class OpenPondExperimentsClient {
     const [baseline, candidate] = await Promise.all([read(baselineId), read(candidateId)]);
     return { baseline, candidate, comparison: compareExperiments(baseline, candidate) };
   }
-  private definition(value: unknown, id?: string) {
-    const result = verifyExperimentDefinition(value);
-    if (result.teamId !== this.options.teamId || id && result.id !== id) throw new Error("Experiment identity mismatch.");
+  private async details(value: unknown, id?: string) {
+    const result = await verifyExperimentRunDetails(value);
+    if (result.summary.teamId !== this.options.teamId || id && result.summary.id !== id)
+      throw new Error("Experiment identity mismatch.");
     return result;
-  }
-  private async executionDetails(value: unknown, id?: string) {
-    const details = await verifyModelTasksetRunDetails(value);
-    if (details.summary.teamId !== this.options.teamId || id && details.summary.id !== id) throw new Error("Experiment execution identity mismatch.");
-    return details;
   }
   private pass(value: unknown, id?: string) {
     const pass = verifyExperimentScoringPass(value);
@@ -172,12 +143,4 @@ export class OpenPondExperimentsClient {
     }
     return value;
   }
-}
-
-/** Native Harness assigns receipt IDs when sealing each new execution. Its
- * saved population still pins every task/seed; Model receipts stay exact. */
-function savedRequestPopulation(request: z.infer<typeof SaveExperimentSchema>["request"]) {
-  return request.policy.kind === "hosted_harness" ? {
-    ...request, population: request.population.map(({ receiptId: _id, ...member }) => member),
-  } : request;
 }

@@ -41,9 +41,15 @@ describe("Models page, scope and resource route boundary", () => {
 
   // Regression: ambiguous execution IDs and retired paths silently selected the wrong resource or project.
   it("preserves typed resource identities and reserves creation and series routes", () => {
-    const history = modelsLocation("experiments", null, { area: "console", collection: "history", projectId: "project A", after: "run-cursor" });
-    expect(modelsRouteFromLocation(new URL(modelsPath(history), "https://local.invalid"))).toEqual(history);
-    expect(modelsRouteFromLocation({ pathname: "/console/experiments/history/extra" })).toBeNull();
+    const localExperiment = modelsLocation("experiments", null, { area: "console", projectId: "project A", executionLocation: "local", resourceId: "local-run-a", passId: "local-score-a", detailTab: "cases" });
+    expect(modelsRouteFromLocation(new URL(modelsPath(localExperiment), "https://local.invalid"))).toEqual(localExperiment);
+    // Flat run identity must not accept a parent revision or nested execution
+    // that could silently select configuration/results from another run.
+    for (const search of ["?location=local&revision=1&hash=" + "c".repeat(64), "?execution=another-run", "?location=remote"])
+      expect(modelsRouteFromLocation({ pathname: "/console/experiments/local-run-a", search })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/models/runs", search: "?location=local" })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/console/experiments/history" })).toBeNull();
+    expect(modelsRouteFromLocation({ pathname: "/console/experiments", search: "?pass=local-score-a" })).toBeNull();
     // An imported release keeps its ordinary Dataset ID while selecting the
     // immutable reader; the marker must not spill into other resource routes.
     const releasedDataset = modelsLocation("datasets", null, { area: "console", resourceId: "hosted-dataset/A", datasetKind: "release", detailTab: "tasks" });

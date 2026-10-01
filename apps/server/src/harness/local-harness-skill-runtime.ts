@@ -88,7 +88,8 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
     if (readers.has(parsed.name)) throw new Error(`Released Harness has duplicate Skill ${parsed.name}.`);
     const packagePrefix = `${path.posix.dirname(asset.path)}/`;
     const resourceFiles = release.harnessRelease.files
-      .filter((candidate) => candidate.path.startsWith(packagePrefix) && candidate.path !== asset.path)
+      .filter((candidate) => candidate.visibility === "policy"
+        && candidate.path.startsWith(packagePrefix) && candidate.path !== asset.path)
       .map((candidate) => candidate.path.slice(packagePrefix.length))
       .sort();
     const skill: OpenPondProfileSkill = {
@@ -153,7 +154,7 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
         id: release.agentSnapshot.id,
         contentHash: release.agentSnapshot.contentHash,
       },
-      files: release.harnessRelease.files.map((asset) => ({
+      files: release.harnessRelease.files.filter((asset) => asset.visibility === "policy").map((asset) => ({
         path: asset.path,
         contentHash: asset.contentHash,
       })),

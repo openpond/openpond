@@ -9,6 +9,8 @@ import { createHostedModelStreamFromEnvironment } from "./runtime/hosted-model-s
 import { AdmittedHostedProfileReleaseSchema, type AdmittedHostedProfileRelease } from "./store/hosted-profile-source.js";
 import type { OpenPondAppServerOptions } from "./app-server-runtime.js";
 import { existsSync } from "node:fs";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { validateHarnessSourcePackage } from "@openpond/harness";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_HOST, DEFAULT_PORT } from "./constants.js";
@@ -33,6 +35,7 @@ type ParsedCliArgs = {
   storeDir: string | null;
   hostedCacheHome?: string;
   experimentOwner?: boolean;
+  experimentHarnessPackage?: string;
   sourceBrowserState?: string;
   profileSource?: ProfileSourceCliOptions;
   admittedProfileRelease?: AdmittedHostedProfileRelease;
@@ -70,6 +73,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let storeDir: string | null = null;
   let hostedCacheHome: string | undefined;
   let experimentOwner=false;
+  let experimentHarnessPackage: string | undefined;
   let sourceBrowserState: string | undefined;
   let profileSourceRoot: string | null = null;
   let profileRepositoryId: string | null = null;
@@ -121,6 +125,9 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       hostedCacheHome = path.resolve(requireValue(args, i, arg)); i += 1;
     } else if (arg === "--experiment-owner") {
       experimentOwner=true;
+    } else if (arg === "--experiment-harness-package") {
+      if (experimentHarnessPackage) throw new Error("Duplicate Experiment Harness source package.");
+      experimentHarnessPackage = path.resolve(requireValue(args, i, arg)); i += 1;
     } else if (arg === "--runtime-storage") {
       const value = requireValue(args, i, arg);
       if (value !== "hosted-postgres") throw new Error("Unsupported app-server runtime storage.");
@@ -174,12 +181,15 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   }
   if (hostedCacheHome && runtimeStorage !== "hosted_postgres") throw new Error("Hosted cache home requires hosted Postgres mode.");
   if(experimentOwner && (mode!=="app-server" || runtimeStorage!=="sqlite_bundle" || profileFlags || !storeDir)) throw new Error("Experiment owner mode requires an isolated app-server home without Profile selection.");
+  if (experimentHarnessPackage && (!experimentOwner || path.dirname(experimentHarnessPackage) !== storeDir))
+    throw new Error("Experiment Harness source must be provisioned directly inside its isolated owner home.");
   return {
     mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, runtimeStorage, sourceBrowserState,
     ...(profileFlags ? { profileSource: { repoPath: profileSourceRoot!, repositoryId: profileRepositoryId!, profileId: profileId!, sourceRevision: profileRevision! } } : {}),
     ...(admittedProfileRelease ? { admittedProfileRelease } : {}),
     ...(hostedCacheHome ? { hostedCacheHome } : {}),
     ...(experimentOwner ? {experimentOwner:true} : {}),
+    ...(experimentHarnessPackage ? { experimentHarnessPackage } : {}),
     help: false,
   };
 }
@@ -285,7 +295,7 @@ export async function runOpenPondServerCli(factories: ServerCliFactories): Promi
 
   if (args.mode === "app-server") {
     await runAgentServer(factories.createOpenPondAppServer, args.storeDir, args.profileSource, args.runtimeStorage,
-      args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner);
+      args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner,args.experimentHarnessPackage);
     return;
   }
 
@@ -366,7 +376,7 @@ export async function runOpenPondAppServerCli(
     throw new Error("The app-server entrypoint only accepts the app-server command.");
   }
   await runAgentServer(createOpenPondAppServer, args.storeDir, args.profileSource,
-    args.runtimeStorage, args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner);
+    args.runtimeStorage, args.admittedProfileRelease, args.hostedCacheHome,args.experimentOwner,args.experimentHarnessPackage);
 }
 
 async function runAgentServer(
@@ -377,6 +387,7 @@ async function runAgentServer(
   admittedProfileRelease?: AdmittedHostedProfileRelease,
   hostedCacheHome?: string,
   experimentOwner=false,
+  experimentHarnessPackage?: string,
 ): Promise<void> {
   const hostStorageClient = new AgentHostStorageClient();
   if (runtimeStorage === "hosted_postgres") {
@@ -398,9 +409,21 @@ async function runAgentServer(
     return;
   }
   if (storeDir) process.env.OPENPOND_HOME = storeDir;
+  let experimentHarnessSource: OpenPondAppServerOptions["experimentHarnessSource"];
+  if (experimentHarnessPackage) {
+    if (!experimentOwner || !storeDir || path.dirname(experimentHarnessPackage) !== storeDir
+      || await realpath(experimentHarnessPackage) !== experimentHarnessPackage)
+      throw new Error("Experiment Harness source escaped its isolated owner home.");
+    const descriptor = await lstat(experimentHarnessPackage);
+    if (!descriptor.isFile() || descriptor.size > 67_108_864)
+      throw new Error("Experiment Harness source package is not a bounded regular file.");
+    experimentHarnessSource = { ownerId: "host-experiment-case", sourcePackage: validateHarnessSourcePackage(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readFile(experimentHarnessPackage)))) };
+  }
   const appServer = await createOpenPondAppServer({
     ...(storeDir ? { storeDir } : {}),
     ...(profileSource ? { profileSource } : {}),
+    ...(experimentHarnessSource ? { experimentHarnessSource } : {}),
     ...(experimentOwner?{experimentPolicyClient:hostStorageClient,
       services:{webSearch:false,scheduling:false,connectedApps:false,tasksets:false,projectActions:false,profileActions:false,backgroundReview:false},
     }:{}),

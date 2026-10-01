@@ -77,6 +77,7 @@
     "@openpond/cloud": "workspace:*",
     "@openpond/continual-support": "workspace:*",
     "@openpond/contracts": "workspace:*",
+    "@openpond/evals": "workspace:*",
     "@openpond/local-server": "workspace:*",
     "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*",
@@ -95,6 +96,7 @@
     "@openpond/taskset-sdk",
     "openpond-sdk",
     "@openpond/terminal",
-    "@openpond/persistence"
+    "@openpond/persistence",
+    "@openpond/evals"
   ]
 }

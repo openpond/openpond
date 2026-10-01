@@ -40,6 +40,10 @@ export const TasksetPackageReadbackSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetPackageReadback.v1"),
   teamId: IdSchema, modelProjectId: IdSchema, package: TasksetPackageSchema,
 }).strict();
+export const TasksetReleasePackageReadbackSchema=z.object({
+  schemaVersion:z.literal("openpond.tasksetReleasePackageReadback.v1"),
+  teamId:IdSchema,release:TasksetCatalogReleaseRefSchema,package:TasksetPackageSchema,
+}).strict();
 export type TasksetPackagePublication = z.infer<typeof TasksetPackagePublicationSchema>;
 export type TasksetPackageReceipt = z.infer<typeof TasksetPackageReceiptSchema>;
 export type TasksetPackageModelConfiguration = z.infer<typeof TasksetPackageModelConfigurationSchema>;
@@ -92,6 +96,19 @@ export class OpenPondTasksetPackageClient {
       }
     }
     return receipt;
+  }
+
+  /** Owner-authorized independent Dataset transfer. Callers retain private
+   * bytes at the evaluator/server boundary, never in a policy-facing picker. */
+  async getByRelease(reference:z.infer<typeof TasksetCatalogReleaseRefSchema>,options:{signal?:AbortSignal;expectedPackageHash?:string}={}):Promise<TasksetPackage> {
+    const ref=TasksetCatalogReleaseRefSchema.parse(reference);
+    const expectedPackageHash=options.expectedPackageHash===undefined?undefined:HashSchema.parse(options.expectedPackageHash);
+    const response=TasksetReleasePackageReadbackSchema.parse(await this.#request(`/releases/${encodeURIComponent(ref.id)}/${ref.revision}/${ref.contentHash}/package`,"GET",undefined,options.signal));
+    const value=validateTasksetPackage(response.package),release={id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash};
+    if(response.teamId!==this.#options.teamId||contentHash(response.release)!==contentHash(ref)||contentHash(release)!==contentHash(ref)
+      ||expectedPackageHash!==undefined&&value.contentHash!==expectedPackageHash)
+      throw new OpenPondTasksetPackageError(502,"package_readback_mismatch","Independent Dataset package differs from the requested workspace or exact release.");
+    return value;
   }
 
   async get(modelProjectId: string, reference: z.infer<typeof TasksetCatalogReleaseRefSchema>, options: { signal?: AbortSignal; expectedPackageHash?: string } = {}): Promise<TasksetPackage> {

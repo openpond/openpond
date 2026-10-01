@@ -77,6 +77,7 @@ import { runWithSingleContextOverflowRecovery } from "./context-overflow-recover
 import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
 import type { TaskInboxRepository } from "../task-inbox/repository.js";
 import { appendTaskInputContext, projectTaskAssignment } from "../task-inbox/model-context.js";
+import { isolateStandaloneExperimentTools } from "../../harness/standalone-experiment-tools.js";
 
 export { hostedTrainingHarnessRound } from "./training-harness-round.js";
 
@@ -282,6 +283,9 @@ export function createHostedToolLoopRuntime(deps: {
         harness: params.harness ?? null, declarations: params.harnessDeclarations ?? [],
         tools: nativeToolDefinitions,
       });
+    }
+    if ((session.metadata?.standaloneExperiment !== undefined || session.metadata?.localProfileExperiment !== undefined)) {
+      nativeToolDefinitions = isolateStandaloneExperimentTools(nativeToolDefinitions, params.harnessDeclarations ?? []);
     }
     const effectiveToolCatalog = createAgentToolCatalogProjection(
       nativeToolDefinitions.map((definition) => ({

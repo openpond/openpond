@@ -13,9 +13,9 @@ afterEach(async () => {
 });
 
 describe("static web security", () => {
-  // A root-only shell test misses the blank page caused by Electron-relative
-  // asset paths when a user reloads a nested Model or draft URL over HTTP.
-  test("loads relative build assets from nested browser routes without changing the Electron build", async () => {
+  // A root-only shell test misses broken assets after reloading a nested
+  // Console resource or an archived Project route over HTTP.
+  test("loads build assets from nested browser routes without changing stored bytes", async () => {
     const webRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-static-route-"));
     cleanupPaths.push(webRoot);
     await mkdir(path.join(webRoot, "assets"));
@@ -32,7 +32,7 @@ describe("static web security", () => {
     try {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Static test server did not bind.");
-      for (const route of ["/", "/models/model-a/tasks", "/models/model-a/tasks/drafts/draft-a"]) {
+      for (const route of ["/", "/models/model-a/tasks", "/models/model-a/tasks/drafts/draft-a", "/console/datasets?project=archived-project", "/console/experiments/retained-run/cases"]) {
         const url = `http://127.0.0.1:${address.port}${route}`;
         const response = await fetch(url);
         expect(response.status).toBe(200);
