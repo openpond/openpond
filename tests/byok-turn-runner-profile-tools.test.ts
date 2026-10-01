@@ -919,4 +919,24 @@ describe("BYOK turn runner profile and tools", () => {
     )).toBe(false);
   });
 
+  // Failure story: rejected candidate admission must neither spend on a model
+  // nor leave the stored turn/Inbox lease blocking subsequent work.
+  test("rejects an unadmitted stored turn before inference and releases its lifecycle owner", async () => {
+    const harness=createByokTurnRunnerHarness({toolArgs:null,finalText:"Admitted ordinary work."});
+    try {
+      await expect(harness.runner.sendTurn("session_1",{prompt:"Candidate authoring",modelRef:{providerId:"openrouter",modelId:"test/model"}},"candidate-denied",{
+        beforeExecute:async(session,turn)=>{
+          expect(session.id).toBe("session_1");
+          expect(harness.turns.find(value=>value.id===turn.id)?.status).toBe("in_progress");
+          throw new Error("The candidate owner changed.");
+        },
+      })).rejects.toThrow("The candidate owner changed.");
+      expect(harness.streamInputs).toHaveLength(0);
+      expect(harness.turns.find(value=>value.id==="candidate-denied")?.status).toBe("failed");
+      const next=await harness.runner.sendTurn("session_1",{prompt:"Continue authorized work",modelRef:{providerId:"openrouter",modelId:"test/model"}});
+      expect(next.status).toBe("completed");
+      expect(harness.streamInputs).toHaveLength(1);
+    } finally {await harness.runner.close();}
+  });
+
 });

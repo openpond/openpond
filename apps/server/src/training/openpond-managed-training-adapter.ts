@@ -1,3 +1,4 @@
+import {boundTrainingActivityAuthority,TrainingActivityAuthoritySchema,type ResolveTrainingActivityAuthority} from "./training-activity-authority.js";
 import { readFile } from "node:fs/promises";
 import { prepareManagedTrainingSubmission, ResolvedTrainingBundleManifestSchema } from "openpond-sdk/training-bundle";
 import path from "node:path";
@@ -75,7 +76,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   private readonly evidenceRefreshes = new Map<string, Promise<void>>();
   private readonly evidenceRefreshedAt = new Map<string, number>();
 
-  constructor(private readonly dependencies: OpenPondManagedTrainingAdapterDependencies) {
+  constructor(private readonly dependencies: OpenPondManagedTrainingAdapterDependencies,private readonly resolveActivityAuthority?:ResolveTrainingActivityAuthority) {
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
     this.resolveAccess =
       dependencies.resolveAccess ?? ((teamId) => resolveManagedAdapterUserAccess({ teamId }));
@@ -543,7 +544,8 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     if (!project) {
       throw new Error("The managed Model Project is no longer available.");
     }
-    const access = await this.resolveBoundAccess();
+    const expectedAuthority=boundTrainingActivityAuthority(plan)??(this.resolveActivityAuthority?TrainingActivityAuthoritySchema.parse(await this.resolveActivityAuthority(trainingPlan.modelId)):null);
+    const access = await this.resolveBoundAccess(expectedAuthority?.teamId);
     const selectedSource = files.find(file => file.path === "harness/source-package.json");
     if (selectedSource) await this.trainingClient(access).publishHarnessSource(JSON.parse(Buffer.from(selectedSource.content, "base64").toString("utf8")));
     project = await this.syncProjectForSubmission(project, access);
@@ -574,6 +576,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     });
     const client = this.trainingClient(access);
     await client.stageArtifact(artifact);
+    if(expectedAuthority&&this.resolveActivityAuthority){const current=TrainingActivityAuthoritySchema.parse(await this.resolveActivityAuthority(trainingPlan.modelId));if(JSON.stringify(current)!==JSON.stringify(expectedAuthority)||current.teamId!==access.teamId)throw new Error('Training account or Project changed before paid admission.');}
     const job = await client.createJob(publicSubmission);
     const ref = {
       runId: job.id,

@@ -1,6 +1,7 @@
 export {
   ROOT_IMAGE_TESTS,
   ROOT_MEMORY_TESTS,
+  ROOT_QUALIFICATION_TESTS,
   ROOT_SYSTEM_TESTS,
   ROOT_UI_TESTS,
 } from "./test-suite-manifest";

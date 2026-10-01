@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-import { createLocalExperimentsRuntime } from "./evaluations/local-experiments-runtime.js";
+import {createAdvancedRefinerEvaluationSource} from "./training/advanced-refiner-evaluation-source.js";
+import {createAdvancedRefinerReviewQuality} from "./training/advanced-refiner-review-quality.js";
+import {createAdvancedRefinerPaidBoundary} from "./training/advanced-refiner-paid-boundary.js";
+import { createManagedTrainingComposition } from "./training/managed-training-composition.js";
+import {closeCoordinatedEvaluations,createCoordinatedQualificationRuntime} from "./evaluations/coordinated-qualification-runtime.js";
+import { createCoordinatedEvaluationRuntime } from "./evaluations/coordinated-evaluation-runtime.js";
+import {createCurrentWorkspaceIdentity} from "./human-review/current-workspace-identity.js";
 import { createProfileEvaluationRuntime } from "./harness/profile-evaluation-runtime.js";
 import { createConfigurationPayloads } from "./api/configuration-payloads.js";
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
@@ -136,6 +142,7 @@ import { createWorkSandboxLifecycleService } from "./work/work-sandbox-lifecycle
 import { createDesktopWorkEvidenceApi } from "./work/work-evidence-api.js";
 import { createWorkAgentPackageService } from "./work/work-agent-package-service.js";
 import { createWorkAgentSdkArchiveLoader } from "./work/work-agent-sdk-archive.js";
+import {createCandidateAgentRuntimeLoader} from "./harness/candidate-agent-runtime.js";
 import { createServerWorkspaceWorkflows } from "./workspace/server-workspace-workflows.js";
 import { organizationRequestPayload } from "./openpond/organizations.js";
 import {
@@ -179,11 +186,8 @@ import {
   findRecentCodexCompactionCompleted,
   resolveMaxHostedWorkspaceToolRounds,
 } from "./server-entry-helpers.js";
-import { createTrainingService } from "./training/training-service.js";
 import { requireReleasedTaskset } from "./training/local-taskset-release.js";
-import { createModelProjectHostingService } from "./training/model-project-hosting.js";
 import { createModelStarterRuntime } from "./training/model-starter-runtime.js";
-import { managedRlOperatorAccess } from "./training/managed-rl-operator-access.js";
 import { createTrainingApi } from "./training/training-api.js";
 import { runLocalHarnessEvaluationBaseline } from "./harness/local-harness-taskset-review.js";
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
@@ -197,15 +201,9 @@ import { createPreferenceComparisonVisualLoader } from "./training/preference-co
 import { createHarnessRefinerBenchmarkModelStream } from "./training/harness-refiner-benchmark-model.js";
 import { resolveBenchmarkUpstreamModel } from "./training/training-model-runtime.js";
 import { createBenchmarkRuntimeComposition } from "./training/benchmark-runtime-composition.js";
-import { createDatasetStorageService } from "./training/dataset-storage-service.js";
-import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
-import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
-import { resolveHostedApiAccess, resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
-import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
-import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
-import { createManagedAdapterHostedChatStream } from "./training/managed-adapter-chat-stream.js";
+import { resolveHostedApiAccess } from "./openpond/hosted-api-access.js";
 import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
 import { createLearningHostedJudgeProvider } from "./training/learning-hosted-judge-provider.js";
 import {
@@ -494,11 +492,14 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     storeDir,
     workspaceDiffPayload,
   });
+  const reviewIdentity=createCurrentWorkspaceIdentity({account:async()=>(await bootstrapPayload()).account,defaultTeam:async()=>(await loadAppPreferences()).defaultTeamId});
+  let candidateWorkspaceTool: ReturnType<typeof createCoordinatedEvaluationRuntime>["executeCandidateWorkspaceTool"] | undefined;
   const {
     closeCloudWorkspaceReadiness,
     executeWorkspaceTool,
     ensureCloudWorkspaceReady,
   } = createWorkspaceToolExecutor({
+    executeCandidateWorkspaceTool: input => candidateWorkspaceTool?.(input) ?? Promise.resolve(null),
     logger,
     truncateLogValue,
     appendRuntimeEvent,
@@ -679,72 +680,19 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       datasetArtifactService.task(tasksetId, taskId, split),
     modelJudge: taskEvaluationModelJudge,
   });
-  const datasetStorageService = createDatasetStorageService({ storeDir });
-  const managedAdapterRegistryClient = createManagedAdapterRegistryClient();
-  const managedAdapterSyncService = createManagedAdapterSyncService({
-    store,
-    client: managedAdapterRegistryClient,
-    resolveSelectedTeamId: async () => {
-      return (await loadAppPreferences()).defaultTeamId;
-    },
-  });
-  onStartupFailure(() => managedAdapterSyncService.close());
-  const datasetStoragePayload = async (action: "state" | "update", payload?: unknown) =>
-    action === "state" ? datasetStorageService.state() : datasetStorageService.update(payload);
-  const portableTrainingDependencies = createPortableTrainingServerDependencies(
-    {
-      storeDir,
-      environment: process.env,
-    }
-  );
-  const resolveManagedTrainingAccess = async () => {
-    const operatorAccess = await managedRlOperatorAccess(process.env);
-    if (operatorAccess) return operatorAccess;
-    const teamId = (await loadAppPreferences()).defaultTeamId;
-    return resolveManagedAdapterUserAccess({ teamId });
-  };
-  const modelProjectHosting = createModelProjectHostingService({
-    store,
-    resolveAccess: resolveManagedTrainingAccess,
-    resolveActorId:async()=> {
-      const account=(await bootstrapPayload()).account;
-      if(account.state!=="signed_in"||!account.profile?.id)throw new Error("Sign in to retain evaluation operation recovery.");
-      return account.profile.id;
-    },
-    resolveReleasedHarness,
-    env: process.env,
-  });
-  const trainingService = createTrainingService({
-    store,
-    storeDir,
-    ...portableTrainingDependencies,
-    resolveManagedTrainingAccess,
-    resolveReleasedHarness,
-    resolveTasksetRelease: (taskset) => requireReleasedTaskset(benchmarkTasksets, taskset, store),
-    resolveApprovalActor: async () => {
-      const account = (await bootstrapPayload()).account;
-      if (account.state !== "signed_in") return null;
-      return account.profile?.handle?.trim() || null;
-    },
-    gradeTaskAttempt: taskEvaluationService.grade,
-    projectDatasetArtifact: datasetArtifactService.project,
-    resolveDatasetTask: ({ tasksetId, taskId, split }) =>
-      datasetArtifactService.task(tasksetId, taskId, split),
-    tasksetWorkRuntime,
-    deactivateManagedBinding: managedAdapterSyncService.deactivateBinding,
-    reactivateManagedBinding: managedAdapterSyncService.reactivateBinding,
-    activateManagedBinding: managedAdapterSyncService.activateBinding,
-  });
-  onStartupFailure(() => trainingService.close());
-  const managedAdapterChatRuntime = createManagedAdapterChatRuntime({
-    store,
-    client: managedAdapterRegistryClient,
-  });
-  const streamSelectedOpenPondChatTurn = createManagedAdapterHostedChatStream({
-    managed: managedAdapterChatRuntime,
-    hosted: streamOpenPondHostedChatTurn,
-  });
-  managedAdapterSyncService.start();
+  const { datasetStorageService, datasetStoragePayload, modelProjectHosting,
+    trainingService, managedAdapterSyncService, managedAdapterChatRuntime,
+    streamSelectedOpenPondChatTurn } = createManagedTrainingComposition({
+      store, storeDir, resolveAccess: resolveHostedApiAccess,
+      account: async () => (await bootstrapPayload()).account,
+      defaultTeam: async () => (await loadAppPreferences()).defaultTeamId,
+      resolveReleasedHarness,
+      resolveTasksetRelease: taskset => requireReleasedTaskset(benchmarkTasksets, taskset, store),
+      gradeTaskAttempt: taskEvaluationService.grade,
+      projectDatasetArtifact: datasetArtifactService.project,
+      resolveDatasetTask: ({ tasksetId, taskId, split }) => datasetArtifactService.task(tasksetId, taskId, split),
+      tasksetWorkRuntime, streamHosted: streamOpenPondHostedChatTurn, onStartupFailure,
+    });
   const trainingChatSearchService = createTrainingChatSearchService({ store });
   const datasetImportService = createDatasetImportService({
     store,
@@ -757,7 +705,18 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       (await datasetStorageService.settings()).datasetStorePath,
   });
   await datasetImportService.reconcile();
-  const harnessRefinerBenchmarks = createHarnessRefinerBenchmarkService({
+  let advancedSource: ReturnType<typeof createAdvancedRefinerEvaluationSource> | undefined;
+  const advancedBoundary = createAdvancedRefinerPaidBoundary({storeDir, authorize:async pin => {
+    if (!advancedSource) throw new Error("Advanced evaluation source authority is not ready.");
+    await advancedSource.authorize(pin);
+  },packageForPin:async pin=>{
+    if(!advancedSource)throw new Error("Advanced evaluation source authority is not ready.");
+    return (await advancedSource.read(pin)).packageValue;
+  }});
+  onStartupFailure(() => advancedBoundary.close());
+  let reviewQuality: ReturnType<typeof createAdvancedRefinerReviewQuality> | undefined;
+  const benchmarkDependencies = {
+    advancedBoundary,
     store,
     storeDir,
     evaluation: localBenchmarkEvaluationService,
@@ -767,7 +726,14 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       streamOpenPondHostedChatTurn,
     ),
     resolveUpstreamModel: resolveBenchmarkUpstreamModel,
+  };
+  const harnessRefinerBenchmarks = createHarnessRefinerBenchmarkService({...benchmarkDependencies,
+    reviewQuality: context => {
+      if (!reviewQuality) throw new Error("Advanced review source authority is not ready.");
+      return reviewQuality(context);
+    },
   });
+  onStartupFailure(() => harnessRefinerBenchmarks.close());
   await harnessRefinerBenchmarks.reconcileInterrupted();
   const trainingApi = createTrainingApi({
     store,
@@ -791,14 +757,29 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     modelStream: trainingModelStream,
     judgeProvider: createLearningHostedJudgeProvider({ stream: streamOpenPondHostedChatTurn }),
   });
-  const trainingPayload = trainingApi.request;
-  const {localExperiments,localNativeOwner,localProfileOwner}=createLocalExperimentsRuntime({store,storeDir,ownerId:serverId,
+  const {localExperiments,localNativeOwner,localProfileOwner,improvements,trainingPayload,experimentImprovementPayload,turnTools,executeCandidateWorkspaceTool}=createCoordinatedEvaluationRuntime({store,storeDir,ownerId:serverId,localInferenceState:localByokRuntimeState,
     resolveAccess:resolveHostedApiAccess,prepare:prepareProfileEvaluationRun,workflows:profileWorkflowsPayload,
-    actorId:async()=>{const account=(await bootstrapPayload()).account;if(account.state!=="signed_in"||!account.profile?.id)throw new Error("Sign in before accessing local Experiments.");return account.profile.id;},
-    teamId:async()=>{const teamId=(await loadAppPreferences()).defaultTeamId?.trim();if(!teamId)throw new Error("Select an OpenPond workspace for local Experiments.");return teamId;},
-    createSession,sendTurn:(...args)=>turnRunner.sendTurn(...args),interruptSessionTurn:(...args)=>turnRunner.interruptSessionTurn(...args)});
-  await localExperiments.recover();
+    ...reviewIdentity,trainingRequest:trainingApi.request,loadAgentRuntime:createCandidateAgentRuntimeLoader({storeDir,loadArchive:createWorkAgentSdkArchiveLoader({storeDir})}),
+    createSession,saveOutput:workOutputService.saveOwnedOutputBytes,
+    recordOutput:async(sessionId,turnId,data)=>{await appendRuntimeEvent({id:randomUUID(),timestamp:now(),name:"workspace_action_result",source:"server",sessionId,turnId,action:"work_output_save",status:"completed",output:`Saved ${data.outputRef.title} as immutable case output.`,data});},
+    sendTurn:(...args)=>turnRunner.sendTurn(...args),interruptSessionTurn:(...args)=>turnRunner.interruptSessionTurn(...args)});
+  advancedSource=createAdvancedRefinerEvaluationSource({store,storeDir,
+    resolveAccess:resolveHostedApiAccess,
+    identity:async()=>({actorId:await reviewIdentity.actorId(),teamId:await reviewIdentity.teamId()}),
+    loadEvidence:improvements.loadEvidence, localExperiments:()=>localExperiments,
+  });
+  reviewQuality=createAdvancedRefinerReviewQuality({source:advancedSource,boundary:advancedBoundary,
+    benchmark:benchmarkDependencies,createSession});
+  const {schedules,experimentEvaluationSchedulePayload,advancedRefinerEvaluationPayload}=createCoordinatedQualificationRuntime({
+    store,storeDir,runtime:improvements,...reviewIdentity,resolveAccess:resolveHostedApiAccess,
+    localExperiments:()=>localExperiments,source:advancedSource,benchmarks:harnessRefinerBenchmarks,benchmarkTasksets,
+  });
+  onStartupFailure(()=>schedules.close());
+  candidateWorkspaceTool=executeCandidateWorkspaceTool;
   onStartupFailure(()=>localExperiments.close());
+  onStartupFailure(()=>improvements.close());
+  onStartupFailure(()=>schedules.stop());
+  await localExperiments.recover();
   trainingApi.learning.start();
   onStartupFailure(() => trainingApi.learning.close());
   const teamChatAiExecutions = createTeamChatAiExecutionService({
@@ -868,6 +849,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   });
   onStartupFailure(() => chatWorkflows.stop());
   const turnRunner = createTurnRunner({
+    ...turnTools,
+    isolatedProfileEvaluationForTurn:session=>localProfileOwner.isolatedProfileEvaluationForTurn(session),
+    resolveModelTools:async context=>await localProfileOwner.resolveModelTools(context)??context.tools,
+    executeProfileEvaluationAction:action=>localProfileOwner.executeProfileEvaluationAction(action),
     storageHome: storeDir,
     attachmentRootDir,
     store,
@@ -1159,7 +1144,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     },
     streamOpenPondHostedChatTurn: streamSelectedOpenPondChatTurn,
     resolveSessionModelStream:experimentSessionStreamResolver(async(session,turn)=>
-      await localNativeOwner.resolveSessionModelStream(session,turn)??await localProfileOwner.resolveSessionModelStream(session,turn)??await options.resolveSessionModelStream?.(session,turn)??null),
+      await improvements.resolveSessionModelStream(session,turn)??await localNativeOwner.resolveSessionModelStream(session,turn)??await localProfileOwner.resolveSessionModelStream(session,turn)??await options.resolveSessionModelStream?.(session,turn)??null),
     subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
     maxHostedWorkspaceToolRounds,
@@ -1743,6 +1728,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       usageTurnCachePayload: usageTurnCacheRoutePayload,
       trainingPayload,
       localExperimentPayload:localExperiments.request,
+      experimentImprovementPayload,experimentEvaluationSchedulePayload,advancedRefinerEvaluationPayload,
       learningProducerPayload: (endpoint, apiKey, payload) => trainingApi.learning.producerRequest(endpoint, apiKey, payload),
       datasetStoragePayload,
       listLocalAgentSchedulesPayload,
@@ -1914,10 +1900,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     closeEventSubscribers,
     terminalWebSockets,
     runtimeClosers: [
+      ()=>closeCoordinatedEvaluations({schedules,localExperiments,benchmarks:harnessRefinerBenchmarks,improvements,advancedBoundary,drainWork:turnRunner.close}),
       trainingApi.learning.close,
-      localExperiments.close,
       waitForOpenPondRefresh,
-      turnRunner.close,
       closeCoordination,
       teamChatAiExecutions.close,
       managedAdapterSyncService.close,
@@ -1947,6 +1932,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   await turnRunner.recoverTaskInbox();
   workSandboxLifecycle.start();
   if (options.httpEnabled !== false) {
+    schedules.start();
     localAgentScheduleLoop.start();
     await chatWorkflows.start();
     harnessEvaluationReviewScheduler.start();

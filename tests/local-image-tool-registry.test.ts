@@ -24,7 +24,7 @@ describe("local image model tool", () => {
     })).toBe(true);
 
     const imagePath = path.join(root, "apps", "web", "public", "favicon-16x16.png");
-    const result = await definition.execute({
+    const context = {
       session,
       turnId: "turn_1",
       turnPermissions: {},
@@ -37,7 +37,8 @@ describe("local image model tool", () => {
       mentionedApps: [],
       userPrompt: "inspect it",
       turnMetadata: null,
-    } as any);
+    } as any;
+    const result = await definition.execute(context);
 
     expect(result.ok).toBe(true);
     expect(result.data).toMatchObject({
@@ -48,5 +49,7 @@ describe("local image model tool", () => {
     expect((result.data as any).artifacts).toBeUndefined();
     expect((result.data as any).luminanceMap).toHaveLength(8);
     expect((result.data as any).colorMap).toHaveLength(8);
+    // A lost turn marker on a candidate Session must never fall through to a host file read.
+    await expect(definition.execute({...context,session:{...session,metadata:{source:"experiment-improvement"}}})).rejects.toThrow("confined filesystem executor");
   });
 });

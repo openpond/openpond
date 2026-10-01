@@ -1,4 +1,3 @@
-import { ExperimentActivity } from "./ExperimentActivity";
 import {
   WorkspaceResourceName,
   WorkspacePanelHost,
@@ -11,7 +10,7 @@ import {
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ClientConnection } from "../../../api/api-client";
-import type { ModelsRoute } from "../models-route";
+import { modelsLocation, type ModelsRoute } from "../models-route";
 import { createWorkspaceApi, type Inventory } from "./workspace-api";
 import { HostedExperimentsPage } from "./HostedExperimentsPage";
 import { LocalExperimentsPage } from "./LocalExperimentsPage";
@@ -26,24 +25,30 @@ function HostedEvaluationWorkspaceContent({
   connection,
   teamId,
   accountKey,
+  actorId,
   route,
   onNavigate,
   onLocalDatasets,
   onResourceName,
+  onOpenWork,
 }: {
   connection: ClientConnection | null;
   teamId: string | null;
   accountKey: string;
+  actorId?: string | null;
   route: ModelsRoute;
   onNavigate: (route: ModelsRoute) => void;
   onLocalDatasets: () => void;
   onResourceName: (name: string | null) => void;
+  onOpenWork?: (id:string)=>void;
   onSidebarControl?: (control: EvaluationSidebarControl | null) => void;
 }) {
   const panel = useWorkspacePanelControls();
   const setup = useEvaluationSetup();
   useWorkspaceActions(
-    setup.draft ? [{ id: "experiment", label: "Experiment", onSelect: () => {} }] : [],
+    setup.draft || setup.advancedTarget
+      ? [{ id: "experiment", label: "Experiment", onSelect: () => {} }]
+      : [],
   );
   const api = useMemo(
     () =>
@@ -51,11 +56,12 @@ function HostedEvaluationWorkspaceContent({
         ? createWorkspaceApi(connection, {
             teamId,
             accountKey,
+            actorId,
             projectId: route.projectId ?? null,
             executionLocation: route.executionLocation,
           })
         : null,
-    [connection, teamId, accountKey, route.projectId, route.executionLocation],
+    [connection, teamId, accountKey, actorId, route.projectId, route.executionLocation],
   );
   const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -113,7 +119,6 @@ function HostedEvaluationWorkspaceContent({
     );
   return (
     <WorkspaceResourceName.Provider value={onResourceName}>
-      <ExperimentActivity api={api} route={route} navigate={onNavigate} />
       <WorkspacePanelHost.Provider value={panelHost}>
         <section
           className="evaluation-workspace"
@@ -161,7 +166,7 @@ function HostedEvaluationWorkspaceContent({
               >
                 {panel?.open ? "Hide sidebar" : "Open sidebar"}
               </button>
-              <small>Datasets · {inventory.data?.apiOrigin ?? "Connecting"}</small>
+              <small>Datasets / {inventory.data?.apiOrigin ?? "Connecting"}</small>
             </div>
             {inventory.error ? (
               <div role="alert">
@@ -210,6 +215,7 @@ function HostedEvaluationWorkspaceContent({
                 api={api}
                 route={route}
                 navigate={onNavigate}
+                onOpenWork={onOpenWork}
               />
             ) : (
               <HostedExperimentsPage
@@ -220,15 +226,22 @@ function HostedEvaluationWorkspaceContent({
                 inventoryError={inventory.error?.message}
                 route={route}
                 navigate={onNavigate}
+                onOpenWork={onOpenWork}
                 refresh={() => void inventory.refetch()}
               />
             )}
-            {setup.draft ? (
+            {setup.draft || setup.advancedTarget ? (
               <ExperimentSetupPanel
                 api={api}
                 inventory={inventory.data ?? null}
                 route={route}
                 navigate={onNavigate}
+                onAdvancedRun={(id) => {
+                  onNavigate(modelsLocation("runs", null, {
+                    resourceId: `model-run:${id}`,
+                    detailTab: "details",
+                  }));
+                }}
                 onSaved={(value) => {
                   void inventory.refetch();
                   onNavigate({
@@ -286,6 +299,8 @@ export function HostedEvaluationWorkspace(
     <EvaluationSetupProvider
       key={JSON.stringify([
         props.accountKey,
+        props.actorId ?? null,
+        props.connection?.serverUrl ?? null,
         props.teamId,
         props.route.projectId ?? null,
         props.route.executionLocation ?? "hosted",

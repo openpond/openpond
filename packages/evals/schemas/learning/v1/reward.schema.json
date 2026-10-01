@@ -170,6 +170,30 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 500
+            },
+            "form": {
+              "type": "object",
+              "properties": {
+                "schemaVersion": {
+                  "$ref": "#/$defs/__schema3"
+                },
+                "mode": {
+                  "$ref": "#/$defs/__schema4"
+                },
+                "instructions": {
+                  "$ref": "#/$defs/__schema5"
+                },
+                "criteria": {
+                  "$ref": "#/$defs/__schema6"
+                }
+              },
+              "required": [
+                "schemaVersion",
+                "mode",
+                "instructions",
+                "criteria"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -331,6 +355,502 @@
     "__schema2": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
+    },
+    "__schema3": {
+      "type": "string",
+      "const": "openpond.humanForm.v1"
+    },
+    "__schema4": {
+      "type": "string",
+      "enum": [
+        "individual",
+        "pairwise"
+      ]
+    },
+    "__schema5": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "__schema6": {
+      "minItems": 1,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema7"
+      }
+    },
+    "__schema7": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "label": {
+              "$ref": "#/$defs/__schema8"
+            },
+            "instructions": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "required": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "allowAbstain": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "requireRationale": {
+              "$ref": "#/$defs/__schema12"
+            },
+            "anchors": {
+              "$ref": "#/$defs/__schema13"
+            },
+            "kind": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "minimum": {
+              "$ref": "#/$defs/__schema16"
+            },
+            "maximum": {
+              "$ref": "#/$defs/__schema17"
+            },
+            "step": {
+              "$ref": "#/$defs/__schema18"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "instructions",
+            "required",
+            "allowAbstain",
+            "kind",
+            "minimum",
+            "maximum",
+            "step"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "label": {
+              "$ref": "#/$defs/__schema19"
+            },
+            "instructions": {
+              "$ref": "#/$defs/__schema20"
+            },
+            "required": {
+              "$ref": "#/$defs/__schema21"
+            },
+            "allowAbstain": {
+              "$ref": "#/$defs/__schema22"
+            },
+            "requireRationale": {
+              "$ref": "#/$defs/__schema23"
+            },
+            "anchors": {
+              "$ref": "#/$defs/__schema24"
+            },
+            "kind": {
+              "$ref": "#/$defs/__schema26"
+            },
+            "options": {
+              "$ref": "#/$defs/__schema27"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "instructions",
+            "required",
+            "allowAbstain",
+            "kind",
+            "options"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "instructions": {
+              "type": "string",
+              "maxLength": 20000
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "allowAbstain": {
+              "type": "boolean"
+            },
+            "requireRationale": {
+              "type": "boolean"
+            },
+            "anchors": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema29"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "instructions",
+            "required",
+            "allowAbstain",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "instructions": {
+              "type": "string",
+              "maxLength": 20000
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "allowAbstain": {
+              "type": "boolean"
+            },
+            "requireRationale": {
+              "type": "boolean"
+            },
+            "anchors": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema30"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "text"
+            },
+            "minimumLength": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20000
+            },
+            "maximumLength": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 20000
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "instructions",
+            "required",
+            "allowAbstain",
+            "kind",
+            "maximumLength"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "instructions": {
+              "type": "string",
+              "maxLength": 20000
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "allowAbstain": {
+              "type": "boolean"
+            },
+            "requireRationale": {
+              "type": "boolean"
+            },
+            "anchors": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema31"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "preference"
+            },
+            "requireStrength": {
+              "type": "boolean"
+            },
+            "allowTie": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "instructions",
+            "required",
+            "allowAbstain",
+            "kind",
+            "allowTie"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema8": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "__schema9": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "__schema10": {
+      "type": "boolean"
+    },
+    "__schema11": {
+      "type": "boolean"
+    },
+    "__schema12": {
+      "type": "boolean"
+    },
+    "__schema13": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema14"
+      }
+    },
+    "__schema14": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "value",
+        "description"
+      ],
+      "additionalProperties": false
+    },
+    "__schema15": {
+      "type": "string",
+      "const": "score"
+    },
+    "__schema16": {
+      "type": "number"
+    },
+    "__schema17": {
+      "type": "number"
+    },
+    "__schema18": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "__schema19": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "__schema20": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "__schema21": {
+      "type": "boolean"
+    },
+    "__schema22": {
+      "type": "boolean"
+    },
+    "__schema23": {
+      "type": "boolean"
+    },
+    "__schema24": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema25"
+      }
+    },
+    "__schema25": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "value",
+        "description"
+      ],
+      "additionalProperties": false
+    },
+    "__schema26": {
+      "type": "string",
+      "const": "category"
+    },
+    "__schema27": {
+      "minItems": 2,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema28"
+      }
+    },
+    "__schema28": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "__schema29": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "value",
+        "description"
+      ],
+      "additionalProperties": false
+    },
+    "__schema30": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "value",
+        "description"
+      ],
+      "additionalProperties": false
+    },
+    "__schema31": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "value",
+        "description"
+      ],
+      "additionalProperties": false
     }
   },
   "$id": "urn:openpond:learning:v1:reward",

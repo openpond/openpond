@@ -72,8 +72,8 @@ function MetricChart({
             })}
           </svg>
           <p>
-            {known.length} recorded observations · maximum {maximum.toLocaleString()} {unit}
-            {known.length < points.length ? ` · ${points.length - known.length} unknown` : ""}
+            {known.length} recorded observations / maximum {maximum.toLocaleString()} {unit}
+            {known.length < points.length ? ` / ${points.length - known.length} unknown` : ""}
           </p>
         </>
       ) : (

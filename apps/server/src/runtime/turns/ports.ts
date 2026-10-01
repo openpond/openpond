@@ -1,4 +1,5 @@
 import type { TaskCoordinationBridge } from "../task-inbox/codex-mcp.js";
+import type {StoredTurnAdmission} from "./privileged-admission.js";
 import type {
   Approval,
   AppPreferences,
@@ -304,7 +305,7 @@ export type CreatePipelineRepository = Pick<
 };
 
 export type TurnDispatcherPort = {
-  sendTurn(sessionId: string, payload: unknown): Promise<Turn>;
+  sendTurn(sessionId: string, payload: unknown, reservedTurnId?:string, admission?:StoredTurnAdmission): Promise<Turn>;
 };
 
 export type TurnRunnerDependencies = {
@@ -391,6 +392,13 @@ export type TurnRunnerDependencies = {
   loadOpenPondProfileStateForRef?: (
     ref: OpenPondProfileRef | null | undefined
   ) => Promise<OpenPondProfileState>;
+  /** Durable admission checks owner, session, turn and isolated candidate state on every call. */
+  resolveCandidateProfile?: (context: import("../../openpond/model-tool-registry.js").ModelToolExecutionContext) => Promise<OpenPondProfileState>;
+  executeCandidateAgentCommand?: (input: import("../../openpond/authoring-tool-registry.js").CandidateAgentCommandInput) => ReturnType<typeof import("@openpond/cloud").runAgentSdkProjectCommand>;
+  candidateAuthoringForTurn?: (sessionId:string,turnId:string)=>Promise<boolean>;
+  authorizeCandidateTool?: (input:{sessionId:string;turnId:string;name:string})=>Promise<boolean>;
+  executeCandidateImage?: import("../../openpond/model-tool-registry.js").ModelToolDefinition["execute"];
+  executeCandidateCommand?: NonNullable<Parameters<typeof import("../../openpond/model-tool-registry.js").createCommandModelToolDefinition>[0]["executeCandidateCommand"]>;
   loadOpenPondProfileLibrary?: () => Promise<OpenPondProfileLibrary>;
   readOpenPondProfileSkill?: (input: {
     profileSourcePath: string;
@@ -414,6 +422,8 @@ export type TurnRunnerDependencies = {
     harnessRelease: import("@openpond/harness").ImmutableReleaseRef;
     admittedAt: string;
   }) => Promise<import("@openpond/contracts").HarnessRunOverlay>;
+  isolatedProfileEvaluationForTurn?:(session:Session,turn:Turn)=>Promise<boolean>;
+  executeProfileEvaluationAction?:(input:{session:Session;turn:Turn;action:import("@openpond/harness").ProfileWorkflowAction;value:unknown;signal:AbortSignal})=>Promise<{output:string;agentSourcePath:string;runPath:string}>;
   resolveModelTools?: import("../app-server-embedding.js").ResolveAppServerModelTools;
   harnessModelTools?: import("../../openpond/model-tool-registry.js").ModelToolDefinition[];
   loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;

@@ -1,0 +1,10 @@
+import {useEffect,useState} from "react";
+import {HumanResultViewSchema} from "@openpond/evals/human-review";
+import {z} from "zod";
+import {humanRequest,type HumanInboxContext} from "./api";
+export function HumanResultControls({context,executionId,onOpenReview}:{context:HumanInboxContext;executionId:string;onOpenReview:(id:string)=>void}){
+  const [result,setResult]=useState<z.infer<typeof HumanResultViewSchema>|null>(null),[error,setError]=useState<string|null>(null),[refresh,setRefresh]=useState(0);
+  useEffect(()=>{const controller=new AbortController();setResult(null);setError(null);void humanRequest(context,{endpoint:"results",scope:context.scope,executionId},controller.signal).then(raw=>{if(!controller.signal.aborted)setResult(HumanResultViewSchema.parse(raw));}).catch(e=>{if(!controller.signal.aborted)setError(e.message);});return()=>controller.abort();},[context.scope,context.actorId,context.location,context.connection,executionId,refresh]);
+  useEffect(()=>{const changed=()=>setRefresh(n=>n+1);window.addEventListener("human-review-changed",changed);return()=>window.removeEventListener("human-review-changed",changed);},[]);
+  return <section><h3>Human assessments</h3>{error?<p role="alert">{error}</p>:null}{result?<><p>{result.coverage.accepted} accepted, {result.coverage.submitted} submitted, {result.coverage.pending} pending</p><table><thead><tr><th>Assessment</th><th>Evidence origin</th><th>Status</th><th>Answers</th></tr></thead><tbody>{result.results.map(r=><tr key={r.review.id}><td><button type="button" onClick={()=>onOpenReview(r.review.id)}>{r.mode==="pairwise"?"A/B assessment":"Individual assessment"}</button></td><td>{r.origin==="owner_attested_local"?"Owner-attested local publication":r.origin==="native_local"?"Native local execution":r.origin==="recorded_evidence"?"Recorded evidence":"Hosted retained execution"}</td><td>{r.status}</td><td>{r.answers.map(a=>`${a.criterionId}: ${a.abstain?"abstained":a.value}`).join("; ")}</td></tr>)}</tbody></table></>:null}</section>;
+}

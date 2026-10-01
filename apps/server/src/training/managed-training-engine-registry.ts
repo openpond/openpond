@@ -1,3 +1,4 @@
+import type {ResolveTrainingActivityAuthority} from "./training-activity-authority.js";
 import { TrainingExecutionRefSchema, type TrainingCatalog, type TrainingJob } from "@openpond/contracts";
 import { TrainingAdapterRegistry, type TrainingDestinationRegistry } from "@openpond/training-sdk";
 import type { SqliteStore } from "../store/store.js";
@@ -7,6 +8,7 @@ export function createDestinationTrainingEngineRegistry(input: {
   destinations: TrainingDestinationRegistry;
   store: SqliteStore;
   storeDir: string;
+  resolveActivityAuthority?:ResolveTrainingActivityAuthority;
   resolveManagedAccess?: () => Promise<{ apiBaseUrl: string; token: string; teamId: string }>;
   catalog(): Promise<TrainingCatalog>;
 }) {
@@ -24,7 +26,7 @@ export function createDestinationTrainingEngineRegistry(input: {
     store: input.store,
     storeDir: input.storeDir,
     resolveAccess: input.resolveManagedAccess,
-  });
+  },input.resolveActivityAuthority);
   adapters.registerEngine(managed);
   adapters.close = () => managed.close();
   adapters.refreshManagedEvidence = async (job) => {

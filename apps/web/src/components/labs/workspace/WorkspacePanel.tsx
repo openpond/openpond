@@ -191,11 +191,13 @@ export function WorkspacePanel({
   label,
   action,
   onRequestClose,
+  visible=true,
 }: {
   children: ReactNode;
   label: string;
   action?: string;
   onRequestClose?: () => void;
+  visible?:boolean;
 }) {
   const host = useContext(WorkspacePanelHost);
   const controls = useWorkspacePanelControls();
@@ -211,12 +213,13 @@ export function WorkspacePanel({
     return registerClose(panelId, () => latestClose.current?.());
   }, [registerClose, panelId, Boolean(onRequestClose)]);
   useEffect(() => {
-    show?.(panelId);
+    if(visible)show?.(panelId);
+    else close?.(panelId);
     return () => close?.(panelId);
-  }, [show, close, panelId]);
+  }, [show, close, panelId,visible]);
   return host
     ? createPortal(
-        <section aria-label={label} hidden={Boolean(controls && controls.active !== panelId)}>
+        <section aria-label={label} hidden={!visible||Boolean(controls && controls.active !== panelId)}>
           <PanelBody.Provider value>{children}</PanelBody.Provider>
         </section>,
         host,

@@ -1,0 +1,13 @@
+export const CLAUDE_PROCESS_CHILD_SOURCE=String.raw`
+// An IPC watchdog owns the actual CLI child. Parent death closes IPC and kills
+// the full CLI process group; browser reconnect never starts another process.
+const {spawn}=require("node:child_process");
+let cli,timer,killer,terminating=false;
+function terminate(){terminating=true;cli?.stdout?.resume();cli?.stderr?.resume();if(!cli?.pid)return;const kill=(signal)=>{if(!cli?.pid)return;if(process.platform==="win32"){const worker=spawn("taskkill",["/PID",String(cli.pid),"/T",...(signal==="SIGKILL"?["/F"]:[])],{stdio:"ignore",windowsHide:true});worker.unref();}else try{process.kill(-cli.pid,signal);}catch(error){if(error.code!=="ESRCH")throw error;}};kill("SIGTERM");killer=setTimeout(()=>kill("SIGKILL"),3000);}
+process.on("disconnect",()=>{terminate();if(!cli)process.exit(1);});
+process.on("message",(message)=>{const value=message;
+ if(value.type==="start"){if(cli)throw new Error("CLI process already admitted");cli=spawn(value.executable,value.args,{cwd:value.cwd,env:value.env,stdio:["pipe","pipe","pipe"],detached:process.platform!=="win32",shell:false,windowsHide:true});timer=setTimeout(terminate,value.timeoutMs);process.send?.({type:"started",pid:cli.pid});cli.stdin.on("error",()=>{});cli.stdout.on("data",(chunk)=>{if(terminating)return;cli.stdout.pause();process.send?.({type:"stdout",base64:chunk.toString("base64")});});cli.stderr.on("data",(chunk)=>{if(terminating)return;cli.stderr.pause();process.send?.({type:"stderr",base64:chunk.toString("base64")});});cli.once("error",()=>process.send?.({type:"error",message:"Claude process could not start."}));cli.once("close",(code,signal)=>{if(timer)clearTimeout(timer);if(killer)clearTimeout(killer);if(process.platform!=="win32"&&cli.pid){try{process.kill(-cli.pid,"SIGKILL");}catch(error){if(error.code!=="ESRCH")throw error;}}process.send?.({type:"closed",code,signal},()=>process.exit(code===0?0:1));if(!process.connected)process.exit(1);});
+ }else if(value.type==="input"){if(!cli?.stdin||cli.stdin.destroyed){if(value.controlId)process.send?.({type:"control_ack",controlId:value.controlId,ok:false});return;}cli.stdin.write(value.line,"utf8",error=>{if(value.controlId)process.send?.({type:"control_ack",controlId:value.controlId,ok:!error});});}else if(value.type==="seal"){if(!cli?.stdin||cli.stdin.destroyed){if(value.controlId)process.send?.({type:"control_ack",controlId:value.controlId,ok:false});return;}cli.stdin.end(()=>{if(value.controlId)process.send?.({type:"control_ack",controlId:value.controlId,ok:true});});}else if(value.type==="cancel"){terminate();}else if(value.type==="ack_stdout")cli?.stdout?.resume();else if(value.type==="ack_stderr")cli?.stderr?.resume();
+});
+
+`;

@@ -1,3 +1,9 @@
+import {
+  prepareImportedTasksetPackage,
+  validateTasksetPackage,
+  decodeTasksetPackageFile,
+  type TasksetPackage,
+} from "openpond-sdk/taskset-packages";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -42,8 +48,9 @@ export function createBenchmarkTasksetService(input: {
     const tasksetId = tasksetIdForProfile(request.profileId);
     const existing = await input.store.getTaskset(tasksetId);
     if (
-      existing?.benchmark?.releaseId === harnessRefinerBenchmarkRelease.id
-      && existing.benchmark.releaseHash === harnessRefinerBenchmarkRelease.contentHash
+      existing?.benchmark?.releaseId === harnessRefinerBenchmarkRelease.id &&
+      existing.benchmark.releaseHash ===
+        harnessRefinerBenchmarkRelease.contentHash
     ) {
       return existing;
     }
@@ -66,7 +73,101 @@ export function createBenchmarkTasksetService(input: {
     return taskset;
   }
 
-  async function releaseForTaskset(taskset: Taskset): Promise<TasksetRelease | null> {
+  /** Only a currently authorized complete package reaches this adapter. Private
+   * files remain under the evaluator store, never the isolated Work source. */
+  async function projectSelected(request: {
+    profileId: string;
+    package: TasksetPackage;
+    adaptationSplit: Taskset["tasks"][number]["split"];
+    holdoutSplit: Taskset["tasks"][number]["split"];
+  }) {
+    const value = validateTasksetPackage(request.package),
+      id = `advanced-refiner-${contentHash([request.profileId, value.contentHash, request.adaptationSplit, request.holdoutSplit]).slice(0, 40)}`;
+    if (request.adaptationSplit === request.holdoutSplit)
+      throw new Error("Adaptation cannot include its held-out split.");
+    const adaptation = value.taskset.tasks.filter(
+        (task) => task.split === request.adaptationSplit,
+      ),
+      holdout = value.taskset.tasks.filter(
+        (task) => task.split === request.holdoutSplit,
+      );
+    if (!adaptation.length || !holdout.length)
+      throw new Error(
+        "The selected release needs both adaptation and private holdout cases.",
+      );
+    const families = new Set(adaptation.map((task) => task.clusterKey));
+    if (holdout.some((task) => families.has(task.clusterKey)))
+      throw new Error("Private holdout families overlap adaptation data.");
+    const existing = await input.store.getTaskset(id);
+    if (existing) {
+      if (existing.metadata.importedPackageHash !== value.contentHash)
+        throw new Error("The selected package binding changed.");
+      return existing;
+    }
+    const projected = prepareImportedTasksetPackage({
+      package: value,
+      profileId: request.profileId,
+      name: value.taskset.id,
+      createdAt: now(),
+    });
+    const root = path.join(input.storeDir, "training", "tasksets", id);
+    await mkdir(path.join(root, "benchmark"), { recursive: true });
+    for (const file of value.files) {
+      const destination = path.resolve(root, file.asset.path);
+      if (!destination.startsWith(root + path.sep))
+        throw new Error("Selected evaluator asset escapes its private store.");
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, decodeTasksetPackageFile(file));
+    }
+    for (const file of projected.generatedFiles) {
+      const destination = path.resolve(root, file.path);
+      if (!destination.startsWith(root + path.sep))
+        throw new Error("Projected verifier escapes its evaluator store.");
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, file.content);
+    }
+    await writeFile(
+      path.join(root, "benchmark", "taskset.release.json"),
+      JSON.stringify(value.taskset),
+      "utf8",
+    );
+    const draft = TasksetSchema.parse({
+      ...projected.taskset,
+      id,
+      environment: {
+        ...projected.taskset.environment,
+        metadata: {
+          ...projected.taskset.environment.metadata,
+          runtimeSourceTasksetId: id,
+        },
+      },
+      purpose: "benchmark",
+      benchmark: {
+        schemaVersion: "openpond.tasksetBenchmark.v1",
+        definitionId: id,
+        releaseId: value.taskset.id,
+        releaseHash: value.taskset.contentHash,
+        managedReleasePath: "benchmark/taskset.release.json",
+        adaptationSplit: request.adaptationSplit,
+        evaluationSplit: request.holdoutSplit,
+        primaryMetric: "success_rate",
+        qualityGate: "non_regression",
+        source: "imported",
+        metadata: { packageHash: value.contentHash },
+      },
+      metadata: { ...projected.taskset.metadata, advancedRefiner: true },
+    });
+    const result = TasksetSchema.parse({
+      ...draft,
+      contentHash: computeTasksetHash(draft),
+    });
+    await input.store.upsertTaskset(result);
+    return result;
+  }
+
+  async function releaseForTaskset(
+    taskset: Taskset,
+  ): Promise<TasksetRelease | null> {
     if (taskset.purpose !== "benchmark" || !taskset.benchmark) return null;
     const releasePath = path.resolve(
       input.storeDir,
@@ -79,15 +180,17 @@ export function createBenchmarkTasksetService(input: {
       JSON.parse(await readFile(releasePath, "utf8")),
     );
     if (
-      release.id !== taskset.benchmark.releaseId
-      || release.contentHash !== taskset.benchmark.releaseHash
+      release.id !== taskset.benchmark.releaseId ||
+      release.contentHash !== taskset.benchmark.releaseHash
     ) {
-      throw new Error("Managed benchmark release does not match its Taskset binding.");
+      throw new Error(
+        "Managed benchmark release does not match its Taskset binding.",
+      );
     }
     return release;
   }
 
-  return { ensureHarnessRefiner, releaseForTaskset };
+  return { ensureHarnessRefiner, projectSelected, releaseForTaskset };
 }
 
 function definitionForRelease(release: TasksetRelease): BenchmarkDefinition {
@@ -103,8 +206,10 @@ function definitionForRelease(release: TasksetRelease): BenchmarkDefinition {
     primaryMetric: "success_rate",
     qualityGate: "non_regression",
     caseCounts: {
-      adaptation: release.tasks.filter((task) => task.split === "validation").length,
-      evaluation: release.tasks.filter((task) => task.split === "frozen_eval").length,
+      adaptation: release.tasks.filter((task) => task.split === "validation")
+        .length,
+      evaluation: release.tasks.filter((task) => task.split === "frozen_eval")
+        .length,
     },
     metadata: {
       builtin: true,
@@ -130,13 +235,16 @@ async function projectRelease(input: {
   const policyAssets = uniqueAssets(
     input.release.tasks.flatMap((task) => task.artifactRefs),
   );
-  const managedAssetById = new Map<string, {
-    artifactRef: string;
-    fileName: string;
-    sha256: string;
-    sizeBytes: number;
-    mediaType: string;
-  }>();
+  const managedAssetById = new Map<
+    string,
+    {
+      artifactRef: string;
+      fileName: string;
+      sha256: string;
+      sizeBytes: number;
+      mediaType: string;
+    }
+  >();
   await mkdir(path.join(input.tasksetRoot, "assets"), { recursive: true });
   await mkdir(path.join(input.tasksetRoot, "benchmark"), { recursive: true });
   await mkdir(path.join(input.tasksetRoot, "rubrics"), { recursive: true });
@@ -153,7 +261,11 @@ async function projectRelease(input: {
     }
     const fileName = `${asset.id}-${path.basename(asset.path)}`;
     const artifactRef = path.posix.join("assets", fileName);
-    await writeFile(path.join(input.tasksetRoot, artifactRef), contents, "utf8");
+    await writeFile(
+      path.join(input.tasksetRoot, artifactRef),
+      contents,
+      "utf8",
+    );
     managedAssetById.set(asset.id, {
       artifactRef,
       fileName,
@@ -194,7 +306,8 @@ async function projectRelease(input: {
       sourceRefs: [sourceId],
       assets: task.artifactRefs.map((asset) => {
         const managed = managedAssetById.get(asset.id);
-        if (!managed) throw new Error(`Managed benchmark asset ${asset.id} is missing.`);
+        if (!managed)
+          throw new Error(`Managed benchmark asset ${asset.id} is missing.`);
         return {
           id: asset.id,
           sourceRefId: sourceId,
@@ -221,7 +334,9 @@ async function projectRelease(input: {
       },
     };
   });
-  const sourceFileHashes = [...managedAssetById.values()].map((asset) => asset.sha256);
+  const sourceFileHashes = [...managedAssetById.values()].map(
+    (asset) => asset.sha256,
+  );
   const graders: GraderSpec[] = [
     {
       id: verifierGrader.id,
@@ -242,8 +357,9 @@ async function projectRelease(input: {
       },
     },
   ];
-  const fixtureTask = tasks.find((task) => task.id === "adaptation-launch-delay-email")
-    ?? tasks[0]!;
+  const fixtureTask =
+    tasks.find((task) => task.id === "adaptation-launch-delay-email") ??
+    tasks[0]!;
   const graderFixtures = benchmarkFixtures(fixtureTask.id);
   const draft = TasksetSchema.parse({
     schemaVersion: "openpond.taskset.v1",
@@ -269,24 +385,35 @@ async function projectRelease(input: {
       metadata: {},
     },
     status: "ready",
-    sourceRefs: [{
-      schemaVersion: "openpond.uploadedFileDatasetSource.v1",
-      kind: "uploaded_file",
-      id: sourceId,
-      profileId: input.profileId,
-      title: "Harness Refiner benchmark fixtures",
-      sourceHash: input.release.contentHash,
-      occurredAt: input.timestamp,
-      licensingStatus: "approved",
-      secretScanStatus: "passed",
-      piiScanStatus: "passed",
-      originalFileNames: [...managedAssetById.values()].map((asset) => asset.fileName),
-      mediaTypes: [...new Set([...managedAssetById.values()].map((asset) => asset.mediaType))],
-      sourceFileHashes,
-      totalBytes: [...managedAssetById.values()].reduce((sum, asset) => sum + asset.sizeBytes, 0),
-      parserVersion: "openpond-builtin-benchmark-v1",
-      metadata: { generatedPublicFixture: true },
-    }],
+    sourceRefs: [
+      {
+        schemaVersion: "openpond.uploadedFileDatasetSource.v1",
+        kind: "uploaded_file",
+        id: sourceId,
+        profileId: input.profileId,
+        title: "Harness Refiner benchmark fixtures",
+        sourceHash: input.release.contentHash,
+        occurredAt: input.timestamp,
+        licensingStatus: "approved",
+        secretScanStatus: "passed",
+        piiScanStatus: "passed",
+        originalFileNames: [...managedAssetById.values()].map(
+          (asset) => asset.fileName,
+        ),
+        mediaTypes: [
+          ...new Set(
+            [...managedAssetById.values()].map((asset) => asset.mediaType),
+          ),
+        ],
+        sourceFileHashes,
+        totalBytes: [...managedAssetById.values()].reduce(
+          (sum, asset) => sum + asset.sizeBytes,
+          0,
+        ),
+        parserVersion: "openpond-builtin-benchmark-v1",
+        metadata: { generatedPublicFixture: true },
+      },
+    ],
     policy: input.release.policy,
     environment: {
       protocolVersion: "openpond.taskEnvironment.v1",
@@ -379,7 +506,9 @@ async function copyVerifierAsset(
 ): Promise<string> {
   const contents = builtinAsset(assets, asset.path);
   if (contentHash(contents) !== asset.contentHash) {
-    throw new Error(`Benchmark verifier asset ${asset.path} failed its content hash.`);
+    throw new Error(
+      `Benchmark verifier asset ${asset.path} failed its content hash.`,
+    );
   }
   await writeFile(path.join(tasksetRoot, asset.path), contents, "utf8");
   return contents;
@@ -426,7 +555,9 @@ function benchmarkFixtures(taskId: string): GraderFixture[] {
       id: "benchmark-boundary",
       taskId,
       label: "boundary",
-      output: { text: "The launch is moving to August 27 while testing finishes." },
+      output: {
+        text: "The launch is moving to August 27 while testing finishes.",
+      },
       infrastructureError: null,
       expectedPassed: false,
       expectedRewardEligible: true,
@@ -442,15 +573,17 @@ function uniqueAssets<T extends { id: string }>(assets: T[]): T[] {
 function supplementaryModelJudge(release: TasksetRelease) {
   const raw = release.metadata.supplementaryModelJudge;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error("Benchmark release has no supplementary model-judge metadata.");
+    throw new Error(
+      "Benchmark release has no supplementary model-judge metadata.",
+    );
   }
   const value = raw as Record<string, unknown>;
   if (
-    typeof value.id !== "string"
-    || typeof value.version !== "string"
-    || value.calibrationStatus !== "pending"
-    || value.executable !== false
-    || value.rewardEligible !== false
+    typeof value.id !== "string" ||
+    typeof value.version !== "string" ||
+    value.calibrationStatus !== "pending" ||
+    value.executable !== false ||
+    value.rewardEligible !== false
   ) {
     throw new Error("Benchmark supplementary model-judge metadata is invalid.");
   }

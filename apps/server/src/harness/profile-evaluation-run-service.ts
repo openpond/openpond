@@ -1,3 +1,4 @@
+import type {ProfilePrivateGradingFactory} from "./profile-private-grading.js";
 import { z } from "zod";
 import {
   ChatModelRefSchema, ProfileComponentBindingSchema, ProfileWorkflowBindingSchema, ReleaseHashSchema,
@@ -9,6 +10,7 @@ import {
   executeProfileEvaluationRun,
 } from "@openpond/evals";
 
+import {admitProfileExternalDataset,type ProfileExternalDatasetResolver} from "./profile-external-dataset-admission.js";
 import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalProfileEvaluationRun } from "../store/store-evaluation-results.js";
 import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
@@ -27,6 +29,9 @@ const RunRequestSchema = z.object({
 export function createProfileEvaluationRunService(input: {
   store: Pick<HarnessStateStore, "getProfileEvaluationRun" | "saveProfileEvaluationGrade" | "saveProfileEvaluationReceipt" | "getProfileEvaluationReceipt" | "getProfileEvaluationGrade" | "saveProfileEvaluationRun">;
   loadCatalog: ProfileEvaluationCatalogSource;
+  loadTasksetPackage?:Parameters<typeof createProfileEvaluationCaseService>[0]["loadTasksetPackage"];
+  privateGrading?:ProfilePrivateGradingFactory;
+  resolveExternalDataset?:ProfileExternalDatasetResolver;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   executeCase: ReturnType<typeof createProfileEvaluationCaseService>;
 }) {
@@ -42,14 +47,15 @@ export function createProfileEvaluationRunService(input: {
       ref: selected.ref, sourceRevision: selected.sourceRevision,
       harnessRelease: parsed.binding.harnessRelease,
     });
-    const catalog = {
+    const external=await admitProfileExternalDataset({manifest:parsed.manifest,taskset:parsed.taskset,selected:{profileRef:selected.ref,sourceRevision:selected.sourceRevision,harnessRelease:parsed.binding.harnessRelease},loadCatalog:input.loadCatalog,resolveExternalDataset:input.resolveExternalDataset});
+    const catalog = external?.catalog??{
       schemaVersion: "openpond.profileEvaluations.v1" as const,
       definitions: discovered.definitions,
       suites: discovered.suites,
     };
     assertProfileEvaluationRunAdmission(parsed.manifest, parsed.taskset, catalog);
-    if (parsed.taskset.graders.some((grader) => grader.kind === "model_judge" || grader.kind === "custom_verifier")
-      || parsed.taskset.metrics?.aggregation === "custom") {
+    if (!input.privateGrading && (parsed.taskset.graders.some((grader) => grader.kind === "model_judge" || grader.kind === "custom_verifier")
+      || parsed.taskset.metrics?.aggregation === "custom")) {
       throw new Error("Profile evaluation cannot run this Taskset's model judge, custom verifier, or custom metric in the current app-server runtime.");
     }
     const source = parsed.manifest.profileEvaluation!;
@@ -67,6 +73,10 @@ export function createProfileEvaluationRunService(input: {
       || policy.configurationHash !== parsed.modelConfigurationHash) {
       throw new Error("Evaluation request differs from its admitted Profile workflow or model configuration.");
     }
+    const definition=catalog.definitions.find(definition=>definition.id===source.definitionId)!;
+    const packageValue=input.privateGrading?(external?.packageValue??await (input.loadTasksetPackage?input.loadTasksetPackage(definition,selected.ref.profileId,source.harnessRelease):Promise.reject(new Error("The current private Taskset owner is unavailable.")))):null;
+    const grading=packageValue?await input.privateGrading?.(parsed.manifest,packageValue,signal):undefined;
+    await grading?.authorize();
     const existing = await input.store.getProfileEvaluationRun(parsed.manifest.id);
     if (existing) {
       if (existing.manifest.contentHash !== parsed.manifest.contentHash
@@ -75,8 +85,11 @@ export function createProfileEvaluationRunService(input: {
       }
       return existing;
     }
+    if(external)await external.authorize();
+    signal?.throwIfAborted();
     const result = await executeProfileEvaluationRun({
       manifest: parsed.manifest, taskset: parsed.taskset, catalog,
+      ...(grading?{customVerifier:grading.customVerifier,modelJudge:grading.modelJudge,metricSource:grading.metricSource,metricExecutor:grading.metricExecutor}:{}),
       execute: ({ task, seed, signal: memberSignal }) => input.executeCase({
         ...parsed, taskId: task.id, seed,
       }, memberSignal),
@@ -95,6 +108,8 @@ export function createProfileEvaluationRunService(input: {
         return { receipt, grade };
       },
     });
+    await grading?.authorize();
+    if(external)await external.authorize();
     const content = {
       profileRef: selected.ref,
       manifest: parsed.manifest, metric: result.metric,

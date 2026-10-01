@@ -71,7 +71,7 @@ export function createHostedProfileEvaluationRuntime(input: {
       return request.hostModelConfigurationHash;
     },
   });
-  const executeProfileEvaluationRun = createProfileEvaluationRunService({ store: records, loadCatalog, selectedProfile, executeCase: executeProfileEvaluationCase });
+  const executeProfileEvaluationRun = createProfileEvaluationRunService({ store: records, loadCatalog, loadTasksetPackage, selectedProfile, executeCase: executeProfileEvaluationCase });
   const inspectionStore = {
     getProfileEvaluationRun: records.getProfileEvaluationRun.bind(records),
     getProfileEvaluationReceipt: records.getProfileEvaluationReceipt.bind(records),

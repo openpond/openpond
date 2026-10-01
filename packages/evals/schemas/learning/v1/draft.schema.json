@@ -183,6 +183,13 @@
             "timeout": {
               "type": "string"
             },
+            "verifierRuntime": {
+              "type": "string",
+              "enum": [
+                "isolated_javascript",
+                "sandbox_process"
+              ]
+            },
             "rubric": {
               "type": "string"
             },
@@ -200,6 +207,10 @@
             },
             "reviewerRole": {
               "type": "string"
+            },
+            "humanForm": {
+              "type": "string",
+              "maxLength": 131072
             },
             "learnedId": {
               "type": "string"

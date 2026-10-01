@@ -11,6 +11,8 @@ import { OpenPondWorkflowsClient } from "./workflows.js";
 import type { OpenPondClientOptions } from "./types.js";
 import { OpenPondLearningClient } from "./learning-client.js";
 import { OpenPondExperimentsClient } from "./experiment-client.js";
+import { ConnectedEvidenceClient } from "./connected-evidence.js";
+import { OpenPondHumanReviewClient } from "./human-review-client.js";
 import { configuredEndpoint, configuredKey } from "./work-sandbox.js";
 
 export class OpenPondClient {
@@ -21,6 +23,8 @@ export class OpenPondClient {
   readonly profileActions: OpenPondProfileActionsClient;
   readonly learning: (scope: string) => OpenPondLearningClient;
   readonly experiments: (teamId: string) => OpenPondExperimentsClient;
+  readonly connectedEvidence: (teamId: string) => ConnectedEvidenceClient;
+  readonly humanReview: (scope: string) => OpenPondHumanReviewClient;
 
   constructor(options: OpenPondClientOptions) {
     const apiKey = options.apiKey?.trim() ?? "";
@@ -40,6 +44,8 @@ export class OpenPondClient {
     const apiBaseUrl = options.baseUrl?.trim() || "https://api.openpond.ai";
     this.learning = (scope) => new OpenPondLearningClient({ apiKey, baseUrl: apiBaseUrl, scope });
     this.experiments = (teamId) => new OpenPondExperimentsClient({ apiKey, baseUrl: apiBaseUrl, teamId });
+    this.connectedEvidence = (teamId) => new ConnectedEvidenceClient({ apiKey, baseUrl: apiBaseUrl, teamId });
+    this.humanReview = (scope) => new OpenPondHumanReviewClient({ apiKey, baseUrl: apiBaseUrl, scope });
     this.sandboxes = createOpenPondSandboxClient({
       apiKey: sandbox?.apiKey ?? apiKey,
       baseUrl: apiBaseUrl,
@@ -111,6 +117,7 @@ export type {
   OpenPondWorkflowWeekday,
 } from "./workflows.js";
 export * from "./refiner.js";
+export * from "./human-review.js";
 export { OpenPondLearningClient, OpenPondLearningError } from "./learning-client.js";
 export type { OpenPondLearningClientOptions, LearningRequestOptions } from "./learning-client.js";
 
@@ -137,3 +144,10 @@ export type {
   HostedProvider,
   HostedProvidersResponse,
 } from "@openpond/cloud/hosted-chat";
+
+export * from "./connected-evidence.js";
+export * from "./candidate-evaluations.js";
+export * from "./experiment-improvements.js";
+
+export * from "./experiment-evaluation-schedules.js";
+export * from "./advanced-refiner-evaluations.js";

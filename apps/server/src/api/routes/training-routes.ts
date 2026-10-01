@@ -18,6 +18,62 @@ import {
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
+  const candidate = /^\/v1\/training\/candidate-evaluations(?:\/([^/]+)(?:\/(prepare|run|cancel))?)?$/.exec(requestUrl.pathname);
+  if ((requestUrl.pathname === "/v1/training/candidates" && request.method === "GET") ||
+      (candidate && (request.method === "GET" && candidate[1] && !candidate[2] || request.method === "POST" && (!candidate[1] || candidate[2])))) {
+    const body=request.method==="POST"?await readJson(request,{maxBytes:8_388_608}):undefined;
+    response.setHeader("Cache-Control","no-store");
+    sendJson(response,200,await deps.trainingPayload("hosted_candidate_evaluation", {
+      teamId:requestUrl.searchParams.get("teamId") ?? (body && typeof body==="object" && "teamId" in body ? body.teamId : null),
+      action:requestUrl.pathname==="/v1/training/candidates"?"options":candidate?.[2] ?? (request.method==="GET"?"read":"save"),
+      ...(candidate?.[1]?{id:decodeURIComponent(candidate[1])}:{}),
+      ...(body===undefined?{}:{command:body}),
+      ...(requestUrl.pathname==="/v1/training/candidates"?{query:{...(requestUrl.searchParams.get("afterId")?{afterId:requestUrl.searchParams.get("afterId")!}:{}),...(requestUrl.searchParams.get("projectId")?{projectId:requestUrl.searchParams.get("projectId")!}:{})}}:{}),
+    },requestUrl));
+    return true;
+  }
+  const hostedPolicy = /^\/v1\/training\/hosted-policies\/([^/]+)(\/control)?$/.exec(requestUrl.pathname);
+  if (hostedPolicy && (request.method === "GET" && !hostedPolicy[2] || request.method === "POST" && hostedPolicy[2])) {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(response, 200, await deps.trainingPayload("hosted_training_policy", {
+      teamId:requestUrl.searchParams.get("teamId"), id:decodeURIComponent(hostedPolicy[1]!),
+      ...(hostedPolicy[2]?{command:await readJson(request,{maxBytes:262_144})}:{afterId:requestUrl.searchParams.get("afterId")}),
+    }, requestUrl));
+    return true;
+  }
+  const trainingSetup = /^\/v1\/training\/setup(?:\/(prepare|start|cancel|publish|attach))?$/.exec(requestUrl.pathname);
+  if (trainingSetup && (request.method === "GET" && !trainingSetup[1] || request.method === "POST" && trainingSetup[1])) {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(response, 200, await deps.trainingPayload("hosted_training_setup", {
+      teamId: requestUrl.searchParams.get("teamId"),
+      ...(trainingSetup[1] ? {action:trainingSetup[1],command:await readJson(request,{maxBytes:8_388_608})}
+        : {configurationId:requestUrl.searchParams.get("configurationId"),projectId:requestUrl.searchParams.get("projectId")}),
+    }, requestUrl));
+    return true;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/experiment-handoff") {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(response, 200, await deps.trainingPayload("experiment_training_handoff", {
+      teamId: requestUrl.searchParams.get("teamId"), executionId: requestUrl.searchParams.get("executionId"),
+      passId: requestUrl.searchParams.get("passId"),
+    }, requestUrl));
+    return true;
+  }
+  const hostedJob = /^\/v1\/training\/hosted-jobs\/([^/]+)(?:\/post-training\/(start|retry|cancel))?$/.exec(requestUrl.pathname);
+  if (hostedJob && (request.method === "GET" && !hostedJob[2] || request.method === "POST" && hostedJob[2])) {
+    response.setHeader("Cache-Control", "no-store");
+    const payload = {teamId:requestUrl.searchParams.get("teamId"),jobId:decodeURIComponent(hostedJob[1]!),
+      ...(hostedJob[2] ? {action:hostedJob[2],command:await readJson(request,{maxBytes:65_536})} : {})};
+    sendJson(response,200,await deps.trainingPayload(hostedJob[2] ? "hosted_training_control" : "hosted_training_detail",payload,requestUrl));
+    return true;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/execution-activity") {
+    response.setHeader("Cache-Control", "no-store");
+    const teamId = requestUrl.searchParams.get("teamId");
+    const projectId = requestUrl.searchParams.get("projectId");
+    sendJson(response, 200, await deps.trainingPayload("execution_activity", { teamId, projectId }, requestUrl));
+    return true;
+  }
   if (request.method === "POST" && requestUrl.pathname === "/v1/training/evaluation-workspace") {
     response.setHeader("Cache-Control", "no-store");
     try { sendJson(response, 200, await deps.trainingPayload("evaluation_workspace", await readJson(request, { maxBytes: 67_108_864 }), requestUrl)); }

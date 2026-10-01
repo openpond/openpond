@@ -60,7 +60,7 @@ export const ExperimentEvaluatorSchema = z.object({
   configurationHash: ReleaseHashSchema.optional(),
   output: z.enum(["boolean", "score", "category"]),
   /** Category labels are meaningful only for category output. */
-  categories: z.array(z.string().trim().min(1).max(120)).max(50),
+  categories: z.array(z.string().trim().min(1).max(500)).max(100),
 }).strict().superRefine((value, context) => {
   if ((value.output === "category") !== (value.categories.length > 0))
     context.addIssue({ code: "custom", path: ["categories"], message: "Only category feedback declares categories." });
@@ -77,6 +77,10 @@ export type ExperimentCaseIdentity = z.infer<typeof ExperimentCaseIdentitySchema
 export function experimentCaseKey(identity: ExperimentCaseIdentity): string {
   const value = ExperimentCaseIdentitySchema.parse(identity);
   return JSON.stringify([value.caseId, value.seed, value.fixtureId]);
+}
+
+export function humanProjectionViewId(originalManifest: {id:string;contentHash:string}, selectionHash:string, rulesHash:string): string {
+  return `human-projection-${contentHash({originalManifest,selectionHash,rulesHash}).slice(0,48)}`;
 }
 
 export const ExperimentManifestContentSchema = z.object({
@@ -104,6 +108,8 @@ export const ExperimentManifestContentSchema = z.object({
     definition: ImmutableReleaseRefSchema.extend({ revision: z.number().int().positive() }).strict().nullable(),
     execution: ImmutableReleaseRefSchema,
     scoringPassId: ReleaseIdSchema.nullable(),
+    /** Explicit accepted Human view; original execution/pass identity is retained. */
+    humanProjection: z.object({originalManifest:ImmutableReleaseRefSchema,selectionHash:ReleaseHashSchema,rulesHash:ReleaseHashSchema}).strict().optional(),
   }).strict().optional(),
   evaluators: z.array(ExperimentEvaluatorSchema).max(100),
   population: z.array(ExperimentCaseIdentitySchema).min(1).max(10_000),
@@ -111,8 +117,14 @@ export const ExperimentManifestContentSchema = z.object({
 }).strict().superRefine((value, context) => {
   if (value.execution?.compatibility && value.execution.compatibility.targetKind !== value.target.kind)
     context.addIssue({ code: "custom", path: ["execution", "compatibility"], message: "Execution compatibility differs from its admitted target kind." });
-  if (value.lineage && value.id !== (value.lineage.scoringPassId ?? value.lineage.execution.id))
-    context.addIssue({ code: "custom", path: ["lineage"], message: "Experiment identity must match its execution or independent scoring pass." });
+  if (value.lineage) {
+    const originalId=value.lineage.scoringPassId ?? value.lineage.execution.id, projection=value.lineage.humanProjection;
+    if (projection) {
+      if (projection.originalManifest.id !== originalId || projection.originalManifest.id.startsWith("human-projection-") || value.id !== humanProjectionViewId(projection.originalManifest,projection.selectionHash,projection.rulesHash))
+        context.addIssue({code:"custom",path:["lineage","humanProjection"],message:"Human view must bind its original execution or scoring pass and deterministic selection identity."});
+    } else if (value.id !== originalId)
+      context.addIssue({ code: "custom", path: ["lineage"], message: "Experiment identity must match its execution or independent scoring pass." });
+  }
   if (new Set(value.population.map(experimentCaseKey)).size !== value.population.length)
     context.addIssue({ code: "custom", path: ["population"], message: "Experiment cases must be unique." });
   if (new Set(value.evaluators.map((item) => item.feedbackKey)).size !== value.evaluators.length)
@@ -125,7 +137,7 @@ export const ExperimentFeedbackSchema = z.object({
   feedbackKey: FeedbackKeySchema,
   evaluator: ExperimentEvaluatorSchema.shape.release,
   status: z.enum(["scored", "unavailable", "failed", "pending"]),
-  value: z.union([z.boolean(), z.number().finite(), z.string().max(120)]).nullable(),
+  value: z.union([z.boolean(), z.number().finite(), z.string().max(500)]).nullable(),
   passed: z.boolean().nullable().optional(),
   reasoning: z.string().max(20_000).nullable(),
   evidenceRefs: z.array(ImmutableArtifactRefSchema).max(1_000),

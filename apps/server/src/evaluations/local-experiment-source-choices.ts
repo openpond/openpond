@@ -1,3 +1,4 @@
+import {assertNativeProfilePrivateGrading} from "./native-profile-private-grading.js";
 import type { ProfileOriginAuthority } from "./local-experiment-profile-origin.js";
 import { z } from "zod";
 import { DatasetPopulationPageSchema } from "openpond-sdk/dataset-workspaces";
@@ -66,12 +67,12 @@ export function createLocalExperimentSourceChoices(deps: {
           if (profiles.length>=100) break;
           const value=validateTasksetPackage(await deps.loadPackage(definition,entry.ref.profileId,catalog.harnessRelease));
           if(value.taskset.id!==definition.tasksetRelease.id||value.taskset.contentHash!==definition.tasksetRelease.contentHash)throw new Error("Local Profile Dataset changed its exact binding.");
-          if(value.taskset.tasks.length>10_000||value.taskset.environment.kind!=="text"||value.taskset.tools.length||value.taskset.policy.connectedAppScopes.length
-            ||value.taskset.capabilities.some(item=>item.required)||value.taskset.tasks.some(task=>task.artifactRefs.length||task.requiredOutputs?.length)
-            ||value.taskset.graders.some(grader=>grader.kind==="model_judge"||grader.kind==="custom_verifier")||value.taskset.metrics?.aggregation==="custom")continue;
+          if(value.taskset.tasks.length>10_000||value.taskset.environment.kind!=="text"||value.taskset.tools.some(tool=>!["work_exec","work_save_output"].includes(tool.name))||value.taskset.policy.connectedAppScopes.length
+            ||value.taskset.capabilities.some(item=>item.required&&item.id!=="private-verifier")||value.taskset.tasks.some(task=>task.artifactRefs.some(asset=>asset.visibility!=="policy"||asset.mediaType!=="application/pdf"||asset.sizeBytes>10000000)))continue;
+          await assertNativeProfilePrivateGrading(value);
           const id=`local-profile-${contentHash([entry.ref,catalog.harnessRelease,definition.id])}`;
           packages.set(id,value);
-          profiles.push({id:id,name:`${entry.name} · ${definition.label}`,
+          profiles.push({id:id,name:`${entry.name}, ${definition.label}`,
             profileRef:entry.ref,sourceRevision:catalog.sourceRevision,harnessRelease:catalog.harnessRelease,
             definitionId:definition.id,definitionHash:contentHash(definition),taskset:{id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash},taskCount:value.taskset.tasks.length,taskIds:definition.taskIds,seeds:definition.seeds});
         }

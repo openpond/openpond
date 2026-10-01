@@ -48,6 +48,14 @@
     "./profile-source-check": {
       "import": "./dist/profile-source-check.js",
       "types": "./dist/profile-source-check.d.ts"
+    },
+    "./hosted-profile-candidate": {
+      "import": "./dist/hosted-profile-candidate.js",
+      "types": "./dist/hosted-profile-candidate.d.ts"
+    },
+    "./hosted-experiment-improvement": {
+      "import": "./dist/hosted-experiment-improvement.js",
+      "types": "./dist/hosted-experiment-improvement.d.ts"
     }
   },
   "bin": {

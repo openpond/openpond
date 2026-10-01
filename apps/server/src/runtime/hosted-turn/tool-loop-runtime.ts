@@ -1,3 +1,4 @@
+import {candidateAuthoringToolNames} from "../../harness/experiment-candidate-tool-catalog.js";
 import { workspaceToolCorrectionMessage, trainingHarnessForTurn } from "./tool-loop-support.js";
 import {
   DEFAULT_SESSION_EXPERIENCE,
@@ -96,7 +97,10 @@ type PrepareHostedProviderRequest = ReturnType<
 export function createHostedToolLoopRuntime(deps: {
   taskInbox: TaskInboxRuntime;
   inboxStore: TaskInboxRepository;
+  isolatedProfileEvaluationForTurn?:TurnRunnerDependencies["isolatedProfileEvaluationForTurn"];
   resolveModelTools?: TurnRunnerDependencies["resolveModelTools"];
+  candidateAuthoringForTurn?: TurnRunnerDependencies["candidateAuthoringForTurn"];
+  authorizeCandidateTool?: TurnRunnerDependencies["authorizeCandidateTool"];
   hostedToolFlags: HostedToolRolloutFlags;
   assertExecutionAllowed?: (turnId: string) => Promise<void>;
   nativeToolsEnabledForProvider(provider: ChatProvider): boolean;
@@ -106,6 +110,7 @@ export function createHostedToolLoopRuntime(deps: {
     profileSkillRuntime: ProfileSkillRuntime,
     connectedApps: ResolvedConnectedAppContext[],
     options?: {
+      candidateAuthoring?: boolean;
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
@@ -245,7 +250,10 @@ export function createHostedToolLoopRuntime(deps: {
       params.turn,
       deps.getTaskset
     );
-    let nativeToolDefinitions = nativeToolsEnabledForProvider(params.provider)
+    const candidateAuthoring=await deps.candidateAuthoringForTurn?.(params.session.id,params.turn.id)??false;
+    if((params.turn.metadata.source==="experiment-improvement"||params.turn.metadata.refinementCandidate!==undefined)&&!candidateAuthoring)throw new Error("Candidate Work has no durable source/turn binding.");
+    const isolatedProfile=await deps.isolatedProfileEvaluationForTurn?.(params.session,params.turn)??false;
+    let nativeToolDefinitions = !isolatedProfile && nativeToolsEnabledForProvider(params.provider)
       ? filterModelToolsForExperience(
           session,
           enabledModelToolDefinitions(
@@ -255,6 +263,7 @@ export function createHostedToolLoopRuntime(deps: {
               params.profileSkillRuntime,
               params.connectedApps,
               {
+                candidateAuthoring,
                 disableWorkflowDelegationTools: isTerminalOneShotTurn(
                   params.turn
                 ),
@@ -284,6 +293,7 @@ export function createHostedToolLoopRuntime(deps: {
         tools: nativeToolDefinitions,
       });
     }
+    if(candidateAuthoring)nativeToolDefinitions=nativeToolDefinitions.filter(definition=>candidateAuthoringToolNames.has(definition.name));
     if ((session.metadata?.standaloneExperiment !== undefined || session.metadata?.localProfileExperiment !== undefined)) {
       nativeToolDefinitions = isolateStandaloneExperimentTools(nativeToolDefinitions, params.harnessDeclarations ?? []);
     }
@@ -296,6 +306,7 @@ export function createHostedToolLoopRuntime(deps: {
         executorAvailable: typeof definition.execute === "function",
         execute: async (args, context) => {
           await deps.assertExecutionAllowed?.(context.turnId);
+          if(candidateAuthoring&&!(await deps.authorizeCandidateTool?.({sessionId:params.session.id,turnId:context.turnId,name:definition.name})))throw new Error("Candidate tool authority changed before dispatch.");
           return definition.execute({
             session: params.session,
             turnId: context.turnId,

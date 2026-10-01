@@ -1,8 +1,6 @@
 import type {
   GradeResult,
   GraderAuditReport,
-  ModelArtifactLineage,
-  ModelProject,
   RuntimeEvent,
   Session,
   TaskAttemptArtifact,
@@ -14,22 +12,13 @@ import type {
   TaskMinerRun,
   Taskset,
   TasksetReadinessReport,
-  TrainingApproval,
-  TrainingArtifact,
-  TrainingBundleManifest,
   TrainingChatSearchResult,
-  TrainingJob,
-  TrainingJobEvent,
-  TrainingPlan,
   TrainingSourceRef,
   Turn,
 } from "@openpond/contracts";
 import {
   GradeResultSchema,
   GraderAuditReportSchema,
-  ModelArtifactLineageSchema,
-  ManagedAdapterServingProjectionSchema,
-  ModelProjectSchema,
   TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
   TaskCandidateSchema,
@@ -40,18 +29,12 @@ import {
   TaskMinerRunSchema,
   TasksetReadinessReportSchema,
   TasksetSchema,
-  TrainingApprovalSchema,
-  TrainingArtifactSchema,
-  TrainingBundleManifestSchema,
-  TrainingJobEventSchema,
-  TrainingJobSchema,
-  TrainingPlanSchema,
   TrainingSourceRefSchema,
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
-import { SqliteModelConfigurationStore } from "./store-model-configuration.js";
+import { SqliteTrainingJobsStore } from "./store-training-jobs.js";
 import { saveTasksetRevision } from "./store-taskset-revisions.js";
 import {
   appendTrainingChatSearchText,
@@ -81,11 +64,10 @@ type TrainingChatSearchEvidenceRow = {
   payload: string;
 };
 
-const ACTIVE_TRAINING_DESTINATIONS_SQL =
-  "('openpond_managed')";
-
-export class SqliteTrainingStore extends SqliteModelConfigurationStore {
-  async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
+export class SqliteTrainingStore extends SqliteTrainingJobsStore {
+  async trainingChatSearchSignatures(
+    source: TrainingChatSearchDocument["source"],
+  ): Promise<Map<string, string>> {
     await this.ready;
     await this.writeQueue;
     const rows = await this.all<TrainingChatSearchDocumentRow>(
@@ -95,7 +77,9 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     return new Map(rows.map((row) => [row.session_id, row.signature]));
   }
 
-  async openPondTrainingChatSearchEvidence(candidateIdsInput: string[]): Promise<Array<{ session: Session; body: string }>> {
+  async openPondTrainingChatSearchEvidence(
+    candidateIdsInput: string[],
+  ): Promise<Array<{ session: Session; body: string }>> {
     await this.ready;
     await this.writeQueue;
     const candidateIds = [...new Set(candidateIdsInput)].slice(0, 500);
@@ -120,11 +104,13 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     const textBySession = new Map<string, string[]>();
     for (const row of turnRows) {
       const turn = JSON.parse(row.payload) as Turn;
-      if (turn.prompt.trim()) appendTrainingChatSearchText(textBySession, row.session_id, turn.prompt);
+      if (turn.prompt.trim())
+        appendTrainingChatSearchText(textBySession, row.session_id, turn.prompt);
     }
     for (const row of eventRows) {
       const event = JSON.parse(row.payload) as RuntimeEvent;
-      if (event.output?.trim()) appendTrainingChatSearchText(textBySession, row.session_id, event.output);
+      if (event.output?.trim())
+        appendTrainingChatSearchText(textBySession, row.session_id, event.output);
     }
     return sessionRows.map((row) => {
       const session = normalizeSessionPayload(JSON.parse(row.payload));
@@ -149,11 +135,15 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
         for (const sessionId of existing.keys()) {
           if (incomingIds.has(sessionId)) continue;
           await this.run("DELETE FROM training_chat_search_fts WHERE session_id = ?", [sessionId]);
-          await this.run("DELETE FROM training_chat_search_documents WHERE session_id = ?", [sessionId]);
+          await this.run("DELETE FROM training_chat_search_documents WHERE session_id = ?", [
+            sessionId,
+          ]);
         }
         for (const document of documents) {
           if (existing.get(document.sessionId) === document.signature) continue;
-          await this.run("DELETE FROM training_chat_search_fts WHERE session_id = ?", [document.sessionId]);
+          await this.run("DELETE FROM training_chat_search_fts WHERE session_id = ?", [
+            document.sessionId,
+          ]);
           await this.run(
             `INSERT INTO training_chat_search_documents (session_id, source, signature, title, updated_at, eligible, body_indexed)
              VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -164,7 +154,15 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
                updated_at = excluded.updated_at,
                eligible = excluded.eligible,
                body_indexed = excluded.body_indexed`,
-            [document.sessionId, document.source, document.signature, document.title, document.updatedAt, document.eligible ? 1 : 0, document.bodyIndexed ? 1 : 0],
+            [
+              document.sessionId,
+              document.source,
+              document.signature,
+              document.title,
+              document.updatedAt,
+              document.eligible ? 1 : 0,
+              document.bodyIndexed ? 1 : 0,
+            ],
           );
           await this.run(
             "INSERT INTO training_chat_search_fts (session_id, title, body) VALUES (?, ?, ?)",
@@ -186,7 +184,9 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     const write = this.writeQueue.then(async () => {
       await this.exec("BEGIN IMMEDIATE");
       try {
-        await this.run("DELETE FROM training_chat_search_fts WHERE session_id = ?", [document.sessionId]);
+        await this.run("DELETE FROM training_chat_search_fts WHERE session_id = ?", [
+          document.sessionId,
+        ]);
         await this.run(
           `INSERT INTO training_chat_search_documents (session_id, source, signature, title, updated_at, eligible, body_indexed)
            VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -197,7 +197,15 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
              updated_at = excluded.updated_at,
              eligible = excluded.eligible,
              body_indexed = excluded.body_indexed`,
-          [document.sessionId, document.source, document.signature, document.title, document.updatedAt, document.eligible ? 1 : 0, document.bodyIndexed ? 1 : 0],
+          [
+            document.sessionId,
+            document.source,
+            document.signature,
+            document.title,
+            document.updatedAt,
+            document.eligible ? 1 : 0,
+            document.bodyIndexed ? 1 : 0,
+          ],
         );
         await this.run(
           "INSERT INTO training_chat_search_fts (session_id, title, body) VALUES (?, ?, ?)",
@@ -213,7 +221,12 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     await write;
   }
 
-  async searchTrainingChats(input: { query: string; offset: number; limit: number; candidateIds: string[] }): Promise<TrainingChatSearchResult> {
+  async searchTrainingChats(input: {
+    query: string;
+    offset: number;
+    limit: number;
+    candidateIds: string[];
+  }): Promise<TrainingChatSearchResult> {
     await this.ready;
     await this.writeQueue;
     const query = input.query.trim();
@@ -244,10 +257,19 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
          LIMIT ? OFFSET ?`,
         [...candidateIds, limit, offset],
       );
-      return trainingChatSearchResult(query, offset, limit, total?.count ?? 0, rows, indexedChats, totalChats);
+      return trainingChatSearchResult(
+        query,
+        offset,
+        limit,
+        total?.count ?? 0,
+        rows,
+        indexedChats,
+        totalChats,
+      );
     }
     const match = trainingChatFtsQuery(query);
-    if (!match) return trainingChatSearchResult(query, offset, limit, 0, [], indexedChats, totalChats);
+    if (!match)
+      return trainingChatSearchResult(query, offset, limit, 0, [], indexedChats, totalChats);
     const total = await this.get<{ count: number }>(
       `SELECT COUNT(*) AS count
        FROM training_chat_search_fts
@@ -269,7 +291,15 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
        LIMIT ? OFFSET ?`,
       [match, ...candidateIds, limit, offset],
     );
-    return trainingChatSearchResult(query, offset, limit, total?.count ?? 0, rows, indexedChats, totalChats);
+    return trainingChatSearchResult(
+      query,
+      offset,
+      limit,
+      total?.count ?? 0,
+      rows,
+      indexedChats,
+      totalChats,
+    );
   }
 
   async listTrainingSources(profileId: string): Promise<TrainingSourceRef[]> {
@@ -319,8 +349,9 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     const source = TrainingSourceRefSchema.parse(sourceInput);
     await this.ready;
     const timestamp = now();
-    const write = this.writeQueue.then(() => this.run(
-      `INSERT INTO training_sources (
+    const write = this.writeQueue.then(() =>
+      this.run(
+        `INSERT INTO training_sources (
          id, profile_id, source_kind, session_id, source_hash,
          repository_id, revision, payload, created_at, updated_at
        )
@@ -334,16 +365,17 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
          revision = NULL,
          payload = excluded.payload,
          updated_at = excluded.updated_at`,
-      [
-        source.id,
-        source.profileId,
-        source.sessionId,
-        source.sourceHash,
-        JSON.stringify(source),
-        timestamp,
-        timestamp,
-      ],
-    ));
+        [
+          source.id,
+          source.profileId,
+          source.sessionId,
+          source.sourceHash,
+          JSON.stringify(source),
+          timestamp,
+          timestamp,
+        ],
+      ),
+    );
     this.writeQueue = write.catch(() => undefined);
     await write;
     return source;
@@ -351,7 +383,9 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
 
   async deleteTrainingSource(id: string): Promise<void> {
     await this.ready;
-    const write = this.writeQueue.then(() => this.run("DELETE FROM training_sources WHERE id = ?", [id]));
+    const write = this.writeQueue.then(() =>
+      this.run("DELETE FROM training_sources WHERE id = ?", [id]),
+    );
     this.writeQueue = write.catch(() => undefined);
     await write;
   }
@@ -406,19 +440,55 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     throw parsed.error;
   }
 
-  async upsertTaskCreationSnapshot(snapshotInput: TaskCreationSnapshot): Promise<TaskCreationSnapshot> {
+  async upsertTaskCreationSnapshot(
+    snapshotInput: TaskCreationSnapshot,
+  ): Promise<TaskCreationSnapshot> {
     const snapshot = TaskCreationSnapshotSchema.parse(snapshotInput);
-    const transcript = TaskCreationTranscriptSchema.parse({ schemaVersion: "openpond.taskCreationTranscript.v1", creationId: snapshot.id, profileId: snapshot.request.profileId, messages: snapshot.transcript, updatedAt: snapshot.updatedAt });
+    const transcript = TaskCreationTranscriptSchema.parse({
+      schemaVersion: "openpond.taskCreationTranscript.v1",
+      creationId: snapshot.id,
+      profileId: snapshot.request.profileId,
+      messages: snapshot.transcript,
+      updatedAt: snapshot.updatedAt,
+    });
     await this.ready;
     const write = this.writeQueue.then(async () => {
       await this.exec("BEGIN IMMEDIATE");
       try {
-        await this.run(`INSERT INTO task_creation_snapshots (id, profile_id, state, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, state = excluded.state, payload = excluded.payload, updated_at = excluded.updated_at`, [snapshot.id, snapshot.request.profileId, snapshot.state, JSON.stringify(snapshot), snapshot.createdAt, snapshot.updatedAt]);
-        await this.run(`INSERT INTO task_creation_transcripts (creation_id, profile_id, payload, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(creation_id) DO UPDATE SET profile_id = excluded.profile_id, payload = excluded.payload, updated_at = excluded.updated_at`, [snapshot.id, snapshot.request.profileId, JSON.stringify(transcript), snapshot.updatedAt]);
-        if (snapshot.proposal) await this.run(`INSERT INTO task_design_proposals (creation_id, proposal_id, profile_id, state, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(creation_id) DO UPDATE SET proposal_id = excluded.proposal_id, profile_id = excluded.profile_id, state = excluded.state, payload = excluded.payload, updated_at = excluded.updated_at`, [snapshot.id, snapshot.proposal.id, snapshot.request.profileId, snapshot.state, JSON.stringify(snapshot.proposal), snapshot.updatedAt]);
-        else await this.run("DELETE FROM task_design_proposals WHERE creation_id = ?", [snapshot.id]);
+        await this.run(
+          `INSERT INTO task_creation_snapshots (id, profile_id, state, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, state = excluded.state, payload = excluded.payload, updated_at = excluded.updated_at`,
+          [
+            snapshot.id,
+            snapshot.request.profileId,
+            snapshot.state,
+            JSON.stringify(snapshot),
+            snapshot.createdAt,
+            snapshot.updatedAt,
+          ],
+        );
+        await this.run(
+          `INSERT INTO task_creation_transcripts (creation_id, profile_id, payload, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(creation_id) DO UPDATE SET profile_id = excluded.profile_id, payload = excluded.payload, updated_at = excluded.updated_at`,
+          [snapshot.id, snapshot.request.profileId, JSON.stringify(transcript), snapshot.updatedAt],
+        );
+        if (snapshot.proposal)
+          await this.run(
+            `INSERT INTO task_design_proposals (creation_id, proposal_id, profile_id, state, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(creation_id) DO UPDATE SET proposal_id = excluded.proposal_id, profile_id = excluded.profile_id, state = excluded.state, payload = excluded.payload, updated_at = excluded.updated_at`,
+            [
+              snapshot.id,
+              snapshot.proposal.id,
+              snapshot.request.profileId,
+              snapshot.state,
+              JSON.stringify(snapshot.proposal),
+              snapshot.updatedAt,
+            ],
+          );
+        else
+          await this.run("DELETE FROM task_design_proposals WHERE creation_id = ?", [snapshot.id]);
         await this.exec("COMMIT");
-      } catch (error) { await this.exec("ROLLBACK").catch(() => undefined); throw error; }
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
     });
     this.writeQueue = write.catch(() => undefined);
     await write;
@@ -426,11 +496,19 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
   }
 
   async getTaskCreationTranscript(creationId: string) {
-    return this.getParsedPayload("SELECT payload FROM task_creation_transcripts WHERE creation_id = ?", [creationId], TaskCreationTranscriptSchema.parse);
+    return this.getParsedPayload(
+      "SELECT payload FROM task_creation_transcripts WHERE creation_id = ?",
+      [creationId],
+      TaskCreationTranscriptSchema.parse,
+    );
   }
 
   async getTaskDesignProposal(creationId: string) {
-    return this.getParsedPayload("SELECT payload FROM task_design_proposals WHERE creation_id = ?", [creationId], TaskDesignProposalSchema.parse);
+    return this.getParsedPayload(
+      "SELECT payload FROM task_design_proposals WHERE creation_id = ?",
+      [creationId],
+      TaskDesignProposalSchema.parse,
+    );
   }
 
   async listTasksets(profileId?: string): Promise<Taskset[]> {
@@ -452,17 +530,27 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
   }
 
   async getTaskset(id: string): Promise<Taskset | null> {
-    return this.getParsedPayload("SELECT payload FROM tasksets WHERE id = ?", [id], parseStoredTaskset);
+    return this.getParsedPayload(
+      "SELECT payload FROM tasksets WHERE id = ?",
+      [id],
+      parseStoredTaskset,
+    );
   }
 
-  async getTasksetRevision(id: string, revision: number, contentHash?: string | null): Promise<Taskset | null> {
+  async getTasksetRevision(
+    id: string,
+    revision: number,
+    contentHash?: string | null,
+  ): Promise<Taskset | null> {
     const taskset = await this.getParsedPayload(
       "SELECT payload FROM taskset_revisions WHERE taskset_id = ? AND revision = ?",
       [id, revision],
       parseStoredTaskset,
     );
     if (taskset && contentHash && taskset.contentHash !== contentHash) {
-      throw new Error(`Taskset ${id}@${revision} does not match the requested immutable content hash.`);
+      throw new Error(
+        `Taskset ${id}@${revision} does not match the requested immutable content hash.`,
+      );
     }
     return taskset;
   }
@@ -489,7 +577,10 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     const write = this.writeQueue.then(async () => {
       await this.exec("BEGIN IMMEDIATE");
       try {
-        await this.run("DELETE FROM grade_results WHERE attempt_id IN (SELECT id FROM task_attempts WHERE taskset_id = ?)", [id]);
+        await this.run(
+          "DELETE FROM grade_results WHERE attempt_id IN (SELECT id FROM task_attempts WHERE taskset_id = ?)",
+          [id],
+        );
         await this.run("DELETE FROM evaluation_results WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM benchmark_runs WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM benchmark_comparisons WHERE taskset_id = ?", [id]);
@@ -501,18 +592,45 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);
-        await this.run("DELETE FROM training_artifacts WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
+        await this.run(
+          "DELETE FROM training_artifacts WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))",
+          [id],
+        );
         await this.run("DELETE FROM training_rollout_receipts WHERE taskset_id = ?", [id]);
-        await this.run("DELETE FROM model_bindings WHERE model_artifact_lineage_id IN (SELECT id FROM model_artifact_lineage WHERE taskset_id = ?)", [id]);
-        await this.run("DELETE FROM training_job_events WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
-        await this.run("DELETE FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
-        await this.run("DELETE FROM training_approvals WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
-        await this.run("DELETE FROM training_bundles WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
+        await this.run(
+          "DELETE FROM model_bindings WHERE model_artifact_lineage_id IN (SELECT id FROM model_artifact_lineage WHERE taskset_id = ?)",
+          [id],
+        );
+        await this.run(
+          "DELETE FROM training_job_events WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))",
+          [id],
+        );
+        await this.run(
+          "DELETE FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)",
+          [id],
+        );
+        await this.run(
+          "DELETE FROM training_approvals WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)",
+          [id],
+        );
+        await this.run(
+          "DELETE FROM training_bundles WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)",
+          [id],
+        );
         await this.run("DELETE FROM model_artifact_lineage WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM training_plans WHERE taskset_id = ?", [id]);
-        await this.run("DELETE FROM task_design_proposals WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)", [id]);
-        await this.run("DELETE FROM task_creation_transcripts WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)", [id]);
-        await this.run("DELETE FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?", [id]);
+        await this.run(
+          "DELETE FROM task_design_proposals WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)",
+          [id],
+        );
+        await this.run(
+          "DELETE FROM task_creation_transcripts WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)",
+          [id],
+        );
+        await this.run(
+          "DELETE FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?",
+          [id],
+        );
         await this.run("DELETE FROM dataset_artifacts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM tasksets WHERE id = ?", [id]);
         await this.run("DELETE FROM taskset_revisions WHERE taskset_id = ?", [id]);
@@ -526,19 +644,38 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
     await write;
   }
 
-  async listTaskCandidates(profileId: string, status?: TaskCandidateStatus | "all"): Promise<TaskCandidate[]> {
-    const sql = status && status !== "all"
-      ? "SELECT payload FROM task_candidates WHERE profile_id = ? AND status = ? ORDER BY updated_at DESC"
-      : "SELECT payload FROM task_candidates WHERE profile_id = ? ORDER BY updated_at DESC";
-    return this.listParsedPayloads(sql, status && status !== "all" ? [profileId, status] : [profileId], TaskCandidateSchema.parse);
+  async listTaskCandidates(
+    profileId: string,
+    status?: TaskCandidateStatus | "all",
+  ): Promise<TaskCandidate[]> {
+    const sql =
+      status && status !== "all"
+        ? "SELECT payload FROM task_candidates WHERE profile_id = ? AND status = ? ORDER BY updated_at DESC"
+        : "SELECT payload FROM task_candidates WHERE profile_id = ? ORDER BY updated_at DESC";
+    return this.listParsedPayloads(
+      sql,
+      status && status !== "all" ? [profileId, status] : [profileId],
+      TaskCandidateSchema.parse,
+    );
   }
 
   async getTaskCandidate(id: string): Promise<TaskCandidate | null> {
-    return this.getParsedPayload("SELECT payload FROM task_candidates WHERE id = ?", [id], TaskCandidateSchema.parse);
+    return this.getParsedPayload(
+      "SELECT payload FROM task_candidates WHERE id = ?",
+      [id],
+      TaskCandidateSchema.parse,
+    );
   }
 
-  async findTaskCandidateByFingerprint(profileId: string, fingerprint: string): Promise<TaskCandidate | null> {
-    return this.getParsedPayload("SELECT payload FROM task_candidates WHERE profile_id = ? AND fingerprint = ?", [profileId, fingerprint], TaskCandidateSchema.parse);
+  async findTaskCandidateByFingerprint(
+    profileId: string,
+    fingerprint: string,
+  ): Promise<TaskCandidate | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM task_candidates WHERE profile_id = ? AND fingerprint = ?",
+      [profileId, fingerprint],
+      TaskCandidateSchema.parse,
+    );
   }
 
   async upsertTaskCandidate(candidateInput: TaskCandidate): Promise<TaskCandidate> {
@@ -547,7 +684,15 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
       `INSERT INTO task_candidates (id, profile_id, status, fingerprint, payload, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, status = excluded.status, fingerprint = excluded.fingerprint, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [candidate.id, candidate.profileId, candidate.status, candidate.fingerprint, JSON.stringify(candidate), candidate.createdAt, candidate.updatedAt],
+      [
+        candidate.id,
+        candidate.profileId,
+        candidate.status,
+        candidate.fingerprint,
+        JSON.stringify(candidate),
+        candidate.createdAt,
+        candidate.updatedAt,
+      ],
     );
     return candidate;
   }
@@ -563,18 +708,45 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
   }
 
   async listTaskAttempts(tasksetId: string): Promise<TaskAttemptResult[]> {
-    return this.listParsedPayloads("SELECT payload FROM task_attempts WHERE taskset_id = ? ORDER BY created_at ASC", [tasksetId], TaskAttemptResultSchema.parse);
+    return this.listParsedPayloads(
+      "SELECT payload FROM task_attempts WHERE taskset_id = ? ORDER BY created_at ASC",
+      [tasksetId],
+      TaskAttemptResultSchema.parse,
+    );
   }
 
   async saveTaskAttemptArtifact(artifactInput: TaskAttemptArtifact): Promise<TaskAttemptArtifact> {
     const artifact = TaskAttemptArtifactSchema.parse(artifactInput);
-    await this.upsertPayload(`INSERT INTO task_attempt_artifacts (id, taskset_id, attempt_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, attempt_id = excluded.attempt_id, kind = excluded.kind, payload = excluded.payload`, [artifact.id, artifact.tasksetId, artifact.attemptId, artifact.kind, JSON.stringify(artifact), artifact.createdAt]);
+    await this.upsertPayload(
+      `INSERT INTO task_attempt_artifacts (id, taskset_id, attempt_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, attempt_id = excluded.attempt_id, kind = excluded.kind, payload = excluded.payload`,
+      [
+        artifact.id,
+        artifact.tasksetId,
+        artifact.attemptId,
+        artifact.kind,
+        JSON.stringify(artifact),
+        artifact.createdAt,
+      ],
+    );
     return artifact;
   }
 
-  async listTaskAttemptArtifacts(input: { tasksetId?: string; attemptId?: string }): Promise<TaskAttemptArtifact[]> {
-    if (input.attemptId) return this.listParsedPayloads("SELECT payload FROM task_attempt_artifacts WHERE attempt_id = ? ORDER BY created_at", [input.attemptId], TaskAttemptArtifactSchema.parse);
-    if (input.tasksetId) return this.listParsedPayloads("SELECT payload FROM task_attempt_artifacts WHERE taskset_id = ? ORDER BY created_at", [input.tasksetId], TaskAttemptArtifactSchema.parse);
+  async listTaskAttemptArtifacts(input: {
+    tasksetId?: string;
+    attemptId?: string;
+  }): Promise<TaskAttemptArtifact[]> {
+    if (input.attemptId)
+      return this.listParsedPayloads(
+        "SELECT payload FROM task_attempt_artifacts WHERE attempt_id = ? ORDER BY created_at",
+        [input.attemptId],
+        TaskAttemptArtifactSchema.parse,
+      );
+    if (input.tasksetId)
+      return this.listParsedPayloads(
+        "SELECT payload FROM task_attempt_artifacts WHERE taskset_id = ? ORDER BY created_at",
+        [input.tasksetId],
+        TaskAttemptArtifactSchema.parse,
+      );
     return [];
   }
 
@@ -602,12 +774,19 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
 
   async saveGraderAuditReport(reportInput: GraderAuditReport): Promise<GraderAuditReport> {
     const report = GraderAuditReportSchema.parse(reportInput);
-    await this.upsertPayload(`INSERT INTO grader_audit_reports (id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, payload = excluded.payload`, [report.id, report.tasksetId, JSON.stringify(report), report.createdAt]);
+    await this.upsertPayload(
+      `INSERT INTO grader_audit_reports (id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, payload = excluded.payload`,
+      [report.id, report.tasksetId, JSON.stringify(report), report.createdAt],
+    );
     return report;
   }
 
   async listGraderAuditReports(tasksetId: string): Promise<GraderAuditReport[]> {
-    return this.listParsedPayloads("SELECT payload FROM grader_audit_reports WHERE taskset_id = ? ORDER BY created_at DESC", [tasksetId], GraderAuditReportSchema.parse);
+    return this.listParsedPayloads(
+      "SELECT payload FROM grader_audit_reports WHERE taskset_id = ? ORDER BY created_at DESC",
+      [tasksetId],
+      GraderAuditReportSchema.parse,
+    );
   }
 
   async saveReadinessReport(reportInput: TasksetReadinessReport): Promise<TasksetReadinessReport> {
@@ -621,10 +800,17 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
   }
 
   async getReadinessReport(tasksetId: string): Promise<TasksetReadinessReport | null> {
-    return this.getParsedPayload("SELECT payload FROM readiness_reports WHERE taskset_id = ?", [tasksetId], parseStoredReadinessReport);
+    return this.getParsedPayload(
+      "SELECT payload FROM readiness_reports WHERE taskset_id = ?",
+      [tasksetId],
+      parseStoredReadinessReport,
+    );
   }
 
-  async saveTaskMinerConfig(profileId: string, configInput: TaskMinerConfig): Promise<TaskMinerConfig> {
+  async saveTaskMinerConfig(
+    profileId: string,
+    configInput: TaskMinerConfig,
+  ): Promise<TaskMinerConfig> {
     const config = TaskMinerConfigSchema.parse(configInput);
     await this.upsertPayload(
       `INSERT INTO task_miner_configs (profile_id, payload, updated_at) VALUES (?, ?, ?)
@@ -635,7 +821,11 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
   }
 
   async getTaskMinerConfig(profileId: string): Promise<TaskMinerConfig | null> {
-    return this.getParsedPayload("SELECT payload FROM task_miner_configs WHERE profile_id = ?", [profileId], TaskMinerConfigSchema.parse);
+    return this.getParsedPayload(
+      "SELECT payload FROM task_miner_configs WHERE profile_id = ?",
+      [profileId],
+      TaskMinerConfigSchema.parse,
+    );
   }
 
   async saveTaskMinerRun(runInput: TaskMinerRun): Promise<TaskMinerRun> {
@@ -649,219 +839,37 @@ export class SqliteTrainingStore extends SqliteModelConfigurationStore {
   }
 
   async getTaskMinerRun(id: string): Promise<TaskMinerRun | null> {
-    return this.getParsedPayload("SELECT payload FROM task_miner_runs WHERE id = ?", [id], TaskMinerRunSchema.parse);
+    return this.getParsedPayload(
+      "SELECT payload FROM task_miner_runs WHERE id = ?",
+      [id],
+      TaskMinerRunSchema.parse,
+    );
   }
 
   async listTaskMinerRuns(profileId?: string): Promise<TaskMinerRun[]> {
     return profileId
-      ? this.listParsedPayloads("SELECT payload FROM task_miner_runs WHERE profile_id = ? ORDER BY updated_at DESC", [profileId], TaskMinerRunSchema.parse)
-      : this.listParsedPayloads("SELECT payload FROM task_miner_runs ORDER BY updated_at DESC", [], TaskMinerRunSchema.parse);
+      ? this.listParsedPayloads(
+          "SELECT payload FROM task_miner_runs WHERE profile_id = ? ORDER BY updated_at DESC",
+          [profileId],
+          TaskMinerRunSchema.parse,
+        )
+      : this.listParsedPayloads(
+          "SELECT payload FROM task_miner_runs ORDER BY updated_at DESC",
+          [],
+          TaskMinerRunSchema.parse,
+        );
   }
-
-  async saveModelProject(projectInput: ModelProject): Promise<ModelProject> {
-    const project = ModelProjectSchema.parse(projectInput);
-    await this.upsertPayload(
-      `INSERT INTO model_projects (id, profile_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [project.id, project.profileId, JSON.stringify(project), project.createdAt, project.updatedAt],
-    );
-    return project;
-  }
-
-  async getModelProject(id: string): Promise<ModelProject | null> {
-    return this.getParsedPayload(
-      "SELECT payload FROM model_projects WHERE id = ?",
-      [id],
-      parseStoredModelProject,
-    );
-  }
-
-  async listModelProjects(profileId?: string): Promise<ModelProject[]> {
-    return this.listParsedPayloads(
-      profileId
-        ? "SELECT payload FROM model_projects WHERE profile_id = ? ORDER BY updated_at DESC"
-        : "SELECT payload FROM model_projects ORDER BY updated_at DESC",
-      profileId ? [profileId] : [],
-      parseStoredModelProject,
-    );
-  }
-
-  async saveTrainingPlan(planInput: TrainingPlan): Promise<TrainingPlan> {
-    const plan = TrainingPlanSchema.parse(planInput);
-    const existing = await this.getTrainingPlan(plan.id);
-    if (existing && existing.contentHash !== plan.contentHash) {
-      throw new Error(`Training Plan ${plan.id} is immutable and already has different content.`);
-    }
-    await this.upsertPayload(
-      `INSERT INTO training_plans (id, taskset_id, destination_id, payload, created_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, destination_id = excluded.destination_id, payload = excluded.payload`,
-      [plan.id, plan.tasksetId, plan.destinationId, JSON.stringify(plan), plan.createdAt],
-    );
-    return plan;
-  }
-
-  async listTrainingPlans(tasksetId?: string): Promise<TrainingPlan[]> {
-    return this.listParsedPayloads(
-      tasksetId
-        ? `SELECT payload FROM training_plans WHERE taskset_id = ? AND destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL} ORDER BY created_at DESC`
-        : `SELECT payload FROM training_plans WHERE destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL} ORDER BY created_at DESC`,
-      tasksetId ? [tasksetId] : [],
-      TrainingPlanSchema.parse,
-    );
-  }
-
-  async getTrainingPlan(id: string): Promise<TrainingPlan | null> {
-    return this.getParsedPayload(
-      `SELECT payload FROM training_plans WHERE id = ? AND destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}`,
-      [id],
-      TrainingPlanSchema.parse,
-    );
-  }
-
-  async saveTrainingBundle(bundleInput: TrainingBundleManifest): Promise<TrainingBundleManifest> {
-    const bundle = TrainingBundleManifestSchema.parse(bundleInput);
-    await this.upsertPayload(
-      `INSERT INTO training_bundles (id, plan_id, content_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET plan_id = excluded.plan_id, content_hash = excluded.content_hash, payload = excluded.payload`,
-      [bundle.id, bundle.planId, bundle.contentHash, JSON.stringify(bundle), bundle.createdAt],
-    );
-    return bundle;
-  }
-
-  async getTrainingBundle(id: string): Promise<TrainingBundleManifest | null> {
-    return this.getParsedPayload("SELECT payload FROM training_bundles WHERE id = ?", [id], TrainingBundleManifestSchema.parse);
-  }
-
-  async listTrainingBundles(planId?: string): Promise<TrainingBundleManifest[]> {
-    return this.listParsedPayloads(planId ? "SELECT payload FROM training_bundles WHERE plan_id = ? ORDER BY created_at DESC" : "SELECT payload FROM training_bundles ORDER BY created_at DESC", planId ? [planId] : [], TrainingBundleManifestSchema.parse);
-  }
-
-  async findTrainingBundleByPlanAndHash(planId: string, contentHash: string): Promise<TrainingBundleManifest | null> {
-    return this.getParsedPayload("SELECT payload FROM training_bundles WHERE plan_id = ? AND content_hash = ?", [planId, contentHash], TrainingBundleManifestSchema.parse);
-  }
-
-  async saveTrainingJob(jobInput: TrainingJob): Promise<TrainingJob> {
-    const job = TrainingJobSchema.parse(jobInput);
-    await this.upsertPayload(
-      `INSERT INTO training_jobs (id, plan_id, destination_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET plan_id = excluded.plan_id, destination_id = excluded.destination_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [job.id, job.planId, job.destinationId, job.status, JSON.stringify(job), job.createdAt, job.updatedAt],
-    );
-    return job;
-  }
-
-  async saveTrainingApproval(approvalInput: TrainingApproval): Promise<TrainingApproval> {
-    const approval = TrainingApprovalSchema.parse(approvalInput);
-    await this.upsertPayload(
-      `INSERT INTO training_approvals (id, plan_id, bundle_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET plan_id = excluded.plan_id, bundle_hash = excluded.bundle_hash, payload = excluded.payload`,
-      [approval.id, approval.planId, approval.bundleHash, JSON.stringify(approval), approval.approvedAt],
-    );
-    return approval;
-  }
-
-  async getTrainingApproval(id: string): Promise<TrainingApproval | null> {
-    return this.getParsedPayload("SELECT payload FROM training_approvals WHERE id = ?", [id], TrainingApprovalSchema.parse);
-  }
-
-  async getTrainingJob(id: string): Promise<TrainingJob | null> {
-    return this.getParsedPayload(
-      `SELECT payload FROM training_jobs WHERE id = ? AND destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}`,
-      [id],
-      TrainingJobSchema.parse,
-    );
-  }
-
-  async listTrainingJobs(): Promise<TrainingJob[]> {
-    return this.listParsedPayloads(
-      `SELECT payload FROM training_jobs WHERE destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL} ORDER BY updated_at DESC`,
-      [],
-      TrainingJobSchema.parse,
-    );
-  }
-
-  async saveTrainingJobEvent(eventInput: TrainingJobEvent): Promise<TrainingJobEvent> {
-    const event = TrainingJobEventSchema.parse(eventInput);
-    await this.upsertPayload(
-      `INSERT INTO training_job_events (id, job_id, sequence, payload, created_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET job_id = excluded.job_id, sequence = excluded.sequence, payload = excluded.payload`,
-      [event.id, event.jobId, event.sequence, JSON.stringify(event), event.timestamp],
-    );
-    return event;
-  }
-
-  async listTrainingJobEvents(jobId: string): Promise<TrainingJobEvent[]> {
-    return this.listParsedPayloads("SELECT payload FROM training_job_events WHERE job_id = ? ORDER BY sequence ASC", [jobId], TrainingJobEventSchema.parse);
-  }
-
-  async saveTrainingArtifact(artifactInput: TrainingArtifact): Promise<TrainingArtifact> {
-    const artifact = TrainingArtifactSchema.parse(artifactInput);
-    await this.upsertPayload(
-      `INSERT INTO training_artifacts (id, job_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET job_id = excluded.job_id, kind = excluded.kind, payload = excluded.payload`,
-      [artifact.id, artifact.jobId, artifact.kind, JSON.stringify(artifact), artifact.createdAt],
-    );
-    return artifact;
-  }
-
-  async listTrainingArtifacts(jobId?: string): Promise<TrainingArtifact[]> {
-    return this.listParsedPayloads(jobId ? "SELECT payload FROM training_artifacts WHERE job_id = ? ORDER BY created_at DESC" : "SELECT payload FROM training_artifacts ORDER BY created_at DESC", jobId ? [jobId] : [], TrainingArtifactSchema.parse);
-  }
-
-  async getTrainingArtifact(id: string): Promise<TrainingArtifact | null> {
-    return this.getParsedPayload("SELECT payload FROM training_artifacts WHERE id = ?", [id], TrainingArtifactSchema.parse);
-  }
-
-  async saveModelArtifactLineage(lineageInput: ModelArtifactLineage): Promise<ModelArtifactLineage> {
-    const lineage = ModelArtifactLineageSchema.parse(lineageInput);
-    await this.upsertPayload(
-      `INSERT INTO model_artifact_lineage (id, artifact_id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET artifact_id = excluded.artifact_id, taskset_id = excluded.taskset_id, payload = excluded.payload`,
-      [lineage.id, lineage.artifactId, lineage.tasksetId, JSON.stringify(lineage), lineage.importedAt],
-    );
-    return lineage;
-  }
-
-  async updateModelArtifactLineageServing(id: string, projection: ModelArtifactLineage["managedServing"]): Promise<void> {
-    const parsed = projection === null ? null : ManagedAdapterServingProjectionSchema.parse(projection);
-    await this.upsertPayload("UPDATE model_artifact_lineage SET payload = json_set(payload, '$.managedServing', json(?)) WHERE id = ?", [JSON.stringify(parsed), id]);
-  }
-
-  async updateModelArtifactLineageReview(id: string, patch: Pick<ModelArtifactLineage, "status" | "rejectedAt" | "rejectionReason" | "frozenEvaluationArtifactId">): Promise<void> {
-    const parsed = ModelArtifactLineageSchema.pick({ status: true, rejectedAt: true, rejectionReason: true, frozenEvaluationArtifactId: true }).parse(patch);
-    await this.upsertPayload("UPDATE model_artifact_lineage SET payload = json_set(payload, '$.status', ?, '$.rejectedAt', ?, '$.rejectionReason', ?, '$.frozenEvaluationArtifactId', ?) WHERE id = ?", [parsed.status, parsed.rejectedAt, parsed.rejectionReason, parsed.frozenEvaluationArtifactId, id]);
-  }
-
-  async listModelArtifactLineage(tasksetId?: string): Promise<ModelArtifactLineage[]> {
-    return this.listParsedPayloads(
-      tasksetId
-        ? "SELECT payload FROM model_artifact_lineage WHERE taskset_id = ? ORDER BY created_at DESC"
-        : "SELECT payload FROM model_artifact_lineage ORDER BY created_at DESC",
-      tasksetId ? [tasksetId] : [],
-      parseStoredModelArtifactLineage,
-    );
-  }
-
-  async getModelArtifactLineage(id: string): Promise<ModelArtifactLineage | null> {
-    return this.getParsedPayload(
-      "SELECT payload FROM model_artifact_lineage WHERE id = ?",
-      [id],
-      parseStoredModelArtifactLineage,
-    );
-  }
-
 }
 
 function retiredTaskCreationSpecificationKind(value: unknown): "agent_benchmark" | null {
-  if (!isRecord(value) || !isRecord(value.request) || !isRecord(value.request.buildSpecification)) return null;
+  if (!isRecord(value) || !isRecord(value.request) || !isRecord(value.request.buildSpecification))
+    return null;
   return value.request.buildSpecification.kind === "agent_benchmark" ? "agent_benchmark" : null;
 }
 
 function parseStoredTaskset(value: unknown): Taskset {
   return TasksetSchema.parse(
-    normalizeStoredTasksetAuthoringProvenance(
-      normalizeStoredReadinessDestinationClasses(value),
-    ),
+    normalizeStoredTasksetAuthoringProvenance(normalizeStoredReadinessDestinationClasses(value)),
   );
 }
 
@@ -869,47 +877,17 @@ function parseStoredReadinessReport(value: unknown): TasksetReadinessReport {
   return TasksetReadinessReportSchema.parse(normalizeStoredReadinessDestinationClasses(value));
 }
 
-function parseStoredModelProject(value: unknown): ModelProject {
-  return ModelProjectSchema.parse(normalizeStoredModelProjectDestination(value));
-}
-
-function normalizeStoredModelProjectDestination(value: unknown): unknown {
-  if (
-    !isRecord(value)
-    || typeof value.defaultDestinationId !== "string"
-    || value.defaultDestinationId === "openpond_managed"
-  ) {
-    return value;
-  }
-  return { ...value, defaultDestinationId: null };
-}
-
-function parseStoredModelArtifactLineage(value: unknown): ModelArtifactLineage {
-  return ModelArtifactLineageSchema.parse(normalizeStoredManagedServingProjection(value));
-}
-
-function normalizeStoredManagedServingProjection(value: unknown): unknown {
-  if (!isRecord(value) || !isRecord(value.managedServing)) return value;
-  const source = value.managedServing.source;
-  if (source !== "openpond_fireworks" && source !== "openpond_training") return value;
-  return { ...value, managedServing: null };
-}
-
 function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
   if (!isRecord(value)) return value;
   const readiness = isRecord(value.readiness) ? value.readiness : value;
   if (!Array.isArray(readiness.compatibleDestinationClasses)) return value;
-  const supportedDestinationClasses = new Set([
-    "export",
-    "custom",
-    "hosted_managed",
-  ]);
+  const supportedDestinationClasses = new Set(["export", "custom", "hosted_managed"]);
   const compatibleDestinationClasses = readiness.compatibleDestinationClasses.filter(
     (destinationClass): destinationClass is string =>
-      typeof destinationClass === "string"
-      && supportedDestinationClasses.has(destinationClass),
+      typeof destinationClass === "string" && supportedDestinationClasses.has(destinationClass),
   );
-  if (compatibleDestinationClasses.length === readiness.compatibleDestinationClasses.length) return value;
+  if (compatibleDestinationClasses.length === readiness.compatibleDestinationClasses.length)
+    return value;
   const normalizedReadiness = { ...readiness, compatibleDestinationClasses };
   return readiness === value ? normalizedReadiness : { ...value, readiness: normalizedReadiness };
 }

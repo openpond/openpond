@@ -1,3 +1,5 @@
+import {assertNativeProfilePrivateGrading} from "../evaluations/native-profile-private-grading.js";
+import {z} from "zod";
 import { readFile } from "node:fs/promises";
 
 import { OpenPondProfileRefSchema, type ProviderSettings, type RuntimeEvent, type OpenPondProfileRef } from "@openpond/contracts";
@@ -65,6 +67,7 @@ export function createProfilePayloads(deps: {
   store: SqliteStore;
   storeDir: string;
   providerSettings: () => Promise<ProviderSettings>;
+  resolveExternalDataset?: Parameters<typeof createProfileEvaluationRunPreparationService>[0]["resolveExternalDataset"];
 }) {
   const { appendRuntimeEvent } = deps;
 
@@ -106,7 +109,11 @@ export function createProfilePayloads(deps: {
   });
 
   async function profileEvaluationsPayload(params?: unknown) {
-    const workflows = await profileWorkflowsPayload();
+    const requestedRef = params && typeof params === "object" && "profileRef" in params
+      ? z.object({profileRef:OpenPondProfileRefSchema}).strict().parse(params).profileRef : undefined;
+    if (requestedRef && requestedRef.source !== "local")
+      throw new Error("Read hosted Profile catalogs through their current authorized source owner.");
+    const workflows = await profileWorkflowsPayload(requestedRef);
     if (params && typeof params === "object" && !Array.isArray(params) && "runId" in params) {
       const inspection = ProfileEvaluationInspectionRequestSchema.parse(params);
       return inspectProfileEvaluationRun({ store: deps.store, profileRef: workflows.profileRef, ...inspection });
@@ -121,12 +128,17 @@ export function createProfilePayloads(deps: {
       deps.store.listProfileEvaluationRuns(workflows.profileRef),
       deps.store.listProfileEvaluationComparisons(workflows.profileRef),
       deps.store.listProfileEvaluationSuiteRuns(workflows.profileRef),
-      profileReports.list(),
+      requestedRef ? createProfileEvaluationReportService({store:deps.store,selectedProfile:async()=>{
+        const profile=await loadOpenPondProfileStateForRef(requestedRef);
+        return profile.sourcePath&&!profile.error?{ref:requestedRef,sourcePath:profile.sourcePath,gitBacked:profile.git?.isRepo===true}:null;
+      }}).list() : profileReports.list(),
     ]);
     return { ...evaluations, runs, comparisons, suiteRuns, reports };
   }
 
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
+    privateGradingPreflight:assertNativeProfilePrivateGrading,
+    resolveExternalDataset: deps.resolveExternalDataset,
     loadCatalog: request => profileEvaluationsForRelease({ ...request, store: deps.store }),
     selectedWorkflows: profileWorkflowsPayload,
     loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({

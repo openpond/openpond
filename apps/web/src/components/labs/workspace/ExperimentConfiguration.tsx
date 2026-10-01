@@ -29,12 +29,12 @@ export function ExperimentConfiguration({
           <dd>{execution.summary.manifestHash}</dd>
           <dt>Dataset</dt>
           <dd>
-            {request.taskset.id} · Revision {request.taskset.revision}
+            {request.taskset.id} / Revision {request.taskset.revision}
           </dd>
           <dt>Dataset hash</dt>
           <dd>{request.taskset.contentHash}</dd>
           <dt>Budget</dt>
-          <dd>${configuration.maximumCostUsd} · Policy and graders combined</dd>
+          <dd>${configuration.maximumCostUsd} / Policy and graders combined</dd>
           <dt>Target</dt>
           <dd>
             <EvaluationModel name={"modelId" in policy ? policy.modelId : "Authored fixture"} />
@@ -50,15 +50,15 @@ export function ExperimentConfiguration({
           <dt>Project</dt>
           <dd>
             {request.project
-              ? `${request.project.id} · Revision ${request.project.revision} · ${request.project.contentHash}`
+              ? `${request.project.id} / Revision ${request.project.revision} / ${request.project.contentHash}`
               : "All projects"}
           </dd>
           <dt>Source</dt>
           <dd>
             {policy.kind === "hosted_harness"
-              ? `${policy.source.definitionId} · ${policy.source.sourceRevision}`
+              ? `${policy.source.definitionId} / ${policy.source.sourceRevision}`
               : policy.kind === "hosted_chat" && policy.harness
-                ? `${policy.harness.harnessRelease.id} · ${policy.harness.harnessRelease.contentHash}`
+                ? `${policy.harness.harnessRelease.id} / ${policy.harness.harnessRelease.contentHash}`
                 : policy.kind === "hosted_chat"
                   ? "Model only"
                   : "Authored fixture"}
@@ -103,7 +103,7 @@ export function ExperimentConfiguration({
             <dd>{pass.contentHash}</dd>
             <dt>Experiment</dt>
             <dd>
-              {pass.request.execution.id} · {pass.request.execution.contentHash}
+              {pass.request.execution.id} / {pass.request.execution.contentHash}
             </dd>
             <dt>Grading budget</dt>
             <dd>${pass.request.maximumCostUsd}</dd>
