@@ -1,6 +1,6 @@
 {
   "name": "@openpond/app-server",
-  "version": "0.2.44",
+  "version": "0.2.45",
   "openpondReleaseVersioned": true,
   "description": "Private canonical OpenPond agent-service composition",
   "license": "MIT",
