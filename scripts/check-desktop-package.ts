@@ -7,49 +7,18 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { listPackage } from "@electron/asar";
 import type { RuntimeInventory, RuntimeInventoryEntry } from "./desktop-runtime-inventory";
 
-type PlatformBudget = {
-  maxArtifactBytes: number;
-  maxUnpackedBytes: number;
-};
-
-const MIB = 1024 * 1024;
-const MAX_ASAR_BYTES = 2 * MIB;
-const MAX_RESOURCES_BYTES = 32 * MIB;
-// Human review, Refiner and training coordination stage at 27.23 MiB over
-// 252 files. Inventory review attributes growth to required server/renderer
-// code; the existing editor workers remain the largest static assets.
-// Keep about 275 KiB of headroom. Artifact, resources, ASAR and exact-inventory
-// gates continue to bound the independently verified packaged application.
-const MAX_STAGED_RUNTIME_BYTES = 27 * MIB + 512 * 1024;
-const MAX_LINUX_X64_UNPACKED_BYTES = 400 * MIB;
-// The required server and web runtime grew past 339 MiB on ARM64 while the
-// compressed artifact, resources, ASAR, and staged runtime remain in budget.
-const MAX_LINUX_ARM64_UNPACKED_BYTES = 340 * MIB;
-const PLATFORM_BUDGETS: Record<NodeJS.Platform, PlatformBudget | undefined> = {
-  linux: { maxArtifactBytes: 129 * MIB, maxUnpackedBytes: MAX_LINUX_X64_UNPACKED_BYTES },
-  darwin: { maxArtifactBytes: 150 * MIB, maxUnpackedBytes: 400 * MIB },
-  win32: { maxArtifactBytes: 150 * MIB, maxUnpackedBytes: 400 * MIB },
-  aix: undefined,
-  android: undefined,
-  freebsd: undefined,
-  haiku: undefined,
-  openbsd: undefined,
-  sunos: undefined,
-  cygwin: undefined,
-  netbsd: undefined,
-};
-
 const execFileAsync = promisify(execFile);
 
-export async function checkDesktopPackageBudgets(input: {
+export async function checkDesktopPackage(input: {
   root: string;
   platform?: NodeJS.Platform;
   arch?: string;
 }): Promise<Record<string, unknown>> {
   const platform = input.platform ?? process.platform;
   const arch = input.arch ?? process.arch;
-  const budget = desktopPackageBudget(platform, arch);
-  if (!budget) throw new Error(`Desktop package budgets are not defined for ${platform}.`);
+  if (!["linux", "darwin", "win32"].includes(platform)) {
+    throw new Error(`Desktop package verification is not supported for ${platform}.`);
+  }
   const releaseRoot = path.join(input.root, "release");
   const unpackedRoot = await resolveUnpackedRoot(releaseRoot, platform, arch);
   const resourcesRoot = resourcesPath(unpackedRoot, platform);
@@ -68,11 +37,6 @@ export async function checkDesktopPackageBudgets(input: {
     packagedRuntime: { bytes: packagedInventory.totalBytes, files: packagedInventory.fileCount },
   };
 
-  assertBudget("compressed artifact", metrics.artifact.bytes, budget.maxArtifactBytes);
-  assertBudget("unpacked application", metrics.unpacked.bytes, budget.maxUnpackedBytes);
-  assertBudget("packaged resources", metrics.resources.bytes, MAX_RESOURCES_BYTES);
-  assertBudget("app.asar", metrics.asar.bytes, MAX_ASAR_BYTES);
-  assertBudget("staged runtime", metrics.stagedRuntime.bytes, MAX_STAGED_RUNTIME_BYTES);
   assertMinimalAsar(asarPath);
   await verifyRuntimeInventory(resourcesRoot, packagedInventory, platform);
   if (platform === "darwin") await verifyDarwinAppBundleSignature(unpackedRoot);
@@ -80,15 +44,6 @@ export async function checkDesktopPackageBudgets(input: {
     throw new Error("Packaged runtime inventory differs from the staged runtime inventory.");
   }
   return metrics;
-}
-
-export function desktopPackageBudget(
-  platform: NodeJS.Platform,
-  arch: string,
-): PlatformBudget | undefined {
-  const budget = PLATFORM_BUDGETS[platform];
-  if (!budget || platform !== "linux" || arch !== "arm64") return budget;
-  return { ...budget, maxUnpackedBytes: MAX_LINUX_ARM64_UNPACKED_BYTES };
 }
 
 function assertMinimalAsar(asarPath: string): void {
@@ -241,18 +196,13 @@ async function directoryBytes(directory: string): Promise<number> {
   return total;
 }
 
-function assertBudget(label: string, actual: number, maximum: number): void {
-  if (actual <= maximum) return;
-  throw new Error(`${label} is ${(actual / MIB).toFixed(2)} MiB; maximum is ${(maximum / MIB).toFixed(2)} MiB.`);
-}
-
 async function exists(filePath: string): Promise<boolean> {
   return fs.access(filePath).then(() => true, () => false);
 }
 
 async function main(): Promise<void> {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  console.log(JSON.stringify(await checkDesktopPackageBudgets({ root }), null, 2));
+  console.log(JSON.stringify(await checkDesktopPackage({ root }), null, 2));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

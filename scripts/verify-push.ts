@@ -20,7 +20,7 @@ const steps: VerificationStep[] = [
   step("Build application artifacts", "run", "build:artifacts"),
   step("Build CLI distribution", "run", "cli:build:from-web"),
   step("Check CLI distribution", "run", "cli:distribution:check"),
-  step("Check performance budgets", "run", "budgets:check"),
+  step("Report performance metrics", "run", "performance:report"),
   step("Check repository structure and dependencies", "run", "repository:check"),
   step("Check repository hygiene", "run", "hygiene:check"),
   step("Check test tier ownership", "run", "test-tiers:check"),

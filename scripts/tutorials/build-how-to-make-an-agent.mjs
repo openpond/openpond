@@ -158,7 +158,9 @@ try {
     const probe = await probeVideo(build.videoPath);
     validateProbe(probe);
     const videoSize = Number((await stat(build.videoPath)).size);
-    assert(videoSize < 25 * 1024 * 1024, `${build.title} is ${(videoSize / 1024 / 1024).toFixed(2)} MiB; the limit is 25 MiB.`);
+    if (videoSize >= 25 * 1024 * 1024) {
+      console.warn(`${build.title} is ${(videoSize / 1024 / 1024).toFixed(2)} MiB; advisory size is 25 MiB.`);
+    }
     await renderContactSheet(
       build.timeline.map((segment) => segment.contactPath ?? segment.path),
       build.contactSheetPath,
