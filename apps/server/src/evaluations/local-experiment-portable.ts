@@ -57,6 +57,9 @@ export function localPortableExperiment(input: {
         tools: value.taskset.tools, capabilities: value.taskset.capabilities,
         source: target.kind === "agent" || target.kind === "harness" ? target.source : null }),
       metricPolicyHash: contentHash(tasksetRunMetricPolicy(value.taskset)),
+      ...(!input.retainedConfigurationHash ? { compatibility: {
+        protocol: "openpond.evaluation-execution.v1" as const, targetKind: target.kind,
+      } } : {}),
     },
     lineage: { definition: input.retainedConfigurationHash ? execution.definition : null,
       execution: execution.sourceExecution ? { id: execution.sourceExecution.id, contentHash: execution.sourceExecution.executionHash }
