@@ -3,6 +3,7 @@ import {
   CLI_INTEGRATION_TESTS,
   ROOT_IMAGE_TESTS,
   ROOT_MEMORY_TESTS,
+  ROOT_QUALIFICATION_TESTS,
   ROOT_SYSTEM_TESTS,
   ROOT_UI_TESTS,
 } from "./scripts/test-suite-config";
@@ -74,6 +75,7 @@ export default defineConfig({
             ...ROOT_SYSTEM_TESTS,
             ...ROOT_MEMORY_TESTS,
             ...ROOT_IMAGE_TESTS,
+            ...ROOT_QUALIFICATION_TESTS,
           ],
         },
       },
@@ -91,6 +93,15 @@ export default defineConfig({
           ...constrained,
           name: "root-system",
           include: [...ROOT_SYSTEM_TESTS],
+          exclude: [...ROOT_QUALIFICATION_TESTS],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...constrained,
+          name: "root-qualification",
+          include: [...ROOT_QUALIFICATION_TESTS],
         },
       },
       {

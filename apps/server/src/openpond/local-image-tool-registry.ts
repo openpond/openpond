@@ -31,7 +31,7 @@ export function createLocalImageModelToolDefinition(deps: { executeCandidateImag
       return resolveWorkspaceExecutionTarget({ session: context.session }).target !== "sandbox";
     },
     execute: async (context) => {
-      if (context.turnMetadata.source === "experiment-improvement" || context.turnMetadata.refinementCandidate !== undefined) {
+      if (context.turnMetadata?.source === "experiment-improvement" || context.turnMetadata?.refinementCandidate !== undefined || context.session.metadata?.source === "experiment-improvement" || context.session.metadata?.refinementCandidate !== undefined) {
         if (!deps.executeCandidateImage) throw new Error("Candidate image inspection requires its confined filesystem executor.");
         return deps.executeCandidateImage(context);
       }

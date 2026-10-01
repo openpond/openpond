@@ -606,7 +606,7 @@ export function createCommandModelToolDefinition(deps: {
         source: "model_tool",
         signal: context.signal,
       };
-      const candidate = context.turnMetadata.source === "experiment-improvement" || context.turnMetadata.refinementCandidate !== undefined;
+      const candidate = context.turnMetadata?.source === "experiment-improvement" || context.turnMetadata?.refinementCandidate !== undefined || context.session.metadata?.source === "experiment-improvement" || context.session.metadata?.refinementCandidate !== undefined;
       if (candidate && !deps.executeCandidateCommand) throw new Error("Candidate commands require an admitted filesystem-confined executor.");
       const result = candidate ? await deps.executeCandidateCommand!(context, commandInput) : await deps.executeCommand(commandInput);
       const artifacts = result.ok && !candidate ? await discoverCommandArtifacts(result) : [];

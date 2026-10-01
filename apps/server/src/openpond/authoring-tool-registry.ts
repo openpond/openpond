@@ -38,7 +38,7 @@ export function createAuthoringModelToolDefinitions(deps: {
   const definitions: ModelToolDefinition[] = [askUserDefinition()];
   if (!deps.loadProfileState) return definitions;
   const loadProfileState: LoadProfileState = async (ref, context) => {
-    if (context?.turnMetadata.source === "experiment-improvement" || context?.turnMetadata.refinementCandidate !== undefined) {
+    if (context && (context.turnMetadata?.source === "experiment-improvement" || context.turnMetadata?.refinementCandidate !== undefined || context.session.metadata?.source === "experiment-improvement" || context.session.metadata?.refinementCandidate !== undefined)) {
       if (!deps.resolveCandidateProfile) throw new Error("Candidate authoring requires an admitted isolated Profile resolver.");
       const profile = await deps.resolveCandidateProfile(context);
       assertEditableProfile(profile);
@@ -47,7 +47,7 @@ export function createAuthoringModelToolDefinitions(deps: {
     return deps.loadProfileState!(ref, context);
   };
   const runCommand: AgentCommandRunner = async input => {
-    if (input.context.turnMetadata.source === "experiment-improvement" || input.context.turnMetadata.refinementCandidate !== undefined) {
+    if (input.context.turnMetadata?.source === "experiment-improvement" || input.context.turnMetadata?.refinementCandidate !== undefined || input.context.session.metadata?.source === "experiment-improvement" || input.context.session.metadata?.refinementCandidate !== undefined) {
       if (!deps.executeCandidateAgentCommand) throw new Error("Candidate Agent commands require filesystem-confined execution.");
       return deps.executeCandidateAgentCommand(input);
     }

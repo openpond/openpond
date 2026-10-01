@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { access, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ROOT_QUALIFICATION_TESTS } from "./test-suite-manifest";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const vitest = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "vitest.cmd" : "vitest");
@@ -22,7 +23,8 @@ async function main(): Promise<void> {
     : existing.filter((file) => file.endsWith(".test.mjs") && !file.includes("live-"));
 
   if (relatedInputs.length > 0) {
-    await run(vitest, ["related", ...relatedInputs, "--run", "--passWithNoTests"]);
+    console.log("[affected-tests] Linux namespace/private-grading proofs remain explicit test:qualification work");
+    await run(vitest, ["related", ...relatedInputs, "--run", "--passWithNoTests", ...ROOT_QUALIFICATION_TESTS.flatMap(file => ["--exclude", file])]);
   } else {
     console.log("[affected-tests] no JavaScript or TypeScript inputs changed");
   }

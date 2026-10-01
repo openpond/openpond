@@ -9,9 +9,6 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/profile-workflow-git-import.test.ts",
   "tests/local-profile-origin.test.ts",
   "tests/human-task-publication.integration.test.ts",
-  "tests/candidate-command-isolation.test.ts",
-  "tests/python-correctness-preset.integration.test.ts",
-  "tests/profile-external-dataset-boundary.test.ts",
   "apps/server/src/**/*.test.ts",
   "tests/agent-app-server-cli.test.ts",
   "tests/agent-app-server-rpc.test.ts",
@@ -113,6 +110,16 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/workspace-lsp.test.ts",
   "tests/workspace-state.test.ts",
   "tests/workspace-tool-git.test.ts",
+] as const;
+
+// These real namespace/private-grading proofs require Linux user namespaces,
+// bubblewrap and Python. Run explicitly on a qualified host; unavailable
+// confinement must fail these proofs rather than count as successful isolation.
+export const ROOT_QUALIFICATION_TESTS = [
+  "tests/candidate-command-isolation.test.ts",
+  "tests/python-correctness-preset.integration.test.ts",
+  "tests/profile-external-dataset-boundary.test.ts",
+  "apps/server/src/training/advanced-refiner-work-confinement.test.ts",
 ] as const;
 
 export const ROOT_UI_TESTS = [

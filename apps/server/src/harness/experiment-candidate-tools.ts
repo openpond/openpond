@@ -24,8 +24,8 @@ export function createExperimentCandidateTools(deps:{store:HarnessStateStore;imp
   async function authority(sessionId:string,turnId:string){
     const session=await deps.store.getSession(sessionId),turn=await deps.store.getTurn(turnId);
     if(!session||!turn||turn.sessionId!==sessionId)throw new Error("Candidate tool has no actual Work turn authority.");
-    const marker=turn.metadata.refinementCandidate;
-    if(turn.metadata.source!=="experiment-improvement"||!marker||typeof marker!=="object"||!("candidateId" in marker)||typeof marker.candidateId!=="string"){
+    const marker=turn.metadata?.refinementCandidate;
+    if(turn.metadata?.source!=="experiment-improvement"||!marker||typeof marker!=="object"||!("candidateId" in marker)||typeof marker.candidateId!=="string"){
       if(session.metadata?.source==="experiment-improvement"||session.metadata?.refinementCandidate!==undefined)throw new Error("This candidate Session requires a fresh private stored-turn admission before any continuation.");return null;
     }
     const actor={actorId:await deps.actorId(),teamId:await deps.teamId()},state=await deps.improvements.read(actor,marker.candidateId);
