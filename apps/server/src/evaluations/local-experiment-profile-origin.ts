@@ -349,11 +349,13 @@ export function createLocalProfileOriginAdapter(deps: {
         ),
       );
     const entries: Array<{ ref: OpenPondProfileRef; name: string }> = [];
+    let attempts = 0;
     for (const project of projects.slice(0, 100)) {
       try {
         if (project.teamId !== access.teamId) continue;
         const available = source(project);
         for (const profileId of available.profiles.slice(0, 20)) {
+          if (++attempts > 100) return entries;
           const ref = {
             source: "openpond_git" as const,
             repositoryId: project.id,
