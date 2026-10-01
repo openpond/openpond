@@ -19,7 +19,6 @@ const directory = mkdtempSync(join(tmpdir(), "openpond-cli-release-"));
 try {
   // This job holds the shared publication lock. A queued older run must not
   // replace latest after a newer version was published by another trigger.
-  requireCurrentVersion(version, (await registry("openpond/latest", true))?.version);
   const [packed] = JSON.parse(npm(["pack", "./apps/cli", "--ignore-scripts", "--pack-destination", directory, "--json"]));
   const expected = { version, sha, repository, integrity: packed.integrity };
   const existing = await registry(`openpond/${version}`, true);
@@ -27,6 +26,7 @@ try {
     if (existing.dist?.integrity !== expected.integrity) throw new Error("Existing CLI version contains a different artifact; refusing recovery.");
     console.log(`openpond@${version} exists; verifying without republishing.`);
   } else {
+    requireCurrentVersion(version, (await registry("openpond/latest", true))?.version);
     console.log(npm(["publish", join(directory, packed.filename), "--access", "public", "--ignore-scripts"]));
   }
   const consumer = join(directory, "consumer");
