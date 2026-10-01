@@ -19,7 +19,7 @@ import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 
 const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
-  "prepareOperation", "acknowledgeOperation", "feedbackSummary",
+  "prepareOperation", "acknowledgeOperation", "feedbackSummary", "harnessSources",
   "datasetExperiments", "experiments", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
 const Identity = z.object({ id: Id }).passthrough();
@@ -63,6 +63,9 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     };
     const ownedExecution = async (id: string) => { const result = await experiments.get(id); assertProject(result.request.project); return result; };
     const ownedPass = async (id: string) => { const result = await experiments.scoringPass(id); await ownedExecution(result.request.execution.id); return result; };
+    if (request.operation === "harnessSources") return experiments.harnessSources(
+      z.object({cursor:z.string().min(1).max(8192).optional()}).strict().parse(request.value??{}),
+    );
     if (["createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder"].includes(request.operation)) return hostedDatasetAuthoring({ client: datasets, teamId: access.teamId, projectId: request.projectId, ownerScope: selectedProject?.ownerScope, operation: request.operation, value: request.value, requireDataset });
     if (request.operation === "attachDatasetGrader") return attachHostedDatasetGrader({ value: request.value, learning: new OpenPondLearningClient({ ...options, scope: access.teamId }), datasets, requireDataset });
     const inspection = new OpenPondGraderInspectionClient(options);

@@ -5,6 +5,22 @@ import { createTasksetRunManifest, tasksetRunMetricPolicy } from "@openpond/eval
 import { OpenPondExperimentsClient, RunExperimentSchema, experimentRunConfigurationHash } from "../src/experiments.js";
 
 describe("flat Experiment collection boundary", () => {
+  // A workspace catalog must never accept another tenant's source, private
+  // bytes, ambiguous duplicates or a non-advancing continuation as selectable.
+  it("fences published Harness catalog scope, projection and paging",async()=> {
+    const source={harnessRelease:{id:"harness-a",contentHash:"a".repeat(64)},agentSnapshot:{id:"agent-a",contentHash:"b".repeat(64)},sourcePackageHash:"c".repeat(64)};
+    const item={name:"Released helper",source,ready:true,reason:null};
+    let value:unknown={teamId:"team-a",items:[item],nextCursor:"next-page"};
+    const client=new OpenPondExperimentsClient({baseUrl:"https://example.test",apiKey:"test",teamId:"team-a",fetch:async()=>Response.json(value)});
+    await expect(client.harnessSources()).resolves.toMatchObject({items:[item]});
+    for(const page of [
+      {teamId:"team-b",items:[item],nextCursor:null},
+      {teamId:"team-a",items:[{...item,sourceBytes:"private"}],nextCursor:null},
+      {teamId:"team-a",items:[item,item],nextCursor:null},
+      {teamId:"team-a",items:[{...item,ready:false}],nextCursor:null},
+      {teamId:"team-a",items:[item],nextCursor:"current-page"},
+    ]){value=page;await expect(client.harnessSources({cursor:"current-page"})).rejects.toThrow();}
+  });
   // A retained collection must not leak private fields or accept foreign,
   // substituted, repeated or out-of-scope runs and continuations.
   it("binds retained rows and paging to the selected workspace and scope", async () => {
