@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { EnvironmentReleaseSchema, VerifierSetReleaseSchema } from "@openpond/evals";
-import { JavaScriptEnvironmentDefinitionSchema, assertJavaScriptEnvironmentDefinition } from "@openpond/evals/javascript-environment";
+import { JavaScriptEnvironmentDefinitionSchema, assertJavaScriptEnvironmentDefinition } from "@openpond/evals/javascript-environment/contracts";
 import { createLearningTextAsset, learningRef, sealLearningContent, verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import type { TasksetRelease } from "@openpond/evals/tasksets";
