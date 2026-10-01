@@ -19,6 +19,7 @@ export interface BoundJudgeProvider {
 export function createBudgetedRewardFixtureExecutor(options: {
   runtime: RewardCheckRuntime; repository: LearningRepository; provider: BoundJudgeProvider;
   executeJavaScript: typeof executeJavaScriptVerifier;
+  transportPolicy?: Parameters<typeof createBoundModelJudgeRunner>[0]["transportPolicy"];
 }): RewardFixtureExecutor {
   return createIsolatedRewardFixtureExecutor({
     runtime: options.runtime, executeJavaScript: options.executeJavaScript,
@@ -30,6 +31,7 @@ export function createBudgetedRewardFixtureExecutor(options: {
     async createModelJudge(input) {
       const budget = createRewardCheckJudgeBudgetStore({ repository: options.repository, scope: input.scope, run: input.run });
       return createBoundModelJudgeRunner({
+        transportPolicy: options.transportPolicy,
         async readRubric(reference) {
           const asset = input.assets.find(asset => asset.id === reference.id);
           if (!asset) throw new Error("reward_check_rubric_missing");

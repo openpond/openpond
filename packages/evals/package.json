@@ -139,7 +139,11 @@
       "types": "./dist/types/evidence/index.d.ts",
       "import": "./dist/evidence/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./learning/reward-calibration-closure": {
+      "types": "./dist/types/learning/reward-calibration-closure.d.ts",
+      "import": "./dist/learning/reward-calibration-closure.js"
+    }
   },
   "publishConfig": {
     "access": "public",
