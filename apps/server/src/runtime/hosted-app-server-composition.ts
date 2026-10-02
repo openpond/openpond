@@ -28,7 +28,6 @@ import { createHostedTurnHelpers } from "../openpond/hosted-turn-helpers.js";
 import { createTurnRunner } from "./turn-runner.js";
 import { createAgentRuntimePorts } from "./agent-runtime-host.js";
 import { createEmbeddingToolResolver } from "./app-server-embedding.js";
-import { createHostedWorkOutputLifecycle } from "../work/hosted-work-output-lifecycle.js";
 import { createHostedHarnessMemoryTools } from "../store/hosted-harness-memory-tools.js";
 import { createHostedEmbeddingAdapter, createHostedSandboxRequest } from "./hosted-embedding-adapter.js";
 import { assertHostedWorkCapabilities } from "./hosted-capability-admission.js";
@@ -82,13 +81,6 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
       ? reviewStore.appendRuntimeEvent(event) : core.appendRuntimeEvent(event),
     runtimeEventPageRows: input => core.runtimeEventPageRows(input),
   } });
-  const outputLifecycle = createHostedWorkOutputLifecycle({
-    client, storeDir, sandboxRequest,
-    getTurn: (turnId) => core.getTurn(turnId),
-    runtimeEventsForSession: (sessionId) => core.runtimeEventsForSession(sessionId,
-      { excludeReasoningDeltas: true }),
-    appendRuntimeEvent,
-  });
   const turnFollowUpQueue = createBackgroundWorkerQueue({ queueId: "turn-follow-up", logger });
   const subagentQueue = createBackgroundWorkerQueue({ queueId: "subagent", logger });
   const stream = createScriptedOpenPondChatStream(options.streamOpenPondHostedChatTurn,
@@ -125,7 +117,9 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const harnessState = new HostedHarnessStateStorage(client);
   const turnRunner = createTurnRunner({
     workInputsForSession: options.workInputsForSession,
-    finalizeWorkTurn: outputLifecycle.finalizeWorkTurn,
+    // The host worker validates and publishes automatic sandbox outputs before
+    // committing its durable result. A second child scan would duplicate files
+    // and has no host-generated visual validation receipt.
     attachmentRootDir: path.join(storeDir, "attachments"),
     resolveModelTools: createEmbeddingToolResolver(embedding, async (turnId, bindings) => {
       const turn = await core.getTurn(turnId);
