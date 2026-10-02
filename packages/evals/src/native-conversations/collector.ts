@@ -55,6 +55,7 @@ export async function runCollector(input: {
     lastHeartbeat = 0;
   const watchers = new Map<string, ReturnType<typeof watch>>();
   const errors = new CollectorErrors(store);
+  const reconciledRevisions = new Map<string, number>();
   function retained(connection: CollectorConnection) {
     return (
       store.connections().find((item) => item.id === connection.id) ??
@@ -236,6 +237,7 @@ export async function runCollector(input: {
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     store.progress.discovered(connection.id);
+    reconciledRevisions.set(connection.id, connection.revision);
     errors.set(
       connection.id,
       "source",
@@ -295,9 +297,15 @@ export async function runCollector(input: {
             connection = applyRemote(connection, remote);
             errors.set(connection.id, "heartbeat", null);
           }
-          if (connection.state !== "active") continue;
+          if (connection.state !== "active") {
+            reconciledRevisions.delete(connection.id);
+            continue;
+          }
           phase = "source";
-          if (reconcile) await acquire(connection);
+          // Resume must scan before retained one-time completion can pause again,
+          // even when the ordinary reconcile interval has not elapsed.
+          if (reconcile || reconciledRevisions.get(connection.id) !== connection.revision)
+            await acquire(connection);
           connection =
             store.connections().find((item) => item.id === connection.id) ??
             connection;
@@ -315,6 +323,7 @@ export async function runCollector(input: {
             }
           if (
             !connection.keepSyncing &&
+            reconciledRevisions.get(connection.id) === connection.revision &&
             store.queued(connection.id) === 0 &&
             store.progress.status(connection.id).stage === "complete" &&
             !errors.source(connection.id)
