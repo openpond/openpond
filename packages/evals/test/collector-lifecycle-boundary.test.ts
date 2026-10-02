@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -173,6 +173,8 @@ it("preserves local source identity and receipts across remote controls", async 
       destinations: destination,
       revision: 3,
       state: "paused",
+      requestedSyncRevision: 0,
+      completedSyncRevision: 0,
     });
     expect(store.status().connections[0]).toMatchObject({
       source: "pi",
@@ -190,6 +192,88 @@ it("preserves local source identity and receipts across remote controls", async 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+// A heartbeat is not a completed sync. Requests arriving after acquisition,
+// paused/stopped collection, and a lost completion ACK must not create a false
+// success or lose durable work when the collector restarts.
+it("acknowledges requested sync only after acquisition and admission, across controls and restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "collector-requested-sync-"));
+  const sourceRoot = join(directory, "source");
+  await mkdir(sourceRoot);
+  const transcript = (id: string) => [
+    { type: "session", version: 3, id, timestamp: "2026-10-02T00:00:00Z" },
+    { type: "message", id: "u", parentId: null, message: { role: "user", content: "retained request" } },
+    { type: "message", id: "a", parentId: "u", message: { role: "assistant", content: [{ type: "text", text: "retained answer" }], stopReason: "stop" } },
+  ].map(row => JSON.stringify(row)).join("\n") + "\n";
+  await writeFile(join(sourceRoot, "first.jsonl"), transcript("first"));
+  const state = join(directory, "state"), store = await CollectorStore.open(state);
+  const connection: CollectorConnection = {
+    id: "requested", teamId: "team", projectId: "project", apiBaseUrl: "http://localhost",
+    revision: 2, requestedSyncRevision: 2, completedSyncRevision: 0,
+    state: "paused", since: null, keepSyncing: false,
+    source: { source: "pi", machineId: "machine", instanceId: "instance", root: sourceRoot,
+      acquisition: "files", available: true, capabilities: { history: true, live: true, nativeResume: false } },
+  };
+  let admissions = 0, acknowledged = 0;
+  try {
+    store.put(connection); store.set("desiredState", "running");
+    const paused = new AbortController();
+    await runCollector({ directory: state, signal: paused.signal, transport: {
+      heartbeat: async current => { paused.abort(); return { revision: current.revision, state: "paused", requestedSyncRevision: 2, completedSyncRevision: 0 }; },
+      admit: async () => { throw new Error("Paused source admitted work"); },
+    } });
+    expect(store.status().connections[0]).toMatchObject({ state: "paused", admitted: 0, completedSyncRevision: 0 });
+    store.put({ ...connection, state: "active" }); store.set("desiredState", "stopped");
+    await runCollector({ directory: state, signal: new AbortController().signal, transport: {
+      heartbeat: async () => { throw new Error("Stopped collector contacted remote"); },
+      admit: async () => { throw new Error("Stopped collector admitted work"); },
+    } });
+    store.set("desiredState", "running");
+    const first = new AbortController(), deadline = setTimeout(() => first.abort(), 8000);
+    try {
+      await runCollector({ directory: state, signal: first.signal, transport: {
+        heartbeat: async (current, report) => {
+          if (report.completedSyncRevision) {
+            expect(report.completedSyncRevision).toBe(3);
+            expect(admissions).toBe(2);
+            expect(report.pendingOperations).toBe(0);
+            expect(report.error).toBeNull();
+            acknowledged = 3;
+            first.abort();
+            throw new Error("Completion committed remotely; response lost");
+          }
+          return { revision: current.revision, state: "active", requestedSyncRevision: current.requestedSyncRevision, completedSyncRevision: acknowledged };
+        },
+        admit: async current => {
+          admissions++;
+          if (admissions === 1) {
+            await writeFile(join(sourceRoot, "second.jsonl"), transcript("second"));
+            store.put({ ...current, revision: 3, requestedSyncRevision: 3 });
+          }
+        },
+        pause: async () => { throw new Error("Auto-pause preceded confirmed completion"); },
+      } });
+    } finally { clearTimeout(deadline); first.abort(); }
+    expect(acknowledged).toBe(3);
+    expect(store.status().connections[0]).toMatchObject({ admitted: 2, queued: 0, completedSyncRevision: 3, acknowledgedSyncRevision: 0 });
+    // A stale local writer cannot erase completion before the restart reports it.
+    store.put({ ...connection, state: "active", revision: 3, requestedSyncRevision: 3 });
+    expect(store.connections()[0]!.completedSyncRevision).toBe(3);
+    const restart = new AbortController(), restartDeadline = setTimeout(() => restart.abort(), 5000);
+    try {
+      await runCollector({ directory: state, signal: restart.signal, transport: {
+        heartbeat: async (current, report) => {
+          expect(report.completedSyncRevision).toBe(3);
+          expect(report.error).toBeNull();
+          return { revision: current.revision, state: "active", requestedSyncRevision: 3, completedSyncRevision: acknowledged };
+        },
+        admit: async () => { throw new Error("Restart duplicated an acknowledged admission"); },
+        pause: async () => { restart.abort(); return { revision: 4, state: "paused", requestedSyncRevision: 3, completedSyncRevision: 3 }; },
+      } });
+    } finally { clearTimeout(restartDeadline); restart.abort(); }
+    expect(store.status().connections[0]).toMatchObject({ state: "paused", admitted: 2, queued: 0, completedSyncRevision: 3, acknowledgedSyncRevision: 3, error: null });
+  } finally { store.close(); await rm(directory, { recursive: true, force: true }); }
+}, 15000);
 
 // Failure story: revocation retries forever, or a late HTTP rejection overwrites
 // Disconnect with Pause and a restarted service resumes collection.

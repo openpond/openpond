@@ -10,7 +10,13 @@ export const COLLECTOR_DEFAULTS = {
   batchBytes: 1024 * 1024,
 } as const;
 export interface CollectorDestinations { taskDatasetId: string | null; conversationDatasetId: string | null }
-export interface CollectorRemoteControl { revision: number; state: CollectorConnection["state"]; destinations?: CollectorDestinations }
+export interface CollectorRemoteControl {
+  revision: number;
+  state: CollectorConnection["state"];
+  destinations?: CollectorDestinations;
+  requestedSyncRevision?: number;
+  completedSyncRevision?: number;
+}
 export interface CollectorConnection {
   id: string;
   teamId: string;
@@ -18,6 +24,9 @@ export interface CollectorConnection {
   account?: string;
   accountBaseUrl?: string;
   destinations?: CollectorDestinations;
+  requestedSyncRevision?: number;
+  /** Locally completed work, retained before the hosted acknowledgement is sent. */
+  completedSyncRevision?: number;
   source: NativeSource;
   projectId: string;
   revision: number;
@@ -42,6 +51,9 @@ export interface CollectorStatus {
     backfill: CollectorBackfillProgress;
     pendingBytes: number;
     lastAdmissionAt: string | null;
+    requestedSyncRevision: number;
+    completedSyncRevision: number;
+    acknowledgedSyncRevision: number;
     destinationLinks: { tasks: string | null; conversations: string | null };
   }[];
 }
@@ -61,7 +73,7 @@ export interface CollectorTransport {
   ): Promise<CollectorRemoteControl>;
   heartbeat(
     connection: CollectorConnection,
-    input: { pendingOperations: number; error: string | null },
+    input: { pendingOperations: number; error: string | null; completedSyncRevision: number },
   ): Promise<CollectorRemoteControl>;
   admit(
     connection: CollectorConnection,
