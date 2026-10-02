@@ -1781,6 +1781,9 @@ button.sidebar-project-location-row:disabled {
 }
 
 .native-conversations .sidebar-section-heading { display: flex; align-items: center; justify-content: space-between; }
+.native-conversations button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.native-conversations button:disabled { cursor: default; opacity: .55; }
+.native-conversations button:hover:not(:disabled) { background: var(--hover-bg, rgba(255, 255, 255, .06)); }
 .native-conversations .sidebar-section-heading > button:first-child { min-width: 0; padding: 8px; color: var(--text-secondary, #a1a1aa); }
 .native-conversations p { padding: 4px 8px; font-size: 12px; line-height: 1.5; color: var(--text-secondary, #a1a1aa); }
 .native-conversation-row { width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 8px; text-align: left; }

@@ -13,6 +13,7 @@ import {
 } from "react";
 import {
   CHAT_ATTACHMENT_LIMITS,
+  SessionSchema,
   type RuntimeEvent,
   type ChatAttachment,
   type OpenPondApp,
@@ -212,6 +213,17 @@ export function Composer({
   onStop,
   onPauseGoal,
 }: ComposerProps) {
+  const nativeReadOnlyReason = useMemo(() => {
+    if (readOnlyReason) return readOnlyReason;
+    for (let index = taskEvents.length - 1; index >= 0; index--) {
+      const event = taskEvents[index]!;
+      if (event.sessionId !== taskSessionId || !["session.started", "session.title.updated"].includes(event.name)) continue;
+      const data = event.data;
+      const session = SessionSchema.safeParse(data && typeof data === "object" && "session" in data ? data.session : null);
+      if (session.success && typeof session.data.metadata?.nativeReadOnlyReason === "string") return session.data.metadata.nativeReadOnlyReason;
+    }
+    return null;
+  }, [readOnlyReason, taskEvents, taskSessionId]);
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
@@ -425,7 +437,7 @@ export function Composer({
   const controlsDisabled = serializingAttachments;
 
   function beginSubmissionForScope(scopeKey = submissionScopeKey): boolean {
-    if (readOnlyReason) return false;
+    if (nativeReadOnlyReason) return false;
     const activeScopes = submittingScopeKeysRef.current;
     if (activeScopes.has(scopeKey)) return false;
     activeScopes.add(scopeKey);
@@ -1504,7 +1516,7 @@ export function Composer({
     });
   }
 
-  if (readOnlyReason) return <p className="composer dock" role="status">{readOnlyReason}</p>;
+  if (nativeReadOnlyReason) return <p className="composer dock" role="status">{nativeReadOnlyReason}</p>;
 
   return (
     <form
