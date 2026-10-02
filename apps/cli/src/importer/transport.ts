@@ -23,7 +23,7 @@ export async function collectorClients(
     apiKey = connection.account ? config.apiKey : resolveApiKey(config);
   if (!apiKey)
     throw Object.assign(
-      new Error("Sign in to OpenPond again; collection is paused."),
+      new Error("This source is disconnected. Reconnect it with OpenPond Importer to authorize collection."),
       { status: 401 },
     );
   const options = {

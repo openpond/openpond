@@ -129,15 +129,22 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       return open(id, branch);
     }
     if (action === "collector") {
-      const { command } = z.object({ command: z.enum(["status", "start", "stop", "sync", "install", "connect"]) }).parse(payload);
+      const { command, connectionId } = z.object({ command: z.enum(["status", "start", "stop", "sync", "install", "connect", "pause", "resume", "disconnect"]), connectionId: z.string().min(1).max(256).optional() }).parse(payload);
       const directory = collectorDirectory();
       if (command === "status") return collectorStatus(directory);
-      if (command === "install" || command === "connect") {
+      if (command === "install" || command === "connect" || command === "pause" || command === "resume" || command === "disconnect") {
         const cli = process.env.OPENPOND_COLLECTOR_CLI;
         const executable = process.env.OPENPOND_COLLECTOR_EXECUTABLE;
         if (!cli || !executable) throw new Error("The bundled Importer is unavailable. Install the OpenPond CLI to connect a source.");
         await access(cli); await access(executable);
         const environment = { ELECTRON_RUN_AS_NODE: "1", ...(process.env.OPENPOND_HOME ? { OPENPOND_HOME: process.env.OPENPOND_HOME } : {}) };
+        if (command === "pause" || command === "resume" || command === "disconnect") {
+          const status = await collectorStatus(directory);
+          const retained = status.connections.find(item => item.id === connectionId);
+          if (!retained) throw new Error("Select a retained Importer connection.");
+          if (retained.state === "disconnected") throw new Error("Reconnect this source through Import conversations before changing its state.");
+          return { command: nativeTerminalCommand(executable, [cli, "import", command, retained.id, "--collector-dir", directory], environment) };
+        }
         if (command === "connect") return { command: nativeTerminalCommand(executable, [cli, "import", "connect", "--collector-dir", directory], environment) };
         return installCollectorService({ directory, executable, args: [cli], environment });
       }
