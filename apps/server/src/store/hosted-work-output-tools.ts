@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { HOST_STORAGE_CONTRACT_VERSION, type AgentHostStorageClient } from "@openpond/agent-runtime";
+import { HOST_STORAGE_CONTRACT_VERSION, HostStorageRequestSchema, type AgentHostStorageClient } from "@openpond/agent-runtime";
 import type { ModelToolDefinition } from "../openpond/model-tool-registry.js";
 
 /** Published files are read by the owner host, independently of sandbox lifetime. */
@@ -28,8 +28,8 @@ export function createHostedWorkOutputTools(client: AgentHostStorageClient): Mod
         pageCount: { type: "integer", minimum: 1, maximum: 10 },
       }, required: ["fileId", "revision"] },
       execute: async context => {
-        const result = await client.request({ contractVersion: HOST_STORAGE_CONTRACT_VERSION,
-          requestId: randomUUID(), operation: "output/read", params: context.args }, 60_000);
+        const result = await client.request(HostStorageRequestSchema.parse({ contractVersion: HOST_STORAGE_CONTRACT_VERSION,
+          requestId: randomUUID(), operation: "output/read", params: context.args }), 60_000);
         return { toolCallId: context.callId, name: "work_read_output", ok: true,
           contentText: JSON.stringify(result), data: result };
       },
