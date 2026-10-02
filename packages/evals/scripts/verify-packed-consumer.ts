@@ -62,6 +62,11 @@ import { executeJavaScriptVerifierInWorker, executeJavaScriptVerifierInProcess }
 import { executeJavaScriptEnvironmentInWorker, executeJavaScriptEnvironmentInProcess } from "@openpond/evals/javascript-environment/node";
 import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-environment";
 import { createLearningTextAsset } from "@openpond/evals/learning";
+import { CollectorStore } from "@openpond/evals/native-conversations";
+const nativeCollector = await CollectorStore.open(path.join(process.cwd(), "native-collector"));
+try {
+  if (nativeCollector.connections().length || nativeCollector.setting("desiredState") !== "stopped") throw new Error("Packed native collector did not open its isolated local database");
+} finally { nativeCollector.close(); }
 import { contentHash, sha256 } from "@openpond/harness";
 import { TasksetMetricPolicySchema } from "@openpond/evals/metrics";
 import { executeTasksetMetricInWorker, executeTasksetMetricInProcess } from "@openpond/evals/metrics/node";
