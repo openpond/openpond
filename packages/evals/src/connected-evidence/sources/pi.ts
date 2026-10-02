@@ -12,7 +12,7 @@ import { sourceUsage } from "./usage.js";
 export function parsePiSession(
   file: ConnectedFile,
   rows: Record<string, unknown>[],
-  origin: "pi" | "oh_my_pi",
+  origin: "pi" | "oh_my_pi" | "openclaw",
   selectedLeaf?: string,
 ) {
   const headers = rows.filter((row) => row.type === "session");
@@ -20,12 +20,38 @@ export function parsePiSession(
   if (
     headers.length !== 1 ||
     !header ||
-    header.version !== 3 ||
+    !(origin === "openclaw"
+      ? [3, 4].includes(Number(header.version))
+      : header.version === 3) ||
     typeof header.id !== "string"
   )
-    throw new Error("Expected a version 3 Pi session tree.");
-  const entries = rows.filter(
-    (row) => row.type !== "session" && row.type !== "title",
+    throw new Error("Unsupported native session tree version.");
+  let nativeLeaf: string | undefined;
+  const prepared =
+    origin !== "openclaw"
+      ? rows
+      : rows.map((row) => {
+          if (row.type === "session") return row;
+          if (row.type === "leaf") {
+            if (typeof row.targetId !== "string")
+              throw new Error(
+                "OpenClaw leaf control does not select a retained entry.",
+              );
+            nativeLeaf = row.targetId;
+            return row;
+          }
+          if (typeof row.id !== "string")
+            throw new Error(
+              "OpenClaw transcript entry is missing its native identity.",
+            );
+          const parentId =
+            row.parentId === undefined ? (nativeLeaf ?? null) : row.parentId;
+          if (row.appendMode !== "side") nativeLeaf = row.id;
+          return { ...row, parentId };
+        });
+  const entries = prepared.filter(
+    (row) =>
+      row.type !== "session" && row.type !== "title" && row.type !== "leaf",
   );
   const nodes = new Map<string, Record<string, unknown>>();
   const parents = new Set<string>();
@@ -37,6 +63,7 @@ export function parsePiSession(
     nodes.set(entry.id, entry);
     if (typeof entry.parentId === "string") parents.add(entry.parentId);
   }
+  selectedLeaf ??= nativeLeaf;
   const leaves = [...nodes.keys()].filter((id) => !parents.has(id));
   if (!selectedLeaf && leaves.length !== 1)
     throw new Error("Select a branch leaf for this branched session.");
@@ -198,6 +225,7 @@ export function parsePiSession(
     origin,
     sessionId: header.id,
     branchId: null,
+    ...(origin === "openclaw" ? { contextComplete: false } : {}),
     files: [file],
     events,
     exporterVersion: `session-v${header.version}`,

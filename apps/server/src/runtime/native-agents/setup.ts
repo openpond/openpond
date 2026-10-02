@@ -14,7 +14,7 @@ export type NativeAgentSetupResult = {
   installUrl: string;
   loginCommand: string[];
   authMethods: Array<{ id: string; name: string; description?: string; type?: string }>;
-  capabilities: unknown;
+  capabilities: import("@openpond/agent-runtime").AcpInitializeResult["agentCapabilities"] | null;
   session: AcpSessionResult | null;
 };
 const cache = new Map<string, { result: NativeAgentSetupResult; expires: number }>();
@@ -36,9 +36,11 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       if (provider === "claude-code") {
         const { stdout } = await promisify(execFile)(launch.command, ["auth", "status", "--json"], { env: launch.env, timeout: 10_000, maxBuffer: 64 * 1024 });
         const auth = JSON.parse(stdout) as { loggedIn?: boolean };
-        if (!auth.loggedIn) { result.status = "needs_login"; result.error = "Sign in using Claude Code's native login, then reconnect."; return result; }
+        if (!auth.loggedIn) { result.status = "needs_login"; throw new Error("Sign in using Claude Code's native login, then reconnect."); }
+        const version = await promisify(execFile)(launch.command, ["--version"], { env: launch.env, timeout: 10_000, maxBuffer: 4096 });
+        result.version = version.stdout.trim().slice(0, 200);
       }
-      result.version = info.agentInfo?.version ?? null;
+      result.version ??= info.agentInfo?.version ?? null;
       result.authMethods = info.authMethods ?? [];
       result.capabilities = info.agentCapabilities ?? null;
       if (options.authMethodId) await client.authenticate(options.authMethodId);
@@ -47,7 +49,7 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       result.status = "ready";
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? error.code : null;
-      result.status = code === -32000 || code === -32001 ? "needs_login" : "unavailable";
+      result.status = result.status === "needs_login" || code === -32000 || code === -32001 ? "needs_login" : "unavailable";
       result.error = error instanceof Error ? error.message : "Native agent connection failed.";
     } finally { await client.stop(); }
     cache.set(launch.instanceId, { result, expires: Date.now() + 30_000 });
@@ -57,6 +59,11 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
   try { return await operation; } finally { probing.delete(launch.instanceId); }
 }
 
+export function invalidateNativeAgent(instanceId: string, error: Error): void {
+  const cached = cache.get(instanceId);
+  if (cached) cache.set(instanceId, { expires: 0, result: { ...cached.result, status: "unavailable", error: error.message } });
+}
+
 export function applyNativeAgentStatus(settings: ProviderSettings): ProviderSettings {
   for (const [id, config] of Object.entries(settings.providers)) {
     if (!isNativeAgentId(id)) continue;
@@ -64,12 +71,13 @@ export function applyNativeAgentStatus(settings: ProviderSettings): ProviderSett
     if (!status) continue;
     const cached = cache.get(nativeAgentLaunch(id, config).instanceId);
     const result = cached?.result ?? null;
+    status.capabilities.imageInput = result?.capabilities?.promptCapabilities?.image === true;
     status.available = config.enabled && result?.status === "ready";
     status.credential.connected = result?.status === "ready";
     status.credential.source = result?.status === "ready" ? "native_agent_login" : "none";
     status.lastError = result?.error ?? null;
     if (result?.session?.models) {
-      const models = result.session.models.availableModels.map((model) => ProviderModelSchema.parse({ id: model.modelId, providerId: id, displayName: model.name, source: "provider", capabilities: { streaming: true, toolCalling: true } }));
+      const models = result.session.models.availableModels.map((model) => ProviderModelSchema.parse({ id: model.modelId, providerId: id, displayName: model.name, source: "provider", capabilities: { streaming: true, toolCalling: true, vision: status.capabilities.imageInput } }));
       settings.modelCaches[id] = { providerId: id, models, fetchedAt: new Date().toISOString(), source: "provider", lastError: null };
       status.modelIds = models.map((model) => model.id);
       status.defaultModel = config.defaultModel ?? result.session.models.currentModelId;

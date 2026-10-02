@@ -17,13 +17,17 @@ import {
   type NativeSource,
 } from "./contracts.js";
 
-async function selectedPath(source: NativeSource, path: string) {
+async function selectedPath(
+  source: NativeSource,
+  path: string,
+  boundSize = true,
+) {
   const root = await realpath(source.root),
     target = await realpath(resolve(root, path));
   const child = relative(root, target);
   if (child.startsWith(`..${sep}`) || child === ".." || isAbsolute(child))
     throw new Error("History path is outside the selected source.");
-  if ((await stat(target)).size > NATIVE_READ_LIMIT)
+  if (boundSize && (await stat(target)).size > NATIVE_READ_LIMIT)
     throw new Error("Source file exceeds 32 MiB.");
   return target;
 }
@@ -119,76 +123,92 @@ export async function listSessions(
     candidates: NativeSession[] = [];
   for (const path of paths) {
     if (input.cursor && path <= input.cursor) continue;
-    const modified = await stat(join(source.root, path));
-    if (input.since && modified.mtimeMs < Date.parse(input.since)) continue;
-    let text: string;
-    if (
-      source.acquisition !== "bundle" &&
-      !sessionFileJson(source, path) &&
-      source.source !== "hermes" &&
-      !(path || source.root).endsWith(".zst")
-    ) {
-      const handle = await open(await selectedPath(source, path), "r");
-      try {
-        const buffer = Buffer.alloc(256 * 1024),
-          read = await handle.read(buffer, 0, buffer.length, 0);
-        const prefix = buffer.subarray(0, read.bytesRead).toString("utf8"),
-          end = prefix.lastIndexOf("\n");
-        text = prefix;
-        if (!prefix.endsWith("\n")) {
-          try {
-            JSON.parse(prefix.slice(end + 1));
-          } catch {
-            text = prefix.slice(0, end + 1);
+    try {
+      const modified = await stat(join(source.root, path));
+      if (input.since && modified.mtimeMs < Date.parse(input.since)) continue;
+      let text: string;
+      if (
+        source.acquisition !== "bundle" &&
+        !sessionFileJson(source, path) &&
+        source.source !== "hermes" &&
+        !(path || source.root).endsWith(".zst")
+      ) {
+        const handle = await open(await selectedPath(source, path, false), "r");
+        try {
+          const buffer = Buffer.alloc(256 * 1024),
+            read = await handle.read(buffer, 0, buffer.length, 0);
+          const prefix = buffer.subarray(0, read.bytesRead).toString("utf8"),
+            end = prefix.lastIndexOf("\n");
+          text = prefix;
+          if (!prefix.endsWith("\n")) {
+            try {
+              JSON.parse(prefix.slice(end + 1));
+            } catch {
+              text = prefix.slice(0, end + 1);
+            }
           }
+        } finally {
+          await handle.close();
         }
-      } finally {
-        await handle.close();
-      }
-    } else text = await readSelectedFile(source, path);
-    const rows =
-      source.acquisition === "bundle" || sessionFileJson(source, path)
-        ? [object(JSON.parse(text))]
-        : text
-            .split(/\r?\n/u)
-            .filter(Boolean)
-            .slice(0, 12)
-            .map((line) => object(JSON.parse(line)));
-    const header =
-      rows.find(
-        (row) => row.type === "session" || row.type === "session_meta",
-      ) ??
-      rows[0] ??
-      {};
-    const payload =
-      header.type === "session_meta"
-        ? object(header.payload)
-        : source.source === "grok_build"
-          ? object(header.params)
-          : source.source === "opencode"
-            ? object(header.info)
-            : header;
-    const id =
-      typeof payload.id === "string"
-        ? payload.id
-        : typeof payload.sessionId === "string"
-          ? payload.sessionId
-          : basename(path).replace(/\.jsonl(?:\.zst)?$/u, "");
-    candidates.push({
-      nativeSessionId: id,
-      sourceInstanceId: source.instanceId,
-      path,
-      title: id,
-      cwd: typeof payload.cwd === "string" ? payload.cwd : null,
-      updatedAt: modified.mtime.toISOString(),
-      storageRevision: [
-        modified.dev,
-        modified.ino,
-        modified.size,
-        modified.mtimeMs,
-        modified.ctimeMs,
-      ].join(":"),
-    });
+      } else text = await readSelectedFile(source, path);
+      const rows =
+        source.acquisition === "bundle" || sessionFileJson(source, path)
+          ? [object(JSON.parse(text))]
+          : text
+              .split(/\r?\n/u)
+              .filter(Boolean)
+              .slice(0, 12)
+              .map((line) => object(JSON.parse(line)));
+      const header =
+        rows.find(
+          (row) => row.type === "session" || row.type === "session_meta",
+        ) ??
+        rows[0] ??
+        {};
+      const payload =
+        header.type === "session_meta"
+          ? object(header.payload)
+          : source.source === "grok_build"
+            ? object(header.params)
+            : source.source === "opencode"
+              ? object(header.info)
+              : header;
+      const id =
+        typeof payload.id === "string"
+          ? payload.id
+          : typeof payload.sessionId === "string"
+            ? payload.sessionId
+            : basename(path).replace(/\.jsonl(?:\.zst)?$/u, "");
+      candidates.push({
+        nativeSessionId: id,
+        sourceInstanceId: source.instanceId,
+        path,
+        title: id,
+        cwd: typeof payload.cwd === "string" ? payload.cwd : null,
+        updatedAt: modified.mtime.toISOString(),
+        storageRevision: [
+          modified.dev,
+          modified.ino,
+          modified.size,
+          modified.mtimeMs,
+          modified.ctimeMs,
+        ].join(":"),
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      candidates.push({
+        nativeSessionId: basename(path || source.root),
+        sourceInstanceId: source.instanceId,
+        path,
+        title: basename(path || source.root),
+        cwd: null,
+        updatedAt: new Date(0).toISOString(),
+        issue:
+          error instanceof Error
+            ? error.message
+            : "Unable to inspect native session",
+      });
+    }
     if (candidates.length > limit) break;
   }
   return {
@@ -201,6 +221,7 @@ export async function readSession(
   session: NativeSession,
   input: { branchLeafId?: string } = {},
 ) {
+  if (session.issue) throw new Error(session.issue);
   if (session.sourceInstanceId !== source.instanceId)
     throw new Error("Native session belongs to another selected source.");
   let files;

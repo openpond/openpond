@@ -1,3 +1,4 @@
+import { nativeImageContent } from "./native-agents/attachments.js";
 import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -926,7 +927,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.modelRef?.providerId ??
       session.modelRef?.providerId ??
       session.provider;
-    if (deps.resolveModelTools && (requestedProvider !== "openpond" || input.createImproveRun)) {
+    if (deps.executionHost === "embedded" && (requestedProvider !== "openpond" || input.createImproveRun)) {
       throw new Error("Embedded Work requires the configured model adapter and native tool loop.");
     }
     if (requestedProvider === "codex" && !sessionUsesRepositoryWork(session)) {
@@ -1666,7 +1667,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         if (!cwd) throw new Error("Choose a local working directory for this native agent.");
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
         const definitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
-        const providerTurnId = await nativeAgents.run({ session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
+        const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
+        const providerTurnId = await nativeAgents.run({ content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
           coordination: definitions.length ? {
             tools: definitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
             execute: async (name, args, callId, signal) => {
@@ -1685,6 +1687,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         throwIfInterrupted(controller.signal);
         await appendWorkspaceDiffEvent(session, turn.id, { baseline: initialWorkspaceDiff });
         const completed = await completeTurn(sessionId, turn.id, providerTurnId);
+        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", appId: session.appId, status: "completed", data: { provider: session.provider } }));
         await processHarnessImprovementBoundarySafely({ session, turn: completed, boundaryKind: "turn_completed" });
         return completed;
       }

@@ -1,4 +1,5 @@
 import type { NativeSource } from "./contracts.js";
+import type { CollectorBackfillProgress } from "./collector-progress.js";
 export const COLLECTOR_DEFAULTS = {
   reconcileMs: 30000,
   heartbeatMs: 10000,
@@ -35,6 +36,9 @@ export interface CollectorStatus {
     queued: number;
     admitted: number;
     error: string | null;
+    backfill: CollectorBackfillProgress;
+    pendingBytes: number;
+    lastAdmissionAt: string | null;
   }[];
 }
 export interface CollectorAdmission {
@@ -47,6 +51,9 @@ export interface CollectorAdmission {
 }
 /** Credentials are resolved by the process host, never persisted in source metadata or queue entries. */
 export interface CollectorTransport {
+  pause?(
+    connection: CollectorConnection,
+  ): Promise<{ revision: number; state: CollectorConnection["state"] }>;
   heartbeat(
     connection: CollectorConnection,
     input: { pendingOperations: number; error: string | null },

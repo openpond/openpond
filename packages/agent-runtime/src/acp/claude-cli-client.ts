@@ -2,7 +2,7 @@ import { signalNativeProcess } from "./process-tree.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
-import type { AcpClientOptions, AcpInitializeResult, AcpObject, AcpSessionResult } from "./types.js";
+import type { AcpClientOptions, AcpInitializeResult, AcpObject, AcpPermissionResult, AcpSessionResult, NativeAgentQuestion } from "./types.js";
 
 const record = (value: unknown): AcpObject => value && typeof value === "object" && !Array.isArray(value) ? value as AcpObject : {};
 /** Native Claude CLI control protocol; credentials and conversation persistence remain with Claude. */
@@ -42,7 +42,7 @@ export class ClaudeCliClient {
       if (Buffer.byteLength(buffer) > 8 * 1024 * 1024) { this.fail(new Error("Claude CLI frame exceeds limit.")); void this.stop(); }
     });
     child.on("error", (error) => this.fail(error)); child.stdin.on("error", (error) => this.fail(error));
-    child.on("exit", (code) => { this.fail(new Error(`Claude CLI exited (${code ?? "signal"}).`)); this.child = null; });
+    child.on("exit", (code) => { this.fail(new Error(`Claude CLI exited (${code ?? "signal"}).`)); signalNativeProcess(child, "SIGTERM"); const cleanup = setTimeout(() => signalNativeProcess(child, "SIGKILL"), 2_000); cleanup.unref(); this.child = null; });
     try {
       const init = await this.control({ subtype: "initialize", hooks: null });
       const models = Array.isArray(init.models) ? init.models.map(record).filter((model) => typeof model.value === "string") : [];
@@ -61,7 +61,7 @@ export class ClaudeCliClient {
     const abort = () => { for (const controller of this.permissions) controller.abort(); void this.control({ subtype: "interrupt" }).catch(() => undefined); kill = setTimeout(() => { void this.stop(); }, 5_000); kill.unref(); };
     signal?.addEventListener("abort", abort, { once: true });
     try {
-      this.write({ type: "user", session_id: sessionId, parent_tool_use_id: null, message: { role: "user", content: prompt } });
+      this.write({ type: "user", session_id: sessionId, parent_tool_use_id: null, message: { role: "user", content: prompt.map((part) => part.type === "image" ? { type: "image", source: { type: "base64", media_type: part.mimeType, data: part.data } } : part) } });
       const result = await promise; await this.updates; return signal?.aborted ? { stopReason: "cancelled" } : result;
     } catch (error) { if (signal?.aborted) return { stopReason: "cancelled" }; throw error;
     } finally { signal?.removeEventListener("abort", abort); if (kill) clearTimeout(kill); this.turn = null; for (const controller of this.permissions) controller.abort(); this.permissions.clear(); }
@@ -94,6 +94,9 @@ export class ClaudeCliClient {
       const raw = record(message.event), delta = record(raw.delta), block = record(raw.content_block);
       if (raw.type === "content_block_delta" && (delta.type === "text_delta" || delta.type === "thinking_delta")) this.emit({ sessionUpdate: delta.type === "text_delta" ? "agent_message_chunk" : "agent_thought_chunk", content: { type: "text", text: delta.text ?? delta.thinking ?? "" } });
       if (raw.type === "content_block_start" && block.type === "tool_use") this.emit({ sessionUpdate: "tool_call", toolCallId: block.id, title: block.name, kind: "other", status: "in_progress", rawInput: block.input });
+    } else if (message.type === "assistant") {
+      const content = record(message.message).content;
+      for (const block of Array.isArray(content) ? content.map(record) : []) if (block.type === "tool_use") this.emit({ sessionUpdate: "tool_call_update", toolCallId: block.id, title: block.name, status: "in_progress", rawInput: block.input });
     } else if (message.type === "user") {
       const content = record(message.message).content;
       for (const block of Array.isArray(content) ? content.map(record) : []) if (block.type === "tool_result") this.emit({ sessionUpdate: "tool_call_update", toolCallId: block.tool_use_id, status: block.is_error ? "failed" : "completed", content: block.content });
@@ -108,9 +111,12 @@ export class ClaudeCliClient {
     if (request.subtype !== "can_use_tool" || !this.turn || !this.sessionId) { this.write({ type: "control_response", response: { subtype: "error", request_id: id, error: "Unsupported or inactive control request." } }); return; }
     const controller = new AbortController(); this.permissions.add(controller);
     try {
-      const result = await this.options.onPermission?.({ sessionId: this.sessionId, toolCall: { toolCallId: request.tool_use_id, title: request.title ?? request.tool_name, rawInput: request.input }, options: [{ optionId: "allow", name: "Allow once", kind: "allow_once" }, { optionId: "deny", name: "Deny", kind: "reject_once" }] }, controller.signal);
+      const input = record(request.input);
+      const questions = request.tool_name === "AskUserQuestion" && Array.isArray(input.questions) ? input.questions as NativeAgentQuestion[] : undefined;
+      const cancelled = new Promise<AcpPermissionResult>((resolve) => controller.signal.addEventListener("abort", () => resolve({ outcome: { outcome: "cancelled" } }), { once: true }));
+      const result = await Promise.race([cancelled, this.options.onPermission?.({ sessionId: this.sessionId, toolCall: { toolCallId: request.tool_use_id, title: request.title ?? request.tool_name, rawInput: request.input }, questions, options: [{ optionId: "allow", name: "Allow once", kind: "allow_once" }, { optionId: "deny", name: "Deny", kind: "reject_once" }] }, controller.signal)]);
       const allow = !controller.signal.aborted && result?.outcome.outcome === "selected" && result.outcome.optionId === "allow";
-      if (this.child) this.write({ type: "control_response", response: { subtype: "success", request_id: id, response: allow ? { behavior: "allow", updatedInput: request.input } : { behavior: "deny", message: "Permission declined or turn cancelled." } } });
+      if (this.child) this.write({ type: "control_response", response: { subtype: "success", request_id: id, response: allow ? { behavior: "allow", updatedInput: questions ? { ...input, answers: result?.answers } : request.input } : { behavior: "deny", message: "Permission declined or turn cancelled." } } });
     } catch { if (this.child) this.write({ type: "control_response", response: { subtype: "success", request_id: id, response: { behavior: "deny", message: "Permission could not be resolved." } } }); }
     finally { this.permissions.delete(controller); }
   }

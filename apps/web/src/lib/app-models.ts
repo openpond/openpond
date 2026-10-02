@@ -739,6 +739,9 @@ export function normalizeChatModel(
   settings?: ProviderSettings | null,
 ): string {
   const trimmed = model?.trim();
+  // Native catalogs are session-scoped and loaded lazily. Preserve an explicit
+  // choice until the runtime validates it against that session's live catalog.
+  if (trimmed && ["opencode", "grok-build", "claude-code"].includes(provider)) return trimmed;
   if (provider === "codex" && (trimmed === "codex-default" || trimmed === "gpt-5.5")) {
     return DEFAULT_CODEX_CHAT_MODEL;
   }

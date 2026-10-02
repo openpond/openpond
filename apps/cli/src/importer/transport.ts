@@ -37,6 +37,14 @@ export async function collectorClients(
   };
 }
 export const collectorTransport: CollectorTransport = {
+  async pause(connection) {
+    const { sync } = await collectorClients(connection);
+    return sync.control({
+      id: connection.id,
+      expectedRevision: connection.revision,
+      action: "pause",
+    });
+  },
   async heartbeat(connection, input) {
     const { sync } = await collectorClients(connection);
     return sync.heartbeat({

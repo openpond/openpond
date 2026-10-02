@@ -1,6 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import type { NativeSession, NativeSource } from "./contracts.js";
+import {
+  listOpenClawSessions,
+  readOpenClawSession,
+} from "./openclaw-database.js";
 import { NATIVE_READ_LIMIT } from "./contracts.js";
 
 function open(source: NativeSource) {
@@ -22,6 +26,7 @@ export function listDatabaseSessions(
   source: NativeSource,
   input: { since?: string; cursor?: string; limit: number },
 ) {
+  if (source.source === "openclaw") return listOpenClawSessions(source, input);
   const database = open(source);
   try {
     const since = input.since ? Date.parse(input.since) : 0;
@@ -29,7 +34,7 @@ export function listDatabaseSessions(
       source.source === "opencode"
         ? database
             .prepare(
-              "SELECT id,title,directory AS cwd,time_updated AS updated FROM session WHERE id > ? AND time_updated >= ? ORDER BY id LIMIT ?",
+              "SELECT id,title,directory AS cwd,time_updated AS updated, time_updated || ':' || COALESCE((SELECT MAX(time_updated) FROM message WHERE session_id=session.id),0) || ':' || COALESCE((SELECT MAX(time_updated) FROM part WHERE session_id=session.id),0) || ':' || (SELECT COUNT(*) FROM part WHERE session_id=session.id) AS revision FROM session WHERE id > ? AND time_updated >= ? ORDER BY id LIMIT ?",
             )
             .all(input.cursor ?? "", since, input.limit + 1)
         : database
@@ -44,7 +49,8 @@ export function listDatabaseSessions(
       title: typeof row.title === "string" ? row.title : String(row.id),
       cwd: typeof row.cwd === "string" ? row.cwd : null,
       updatedAt: new Date(Number(row.updated)).toISOString(),
-      storageRevision: String(row.updated),
+      storageRevision:
+        source.source === "opencode" ? String(row.revision) : undefined,
     }));
     return {
       items,
@@ -56,6 +62,8 @@ export function listDatabaseSessions(
   }
 }
 export function readDatabaseSession(source: NativeSource, sessionId: string) {
+  if (source.source === "openclaw")
+    return readOpenClawSession(source, sessionId);
   const database = open(source);
   try {
     let result: unknown;

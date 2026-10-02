@@ -7,9 +7,13 @@ import type {
   CollectorStatus,
 } from "./collector-contracts.js";
 import { COLLECTOR_DEFAULTS } from "./collector-contracts.js";
+import { CollectorProgress } from "./collector-progress.js";
 
 export class CollectorStore {
-  private constructor(readonly database: DatabaseSync) {}
+  readonly progress: CollectorProgress;
+  private constructor(readonly database: DatabaseSync) {
+    this.progress = new CollectorProgress(database);
+  }
   static async open(directory: string) {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await chmod(directory, 0o700);
@@ -49,12 +53,54 @@ export class CollectorStore {
       .map((row) => JSON.parse(String(row.config)));
   }
   put(connection: CollectorConnection) {
-    this.database
-      .prepare(
-        "INSERT INTO connections(id,config) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET config=excluded.config",
-      )
-      .run(connection.id, JSON.stringify(connection));
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const prior = this.connections().find(
+        (item) => item.id === connection.id,
+      );
+      if (prior && prior.revision > connection.revision) {
+        this.database.exec("COMMIT");
+        return;
+      }
+      const identityChanged =
+        !!prior &&
+        (prior.source.instanceId !== connection.source.instanceId ||
+          prior.projectId !== connection.projectId ||
+          prior.teamId !== connection.teamId ||
+          prior.apiBaseUrl !== connection.apiBaseUrl ||
+          prior.account !== connection.account);
+      if (prior && (identityChanged || prior.since !== connection.since)) {
+        // Scope changes fence queued evidence too: do not upload a wider old
+        // selection under newly narrowed consent. Reacquire the approved scope.
+        this.progress.reset(connection.id);
+        for (const table of ["source_scans", "checkpoints", "pending"])
+          this.database
+            .prepare(`DELETE FROM ${table} WHERE connection_id=?`)
+            .run(connection.id);
+        if (identityChanged) {
+          this.database
+            .prepare("DELETE FROM admitted_boundaries WHERE connection_id=?")
+            .run(connection.id);
+          this.database
+            .prepare("UPDATE connections SET admitted=0 WHERE id=?")
+            .run(connection.id);
+          this.database
+            .prepare("DELETE FROM settings WHERE key=?")
+            .run(`lastAdmission:${connection.id}`);
+        }
+      }
+      this.database
+        .prepare(
+          "INSERT INTO connections(id,config) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET config=excluded.config",
+        )
+        .run(connection.id, JSON.stringify(connection));
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
+
   error(id: string, message: string | null) {
     this.database
       .prepare("UPDATE connections SET error=? WHERE id=?")
@@ -103,6 +149,7 @@ export class CollectorStore {
   enqueue(
     entry: CollectorAdmission,
     revisions: { id: string; revision: string }[],
+    progressSessionKey?: string,
   ) {
     const payload = JSON.stringify(entry),
       bytes = Buffer.byteLength(payload);
@@ -135,6 +182,12 @@ export class CollectorStore {
           boundary.id,
           boundary.revision,
         );
+      if (progressSessionKey)
+        this.progress.queued(
+          entry.operationId,
+          entry.connectionId,
+          progressSessionKey,
+        );
       this.database.exec("COMMIT");
     } catch (error) {
       this.database.exec("ROLLBACK");
@@ -161,6 +214,11 @@ export class CollectorStore {
         .prepare("DELETE FROM pending WHERE id=?")
         .run(entry.operationId);
       if (Number(removed.changes) > 0) {
+        this.progress.acknowledge(entry.operationId);
+        this.set(
+          `lastAdmission:${entry.connectionId}`,
+          new Date().toISOString(),
+        );
         let admitted = 0;
         const insert = this.database.prepare(
           "INSERT OR IGNORE INTO admitted_boundaries VALUES(?,?)",
@@ -220,6 +278,15 @@ export class CollectorStore {
             queued: this.queued(String(row.id)),
             admitted: Number(row.admitted),
             error: typeof row.error === "string" ? row.error : null,
+            backfill: this.progress.status(String(row.id)),
+            pendingBytes: Number(
+              this.database
+                .prepare(
+                  "SELECT COALESCE(SUM(bytes),0) AS bytes FROM pending WHERE connection_id=?",
+                )
+                .get(String(row.id))?.bytes ?? 0,
+            ),
+            lastAdmissionAt: this.setting(`lastAdmission:${row.id}`),
           };
         }),
     };

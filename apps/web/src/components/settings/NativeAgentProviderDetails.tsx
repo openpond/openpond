@@ -35,7 +35,7 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
       setCommand(result.command); setError(null);
     } catch (error) { setError(error instanceof Error ? error.message : "Could not open native login."); }
   }
-  return <div className="provider-dialog-body">
+  return <div className="provider-dialog-body native-agent-setup">
     <p>{status.displayName} owns its login, tools and saved conversations. OpenPond uses the selected local installation.</p>
     <form className="provider-card-form" onSubmit={(event) => void save(event)}>
       <label className="settings-select-field"><span>Executable</span><input value={binaryPath} placeholder={`${info.executable} from PATH, or an absolute path`} disabled={busy} onChange={(event) => setBinaryPath(event.currentTarget.value)} /></label>

@@ -424,6 +424,8 @@ export type TurnRunnerDependencies = {
   }) => Promise<import("@openpond/contracts").HarnessRunOverlay>;
   isolatedProfileEvaluationForTurn?:(session:Session,turn:Turn)=>Promise<boolean>;
   executeProfileEvaluationAction?:(input:{session:Session;turn:Turn;action:import("@openpond/harness").ProfileWorkflowAction;value:unknown;signal:AbortSignal})=>Promise<{output:string;agentSourcePath:string;runPath:string}>;
+  /** Set by trusted runtime composition, never by a session or turn payload. */
+  executionHost?: "local" | "embedded";
   resolveModelTools?: import("../app-server-embedding.js").ResolveAppServerModelTools;
   harnessModelTools?: import("../../openpond/model-tool-registry.js").ModelToolDefinition[];
   loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;

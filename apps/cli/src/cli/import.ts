@@ -12,6 +12,7 @@ import {
   configureCollector,
   installCollectorService,
   startCollectorService,
+  uninstallCollectorService,
   runCollector,
   NATIVE_SOURCE_NAMES,
   type ExternalAgentSource,
@@ -21,6 +22,7 @@ import { ConnectedSyncClient } from "openpond-sdk/connected-evidence";
 import { optionString, promptConfirm, parseBooleanOption } from "./common";
 import { authorizeImporter } from "../importer/device-auth";
 import { collectorTransport, collectorClients } from "../importer/transport";
+import { monitorImport } from "../importer/monitor";
 
 export async function runImportCommand(
   options: Record<string, string | boolean>,
@@ -41,12 +43,17 @@ export async function runImportCommand(
       print(await controlCollector(directory, "stop"));
       return;
     }
+    if (id === "uninstall") {
+      print(await uninstallCollectorService(directory));
+      return;
+    }
     if (id === "install") {
       print(
         await installCollectorService({
           directory,
           executable: process.execPath,
           args: [process.argv[1]!],
+          environment: collectorEnvironment(),
         }),
       );
       return;
@@ -73,7 +80,7 @@ export async function runImportCommand(
       return;
     }
     throw new Error(
-      "usage: openpond import service <install|start|stop|status|run>",
+      "usage: openpond import service <install|start|stop|status|run|uninstall>",
     );
   }
   if (action === "status") {
@@ -130,10 +137,14 @@ export async function runImportCommand(
     throw new Error(
       "usage: openpond import <connect|discover|status|sync|pause|resume|disconnect|service>",
     );
-  let source = sources.find((item) => item.source === sourceName);
-  const interactive = process.stdin.isTTY && !json;
+  const matching = sources.filter(
+    (item) => item.source === sourceName && item.available,
+  );
+  let source = matching.length === 1 ? matching[0] : undefined;
+  const interactive = process.stdin.isTTY && process.stdout.isTTY && !json;
   if (!source && interactive) {
-    const available = sources.filter((item) => item.available);
+    const available =
+      matching.length > 1 ? matching : sources.filter((item) => item.available);
     available.forEach((item, index) =>
       console.log(
         `${index + 1}. ${NATIVE_SOURCE_NAMES[item.source]}  ${item.root}${item.capabilities.history ? "" : ` (${item.reason})`}`,
@@ -152,7 +163,10 @@ export async function runImportCommand(
   }
   if (!source?.capabilities.history)
     throw new Error(
-      source?.reason ?? "Select --source and optionally --source-path.",
+      source?.reason ??
+        (matching.length > 1
+          ? "Multiple source instances found. Select the exact --source-path or use interactive setup."
+          : "Select --source and optionally --source-path."),
     );
   let range = optionString(options, "range") || "week";
   if (interactive && !options.range) {
@@ -234,40 +248,49 @@ export async function runImportCommand(
     directory,
     executable: process.execPath,
     args: [process.argv[1]!],
+    environment: collectorEnvironment(),
   });
   await startCollectorService(directory);
   print({ connection: retained, service: await collectorStatus(directory) });
   if (interactive && !parseBooleanOption(options.detach)) {
-    console.log(
-      "Syncing. Ctrl+C or Ctrl+D closes this monitor; the background service keeps running. Use openpond import pause <id> to pause uploads.",
-    );
-    const controller = new AbortController(),
-      detach = () => controller.abort();
-    process.once("SIGINT", detach);
-    process.stdin.once("end", detach);
-    try {
-      while (!controller.signal.aborted) {
-        const status = await collectorStatus(directory),
-          item = status.connections.find((row) => row.id === connectionId);
-        if (!item) break;
-        process.stdout.write(
-          `\rAdmitted ${item.admitted} tasks  Queued ${item.queued}  ${item.error || item.state}          `,
-        );
-        if (!keepSyncing && item.state === "paused" && item.queued === 0) break;
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            clearTimeout(timer);
-            controller.signal.removeEventListener("abort", done);
-            resolve();
-          };
-          const timer = setTimeout(done, 1000);
-          controller.signal.addEventListener("abort", done, { once: true });
+    await monitorImport({
+      directory,
+      connectionId,
+      keepSyncing,
+      async pause() {
+        const store = await CollectorStore.open(directory);
+        let current: CollectorConnection | undefined;
+        try {
+          current = store
+            .connections()
+            .find((item) => item.id === connectionId);
+        } finally {
+          store.close();
+        }
+        if (!current) throw new Error("The connection is unavailable.");
+        const { sync: client } = await collectorClients(current);
+        const remote = await client.control({
+          id: current.id,
+          expectedRevision: current.revision,
+          action: "pause",
         });
-      }
-    } finally {
-      process.off("SIGINT", detach);
-      process.stdin.off("end", detach);
-      console.log();
-    }
+        await configureCollector(directory, {
+          ...current,
+          revision: remote.revision,
+          state: remote.state,
+        });
+      },
+    });
   }
+}
+
+function collectorEnvironment() {
+  return {
+    ...(process.env.OPENPOND_HOME
+      ? { OPENPOND_HOME: process.env.OPENPOND_HOME }
+      : {}),
+    ...(process.env.ELECTRON_RUN_AS_NODE === "1"
+      ? { ELECTRON_RUN_AS_NODE: "1" }
+      : {}),
+  };
 }

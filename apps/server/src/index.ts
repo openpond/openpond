@@ -257,7 +257,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   await store.recentTurns(1);
   // A native permission request belongs to the process that issued it. Restart never approves it.
   for (const approval of await store.pendingApprovals()) {
-    if (approval.providerRequestId?.startsWith("native-agent:")) await store.upsertApproval({ ...approval, status: "cancelled" });
+    if (typeof approval.providerRequestId === "string" && approval.providerRequestId.startsWith("native-agent:")) await store.upsertApproval({ ...approval, status: "cancelled" });
   }
   const scheduleRecovery = reconcileInterruptedScheduledWork(storeDir);
   if (scheduleRecovery.recovered || scheduleRecovery.needsReview) logger.warn("Scheduled work requires review after restart", scheduleRecovery);

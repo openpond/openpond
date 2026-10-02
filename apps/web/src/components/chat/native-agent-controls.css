@@ -1,0 +1,2 @@
+.composer-native-option { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-secondary, #a1a1aa); }
+.composer-native-option select { max-width: 130px; border: 1px solid var(--border, #333); border-radius: 6px; background: var(--panel, #18181b); color: inherit; padding: 4px; }

@@ -1779,3 +1779,10 @@ button.sidebar-project-location-row:disabled {
 .sidebar-pagination-controls .sidebar-show-more {
   padding-left: 0;
 }
+
+.native-conversations .sidebar-section-heading { display: flex; align-items: center; justify-content: space-between; }
+.native-conversations .sidebar-section-heading > button:first-child { min-width: 0; padding: 8px; color: var(--text-secondary, #a1a1aa); }
+.native-conversations p { padding: 4px 8px; font-size: 12px; line-height: 1.5; color: var(--text-secondary, #a1a1aa); }
+.native-conversation-row { width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 8px; text-align: left; }
+.native-conversation-row > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.native-conversation-row > small { flex-shrink: 0; color: var(--text-secondary, #a1a1aa); font-size: 10px; }

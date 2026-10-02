@@ -118,7 +118,7 @@ export function Sidebar(props: SidebarProps) {
             setSectionMenuOpen={setSidebarSectionMenuOpen}
           />
         )}
-        {productArea === "chat" ? <NativeConversationSources connection={props.connection} onOpen={(session) => { setSelectedSessionId(session.id); setView("chat"); }} /> : null}
+        {productArea === "chat" ? <NativeConversationSources selectedSessionId={props.selectedSessionId} connection={props.connection} onOpen={(session) => { setSelectedSessionId(session.id); setView("chat"); }} /> : null}
       </div>
 
       <div className="sidebar-bottom-stack">

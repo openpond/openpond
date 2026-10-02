@@ -24,6 +24,20 @@ function waitUntilStarted() {
 }
 
 describe("turn-runner lifecycle", () => {
+  // A local Profile tool resolver must not accidentally turn Desktop into a
+  // hosted worker; hosted admission must still reject non-adapter providers.
+  test("distinguishes local tool resolution from trusted embedded admission", async () => {
+    const resolveModelTools = async (context: { tools: import("../apps/server/src/openpond/model-tool-registry").ModelToolDefinition[] }) => context.tools;
+    const local = createTurnRunnerTestHarness({ dependencies: { resolveModelTools } });
+    const embedded = createTurnRunnerTestHarness({ dependencies: { executionHost: "embedded", resolveModelTools } });
+    try {
+      const input = { prompt: "Check local provider admission.", modelRef: { providerId: "openrouter" as const, modelId: "test/model" } };
+      expect((await local.runner.sendTurn("session_test", input)).status).toBe("completed");
+      await expect(embedded.runner.sendTurn("session_test", input)).rejects.toThrow("Embedded Work requires");
+      expect(embedded.state.turns).toHaveLength(0);
+    } finally { await Promise.all([local.runner.close(), embedded.runner.close()]); }
+  });
+
   test("interruptAll is concurrent-idempotent and waits for active turns to settle", async () => {
     const stream = waitUntilStarted();
     const harness = createTurnRunnerTestHarness({

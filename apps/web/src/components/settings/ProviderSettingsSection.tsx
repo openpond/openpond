@@ -87,6 +87,7 @@ function providerStateTone(status: ProviderStatus | null | undefined): string {
 function credentialSummary(status: ProviderStatus): string {
   if (!status.credential.connected) return status.credential.lastError ?? "Not connected";
   if (status.credential.redacted) return status.credential.redacted;
+  if (status.credential.source === "native_agent_login") return "Native login";
   if (status.credential.source === "chatgpt_subscription") return "ChatGPT subscription";
   return status.credential.source;
 }
@@ -104,6 +105,7 @@ function usesZaiCodingPlan(status: ProviderStatus, settings: ProviderSettings): 
 
 export function providerCredentialLabel(status: ProviderStatus, settings: ProviderSettings): string {
   if (!status.credential.connected || !status.routing.localByok) return "";
+  if (status.credential.source === "native_agent_login") return "Native login";
   if (status.credential.source === "chatgpt_subscription") return "Subscription";
   if (usesZaiCodingPlan(status, settings)) return "Coding Plan key";
   return "API key";
@@ -414,10 +416,10 @@ function ProviderDetailsDialog({
           </div>
           {!showingSubscriptionDetails ? (
             <>
-              <div>
+              {!isAcpProvider(providerId) ? <div>
                 <dt>Base URL</dt>
                 <dd title={baseUrlLabel}>{baseUrlLabel}</dd>
-              </div>
+              </div> : null}
               <div>
                 <dt>Model</dt>
                 <dd title={config?.defaultModel ?? status.defaultModel ?? undefined}>
