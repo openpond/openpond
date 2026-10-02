@@ -67,11 +67,15 @@ export class OpenPondDatasetCommerceClient {
       );
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
     this.files = new OpenPondCommerceFiles(
-      (path, requestOptions, input) => this.#request(path, requestOptions, input),
+      (path, requestOptions, input) =>
+        this.#request(path, requestOptions, input),
       options.fetch ?? globalThis.fetch,
     );
   }
-  async browse(query: z.input<typeof CommerceBrowse> = {}, options: RequestOptions = {}) {
+  async browse(
+    query: z.input<typeof CommerceBrowse> = {},
+    options: RequestOptions = {},
+  ) {
     const input = CommerceBrowse.parse(query),
       search = new URLSearchParams();
     for (const [key, value] of Object.entries(input))
@@ -83,7 +87,19 @@ export class OpenPondDatasetCommerceClient {
       result.items.length > input.limit ||
       result.items.some(
         (item) =>
-          item.state !== "listed" || (input.category && item.terms.category !== input.category),
+          item.state !== "listed" ||
+          (input.category && item.terms.category !== input.category) ||
+          (input.format && item.format !== input.format) ||
+          (input.license &&
+            !item.terms.license
+              .toLowerCase()
+              .includes(input.license.toLowerCase())) ||
+          (input.minPriceBaseUnits &&
+            BigInt(item.terms.priceBaseUnits) <
+              BigInt(input.minPriceBaseUnits)) ||
+          (input.maxPriceBaseUnits &&
+            BigInt(item.terms.priceBaseUnits) >
+              BigInt(input.maxPriceBaseUnits)),
       )
     )
       this.#mismatch();
@@ -101,10 +117,14 @@ export class OpenPondDatasetCommerceClient {
     const result = CommerceInventorySchema.parse(
       await this.#request("/inventory", options, undefined, true),
     );
-    if (result.listings.some((item) => item.teamId !== this.#options.teamId)) this.#mismatch();
+    if (result.listings.some((item) => item.teamId !== this.#options.teamId))
+      this.#mismatch();
     return result;
   }
-  async capture(input: z.infer<typeof CaptureCommerceRelease>, options: RequestOptions = {}) {
+  async capture(
+    input: z.infer<typeof CaptureCommerceRelease>,
+    options: RequestOptions = {},
+  ) {
     const request = CaptureCommerceRelease.parse(input);
     const result = CommerceCapturedReleaseSchema.parse(
       await this.#request("/capture", options, request),
@@ -120,7 +140,10 @@ export class OpenPondDatasetCommerceClient {
       this.#mismatch();
     return result;
   }
-  async writeListing(input: z.infer<typeof WriteCommerceListing>, options: RequestOptions = {}) {
+  async writeListing(
+    input: z.infer<typeof WriteCommerceListing>,
+    options: RequestOptions = {},
+  ) {
     const request = WriteCommerceListing.parse(input);
     const result = CommerceListingReceiptSchema.parse(
       await this.#request("/write-listing", options, request),
@@ -135,9 +158,14 @@ export class OpenPondDatasetCommerceClient {
       this.#mismatch();
     return result;
   }
-  async checkout(input: z.infer<typeof CommerceCheckout>, options: RequestOptions = {}) {
+  async checkout(
+    input: z.infer<typeof CommerceCheckout>,
+    options: RequestOptions = {},
+  ) {
     const request = CommerceCheckout.parse(input);
-    const result = CommerceOrderSchema.parse(await this.#request("/checkout", options, request));
+    const result = CommerceOrderSchema.parse(
+      await this.#request("/checkout", options, request),
+    );
     if (
       result.buyerTeamId !== this.#options.teamId ||
       result.source !== request.source ||
@@ -152,11 +180,17 @@ export class OpenPondDatasetCommerceClient {
   async order(id: string, options: RequestOptions = {}) {
     CommerceId.parse(id);
     const result = CommerceOrderSchema.parse(
-      await this.#request(`/order/${encodeURIComponent(id)}`, options, undefined, true),
+      await this.#request(
+        `/order/${encodeURIComponent(id)}`,
+        options,
+        undefined,
+        true,
+      ),
     );
     if (
       result.id !== id ||
-      (result.buyerTeamId !== this.#options.teamId && result.sellerTeamId !== this.#options.teamId)
+      (result.buyerTeamId !== this.#options.teamId &&
+        result.sellerTeamId !== this.#options.teamId)
     )
       this.#mismatch();
     return result;
@@ -169,7 +203,12 @@ export class OpenPondDatasetCommerceClient {
         url: z.string().url(),
         expiresAt: z.string().datetime(),
         name: z.string(),
-        format: z.enum(["csv", "jsonl", "parquet", "openpond.datasetCatalogSnapshot.v1"]),
+        format: z.enum([
+          "csv",
+          "jsonl",
+          "parquet",
+          "openpond.datasetCatalogSnapshot.v1",
+        ]),
         contentHash: z.string().regex(/^[a-f0-9]{64}$/),
         sizeBytes: z
           .number()
@@ -178,7 +217,14 @@ export class OpenPondDatasetCommerceClient {
           .max(128 * 1024 * 1024),
       })
       .strict()
-      .parse(await this.#request(`/download/${encodeURIComponent(id)}`, options, undefined, true));
+      .parse(
+        await this.#request(
+          `/download/${encodeURIComponent(id)}`,
+          options,
+          undefined,
+          true,
+        ),
+      );
     const url = new URL(result.url);
     if (
       result.orderId !== id ||
@@ -194,9 +240,14 @@ export class OpenPondDatasetCommerceClient {
     input: { operationId: string; orderId: string },
     options: RequestOptions = {},
   ) {
-    const value = CommerceOperation.extend({ orderId: CommerceId }).strict().parse(input);
+    const value = CommerceOperation.extend({ orderId: CommerceId })
+      .strict()
+      .parse(input);
     const result = z
-      .object({ orderId: CommerceId, state: z.enum(["paid", "delivery_failed", "delivered"]) })
+      .object({
+        orderId: CommerceId,
+        state: z.enum(["paid", "delivery_failed", "delivered"]),
+      })
       .strict()
       .parse(await this.#request("/retry-delivery", options, value));
     if (result.orderId !== value.orderId) this.#mismatch();
@@ -221,10 +272,14 @@ export class OpenPondDatasetCommerceClient {
     const result = CommercePaymentSubmissionSchema.parse(
       await this.#request("/submit-payment", options, request),
     );
-    if (("orderId" in result ? result.orderId : result.id) !== request.orderId) this.#mismatch();
+    if (("orderId" in result ? result.orderId : result.id) !== request.orderId)
+      this.#mismatch();
     return result;
   }
-  async requests(query: z.input<typeof CommerceBrowse> = {}, options: RequestOptions = {}) {
+  async requests(
+    query: z.input<typeof CommerceBrowse> = {},
+    options: RequestOptions = {},
+  ) {
     const input = CommerceBrowse.parse(query),
       search = new URLSearchParams();
     for (const [key, value] of Object.entries(input))
@@ -234,7 +289,24 @@ export class OpenPondDatasetCommerceClient {
     );
     if (
       result.items.length > input.limit ||
-      result.items.some((item) => item.state !== "open" || item.content.projectId !== null)
+      result.items.some(
+        (item) =>
+          item.state !== "open" ||
+          item.content.projectId !== null ||
+          (input.category && item.content.category !== input.category) ||
+          (input.format &&
+            !item.content.requirements.formats.includes(input.format)) ||
+          (input.license &&
+            !item.content.requirements.license
+              .toLowerCase()
+              .includes(input.license.toLowerCase())) ||
+          (input.minPriceBaseUnits &&
+            BigInt(item.content.budgetBaseUnits) <
+              BigInt(input.minPriceBaseUnits)) ||
+          (input.maxPriceBaseUnits &&
+            BigInt(item.content.budgetBaseUnits) >
+              BigInt(input.maxPriceBaseUnits)),
+      )
     )
       this.#mismatch();
     return result;
@@ -252,10 +324,14 @@ export class OpenPondDatasetCommerceClient {
       .array(CommerceOwnedRequestSchema)
       .max(100)
       .parse(await this.#request("/my-requests", options, undefined, true));
-    if (result.some((item) => item.teamId !== this.#options.teamId)) this.#mismatch();
+    if (result.some((item) => item.teamId !== this.#options.teamId))
+      this.#mismatch();
     return result;
   }
-  async writeRequest(input: z.infer<typeof WriteDatasetRequest>, options: RequestOptions = {}) {
+  async writeRequest(
+    input: z.infer<typeof WriteDatasetRequest>,
+    options: RequestOptions = {},
+  ) {
     const request = WriteDatasetRequest.parse(input),
       result = CommerceRequestReceiptSchema.parse(
         await this.#request("/write-request", options, request),
@@ -269,7 +345,10 @@ export class OpenPondDatasetCommerceClient {
       this.#mismatch();
     return result;
   }
-  async submitOffer(input: z.infer<typeof SubmitDatasetOffer>, options: RequestOptions = {}) {
+  async submitOffer(
+    input: z.infer<typeof SubmitDatasetOffer>,
+    options: RequestOptions = {},
+  ) {
     const request = SubmitDatasetOffer.parse(input),
       result = CommerceOfferSubmissionSchema.parse(
         await this.#request("/submit-offer", options, request),
@@ -300,14 +379,20 @@ export class OpenPondDatasetCommerceClient {
       );
     if (
       result.some(
-        (item) => item.proposal.offerId !== item.id || item.proposal.revision !== item.revision,
+        (item) =>
+          item.proposal.offerId !== item.id ||
+          item.proposal.revision !== item.revision,
       )
     )
       this.#mismatch();
     return result;
   }
   async offer(
-    input: { id: string; notesCursor?: string | null; historyBefore?: number | null },
+    input: {
+      id: string;
+      notesCursor?: string | null;
+      historyBefore?: number | null;
+    },
     options: RequestOptions = {},
   ) {
     const request = z
@@ -330,7 +415,10 @@ export class OpenPondDatasetCommerceClient {
       this.#mismatch();
     return result;
   }
-  async reviewOffer(input: z.infer<typeof ReviewDatasetOffer>, options: RequestOptions = {}) {
+  async reviewOffer(
+    input: z.infer<typeof ReviewDatasetOffer>,
+    options: RequestOptions = {},
+  ) {
     const request = ReviewDatasetOffer.parse(input),
       result = CommerceOfferReviewReceiptSchema.parse(
         await this.#request("/review-offer", options, request),
@@ -344,7 +432,12 @@ export class OpenPondDatasetCommerceClient {
     return result;
   }
   async withdrawOffer(
-    input: { operationId: string; id: string; expectedRevision: number; expectedUpdatedAt: string },
+    input: {
+      operationId: string;
+      id: string;
+      expectedRevision: number;
+      expectedUpdatedAt: string;
+    },
     options: RequestOptions = {},
   ) {
     const request = CommerceOperation.extend({
@@ -369,7 +462,8 @@ export class OpenPondDatasetCommerceClient {
     if (
       result.some(
         (item) =>
-          (side === "purchases" ? item.buyerTeamId : item.sellerTeamId) !== this.#options.teamId,
+          (side === "purchases" ? item.buyerTeamId : item.sellerTeamId) !==
+          this.#options.teamId,
       )
     )
       this.#mismatch();
@@ -389,8 +483,13 @@ export class OpenPondDatasetCommerceClient {
     authenticated = false,
   ): Promise<unknown> {
     const auth =
-      authenticated || body !== undefined || Boolean(this.#options.apiKey && this.#options.teamId);
-    if (auth && (!this.#options.apiKey?.trim() || !this.#options.teamId?.trim()))
+      authenticated ||
+      body !== undefined ||
+      Boolean(this.#options.apiKey && this.#options.teamId);
+    if (
+      auth &&
+      (!this.#options.apiKey?.trim() || !this.#options.teamId?.trim())
+    )
       throw new Error(
         "An API key and explicit workspace are required for this dataset commerce operation.",
       );

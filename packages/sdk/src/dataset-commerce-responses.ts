@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  CommerceCursor,
+  CommerceDatasetFormat,
   CommerceHash,
   CommerceId,
   CommerceReleaseRef,
@@ -26,6 +28,7 @@ export const CommerceCapturedReleaseSchema = z
   })
   .strict();
 export const CommerceListingSchema = CommerceCapturedReleaseSchema.extend({
+  format: CommerceDatasetFormat,
   revision: z.number().int().positive(),
   teamId: CommerceId,
   sellerUserId: CommerceId,
@@ -47,13 +50,19 @@ export const CommerceListingReceiptSchema = z
   })
   .strict();
 export const CommerceListingsPageSchema = z
-  .object({ items: z.array(CommerceListingSchema).max(50), cursor: CommerceId.nullable() })
+  .object({
+    items: z.array(CommerceListingSchema).max(50),
+    cursor: CommerceCursor.nullable(),
+  })
   .strict();
 export const CommerceInventorySchema = z
   .object({
     releases: z
       .array(
-        CommerceCapturedReleaseSchema.omit({ sizeBytes: true, sample: true }).extend({
+        CommerceCapturedReleaseSchema.omit({
+          sizeBytes: true,
+          sample: true,
+        }).extend({
           tasksetId: CommerceId,
           title: z.string(),
         }),
@@ -107,7 +116,12 @@ export const CommerceOrderSchema = z
   })
   .strict();
 export const CommercePaymentSubmissionSchema = z.union([
-  z.object({ orderId: CommerceId, state: z.enum(["awaiting_payment", "confirming"]) }).strict(),
+  z
+    .object({
+      orderId: CommerceId,
+      state: z.enum(["awaiting_payment", "confirming"]),
+    })
+    .strict(),
   CommerceOrderSchema,
 ]);
 export type CommerceOrder = z.infer<typeof CommerceOrderSchema>;
@@ -117,13 +131,23 @@ export const CommerceRequestSchema = z
     id: CommerceId,
     buyerUserId: CommerceId,
     revision: z.number().int().positive(),
-    state: z.enum(["draft", "open", "paused", "closed", "cancelled", "fulfilled"]),
+    state: z.enum([
+      "draft",
+      "open",
+      "paused",
+      "closed",
+      "cancelled",
+      "fulfilled",
+    ]),
     content: DatasetRequestContent,
     createdAt: Timestamp,
   })
   .strict();
 export const CommerceRequestsPageSchema = z
-  .object({ items: z.array(CommerceRequestSchema).max(50), cursor: CommerceId.nullable() })
+  .object({
+    items: z.array(CommerceRequestSchema).max(50),
+    cursor: CommerceCursor.nullable(),
+  })
   .strict();
 export const CommerceRequestReceiptSchema = CommerceRequestSchema.omit({
   buyerUserId: true,
@@ -187,7 +211,10 @@ export const CommerceOfferSchema = z
       .max(1000),
   })
   .strict();
-export const CommerceOfferSummarySchema = CommerceOfferSchema.omit({ sample: true, notes: true });
+export const CommerceOfferSummarySchema = CommerceOfferSchema.omit({
+  sample: true,
+  notes: true,
+});
 export const CommerceOfferDetailSchema = CommerceOfferSchema.extend({
   notes: CommerceOfferSchema.shape.notes.max(20),
   notesCursor: CommerceId.nullable(),
@@ -207,6 +234,11 @@ export const CommerceOfferReviewReceiptSchema = z
   .object({
     id: CommerceId,
     revision: z.number().int().positive(),
-    state: z.enum(["submitted", "shortlisted", "changes_requested", "declined"]),
+    state: z.enum([
+      "submitted",
+      "shortlisted",
+      "changes_requested",
+      "declined",
+    ]),
   })
   .strict();
