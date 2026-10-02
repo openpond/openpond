@@ -14,7 +14,13 @@ export async function handleSettingsRoutes({
   }
   const nativeSetup = /^\/v1\/providers\/([^/]+)\/native-setup$/.exec(requestUrl.pathname);
   if (nativeSetup && request.method === "POST" && deps.nativeAgentSetupPayload) {
-    sendJson(response, 200, await deps.nativeAgentSetupPayload(decodeURIComponent(nativeSetup[1]!), await readJson(request)));
+    const controller = new AbortController();
+    const cancel = () => { if (!response.writableEnded) controller.abort(); };
+    response.once("close", cancel);
+    try {
+      const result = await deps.nativeAgentSetupPayload(decodeURIComponent(nativeSetup[1]!), await readJson(request), controller.signal);
+      if (!controller.signal.aborted) sendJson(response, 200, result);
+    } finally { response.off("close", cancel); }
     return true;
   }
   if (requestUrl.pathname === "/v1/configuration" && deps.configuration) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type {
   AppPreferences,
@@ -10,6 +10,8 @@ import type {
   ProviderValidationRequest,
 } from "@openpond/contracts";
 import { api, type ClientConnection, type PreferencesPayload } from "../../api";
+import { apiFetch } from "../../api/api-client";
+import type { CheckNativeProvider, NativeProviderCheck } from "./native-provider-check";
 import { normalizeChatModel } from "../../lib/app-models";
 
 export function useProviderSettings({
@@ -28,6 +30,8 @@ export function useProviderSettings({
   preferences: AppPreferences;
   providers: ProviderSettings | null | undefined;
 }) {
+  const currentConnection = useRef(connection);
+  currentConnection.current = connection;
   const [defaultProvider, setDefaultProvider] = useState<ChatProvider>(preferences.defaultChatProvider);
   const [defaultModel, setDefaultModel] = useState(preferences.defaultChatModel);
   const [saving, setSaving] = useState(false);
@@ -173,7 +177,22 @@ export function useProviderSettings({
     });
   }
 
+  const checkNativeProvider: CheckNativeProvider = async (provider, signal, patch) => {
+    if (!connection) throw new Error("Connect to the local OpenPond server first.");
+    signal.throwIfAborted();
+    if (patch) await api.saveProviderSettings(connection, { providers: { [provider]: patch } });
+    signal.throwIfAborted();
+    const result = await apiFetch<NativeProviderCheck>(connection, `/v1/providers/${provider}/native-setup`, {
+      method: "POST", body: JSON.stringify({ action: "check" }), signal,
+    });
+    signal.throwIfAborted();
+    if (currentConnection.current?.serverUrl !== connection.serverUrl || currentConnection.current?.token !== connection.token) throw new DOMException("Connection changed", "AbortError");
+    onProviders(result.settings);
+    return result;
+  };
+
   return {
+    checkNativeProvider,
     defaultModel,
     defaultProvider,
     providerBusy,

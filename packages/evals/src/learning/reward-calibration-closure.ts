@@ -44,8 +44,7 @@ export function verifyRewardCalibrationClosure(raw: unknown): RewardCalibrationC
     || check.snapshotHash !== compiled.snapshotHash || contentHash(check.fixtureRefs) !== contentHash(compiled.fixtureRefs)
     || check.status !== "completed" || !check.runtime || check.matchesExpectations !== true || check.failure !== null
     || check.results.length !== compiled.fixtures.length) fail("reward_calibration_closure_check_mismatch");
-  const expectedReward = reward.implementation.kind === "model_judge"
-    ? qualifyRewardCheck(value.draft, value.base, check).reward : compiled.reward;
+  const expectedReward = qualifyRewardCheck(value.draft, value.base, check).reward;
   // Display fields can be updated by publication; the scoring graph cannot.
   const scoring = (item: typeof reward) => contentHash([item.implementation, item.rawScore, item.assets, item.fixtureSetRef ?? null]);
   if (reward.id !== expectedReward.id || scoring(reward) !== scoring(expectedReward)

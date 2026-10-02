@@ -60,6 +60,16 @@ describe("desktop runtime staging", () => {
         ),
         writeFixture(
           root,
+          "apps/cli/dist/cli.js",
+          'import "./chunks/collector.js";\n'
+        ),
+        writeFixture(
+          root,
+          "apps/cli/dist/chunks/collector.js",
+          'console.log("collector");\n'
+        ),
+        writeFixture(
+          root,
           "apps/web/dist/index.html",
           "<main>OpenPond</main>\n"
         ),
@@ -116,6 +126,11 @@ describe("desktop runtime staging", () => {
         arch: "x64",
       });
       const stagedPaths = result.files.map((entry) => entry.path);
+
+      expect(await readFile(path.join(result.stageRoot, "runtime/cli/cli.js"), "utf8"))
+        .toBe('import "./chunks/collector.js";\n');
+      expect(await readFile(path.join(result.stageRoot, "runtime/cli/chunks/collector.js"), "utf8"))
+        .toBe('console.log("collector");\n');
 
       expect(stagedPaths).toContain(
         "server/node_modules/node-pty/package.json"

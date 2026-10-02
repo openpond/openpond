@@ -90,7 +90,7 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
       const { reward: release, assets } = compileRewardAuthoring({ id, fields: draft, base: reward });
       const { contentHash: _hash, ...content } = release;
       const storedDraft = await persistence.save(api, draftInput());
-      if (draft.kind === "model_judge" && release.implementation.kind === "model_judge" && release.implementation.calibrationStatus !== "passed") {
+      if (draft.kind !== "human" && draft.kind !== "learned_model" && (draft.fixtures?.length ?? 0) > 0) {
         const checks = await api.list("reward_check", { parentId: id, status: "completed", limit: 100 });
         const check = checks.items.find(check => check.matchesExpectations && check.draft.id === storedDraft.id
           && check.draft.revision === storedDraft.revision && check.draft.contentHash === storedDraft.contentHash);

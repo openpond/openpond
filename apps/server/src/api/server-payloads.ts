@@ -581,6 +581,7 @@ export function createServerPayloads(deps: {
             providerId,
             ok: errors.length === 0,
             live: false,
+            nativeStatus: !codex.available ? "missing" : codex.authHealth === "signed_out" ? "needs_login" : errors.length ? "unavailable" : "ready",
             baseUrl: null,
             modelId,
             credential:
@@ -1778,17 +1779,31 @@ export function createServerPayloads(deps: {
     updateAppPreferencesPayload,
     providerSettingsPayload,
     nativeHistoryPayload,
-    nativeAgentSetupPayload: async (provider: string, payload: unknown) => {
-      if (!isNativeAgentId(provider)) throw new Error("Unknown native agent.");
+    nativeAgentSetupPayload: async (provider: string, payload: unknown, signal?: AbortSignal) => {
       const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+      if (provider === "codex") {
+        if (input.action === "login") {
+          const binary = getCodexStatus().binaryPath;
+          if (!binary) throw new Error("Install Codex before signing in.");
+          return { command: nativeTerminalCommand(binary, ["login"], process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}) };
+        }
+        signal?.throwIfAborted();
+        const validation = await validateProviderCredentialPayload("codex", {}) as { nativeStatus: string; errors: string[]; providers: ProviderSettings };
+        signal?.throwIfAborted();
+        return { status: validation.nativeStatus, error: validation.errors.join("\n") || null, version: getCodexStatus().version, settings: validation.providers };
+      }
+      if (!isNativeAgentId(provider)) throw new Error("Unknown native agent.");
       const file = await loadProvidersFile();
       if (input.action === "login") {
         const launch = nativeAgentLaunch(provider, file.providers[provider]);
         const definition = NATIVE_AGENTS[provider];
         return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { [definition.homeVariable]: launch.sourceHome }) };
       }
-      const result = await probeNativeAgent(provider, file.providers[provider], { force: input.action !== "capabilities", authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
-      return { ...result, settings: await providerSettingsPayload() };
+      const result = await probeNativeAgent(provider, file.providers[provider], { signal, force: input.action !== "capabilities", authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
+      const settings = await providerSettingsPayload();
+      if (nativeAgentLaunch(provider, settings.providers[provider]).instanceId !== result.instanceId) throw new Error("Provider configuration changed during the check. Refresh the connection.");
+      signal?.throwIfAborted();
+      return { ...result, settings };
     },
     updateProviderSettingsPayload,
     listProviderModelsPayload,
