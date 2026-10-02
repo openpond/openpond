@@ -5,6 +5,48 @@ import { expect, it } from "vitest";
 import { listSessions, inspectSessionBranches, readSession } from "../src/native-conversations/history.js";
 import { CollectorStore } from "../src/native-conversations/collector-store.js";
 import { collectorBranchAnchor, selectCollectorBranch } from "../src/native-conversations/collector-branches.js";
+import { discoverSources } from "../src/native-conversations/discovery.js";
+
+// A default-path fallback can upload a different account/profile's history.
+// Discovery must preserve explicit authority and surface ambiguous choices.
+it("keeps profile discovery and explicit source authority separate", async () => {
+  const home = await mkdtemp(join(tmpdir(), "native-source-authority-"));
+  const hermes = join(home, ".hermes");
+  const omp = join(home, ".omp");
+  const selected = join(home, "selected-history");
+  const inventory = async (source: "hermes" | "oh_my_pi", environment = {}, locations = {}) =>
+    (await discoverSources({ machineId: "machine", home, environment, locations })).filter((item) => item.source === source);
+  try {
+    for (const name of ["work", "personal", "deleted"]) {
+      await mkdir(join(hermes, "profiles", name), { recursive: true });
+      await writeFile(join(hermes, "profiles", name, "state.db"), "");
+      await mkdir(join(omp, "profiles", name, "agent", "sessions"), { recursive: true });
+    }
+    await mkdir(join(hermes, "profiles", ".deleted"));
+    await writeFile(join(hermes, "profiles", ".deleted", "deleted"), "deleted");
+    await writeFile(join(hermes, "active_profile"), "work");
+    const choices = await inventory("hermes");
+    expect(choices.map((item) => item.root)).toEqual([join(hermes, "profiles", "work"), join(hermes, "profiles", "personal")]);
+    expect(new Set(choices.map((item) => item.instanceId)).size).toBe(2);
+    expect((await inventory("hermes", { HERMES_HOME: choices[1]!.root })).map((item) => item.root)).toEqual([choices[1]!.root]);
+    await writeFile(join(hermes, "active_profile"), "missing");
+    expect((await inventory("hermes"))[0]).toMatchObject({ available: false, capabilities: { history: false } });
+
+    await mkdir(selected);
+    const pinned = (await inventory("hermes", {}, { hermes: selected }))[0]!;
+    expect(pinned.root).toBe(selected);
+    expect((await inventory("hermes", { HERMES_HOME: "/absent/other-home" }, { hermes: selected }))[0]!.instanceId).toBe(pinned.instanceId);
+
+    const named = await inventory("oh_my_pi", { OMP_PROFILE: "work", PI_PROFILE: "personal", PI_CODING_AGENT_DIR: selected });
+    expect(named.map((item) => item.root)).toEqual([join(omp, "profiles", "work", "agent")]);
+    expect((await inventory("oh_my_pi", { OMP_PROFILE: "", PI_PROFILE: "work", PI_CODING_AGENT_DIR: selected }))[0]!.root).toBe(selected);
+    expect((await inventory("oh_my_pi", { OMP_PROFILE: "../outside" }))[0]!.available).toBe(false);
+    expect((await inventory("oh_my_pi", { OMP_PROFILE: "../outside" }, { oh_my_pi: selected }))[0]!.root).toBe(selected);
+    const missing = (await inventory("oh_my_pi", {}, { oh_my_pi: join(home, "missing") }))[0]!;
+    expect(missing.available).toBe(false);
+    expect(missing.root).toBe(join(home, "missing"));
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
 
 // Claude queue records precede the cwd owner. Guessing from the first row or
 // another session can resume a conversation in the wrong working directory.

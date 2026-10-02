@@ -155,9 +155,9 @@ export async function runImportCommand(
     throw new Error(
       "usage: openpond import <connect|reconnect|discover|status|sync|pause|resume|disconnect|branches|branch|service>",
     );
-  const matching = sources.filter(
-    (item) => item.source === sourceName && item.available,
-  );
+  // An unavailable selected/default profile is still an authority choice.
+  // Filtering it out could silently connect the sole remaining sibling.
+  const matching = sources.filter((item) => item.source === sourceName);
   let source = matching.length === 1 ? matching[0] : undefined;
   const interactive = process.stdin.isTTY && process.stdout.isTTY && !json;
   if (reconnect) assertReconnectSource(reconnect, source);
