@@ -7,6 +7,7 @@ import type {
   CollectorStatus,
 } from "./collector-contracts.js";
 import { COLLECTOR_DEFAULTS } from "./collector-contracts.js";
+import { collectorDestinationLinks } from "./collector-destinations.js";
 import { CollectorProgress } from "./collector-progress.js";
 
 export class CollectorStore {
@@ -69,6 +70,7 @@ export class CollectorStore {
           prior.teamId !== connection.teamId ||
           prior.apiBaseUrl !== connection.apiBaseUrl ||
           prior.account !== connection.account);
+      if (identityChanged) connection = { ...connection, destinations: undefined };
       if (prior && (identityChanged || prior.since !== connection.since)) {
         // Scope changes fence queued evidence too: do not upload a wider old
         // selection under newly narrowed consent. Reacquire the approved scope.
@@ -291,6 +293,7 @@ export class CollectorStore {
                 .get(String(row.id))?.bytes ?? 0,
             ),
             lastAdmissionAt: this.setting(`lastAdmission:${row.id}`),
+            destinationLinks: collectorDestinationLinks(config),
           };
         }),
     };

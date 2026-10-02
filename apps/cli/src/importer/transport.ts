@@ -4,9 +4,10 @@ import {
   ConnectedSyncClient,
   AgentImportReceiptSchema,
 } from "openpond-sdk/connected-evidence";
-import type {
-  CollectorConnection,
-  CollectorTransport,
+import {
+  collectorDestinations,
+  type CollectorConnection,
+  type CollectorTransport,
 } from "@openpond/evals/native-conversations";
 import { loadConfig } from "../config";
 import { resolveApiKey } from "../cli/common/auth";
@@ -39,19 +40,21 @@ export async function collectorClients(
 export const collectorTransport: CollectorTransport = {
   async pause(connection) {
     const { sync } = await collectorClients(connection);
-    return sync.control({
+    const remote = await sync.control({
       id: connection.id,
       expectedRevision: connection.revision,
       action: "pause",
     });
+    return { revision: remote.revision, state: remote.state, destinations: collectorDestinations(connection, remote) };
   },
   async heartbeat(connection, input) {
     const { sync } = await collectorClients(connection);
-    return sync.heartbeat({
+    const remote = await sync.heartbeat({
       id: connection.id,
       expectedRevision: connection.revision,
       ...input,
     });
+    return { revision: remote.revision, state: remote.state, destinations: collectorDestinations(connection, remote) };
   },
   async admit(connection, entry) {
     const { evidence, sync } = await collectorClients(connection),

@@ -23,6 +23,7 @@ it("retains reconnect scope and rejects changed machine, source and concurrent c
     expect(retained).toEqual(connection);
     expect(() => assertReconnectSource(retained, retained.source)).not.toThrow();
     expect(() => assertReconnectSource(retained, { ...retained.source, root: join(directory, "another-profile") })).toThrow(/identity changed/);
+    store.put({ ...connection, destinations: { taskDatasetId: "acknowledged-dataset", conversationDatasetId: null } });
     await assertReconnectUnchanged(directory, retained);
     store.put({ ...connection, revision: 8, since: null });
     await expect(assertReconnectUnchanged(directory, retained)).rejects.toThrow(/changed during sign-in/);
