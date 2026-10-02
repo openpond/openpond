@@ -121,6 +121,13 @@ const ZAI_PREVIOUS_DEFAULT_BASE_URLS = new Set([
   "https://open.bigmodel.cn/api/paas/v4",
 ]);
 const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
+  ...([
+    ["claude-code", "Claude Code"], ["grok-build", "Grok Build"], ["opencode", "OpenCode"],
+  ] as const).map(([id, displayName]): ServerProviderPreset => ({
+    id, displayName, credentialModes: ["native-agent-login"],
+    routing: { localRuntime: true }, capabilities: { chatCompletions: true, streaming: true, toolCalling: true, modelDiscovery: "provider" },
+    defaultEnabled: false, defaultModel: null, modelCacheSource: "provider", models: [],
+  })),
   {
     id: "openpond",
     displayName: "OpenPond",
@@ -657,6 +664,10 @@ function providerConfigForPreset(
         ? preset.defaultModel
       : stored?.defaultModel;
   return ProviderConfigSchema.parse({
+    nativeMode: stored?.nativeMode ?? null,
+    nativeOptions: stored?.nativeOptions ?? {},
+    binaryPath: stored?.binaryPath ?? null,
+    sourceHome: stored?.sourceHome ?? null,
     enabled: stored?.enabled ?? preset.defaultEnabled ?? false,
     baseUrl: storedBaseUrl ?? presetBaseUrl,
     defaultModel: storedDefaultModel ?? preset.defaultModel ?? null,

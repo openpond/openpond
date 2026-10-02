@@ -296,7 +296,7 @@ it("binds the complete evaluation package to the selected reference and receipt"
 // A metadata hash cannot authorize independent private calibration. Admission
 // must retain the original executed fixture closure and keep it out of targets.
 it("admits retained independent calibration and refuses substituted or exposed closure assets", async () => {
-  const { compileRewardCheck, executeRewardFixture, matchRewardFixture, rewardAuthoringFields, AuthoringDraftSchema } = await import("@openpond/evals/learning");
+  const { compileRewardCheck, executeRewardFixture, matchRewardFixture, rewardAuthoringFields, AuthoringDraftSchema, qualifyRewardCheck } = await import("@openpond/evals/learning");
   const { createRewardCalibrationClosure, verifyRewardCalibrationClosure, rewardCalibrationClosureAsset } = await import("@openpond/evals/learning/reward-calibration-closure");
   const { resolveTasksetCalibrationFixture } = await import("../src/taskset-calibration-fixtures.js");
   const at = "2026-10-01T00:00:00.000Z";
@@ -307,30 +307,36 @@ it("admits retained independent calibration and refuses substituted or exposed c
       { id: "positive", name: "Positive", input: JSON.stringify({ prompt: "Independent fixture request" }), output: JSON.stringify({ answer: "correct" }),
         expectedOutput: JSON.stringify({ answer: "correct" }), evaluatorContext: JSON.stringify({ privateCriterion: "retained grader only" }),
         artifactRefs: [], runtimeEventRefs: [], infrastructureError: "", expectedStatus: "scored", minimumScore: "1", maximumScore: "1", expectedPassed: "true" },
+      { id: "negative", name: "Negative", input: JSON.stringify({ prompt: "Independent fixture request" }), output: JSON.stringify({ answer: "incorrect" }),
+        expectedOutput: JSON.stringify({ answer: "correct" }), evaluatorContext: JSON.stringify({ privateCriterion: "retained grader only" }),
+        artifactRefs: [], runtimeEventRefs: [], infrastructureError: "", expectedStatus: "scored", minimumScore: "0", maximumScore: "0", expectedPassed: "false" },
     ] },
   }));
   if (draft.targetKind !== "reward") throw new Error("Wrong fixture draft kind");
   const compiled = compileRewardCheck(draft, null);
   const independent = compiled.fixtures[0]!;
-  const retained = matchRewardFixture(independent, await executeRewardFixture({ reward: compiled.reward, fixture: independent }));
+  const results = await Promise.all(compiled.fixtures.map(async fixture => matchRewardFixture(fixture, await executeRewardFixture({ reward: compiled.reward, fixture }))));
+  const retained = results[0]!;
+  expect(results.map(result => result.result.passed)).toEqual([true, false]);
   const check = { schemaVersion: "openpond.rewardCheckRun.v1" as const, id: "actual-check", revision: 2,
     draft: learningRef(draft), reward: learningRef(compiled.reward), snapshotHash: compiled.snapshotHash, fixtureRefs: compiled.fixtureRefs,
-    status: "completed" as const, runtime: { id: "actual-deterministic-test-owner", packageVersion: "source", engine: "node" }, results: [retained], matchesExpectations: true, failure: null,
+    status: "completed" as const, runtime: { id: "actual-deterministic-test-owner", packageVersion: "source", engine: "node" }, results, matchesExpectations: true, failure: null,
     timeoutMs: 1000, maximumSpendUsd: 0, leaseOwner: null, leaseExpiresAt: null, attemptCount: 1, createdAt: at, updatedAt: at };
-  const closure = createRewardCalibrationClosure({ schemaVersion: "openpond.rewardCalibrationClosure.v1", reward: compiled.reward,
+  const reward = qualifyRewardCheck(draft, null, check).reward;
+  const closure = createRewardCalibrationClosure({ schemaVersion: "openpond.rewardCalibrationClosure.v1", reward: reward,
     draft, base: null, check, assets: compiled.assets });
   const privateAsset = rewardCalibrationClosureAsset(closure);
   const binding = createRewardBinding({ schemaVersion: "openpond.rewardBinding.v1", id: "calibration-binding", revision: 1,
-    sources: [{ graderId: compiled.reward.id, reward: learningRef(compiled.reward), role: "evaluation", normalization: { kind: "identity" },
-      weight: 1, required: true, hardGate: false, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }, [compiled.reward]);
+    sources: [{ graderId: reward.id, reward: learningRef(reward), role: "evaluation", normalization: { kind: "identity" },
+      weight: 1, required: true, hardGate: false, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }, [reward]);
   const original = fixture();
-  const grader = compileBoundGraders(binding, [compiled.reward])[0]!;
+  const grader = compileBoundGraders(binding, [reward])[0]!;
   const { contentHash: _verifierHash, ...verifierBody } = original.verifierSet;
   const verifierSet = createVerifierSetRelease({ ...verifierBody, graders: [grader], calibrationReceiptRefs: [] });
-  const id = `calibration-${contentHash([learningRef(compiled.reward), independent.id])}`;
+  const id = `calibration-${contentHash([learningRef(reward), independent.id])}`;
   const authored = { id, taskId: id, label: "positive", output: independent.output, infrastructureError: null,
     expectedPassed: true, expectedRewardEligible: false, metadata: { rewardCalibration: {
-      schemaVersion: "openpond.connectedRewardCalibrationProjection.v1", sourceReward: learningRef(compiled.reward), fixtureSet: compiled.reward.fixtureSetRef,
+      schemaVersion: "openpond.connectedRewardCalibrationProjection.v1", sourceReward: learningRef(reward), fixtureSet: reward.fixtureSetRef,
       calibrationCheck: { id: check.id, revision: check.revision, contentHash: contentHash(check) }, fixture: independent,
       fixtureHash: contentHash(independent), checkResultHash: contentHash(retained), independentCalibrationTask: true, closureRef: privateAsset.asset,
     } } };
@@ -357,8 +363,8 @@ it("admits retained independent calibration and refuses substituted or exposed c
   expect(readableHistory.taskset.tasks).toEqual(original.taskset.tasks);
   expect(() => resolveTasksetCalibrationFixture(readableHistory, id)).toThrow();
   const { contentHash: _closureHash, ...closureBody } = closure;
-  const changed = sealLearningContent({ ...closureBody, check: { ...check, results: [{ ...retained, result: { ...retained.result, rawScore: 0 } }] } });
-  expect(() => verifyRewardCalibrationClosure(changed)).toThrow(/grader_evidence_hash_mismatch|bound_reward|reward_calibration_closure_fixture_mismatch/);
+  const changed = sealLearningContent({ ...closureBody, check: { ...check, results: [{ ...retained, result: { ...retained.result, rawScore: 0 } }, ...results.slice(1)] } });
+  expect(() => verifyRewardCalibrationClosure(changed)).toThrow(/grader_evidence_hash_mismatch|bound_reward|reward_calibration_closure_fixture_mismatch|reward_calibration_fixture_mismatch/);
   const aliasedTaskset = sealLearningContent({ ...tasksetBody, tasks: taskset.tasks.map(task => ({ ...task, privilegedContextRef: privateAsset.id })) });
   expect(() => validateTasksetPackage(reseal({ taskset: aliasedTaskset }))).toThrow(/calibration_closure_task_alias/);
   const environmentAlias = sealLearningContent({ ...tasksetBody, metadata: { ...tasksetBody.metadata,

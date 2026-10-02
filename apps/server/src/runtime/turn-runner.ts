@@ -1,3 +1,4 @@
+import { nativeImageContent } from "./native-agents/attachments.js";
 import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -63,6 +64,8 @@ import { createCapabilityCatalogRuntime } from "./hosted-turn/capability-catalog
 import { createCreateImproveRuntime } from "./create-pipeline/runtime.js";
 import { createCreateImproveTurnHandler } from "./create-pipeline/send-turn.js";
 import { ActiveTurnRegistry } from "./turns/active-turn-registry.js";
+import { createNativeAgentRuntime } from "./native-agents/runtime.js";
+import { isNativeAgentId } from "./native-agents/config.js";
 import type {
   ActiveTurn,
   TurnRunner,
@@ -467,6 +470,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     subagentRepositoryRuntime.upsertRunAndNotify;
   const appendSubagentReceipt = subagentRepositoryRuntime.appendReceipt;
 
+  const nativeAgents = createNativeAgentRuntime(deps);
   const createImproveRuntime = createCreateImproveRuntime({
     getSession,
     getTurn: getStoredTurn,
@@ -923,7 +927,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.modelRef?.providerId ??
       session.modelRef?.providerId ??
       session.provider;
-    if (deps.resolveModelTools && (requestedProvider !== "openpond" || input.createImproveRun)) {
+    if (deps.executionHost === "embedded" && (requestedProvider !== "openpond" || input.createImproveRun)) {
       throw new Error("Embedded Work requires the configured model adapter and native tool loop.");
     }
     if (requestedProvider === "codex" && !sessionUsesRepositoryWork(session)) {
@@ -1658,6 +1662,35 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         return completed;
       }
 
+      if (isNativeAgentId(session.provider)) {
+        const cwd = input.cwd ?? (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: session.workspaceKind !== "local_project" })) ?? session.cwd;
+        if (!cwd) throw new Error("Choose a local working directory for this native agent.");
+        if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
+        const definitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
+        const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
+        const providerTurnId = await nativeAgents.run({ content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
+          coordination: definitions.length ? {
+            tools: definitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
+            execute: async (name, args, callId, signal) => {
+              const active = activeTurns.get(sessionId);
+              if (!active || active.controller.signal.aborted || active.session.experience === "chat" || active.session.systemKind) throw new Error("This task has no active coordination execution.");
+              const definition = definitions.find((tool) => tool.name === name);
+              if (!definition) throw new Error("Unknown task coordination tool.");
+              const result = await definition.execute({ session: active.session, turnId: active.turn.id,
+                turnPermissions: turnPermissionsFromSendTurnInput(SendTurnRequestSchema.parse({ prompt: active.turn.prompt })), provider: active.session.provider, model: active.turn.modelRef?.modelId ?? "native",
+                callId, args, signal: AbortSignal.any([signal, active.controller.signal]), workspaceDiffBaseline: null,
+                mentionedApps: [], userPrompt: active.turn.prompt, turnMetadata: active.turn.metadata });
+              return result.contentText;
+            },
+          } : undefined,
+        });
+        throwIfInterrupted(controller.signal);
+        await appendWorkspaceDiffEvent(session, turn.id, { baseline: initialWorkspaceDiff });
+        const completed = await completeTurn(sessionId, turn.id, providerTurnId);
+        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", appId: session.appId, status: "completed", data: { provider: session.provider } }));
+        await processHarnessImprovementBoundarySafely({ session, turn: completed, boundaryKind: "turn_completed" });
+        return completed;
+      }
       if (session.provider !== "codex")
         throw new Error(`Unsupported provider: ${session.provider}`);
       const codexModel = turnModelRef?.modelId ?? input.model ?? null;
@@ -1809,6 +1842,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   let closePromise: Promise<void> | null = null;
   const close = () => closePromise ??= (async () => {
     taskInbox.stopScheduling();
+    await nativeAgents.close();
     await turnRunnerLifecycle.close();
     await closeCompletionDelivery();
     await taskInbox.close();
@@ -1833,6 +1867,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     listCreateImproveRuns,
     resolveCreateImproveApproval,
     resolveSubagentPatchApplyApproval,
+    resolveNativeAgentApproval: nativeAgents.resolveApproval,
     runSubagentLifecycleAction,
     recoverPendingSubagentCompletions: recoverPendingCompletions,
     cleanupExpiredRetainedSubagentWorkspace,

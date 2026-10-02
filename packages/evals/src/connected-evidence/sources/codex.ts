@@ -1,6 +1,7 @@
 import { contentHash } from "@openpond/harness";
 import type { ConnectedEvent, ConnectedFile } from "../contracts.js";
 import { connectedTimestamp, event, json, normalizeConnectedSession, object } from "../normalize.js";
+import { projectCodexAuthorization } from "./codex-authorization.js";
 import { sourceUsage } from "./usage.js";
 
 export function parseCodexSession(file: ConnectedFile, rows: Record<string, unknown>[]) {
@@ -8,8 +9,11 @@ export function parseCodexSession(file: ConnectedFile, rows: Record<string, unkn
   if (typeof metadata.id !== "string") throw new Error("This is not a supported Codex rollout: session_meta.id is missing.");
   const events: ConnectedEvent[] = [];
   let turnId: string | null = null;
+  let authorizationOmissions = 0;
   for (const [ordinal, row] of rows.entries()) {
-    const payload = object(row.payload);
+    const projected = projectCodexAuthorization(row);
+    authorizationOmissions += projected.omissions.length;
+    const payload = object(projected.row.payload);
     if (row.type === "session_meta") continue;
     if (row.type === "turn_context") { turnId = typeof payload.turn_id === "string" ? payload.turn_id : turnId; continue; }
     const id = typeof payload.id === "string" ? payload.id : `codex-event-${contentHash([ordinal, row]).slice(0, 32)}`;
@@ -30,9 +34,9 @@ export function parseCodexSession(file: ConnectedFile, rows: Record<string, unkn
         const usage = sourceUsage(info.total_token_usage, `codex-cumulative:${metadata.id}:${ordinal}`, "reported_cumulative");
         events.push(event({ ...base, kind: "usage", usage, content: json(payload) }));
       } else events.push(event({ ...base, kind: "unknown", content: json(payload) }));
-    } else events.push(event({ ...base, kind: "unknown", content: json(row) }));
+    } else events.push(event({ ...base, kind: "unknown", content: json(projected.row) }));
   }
   return normalizeConnectedSession({ origin: "codex", sessionId: metadata.id, parentSessionId: typeof metadata.forked_from_id === "string" ? metadata.forked_from_id : null,
     exporterVersion: typeof metadata.cli_version === "string" ? metadata.cli_version : null, files: [file], events,
-    warnings: ["Codex cumulative usage is retained as reported totals and is not summed as billed invocations.", "Referenced files are unavailable unless separately admitted."] });
+    warnings: ["Codex cumulative usage is retained as reported totals and is not summed as billed invocations.", "Referenced files are unavailable unless separately admitted.", ...(authorizationOmissions ? [`Codex native authorization state excluded by codex-native-authorization-v1 from ${authorizationOmissions} locations. Omission markers retain source-section hashes; sourceFiles retains original byte hashes. Other conversation evidence is unchanged and still requires privacy admission.`] : [])] });
 }

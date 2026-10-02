@@ -1,31 +1,40 @@
 import { useEffect, useState } from "react";
 import { BadgeCheck, Ban, Check, X } from "../icons";
 import type { Approval, ResolveApprovalRequest } from "@openpond/contracts";
+import type { NativeAgentQuestion } from "@openpond/agent-runtime";
+import { NativeQuestionFields } from "./NativeQuestionFields";
 
 type ApprovalDecision = ResolveApprovalRequest["decision"];
 
 type ApprovalRequestCardProps = {
   approval: Approval | null;
-  onResolve: (approvalId: string, decision: ApprovalDecision) => Promise<void>;
+  onResolve: (approvalId: string, decision: ApprovalDecision, answers?: ResolveApprovalRequest["answers"]) => Promise<void>;
 };
 
 export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCardProps) {
   const [pendingDecision, setPendingDecision] = useState<ApprovalDecision | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setPendingDecision(null);
+    setAnswers({});
   }, [approval?.id]);
 
   if (!approval || approval.kind === "create_plan") return null;
 
   const detail = formatApprovalDetail(approval.detail);
-  const supportsSessionApproval = approval.kind !== "subagent_patch_apply";
+  const native = typeof approval.providerRequestId === "string" && approval.providerRequestId.startsWith("native-agent:");
+  let choices: Array<{ kind: string; name: string }> = [];
+  let questions: NativeAgentQuestion[] = [];
+  if (native) { try { const parsed = JSON.parse(approval.detail) as { options?: Array<{ kind: string; name: string }>; questions?: NativeAgentQuestion[] }; choices = parsed.options ?? []; questions = parsed.questions ?? []; } catch { /* Invalid native details never expose a broader grant. */ } }
+  const supportsSessionApproval = native ? choices.some((option) => option.kind === "allow_always") : approval.kind !== "subagent_patch_apply";
+  const nativeAlwaysName = choices.find((option) => option.kind === "allow_always")?.name;
 
   async function resolve(decision: ApprovalDecision) {
     if (!approval || pendingDecision) return;
     setPendingDecision(decision);
     try {
-      await onResolve(approval.id, decision);
+      await onResolve(approval.id, decision, decision === "accept" && questions.length ? answers : undefined);
     } catch {
       setPendingDecision(null);
     }
@@ -47,33 +56,34 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
               <pre>{detail}</pre>
             </details>
           )}
+          {questions.length ? <NativeQuestionFields questions={questions} answers={answers} disabled={Boolean(pendingDecision)} onChange={setAnswers} /> : null}
         </div>
         <div className="approval-request-actions">
           <button
             type="button"
             className="approval-action primary"
-            disabled={Boolean(pendingDecision)}
+            disabled={Boolean(pendingDecision) || questions.some((question) => !answers[question.question]?.trim()) || (native && !choices.some((option) => option.kind === "allow_once"))}
             onClick={() => void resolve("accept")}
           >
             <Check size={14} />
-            <span>{pendingDecision === "accept" ? "Approving" : "Approve"}</span>
+            <span>{pendingDecision === "accept" ? "Sending" : questions.length ? "Submit answers" : "Approve"}</span>
           </button>
           {supportsSessionApproval ? (
             <button
               type="button"
               className="approval-action"
-              title="Approve for the rest of this session"
+              title={native ? nativeAlwaysName : "Approve for the rest of this session"}
               disabled={Boolean(pendingDecision)}
               onClick={() => void resolve("acceptForSession")}
             >
               <BadgeCheck size={14} />
-              <span>{pendingDecision === "acceptForSession" ? "Approving" : "Session"}</span>
+              <span>{pendingDecision === "acceptForSession" ? "Approving" : native ? nativeAlwaysName : "Session"}</span>
             </button>
           ) : null}
           <button
             type="button"
             className="approval-action muted"
-            disabled={Boolean(pendingDecision)}
+            disabled={Boolean(pendingDecision) || (native && !choices.some((option) => option.kind === "reject_once"))}
             onClick={() => void resolve("decline")}
           >
             <Ban size={14} />
@@ -82,8 +92,8 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
           <button
             type="button"
             className="approval-action icon-only"
-            title="Cancel task"
-            aria-label="Cancel task"
+            title={native ? "Dismiss request" : "Cancel task"}
+            aria-label={native ? "Dismiss request" : "Cancel task"}
             disabled={Boolean(pendingDecision)}
             onClick={() => void resolve("cancel")}
           >

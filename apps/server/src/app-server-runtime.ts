@@ -456,6 +456,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   const isolatedProfileTools=externalDataset&&explicitProfileRelease?createHostProfileEvaluationTools({storeDir,release:explicitProfileRelease,getTurn:id=>coreStore.getTurn(id),getSession,saveOutput:evaluationOutputOwner.saveOwnedOutputBytes,recordOutput:async(sessionId,turnId,data)=>{await appendRuntimeEvent({id:randomUUID(),timestamp:new Date().toISOString(),name:"workspace_action_result",source:"server",sessionId,turnId,action:"work_output_save",status:"completed",output:`Saved ${data.outputRef.title} as immutable case output.`,data});},authorize:externalDataset.authorize}):null;
   const embeddedToolResolver=options.embedding ? createEmbeddingToolResolver(options.embedding, async (turnId,bindings)=>{const turn=await coreStore.getTurn(turnId);if(!turn)throw new Error("Embedded turn is unavailable.");const session=await getSession(turn.sessionId),previous=session.metadata?.embeddingToolBindings,admittedBindings=[...bindings].sort((a,b)=>a.name.localeCompare(b.name));if(previous!==undefined&&contentHash(previous)!==contentHash(admittedBindings))throw new Error("Embedded tool bindings changed; start a new thread.");await updateSession(session.id,{metadata:{...session.metadata,embeddingToolBindings:admittedBindings}});await coreStore.updateTurn(turnId,current=>({...current,metadata:{...current.metadata,toolBindings:admittedBindings}}));}):undefined;
   const turnRunner = createTurnRunner({
+    executionHost: embedded ? "embedded" : "local",
     storageHome: storeDir,
     workInputsForSession: options.workInputsForSession,
     finalizeWorkTurn: options.finalizeWorkTurn,
@@ -547,6 +548,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     approvalId: string,
     payload: unknown,
   ): Promise<Approval> {
+    const nativeApproval = await turnRunner.resolveNativeAgentApproval(approvalId, payload);
+    if (nativeApproval) return nativeApproval;
     const commandApproval = await commandAccess.resolveApproval(
       approvalId,
       payload,

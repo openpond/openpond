@@ -18,6 +18,7 @@ export const ProviderCredentialModeSchema = z.enum([
   "openpond-account",
   "openpond-managed",
   "codex-login",
+  "native-agent-login",
   "chatgpt-subscription",
   "local-byok",
   "hosted-byok",
@@ -34,6 +35,7 @@ export const ProviderCredentialSourceSchema = z.enum([
   "env",
   "openpond_account",
   "codex_login",
+  "native_agent_login",
   "chatgpt_subscription",
   "hosted",
 ]);
@@ -136,6 +138,10 @@ export const ProviderModelCacheSchema = z.object({
 export type ProviderModelCache = z.infer<typeof ProviderModelCacheSchema>;
 
 export const ProviderConfigSchema = z.object({
+  nativeMode: z.string().max(200).nullable().default(null),
+  nativeOptions: z.record(z.string().max(200), z.string().max(300)).default({}),
+  binaryPath: z.string().trim().min(1).max(4096).nullable().default(null),
+  sourceHome: z.string().trim().min(1).max(4096).nullable().default(null),
   enabled: z.boolean().default(false),
   baseUrl: z.string().trim().min(1).max(2048).nullable().default(null),
   defaultModel: z.string().trim().min(1).max(300).nullable().default(null),
@@ -146,6 +152,10 @@ export const ProviderConfigSchema = z.object({
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 
 export const ProviderConfigPatchSchema = z.object({
+  nativeMode: z.string().max(200).nullable().optional(),
+  nativeOptions: z.record(z.string().max(200), z.string().max(300)).optional(),
+  binaryPath: z.string().trim().min(1).max(4096).nullable().optional(),
+  sourceHome: z.string().trim().min(1).max(4096).nullable().optional(),
   enabled: z.boolean().optional(),
   baseUrl: z.string().trim().min(1).max(2048).nullable().optional(),
   defaultModel: z.string().trim().min(1).max(300).nullable().optional(),

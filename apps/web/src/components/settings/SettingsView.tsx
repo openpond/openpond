@@ -347,6 +347,7 @@ export function SettingsView({
           />
         ) : section === "providers" ? (
           <ProviderSettingsSection
+            connection={connection}
             account={payload?.account ?? null}
             codex={codex}
             providers={payload?.providers ?? null}

@@ -4,6 +4,28 @@
 
 Parsing, aliases, command help, and this reference use the same authoritative registry.
 
+## import
+
+```text
+Usage:
+  openpond import <connect|reconnect|discover|status|sync|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--once] [--yes] [--detach]
+
+Options:
+  --collector-dir <string>
+  --connection <string>
+  --detach
+  --json
+  --leaf <string>
+  --once
+  --project <string>
+  --range <string>
+  --revision <string>
+  --session <string>
+  --source <string>
+  --source-path <string>
+  --team <string>
+  --yes
+```
 ## datasets
 
 ```text

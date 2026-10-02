@@ -177,7 +177,7 @@ export function buildDevRunnerPlan(
     OPENPOND_WEB_URL: webUrl,
     OPENPOND_REMOTE_ACCESS_TARGET: webUrl,
   };
-  const serverEnv = { ...baseEnv, OPENPOND_REMOTE_ACCESS_TARGET: webUrl };
+  const serverEnv = { ...baseEnv, OPENPOND_REMOTE_ACCESS_TARGET: webUrl, OPENPOND_COLLECTOR_CLI: path.join(root, "apps", "cli", "dist", "cli.js"), OPENPOND_COLLECTOR_EXECUTABLE: process.execPath };
   const rendererEnv = {
     ...baseEnv,
     VITE_OPENPOND_SERVER_URL: serverUrl,

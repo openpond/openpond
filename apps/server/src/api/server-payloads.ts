@@ -3,6 +3,11 @@ import path from "node:path";
 import {createLocalExternalDatasetPreparation} from "../harness/local-external-dataset-preparation.js";
 import {resolveHostedApiAccess} from "../openpond/hosted-api-access.js";
 
+import { nativeTerminalCommand } from "../runtime/native-agents/terminal-command.js";
+import { NATIVE_AGENTS, nativeAgentLaunch } from "../runtime/native-agents/config.js";
+import { applyNativeAgentStatus, probeNativeAgent } from "../runtime/native-agents/setup.js";
+import { isNativeAgentId } from "../runtime/native-agents/config.js";
+import { createNativeHistory } from "../runtime/native-agents/history.js";
 import {
   AccountStateSchema,
   BootstrapPayloadSchema,
@@ -189,6 +194,7 @@ export function createServerPayloads(deps: {
   } = deps;
   const attachmentRootDir =
     deps.attachmentRootDir ?? path.join(storeDir, "attachments");
+  const nativeHistoryPayload = createNativeHistory({ store, storeDir, appendRuntimeEvent });
   const {
     appendAppPage,
     loadOpenPondData,
@@ -280,7 +286,7 @@ export function createServerPayloads(deps: {
       readProviderSecrets(providerSecretPaths),
       listManagedAdapterProviderModels(store),
     ]);
-    return withManagedAdapterProviderModels(
+    return applyNativeAgentStatus(withManagedAdapterProviderModels(
       buildProviderSettings({
         file: providerState.file,
         secrets,
@@ -289,7 +295,7 @@ export function createServerPayloads(deps: {
         catalog: providerState.catalog,
       }),
       managedAdapterModels
-    );
+    ));
   }
 
   async function updateAppPreferencesPayload(
@@ -329,7 +335,7 @@ export function createServerPayloads(deps: {
           readProviderSecrets(providerSecretPaths),
           listManagedAdapterProviderModels(store),
         ]);
-      return withManagedAdapterProviderModels(
+      return applyNativeAgentStatus(withManagedAdapterProviderModels(
         buildProviderSettings({
           file: providerState.file,
           secrets,
@@ -338,7 +344,7 @@ export function createServerPayloads(deps: {
           catalog: providerState.catalog,
         }),
         managedAdapterModels
-      );
+      ));
     });
   }
 
@@ -400,6 +406,11 @@ export function createServerPayloads(deps: {
       async () => {
         const request = parseProviderModelsRefreshRequest(payload);
         const state = await localProviderRuntimeState();
+        if (isNativeAgentId(providerId)) {
+          await probeNativeAgent(providerId, state.file.providers[providerId], { force: true });
+          const providers = await providerSettingsPayload();
+          return { ...listProviderModels(providers, providerId, { query: request.query, refresh: false, limit: 100 }), providers };
+        }
         let cache = buildProviderModelCache({
           providerId,
           file: state.file,
@@ -538,6 +549,11 @@ export function createServerPayloads(deps: {
         if (!status || !config)
           throw new Error(`Unknown provider: ${providerId}`);
 
+        if (isNativeAgentId(providerId)) {
+          const result = await probeNativeAgent(providerId, config, { force: true });
+          return { ok: result.status === "ready", providerId, modelId: result.session?.models?.currentModelId ?? null, errors: result.error ? [result.error] : [], providers: await providerSettingsPayload() };
+        }
+
         if (providerId === "codex") {
           const codex = refreshCodexStatus
             ? await refreshCodexStatus()
@@ -565,6 +581,7 @@ export function createServerPayloads(deps: {
             providerId,
             ok: errors.length === 0,
             live: false,
+            nativeStatus: !codex.available ? "missing" : codex.authHealth === "signed_out" ? "needs_login" : errors.length ? "unavailable" : "ready",
             baseUrl: null,
             modelId,
             credential:
@@ -1761,6 +1778,33 @@ export function createServerPayloads(deps: {
     loadProviderSettings,
     updateAppPreferencesPayload,
     providerSettingsPayload,
+    nativeHistoryPayload,
+    nativeAgentSetupPayload: async (provider: string, payload: unknown, signal?: AbortSignal) => {
+      const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+      if (provider === "codex") {
+        if (input.action === "login") {
+          const binary = getCodexStatus().binaryPath;
+          if (!binary) throw new Error("Install Codex before signing in.");
+          return { command: nativeTerminalCommand(binary, ["login"], process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}) };
+        }
+        signal?.throwIfAborted();
+        const validation = await validateProviderCredentialPayload("codex", {}) as { nativeStatus: string; errors: string[]; providers: ProviderSettings };
+        signal?.throwIfAborted();
+        return { status: validation.nativeStatus, error: validation.errors.join("\n") || null, version: getCodexStatus().version, settings: validation.providers };
+      }
+      if (!isNativeAgentId(provider)) throw new Error("Unknown native agent.");
+      const file = await loadProvidersFile();
+      if (input.action === "login") {
+        const launch = nativeAgentLaunch(provider, file.providers[provider]);
+        const definition = NATIVE_AGENTS[provider];
+        return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { [definition.homeVariable]: launch.sourceHome }) };
+      }
+      const result = await probeNativeAgent(provider, file.providers[provider], { signal, force: input.action !== "capabilities", authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
+      const settings = await providerSettingsPayload();
+      if (nativeAgentLaunch(provider, settings.providers[provider]).instanceId !== result.instanceId) throw new Error("Provider configuration changed during the check. Refresh the connection.");
+      signal?.throwIfAborted();
+      return { ...result, settings };
+    },
     updateProviderSettingsPayload,
     listProviderModelsPayload,
     refreshProviderModelsPayload,

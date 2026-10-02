@@ -1,3 +1,4 @@
+import { exportRewardCalibrationClosure, verifyRewardCalibrationClosure } from "@openpond/evals/learning/reward-calibration-closure";
 import { expect, test } from "vitest";
 import { createRewardRelease, RewardReleaseSchema } from "@openpond/evals/rewards";
 import {
@@ -76,6 +77,43 @@ test("checked judges publish exact calibration evidence and grade bound examples
       const result = await createTaskGradeWorker(repository, createLocalTaskGradeExecutor(repository, provider), { workerId: "grade" }).run(learningContext.scope, grade.id);
       expect(result).toMatchObject({ status: "completed", composition: { training: { status: "scored", passed: true } }, judgeCalls: [{ status: "settled", response: { costUsd: 0.001 } }] });
       expect(calls).toBe(3);
+    } finally { await store.close(); }
+  });
+});
+
+// A real deterministic check must survive publication/export without accepting
+// another verifier's retained check or requiring a model-provider receipt.
+test("deterministic calibration publishes and exports only its checked verifier and fixtures", async () => {
+  await withTempDirectory("openpond-deterministic-calibration-", async home => {
+    const store = new SqliteLearningStore(home);
+    try {
+      const repository = store.learningRepository();
+      const setup = await learningFixture(repository);
+      const fields = { ...rewardAuthoringFields(null, null), name: "Checked deterministic verifier", kind: "custom_verifier" as const,
+        fixtures: [true, false].map(passed => ({ id: passed ? "positive" : "negative", name: passed ? "Positive" : "Negative",
+          input: "{}", output: JSON.stringify({ answer: passed ? "yes" : "no" }), expectedOutput: '{"answer":"yes"}', evaluatorContext: "",
+          artifactRefs: [], runtimeEventRefs: [], infrastructureError: "", expectedStatus: "scored" as const,
+          minimumScore: passed ? "1" : "0", maximumScore: passed ? "1" : "0", expectedPassed: passed ? "true" as const : "false" as const })) };
+      const draft = AuthoringDraftSchema.parse((await setup.command({ action: "save_draft", expectedRevision: 0,
+        draft: { id: "deterministic-draft", targetId: "deterministic-grader", targetKind: "reward", baseRelease: null, editorVersion: "openpond.modelsEditor.v1", fields } })).resources[0]);
+      const queued = RewardCheckRunSchema.parse((await setup.command({ action: "queue_reward_check", draft: learningRef(draft), maximumSpendUsd: 0 })).resources[0]);
+      await expect(setup.command({ action: "publish_checked_reward", draft: learningRef(draft), checkId: queued.id, checkRevision: queued.revision })).rejects.toThrow("check_incomplete");
+      const check = await createRewardCheckWorker(repository, createLocalRewardCheckExecutor(repository), { workerId: "deterministic-calibration" }).run(learningContext.scope, queued.id);
+      expect(check).toMatchObject({ status: "completed", matchesExpectations: true, maximumSpendUsd: 0 });
+      expect(check.judgeCalls ?? []).toEqual([]);
+      expect(check.results.map(row => row.result.rawScore)).toEqual([1, 0]);
+      const publication = await setup.command({ action: "publish_checked_reward", draft: learningRef(draft), checkId: check.id, checkRevision: check.revision });
+      const reward = RewardReleaseSchema.parse(publication.resources.find(value => value.schemaVersion === "openpond.rewardRelease.v1"));
+      expect(reward.calibrationCheckRef).toMatchObject({ id: check.id, revision: check.revision });
+      expect(reward.implementation.kind).toBe("custom_verifier");
+      const closure = await repository.transaction(learningContext.scope, tx => exportRewardCalibrationClosure(tx, { reward: learningRef(reward), check: reward.calibrationCheckRef! }));
+      expect(verifyRewardCalibrationClosure(closure).reward).toEqual(reward);
+      const { contentHash: _hash, ...content } = reward;
+      if (content.implementation.kind !== "custom_verifier") throw new Error("Missing verifier");
+      await expect(setup.command({ action: "publish", kind: "reward", expectedRevision: 1,
+        content: { ...content, revision: 2, implementation: { ...content.implementation, exportName: "differentVerifier" } } })).rejects.toThrow("configuration_changed");
+      await expect(setup.command({ action: "publish", kind: "reward", expectedRevision: 1,
+        content: { ...content, revision: 2, calibrationCheckRef: { ...reward.calibrationCheckRef!, contentHash: "0".repeat(64) } } })).rejects.toThrow("check_changed");
     } finally { await store.close(); }
   });
 });

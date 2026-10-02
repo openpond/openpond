@@ -255,6 +255,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   const store = new SqliteStore(storeDir, { logger });
   onStartupFailure(() => store.close());
   await store.recentTurns(1);
+  // A native permission request belongs to the process that issued it. Restart never approves it.
+  for (const approval of await store.pendingApprovals()) {
+    if (typeof approval.providerRequestId === "string" && approval.providerRequestId.startsWith("native-agent:")) await store.upsertApproval({ ...approval, status: "cancelled" });
+  }
   const scheduleRecovery = reconcileInterruptedScheduledWork(storeDir);
   if (scheduleRecovery.recovered || scheduleRecovery.needsReview) logger.warn("Scheduled work requires review after restart", scheduleRecovery);
   await ensureSelectedLocalHarnessWorkspace({
@@ -336,6 +340,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     loadAppPreferences,
     updateAppPreferencesPayload,
     providerSettingsPayload,
+    nativeAgentSetupPayload,
+    nativeHistoryPayload,
     updateProviderSettingsPayload,
     listProviderModelsPayload,
     refreshProviderModelsPayload,
@@ -1186,6 +1192,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     approvalId: string,
     payload: unknown
   ): Promise<Approval> {
+    const nativeApproval = await turnRunner.resolveNativeAgentApproval(approvalId, payload);
+    if (nativeApproval) return nativeApproval;
     const commandApproval = await openPondCommandAccess.resolveApproval(
       approvalId,
       payload
@@ -1771,6 +1779,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       profileRunPayload,
       updateAppPreferencesPayload,
       providerSettingsPayload,
+      nativeAgentSetupPayload,
+      nativeHistoryPayload,
       updateProviderSettingsPayload,
       listProviderModelsPayload,
       refreshProviderModelsPayload,

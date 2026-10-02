@@ -123,7 +123,10 @@ export function draftPublishIssues(draft: TasksetDraft): TasksetDraftPublishIssu
   if (!draft.objective.trim()) issues.push({ code: "objective_missing", message: "Objective is required.", path: "objective" });
   if (!draft.datasetArtifact && draft.tasks.length === 0) issues.push({ code: "tasks_missing", message: "Add at least one task or Dataset artifact.", path: "tasks" });
   if (draft.graders.length === 0) issues.push({ code: "graders_missing", message: "Add at least one grader.", path: "graders" });
-  if (draft.graderFixtures.length === 0) issues.push({ code: "grader_fixtures_missing", message: "Add grader fixtures before publishing.", path: "graderFixtures" });
+  // Human-only review retains its rubric/form and awaits actual submissions;
+  // it has no automated outputs to qualify with grader fixtures.
+  const humanReviewOnly = draft.graders.length > 0 && draft.graders.every(grader => grader.kind === "human");
+  if (!humanReviewOnly && draft.graderFixtures.length === 0) issues.push({ code: "grader_fixtures_missing", message: "Add grader fixtures before publishing.", path: "graderFixtures" });
   const sourceIds = new Set(draft.sourceRefs.map((source) => source.id));
   for (const task of draft.tasks) {
     for (const sourceId of task.sourceRefs) {

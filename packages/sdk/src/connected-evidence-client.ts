@@ -7,6 +7,7 @@ import { ConnectedRecordedExecutionRequestSchema, ConnectedRecordedListSchema, C
 import { ConnectedDatasetPublicationSchema, type ConnectedDatasetPublication } from "./connected-dataset-publication.js";
 import { DatasetWorkspaceReceiptSchema } from "./dataset-workspace-contracts.js";
 import { fetchConnectedJson } from "./connected-evidence-http.js";
+import { ConnectedCollectionStatusSchema } from "./connected-collection-status.js";
 
 const Id = z.string().min(1).max(500), Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const ConnectedCollectionSchema = z.object({ teamId: Id, projectId: Id.nullable(), status: z.enum(["active", "paused", "archived"]), revision: z.number().int().nonnegative() }).strict();
@@ -72,6 +73,11 @@ export class ConnectedEvidenceClient {
     this.scope(result.teamId); return result;
   }
   async collection(signal?: AbortSignal) { const result = ConnectedCollectionSchema.parse(await this.request("/collection", "GET", undefined, signal)); this.scope(result.teamId); return result; }
+  async collectionStatus(signal?: AbortSignal) {
+    const result = ConnectedCollectionStatusSchema.parse(await this.request("/collection/status", "GET", undefined, signal));
+    this.scope(result.teamId);
+    return result;
+  }
   async unmappedEvents(input: { id: string; snapshotHash: string; contentHash: string; offset?: number; limit?: number }, signal?: AbortSignal) {
     const request = z.object({ id: Id, snapshotHash: Hash, contentHash: Hash, offset: z.number().int().nonnegative().default(0), limit: z.number().int().min(1).max(50).default(20) }).strict().parse(input);
     const result = ConnectedUnmappedEventsSchema.parse(await this.request(`/${encodeURIComponent(request.id)}/unmapped-events?snapshotHash=${request.snapshotHash}&offset=${request.offset}&limit=${request.limit}`, "GET", undefined, signal));
