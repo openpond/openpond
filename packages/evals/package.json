@@ -182,7 +182,7 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
-    "@openpond/harness": "^0.4.0"
+    "@openpond/harness": "^0.4.5"
   },
   "devDependencies": {
     "@openpond/harness": "workspace:*",
