@@ -22,6 +22,6 @@ export function assertReconnectSource(connection: CollectorConnection, source: N
 
 export async function assertReconnectUnchanged(directory: string, expected: CollectorConnection) {
   const current = await retainedReconnect(directory, expected.id);
-  if (contentHash(current) !== contentHash(expected))
+  if (contentHash({ ...current, destinations: undefined }) !== contentHash({ ...expected, destinations: undefined }))
     throw new Error("The connection changed during sign-in. Reconnect again after reviewing its current scope.");
 }

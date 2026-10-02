@@ -9,12 +9,15 @@ export const COLLECTOR_DEFAULTS = {
   batchCases: 20,
   batchBytes: 1024 * 1024,
 } as const;
+export interface CollectorDestinations { taskDatasetId: string | null; conversationDatasetId: string | null }
+export interface CollectorRemoteControl { revision: number; state: CollectorConnection["state"]; destinations?: CollectorDestinations }
 export interface CollectorConnection {
   id: string;
   teamId: string;
   apiBaseUrl: string;
   account?: string;
   accountBaseUrl?: string;
+  destinations?: CollectorDestinations;
   source: NativeSource;
   projectId: string;
   revision: number;
@@ -39,6 +42,7 @@ export interface CollectorStatus {
     backfill: CollectorBackfillProgress;
     pendingBytes: number;
     lastAdmissionAt: string | null;
+    destinationLinks: { tasks: string | null; conversations: string | null };
   }[];
 }
 export interface CollectorAdmission {
@@ -54,11 +58,11 @@ export interface CollectorAdmission {
 export interface CollectorTransport {
   pause?(
     connection: CollectorConnection,
-  ): Promise<{ revision: number; state: CollectorConnection["state"] }>;
+  ): Promise<CollectorRemoteControl>;
   heartbeat(
     connection: CollectorConnection,
     input: { pendingOperations: number; error: string | null },
-  ): Promise<{ revision: number; state: CollectorConnection["state"] }>;
+  ): Promise<CollectorRemoteControl>;
   admit(
     connection: CollectorConnection,
     entry: CollectorAdmission,

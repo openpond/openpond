@@ -12,6 +12,7 @@ import {
   COLLECTOR_DEFAULTS,
   type CollectorConnection,
   type CollectorTransport,
+  type CollectorRemoteControl,
 } from "./collector-contracts.js";
 
 /** Supervised single owner: acquisition and admission checkpoints survive monitor/service exits. */
@@ -61,12 +62,12 @@ export async function runCollector(input: {
   }
   function applyRemote(
     connection: CollectorConnection,
-    remote: Pick<CollectorConnection, "revision" | "state">,
+    remote: CollectorRemoteControl,
   ) {
     const current = retained(connection);
     const next =
-      current.state !== "disconnected" && remote.revision > current.revision
-        ? { ...current, revision: remote.revision, state: remote.state }
+      current.state !== "disconnected" && remote.revision >= current.revision
+        ? { ...current, ...(remote.revision > current.revision ? { revision: remote.revision, state: remote.state } : {}), ...(remote.destinations ? { destinations: remote.destinations } : {}) }
         : current;
     store.put(next);
     return next;

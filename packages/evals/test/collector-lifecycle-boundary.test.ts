@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { runCollector } from "../src/native-conversations/collector.js";
+import { collectorDestinations, collectorDestinationLinks } from "../src/native-conversations/collector-destinations.js";
 import { CollectorStore } from "../src/native-conversations/collector-store.js";
 import type { CollectorConnection } from "../src/native-conversations/collector-contracts.js";
 
@@ -38,6 +39,7 @@ it("preserves local source identity and receipts across remote controls", async 
     id: "connection",
     teamId: "team",
     apiBaseUrl: "http://localhost",
+    accountBaseUrl: "https://staging.openpond.ai",
     projectId: "project",
     revision: 1,
     since: null,
@@ -53,6 +55,22 @@ it("preserves local source identity and receipts across remote controls", async 
       capabilities: { history: true, live: true, nativeResume: true },
     },
   };
+  const destination = collectorDestinations(connection, {
+    id: connection.id, teamId: connection.teamId, projectId: connection.projectId,
+    machineId: connection.source.machineId, sourceInstanceId: connection.source.instanceId,
+    sourceRoot: connection.source.root, source: connection.source.source,
+    taskDatasetId: "task/dataset", conversationDatasetId: null,
+  });
+  // No link is manufactured before the server returns a destination; a foreign
+  // scope or credential-bearing/unsafe origin must never become a Desktop link.
+  expect(collectorDestinationLinks(connection).tasks).toBeNull();
+  expect(() => collectorDestinations(connection, {
+    id: connection.id, teamId: "another-team", projectId: connection.projectId,
+    machineId: connection.source.machineId, sourceInstanceId: connection.source.instanceId,
+    sourceRoot: connection.source.root, source: connection.source.source, ...destination,
+  })).toThrow(/another source or workspace/);
+  expect(collectorDestinationLinks({ ...connection, destinations: destination, accountBaseUrl: "https://user:secret@example.com" }).tasks).toBeNull();
+  expect(collectorDestinationLinks({ ...connection, destinations: destination, accountBaseUrl: "javascript:alert(1)" }).tasks).toBeNull();
   const store = await CollectorStore.open(join(directory, "state"));
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), 5000);
@@ -69,6 +87,7 @@ it("preserves local source identity and receipts across remote controls", async 
           state: "active",
           source: "pi",
           projectId: "untrusted-extra",
+          destinations: destination,
         }),
         admit: async () => {
           admissions++;
@@ -87,15 +106,19 @@ it("preserves local source identity and receipts across remote controls", async 
     expect(admissions).toBe(1);
     expect(store.connections()[0]).toEqual({
       ...connection,
+      destinations: destination,
       revision: 3,
       state: "paused",
     });
     expect(store.status().connections[0]).toMatchObject({
       source: "pi",
+      destinationLinks: { tasks: "https://staging.openpond.ai/console/datasets/task%2Fdataset/tasks?project=project", conversations: null },
       admitted: 1,
       queued: 0,
       backfill: { stage: "complete", total: 1, admitted: 1, failed: 0 },
     });
+    store.put({ ...store.connections()[0]!, revision: 4, projectId: "another-project" });
+    expect(store.status().connections[0]?.destinationLinks.tasks).toBeNull();
   } finally {
     clearTimeout(deadline);
     controller.abort();

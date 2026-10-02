@@ -22,6 +22,8 @@ export function NativeImporterStatus({ status, busy, onControl, onConnectionCont
         {!complete && progress.total > 0 ? <progress aria-label={`${sourceNames[connection.source] ?? connection.source} import progress`} value={done} max={progress.total} /> : null}
         {connection.queued > 0 ? <small>{connection.queued} updates waiting to upload ({new Intl.NumberFormat(undefined, { notation: "compact" }).format(connection.pendingBytes)} bytes)</small> : null}
         {connection.lastAdmissionAt ? <small>Last synced <time dateTime={connection.lastAdmissionAt}>{new Date(connection.lastAdmissionAt).toLocaleString()}</time></small> : <small>No uploads acknowledged yet</small>}
+        {connection.destinationLinks?.tasks ? <a href={connection.destinationLinks.tasks} target="_blank" rel="noopener noreferrer">View tasks</a> : null}
+        {connection.destinationLinks?.conversations ? <a href={connection.destinationLinks.conversations} target="_blank" rel="noopener noreferrer">View conversations</a> : null}
         {connection.error ? <small role="status">{connection.error}</small> : null}
         {connection.state === "disconnected" ? <button type="button" disabled={busy} onClick={() => onReconnect(connection.id)}>Reconnect source</button> : <div>
           <button type="button" disabled={busy} onClick={() => onConnectionControl(connection.state === "paused" ? "resume" : "pause", connection.id)}>{connection.state === "paused" ? "Resume" : "Pause"} {sourceNames[connection.source] ?? connection.source}</button>
