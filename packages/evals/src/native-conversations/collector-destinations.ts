@@ -21,7 +21,7 @@ export function collectorDestinationLinks(connection: CollectorConnection) {
   if ((origin.protocol !== "https:" && !(origin.protocol === "http:" && ["localhost", "127.0.0.1"].includes(origin.hostname))) ||
       origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/") return absent;
   const link = (id: string | null) => id
-    ? `${origin.origin}/console/datasets/${encodeURIComponent(id)}/tasks?project=${encodeURIComponent(connection.projectId)}`
+    ? `${origin.origin}/console/datasets/${encodeURIComponent(id)}/tasks?project=${encodeURIComponent(connection.projectId)}&connection=${encodeURIComponent(connection.id)}`
     : null;
   return { tasks: link(connection.destinations.taskDatasetId), conversations: link(connection.destinations.conversationDatasetId) };
 }
