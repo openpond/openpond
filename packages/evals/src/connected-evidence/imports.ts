@@ -1,6 +1,7 @@
 import { contentHash } from "@openpond/harness";
 import {
   CONNECTED_EVIDENCE_LIMITS,
+  CONNECTED_NORMALIZER_VERSION,
   type ConnectedFile,
   type ConnectedSession,
   type ConnectedSourceKind,
@@ -9,6 +10,7 @@ import { connectedJsonLines, normalizeConnectedSession } from "./normalize.js";
 import { parseGrokBuildSession } from "./sources/grok-build.js";
 import { parsePiSession } from "./sources/pi.js";
 import { parseOpenCodeSession } from "./sources/opencode.js";
+import { CODEX_AUTHORIZATION_PROJECTION_POLICY } from "./sources/codex-authorization.js";
 import { parseCodexSession } from "./sources/codex.js";
 import { parseClaudeSession } from "./sources/claude-code.js";
 import {
@@ -20,6 +22,10 @@ export type ExternalAgentSource = Exclude<
   ConnectedSourceKind,
   "native_chat" | "native_work"
 >;
+/** Cache identity includes source projection policy, independent of file mtimes. */
+export function agentImportNormalizerRevision(source: ExternalAgentSource) {
+  return source === "codex" ? `${CONNECTED_NORMALIZER_VERSION}/${CODEX_AUTHORIZATION_PROJECTION_POLICY}` : CONNECTED_NORMALIZER_VERSION;
+}
 export type AgentImportPreview = {
   schemaVersion: "openpond.agentImportPreview.v1";
   source: ExternalAgentSource;

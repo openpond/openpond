@@ -1,3 +1,4 @@
+import { agentImportNormalizerRevision } from "../connected-evidence/imports.js";
 import { watch } from "node:fs";
 import { contentHash } from "@openpond/harness";
 import { randomUUID } from "node:crypto";
@@ -127,6 +128,9 @@ export async function runCollector(input: {
       });
       for (const native of page.items) {
         const scanKey = JSON.stringify([native.path, native.nativeSessionId]);
+        const scanRevision = native.storageRevision
+          ? contentHash([native.storageRevision, agentImportNormalizerRevision(connection.source.source)])
+          : null;
         store.progress.select(connection.id, scanKey);
         if (
           input.signal.aborted ||
@@ -137,11 +141,11 @@ export async function runCollector(input: {
           return;
         try {
           if (
-            native.storageRevision &&
+            scanRevision &&
             !store.sourceChanged(
               connection.id,
               scanKey,
-              native.storageRevision,
+              scanRevision,
             ) &&
             !store.progress.tracks(connection.id, scanKey)
           )
@@ -216,8 +220,8 @@ export async function runCollector(input: {
             }
           }
           store.progress.read(connection.id, scanKey, eligible);
-          if (native.storageRevision)
-            store.scanned(connection.id, scanKey, native.storageRevision);
+          if (scanRevision)
+            store.scanned(connection.id, scanKey, scanRevision);
         } catch (error) {
           store.progress.failed(
             connection.id,

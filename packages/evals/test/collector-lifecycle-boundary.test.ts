@@ -6,6 +6,58 @@ import { runCollector } from "../src/native-conversations/collector.js";
 import { collectorDestinations, collectorDestinationLinks } from "../src/native-conversations/collector-destinations.js";
 import { CollectorStore } from "../src/native-conversations/collector-store.js";
 import type { CollectorConnection } from "../src/native-conversations/collector-contracts.js";
+import { listSessions, readSession } from "../src/native-conversations/history.js";
+
+// A parser privacy correction must invalidate the old mtime cache and create a
+// new immutable revision, while preserving already admitted task identities.
+it("reprojects an unchanged Codex file after a source-policy upgrade", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "collector-normalizer-upgrade-"));
+  const file = join(directory, "rollout.jsonl");
+  await writeFile(file, [
+    { type: "session_meta", payload: { id: "policy-upgrade", cli_version: "0.153.4" } },
+    { type: "world_state", payload: { state: { permissions: { approved_command_prefixes: [["token=fixtureAuthorization123"]] } } } },
+    { type: "response_item", payload: { id: "request", type: "message", role: "user", content: "retained request" } },
+    { type: "response_item", payload: { id: "answer", type: "message", role: "assistant", content: "retained answer" } },
+    { type: "event_msg", payload: { type: "task_complete" } },
+  ].map(row => JSON.stringify(row)).join("\n"));
+  const connection: CollectorConnection = {
+    id: "upgrade", teamId: "team", apiBaseUrl: "http://localhost", projectId: "project",
+    revision: 2, since: null, keepSyncing: false, state: "active",
+    source: { source: "codex", machineId: "machine", instanceId: "instance", root: file,
+      acquisition: "files", available: true, capabilities: { history: true, live: true, nativeResume: false } },
+  };
+  const native = (await listSessions(connection.source, {})).items[0]!;
+  const { files, preview } = await readSession(connection.source, native);
+  const session = preview.sessions[0]!, boundary = session.boundaries.find(item => item.projection === "turn")!;
+  const scanKey = JSON.stringify([native.path, native.nativeSessionId]);
+  const sessionKey = JSON.stringify([connection.source.instanceId, session.sessionId, session.branchId]);
+  const stateDirectory = join(directory, "state"), store = await CollectorStore.open(stateDirectory);
+  const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 5000);
+  try {
+    store.put(connection); store.set("desiredState", "running");
+    const prior = { operationId: "old-normalizer-operation", connectionId: connection.id, sessionKey,
+      contentHash: "old-normalizer-snapshot", files, boundaryIds: [boundary.id] };
+    store.enqueue(prior, [{ id: boundary.id, revision: "old-normalizer-boundary" }]);
+    store.acknowledge(prior);
+    store.scanned(connection.id, scanKey, native.storageRevision!);
+    store.progress.select(connection.id, scanKey); store.progress.read(connection.id, scanKey, true); store.progress.discovered(connection.id);
+    let revisions = 0;
+    await runCollector({ directory: stateDirectory, signal: controller.signal, transport: {
+      heartbeat: async () => ({ revision: 2, state: "active" }),
+      admit: async (_, entry) => {
+        revisions++;
+        expect(entry.operationId).not.toBe(prior.operationId);
+        expect(entry.contentHash).toBe(session.contentHash);
+        expect(entry.boundaryIds).toEqual([boundary.id]);
+        expect(entry.files).toEqual(files);
+      },
+      pause: async () => { controller.abort(); return { revision: 3, state: "paused" }; },
+    } });
+    expect(revisions).toBe(1);
+    expect(store.status().connections[0]).toMatchObject({ state: "paused", admitted: 1, queued: 0 });
+    expect((await listSessions(connection.source, {})).items[0]?.storageRevision).toBe(native.storageRevision);
+  } finally { clearTimeout(deadline); controller.abort(); store.close(); await rm(directory, { recursive: true, force: true }); }
+});
 
 // Failure story: a richer hosted control DTO replaces the local NativeSource with
 // its source-name string, erasing acknowledged progress and breaking resumption.
