@@ -1,60 +1,273 @@
 import { createInterface } from "node:readline/promises";
 import { resolve } from "node:path";
-import { randomUUID } from "node:crypto";
-import { collectorDirectory,collectorMachineId,discoverSources,listSessions,CollectorStore,collectorStatus,controlCollector,configureCollector,installCollectorService,startCollectorService,runCollector,NATIVE_SOURCE_NAMES,type ExternalAgentSource,type CollectorConnection } from "@openpond/evals/native-conversations";
+import { contentHash } from "@openpond/harness";
+import {
+  collectorDirectory,
+  collectorMachineId,
+  discoverSources,
+  listSessions,
+  CollectorStore,
+  collectorStatus,
+  controlCollector,
+  configureCollector,
+  installCollectorService,
+  startCollectorService,
+  runCollector,
+  NATIVE_SOURCE_NAMES,
+  type ExternalAgentSource,
+  type CollectorConnection,
+} from "@openpond/evals/native-conversations";
 import { ConnectedSyncClient } from "openpond-sdk/connected-evidence";
-import { optionString,promptConfirm,parseBooleanOption } from "./common";
-import { evaluationCommandAccess } from "./evaluation-command-access";
-import { collectorTransport,collectorClients } from "../importer/transport";
+import { optionString, promptConfirm, parseBooleanOption } from "./common";
+import { authorizeImporter } from "../importer/device-auth";
+import { collectorTransport, collectorClients } from "../importer/transport";
 
-export async function runImportCommand(options:Record<string,string|boolean>,rest:string[]){
- const[action="connect",id]=rest,directory=resolve(optionString(options,"collectorDir")||collectorDirectory());
- const json=parseBooleanOption(options.json),print=(value:unknown)=>console.log(JSON.stringify(value,null,2));
- if(action==="service"){
-  if(id==="status"){print(await collectorStatus(directory));return;}
-  if(id==="stop"){print(await controlCollector(directory,"stop"));return;}
-  if(id==="install"){print(await installCollectorService({directory,executable:process.execPath,args:[process.argv[1]!]}));return;}
-  if(id==="start"){print(await startCollectorService(directory));return;}
-  if(id==="run"){
-   const controller=new AbortController(),stop=()=>controller.abort();process.once("SIGTERM",stop);process.once("SIGINT",stop);
-   try{await runCollector({directory,transport:collectorTransport,signal:controller.signal});}finally{process.off("SIGTERM",stop);process.off("SIGINT",stop);}return;
+export async function runImportCommand(
+  options: Record<string, string | boolean>,
+  rest: string[],
+) {
+  const [action = "connect", id] = rest,
+    directory = resolve(
+      optionString(options, "collectorDir") || collectorDirectory(),
+    );
+  const json = parseBooleanOption(options.json),
+    print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
+  if (action === "service") {
+    if (id === "status") {
+      print(await collectorStatus(directory));
+      return;
+    }
+    if (id === "stop") {
+      print(await controlCollector(directory, "stop"));
+      return;
+    }
+    if (id === "install") {
+      print(
+        await installCollectorService({
+          directory,
+          executable: process.execPath,
+          args: [process.argv[1]!],
+        }),
+      );
+      return;
+    }
+    if (id === "start") {
+      print(await startCollectorService(directory));
+      return;
+    }
+    if (id === "run") {
+      const controller = new AbortController(),
+        stop = () => controller.abort();
+      process.once("SIGTERM", stop);
+      process.once("SIGINT", stop);
+      try {
+        await runCollector({
+          directory,
+          transport: collectorTransport,
+          signal: controller.signal,
+        });
+      } finally {
+        process.off("SIGTERM", stop);
+        process.off("SIGINT", stop);
+      }
+      return;
+    }
+    throw new Error(
+      "usage: openpond import service <install|start|stop|status|run>",
+    );
   }
-  throw new Error("usage: openpond import service <install|start|stop|status|run>");
- }
- if(action==="status"){print(await collectorStatus(directory));return;}
- if(action==="sync"){print(await controlCollector(directory,"sync"));return;}
- if(["pause","resume","disconnect"].includes(action)){
-  const store=await CollectorStore.open(directory);let connection:CollectorConnection|undefined;try{connection=store.connections().find(item=>item.id===id);}finally{store.close();}
-  if(!connection)throw new Error("Select a connection id from openpond import status.");
-  const{sync}=await collectorClients(connection),remote=await sync.control({id:connection.id,expectedRevision:connection.revision,action:action as "pause"|"resume"|"disconnect"});
-  await configureCollector(directory,{...connection,revision:remote.revision,state:remote.state});print(remote);return;
- }
- const sourceName=optionString(options,"source") as ExternalAgentSource;
- if(sourceName&&!(sourceName in NATIVE_SOURCE_NAMES))throw new Error("Choose a supported native source name.");
- const machineId=await collectorMachineId(directory),sources=await discoverSources({machineId,...(sourceName&&optionString(options,"sourcePath")?{locations:{[sourceName]:resolve(optionString(options,"sourcePath"))}}:{})});
- if(action==="discover"){print(sources);return;}
- if(action!=="connect")throw new Error("usage: openpond import <connect|discover|status|sync|pause|resume|disconnect|service>");
- let source=sources.find(item=>item.source===sourceName);
- const interactive=process.stdin.isTTY&&!json;
- if(!source&&interactive){const available=sources.filter(item=>item.available);available.forEach((item,index)=>console.log(`${index+1}. ${NATIVE_SOURCE_NAMES[item.source]}  ${item.root}${item.capabilities.history?"":` (${item.reason})`}`));const prompt=createInterface({input:process.stdin,output:process.stdout});try{source=available[Number(await prompt.question("Choose a source: "))-1];}finally{prompt.close();}}
- if(!source?.capabilities.history)throw new Error(source?.reason??"Select --source and optionally --source-path.");
- let range=optionString(options,"range")||"week";
- if(interactive&&!options.range){const prompt=createInterface({input:process.stdin,output:process.stdout});try{range=(await prompt.question("History: day, week, or all [week]: ")).trim()||"week";}finally{prompt.close();}}
- if(!["day","week","all"].includes(range))throw new Error("--range must be day, week or all.");
- const since=range==="all"?null:new Date(Date.now()-(range==="day"?1:7)*86400000).toISOString();
- const preview=await listSessions(source,{since:since??undefined,limit:100});
- if(!json)console.log(`Found ${preview.items.length}${preview.nextCursor?"+":""} sessions in ${source.root}. History: ${range}.`);
- const keepSyncing=!parseBooleanOption(options.once),projectId=optionString(options,"project");
- if(!parseBooleanOption(options.yes)&&(!interactive||!await promptConfirm(`Sync this source to ${projectId||"your personal Imported conversations Project"} and ${keepSyncing?"keep syncing":"import once"}?`,true)))throw new Error("Connection was not approved. No history was uploaded.");
- const access=await evaluationCommandAccess(options),sync=new ConnectedSyncClient(access),connectionId=optionString(options,"connection")||`sync-${randomUUID()}`;
- const retained=await sync.register({id:connectionId,source:source.source,machineId,sourceInstanceId:source.instanceId,sourceLabel:NATIVE_SOURCE_NAMES[source.source],sourceRoot:source.root,
-  destination:projectId?{kind:"existing",projectId}:{kind:"new",name:"Imported conversations"},since,keepSyncing,expectedRevision:0});
- await configureCollector(directory,{id:retained.id,teamId:access.teamId,apiBaseUrl:access.baseUrl,source,projectId:retained.projectId,revision:retained.revision,since,keepSyncing,state:retained.state});
- await installCollectorService({directory,executable:process.execPath,args:[process.argv[1]!]});await startCollectorService(directory);
- print({connection:retained,service:await collectorStatus(directory)});
- if(interactive&&!parseBooleanOption(options.detach)){
-  console.log("Syncing. Ctrl+C or Ctrl+D closes this monitor; the background service keeps running. Use openpond import pause <id> to pause uploads.");
-  const controller=new AbortController(),detach=()=>controller.abort();process.once("SIGINT",detach);process.stdin.once("end",detach);
-  try{while(!controller.signal.aborted){const status=await collectorStatus(directory),item=status.connections.find(row=>row.id===connectionId);if(!item)break;process.stdout.write(`\rAdmitted ${item.admitted} tasks  Queued ${item.queued}  ${item.error||item.state}          `);if(!keepSyncing&&item.state==="paused"&&item.queued===0)break;await new Promise<void>(resolve=>{const done=()=>{clearTimeout(timer);controller.signal.removeEventListener("abort",done);resolve();};const timer=setTimeout(done,1000);controller.signal.addEventListener("abort",done,{once:true});});}}finally{process.off("SIGINT",detach);process.stdin.off("end",detach);console.log();}
- }
+  if (action === "status") {
+    print(await collectorStatus(directory));
+    return;
+  }
+  if (action === "sync") {
+    print(await controlCollector(directory, "sync"));
+    return;
+  }
+  if (["pause", "resume", "disconnect"].includes(action)) {
+    const store = await CollectorStore.open(directory);
+    let connection: CollectorConnection | undefined;
+    try {
+      connection = store.connections().find((item) => item.id === id);
+    } finally {
+      store.close();
+    }
+    if (!connection)
+      throw new Error("Select a connection id from openpond import status.");
+    const { sync } = await collectorClients(connection),
+      remote = await sync.control({
+        id: connection.id,
+        expectedRevision: connection.revision,
+        action: action as "pause" | "resume" | "disconnect",
+      });
+    await configureCollector(directory, {
+      ...connection,
+      revision: remote.revision,
+      state: remote.state,
+    });
+    print(remote);
+    return;
+  }
+  const sourceName = optionString(options, "source") as ExternalAgentSource;
+  if (sourceName && !(sourceName in NATIVE_SOURCE_NAMES))
+    throw new Error("Choose a supported native source name.");
+  const machineId = await collectorMachineId(directory),
+    sources = await discoverSources({
+      machineId,
+      ...(sourceName && optionString(options, "sourcePath")
+        ? {
+            locations: {
+              [sourceName]: resolve(optionString(options, "sourcePath")),
+            },
+          }
+        : {}),
+    });
+  if (action === "discover") {
+    print(sources);
+    return;
+  }
+  if (action !== "connect")
+    throw new Error(
+      "usage: openpond import <connect|discover|status|sync|pause|resume|disconnect|service>",
+    );
+  let source = sources.find((item) => item.source === sourceName);
+  const interactive = process.stdin.isTTY && !json;
+  if (!source && interactive) {
+    const available = sources.filter((item) => item.available);
+    available.forEach((item, index) =>
+      console.log(
+        `${index + 1}. ${NATIVE_SOURCE_NAMES[item.source]}  ${item.root}${item.capabilities.history ? "" : ` (${item.reason})`}`,
+      ),
+    );
+    const prompt = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    try {
+      source =
+        available[Number(await prompt.question("Choose a source: ")) - 1];
+    } finally {
+      prompt.close();
+    }
+  }
+  if (!source?.capabilities.history)
+    throw new Error(
+      source?.reason ?? "Select --source and optionally --source-path.",
+    );
+  let range = optionString(options, "range") || "week";
+  if (interactive && !options.range) {
+    const prompt = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    try {
+      range =
+        (await prompt.question("History: day, week, or all [week]: ")).trim() ||
+        "week";
+    } finally {
+      prompt.close();
+    }
+  }
+  if (!["day", "week", "all"].includes(range))
+    throw new Error("--range must be day, week or all.");
+  const since =
+    range === "all"
+      ? null
+      : new Date(
+          Date.now() - (range === "day" ? 1 : 7) * 86400000,
+        ).toISOString();
+  const preview = await listSessions(source, {
+    since: since ?? undefined,
+    limit: 100,
+  });
+  if (!json)
+    console.log(
+      `Found ${preview.items.length}${preview.nextCursor ? "+" : ""} sessions in ${source.root}. History: ${range}.`,
+    );
+  const keepSyncing = !parseBooleanOption(options.once),
+    projectId = optionString(options, "project");
+  if (
+    !parseBooleanOption(options.yes) &&
+    (!interactive ||
+      !(await promptConfirm(
+        `Sync this source to ${projectId || "your personal Imported conversations Project"} and ${keepSyncing ? "keep syncing" : "import once"}?`,
+        true,
+      )))
+  )
+    throw new Error("Connection was not approved. No history was uploaded.");
+  const access = await authorizeImporter(source, options),
+    sync = new ConnectedSyncClient(access),
+    connectionId =
+      optionString(options, "connection") ||
+      `sync-${contentHash([access.baseUrl, access.teamId, source.instanceId, projectId || "default"]).slice(0, 40)}`;
+  const prior = (await sync.list()).items.find(
+    (item) => item.id === connectionId,
+  );
+  const retained = await sync.register({
+    id: connectionId,
+    source: source.source,
+    machineId,
+    sourceInstanceId: source.instanceId,
+    sourceLabel: NATIVE_SOURCE_NAMES[source.source],
+    sourceRoot: source.root,
+    destination: projectId
+      ? { kind: "existing", projectId }
+      : { kind: "new", name: "Imported conversations" },
+    since,
+    keepSyncing,
+    expectedRevision: prior?.revision ?? 0,
+  });
+  await configureCollector(directory, {
+    id: retained.id,
+    teamId: access.teamId,
+    apiBaseUrl: access.baseUrl,
+    account: access.account,
+    accountBaseUrl: access.accountBaseUrl,
+    source,
+    projectId: retained.projectId,
+    revision: retained.revision,
+    since,
+    keepSyncing,
+    state: retained.state,
+  });
+  await installCollectorService({
+    directory,
+    executable: process.execPath,
+    args: [process.argv[1]!],
+  });
+  await startCollectorService(directory);
+  print({ connection: retained, service: await collectorStatus(directory) });
+  if (interactive && !parseBooleanOption(options.detach)) {
+    console.log(
+      "Syncing. Ctrl+C or Ctrl+D closes this monitor; the background service keeps running. Use openpond import pause <id> to pause uploads.",
+    );
+    const controller = new AbortController(),
+      detach = () => controller.abort();
+    process.once("SIGINT", detach);
+    process.stdin.once("end", detach);
+    try {
+      while (!controller.signal.aborted) {
+        const status = await collectorStatus(directory),
+          item = status.connections.find((row) => row.id === connectionId);
+        if (!item) break;
+        process.stdout.write(
+          `\rAdmitted ${item.admitted} tasks  Queued ${item.queued}  ${item.error || item.state}          `,
+        );
+        if (!keepSyncing && item.state === "paused" && item.queued === 0) break;
+        await new Promise<void>((resolve) => {
+          const done = () => {
+            clearTimeout(timer);
+            controller.signal.removeEventListener("abort", done);
+            resolve();
+          };
+          const timer = setTimeout(done, 1000);
+          controller.signal.addEventListener("abort", done, { once: true });
+        });
+      }
+    } finally {
+      process.off("SIGINT", detach);
+      process.stdin.off("end", detach);
+      console.log();
+    }
+  }
 }

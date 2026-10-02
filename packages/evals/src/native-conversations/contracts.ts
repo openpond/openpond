@@ -17,8 +17,16 @@ export interface NativeSession {
   title: string;
   cwd: string | null;
   updatedAt: string;
+  storageRevision?: string;
 }
 export const NATIVE_SOURCE_NAMES: Record<ExternalAgentSource, string> = {
-  codex: "Codex", claude_code: "Claude Code", hermes: "Hermes", openclaw: "OpenClaw", opencode: "OpenCode", grok_build: "Grok Build", pi: "Pi", oh_my_pi: "Oh My Pi",
+  codex: "Codex",
+  claude_code: "Claude Code",
+  hermes: "Hermes",
+  openclaw: "OpenClaw",
+  opencode: "OpenCode",
+  grok_build: "Grok Build",
+  pi: "Pi",
+  oh_my_pi: "Oh My Pi",
 };
 export const NATIVE_READ_LIMIT = 32 * 1024 * 1024;

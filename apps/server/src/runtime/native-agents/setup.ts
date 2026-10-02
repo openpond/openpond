@@ -1,5 +1,7 @@
 import { homedir } from "node:os";
-import { AcpClient, type AcpSessionResult } from "@openpond/agent-runtime";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { AcpClient, ClaudeCliClient, type AcpSessionResult } from "@openpond/agent-runtime";
 import { ProviderModelSchema, type ProviderSettings, type ProviderConfig } from "@openpond/contracts";
 import { isNativeAgentId, NATIVE_AGENTS, nativeAgentLaunch, type NativeAgentId } from "./config.js";
 
@@ -27,9 +29,15 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
   const operation = (async () => {
     const definition = NATIVE_AGENTS[provider];
     const result: NativeAgentSetupResult = { provider, status: "unavailable", instanceId: launch.instanceId, version: null, error: null, installUrl: definition.installUrl, loginCommand: definition.login, authMethods: [], capabilities: null, session: null };
-    const client = new AcpClient({ ...launch, cwd: homedir(), requestTimeoutMs: 15_000 });
+    const Client = provider === "claude-code" ? ClaudeCliClient : AcpClient;
+    const client = new Client({ ...launch, cwd: homedir(), requestTimeoutMs: 15_000 });
     try {
       const info = await client.initialize();
+      if (provider === "claude-code") {
+        const { stdout } = await promisify(execFile)(launch.command, ["auth", "status", "--json"], { env: launch.env, timeout: 10_000, maxBuffer: 64 * 1024 });
+        const auth = JSON.parse(stdout) as { loggedIn?: boolean };
+        if (!auth.loggedIn) { result.status = "needs_login"; result.error = "Sign in using Claude Code's native login, then reconnect."; return result; }
+      }
       result.version = info.agentInfo?.version ?? null;
       result.authMethods = info.authMethods ?? [];
       result.capabilities = info.agentCapabilities ?? null;
@@ -55,7 +63,7 @@ export function applyNativeAgentStatus(settings: ProviderSettings): ProviderSett
     const status = settings.statuses[id];
     if (!status) continue;
     const cached = cache.get(nativeAgentLaunch(id, config).instanceId);
-    const result = cached && cached.expires > Date.now() ? cached.result : null;
+    const result = cached?.result ?? null;
     status.available = config.enabled && result?.status === "ready";
     status.credential.connected = result?.status === "ready";
     status.credential.source = result?.status === "ready" ? "native_agent_login" : "none";

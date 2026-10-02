@@ -1665,7 +1665,23 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const cwd = input.cwd ?? (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: session.workspaceKind !== "local_project" })) ?? session.cwd;
         if (!cwd) throw new Error("Choose a local working directory for this native agent.");
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
-        const providerTurnId = await nativeAgents.run({ session, turn, cwd, prompt: providerPrompt, model: turnModelRef?.modelId, signal: controller.signal });
+        const definitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
+        const providerTurnId = await nativeAgents.run({ session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
+          coordination: definitions.length ? {
+            tools: definitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
+            execute: async (name, args, callId, signal) => {
+              const active = activeTurns.get(sessionId);
+              if (!active || active.controller.signal.aborted || active.session.experience === "chat" || active.session.systemKind) throw new Error("This task has no active coordination execution.");
+              const definition = definitions.find((tool) => tool.name === name);
+              if (!definition) throw new Error("Unknown task coordination tool.");
+              const result = await definition.execute({ session: active.session, turnId: active.turn.id,
+                turnPermissions: turnPermissionsFromSendTurnInput(SendTurnRequestSchema.parse({ prompt: active.turn.prompt })), provider: active.session.provider, model: active.turn.modelRef?.modelId ?? "native",
+                callId, args, signal: AbortSignal.any([signal, active.controller.signal]), workspaceDiffBaseline: null,
+                mentionedApps: [], userPrompt: active.turn.prompt, turnMetadata: active.turn.metadata });
+              return result.contentText;
+            },
+          } : undefined,
+        });
         throwIfInterrupted(controller.signal);
         await appendWorkspaceDiffEvent(session, turn.id, { baseline: initialWorkspaceDiff });
         const completed = await completeTurn(sessionId, turn.id, providerTurnId);

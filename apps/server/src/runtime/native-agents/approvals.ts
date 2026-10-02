@@ -23,14 +23,14 @@ export function createNativeAgentApprovals(deps: {
   return {
     async request(sessionId: string, turnId: string, request: AcpPermissionRequest, signal: AbortSignal): Promise<AcpPermissionResult> {
       if (signal.aborted) return { outcome: { outcome: "cancelled" } };
-      const approval: Approval = { id: randomUUID(), sessionId, turnId, providerRequestId: String(request.toolCall.toolCallId ?? randomUUID()), kind: "permissions", title: String(request.toolCall.title ?? "Agent permission"), detail: JSON.stringify({ toolCall: request.toolCall, options: request.options }), status: "pending", createdAt: now() };
+      const approval: Approval = { id: randomUUID(), sessionId, turnId, providerRequestId: `native-agent:${String(request.toolCall.toolCallId ?? randomUUID())}`, kind: "permissions", title: String(request.toolCall.title ?? "Agent permission"), detail: JSON.stringify({ toolCall: request.toolCall, options: request.options }), status: "pending", createdAt: now() };
       let settle!: (result: AcpPermissionResult) => void;
       const result = new Promise<AcpPermissionResult>((resolve) => { settle = resolve; });
-      pending.set(approval.id, { approval, request, settle });
       const abort = () => { void finish(approval.id, "cancelled", { outcome: { outcome: "cancelled" } }).catch(() => undefined); };
-      signal.addEventListener("abort", abort, { once: true });
       try {
         await deps.upsertApproval(approval);
+        pending.set(approval.id, { approval, request, settle });
+        signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
         else await deps.appendRuntimeEvent(event({ sessionId, turnId, name: "approval.requested", source: "provider", action: "permissions", status: "pending", output: approval.title, data: approval }));
         return await result;

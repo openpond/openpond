@@ -48,6 +48,11 @@ export async function stageDesktopRuntime(
     path.join(options.root, "apps", "server", "dist", "index.js"),
     path.join(runtimeRoot, "server", "index.js")
   );
+  // The collector is supervised independently of Electron's UI/backend process.
+  // Ship the same CLI entry and chunk closure used by command-line setup.
+  await copyRequired(path.join(options.root, "apps", "cli", "dist", "cli.js"), path.join(runtimeRoot, "cli", "cli.js"));
+  await copyTree(path.join(options.root, "apps", "cli", "dist", "chunks"), path.join(runtimeRoot, "cli", "chunks"), (file) => file.endsWith(".js"));
+  await fs.writeFile(path.join(runtimeRoot, "cli", "package.json"), JSON.stringify({ type: "module", private: true }), { mode: 0o644 });
   await copyTree(
     path.join(
       options.root,

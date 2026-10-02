@@ -3,8 +3,11 @@ import path from "node:path";
 import {createLocalExternalDatasetPreparation} from "../harness/local-external-dataset-preparation.js";
 import {resolveHostedApiAccess} from "../openpond/hosted-api-access.js";
 
+import { nativeTerminalCommand } from "../runtime/native-agents/terminal-command.js";
+import { NATIVE_AGENTS, nativeAgentLaunch } from "../runtime/native-agents/config.js";
 import { applyNativeAgentStatus, probeNativeAgent } from "../runtime/native-agents/setup.js";
 import { isNativeAgentId } from "../runtime/native-agents/config.js";
+import { createNativeHistory } from "../runtime/native-agents/history.js";
 import {
   AccountStateSchema,
   BootstrapPayloadSchema,
@@ -191,6 +194,7 @@ export function createServerPayloads(deps: {
   } = deps;
   const attachmentRootDir =
     deps.attachmentRootDir ?? path.join(storeDir, "attachments");
+  const nativeHistoryPayload = createNativeHistory({ store, storeDir, appendRuntimeEvent });
   const {
     appendAppPage,
     loadOpenPondData,
@@ -282,7 +286,7 @@ export function createServerPayloads(deps: {
       readProviderSecrets(providerSecretPaths),
       listManagedAdapterProviderModels(store),
     ]);
-    return withManagedAdapterProviderModels(
+    return applyNativeAgentStatus(withManagedAdapterProviderModels(
       buildProviderSettings({
         file: providerState.file,
         secrets,
@@ -291,7 +295,7 @@ export function createServerPayloads(deps: {
         catalog: providerState.catalog,
       }),
       managedAdapterModels
-    );
+    ));
   }
 
   async function updateAppPreferencesPayload(
@@ -1773,10 +1777,16 @@ export function createServerPayloads(deps: {
     loadProviderSettings,
     updateAppPreferencesPayload,
     providerSettingsPayload,
+    nativeHistoryPayload,
     nativeAgentSetupPayload: async (provider: string, payload: unknown) => {
       if (!isNativeAgentId(provider)) throw new Error("Unknown native agent.");
       const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
       const file = await loadProvidersFile();
+      if (input.action === "login") {
+        const launch = nativeAgentLaunch(provider, file.providers[provider]);
+        const definition = NATIVE_AGENTS[provider];
+        return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { [definition.homeVariable]: launch.sourceHome }) };
+      }
       const result = await probeNativeAgent(provider, file.providers[provider], { force: true, authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
       return { ...result, settings: await providerSettingsPayload() };
     },

@@ -1,6 +1,7 @@
 import { contentHash } from "@openpond/harness";
 import { CONNECTED_EVIDENCE_LIMITS, type ConnectedFile, type ConnectedSession, type ConnectedSourceKind } from "./contracts.js";
 import { connectedJsonLines, normalizeConnectedSession } from "./normalize.js";
+import { parseGrokBuildSession } from "./sources/grok-build.js";
 import { parsePiSession } from "./sources/pi.js";
 import { parseOpenCodeSession } from "./sources/opencode.js";
 import { parseCodexSession } from "./sources/codex.js";
@@ -27,7 +28,7 @@ export function previewAgentImport(input: { source: ExternalAgentSource; files: 
   if (bytes > CONNECTED_EVIDENCE_LIMITS.decodedBytes) throw new Error("Decoded source files exceed 64 MiB.");
   const sessions: ConnectedSession[] = [], issues: AgentImportPreview["issues"] = [];
   const attempt = (file: string, parse: () => ConnectedSession[]) => {
-    try { sessions.push(...parse().map(session => input.acquisition ? normalizeConnectedSession({ origin: session.origin, sessionId: session.sessionId, branchId: session.branchId, parentSessionId: session.parentSessionId, exporterVersion: session.exporterVersion, files: input.files.filter(item => session.sourceFiles.some(file => file.path === item.path)), events: session.events, unmappedEvents: session.unmappedEvents, warnings: session.warnings, acquisition: input.acquisition }) : session)); } catch (error) { issues.push({ file, message: error instanceof Error ? error.message : "Unsupported session." }); }
+    try { sessions.push(...parse().map(session => input.acquisition ? normalizeConnectedSession({ origin: session.origin, sessionId: session.sessionId, branchId: session.branchId, parentSessionId: session.parentSessionId, exporterVersion: session.exporterVersion, files: input.files.filter(item => session.sourceFiles.some(file => file.path === item.path)), events: session.events, unmappedEvents: session.unmappedEvents, warnings: session.warnings, contextComplete: !session.boundaries.some(boundary => boundary.coverage.context === "unknown"), acquisition: input.acquisition }) : session)); } catch (error) { issues.push({ file, message: error instanceof Error ? error.message : "Unsupported session." }); }
   };
   if (input.source === "openclaw") attempt("manifest.json", () => {
     const root = input.files[0]!.path.split("/")[0]!;
@@ -43,6 +44,7 @@ export function previewAgentImport(input: { source: ExternalAgentSource; files: 
       if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Hermes session backup must be one JSON object.");
       rows = [value as Record<string, unknown>];
     } else rows = connectedJsonLines(file);
+    if (input.source === "grok_build") return [parseGrokBuildSession(file, rows)];
     if (input.source === "pi" || input.source === "oh_my_pi") return [parsePiSession(file, rows, input.source, input.branchLeafId)];
     if (input.source === "codex") return [parseCodexSession(file, rows)];
     if (input.source === "claude_code") return [parseClaudeSession(file, rows, input.branchLeafId)];
