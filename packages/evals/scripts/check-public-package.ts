@@ -32,10 +32,13 @@ if (/export\s+\*\s+from\s+["']@openpond\/harness/.test(rootIndex)) {
   throw new Error("@openpond/evals root must not re-export @openpond/harness.");
 }
 
-const forbidden = /(?:@openpond\/(?!harness(?:["'/]|$))|electron|next\/|better-sqlite|node:sqlite|connected-app|provider sdk)/i;
+const forbidden = /(?:@openpond\/(?!harness(?:["'/]|$))|\belectron\b|next\/|better-sqlite|connected-app|provider sdk)/i;
 for (const file of await sourceFiles(path.join(root, "src"))) {
   const source = await readFile(file, "utf8");
-  if (forbidden.test(source)) {
+  // The explicit native-conversations subpath owns local Node SQLite histories;
+  // the portable evaluation APIs must retain their WASM database boundary.
+  const nativeHistory = path.relative(root, file).startsWith(`src${path.sep}native-conversations${path.sep}`);
+  if (forbidden.test(source) || (!nativeHistory && /node:sqlite/i.test(source))) {
     throw new Error(
       `Application-only dependency marker found in ${path.relative(root, file)}.`,
     );
