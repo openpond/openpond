@@ -7,6 +7,7 @@ import {
   SidebarUtilityNavigation,
 } from "./SidebarNavigation";
 import { SidebarSectionList } from "./SidebarSectionList";
+import { NativeConversationSources } from "./NativeConversationSources";
 import { SidebarProductMenu } from "./SidebarProductMenu";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
@@ -117,6 +118,7 @@ export function Sidebar(props: SidebarProps) {
             setSectionMenuOpen={setSidebarSectionMenuOpen}
           />
         )}
+        {productArea === "chat" ? <NativeConversationSources connection={props.connection} onOpen={(session) => { setSelectedSessionId(session.id); setView("chat"); }} /> : null}
       </div>
 
       <div className="sidebar-bottom-stack">

@@ -1,3 +1,4 @@
+import { signalNativeProcess } from "./process-tree.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { AcpRpcError, type AcpClientOptions, type AcpInitializeResult, type AcpObject, type AcpPermissionRequest, type AcpPermissionResult, type AcpSessionResult } from "./types.js";
@@ -32,7 +33,7 @@ export class AcpClient {
   private async connect(): Promise<AcpInitializeResult> {
     if (this.stopped) throw new Error("ACP client is closed; reconnect with a new client.");
     const child = spawn(this.options.command, this.options.args, {
-      cwd: this.options.cwd, env: this.options.env ?? process.env, stdio: ["pipe", "pipe", "pipe"], shell: false,
+      cwd: this.options.cwd, env: this.options.env ?? process.env, stdio: ["pipe", "pipe", "pipe"], shell: false, detached: process.platform !== "win32",
     });
     this.child = child;
     child.stdout.on("data", (chunk: Buffer) => this.consume(this.decoder.write(chunk)));
@@ -105,7 +106,10 @@ export class AcpClient {
     try {
       const result = await this.request("session/prompt", { sessionId, prompt }, 0) as { stopReason: string };
       await this.updateQueue;
-      return result;
+      return signal?.aborted ? { ...result, stopReason: "cancelled" } : result;
+    } catch (error) {
+      if (signal?.aborted) return { stopReason: "cancelled" };
+      throw error;
     } finally {
       if (cancellationTimer) clearTimeout(cancellationTimer);
       signal?.removeEventListener("abort", abort);
@@ -126,10 +130,10 @@ export class AcpClient {
     this.fail(new Error("ACP connection closed."));
     if (!child || child.exitCode !== null || child.signalCode !== null) return;
     await new Promise<void>((resolve) => {
-      const kill = setTimeout(() => child.kill("SIGKILL"), 2_000);
+      const kill = setTimeout(() => signalNativeProcess(child, "SIGKILL"), 2_000);
       kill.unref();
       child.once("exit", () => { clearTimeout(kill); resolve(); });
-      child.kill("SIGTERM");
+      signalNativeProcess(child, "SIGTERM");
     });
   }
 
@@ -238,8 +242,8 @@ export class AcpClient {
     const wasConnected = Boolean(child);
     this.child = null;
     if (child && child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGTERM");
-      const kill = setTimeout(() => child.kill("SIGKILL"), 2_000);
+      signalNativeProcess(child, "SIGTERM");
+      const kill = setTimeout(() => signalNativeProcess(child, "SIGKILL"), 2_000);
       kill.unref();
       child.once("exit", () => clearTimeout(kill));
     }

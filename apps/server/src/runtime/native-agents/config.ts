@@ -7,7 +7,7 @@ export const NATIVE_AGENT_IDS = ["claude-code", "grok-build", "opencode"] as con
 export type NativeAgentId = typeof NATIVE_AGENT_IDS[number];
 export function isNativeAgentId(value: string): value is NativeAgentId { return (NATIVE_AGENT_IDS as readonly string[]).includes(value); }
 export const NATIVE_AGENTS = {
-  "claude-code": { title: "Claude Code", command: "claude-agent-acp", args: [] as string[], installUrl: "https://github.com/agentclientprotocol/claude-agent-acp", login: ["claude", "auth", "login"], homeVariable: "CLAUDE_CONFIG_DIR", defaultHome: () => join(homedir(), ".claude") },
+  "claude-code": { title: "Claude Code", command: "claude", args: [] as string[], installUrl: "https://code.claude.com/docs/en/setup", login: ["claude", "auth", "login"], homeVariable: "CLAUDE_CONFIG_DIR", defaultHome: () => join(homedir(), ".claude") },
   "grok-build": { title: "Grok Build", command: "grok", args: ["--no-auto-update", "agent", "stdio"], installUrl: "https://docs.x.ai/build/cli", login: ["grok", "login"], homeVariable: "GROK_HOME", defaultHome: () => join(homedir(), ".grok") },
   opencode: { title: "OpenCode", command: "opencode", args: ["acp"], installUrl: "https://opencode.ai/docs", login: ["opencode", "auth", "login"], homeVariable: "XDG_DATA_HOME", defaultHome: () => process.env.XDG_DATA_HOME || join(homedir(), ".local", "share") },
 } satisfies Record<NativeAgentId, { title: string; command: string; args: string[]; installUrl: string; login: string[]; homeVariable: string; defaultHome(): string }>;

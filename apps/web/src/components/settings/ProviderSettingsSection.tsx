@@ -1,3 +1,4 @@
+import type { ClientConnection } from "../../api/api-client";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
@@ -29,6 +30,7 @@ import {
 } from "../../lib/app-models";
 
 type ProviderSettingsSectionProps = {
+  connection: ClientConnection | null;
   account: BootstrapPayload["account"] | null;
   codex: BootstrapPayload["codex"] | null;
   providers: ProviderSettings | null;
@@ -187,6 +189,7 @@ export function visibleProviderModelOptions(
 }
 
 export function ProviderSettingsSection({
+  connection,
   account,
   codex,
   providers,
@@ -282,6 +285,7 @@ export function ProviderSettingsSection({
 
       {detailsProviderId && detailsStatus && providers ? (
         <ProviderDetailsDialog
+          connection={connection}
           account={account}
           codex={codex}
           providerId={detailsProviderId}
@@ -302,6 +306,7 @@ export function ProviderSettingsSection({
 }
 
 function ProviderDetailsDialog({
+  connection,
   account,
   codex,
   providerId,
@@ -316,6 +321,7 @@ function ProviderDetailsDialog({
   onStartOpenAiSubscriptionAuth,
   onValidate,
 }: {
+  connection: ClientConnection | null;
   account: BootstrapPayload["account"] | null;
   codex: BootstrapPayload["codex"] | null;
   providerId: ChatProvider;
@@ -456,7 +462,7 @@ function ProviderDetailsDialog({
           />
           <div className="provider-dialog-body"><h3>ChatGPT with the OpenPond harness</h3><p>Native Codex and the OpenPond harness keep their own connections. Choose the execution path in the model picker.</p><p>{settings.statuses.openai?.credential.connected ? "OpenPond harness connected" : "OpenPond harness not connected"}</p><button type="button" className="settings-secondary" disabled={providerBusy !== null} onClick={() => void onStartOpenAiSubscriptionAuth("browser")}>Connect ChatGPT for OpenPond</button><button type="button" className="settings-secondary" disabled={providerBusy !== null} onClick={() => void onSaveConfig("openai", { enabled: !settings.providers.openai?.enabled })}>{settings.providers.openai?.enabled ? "Disable" : "Enable"} OpenPond harness route</button></div></>
         ) : isAcpProvider(providerId) && config ? (
-          <NativeAgentProviderDetails key={providerId} providerId={providerId} config={config} status={status} busy={providerBusy !== null} onSave={onSaveConfig} onConnect={onRefreshModels} />
+          <NativeAgentProviderDetails connection={connection} key={providerId} providerId={providerId} config={config} status={status} busy={providerBusy !== null} onSave={onSaveConfig} onConnect={onRefreshModels} />
         ) : localByok && config && cache ? (
           <LocalByokProviderDetails
             credentialTab={credentialTab}
