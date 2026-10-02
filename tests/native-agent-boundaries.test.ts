@@ -1,11 +1,11 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import type { Approval, RuntimeEvent } from "@openpond/contracts";
 import { createNativeAgentApprovals } from "../apps/server/src/runtime/native-agents/approvals.js";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages.js";
 import { createHash } from "node:crypto";
 import { normalizeConnectedSession } from "../packages/evals/src/connected-evidence/normalize.js";
 import { ownedNativeBoundaryIds } from "../apps/server/src/runtime/native-agents/history-ownership.js";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeNativeAgent } from "../apps/server/src/runtime/native-agents/setup.js";
@@ -72,4 +72,47 @@ it("does not hide a later external turn that repeats an OpenPond-owned prompt", 
   const owned = ownedNativeBoundaryIds(native, [{ startedAt: "2026-10-02T00:00:00.500Z", completedAt: "2026-10-02T00:00:01.500Z", metadata: { nativePromptHash: createHash("sha256").update(prompt).digest("hex") } }]);
   expect([...owned]).toEqual([native.boundaries[0]!.id]);
   expect(owned.has(native.boundaries[1]!.id)).toBe(false);
+});
+
+// Automatic setup must never submit a paid prompt, and closing its UI must kill
+// the owned pending probe rather than caching a late success for that account.
+it.skipIf(process.platform === "win32")("checks native models without prompting and cancels the owned process without retaining its result", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "native-setup-cancel-"));
+  const binaryPath = join(directory, "agent");
+  const trace = join(directory, "trace");
+  const pidFile = join(directory, "pid");
+  try {
+    expect((await probeNativeAgent("opencode", { binaryPath, sourceHome: directory }, { force: true })).status).toBe("missing");
+    await writeFile(binaryPath, `#!${process.execPath}
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+require('node:readline').createInterface({input:process.stdin}).on('line', line => {
+ const request = JSON.parse(line);
+ fs.appendFileSync(${JSON.stringify(trace)}, request.method + '\\n');
+ let result;
+ if(request.method==='initialize') result={protocolVersion:1,agentCapabilities:{},authMethods:[]};
+ else if(request.method==='session/new') {
+  if(fs.existsSync(${JSON.stringify(join(directory, "hang"))})) return;
+  result={sessionId:'setup-only',models:{currentModelId:'local-model',availableModels:[{modelId:'local-model',name:'Local model'}]}};
+ } else process.exit(9);
+ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:request.id,result})+'\\n');
+});
+`, { mode: 0o700 });
+    const ready = await probeNativeAgent("opencode", { binaryPath, sourceHome: directory }, { force: true });
+    expect(ready.status).toBe("ready");
+    expect(ready.session?.models?.availableModels.map(model => model.modelId)).toEqual(["local-model"]);
+    expect((await readFile(trace, "utf8")).trim().split("\n")).toEqual(["initialize", "session/new"]);
+    await writeFile(join(directory, "hang"), "1");
+    await writeFile(trace, "");
+    const controller = new AbortController();
+    const pending = probeNativeAgent("opencode", { binaryPath, sourceHome: directory }, { force: true, signal: controller.signal });
+    const cancelled = expect(pending).rejects.toThrow("cancelled setup");
+    await vi.waitFor(async () => expect(await readFile(trace, "utf8")).toContain("session/new"));
+    const pid = Number(await readFile(pidFile, "utf8"));
+    controller.abort(new Error("cancelled setup"));
+    await cancelled;
+    expect(() => process.kill(pid, 0)).toThrow();
+    // The preceding ready result remains intact; cancellation is not an auth failure.
+    expect((await probeNativeAgent("opencode", { binaryPath, sourceHome: directory })).status).toBe("ready");
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

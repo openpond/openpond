@@ -7,25 +7,30 @@ import { requireLearningRelease, requireLearningResource, type LearningTransacti
 import { compileRewardCheck, matchRewardFixture, type RewardCheckRun } from "./reward-checks.js";
 
 /** Qualification is tied to the exact private draft, fixtures and worker-owned
- * provider receipts. Publishing does not rewrite or re-run those checks. */
+ * execution results. Model judges additionally require provider receipts. */
 export function qualifyRewardCheck(draft: AuthoringDraftFor<"reward">, base: RewardRelease | null, check: RewardCheckRun) {
   const compiled = compileRewardCheck(draft, base);
   const implementation = compiled.reward.implementation;
-  if (implementation.kind !== "model_judge" || !implementation.model) throw new LearningDomainError("reward_calibration_model_required", 422);
+  if (implementation.kind === "human" || implementation.kind === "learned_model")
+    throw new LearningDomainError("reward_calibration_kind_unsupported", 422);
+  if (implementation.kind === "model_judge" && !implementation.model)
+    throw new LearningDomainError("reward_calibration_model_required", 422);
   if (!sameLearningRef(check.draft, learningRef(draft)) || !sameLearningRef(check.reward, learningRef(compiled.reward))
     || check.snapshotHash !== compiled.snapshotHash || contentHash(check.fixtureRefs) !== contentHash(compiled.fixtureRefs)) throw new LearningDomainError("reward_calibration_snapshot_mismatch", 422);
   if (check.status !== "completed" || !check.runtime || check.matchesExpectations !== true || check.failure
     || check.results.length !== compiled.fixtures.length) throw new LearningDomainError("reward_calibration_check_incomplete", 422);
   if (!compiled.fixtures.some(fixture => fixture.expected.status === "scored" && fixture.expected.passed === true)
     || !compiled.fixtures.some(fixture => fixture.expected.status === "scored" && fixture.expected.passed === false)) {
-    throw new LearningDomainError("reward_calibration_coverage_required", 422, "Check both a passing and a failing example before publishing a calibrated judge.");
+    throw new LearningDomainError("reward_calibration_coverage_required", 422, "Check both a passing and a failing example before publishing a calibrated grader.");
   }
   for (const fixture of compiled.fixtures) {
     const results = check.results.filter(result => result.fixture.id === fixture.id);
     const retained = results[0];
     if (results.length !== 1 || !retained || retained.fixture.contentHash !== contentHash(fixture)
+      || retained.result.graderId !== compiled.reward.id || retained.result.role !== "evaluation"
       || !sameLearningRef(retained.result.reward, check.reward) || !matchRewardFixture(fixture, retained.result).matchesExpectation) throw new LearningDomainError("reward_calibration_fixture_mismatch", 422);
-    if (fixture.expected.status !== "scored") continue;
+    if (fixture.expected.status !== "scored" || implementation.kind !== "model_judge") continue;
+    if (!implementation.model) throw new LearningDomainError("reward_calibration_model_required", 422);
     const receipt = retained.result.graderEvidence?.modelJudgeReceipt;
     const call = check.judgeCalls?.find(call => call.id === `fixture-${contentHash([fixture, compiled.reward.contentHash])}`);
     if (!receipt || receipt.providerId !== implementation.model.providerId || receipt.modelId !== implementation.model.modelId
@@ -34,19 +39,24 @@ export function qualifyRewardCheck(draft: AuthoringDraftFor<"reward">, base: Rew
       || contentHash(call.response) !== receipt.responseHash) throw new LearningDomainError("reward_calibration_provider_receipt_mismatch", 422);
   }
   const { contentHash: _hash, ...content } = compiled.reward;
-  return { ...compiled, reward: createRewardRelease({ ...content, implementation: { ...implementation, calibrationStatus: "passed" },
+  return { ...compiled, reward: createRewardRelease({ ...content, implementation: implementation.kind === "model_judge" ? { ...implementation, calibrationStatus: "passed" } : implementation,
     calibrationCheckRef: { id: check.id, revision: check.revision, contentHash: contentHash(check) } }) };
 }
 
 /** Generic publication cannot manufacture a passed flag, including by copying
  * a check from a different rubric, model, temperature or fixture set. */
 export async function assertRewardCalibration(tx: LearningTransaction, reward: RewardRelease) {
-  if (reward.implementation.kind !== "model_judge" || reward.implementation.calibrationStatus !== "passed") {
-    if (reward.calibrationCheckRef) throw new LearningDomainError("reward_calibration_reference_invalid", 422);
+  const implementation = reward.implementation;
+  const reference = reward.calibrationCheckRef;
+  if (implementation.kind === "human" || implementation.kind === "learned_model"
+    || (implementation.kind === "model_judge" && implementation.calibrationStatus !== "passed")) {
+    if (reference) throw new LearningDomainError("reward_calibration_reference_invalid", 422);
     return;
   }
-  const reference = reward.calibrationCheckRef;
-  if (!reference) throw new LearningDomainError("reward_calibration_check_required", 422);
+  if (!reference) {
+    if (implementation.kind === "model_judge") throw new LearningDomainError("reward_calibration_check_required", 422);
+    return;
+  }
   const check = await requireLearningResource(tx, "reward_check", reference.id, reference.revision);
   if (contentHash(check) !== reference.contentHash) throw new LearningDomainError("reward_calibration_check_changed", 422);
   const draft = await requireLearningRelease(tx, "draft", check.draft);

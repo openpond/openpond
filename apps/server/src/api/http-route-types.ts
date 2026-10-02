@@ -34,7 +34,7 @@ export type ChatAttachmentImagePayloadRequest = {
 };
 
 export type HttpRouteDeps = {
-  nativeAgentSetupPayload?: (provider: string, payload: unknown) => Promise<unknown>;
+  nativeAgentSetupPayload?: (provider: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>;
   nativeHistoryPayload?: (action: string, payload: unknown) => Promise<unknown>;
   configuration?: ReturnType<typeof import("./configuration-payloads.js").createConfigurationPayloads>;
   host: string;
