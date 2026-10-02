@@ -5,6 +5,27 @@ import { buildChatMessages } from "../apps/web/src/lib/chat-messages.js";
 import { createHash } from "node:crypto";
 import { normalizeConnectedSession } from "../packages/evals/src/connected-evidence/normalize.js";
 import { ownedNativeBoundaryIds } from "../apps/server/src/runtime/native-agents/history-ownership.js";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { probeNativeAgent } from "../apps/server/src/runtime/native-agents/setup.js";
+
+// Claude's supported auth status command exits 1 when signed out. Treating
+// that as a broken installation hides the login action from ordinary users.
+it.skipIf(process.platform === "win32")("distinguishes native signed-out JSON from a broken auth executable", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "native-auth-status-"));
+  const binaryPath = join(directory, "claude");
+  try {
+    await writeFile(binaryPath, `#!${process.execPath}\nprocess.stdout.write(JSON.stringify({loggedIn:false}));process.exit(1);\n`, { mode: 0o700 });
+    const signedOut = await probeNativeAgent("claude-code", { binaryPath, sourceHome: directory }, { force: true });
+    expect(signedOut.status).toBe("needs_login");
+    expect(signedOut.session).toBeNull();
+    await writeFile(binaryPath, `#!${process.execPath}\nprocess.stdout.write(JSON.stringify({loggedIn:true}));process.exit(2);\n`, { mode: 0o700 });
+    const broken = await probeNativeAgent("claude-code", { binaryPath, sourceHome: directory }, { force: true });
+    expect(broken.status).toBe("unavailable");
+    expect(broken.session).toBeNull();
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 it("persists cancelled native approval after an in-flight initial write and rejects its late reply", async () => {
   let release!: () => void;

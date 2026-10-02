@@ -160,6 +160,34 @@
       ],
       "additionalProperties": false
     },
+    "capturedOrigin": {
+      "type": "object",
+      "properties": {
+        "receiptId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "ownerUserId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "modelId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "packageHash": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "taskset": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "required": [
+        "receiptId",
+        "ownerUserId",
+        "modelId",
+        "packageHash",
+        "taskset"
+      ],
+      "additionalProperties": false
+    },
     "contentHash": {
       "$ref": "#/$defs/__schema2"
     }

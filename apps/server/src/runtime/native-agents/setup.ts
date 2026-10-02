@@ -34,8 +34,21 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
     try {
       const info = await client.initialize();
       if (provider === "claude-code") {
-        const { stdout } = await promisify(execFile)(launch.command, ["auth", "status", "--json"], { env: launch.env, timeout: 10_000, maxBuffer: 64 * 1024 });
-        const auth = JSON.parse(stdout) as { loggedIn?: boolean };
+        let stdout: string;
+        let signedOutExit = false;
+        try {
+          ({ stdout } = await promisify(execFile)(launch.command, ["auth", "status", "--json"], { env: launch.env, timeout: 10_000, maxBuffer: 64 * 1024 }));
+        } catch (error) {
+          // The native CLI reports an ordinary signed-out state with exit 1
+          // and a JSON body. Preserve spawn/timeout failures as unavailable.
+          if (!error || typeof error !== "object" || !("code" in error) || error.code !== 1 || !("stdout" in error) || typeof error.stdout !== "string") throw error;
+          stdout = error.stdout;
+          signedOutExit = true;
+        }
+        let auth: { loggedIn?: boolean } | null;
+        try { auth = JSON.parse(stdout); }
+        catch { throw new Error("Claude Code returned an unsupported authentication status."); }
+        if (!auth || typeof auth.loggedIn !== "boolean" || (signedOutExit && auth.loggedIn)) throw new Error("Claude Code returned an unsupported authentication status.");
         if (!auth.loggedIn) { result.status = "needs_login"; throw new Error("Sign in using Claude Code's native login, then reconnect."); }
         const version = await promisify(execFile)(launch.command, ["--version"], { env: launch.env, timeout: 10_000, maxBuffer: 4096 });
         result.version = version.stdout.trim().slice(0, 200);

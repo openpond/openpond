@@ -48,6 +48,7 @@ export interface CollectorAdmission {
   contentHash: string;
   files: { path: string; text: string }[];
   boundaryIds: string[];
+  branchLeafId?: string;
 }
 /** Credentials are resolved by the process host, never persisted in source metadata or queue entries. */
 export interface CollectorTransport {

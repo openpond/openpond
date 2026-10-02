@@ -1,30 +1,13 @@
+import { claudeGraph } from "./claude-branches.js";
 import { contentHash } from "@openpond/harness";
 import type { ConnectedEvent, ConnectedFile } from "../contracts.js";
 import { connectedTimestamp, event, json, normalizeConnectedSession, object } from "../normalize.js";
 import { sourceUsage } from "./usage.js";
 
 export function parseClaudeSession(file: ConnectedFile, rows: Record<string, unknown>[], leafId?: string) {
-  const messages = rows.filter(row => (row.type === "user" || row.type === "assistant") && typeof row.uuid === "string");
-  const sessionIds = new Set(messages.flatMap(row => typeof row.sessionId === "string" ? [row.sessionId] : []));
-  if (sessionIds.size !== 1 || !messages.length) throw new Error("A supported Claude Code transcript must identify one session with UUID messages.");
-  const nodes = rows.filter(row => typeof row.uuid === "string" && row.sessionId === [...sessionIds][0]);
-  const byId = new Map(nodes.map(row => [row.uuid as string, row]));
-  if (byId.size !== nodes.length) throw new Error("Claude Code transcript contains duplicate message UUIDs.");
-  const parents = new Set(nodes.flatMap(row => typeof row.parentUuid === "string" ? [row.parentUuid] : []));
-  const leaves = nodes.filter(row => !parents.has(row.uuid as string));
-  if (!leafId && leaves.length !== 1) throw new Error("This transcript has multiple branches. Select a branch leaf UUID before importing.");
-  let current = byId.get(leafId ?? leaves[0]!.uuid as string);
-  if (!current) throw new Error("The selected Claude Code branch leaf is missing.");
-  const chain: Record<string, unknown>[] = [], seen = new Set<string>();
-  let missingParent = false;
-  while (current) {
-    const id = current.uuid as string;
-    if (seen.has(id)) throw new Error("Claude Code branch contains a parent cycle.");
-    seen.add(id); chain.unshift(current);
-    const parent = current.parentUuid;
-    if (typeof parent !== "string") break;
-    current = byId.get(parent); if (!current) missingParent = true;
-  }
+  const graph = claudeGraph(rows);
+  if (!leafId && graph.leaves.length !== 1) throw new Error("This transcript has multiple branches. Select a branch leaf UUID before importing.");
+  const { chain, missingParent } = graph.select(leafId ?? graph.leaves[0]!.uuid as string);
   const events: ConnectedEvent[] = [];
   for (const row of chain) {
     if (row.type !== "user" && row.type !== "assistant") continue;
@@ -48,7 +31,7 @@ export function parseClaudeSession(file: ConnectedFile, rows: Record<string, unk
     if (message.stop_reason === "end_turn") events.push(event({ ...base, id: `${row.uuid}:terminal`, kind: "terminal", content: { status: "completed" } }));
   }
   if (rows.some(row => row.type === "system" && row.subtype === "compact_boundary")) events.unshift(event({ id: `compaction-${contentHash(rows.filter(row => row.subtype === "compact_boundary")).slice(0, 32)}`, kind: "compaction", content: { source: "claude_compact_boundary" } }));
-  return normalizeConnectedSession({ origin: "claude_code", sessionId: [...sessionIds][0]!,
+  return normalizeConnectedSession({ origin: "claude_code", sessionId: graph.sessionId,
     // A chosen leaf is a cutoff, not a new family or the identity of every turn.
     branchId: null, parentSessionId: typeof chain[0]?.parentSessionId === "string" ? chain[0].parentSessionId : null,
     exporterVersion: typeof chain.at(-1)?.version === "string" ? chain.at(-1)!.version as string : null,

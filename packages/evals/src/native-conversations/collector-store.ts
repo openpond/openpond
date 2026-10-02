@@ -73,6 +73,10 @@ export class CollectorStore {
         // Scope changes fence queued evidence too: do not upload a wider old
         // selection under newly narrowed consent. Reacquire the approved scope.
         this.progress.reset(connection.id);
+        this.database
+          .prepare("DELETE FROM settings WHERE key=?")
+          .run(`errors:${connection.id}`);
+        this.error(connection.id, null);
         for (const table of ["source_scans", "checkpoints", "pending"])
           this.database
             .prepare(`DELETE FROM ${table} WHERE connection_id=?`)

@@ -386,7 +386,7 @@ export function ComposerPrimaryControls({
           ) : null}
         </span>
       </span>}
-      {!hideModelControls && <NativeAgentControls connection={connection} provider={provider} onSettings={setNativeSettings} disabled={busy || disabled} />}
+      {!hideModelControls && <NativeAgentControls connection={connection} provider={provider} onSettings={setNativeSettings} onSetup={onProviderSetupOpen} disabled={busy || disabled} />}
       {!hideModelControls && <ComposerModelMenu
         disabled={busy}
         model={modelValue}

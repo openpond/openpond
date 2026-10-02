@@ -10,7 +10,7 @@ type Setup = { error: string | null; settings: ProviderSettings; session: null |
 } };
 
 /** Vendor-advertised controls are defaults for this configured installation. */
-export function NativeAgentControls({ connection, provider, disabled, onSettings }: { connection: ClientConnection | null; provider: string; disabled: boolean; onSettings(value: { provider: string; settings: ProviderSettings }): void }) {
+export function NativeAgentControls({ connection, provider, disabled, onSettings, onSetup }: { connection: ClientConnection | null; provider: string; disabled: boolean; onSettings(value: { provider: string; settings: ProviderSettings }): void; onSetup?(): void }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -36,8 +36,9 @@ export function NativeAgentControls({ connection, provider, disabled, onSettings
     finally { setSaving(false); }
   }
   return <>
+    {config && !config.enabled ? <button type="button" disabled={disabled || saving} onClick={() => void save({ enabled: true })}>Enable agent</button> : null}
     {setup?.session?.modes ? <label className="composer-native-option"><span>Mode</span><select title="Default mode for this agent installation" disabled={disabled || saving} value={config?.nativeMode ?? setup.session.modes.currentModeId} onChange={(event) => void save({ nativeMode: event.target.value })}>{setup.session.modes.availableModes.map((mode) => <option key={mode.id} value={mode.id}>{mode.name}</option>)}</select></label> : null}
     {setup?.session?.configOptions?.filter((option) => option.type === "select" && option.category !== "model" && option.category !== "mode").map((option) => <label className="composer-native-option" key={option.id}><span>{option.name}</span><select title={`Default ${option.name.toLowerCase()} for this agent installation`} disabled={disabled || saving} value={config?.nativeOptions?.[option.id] ?? option.currentValue} onChange={(event) => void save({ nativeOptions: { ...config?.nativeOptions, [option.id]: event.target.value } })}>{option.options?.flatMap((item) => "options" in item ? item.options : [item]).map((item) => <option key={item.value} value={item.value}>{item.name}</option>)}</select></label>)}
-    {error || setup?.error ? <span role="status" title={error ?? setup?.error ?? undefined}>Agent needs attention</span> : null}
+    {error || setup?.error ? <span role="status" title={error ?? setup?.error ?? undefined}>Agent needs attention{onSetup ? <button type="button" onClick={onSetup}>Open setup</button> : null}</span> : null}
   </>;
 }

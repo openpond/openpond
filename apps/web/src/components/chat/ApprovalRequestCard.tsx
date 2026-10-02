@@ -92,8 +92,8 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
           <button
             type="button"
             className="approval-action icon-only"
-            title="Cancel task"
-            aria-label="Cancel task"
+            title={native ? "Dismiss request" : "Cancel task"}
+            aria-label={native ? "Dismiss request" : "Cancel task"}
             disabled={Boolean(pendingDecision)}
             onClick={() => void resolve("cancel")}
           >

@@ -23,6 +23,7 @@ import { optionString, promptConfirm, parseBooleanOption } from "./common";
 import { authorizeImporter } from "../importer/device-auth";
 import { collectorTransport, collectorClients } from "../importer/transport";
 import { monitorImport } from "../importer/monitor";
+import { runImporterBranchCommand } from "../importer/branches";
 
 export async function runImportCommand(
   options: Record<string, string | boolean>,
@@ -34,6 +35,10 @@ export async function runImportCommand(
     );
   const json = parseBooleanOption(options.json),
     print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
+  if (action === "branches" || action === "branch") {
+    await runImporterBranchCommand(directory, action, id, options);
+    return;
+  }
   if (action === "service") {
     if (id === "status") {
       print(await collectorStatus(directory));
@@ -135,7 +140,7 @@ export async function runImportCommand(
   }
   if (action !== "connect")
     throw new Error(
-      "usage: openpond import <connect|discover|status|sync|pause|resume|disconnect|service>",
+      "usage: openpond import <connect|discover|status|sync|pause|resume|disconnect|branches|branch|service>",
     );
   const matching = sources.filter(
     (item) => item.source === sourceName && item.available,

@@ -7,7 +7,7 @@ export async function handleSettingsRoutes({
   requestUrl,
   response,
 }: HttpRouteContext): Promise<boolean> {
-  const nativeHistory = /^\/v1\/native-history\/(list|open|collector)$/.exec(requestUrl.pathname);
+  const nativeHistory = /^\/v1\/native-history\/(list|open|branches|collector)$/.exec(requestUrl.pathname);
   if (nativeHistory && request.method === "POST" && deps.nativeHistoryPayload) {
     sendJson(response, 200, await deps.nativeHistoryPayload(nativeHistory[1]!, await readJson(request)));
     return true;

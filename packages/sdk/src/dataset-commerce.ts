@@ -24,7 +24,8 @@ import {
   CommerceRequestsPageSchema,
   CommerceRequestReceiptSchema,
   CommerceOwnedRequestSchema,
-  CommerceOfferSchema,
+  CommerceOfferSummarySchema,
+  CommerceOfferDetailSchema,
   CommerceOfferSubmissionSchema,
   CommerceOfferReviewReceiptSchema,
 } from "./dataset-commerce-responses.js";
@@ -276,19 +277,55 @@ export class OpenPondDatasetCommerceClient {
     if (result.revision !== request.expectedRevision + 1) this.#mismatch();
     return result;
   }
-  async offers(direction: "sent" | "received", options: RequestOptions = {}) {
+  async offers(
+    direction: "sent" | "received",
+    options: RequestOptions & { cursor?: string; limit?: number } = {},
+  ) {
     z.enum(["sent", "received"]).parse(direction);
     const result = z
-      .array(CommerceOfferSchema)
-      .max(100)
-      .parse(await this.#request(`/${direction}-offers`, options, undefined, true));
+      .array(CommerceOfferSummarySchema)
+      .max(20)
+      .parse(
+        await this.#request(
+          `/${direction}-offers`,
+          options,
+          z
+            .object({
+              cursor: CommerceId.optional(),
+              limit: z.number().int().min(1).max(20).optional(),
+            })
+            .parse({ cursor: options.cursor, limit: options.limit }),
+          true,
+        ),
+      );
     if (
       result.some(
-        (item) =>
-          item.proposal.offerId !== item.id ||
-          item.proposal.revision !== item.revision ||
-          (direction === "sent" && item.notes.length),
+        (item) => item.proposal.offerId !== item.id || item.proposal.revision !== item.revision,
       )
+    )
+      this.#mismatch();
+    return result;
+  }
+  async offer(
+    input: { id: string; notesCursor?: string | null; historyBefore?: number | null },
+    options: RequestOptions = {},
+  ) {
+    const request = z
+      .object({
+        id: CommerceId,
+        notesCursor: CommerceId.nullable().optional(),
+        historyBefore: z.number().int().positive().nullable().optional(),
+      })
+      .strict()
+      .parse(input);
+    const result = CommerceOfferDetailSchema.parse(
+      await this.#request("/offer", options, request, true),
+    );
+    if (
+      result.id !== request.id ||
+      result.proposal.offerId !== result.id ||
+      result.proposal.revision !== result.revision ||
+      (!result.canReview && result.notes.length)
     )
       this.#mismatch();
     return result;
@@ -351,7 +388,8 @@ export class OpenPondDatasetCommerceClient {
     body?: unknown,
     authenticated = false,
   ): Promise<unknown> {
-    const auth = authenticated || body !== undefined;
+    const auth =
+      authenticated || body !== undefined || Boolean(this.#options.apiKey && this.#options.teamId);
     if (auth && (!this.#options.apiKey?.trim() || !this.#options.teamId?.trim()))
       throw new Error(
         "An API key and explicit workspace are required for this dataset commerce operation.",

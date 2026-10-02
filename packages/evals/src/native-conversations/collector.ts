@@ -4,6 +4,11 @@ import { randomUUID } from "node:crypto";
 import { listSessions, readSession } from "./history.js";
 import { CollectorStore } from "./collector-store.js";
 import {
+  CollectorErrors,
+  type CollectorErrorPhase,
+} from "./collector-errors.js";
+import { collectorBranchAnchor } from "./collector-branches.js";
+import {
   COLLECTOR_DEFAULTS,
   type CollectorConnection,
   type CollectorTransport,
@@ -47,7 +52,46 @@ export async function runCollector(input: {
     lastReconcile = 0,
     lastHeartbeat = 0;
   const watchers = new Map<string, ReturnType<typeof watch>>();
-  const errors = new Map<string, string>();
+  const errors = new CollectorErrors(store);
+  function retained(connection: CollectorConnection) {
+    return (
+      store.connections().find((item) => item.id === connection.id) ??
+      connection
+    );
+  }
+  function applyRemote(
+    connection: CollectorConnection,
+    remote: Pick<CollectorConnection, "revision" | "state">,
+  ) {
+    const current = retained(connection);
+    const next =
+      current.state !== "disconnected" && remote.revision > current.revision
+        ? { ...current, revision: remote.revision, state: remote.state }
+        : current;
+    store.put(next);
+    return next;
+  }
+  function recordFailure(
+    connection: CollectorConnection,
+    error: unknown,
+    phase: CollectorErrorPhase,
+  ) {
+    const message =
+      error instanceof Error ? error.message : "Collection failed.";
+    errors.set(connection.id, phase, message);
+    const status =
+      error && typeof error === "object" && "status" in error
+        ? Number(error.status)
+        : 0;
+    const current = retained(connection);
+    // Authentication loss requires explicit reconnection; a timer or restart
+    // must never turn a revoked connection back into a paused/resumable one.
+    if (current.state !== "disconnected" && [400, 401, 403].includes(status))
+      store.put({
+        ...current,
+        state: status === 400 ? "paused" : "disconnected",
+      });
+  }
   async function acquire(connection: CollectorConnection) {
     let cursor: string | undefined;
     const failures: string[] = [];
@@ -55,23 +99,17 @@ export async function runCollector(input: {
       if (Date.now() - lastHeartbeat >= COLLECTOR_DEFAULTS.heartbeatMs) {
         lastHeartbeat = Date.now();
         store.set("heartbeatAt", new Date().toISOString());
-        for (let current of store.connections()) {
+        for (const current of store.connections()) {
+          if (current.state === "disconnected") continue;
           try {
             const remote = await input.transport.heartbeat(current, {
               pendingOperations: store.queued(current.id),
-              error: errors.get(current.id) ?? null,
+              error: errors.message(current.id, "heartbeat"),
             });
-            if (remote.revision > current.revision)
-              current = {
-                ...current,
-                revision: remote.revision,
-                state: remote.state,
-              };
-            store.put(current);
+            applyRemote(current, remote);
+            errors.set(current.id, "heartbeat", null);
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : "Heartbeat failed";
-            store.error(current.id, message);
+            recordFailure(current, error, "heartbeat");
           }
         }
       }
@@ -107,9 +145,16 @@ export async function runCollector(input: {
             !store.progress.tracks(connection.id, scanKey)
           )
             continue;
-          const { files, preview } = await readSession(
+          const { files, preview, branchLeafId } = await readSession(
             connection.source,
             native,
+            {
+              branchAnchor: collectorBranchAnchor(
+                store,
+                connection.id,
+                native.nativeSessionId,
+              ),
+            },
           );
           let eligible = false;
           for (const session of preview.sessions) {
@@ -156,6 +201,7 @@ export async function runCollector(input: {
                   contentHash: session.contentHash,
                   files,
                   boundaryIds: selected.map((boundary) => boundary.id),
+                  ...(branchLeafId ? { branchLeafId } : {}),
                 },
                 selected.map((boundary) => ({
                   id: boundary.id,
@@ -185,13 +231,13 @@ export async function runCollector(input: {
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     store.progress.discovered(connection.id);
-    if (failures.length)
-      errors.set(
-        connection.id,
-        `${failures.length} session(s) need attention. ${failures[0]}`,
-      );
-    else errors.delete(connection.id);
-    store.error(connection.id, errors.get(connection.id) ?? null);
+    errors.set(
+      connection.id,
+      "source",
+      failures.length
+        ? `${failures.length} session(s) need attention. ${failures[0]}`
+        : null,
+    );
   }
   try {
     while (
@@ -201,6 +247,7 @@ export async function runCollector(input: {
       const connections = store.connections();
       store.set("heartbeatAt", new Date().toISOString());
       for (const connection of connections) {
+        if (connection.state === "disconnected") continue;
         if (!watchers.has(connection.source.root))
           try {
             const watcher = watch(
@@ -231,32 +278,32 @@ export async function runCollector(input: {
         store.set("syncNow", "no");
       }
       for (let connection of connections) {
+        connection = retained(connection);
+        if (connection.state === "disconnected") continue;
+        let phase: CollectorErrorPhase = "heartbeat";
         try {
           if (heartbeat) {
             const remote = await input.transport.heartbeat(connection, {
               pendingOperations: store.queued(connection.id),
-              error: errors.get(connection.id) ?? null,
+              error: errors.message(connection.id, "heartbeat"),
             });
-            if (remote.revision > connection.revision)
-              connection = {
-                ...connection,
-                revision: remote.revision,
-                state: remote.state,
-              };
-            store.put(connection);
+            connection = applyRemote(connection, remote);
+            errors.set(connection.id, "heartbeat", null);
           }
           if (connection.state !== "active") continue;
+          phase = "source";
           if (reconcile) await acquire(connection);
           connection =
             store.connections().find((item) => item.id === connection.id) ??
             connection;
           if (connection.state !== "active") continue;
+          phase = "admission";
           const next = store.next(connection.id);
           if (next)
             try {
               await input.transport.admit(connection, next.entry);
               store.acknowledge(next.entry);
-              store.error(connection.id, errors.get(connection.id) ?? null);
+              errors.set(connection.id, "admission", null);
             } catch (error) {
               store.retry(next.entry.operationId, next.attempts);
               throw error;
@@ -265,30 +312,19 @@ export async function runCollector(input: {
             !connection.keepSyncing &&
             store.queued(connection.id) === 0 &&
             store.progress.status(connection.id).stage === "complete" &&
-            !errors.has(connection.id)
+            !errors.source(connection.id)
           ) {
+            phase = "control";
             if (!input.transport.pause)
               throw new Error(
                 "This transport cannot acknowledge completion of a one-time import.",
               );
             const paused = await input.transport.pause(connection);
-            store.put({
-              ...connection,
-              revision: paused.revision,
-              state: paused.state,
-            });
+            applyRemote(connection, paused);
+            errors.set(connection.id, "control", null);
           }
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Collection failed.";
-          errors.set(connection.id, message);
-          store.error(connection.id, message);
-          const status =
-            error && typeof error === "object" && "status" in error
-              ? Number(error.status)
-              : 0;
-          if (status === 401 || status === 403 || status === 400)
-            store.put({ ...connection, state: "paused" });
+          recordFailure(connection, error, phase);
         }
       }
       await new Promise<void>((resolve) => {

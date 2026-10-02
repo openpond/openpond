@@ -1808,6 +1808,7 @@ export function MainPane({
               ) : null}
               <DraftBoundComposer
                 experience={experience}
+                readOnlyReason={typeof selectedProfileSession?.metadata?.nativeReadOnlyReason === "string" ? selectedProfileSession.metadata.nativeReadOnlyReason : null}
                 draftStore={composerDraftStore}
                 attachmentRequest={composerAttachmentRequest}
                 mode="dock"

@@ -20,6 +20,12 @@ export interface NativeSession {
   storageRevision?: string;
   issue?: string;
 }
+export interface NativeBranchChoice { leafId: string; revision: string }
+export interface NativeBranchAnchor { leafId: string; chainHash: string }
+export interface NativeBranchInspection {
+  revision: string;
+  branches: Array<{ leafId: string; chainHash: string; title: string; updatedAt: string | null; messages: number }>;
+}
 export const NATIVE_SOURCE_NAMES: Record<ExternalAgentSource, string> = {
   codex: "Codex",
   claude_code: "Claude Code",

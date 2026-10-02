@@ -69,9 +69,10 @@ export function validateTaskset(input: unknown, options: { allowUnscoredOnlineRe
 
 function validateGraderFixtures(taskset: Taskset, issues: TasksetValidationIssue[], options: { allowUnscoredOnlineRewardBatch?: boolean }): void {
   // The hosted learning boundary checks the sealed batch and executable Reward
-  // before opting into fresh-rollout GRPO. Ordinary authored Tasksets still
-  // require grader fixtures.
-  if (!taskset.graderFixtures.length && !(options.allowUnscoredOnlineRewardBatch && taskset.metadata.trainingMethod === "grpo" && taskset.metadata.learning)) {
+  // before opting into fresh-rollout GRPO. Human-only review has no automated
+  // grader to calibrate; every mixed/automated taskset retains fixture gates.
+  const humanReviewOnly = taskset.graders.length > 0 && taskset.graders.every(grader => grader.kind === "human");
+  if (!humanReviewOnly && !taskset.graderFixtures.length && !(options.allowUnscoredOnlineRewardBatch && taskset.metadata.trainingMethod === "grpo" && taskset.metadata.learning)) {
     issues.push({ code: "grader_fixtures_required", severity: "error", message: "Taskset admission requires authored grader fixtures.", path: "graderFixtures" });
   }
   const taskIds = new Set(taskset.tasks.map((task) => task.id));
@@ -81,7 +82,7 @@ function validateGraderFixtures(taskset: Taskset, issues: TasksetValidationIssue
     required.delete(fixture.label);
     if (fixture.label === "infrastructure_failure" && !fixture.infrastructureError) issues.push({ code: "infrastructure_fixture_error_missing", severity: "error", message: `Infrastructure fixture ${fixture.id} must declare an infrastructure error.`, path: `graderFixtures.${fixture.id}.infrastructureError` });
   }
-  for (const label of required) issues.push({ code: "grader_fixture_missing", severity: "warning", message: `Taskset does not include the optional ${label} grader calibration fixture.`, path: "graderFixtures" });
+  for (const label of humanReviewOnly ? [] : required) issues.push({ code: "grader_fixture_missing", severity: "warning", message: `Taskset does not include the optional ${label} grader calibration fixture.`, path: "graderFixtures" });
 }
 
 function validateDatasetArtifact(

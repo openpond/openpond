@@ -6,15 +6,19 @@ import {
   realpath,
   stat,
 } from "node:fs/promises";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
 import { previewAgentImport } from "../connected-evidence/imports.js";
-import { object } from "../connected-evidence/normalize.js";
+import { connectedJsonLines, object } from "../connected-evidence/normalize.js";
+import { claudeGraph } from "../connected-evidence/sources/claude-branches.js";
+import { contentHash } from "@openpond/harness";
 import { listDatabaseSessions, readDatabaseSession } from "./database.js";
 import {
   NATIVE_READ_LIMIT,
   type NativeSession,
   type NativeSource,
+  type NativeBranchInspection,
+  type NativeBranchAnchor,
 } from "./contracts.js";
 
 async function selectedPath(
@@ -185,12 +189,23 @@ export async function listSessions(
       const claudeMessage = source.source === "claude_code"
         ? rows.find((row) => row.sessionId === id && row.type === "user" && typeof row.cwd === "string" && isAbsolute(row.cwd))
         : undefined;
-      const cwd = claudeMessage?.cwd ?? payload.cwd;
+      let cwd = claudeMessage?.cwd ?? payload.cwd;
+      let title = id;
+      if (source.source === "grok_build" && path.endsWith("updates.jsonl")) {
+        try {
+          const summary = object(JSON.parse(await readSelectedFile(source, join(dirname(path), "summary.json"))));
+          const info = object(summary.info);
+          if (info.id === id) {
+            cwd = info.cwd;
+            if (typeof summary.generated_title === "string") title = summary.generated_title.slice(0, 500);
+          }
+        } catch { /* Missing/unreadable metadata leaves history readable without native resume. */ }
+      }
       candidates.push({
         nativeSessionId: id,
         sourceInstanceId: source.instanceId,
         path,
-        title: id,
+        title,
         cwd: typeof cwd === "string" && isAbsolute(cwd) ? cwd : null,
         updatedAt: modified.mtime.toISOString(),
         storageRevision: [
@@ -223,10 +238,20 @@ export async function listSessions(
     nextCursor: candidates.length > limit ? candidates[limit - 1]!.path : null,
   };
 }
+export async function inspectSessionBranches(source: NativeSource, session: NativeSession): Promise<NativeBranchInspection> {
+  if (source.source !== "claude_code") return { revision: "", branches: [] };
+  if (session.issue) throw new Error(session.issue);
+  if (session.sourceInstanceId !== source.instanceId) throw new Error("Native session belongs to another selected source.");
+  const text = await readSelectedFile(source, session.path);
+  const graph = claudeGraph(connectedJsonLines({ path: basename(session.path), text }));
+  if (graph.sessionId !== session.nativeSessionId) throw new Error("Native session changed identity.");
+  return { revision: contentHash(text), branches: graph.branches() };
+}
+
 export async function readSession(
   source: NativeSource,
   session: NativeSession,
-  input: { branchLeafId?: string } = {},
+  input: { branchLeafId?: string; expectedBranchRevision?: string; branchAnchor?: NativeBranchAnchor } = {},
 ) {
   if (session.issue) throw new Error(session.issue);
   if (session.sourceInstanceId !== source.instanceId)
@@ -251,6 +276,27 @@ export async function readSession(
         text: await readSelectedFile(source, session.path),
       },
     ];
+  if (input.expectedBranchRevision && !input.branchLeafId) throw new Error("Choose a branch before supplying its revision.");
+  if (source.source === "claude_code") {
+    const file = files[0]!;
+    const graph = claudeGraph(connectedJsonLines(file));
+    if (graph.sessionId !== session.nativeSessionId) throw new Error("Native session changed identity.");
+    if (input.branchAnchor) {
+      if (input.branchLeafId || input.expectedBranchRevision) throw new Error("Choose either a frozen branch snapshot or a followed branch anchor.");
+      const anchor = graph.select(input.branchAnchor.leafId);
+      if (anchor.chainHash !== input.branchAnchor.chainHash) throw new Error("The selected branch history changed. Review and select it again before syncing.");
+      const descendants = graph.leaves.filter(leaf => graph.select(leaf.uuid as string).chain.some(row => row.uuid === input.branchAnchor!.leafId));
+      if (descendants.length !== 1) throw new Error("The selected branch diverged. Pause this connection and choose its branch again.");
+      input = { ...input, branchLeafId: descendants[0]!.uuid as string };
+    }
+    if (input.expectedBranchRevision && contentHash(file.text) !== input.expectedBranchRevision) throw new Error("This conversation changed. Refresh its branches and choose again.");
+    if (input.branchLeafId) {
+      if (!graph.leaves.some(leaf => leaf.uuid === input.branchLeafId)) throw new Error("The selected Claude branch is no longer a leaf. Refresh and choose again.");
+      // Selected-branch consent never uploads sibling transcript rows. The
+      // retained native file is unchanged; admission receives only this chain.
+      files = [{ ...file, text: graph.select(input.branchLeafId).chain.map(row => JSON.stringify(row)).join("\n") + "\n" }];
+    }
+  } else if (input.expectedBranchRevision || input.branchAnchor) throw new Error("Branch revision selection is only supported for Claude Code.");
   const preview = previewAgentImport({
     source: source.source,
     files,
@@ -267,5 +313,5 @@ export async function readSession(
     preview.sessions.some((item) => item.sessionId !== session.nativeSessionId)
   )
     throw new Error("Native session changed identity.");
-  return { files, preview };
+  return { files, preview, branchLeafId: input.branchLeafId };
 }

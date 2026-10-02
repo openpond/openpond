@@ -169,6 +169,7 @@ export function Composer({
   subagentRuntime = null,
   createImproveRuntime = null,
   busy,
+  readOnlyReason = null,
   running = busy,
   taskSessionId = null,
   taskEvents = EMPTY_TASK_EVENTS,
@@ -424,6 +425,7 @@ export function Composer({
   const controlsDisabled = serializingAttachments;
 
   function beginSubmissionForScope(scopeKey = submissionScopeKey): boolean {
+    if (readOnlyReason) return false;
     const activeScopes = submittingScopeKeysRef.current;
     if (activeScopes.has(scopeKey)) return false;
     activeScopes.add(scopeKey);
@@ -1501,6 +1503,8 @@ export function Composer({
       inputRef.current?.focusAtPromptIndex(next.cursorIndex);
     });
   }
+
+  if (readOnlyReason) return <p className="composer dock" role="status">{readOnlyReason}</p>;
 
   return (
     <form
