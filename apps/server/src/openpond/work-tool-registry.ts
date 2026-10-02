@@ -207,8 +207,8 @@ export function createWorkModelToolDefinitions(deps: {
             runtimeProfileId: WORK_RUNTIME_PROFILE_ID,
             workspaceRoot: "/workspace",
             cwd: "/workspace/work",
-            status: workModelData(status.data) ?? null,
-            probe: workModelData(probeResult.data) ?? null,
+            status: status.data ?? null,
+            probe: probeResult.data ?? null,
             executionBacked: probeResult.ok,
           },
         };
@@ -766,7 +766,7 @@ function workspaceToolResult(
     name: toolName,
     ok: result.ok,
     contentText: JSON.stringify({ ...result, data: workModelData(result.data) }, null, 2),
-    data: workModelData(result.data),
+    data: result.data,
   };
 }
 

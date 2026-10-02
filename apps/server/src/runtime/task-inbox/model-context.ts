@@ -9,7 +9,9 @@ export function projectTaskAssignment(messages: HostedMessages, inputs: TaskInpu
     const message = messages[index]!;
     if (message.role === "user" && typeof message.content === "string" && message.content.startsWith(ASSIGNMENT_PREFIX)) messages.splice(index, 1);
   }
-  if (originalPrompt || inputs.length) messages.push({ role: "user", content: ASSIGNMENT_PREFIX + (originalPrompt ? `Original assignment:\n${originalPrompt}\n\n` : "") + inputs.map(taskInputModelText).join("\n\n") });
+  const originalStillPresent = originalPrompt && messages.some(message =>
+    message.role === "user" && message.content === originalPrompt);
+  if (inputs.length || (originalPrompt && !originalStillPresent)) messages.push({ role: "user", content: ASSIGNMENT_PREFIX + (originalPrompt ? `Original assignment:\n${originalPrompt}\n\n` : "") + inputs.map(taskInputModelText).join("\n\n") });
 }
 
 export function appendTaskInputContext(messages: HostedMessages, inputs: TaskInput[]): void {
