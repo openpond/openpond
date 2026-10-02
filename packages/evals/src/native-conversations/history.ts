@@ -157,7 +157,7 @@ export async function listSessions(
           : text
               .split(/\r?\n/u)
               .filter(Boolean)
-              .slice(0, 12)
+              .slice(0, source.source === "claude_code" ? undefined : 12)
               .map((line) => object(JSON.parse(line)));
       const header =
         rows.find(
@@ -179,12 +179,19 @@ export async function listSessions(
           : typeof payload.sessionId === "string"
             ? payload.sessionId
             : basename(path).replace(/\.jsonl(?:\.zst)?$/u, "");
+      // Claude writes queue/history bookkeeping before its first message. The
+      // native session's message metadata owns cwd; encoded project-directory
+      // names are ambiguous and must never be decoded into a guessed path.
+      const claudeMessage = source.source === "claude_code"
+        ? rows.find((row) => row.sessionId === id && row.type === "user" && typeof row.cwd === "string" && isAbsolute(row.cwd))
+        : undefined;
+      const cwd = claudeMessage?.cwd ?? payload.cwd;
       candidates.push({
         nativeSessionId: id,
         sourceInstanceId: source.instanceId,
         path,
         title: id,
-        cwd: typeof payload.cwd === "string" ? payload.cwd : null,
+        cwd: typeof cwd === "string" && isAbsolute(cwd) ? cwd : null,
         updatedAt: modified.mtime.toISOString(),
         storageRevision: [
           modified.dev,
