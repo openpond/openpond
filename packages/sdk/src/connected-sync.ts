@@ -26,12 +26,18 @@ export const ConnectedSyncControlSchema = z
     action: z.enum(["pause", "resume", "disconnect"]),
   })
   .strict();
+export const ConnectedSyncRequestSchema = z.object({
+  id: Id,
+  operationId: Id,
+  expectedRevision: z.number().int().positive(),
+}).strict();
 export const ConnectedSyncHeartbeatSchema = z
   .object({
     id: Id,
     expectedRevision: z.number().int().positive(),
     pendingOperations: z.number().int().min(0).max(10000),
     error: z.string().max(500).nullable(),
+    completedSyncRevision: z.number().int().nonnegative().default(0),
   })
   .strict();
 export const ConnectedSyncConnectionSchema = z
@@ -57,8 +63,13 @@ export const ConnectedSyncConnectionSchema = z
     pendingOperations: z.number().int().nonnegative(),
     admittedTasks: z.number().int().nonnegative(),
     error: z.string().nullable(),
+    requestedSyncRevision: z.number().int().nonnegative().default(0),
+    completedSyncRevision: z.number().int().nonnegative().default(0),
+    syncRequestedAt: z.string().datetime().nullable().default(null),
+    syncCompletedAt: z.string().datetime().nullable().default(null),
   })
-  .strict();
+  .strict()
+  .refine(value => value.completedSyncRevision <= value.requestedSyncRevision && value.requestedSyncRevision <= value.revision, "Invalid sync acknowledgement generation.");
 export const ConnectedSyncCommitSchema = z
   .object({
     connectionId: Id,
@@ -142,6 +153,15 @@ export class ConnectedSyncClient {
         ConnectedSyncHeartbeatSchema.parse(raw),
         signal,
       ),
+      raw.id,
+    );
+  }
+  async requestSync(
+    raw: z.input<typeof ConnectedSyncRequestSchema>,
+    signal?: AbortSignal,
+  ) {
+    return this.connection(
+      await this.request("/sync-now", "POST", ConnectedSyncRequestSchema.parse(raw), signal),
       raw.id,
     );
   }

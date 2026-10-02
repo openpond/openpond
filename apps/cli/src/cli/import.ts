@@ -260,6 +260,8 @@ export async function runImportCommand(
     source,
     projectId: retained.projectId,
     revision: retained.revision,
+    requestedSyncRevision: retained.requestedSyncRevision,
+    completedSyncRevision: retained.completedSyncRevision,
     since,
     keepSyncing,
     state: retained.state,

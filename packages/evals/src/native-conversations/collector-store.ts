@@ -78,6 +78,8 @@ export class CollectorStore {
         this.database
           .prepare("DELETE FROM settings WHERE key=?")
           .run(`errors:${connection.id}`);
+        this.database.prepare("DELETE FROM settings WHERE key=?").run(`syncAcknowledged:${connection.id}`);
+        connection = { ...connection, completedSyncRevision: 0 };
         this.error(connection.id, null);
         for (const table of ["source_scans", "checkpoints", "pending"])
           this.database
@@ -94,6 +96,14 @@ export class CollectorStore {
             .prepare("DELETE FROM settings WHERE key=?")
             .run(`lastAdmission:${connection.id}`);
         }
+      } else if (prior) {
+        // UI/service writers may have read the connection before completion.
+        // Their later control write cannot erase a durable work receipt.
+        connection = {
+          ...connection,
+          requestedSyncRevision: Math.max(prior.requestedSyncRevision ?? 0, connection.requestedSyncRevision ?? 0),
+          completedSyncRevision: Math.max(prior.completedSyncRevision ?? 0, connection.completedSyncRevision ?? 0),
+        };
       }
       this.database
         .prepare(
@@ -293,6 +303,9 @@ export class CollectorStore {
                 .get(String(row.id))?.bytes ?? 0,
             ),
             lastAdmissionAt: this.setting(`lastAdmission:${row.id}`),
+            requestedSyncRevision: config.requestedSyncRevision ?? 0,
+            completedSyncRevision: config.completedSyncRevision ?? 0,
+            acknowledgedSyncRevision: Number(this.setting(`syncAcknowledged:${row.id}`)) || 0,
             destinationLinks: collectorDestinationLinks(config),
           };
         }),

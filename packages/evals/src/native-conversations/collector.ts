@@ -9,6 +9,7 @@ import {
   type CollectorErrorPhase,
 } from "./collector-errors.js";
 import { collectorBranchAnchor } from "./collector-branches.js";
+import { CollectorSyncRequests } from "./collector-sync-requests.js";
 import {
   COLLECTOR_DEFAULTS,
   type CollectorConnection,
@@ -55,6 +56,7 @@ export async function runCollector(input: {
     lastHeartbeat = 0;
   const watchers = new Map<string, ReturnType<typeof watch>>();
   const errors = new CollectorErrors(store);
+  const syncRequests = new CollectorSyncRequests(store);
   const reconciledRevisions = new Map<string, number>();
   function retained(connection: CollectorConnection) {
     return (
@@ -62,15 +64,27 @@ export async function runCollector(input: {
       connection
     );
   }
+  function heartbeatInput(connection: CollectorConnection) {
+    const pendingOperations = store.queued(connection.id);
+    const error = errors.message(connection.id, "heartbeat");
+    return {
+      pendingOperations,
+      error,
+      // A durable older completion may coexist with newly queued live work.
+      // Keep its receipt, but do not send an ineligible ACK that the server
+      // must reject while the current acquisition/admission state is unhealthy.
+      completedSyncRevision: !pendingOperations && !error ? connection.completedSyncRevision ?? 0 : 0,
+    };
+  }
   function applyRemote(
     connection: CollectorConnection,
     remote: CollectorRemoteControl,
   ) {
     const current = retained(connection);
-    const next =
-      current.state !== "disconnected" && remote.revision >= current.revision
-        ? { ...current, ...(remote.revision > current.revision ? { revision: remote.revision, state: remote.state } : {}), ...(remote.destinations ? { destinations: remote.destinations } : {}) }
-        : current;
+    if (current.state === "disconnected" || remote.revision < current.revision) return current;
+    const sync = syncRequests.observe(current, remote);
+    if (remote.revision > current.revision) errors.set(current.id, "control", null);
+    const next = { ...current, ...sync, ...(remote.revision > current.revision ? { revision: remote.revision, state: remote.state } : {}), ...(remote.destinations ? { destinations: remote.destinations } : {}) };
     store.put(next);
     return next;
   }
@@ -96,6 +110,9 @@ export async function runCollector(input: {
       });
   }
   async function acquire(connection: CollectorConnection) {
+    // A request arriving mid-scan must not be acknowledged by the older scan.
+    const controlRevision = connection.revision;
+    const requestedSyncRevision = connection.requestedSyncRevision ?? 0;
     let cursor: string | undefined;
     const failures: string[] = [];
     do {
@@ -105,10 +122,7 @@ export async function runCollector(input: {
         for (const current of store.connections()) {
           if (current.state === "disconnected") continue;
           try {
-            const remote = await input.transport.heartbeat(current, {
-              pendingOperations: store.queued(current.id),
-              error: errors.message(current.id, "heartbeat"),
-            });
+            const remote = await input.transport.heartbeat(current, heartbeatInput(current));
             applyRemote(current, remote);
             errors.set(current.id, "heartbeat", null);
           } catch (error) {
@@ -237,7 +251,8 @@ export async function runCollector(input: {
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     store.progress.discovered(connection.id);
-    reconciledRevisions.set(connection.id, connection.revision);
+    reconciledRevisions.set(connection.id, controlRevision);
+    syncRequests.acquired(connection.id, { controlRevision, requestedSyncRevision, succeeded: failures.length === 0 });
     errors.set(
       connection.id,
       "source",
@@ -290,10 +305,7 @@ export async function runCollector(input: {
         let phase: CollectorErrorPhase = "heartbeat";
         try {
           if (heartbeat) {
-            const remote = await input.transport.heartbeat(connection, {
-              pendingOperations: store.queued(connection.id),
-              error: errors.message(connection.id, "heartbeat"),
-            });
+            const remote = await input.transport.heartbeat(connection, heartbeatInput(connection));
             connection = applyRemote(connection, remote);
             errors.set(connection.id, "heartbeat", null);
           }
@@ -304,12 +316,13 @@ export async function runCollector(input: {
           phase = "source";
           // Resume must scan before retained one-time completion can pause again,
           // even when the ordinary reconcile interval has not elapsed.
-          if (reconcile || reconciledRevisions.get(connection.id) !== connection.revision)
+          if (reconcile || reconciledRevisions.get(connection.id) !== connection.revision || syncRequests.needsAcquisition(connection))
             await acquire(connection);
           connection =
             store.connections().find((item) => item.id === connection.id) ??
             connection;
           if (connection.state !== "active") continue;
+          if (input.signal.aborted || store.setting("desiredState") !== "running") continue;
           phase = "admission";
           const next = store.next(connection.id);
           if (next)
@@ -321,12 +334,25 @@ export async function runCollector(input: {
               store.retry(next.entry.operationId, next.attempts);
               throw error;
             }
+          connection = retained(connection);
+          if (input.signal.aborted || store.setting("desiredState") !== "running" || connection.state !== "active") continue;
+          connection = syncRequests.complete(connection, errors.message(connection.id, "heartbeat"));
+          if (syncRequests.needsAcknowledgement(connection) && heartbeatInput(connection).completedSyncRevision) {
+            phase = "heartbeat";
+            const remote = await input.transport.heartbeat(connection, heartbeatInput(connection));
+            connection = applyRemote(connection, remote);
+            errors.set(connection.id, "heartbeat", null);
+          }
           if (
+            !input.signal.aborted &&
+            store.setting("desiredState") === "running" &&
+            connection.state === "active" &&
             !connection.keepSyncing &&
             reconciledRevisions.get(connection.id) === connection.revision &&
             store.queued(connection.id) === 0 &&
             store.progress.status(connection.id).stage === "complete" &&
-            !errors.source(connection.id)
+            !errors.source(connection.id) &&
+            syncRequests.confirmed(connection.id) >= (connection.requestedSyncRevision ?? 0)
           ) {
             phase = "control";
             if (!input.transport.pause)

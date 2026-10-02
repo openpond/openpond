@@ -45,7 +45,7 @@ export const collectorTransport: CollectorTransport = {
       expectedRevision: connection.revision,
       action: "pause",
     });
-    return { revision: remote.revision, state: remote.state, destinations: collectorDestinations(connection, remote) };
+    return { revision: remote.revision, state: remote.state, destinations: collectorDestinations(connection, remote), requestedSyncRevision: remote.requestedSyncRevision, completedSyncRevision: remote.completedSyncRevision };
   },
   async heartbeat(connection, input) {
     const { sync } = await collectorClients(connection);
@@ -54,7 +54,7 @@ export const collectorTransport: CollectorTransport = {
       expectedRevision: connection.revision,
       ...input,
     });
-    return { revision: remote.revision, state: remote.state, destinations: collectorDestinations(connection, remote) };
+    return { revision: remote.revision, state: remote.state, destinations: collectorDestinations(connection, remote), requestedSyncRevision: remote.requestedSyncRevision, completedSyncRevision: remote.completedSyncRevision };
   },
   async admit(connection, entry) {
     const { evidence, sync } = await collectorClients(connection),
