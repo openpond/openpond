@@ -366,6 +366,7 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
     kind: "human",
     rubricRef: rubricAsset(grader),
     reviewerRole: grader.reviewerRole,
+    ...(grader.form ? { form: grader.form } : {}),
   };
   return {
     ...base,

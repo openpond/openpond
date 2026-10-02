@@ -2,7 +2,7 @@ const SECRET_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "OpenAI-style API key", pattern: /\bsk-[A-Za-z0-9_-]{16,}\b/g },
   { label: "OpenPond API key", pattern: /\bopk_[A-Za-z0-9_-]{12,}\b/g },
   { label: "private key", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g },
-  { label: "credential assignment", pattern: /\b(?:api[_-]?key|password|secret|token)\s*[:=]\s*["']?[^\s"']{8,}/gi },
+  { label: "credential assignment", pattern: /\b(?:api[_-]?key|password|secret|token)["']?\s*[:=]\s*["']?[^\s"']{8,}/gi },
 ];
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const PHONE_PATTERN = /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g;

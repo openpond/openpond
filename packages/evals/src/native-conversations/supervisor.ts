@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { retainAppImageRuntime, removeAppImageRuntimes } from "./appimage-runtime.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { contentHash } from "@openpond/harness";
@@ -28,7 +30,7 @@ export interface CollectorServiceSetup {
   args: string[];
   home?: string;
   environment?: Partial<
-    Record<"OPENPOND_HOME" | "ELECTRON_RUN_AS_NODE", string>
+    Record<"OPENPOND_HOME" | "ELECTRON_RUN_AS_NODE" | "APPIMAGE_EXTRACT_AND_RUN", string>
   >;
 }
 function identity(directory: string) {
@@ -95,11 +97,13 @@ export async function installCollectorService(input: CollectorServiceSetup) {
     throw new Error(
       "Collector service requires absolute paths and single-line arguments.",
     );
+  const retainedRuntime = await retainAppImageRuntime(input);
+  if (retainedRuntime) input = { ...input, ...retainedRuntime, environment: { ...input.environment, ELECTRON_RUN_AS_NODE: "1", APPIMAGE_EXTRACT_AND_RUN: "1" } };
   const environment = Object.entries(input.environment ?? {});
   if (
     environment.some(
       ([key, value]) =>
-        !["OPENPOND_HOME", "ELECTRON_RUN_AS_NODE"].includes(key) ||
+        !["OPENPOND_HOME", "ELECTRON_RUN_AS_NODE", "APPIMAGE_EXTRACT_AND_RUN"].includes(key) ||
         typeof value !== "string" ||
         /[\r\n\0]/u.test(value),
     )
@@ -118,7 +122,7 @@ export async function installCollectorService(input: CollectorServiceSetup) {
   if (process.platform === "linux") {
     const directory = join(home, ".config/systemd/user");
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    await writeFile(
+    await atomicServiceFile(
       join(directory, `${name}.service`),
       `[Unit]\nDescription=OpenPond conversation importer\nAfter=network-online.target\n[Service]\nType=simple\n${environment.map(([key, value]) => `Environment=${systemd(`${key}=${value}`)}`).join("\n")}\nExecStart=${[input.executable, ...launch].map(systemd).join(" ")}\nRestart=on-failure\nRestartSec=5\nUMask=0077\nNoNewPrivileges=true\n[Install]\nWantedBy=default.target\n`,
       { mode: 0o600 },
@@ -207,6 +211,7 @@ export async function uninstallCollectorService(
     await rm(join(directory, "scheduled-task.xml"), { force: true });
     await rm(join(directory, "start-collector.ps1"), { force: true });
   } else throw new Error("No per-user supervisor is available.");
+  if (process.platform === "linux") await removeAppImageRuntimes(directory);
   return collectorStatus(directory);
 }
 export async function startCollectorService(directory: string) {
@@ -229,4 +234,12 @@ export async function startCollectorService(directory: string) {
     throw error;
   }
   return collectorStatus(directory);
+}
+
+async function atomicServiceFile(file: string, text: string, options: { mode: number }) {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, text, { ...options, flag: "wx" });
+    await rename(temporary, file);
+  } finally { await rm(temporary, { force: true }); }
 }

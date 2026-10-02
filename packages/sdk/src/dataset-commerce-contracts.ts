@@ -35,12 +35,39 @@ export const WriteCommerceListing = CommerceOperation.extend({
   terms: ListingTerms,
   state: z.enum(["draft", "listed", "paused", "retired"]),
 }).strict();
-export const CommerceBrowse = z.object({
-  search: z.string().max(120).optional(),
-  category: z.string().max(80).optional(),
-  cursor: CommerceId.optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(24),
-});
+export const CommerceCursor = z.string().min(1).max(1024);
+export const CommerceDatasetFormat = z.enum([
+  "native",
+  "csv",
+  "jsonl",
+  "parquet",
+]);
+/** Amount filters apply to listing price or the request's indicative budget. */
+export const CommerceBrowse = z
+  .object({
+    search: z.string().max(120).optional(),
+    category: z.string().max(80).optional(),
+    format: CommerceDatasetFormat.optional(),
+    license: z.string().max(120).optional(),
+    minPriceBaseUnits: z
+      .string()
+      .regex(/^(0|[1-9][0-9]{0,11})$/)
+      .optional(),
+    maxPriceBaseUnits: UsdcAmount.optional(),
+    sort: z.enum(["newest", "price_low", "price_high"]).default("newest"),
+    cursor: CommerceCursor.optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+  })
+  .refine(
+    (value) =>
+      !value.minPriceBaseUnits ||
+      !value.maxPriceBaseUnits ||
+      BigInt(value.minPriceBaseUnits) <= BigInt(value.maxPriceBaseUnits),
+    {
+      message: "Minimum price must not exceed maximum price.",
+      path: ["maxPriceBaseUnits"],
+    },
+  );
 export const DatasetRequestContent = z
   .object({
     title: z.string().trim().min(3).max(160),
@@ -120,6 +147,7 @@ export type CommerceListingView = {
   release: z.infer<typeof CommerceReleaseRef>;
   packageHash: string;
   taskCount: number;
+  format: z.infer<typeof CommerceDatasetFormat>;
   sizeBytes: number;
   sample: CommerceSample;
   sampleHash: string;
