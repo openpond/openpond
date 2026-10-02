@@ -26,6 +26,16 @@ export const HostStorageScopeSchema = z.object({
 }).strict();
 
 export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
+  z.object({ contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id,
+    operation: z.literal("output/list"), params: z.object({}).strict() }).strict(),
+  z.object({ contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id,
+    operation: z.literal("output/read"), params: z.object({
+      fileId: id, revision: z.number().int().min(1),
+      offset: z.number().int().min(0).max(10_000_000).optional(),
+      maxChars: z.number().int().min(1).max(100_000).optional(),
+      firstPage: z.number().int().min(1).max(1000).optional(),
+      pageCount: z.number().int().min(1).max(10).optional(),
+    }).strict() }).strict(),
   z.object({contractVersion:z.literal(HOST_STORAGE_CONTRACT_VERSION),requestId:id,operation:z.literal("profile.externalDataset.authorize"),params:z.object({bindingHash:z.string().regex(/^[a-f0-9]{64}$/),manifestHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),taskId:id.optional(),seed:z.string().min(1).max(500).optional()}).strict().refine(value=>Boolean(value.taskId)===Boolean(value.seed),"Case authority requires both task and seed.")}).strict(),
   z.object({
     contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id,
@@ -351,7 +361,7 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
 
 export const HostStorageCapabilitySchema = z.object({
   contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
-  operations: z.array(z.enum(["experiment/policy", "experiment/environment", "sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write", "harness/state/read", "profile-evaluations/execute", "harness/review/execute", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(48),
+  operations: z.array(z.enum(["experiment/policy", "experiment/environment", "sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "output/list", "output/read", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write", "harness/state/read", "profile-evaluations/execute", "harness/review/execute", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(50),
   allowedTools: z.array(id).max(128),
   maxPageSize: pageSize,
   maxRequestBytes: z.number().int().min(1).max(8_388_608),

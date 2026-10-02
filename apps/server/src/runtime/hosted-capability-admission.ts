@@ -3,7 +3,7 @@ import type { HostStorageCapability } from "@openpond/agent-runtime";
 /** Every operation used by the admitted hosted Work composition. */
 export const HOSTED_WORK_REQUIRED_OPERATIONS = [
   "sandbox/request", "embedding/authorize",
-  "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile",
+  "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "output/list", "output/read",
   "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put",
   "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write",
   "harness/state/read", "task-inbox/execute", "create-improve/execute",
