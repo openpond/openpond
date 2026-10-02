@@ -46,7 +46,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
       const updated = await deps.updateSession(session.id, { nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd } });
       runtime = { client, native, instanceId: launch.instanceId, cwd, turnId: null, replaying: false, session: updated };
       runtimes.set(session.id, runtime);
-      await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "provider.configuration", source: "provider", data: { provider: session.provider, nativeSessionId: native.sessionId, capabilities: info.agentCapabilities, models: native.models, modes: native.modes, configOptions: native.configOptions } }));
+      await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "diagnostic", action: "native_configuration", source: "provider", data: { provider: session.provider, nativeSessionId: native.sessionId, capabilities: info.agentCapabilities, models: native.models, modes: native.modes, configOptions: native.configOptions } }));
       return runtime;
     } catch (error) { await client.stop(); throw error; }
   }

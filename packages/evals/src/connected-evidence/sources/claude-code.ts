@@ -7,10 +7,11 @@ export function parseClaudeSession(file: ConnectedFile, rows: Record<string, unk
   const messages = rows.filter(row => (row.type === "user" || row.type === "assistant") && typeof row.uuid === "string");
   const sessionIds = new Set(messages.flatMap(row => typeof row.sessionId === "string" ? [row.sessionId] : []));
   if (sessionIds.size !== 1 || !messages.length) throw new Error("A supported Claude Code transcript must identify one session with UUID messages.");
-  const byId = new Map(messages.map(row => [row.uuid as string, row]));
-  if (byId.size !== messages.length) throw new Error("Claude Code transcript contains duplicate message UUIDs.");
-  const parents = new Set(messages.flatMap(row => typeof row.parentUuid === "string" ? [row.parentUuid] : []));
-  const leaves = messages.filter(row => !parents.has(row.uuid as string));
+  const nodes = rows.filter(row => typeof row.uuid === "string" && row.sessionId === [...sessionIds][0]);
+  const byId = new Map(nodes.map(row => [row.uuid as string, row]));
+  if (byId.size !== nodes.length) throw new Error("Claude Code transcript contains duplicate message UUIDs.");
+  const parents = new Set(nodes.flatMap(row => typeof row.parentUuid === "string" ? [row.parentUuid] : []));
+  const leaves = nodes.filter(row => !parents.has(row.uuid as string));
   if (!leafId && leaves.length !== 1) throw new Error("This transcript has multiple branches. Select a branch leaf UUID before importing.");
   let current = byId.get(leafId ?? leaves[0]!.uuid as string);
   if (!current) throw new Error("The selected Claude Code branch leaf is missing.");
@@ -26,6 +27,7 @@ export function parseClaudeSession(file: ConnectedFile, rows: Record<string, unk
   }
   const events: ConnectedEvent[] = [];
   for (const row of chain) {
+    if (row.type !== "user" && row.type !== "assistant") continue;
     const message = object(row.message), content = message.content;
     const base = { occurredAt: connectedTimestamp(row.timestamp), parentId: typeof row.parentUuid === "string" ? row.parentUuid : null };
     const role = row.type === "user" ? "user" : "assistant";

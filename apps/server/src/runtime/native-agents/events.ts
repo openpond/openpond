@@ -14,11 +14,11 @@ export function nativeAgentEvent(session: Session, turnId: string, update: AcpOb
       const done = update.status === "completed" || update.status === "failed";
       return event({ ...base, name: done ? "tool.completed" : "tool.started", action: String(update.kind ?? "native_tool"), status: update.status === "failed" ? "failed" : done ? "completed" : "started", output: typeof update.title === "string" ? update.title : undefined, data: { ...update, callId: update.toolCallId, provider: session.provider } });
     }
-    case "plan": return event({ ...base, name: "plan.updated", data: update });
-    case "usage_update": return event({ ...base, name: "usage.updated", data: update });
+    case "plan": return event({ ...base, name: "tool.completed", action: "update_plan", status: "completed", data: { ...update, plan: update.entries } });
+    case "usage_update": return event({ ...base, name: "diagnostic", action: "native_usage", data: update });
     case "current_mode_update":
     case "config_option_update":
-    case "available_commands_update": return event({ ...base, name: "provider.configuration", data: update });
+    case "available_commands_update": return event({ ...base, name: "diagnostic", action: "native_configuration", data: update });
     default: return null;
   }
 }

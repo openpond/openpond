@@ -19,6 +19,7 @@ import type {
 } from "@openpond/contracts";
 import { PROVIDER_IDS } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
+import { DESKTOP_AGENT_PROVIDERS, isAcpProvider, NativeAgentProviderDetails } from "./NativeAgentProviderDetails";
 import {
   chatModelLabel,
   chatProviderLabel,
@@ -120,7 +121,7 @@ function providerMeta(status: ProviderStatus, settings: ProviderSettings): strin
     cache ? modelCountLabel : "",
     modelLabel,
   ].filter(Boolean);
-  return parts.join(" · ");
+  return parts.join(", ");
 }
 
 function canToggleProvider(providerId: ChatProvider): boolean {
@@ -200,15 +201,7 @@ export function ProviderSettingsSection({
   validateProvider,
 }: ProviderSettingsSectionProps) {
   const [detailsProviderId, setDetailsProviderId] = useState<ChatProvider | null>(null);
-  const [showSubscriptionProvidersOnly, setShowSubscriptionProvidersOnly] = useState(false);
-  const allProviderRows = useMemo(
-    () => providerRowsForSubscriptionFilter(providers, false),
-    [providers],
-  );
-  const providerRows = useMemo(
-    () => providerRowsForSubscriptionFilter(providers, showSubscriptionProvidersOnly),
-    [providers, showSubscriptionProvidersOnly],
-  );
+  const providerRows = DESKTOP_AGENT_PROVIDERS.filter((id) => providers?.statuses[id]);
   const detailsStatus = detailsProviderId ? providers?.statuses[detailsProviderId] ?? null : null;
   function openProviderDetails(providerId: ChatProvider, loadModels: boolean) {
     setDetailsProviderId(providerId);
@@ -223,17 +216,9 @@ export function ProviderSettingsSection({
         <div className="provider-manager-panel">
           <div className="account-list-heading provider-manager-heading">
             <div className="provider-manager-title-row">
-              <span>Model providers</span>
-              <label className="settings-check-row compact provider-subscription-filter">
-                <input
-                  type="checkbox"
-                  checked={showSubscriptionProvidersOnly}
-                  onChange={(event) => setShowSubscriptionProvidersOnly(event.currentTarget.checked)}
-                />
-                <span>Subscriptions</span>
-              </label>
+              <span>Agent providers</span>
             </div>
-            <small>{providerRows.length} of {allProviderRows.length} presets</small>
+            <small>OpenPond account access is managed in Account settings.</small>
           </div>
           {providerRows.length > 0 ? (
             <div className="provider-manager-scroll" role="list">
@@ -260,7 +245,7 @@ export function ProviderSettingsSection({
                       <span />
                     </label>
                     <div className="provider-row-main">
-                      <strong>{status.displayName}</strong>
+                      <strong>{providerId === "codex" ? "Codex / ChatGPT" : status.displayName}</strong>
                     </div>
                     <div className={`provider-row-status ${providerStateTone(status)}`}>
                       {rowBusy ? <Loader2 size={13} className="settings-spin" /> : null}
@@ -436,7 +421,7 @@ function ProviderDetailsDialog({
               <div>
                 <dt>Models</dt>
                 <dd title={cache?.lastError ?? undefined}>
-                  {modelCount} cached · {formatDate(cache?.fetchedAt)}
+                  {modelCount} cached, {formatDate(cache?.fetchedAt)}
                 </dd>
               </div>
             </>
@@ -464,11 +449,14 @@ function ProviderDetailsDialog({
         </dl>
 
         {providerId === "codex" ? (
-          <CodexProviderDetails
+          <><CodexProviderDetails
             providerBusy={providerBusy}
             status={status}
             onValidate={onValidate}
           />
+          <div className="provider-dialog-body"><h3>ChatGPT with the OpenPond harness</h3><p>Native Codex and the OpenPond harness keep their own connections. Choose the execution path in the model picker.</p><p>{settings.statuses.openai?.credential.connected ? "OpenPond harness connected" : "OpenPond harness not connected"}</p><button type="button" className="settings-secondary" disabled={providerBusy !== null} onClick={() => void onStartOpenAiSubscriptionAuth("browser")}>Connect ChatGPT for OpenPond</button><button type="button" className="settings-secondary" disabled={providerBusy !== null} onClick={() => void onSaveConfig("openai", { enabled: !settings.providers.openai?.enabled })}>{settings.providers.openai?.enabled ? "Disable" : "Enable"} OpenPond harness route</button></div></>
+        ) : isAcpProvider(providerId) && config ? (
+          <NativeAgentProviderDetails key={providerId} providerId={providerId} config={config} status={status} busy={providerBusy !== null} onSave={onSaveConfig} onConnect={onRefreshModels} />
         ) : localByok && config && cache ? (
           <LocalByokProviderDetails
             credentialTab={credentialTab}
