@@ -129,10 +129,10 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       return open(id, branch);
     }
     if (action === "collector") {
-      const { command, connectionId } = z.object({ command: z.enum(["status", "start", "stop", "sync", "install", "connect", "pause", "resume", "disconnect"]), connectionId: z.string().min(1).max(256).optional() }).parse(payload);
+      const { command, connectionId } = z.object({ command: z.enum(["status", "start", "stop", "sync", "install", "connect", "reconnect", "pause", "resume", "disconnect"]), connectionId: z.string().min(1).max(256).optional() }).parse(payload);
       const directory = collectorDirectory();
       if (command === "status") return collectorStatus(directory);
-      if (command === "install" || command === "connect" || command === "pause" || command === "resume" || command === "disconnect") {
+      if (command === "install" || command === "connect" || command === "reconnect" || command === "pause" || command === "resume" || command === "disconnect") {
         const cli = process.env.OPENPOND_COLLECTOR_CLI;
         const executable = process.env.OPENPOND_COLLECTOR_EXECUTABLE;
         if (!cli || !executable) throw new Error("The bundled Importer is unavailable. Install the OpenPond CLI to connect a source.");
@@ -144,6 +144,10 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
           if (!retained) throw new Error("Select a retained Importer connection.");
           if (retained.state === "disconnected") throw new Error("Reconnect this source through Import conversations before changing its state.");
           return { command: nativeTerminalCommand(executable, [cli, "import", command, retained.id, "--collector-dir", directory], environment) };
+        }
+        if (command === "reconnect") {
+          if (!(await collectorStatus(directory)).connections.some(item => item.id === connectionId)) throw new Error("Select a retained Importer connection.");
+          return { command: nativeTerminalCommand(executable, [cli, "import", "reconnect", connectionId!, "--collector-dir", directory], environment) };
         }
         if (command === "connect") return { command: nativeTerminalCommand(executable, [cli, "import", "connect", "--collector-dir", directory], environment) };
         return installCollectorService({ directory, executable, args: [cli], environment });
