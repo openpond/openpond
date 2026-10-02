@@ -7,7 +7,7 @@ export function createHostedWorkOutputTools(client: AgentHostStorageClient): Mod
   return [
     {
       name: "work_list_outputs",
-      description: "List this conversation's saved outputs without starting sandbox compute. Use this before reading a previously saved file; returns exact file IDs and revisions.",
+      description: "List this conversation's published outputs from completed turns without starting sandbox compute. Use this before reading a previously saved file; returns exact file IDs and revisions. New workspace files are published after the current turn ends. Inspect those with workspace tools and finish the turn instead of polling this list.",
       parameters: { type: "object", additionalProperties: false, properties: {} },
       execute: async context => {
         const result = await client.request({ contractVersion: HOST_STORAGE_CONTRACT_VERSION,
