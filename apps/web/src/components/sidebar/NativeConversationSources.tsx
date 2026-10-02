@@ -81,11 +81,11 @@ export function NativeConversationSources({ connection, selectedSessionId, onOpe
     } catch (error) { setError(error instanceof Error ? error.message : "Could not change Importer connection."); }
     finally { setBusy(null); }
   }
-  async function connect() {
+  async function connect(connectionId?: string) {
     if (!connection) return;
     setBusy("connect");
     try {
-      const result = await apiFetch<{ command: string }>(connection, "/v1/native-history/collector", { method: "POST", body: JSON.stringify({ command: "connect" }) });
+      const result = await apiFetch<{ command: string }>(connection, "/v1/native-history/collector", { method: "POST", body: JSON.stringify({ command: connectionId ? "reconnect" : "connect", connectionId }) });
       setCommand(result.command); setError(null);
     } catch (error) { setError(error instanceof Error ? error.message : "Could not open Importer setup."); }
     finally { setBusy(null); }
@@ -101,7 +101,7 @@ export function NativeConversationSources({ connection, selectedSessionId, onOpe
       {history && Object.keys(history.nextCursors).length ? <button type="button" disabled={busy !== null} onClick={() => void more()}>Load more conversations</button> : null}
       {history && history.items.length === 0 ? <p>No saved conversations found in configured source locations.</p> : null}
       {history?.warnings.map((warning) => <p key={warning}><CircleAlert size={12} aria-hidden="true" /> {warning}</p>)}
-      {history?.collector.connections.length ? <NativeImporterStatus status={history.collector} busy={busy !== null} onControl={(command) => void control(command)} onConnectionControl={(command, id) => void connectionControl(command, id)} onReconnect={() => void connect()} /> : <p>To upload these conversations, connect a source with the OpenPond Importer. Local history stays available without cloud sync.</p>}
+      {history?.collector.connections.length ? <NativeImporterStatus status={history.collector} busy={busy !== null} onControl={(command) => void control(command)} onConnectionControl={(command, id) => void connectionControl(command, id)} onReconnect={(id) => void connect(id)} /> : <p>To upload these conversations, connect a source with the OpenPond Importer. Local history stays available without cloud sync.</p>}
     </> : null}
     {error ? <p role="status"><CircleAlert size={12} aria-hidden="true" /> {error}</p> : null}
   </section>;

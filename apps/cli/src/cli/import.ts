@@ -23,6 +23,7 @@ import { optionString, promptConfirm, parseBooleanOption } from "./common";
 import { authorizeImporter } from "../importer/device-auth";
 import { collectorTransport, collectorClients } from "../importer/transport";
 import { monitorImport } from "../importer/monitor";
+import { retainedReconnect, assertReconnectSource, assertReconnectUnchanged } from "../importer/reconnect";
 import { runImporterBranchCommand } from "../importer/branches";
 
 export async function runImportCommand(
@@ -120,6 +121,18 @@ export async function runImportCommand(
     print(remote);
     return;
   }
+  const reconnect = action === "reconnect" ? await retainedReconnect(directory, id) : null;
+  if (reconnect) options = {
+    ...options,
+    source: reconnect.source.source,
+    sourcePath: reconnect.source.root,
+    project: reconnect.projectId,
+    connection: reconnect.id,
+    team: reconnect.teamId,
+    apiBaseUrl: reconnect.apiBaseUrl,
+    baseUrl: reconnect.accountBaseUrl!,
+    once: !reconnect.keepSyncing,
+  };
   const sourceName = optionString(options, "source") as ExternalAgentSource;
   if (sourceName && !(sourceName in NATIVE_SOURCE_NAMES))
     throw new Error("Choose a supported native source name.");
@@ -138,15 +151,16 @@ export async function runImportCommand(
     print(sources);
     return;
   }
-  if (action !== "connect")
+  if (action !== "connect" && action !== "reconnect")
     throw new Error(
-      "usage: openpond import <connect|discover|status|sync|pause|resume|disconnect|branches|branch|service>",
+      "usage: openpond import <connect|reconnect|discover|status|sync|pause|resume|disconnect|branches|branch|service>",
     );
   const matching = sources.filter(
     (item) => item.source === sourceName && item.available,
   );
   let source = matching.length === 1 ? matching[0] : undefined;
   const interactive = process.stdin.isTTY && process.stdout.isTTY && !json;
+  if (reconnect) assertReconnectSource(reconnect, source);
   if (!source && interactive) {
     const available =
       matching.length > 1 ? matching : sources.filter((item) => item.available);
@@ -174,7 +188,7 @@ export async function runImportCommand(
           : "Select --source and optionally --source-path."),
     );
   let range = optionString(options, "range") || "week";
-  if (interactive && !options.range) {
+  if (!reconnect && interactive && !options.range) {
     const prompt = createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -189,7 +203,7 @@ export async function runImportCommand(
   }
   if (!["day", "week", "all"].includes(range))
     throw new Error("--range must be day, week or all.");
-  const since =
+  const since = reconnect ? reconnect.since :
     range === "all"
       ? null
       : new Date(
@@ -201,7 +215,7 @@ export async function runImportCommand(
   });
   if (!json)
     console.log(
-      `Found ${preview.items.length}${preview.nextCursor ? "+" : ""} sessions in ${source.root}. History: ${range}.`,
+      `Found ${preview.items.length}${preview.nextCursor ? "+" : ""} sessions in ${source.root}. History: ${reconnect ? since ? `since ${since}` : "all" : range}.`,
     );
   const keepSyncing = !parseBooleanOption(options.once),
     projectId = optionString(options, "project");
@@ -219,6 +233,7 @@ export async function runImportCommand(
     connectionId =
       optionString(options, "connection") ||
       `sync-${contentHash([access.baseUrl, access.teamId, source.instanceId, projectId || "default"]).slice(0, 40)}`;
+  if (reconnect) await assertReconnectUnchanged(directory, reconnect);
   const prior = (await sync.list()).items.find(
     (item) => item.id === connectionId,
   );
