@@ -10,6 +10,8 @@ import { listSessions, readSession } from "../src/native-conversations/history.j
 
 // A parser privacy correction must invalidate the old mtime cache and create a
 // new immutable revision, while preserving already admitted task identities.
+// A resumed once-only source must not auto-pause from old completed progress
+// before its next scheduled reconciliation.
 it("reprojects an unchanged Codex file after a source-policy upgrade", async () => {
   const directory = await mkdtemp(join(tmpdir(), "collector-normalizer-upgrade-"));
   const file = join(directory, "rollout.jsonl");
@@ -22,7 +24,7 @@ it("reprojects an unchanged Codex file after a source-policy upgrade", async () 
   ].map(row => JSON.stringify(row)).join("\n"));
   const connection: CollectorConnection = {
     id: "upgrade", teamId: "team", apiBaseUrl: "http://localhost", projectId: "project",
-    revision: 2, since: null, keepSyncing: false, state: "active",
+    revision: 2, since: null, keepSyncing: false, state: "paused",
     source: { source: "codex", machineId: "machine", instanceId: "instance", root: file,
       acquisition: "files", available: true, capabilities: { history: true, live: true, nativeResume: false } },
   };
@@ -42,8 +44,13 @@ it("reprojects an unchanged Codex file after a source-policy upgrade", async () 
     store.scanned(connection.id, scanKey, native.storageRevision!);
     store.progress.select(connection.id, scanKey); store.progress.read(connection.id, scanKey, true); store.progress.discovered(connection.id);
     let revisions = 0;
+    let resume: ReturnType<typeof setTimeout> | undefined;
     await runCollector({ directory: stateDirectory, signal: controller.signal, transport: {
-      heartbeat: async () => ({ revision: 2, state: "active" }),
+      heartbeat: async current => {
+        // Emulate an explicit control arriving after the paused startup scan.
+        resume ??= setTimeout(() => store.put({ ...connection, revision: 3, state: "active" }), 50);
+        return { revision: current.revision, state: current.state };
+      },
       admit: async (_, entry) => {
         revisions++;
         expect(entry.operationId).not.toBe(prior.operationId);
@@ -51,8 +58,9 @@ it("reprojects an unchanged Codex file after a source-policy upgrade", async () 
         expect(entry.boundaryIds).toEqual([boundary.id]);
         expect(entry.files).toEqual(files);
       },
-      pause: async () => { controller.abort(); return { revision: 3, state: "paused" }; },
+      pause: async () => { controller.abort(); return { revision: 4, state: "paused" }; },
     } });
+    clearTimeout(resume);
     expect(revisions).toBe(1);
     expect(store.status().connections[0]).toMatchObject({ state: "paused", admitted: 1, queued: 0 });
     expect((await listSessions(connection.source, {})).items[0]?.storageRevision).toBe(native.storageRevision);
