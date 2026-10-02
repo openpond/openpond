@@ -16,3 +16,5 @@ export * from "./service.js";
 export * from "./snapshots.js";
 export * from "./tools.js";
 export * from "./task-signals.js";
+export * from "./acp/types.js";
+export * from "./acp/client.js";

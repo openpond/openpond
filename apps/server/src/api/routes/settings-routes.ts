@@ -7,6 +7,11 @@ export async function handleSettingsRoutes({
   requestUrl,
   response,
 }: HttpRouteContext): Promise<boolean> {
+  const nativeSetup = /^\/v1\/providers\/([^/]+)\/native-setup$/.exec(requestUrl.pathname);
+  if (nativeSetup && request.method === "POST" && deps.nativeAgentSetupPayload) {
+    sendJson(response, 200, await deps.nativeAgentSetupPayload(decodeURIComponent(nativeSetup[1]!), await readJson(request)));
+    return true;
+  }
   if (requestUrl.pathname === "/v1/configuration" && deps.configuration) {
     if (request.method === "GET") sendJson(response, 200, await deps.configuration.status(requestUrl.searchParams.get("projectRoot") ?? undefined, requestUrl.searchParams.get("accountId") ?? undefined));
     else if (request.method === "POST") sendJson(response, 200, await deps.configuration.mutate(await readJson(request)));

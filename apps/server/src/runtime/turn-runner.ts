@@ -63,6 +63,8 @@ import { createCapabilityCatalogRuntime } from "./hosted-turn/capability-catalog
 import { createCreateImproveRuntime } from "./create-pipeline/runtime.js";
 import { createCreateImproveTurnHandler } from "./create-pipeline/send-turn.js";
 import { ActiveTurnRegistry } from "./turns/active-turn-registry.js";
+import { createNativeAgentRuntime } from "./native-agents/runtime.js";
+import { isNativeAgentId } from "./native-agents/config.js";
 import type {
   ActiveTurn,
   TurnRunner,
@@ -467,6 +469,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     subagentRepositoryRuntime.upsertRunAndNotify;
   const appendSubagentReceipt = subagentRepositoryRuntime.appendReceipt;
 
+  const nativeAgents = createNativeAgentRuntime(deps);
   const createImproveRuntime = createCreateImproveRuntime({
     getSession,
     getTurn: getStoredTurn,
@@ -1658,6 +1661,17 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         return completed;
       }
 
+      if (isNativeAgentId(session.provider)) {
+        const cwd = input.cwd ?? (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: session.workspaceKind !== "local_project" })) ?? session.cwd;
+        if (!cwd) throw new Error("Choose a local working directory for this native agent.");
+        if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
+        const providerTurnId = await nativeAgents.run({ session, turn, cwd, prompt: providerPrompt, model: turnModelRef?.modelId, signal: controller.signal });
+        throwIfInterrupted(controller.signal);
+        await appendWorkspaceDiffEvent(session, turn.id, { baseline: initialWorkspaceDiff });
+        const completed = await completeTurn(sessionId, turn.id, providerTurnId);
+        await processHarnessImprovementBoundarySafely({ session, turn: completed, boundaryKind: "turn_completed" });
+        return completed;
+      }
       if (session.provider !== "codex")
         throw new Error(`Unsupported provider: ${session.provider}`);
       const codexModel = turnModelRef?.modelId ?? input.model ?? null;
@@ -1809,6 +1823,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   let closePromise: Promise<void> | null = null;
   const close = () => closePromise ??= (async () => {
     taskInbox.stopScheduling();
+    await nativeAgents.close();
     await turnRunnerLifecycle.close();
     await closeCompletionDelivery();
     await taskInbox.close();
@@ -1833,6 +1848,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     listCreateImproveRuns,
     resolveCreateImproveApproval,
     resolveSubagentPatchApplyApproval,
+    resolveNativeAgentApproval: nativeAgents.resolveApproval,
     runSubagentLifecycleAction,
     recoverPendingSubagentCompletions: recoverPendingCompletions,
     cleanupExpiredRetainedSubagentWorkspace,

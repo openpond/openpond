@@ -3,6 +3,8 @@ import path from "node:path";
 import {createLocalExternalDatasetPreparation} from "../harness/local-external-dataset-preparation.js";
 import {resolveHostedApiAccess} from "../openpond/hosted-api-access.js";
 
+import { applyNativeAgentStatus, probeNativeAgent } from "../runtime/native-agents/setup.js";
+import { isNativeAgentId } from "../runtime/native-agents/config.js";
 import {
   AccountStateSchema,
   BootstrapPayloadSchema,
@@ -329,7 +331,7 @@ export function createServerPayloads(deps: {
           readProviderSecrets(providerSecretPaths),
           listManagedAdapterProviderModels(store),
         ]);
-      return withManagedAdapterProviderModels(
+      return applyNativeAgentStatus(withManagedAdapterProviderModels(
         buildProviderSettings({
           file: providerState.file,
           secrets,
@@ -338,7 +340,7 @@ export function createServerPayloads(deps: {
           catalog: providerState.catalog,
         }),
         managedAdapterModels
-      );
+      ));
     });
   }
 
@@ -1761,6 +1763,13 @@ export function createServerPayloads(deps: {
     loadProviderSettings,
     updateAppPreferencesPayload,
     providerSettingsPayload,
+    nativeAgentSetupPayload: async (provider: string, payload: unknown) => {
+      if (!isNativeAgentId(provider)) throw new Error("Unknown native agent.");
+      const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+      const file = await loadProvidersFile();
+      const result = await probeNativeAgent(provider, file.providers[provider], { force: true, authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
+      return { ...result, settings: await providerSettingsPayload() };
+    },
     updateProviderSettingsPayload,
     listProviderModelsPayload,
     refreshProviderModelsPayload,

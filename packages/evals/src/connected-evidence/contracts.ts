@@ -9,7 +9,7 @@ const Id = z.string().min(1).max(500);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Time = z.string().datetime().nullable();
 const Tokens = z.number().int().nonnegative().nullable();
-export const ConnectedSourceKindSchema = z.enum(["native_chat", "native_work", "codex", "claude_code", "hermes", "openclaw"]);
+export const ConnectedSourceKindSchema = z.enum(["native_chat", "native_work", "codex", "claude_code", "hermes", "openclaw", "opencode", "grok_build", "pi", "oh_my_pi"]);
 export const ConnectedUsageSchema = z.object({
   invocationId: Id, inputTokens: Tokens, outputTokens: Tokens, cachedInputTokens: Tokens,
   totalTokens: Tokens, provenance: z.enum(["billed_invocation", "reported_invocation", "reported_cumulative"]),
@@ -34,6 +34,7 @@ export const ConnectedSessionSchema = z.object({
   schemaVersion: z.literal(CONNECTED_EVIDENCE_VERSION), normalizerVersion: z.literal(CONNECTED_NORMALIZER_VERSION),
   origin: ConnectedSourceKindSchema, sessionId: Id, branchId: Id.nullable(), parentSessionId: Id.nullable(),
   exporterVersion: z.string().max(200).nullable(),
+  acquisition: z.object({ machineId: Id, sourceInstanceId: Id }).strict().optional(),
   sourceFiles: z.array(z.object({ path: Id, contentHash: Hash, sizeBytes: z.number().int().nonnegative() }).strict()).max(CONNECTED_EVIDENCE_LIMITS.files),
   events: z.array(ConnectedEventSchema).max(CONNECTED_EVIDENCE_LIMITS.events),
   unmappedEvents: z.array(ConnectedEventSchema).max(CONNECTED_EVIDENCE_LIMITS.events),

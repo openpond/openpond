@@ -51,6 +51,12 @@ export const SessionSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable(),
   codexThreadId: z.string().nullable(),
+  nativeAgent: z.object({
+    provider: z.enum(["claude-code", "grok-build", "opencode"]),
+    instanceId: z.string().min(1),
+    sessionId: z.string().min(1),
+    cwd: z.string().min(1),
+  }).nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   status: z.enum(["idle", "active", "failed", "closed"]),

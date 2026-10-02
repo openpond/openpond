@@ -19,6 +19,10 @@
     "LICENSE"
   ],
   "exports": {
+    "./native-conversations": {
+      "types": "./dist/types/native-conversations/index.d.ts",
+      "import": "./dist/native-conversations/index.js"
+    },
     "./human-review": {
       "types": "./dist/types/human-review/index.d.ts",
       "import": "./dist/human-review/index.js"

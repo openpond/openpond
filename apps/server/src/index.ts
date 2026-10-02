@@ -1186,6 +1186,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     approvalId: string,
     payload: unknown
   ): Promise<Approval> {
+    const nativeApproval = await turnRunner.resolveNativeAgentApproval(approvalId, payload);
+    if (nativeApproval) return nativeApproval;
     const commandApproval = await openPondCommandAccess.resolveApproval(
       approvalId,
       payload
