@@ -537,6 +537,7 @@ export type TurnRunner = TurnDispatcherPort & {
     approvalId: string,
     payload: unknown
   ): Promise<Approval | null>;
+  resolveNativeAgentApproval(approvalId: string, payload: unknown): Promise<Approval | null>;
   runSubagentLifecycleAction(
     runId: string,
     payload: unknown

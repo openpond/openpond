@@ -13,7 +13,7 @@ export const AgentImportUploadRefSchema = z.object({ hash: Hash, parts: z.number
 export const AgentImportUploadPartSchema = AgentImportUploadRefSchema.extend({ index: z.number().int().nonnegative().max(1_499), base64: z.string().max(350_000) }).strict();
 export const AgentImportFileSchema = z.object({ path: z.string().min(1).max(500), encoding: z.enum(["utf8", "zstd"]), base64: z.string() }).strict();
 export const AgentImportPreviewRequestSchema = z.object({ upload: AgentImportUploadRefSchema,
-  source: z.enum(["codex", "claude_code", "hermes", "openclaw"]), branchLeafId: Id.optional(),
+  source: z.enum(["codex", "claude_code", "hermes", "openclaw", "opencode", "grok_build", "pi", "oh_my_pi"]), branchLeafId: Id.optional(), acquisition: z.object({ machineId: Id, sourceInstanceId: Id }).strict().optional(),
   destination: z.discriminatedUnion("kind", [z.object({ kind: z.literal("existing"), projectId: Id }).strict(),
     z.object({ kind: z.literal("new"), name: z.string().trim().min(1).max(200) }).strict()]) }).strict();
 export const AgentImportCommitRequestSchema = AgentImportPreviewRequestSchema.extend({ operationId: Id, previewHash: Hash,

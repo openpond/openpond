@@ -20,7 +20,7 @@ export const CredentialReferenceSchema = z.discriminatedUnion("source", [
   z.strictObject({ source: z.literal("env"), name: string.regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(160) }),
 ]);
 const account = z.strictObject({ handle: string, base_url: endpoint.optional(), api_base_url: endpoint.optional(), chat_api_base_url: endpoint.optional(), environment: string.optional(), credential: CredentialReferenceSchema.optional(), enabled: z.boolean().optional() });
-const provider = z.strictObject({ enabled: z.boolean().optional(), base_url: endpoint.optional(), default_model: string.max(300).optional(), model_overrides: z.array(string.max(300)).max(500).optional(), credential: CredentialReferenceSchema.optional() });
+const provider = z.strictObject({ enabled: z.boolean().optional(), binary_path: string.max(4096).optional(), source_home: string.max(4096).optional(), base_url: endpoint.optional(), default_model: string.max(300).optional(), model_overrides: z.array(string.max(300)).max(500).optional(), credential: CredentialReferenceSchema.optional() });
 const language = z.strictObject({ mode: z.enum(["auto", "disabled", "custom"]).optional(), custom_command: pathString.optional() });
 const cap = z.union([z.number().int().min(1).max(32), z.literal("unlimited")]);
 const role = z.strictObject({
