@@ -62,7 +62,11 @@ export async function runCollector(input: {
               error: errors.get(current.id) ?? null,
             });
             if (remote.revision > current.revision)
-              current = { ...current, ...remote };
+              current = {
+                ...current,
+                revision: remote.revision,
+                state: remote.state,
+              };
             store.put(current);
           } catch (error) {
             const message =
@@ -234,7 +238,11 @@ export async function runCollector(input: {
               error: errors.get(connection.id) ?? null,
             });
             if (remote.revision > connection.revision)
-              connection = { ...connection, ...remote };
+              connection = {
+                ...connection,
+                revision: remote.revision,
+                state: remote.state,
+              };
             store.put(connection);
           }
           if (connection.state !== "active") continue;
@@ -264,7 +272,11 @@ export async function runCollector(input: {
                 "This transport cannot acknowledge completion of a one-time import.",
               );
             const paused = await input.transport.pause(connection);
-            store.put({ ...connection, ...paused });
+            store.put({
+              ...connection,
+              revision: paused.revision,
+              state: paused.state,
+            });
           }
         } catch (error) {
           const message =

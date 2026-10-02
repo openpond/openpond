@@ -1,3 +1,5 @@
+import { OpenPondCommerceFiles } from "./dataset-commerce-files.js";
+export * from "./dataset-commerce-files.js";
 import { z } from "zod";
 import {
   CaptureCommerceRelease,
@@ -49,6 +51,7 @@ export class OpenPondDatasetCommerceError extends Error {
 /** Retained dataset commerce. Checkout creates a quote only: this client never signs or sends wallet transactions. */
 export class OpenPondDatasetCommerceClient {
   readonly #options: DatasetCommerceClientOptions;
+  readonly files: OpenPondCommerceFiles;
   constructor(options: DatasetCommerceClientOptions) {
     const url = new URL(options.baseUrl);
     if (
@@ -62,6 +65,10 @@ export class OpenPondDatasetCommerceClient {
         "Dataset commerce base URL must be an HTTP(S) endpoint without credentials, query, or fragment.",
       );
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
+    this.files = new OpenPondCommerceFiles(
+      (path, requestOptions, input) => this.#request(path, requestOptions, input),
+      options.fetch ?? globalThis.fetch,
+    );
   }
   async browse(query: z.input<typeof CommerceBrowse> = {}, options: RequestOptions = {}) {
     const input = CommerceBrowse.parse(query),
@@ -151,6 +158,47 @@ export class OpenPondDatasetCommerceClient {
       (result.buyerTeamId !== this.#options.teamId && result.sellerTeamId !== this.#options.teamId)
     )
       this.#mismatch();
+    return result;
+  }
+  async download(id: string, options: RequestOptions = {}) {
+    CommerceId.parse(id);
+    const result = z
+      .object({
+        orderId: CommerceId,
+        url: z.string().url(),
+        expiresAt: z.string().datetime(),
+        name: z.string(),
+        format: z.enum(["csv", "jsonl", "parquet", "openpond.datasetCatalogSnapshot.v1"]),
+        contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+        sizeBytes: z
+          .number()
+          .int()
+          .positive()
+          .max(128 * 1024 * 1024),
+      })
+      .strict()
+      .parse(await this.#request(`/download/${encodeURIComponent(id)}`, options, undefined, true));
+    const url = new URL(result.url);
+    if (
+      result.orderId !== id ||
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      new Date(result.expiresAt).getTime() <= Date.now()
+    )
+      this.#mismatch();
+    return result;
+  }
+  async retryDelivery(
+    input: { operationId: string; orderId: string },
+    options: RequestOptions = {},
+  ) {
+    const value = CommerceOperation.extend({ orderId: CommerceId }).strict().parse(input);
+    const result = z
+      .object({ orderId: CommerceId, state: z.enum(["paid", "delivery_failed", "delivered"]) })
+      .strict()
+      .parse(await this.#request("/retry-delivery", options, value));
+    if (result.orderId !== value.orderId) this.#mismatch();
     return result;
   }
   async purchases(options: RequestOptions = {}) {

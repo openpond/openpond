@@ -67,6 +67,10 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
         await deps.store.insertSessionAtFront(session);
         await deps.appendRuntimeEvent(event({ sessionId, name: "session.started", source: "server", data: { session, retainedHistory: true } }));
       }
+      if (session.metadata?.nativeHistoryProjection && !session.nativeAgent && item.session.cwd) {
+        const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, cwd: item.session.cwd, nativeAgent: { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: item.session.cwd! }, metadata: { ...current.metadata, nativeResumeAvailable: true } }));
+        if (updated) session = updated;
+      }
       const events = await deps.store.runtimeEventsForSession(sessionId);
       const existingIds = new Set(events.map((event) => event.id));
       const retainedTurns = await deps.store.turnsForSession(sessionId, 10_000);
