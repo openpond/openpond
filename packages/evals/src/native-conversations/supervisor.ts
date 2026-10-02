@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { contentHash } from "@openpond/harness";
@@ -129,6 +129,18 @@ export async function installCollectorService(input: CollectorServiceSetup) {
     const directory = join(home, "Library/LaunchAgents");
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const file = join(directory, `${name}.plist`);
+    let loaded = false;
+    try {
+      await command("launchctl", ["print", `gui/${process.getuid!()}/${name}`]);
+      loaded = true;
+    } catch {
+      /* A first installation has no loaded job. Bootstrap below reports actual setup errors. */
+    }
+    if (loaded)
+      await command("launchctl", [
+        "bootout",
+        `gui/${process.getuid!()}/${name}`,
+      ]);
     await writeFile(
       file,
       `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${name}</string><key>ProgramArguments</key><array>${[input.executable, ...launch].map((value) => `<string>${xml(value)}</string>`).join("")}</array><key>EnvironmentVariables</key><dict>${environment.map(([key, value]) => `<key>${xml(key)}</key><string>${xml(value!)}</string>`).join("")}</dict><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>5</integer></dict></plist>`,
@@ -166,15 +178,47 @@ export async function installCollectorService(input: CollectorServiceSetup) {
     status: await collectorStatus(input.directory),
   };
 }
+/** Removing supervision preserves receipts, pending uploads and retained datasets. */
+export async function uninstallCollectorService(
+  directory: string,
+  home = homedir(),
+) {
+  await controlCollector(directory, "stop");
+  const name = identity(directory);
+  if (process.platform === "linux") {
+    await command("systemctl", [
+      "--user",
+      "disable",
+      "--now",
+      `${name}.service`,
+    ]);
+    await rm(join(home, ".config/systemd/user", `${name}.service`), {
+      force: true,
+    });
+    await command("systemctl", ["--user", "daemon-reload"]);
+  } else if (process.platform === "darwin") {
+    await command("launchctl", ["bootout", `gui/${process.getuid!()}/${name}`]);
+    await rm(join(home, "Library/LaunchAgents", `${name}.plist`), {
+      force: true,
+    });
+  } else if (process.platform === "win32") {
+    await command("schtasks", ["/End", "/TN", name]);
+    await command("schtasks", ["/Delete", "/TN", name, "/F"]);
+    await rm(join(directory, "scheduled-task.xml"), { force: true });
+    await rm(join(directory, "start-collector.ps1"), { force: true });
+  } else throw new Error("No per-user supervisor is available.");
+  return collectorStatus(directory);
+}
 export async function startCollectorService(directory: string) {
   await controlCollector(directory, "start");
   const name = identity(directory);
   try {
     if (process.platform === "linux")
-      await command("systemctl", ["--user", "start", `${name}.service`]);
+      await command("systemctl", ["--user", "restart", `${name}.service`]);
     else if (process.platform === "darwin")
       await command("launchctl", [
         "kickstart",
+        "-k",
         `gui/${process.getuid!()}/${name}`,
       ]);
     else if (process.platform === "win32")

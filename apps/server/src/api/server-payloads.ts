@@ -1787,7 +1787,7 @@ export function createServerPayloads(deps: {
         const definition = NATIVE_AGENTS[provider];
         return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { [definition.homeVariable]: launch.sourceHome }) };
       }
-      const result = await probeNativeAgent(provider, file.providers[provider], { force: true, authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
+      const result = await probeNativeAgent(provider, file.providers[provider], { force: input.action !== "capabilities", authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
       return { ...result, settings: await providerSettingsPayload() };
     },
     updateProviderSettingsPayload,

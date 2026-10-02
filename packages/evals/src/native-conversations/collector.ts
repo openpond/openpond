@@ -52,6 +52,29 @@ export async function runCollector(input: {
     let cursor: string | undefined;
     const failures: string[] = [];
     do {
+      if (Date.now() - lastHeartbeat >= COLLECTOR_DEFAULTS.heartbeatMs) {
+        lastHeartbeat = Date.now();
+        store.set("heartbeatAt", new Date().toISOString());
+        for (let current of store.connections()) {
+          try {
+            const remote = await input.transport.heartbeat(current, {
+              pendingOperations: store.queued(current.id),
+              error: errors.get(current.id) ?? null,
+            });
+            if (remote.revision > current.revision)
+              current = { ...current, ...remote };
+            store.put(current);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "Heartbeat failed";
+            store.error(current.id, message);
+          }
+        }
+      }
+      connection =
+        store.connections().find((item) => item.id === connection.id) ??
+        connection;
+      if (connection.state !== "active") return;
       if (input.signal.aborted || store.setting("desiredState") !== "running")
         return;
       const page = await listSessions(connection.source, {
@@ -60,6 +83,8 @@ export async function runCollector(input: {
         limit: 50,
       });
       for (const native of page.items) {
+        const scanKey = JSON.stringify([native.path, native.nativeSessionId]);
+        store.progress.select(connection.id, scanKey);
         if (
           input.signal.aborted ||
           store.setting("desiredState") !== "running" ||
@@ -68,23 +93,29 @@ export async function runCollector(input: {
         )
           return;
         try {
-          const scanKey = JSON.stringify([native.path, native.nativeSessionId]);
           if (
             native.storageRevision &&
-            !store.sourceChanged(connection.id, scanKey, native.storageRevision)
+            !store.sourceChanged(
+              connection.id,
+              scanKey,
+              native.storageRevision,
+            ) &&
+            !store.progress.tracks(connection.id, scanKey)
           )
             continue;
           const { files, preview } = await readSession(
             connection.source,
             native,
           );
+          let eligible = false;
           for (const session of preview.sessions) {
             const key = JSON.stringify([
               connection.source.instanceId,
               session.sessionId,
               session.branchId,
             ]);
-            const changed = session.boundaries.filter(
+            store.progress.retained(connection.id, scanKey, key);
+            const selectedBoundaries = session.boundaries.filter(
               (boundary) =>
                 boundary.projection === "turn" &&
                 boundary.terminal !== "unknown" &&
@@ -92,13 +123,16 @@ export async function runCollector(input: {
                   Date.parse(
                     session.events[boundary.start]!.occurredAt ??
                       native.updatedAt,
-                  ) >= Date.parse(connection.since)) &&
-                store.changed(
-                  connection.id,
-                  key,
-                  boundary.id,
-                  contentHash([boundary.inputHash, boundary.revisionHash]),
-                ),
+                  ) >= Date.parse(connection.since)),
+            );
+            eligible ||= selectedBoundaries.length > 0;
+            const changed = selectedBoundaries.filter((boundary) =>
+              store.changed(
+                connection.id,
+                key,
+                boundary.id,
+                contentHash([boundary.inputHash, boundary.revisionHash]),
+              ),
             );
             for (
               let offset = 0;
@@ -126,12 +160,19 @@ export async function runCollector(input: {
                     boundary.revisionHash,
                   ]),
                 })),
+                scanKey,
               );
             }
           }
+          store.progress.read(connection.id, scanKey, eligible);
           if (native.storageRevision)
             store.scanned(connection.id, scanKey, native.storageRevision);
         } catch (error) {
+          store.progress.failed(
+            connection.id,
+            scanKey,
+            error instanceof Error ? error.message : "Unable to read session",
+          );
           failures.push(
             `${native.nativeSessionId}: ${error instanceof Error ? error.message : "Unable to read session"}`,
           );
@@ -139,6 +180,7 @@ export async function runCollector(input: {
       }
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
+    store.progress.discovered(connection.id);
     if (failures.length)
       errors.set(
         connection.id,
@@ -197,6 +239,10 @@ export async function runCollector(input: {
           }
           if (connection.state !== "active") continue;
           if (reconcile) await acquire(connection);
+          connection =
+            store.connections().find((item) => item.id === connection.id) ??
+            connection;
+          if (connection.state !== "active") continue;
           const next = store.next(connection.id);
           if (next)
             try {
@@ -210,10 +256,15 @@ export async function runCollector(input: {
           if (
             !connection.keepSyncing &&
             store.queued(connection.id) === 0 &&
-            reconcile &&
+            store.progress.status(connection.id).stage === "complete" &&
             !errors.has(connection.id)
           ) {
-            store.put({ ...connection, state: "paused" });
+            if (!input.transport.pause)
+              throw new Error(
+                "This transport cannot acknowledge completion of a one-time import.",
+              );
+            const paused = await input.transport.pause(connection);
+            store.put({ ...connection, ...paused });
           }
         } catch (error) {
           const message =

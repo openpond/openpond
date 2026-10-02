@@ -1,3 +1,4 @@
+import { NativeAgentControls } from "./NativeAgentControls";
 import { useMemo, useState, type CSSProperties, type RefObject } from "react";
 import {
   ArrowUp,
@@ -87,7 +88,7 @@ export function ComposerPrimaryControls({
   onTranscript,
   voiceInputChannelKey,
   provider,
-  providerSettings,
+  providerSettings: initialProviderSettings,
   providerOptions,
   running,
   sendDisabled,
@@ -146,6 +147,8 @@ export function ComposerPrimaryControls({
   stopIcon?: "pause" | "stop";
   stopLabel?: string;
 }) {
+  const [nativeSettings, setNativeSettings] = useState<{ provider: string; settings: ProviderSettings } | null>(null);
+  const providerSettings = nativeSettings?.provider === provider ? nativeSettings.settings : initialProviderSettings;
   const [voiceInputActive, setVoiceInputActive] = useState(false);
   const showModelReasoningMenu = providerModelSupportsReasoning(
     provider,
@@ -155,12 +158,12 @@ export function ComposerPrimaryControls({
   const modelGroups = useMemo(
     () =>
       composerModelGroups({
-        currentModelOptions: modelOptions,
+        currentModelOptions: nativeSettings?.provider === provider ? modelOptionsForProvider(provider, providerSettings) : modelOptions,
         currentProvider: provider,
         providerOptions,
         providerSettings,
       }),
-    [modelOptions, provider, providerOptions, providerSettings],
+    [modelOptions, provider, providerOptions, providerSettings, nativeSettings?.provider],
   );
   const teamModelGroups = useMemo(
     () => modelGroups.filter((group) => TEAM_CHAT_LOCAL_PROVIDER_IDS.has(group.provider)),
@@ -383,6 +386,7 @@ export function ComposerPrimaryControls({
           ) : null}
         </span>
       </span>}
+      {!hideModelControls && <NativeAgentControls connection={connection} provider={provider} onSettings={setNativeSettings} disabled={busy || disabled} />}
       {!hideModelControls && <ComposerModelMenu
         disabled={busy}
         model={modelValue}

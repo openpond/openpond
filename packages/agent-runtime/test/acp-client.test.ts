@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AcpClient } from "../src/acp/client.js";
+import { readFile } from "node:fs/promises";
 
 // A provider process can send permissions while streaming and exiting. These tests
 // protect session ownership and settlement, not the particular UI representation.
@@ -29,6 +30,33 @@ function client(options: Partial<ConstructorParameters<typeof AcpClient>[0]> = {
 }
 
 describe("ACP process and session boundary", () => {
+  // Provider failure must not leave a tool process running after its parent exits.
+  it.skipIf(process.platform !== "linux")("kills an uncooperative descendant after its native parent exits", async () => {
+    const descendantAgent = String.raw`
+const {spawn}=require('node:child_process');
+const child=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});process.send('ready');setInterval(()=>{},1000)"],{stdio:['ignore','ignore','ignore','ipc']});
+const send=m=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',...m})+'\n');
+require('node:readline').createInterface({input:process.stdin}).on('line',line=>{
+ const r=JSON.parse(line);
+ if(r.method==='initialize')send({id:r.id,result:{protocolVersion:1}});
+ if(r.method==='session/new')send({id:r.id,result:{sessionId:String(child.pid)}});
+ if(r.method==='session/prompt')process.exit(9);
+});
+child.on('message',()=>{});`;
+    const value = client({ args: ["-e", descendantAgent] });
+    let pid = 0;
+    try {
+      const session = await value.createSession(process.cwd()); pid = Number(session.sessionId);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await expect(value.prompt(session.sessionId, [{ type: "text", text: "crash" }])).rejects.toThrow("exited");
+      const stopped = async () => {
+        try { return /\) Z /.test(await readFile(`/proc/${pid}/stat`, "utf8")); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return true; throw error; }
+      };
+      await expect.poll(stopped, { timeout: 4_000 }).toBe(true);
+    } finally { await value.stop(); if (pid) try { process.kill(pid, "SIGKILL"); } catch {} }
+  });
+
   it("waits for retained updates, scopes prompts and accepts only advertised permission options", async () => {
     const updates: string[] = [];
     const value = client({ onUpdate: async (_session, update) => { await new Promise((resolve) => setTimeout(resolve, 5)); updates.push(String((update.content as { text: string }).text)); }, onPermission: async () => ({ outcome: { outcome: "selected", optionId: "yes" } }) });

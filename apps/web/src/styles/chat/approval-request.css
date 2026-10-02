@@ -254,3 +254,8 @@
     transform: translate(-50%, 0) scale(1);
   }
 }
+.native-question-fields { display: grid; gap: 12px; margin-top: 12px; }
+.native-question-fields fieldset { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.native-question-fields label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.native-question-fields small { display: block; width: 100%; opacity: 0.7; }
+.native-question-fields input[type="text"] { flex: 1; min-width: 160px; }

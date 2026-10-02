@@ -664,6 +664,8 @@ function providerConfigForPreset(
         ? preset.defaultModel
       : stored?.defaultModel;
   return ProviderConfigSchema.parse({
+    nativeMode: stored?.nativeMode ?? null,
+    nativeOptions: stored?.nativeOptions ?? {},
     binaryPath: stored?.binaryPath ?? null,
     sourceHome: stored?.sourceHome ?? null,
     enabled: stored?.enabled ?? preset.defaultEnabled ?? false,

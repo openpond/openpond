@@ -396,6 +396,7 @@ export type UpdatePersonalizationRequest = z.infer<
 
 export const ResolveApprovalRequestSchema = z.object({
   decision: z.enum(["accept", "acceptForSession", "decline", "cancel"]),
+  answers: z.record(z.string().min(1).max(2000), z.string().trim().min(1).max(8000)).optional(),
 });
 
 export type ResolveApprovalRequest = z.infer<

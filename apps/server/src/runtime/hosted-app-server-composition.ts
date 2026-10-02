@@ -117,6 +117,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const overlay = new HostedHarnessOverlayStorage(client);
   const harnessState = new HostedHarnessStateStorage(client);
   const turnRunner = createTurnRunner({
+    executionHost: "embedded",
     workInputsForSession: options.workInputsForSession,
     // The host worker validates and publishes automatic sandbox outputs before
     // committing its durable result. A second child scan would duplicate files

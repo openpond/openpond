@@ -192,7 +192,8 @@ export type MainPaneProps = {
   ) => void;
   resolveApproval: (
     approvalId: string,
-    decision: ResolveApprovalRequest["decision"]
+    decision: ResolveApprovalRequest["decision"],
+    answers?: ResolveApprovalRequest["answers"],
   ) => Promise<void>;
   answerCreateImproveQuestion: (
     input: CreateImproveReviewActionInput,

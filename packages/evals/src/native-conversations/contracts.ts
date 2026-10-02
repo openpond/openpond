@@ -18,6 +18,7 @@ export interface NativeSession {
   cwd: string | null;
   updatedAt: string;
   storageRevision?: string;
+  issue?: string;
 }
 export const NATIVE_SOURCE_NAMES: Record<ExternalAgentSource, string> = {
   codex: "Codex",

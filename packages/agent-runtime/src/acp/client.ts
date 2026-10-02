@@ -90,6 +90,11 @@ export class AcpClient {
     await this.request("session/set_mode", { sessionId, modeId });
   }
 
+  async setConfigOption(sessionId: string, configId: string, value: string): Promise<{ configOptions?: AcpObject[] }> {
+    this.assertSession(sessionId);
+    return await this.request("session/set_config_option", { sessionId, configId, value }) as { configOptions?: AcpObject[] };
+  }
+
   async prompt(sessionId: string, prompt: AcpObject[], signal?: AbortSignal): Promise<{ stopReason: string }> {
     this.assertSession(sessionId);
     if (signal?.aborted) throw new Error("ACP prompt cancelled.");
@@ -241,11 +246,11 @@ export class AcpClient {
     const child = this.child;
     const wasConnected = Boolean(child);
     this.child = null;
-    if (child && child.exitCode === null && child.signalCode === null) {
+    if (child) {
       signalNativeProcess(child, "SIGTERM");
       const kill = setTimeout(() => signalNativeProcess(child, "SIGKILL"), 2_000);
       kill.unref();
-      child.once("exit", () => clearTimeout(kill));
+      // Keep the final group signal even if the parent exits before one of its tools.
     }
     for (const pending of this.pending.values()) { if (pending.timer) clearTimeout(pending.timer); pending.reject(error); }
     this.pending.clear();

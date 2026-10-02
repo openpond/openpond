@@ -82,6 +82,7 @@ export async function readProvidersFile(filePath: string): Promise<ProvidersFile
     ...cache?.payload,
     providers: Object.fromEntries(Object.entries(document.providers ?? {}).map(([id, value]) => [id, {
       enabled: value.enabled ?? true, baseUrl: value.base_url ?? null, defaultModel: value.default_model ?? null, modelOverrides: value.model_overrides ?? [],
+      nativeMode: value.native_mode ?? null, nativeOptions: value.native_options ?? {},
       binaryPath: value.binary_path ?? null, sourceHome: value.source_home ?? null,
     }])),
   });
@@ -103,6 +104,7 @@ export async function updateProvidersFile(
         if (!value) { delete providers[id]; continue; }
         providers[id] = {
           ...providers[id], enabled: value.enabled,
+          native_mode: value.nativeMode || undefined, native_options: Object.keys(value.nativeOptions ?? {}).length ? value.nativeOptions : undefined,
           binary_path: value.binaryPath || undefined, source_home: value.sourceHome || undefined,
           base_url: value.baseUrl || undefined, default_model: value.defaultModel || undefined, model_overrides: value.modelOverrides,
         };

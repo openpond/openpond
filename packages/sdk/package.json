@@ -142,6 +142,10 @@
     "./advanced-refiner-evaluations": {
       "types": "./dist/types/packages/sdk/src/advanced-refiner-evaluations.d.ts",
       "import": "./dist/advanced-refiner-evaluations.js"
+    },
+    "./dataset-commerce": {
+      "types": "./dist/types/packages/sdk/src/dataset-commerce.d.ts",
+      "import": "./dist/dataset-commerce.js"
     }
   },
   "publishConfig": {
