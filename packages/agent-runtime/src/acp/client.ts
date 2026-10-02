@@ -18,7 +18,6 @@ export class AcpClient {
   private buffer = "";
   private decoder = new StringDecoder("utf8");
   private initialized: Promise<AcpInitializeResult> | null = null;
-  private capabilities: AcpInitializeResult | null = null;
   private updateQueue: Promise<void> = Promise.resolve();
   private stopped = false;
 
@@ -48,7 +47,6 @@ export class AcpClient {
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, auth: { terminal: false } },
       }) as AcpInitializeResult;
       if (result.protocolVersion !== 1) throw new Error(`Unsupported ACP protocol version: ${result.protocolVersion}`);
-      this.capabilities = result;
       return result;
     } catch (error) { await this.stop(); throw error; }
   }

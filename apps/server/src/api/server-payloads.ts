@@ -402,6 +402,11 @@ export function createServerPayloads(deps: {
       async () => {
         const request = parseProviderModelsRefreshRequest(payload);
         const state = await localProviderRuntimeState();
+        if (isNativeAgentId(providerId)) {
+          await probeNativeAgent(providerId, state.file.providers[providerId], { force: true });
+          const providers = await providerSettingsPayload();
+          return { ...listProviderModels(providers, providerId, { query: request.query, refresh: false, limit: 100 }), providers };
+        }
         let cache = buildProviderModelCache({
           providerId,
           file: state.file,
@@ -539,6 +544,11 @@ export function createServerPayloads(deps: {
         const config = state.settings.providers[providerId];
         if (!status || !config)
           throw new Error(`Unknown provider: ${providerId}`);
+
+        if (isNativeAgentId(providerId)) {
+          const result = await probeNativeAgent(providerId, config, { force: true });
+          return { ok: result.status === "ready", providerId, modelId: result.session?.models?.currentModelId ?? null, errors: result.error ? [result.error] : [], providers: await providerSettingsPayload() };
+        }
 
         if (providerId === "codex") {
           const codex = refreshCodexStatus
