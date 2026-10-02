@@ -4,7 +4,7 @@ import type { Session } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { RefreshCw, Loader2, CircleAlert } from "../icons";
 import type { CollectorStatus, NativeBranchChoice, NativeBranchInspection } from "@openpond/evals/native-conversations";
-import { NativeImporterStatus, type ImporterControl } from "./NativeImporterStatus";
+import { NativeImporterStatus, type ImporterControl, type ImporterConnectionControl } from "./NativeImporterStatus";
 import { NativeBranchPicker } from "./NativeBranchPicker";
 
 type HistoryPayload = {
@@ -72,6 +72,15 @@ export function NativeConversationSources({ connection, selectedSessionId, onOpe
     catch (error) { setError(error instanceof Error ? error.message : "Collector action failed."); }
     finally { setBusy(null); }
   }
+  async function connectionControl(action: ImporterConnectionControl, connectionId: string) {
+    if (!connection) return;
+    setBusy(action);
+    try {
+      const result = await apiFetch<{ command: string }>(connection, "/v1/native-history/collector", { method: "POST", body: JSON.stringify({ command: action, connectionId }) });
+      setCommand(result.command); setError(null);
+    } catch (error) { setError(error instanceof Error ? error.message : "Could not change Importer connection."); }
+    finally { setBusy(null); }
+  }
   async function connect() {
     if (!connection) return;
     setBusy("connect");
@@ -92,7 +101,7 @@ export function NativeConversationSources({ connection, selectedSessionId, onOpe
       {history && Object.keys(history.nextCursors).length ? <button type="button" disabled={busy !== null} onClick={() => void more()}>Load more conversations</button> : null}
       {history && history.items.length === 0 ? <p>No saved conversations found in configured source locations.</p> : null}
       {history?.warnings.map((warning) => <p key={warning}><CircleAlert size={12} aria-hidden="true" /> {warning}</p>)}
-      {history?.collector.connections.length ? <NativeImporterStatus status={history.collector} busy={busy !== null} onControl={(command) => void control(command)} /> : <p>To upload these conversations, connect a source with the OpenPond Importer. Local history stays available without cloud sync.</p>}
+      {history?.collector.connections.length ? <NativeImporterStatus status={history.collector} busy={busy !== null} onControl={(command) => void control(command)} onConnectionControl={(command, id) => void connectionControl(command, id)} onReconnect={() => void connect()} /> : <p>To upload these conversations, connect a source with the OpenPond Importer. Local history stays available without cloud sync.</p>}
     </> : null}
     {error ? <p role="status"><CircleAlert size={12} aria-hidden="true" /> {error}</p> : null}
   </section>;

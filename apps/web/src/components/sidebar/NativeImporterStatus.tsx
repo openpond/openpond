@@ -1,11 +1,12 @@
 import type { CollectorStatus } from "@openpond/evals/native-conversations";
 import { CircleAlert, Check, Loader2 } from "../icons";
 
+export type ImporterConnectionControl = "pause" | "resume" | "disconnect";
 export type ImporterControl = "start" | "stop" | "sync" | "install";
 const sourceNames: Record<string, string> = { codex: "Codex", claude_code: "Claude Code", opencode: "OpenCode", grok_build: "Grok Build", hermes: "Hermes", pi: "Pi", oh_my_pi: "Oh My Pi", openclaw: "OpenClaw" };
 
 /** Read the independently supervised collector; never start collection in React. */
-export function NativeImporterStatus({ status, busy, onControl }: { status: CollectorStatus; busy: boolean; onControl(command: ImporterControl): void }) {
+export function NativeImporterStatus({ status, busy, onControl, onConnectionControl, onReconnect }: { status: CollectorStatus; busy: boolean; onControl(command: ImporterControl): void; onConnectionControl(command: ImporterConnectionControl, connectionId: string): void; onReconnect(): void }) {
   const stopped = status.desiredState === "stopped";
   const label = stopped ? "Importer stopped" : status.running ? "Importer running" : "Importer offline";
   return <div className="sidebar-section native-importer-status">
@@ -20,6 +21,10 @@ export function NativeImporterStatus({ status, busy, onControl }: { status: Coll
         {!complete && progress.total > 0 ? <progress aria-label={`${sourceNames[connection.source] ?? connection.source} import progress`} value={done} max={progress.total} /> : null}
         {connection.queued > 0 ? <small>{connection.queued} updates waiting to upload</small> : null}
         {connection.error ? <small role="status">{connection.error}</small> : null}
+        {connection.state === "disconnected" ? <button type="button" disabled={busy} onClick={onReconnect}>Reconnect source</button> : <div>
+          <button type="button" disabled={busy} onClick={() => onConnectionControl(connection.state === "paused" ? "resume" : "pause", connection.id)}>{connection.state === "paused" ? "Resume" : "Pause"} {sourceNames[connection.source] ?? connection.source}</button>
+          <button type="button" disabled={busy} onClick={() => onConnectionControl("disconnect", connection.id)}>Disconnect {sourceNames[connection.source] ?? connection.source}</button>
+        </div>}
       </div>;
     })}
     <button type="button" disabled={busy || stopped} onClick={() => onControl("sync")}>Sync now</button>
