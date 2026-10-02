@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { workModelData } from "./work-model-result.js";
 import type {
   OutputRef,
   WorkspaceToolRequest,
@@ -194,8 +195,8 @@ export function createWorkModelToolDefinitions(deps: {
                   work: "/workspace/work",
                   outputs: "/workspace/outputs",
                 },
-                status: status.data ?? null,
-                probe: probeResult.data ?? { output: probeResult.output },
+                status: workModelData(status.data) ?? null,
+                probe: workModelData(probeResult.data) ?? { output: probeResult.output },
                 executionBacked: probeResult.ok,
               },
             },
@@ -206,8 +207,8 @@ export function createWorkModelToolDefinitions(deps: {
             runtimeProfileId: WORK_RUNTIME_PROFILE_ID,
             workspaceRoot: "/workspace",
             cwd: "/workspace/work",
-            status: status.data ?? null,
-            probe: probeResult.data ?? null,
+            status: workModelData(status.data) ?? null,
+            probe: workModelData(probeResult.data) ?? null,
             executionBacked: probeResult.ok,
           },
         };
@@ -238,7 +239,7 @@ export function createWorkModelToolDefinitions(deps: {
           recursive:
             typeof context.args.recursive === "boolean"
               ? context.args.recursive
-              : true,
+              : false,
         })
       ),
     },
@@ -764,8 +765,8 @@ function workspaceToolResult(
     toolCallId: callId,
     name: toolName,
     ok: result.ok,
-    contentText: JSON.stringify(result, null, 2),
-    data: result.data,
+    contentText: JSON.stringify({ ...result, data: workModelData(result.data) }, null, 2),
+    data: workModelData(result.data),
   };
 }
 
