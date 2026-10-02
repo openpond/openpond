@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contentHash } from "@openpond/harness";
-import { previewAgentImport, resolveConnectedBoundary, summarizeConnectedInvocations } from "../src/connected-evidence/index.js";
+import { previewAgentImport, resolveConnectedBoundary, resolveConnectedBoundaryMetadata, summarizeConnectedInvocations } from "../src/connected-evidence/index.js";
 import { scanAndRedactEvidence } from "../../sdk/src/training-privacy.js";
 
 const file = (path: string, rows: unknown[]) => ({ path, text: rows.map(row => JSON.stringify(row)).join("\n") });
@@ -71,6 +71,18 @@ describe("connected evidence immutable admission boundary", () => {
     expect(changed.boundaries[0]!.revisionHash).not.toBe(turns[0]!.revisionHash);
     const mutated = structuredClone(session); mutated.events[1]!.content = "tampered";
     expect(() => resolveConnectedBoundary(mutated, turns[0]!.id)).toThrow("connected_evidence_hash_mismatch");
+    // Status must not fail for large retained history or weaken evaluator size
+    // limits; metadata also rejects internally inconsistent boundary hashes.
+    const large = previewAgentImport({ source: "codex", files: [codex("x".repeat(1_100_000))] }).sessions[0]!;
+    const largeTurn = large.boundaries[0]!;
+    expect(resolveConnectedBoundaryMetadata(large, largeTurn.id)).toEqual(largeTurn);
+    expect(() => resolveConnectedBoundary(large, largeTurn.id)).toThrow("connected_evaluator_context_too_large");
+    expect(() => resolveConnectedBoundaryMetadata(mutated, turns[0]!.id)).toThrow("connected_evidence_hash_mismatch");
+    const wrongBoundary = structuredClone(large);
+    wrongBoundary.boundaries[0]!.inputHash = "0".repeat(64);
+    const { contentHash: _hash, ...wrongBody } = wrongBoundary;
+    wrongBoundary.contentHash = contentHash(wrongBody);
+    expect(() => resolveConnectedBoundaryMetadata(wrongBoundary, largeTurn.id)).toThrow("connected_boundary_hash_mismatch");
   });
   // Failure story: an ambiguous branch silently combines mutually exclusive outputs or tool results become user tasks.
   it("requires Claude branch selection and retains tool-only usage without inventing a request", () => {

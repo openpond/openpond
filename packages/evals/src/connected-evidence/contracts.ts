@@ -54,8 +54,8 @@ export function hasRecordedConnectedAnswer(event: ConnectedEvent) {
   return typeof event.content !== "object" || !("text" in event.content) || typeof event.content.text === "string" && event.content.text.trim().length > 0;
 }
 
-/** Bytes stay in one immutable snapshot; cases retain cutoffs, not copied history. */
-export function resolveConnectedBoundary(sessionValue: unknown, boundaryId: string) {
+/** Shared integrity verification for metadata and evaluator evidence. */
+function verifiedConnectedBoundary(sessionValue: unknown, boundaryId: string) {
   const session = ConnectedSessionSchema.parse(sessionValue);
   const { contentHash: actual, ...body } = session;
   if (contentHash(body) !== actual) throw new Error("connected_evidence_hash_mismatch");
@@ -68,7 +68,16 @@ export function resolveConnectedBoundary(sessionValue: unknown, boundaryId: stri
   const answers = observed.filter(hasRecordedConnectedAnswer);
   const answer = boundary.projection === "conversation" ? answers.map(event => event.content) : answers.at(-1)?.content ?? null;
   if ((answers.length ? contentHash(answer) : null) !== boundary.outputHash) throw new Error("connected_output_hash_mismatch");
-  const value = { input, observed, answer, boundary };
+  return { input, observed, answer, boundary };
+}
+/** Status/discovery returns no evaluator payload. Large retained histories still
+ * require the exact session, input, observed-output and answer hashes to match. */
+export function resolveConnectedBoundaryMetadata(sessionValue: unknown, boundaryId: string): ConnectedBoundary {
+  return verifiedConnectedBoundary(sessionValue, boundaryId).boundary;
+}
+/** Bytes stay in one immutable snapshot; cases retain cutoffs, not copied history. */
+export function resolveConnectedBoundary(sessionValue: unknown, boundaryId: string) {
+  const value = verifiedConnectedBoundary(sessionValue, boundaryId);
   if (new TextEncoder().encode(JSON.stringify(value)).length > CONNECTED_EVIDENCE_LIMITS.evaluatorBytes)
     throw new Error("connected_evaluator_context_too_large");
   return value;
