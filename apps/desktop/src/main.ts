@@ -324,6 +324,8 @@ async function ensureServer(): Promise<ServerConnection> {
       OPENPOND_HOME: appHomePath(),
       OPENPOND_APP_CHANNEL: releaseChannel(),
       OPENPOND_APP_DOCUMENTS_DIR: app.getPath("documents"),
+      OPENPOND_COLLECTOR_CLI: app.isPackaged ? path.join(process.resourcesPath, "cli", "cli.js") : path.join(root, "apps", "cli", "dist", "cli.js"),
+      OPENPOND_COLLECTOR_EXECUTABLE: process.execPath,
       ...(app.isPackaged
         ? {}
         : {

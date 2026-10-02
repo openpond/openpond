@@ -274,6 +274,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@openpond/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

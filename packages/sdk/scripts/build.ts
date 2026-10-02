@@ -24,6 +24,7 @@ await build({
     "advanced-refiner-evaluations": path.join(root, "src/advanced-refiner-evaluations.ts"),
     experiments: path.join(root, "src/experiments.ts"),
     "dataset-marketplace": path.join(root, "src/dataset-marketplace.ts"),
+    "dataset-commerce": path.join(root, "src/dataset-commerce.ts"),
     "dataset-workspaces": path.join(root, "src/dataset-workspaces.ts"),
     "training-projects": path.join(root, "src/training-projects.ts"),
     index: path.join(root, "src/index.ts"),

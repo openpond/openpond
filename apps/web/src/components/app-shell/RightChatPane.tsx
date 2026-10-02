@@ -136,6 +136,7 @@ export function RightChatPane({
   onResolveApproval: (
     approvalId: string,
     decision: ResolveApprovalRequest["decision"],
+    answers?: ResolveApprovalRequest["answers"],
   ) => Promise<void>;
   onShowBrowserPanel: () => void;
   onStop: () => Promise<boolean>;

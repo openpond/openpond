@@ -7,6 +7,22 @@ export async function handleSettingsRoutes({
   requestUrl,
   response,
 }: HttpRouteContext): Promise<boolean> {
+  const nativeHistory = /^\/v1\/native-history\/(list|open|branches|collector)$/.exec(requestUrl.pathname);
+  if (nativeHistory && request.method === "POST" && deps.nativeHistoryPayload) {
+    sendJson(response, 200, await deps.nativeHistoryPayload(nativeHistory[1]!, await readJson(request)));
+    return true;
+  }
+  const nativeSetup = /^\/v1\/providers\/([^/]+)\/native-setup$/.exec(requestUrl.pathname);
+  if (nativeSetup && request.method === "POST" && deps.nativeAgentSetupPayload) {
+    const controller = new AbortController();
+    const cancel = () => { if (!response.writableEnded) controller.abort(); };
+    response.once("close", cancel);
+    try {
+      const result = await deps.nativeAgentSetupPayload(decodeURIComponent(nativeSetup[1]!), await readJson(request), controller.signal);
+      if (!controller.signal.aborted) sendJson(response, 200, result);
+    } finally { response.off("close", cancel); }
+    return true;
+  }
   if (requestUrl.pathname === "/v1/configuration" && deps.configuration) {
     if (request.method === "GET") sendJson(response, 200, await deps.configuration.status(requestUrl.searchParams.get("projectRoot") ?? undefined, requestUrl.searchParams.get("accountId") ?? undefined));
     else if (request.method === "POST") sendJson(response, 200, await deps.configuration.mutate(await readJson(request)));

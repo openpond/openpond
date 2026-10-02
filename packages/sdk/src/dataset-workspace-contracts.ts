@@ -31,6 +31,7 @@ export type DatasetWorkspaceReceipt = z.infer<typeof DatasetWorkspaceReceiptSche
 export const DatasetWorkspaceListSchema = z.object({ teamId: Id, datasets: z.array(z.object({
   id: Id, revision: z.number().int().positive(), originProjectId: Id.optional(), name: z.string(), status: z.enum(["draft", "published"]),
   ownerScope: z.enum(["workspace", "personal"]).optional(),
+  taskCount: z.number().int().nonnegative().optional(),
   publication: DatasetWorkspaceReceiptSchema.shape.publication, updatedAt: z.string().datetime(),
 }).strict()).max(100), nextCursor: z.string().trim().min(1).max(2_000).nullable() }).strict();
 export const DatasetWorkspaceValidationSchema = z.object({ teamId: Id, datasetId: Id, revision: z.number().int().positive(), workspaceHash: Hash, packageHash: Hash, release: TasksetCatalogReleaseRefSchema }).strict();

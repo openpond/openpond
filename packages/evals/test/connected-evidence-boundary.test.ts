@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { contentHash } from "@openpond/harness";
-import { previewAgentImport, resolveConnectedBoundary, summarizeConnectedInvocations } from "../src/connected-evidence/index.js";
+import { previewAgentImport, resolveConnectedBoundary, resolveConnectedBoundaryMetadata, summarizeConnectedInvocations } from "../src/connected-evidence/index.js";
+import { scanAndRedactEvidence } from "../../sdk/src/training-privacy.js";
 
 const file = (path: string, rows: unknown[]) => ({ path, text: rows.map(row => JSON.stringify(row)).join("\n") });
 const at = "2026-10-01T00:00:00.000Z";
@@ -16,6 +17,45 @@ const codex = (answer = "first answer") => file("rollout.jsonl", [
   { type: "response_item", timestamp: at, payload: { id: "a2", type: "message", role: "assistant", content: [{ type: "output_text", text: "future secret answer" }] } },
 ]);
 describe("connected evidence immutable admission boundary", () => {
+  // Native approval rules can contain credentials. Excluding that authorization
+  // state must not become a blanket removal of user, tool or system evidence.
+  it("excludes only Codex native approved rules with immutable source provenance", () => {
+    const nativeAuthority = "token=fixtureNativeAuthority123";
+    const instruction = `<permissions instructions>\nRetain sandbox policy.\n## Approved command prefixes\nThe following prefix rules have already been approved: - [\"${nativeAuthority}\"]\n</permissions instructions>\nRetain following instructions.`;
+    const rows = [
+      { type: "session_meta", payload: { id: "privacy-session", cli_version: "0.153.4" } },
+      { type: "response_item", payload: { id: "system", type: "message", role: "developer", content: [{ type: "input_text", text: instruction }] } },
+      { type: "world_state", payload: { full: true, state: { model: "retained-model", permissions: { instructions: "retained permissions policy", approved_command_prefixes: [[nativeAuthority]] } } } },
+      { type: "response_item", payload: { id: "request", type: "message", role: "user", content: "Explain approved_command_prefixes and ## Approved command prefixes." } },
+      { type: "response_item", payload: { id: "call", type: "function_call", call_id: "tool", name: "read", arguments: "approved_command_prefixes" } },
+      { type: "response_item", payload: { id: "result", type: "function_call_output", call_id: "tool", output: "## Approved command prefixes is ordinary tool evidence." } },
+      { type: "response_item", payload: { id: "answer", type: "message", role: "assistant", content: "retained answer" } },
+      { type: "event_msg", payload: { type: "task_complete" } },
+    ];
+    const source = file("authorization.jsonl", rows);
+    const sourceHash = contentHash(source.text);
+    const normalize = (value: typeof source) => previewAgentImport({ source: "codex", files: [value], acquisition: { machineId: "machine", sourceInstanceId: "instance" } }).sessions[0]!;
+    const session = normalize(source), serialized = JSON.stringify(session);
+    expect(serialized).not.toContain(nativeAuthority);
+    expect(scanAndRedactEvidence(serialized).secretStatus).toBe("passed");
+    expect(session.sourceFiles[0]?.contentHash).toBe(sourceHash);
+    expect(contentHash(source.text)).toBe(sourceHash);
+    expect(serialized).toContain("codex-native-authorization-v1");
+    expect(serialized).toContain(contentHash([[nativeAuthority]]));
+    for (const retained of ["Retain sandbox policy.", "Retain following instructions.", "retained-model", "retained permissions policy", "ordinary tool evidence", "retained answer"])
+      expect(serialized).toContain(retained);
+    const boundary = session.boundaries.find(item => item.projection === "turn")!;
+    expect(resolveConnectedBoundary(session, boundary.id).answer).toBe("retained answer");
+    // The same syntax in a user message or actual tool output is never scrubbed.
+    for (const index of [3, 5]) {
+      const unsafe = structuredClone(rows);
+      const payload = unsafe[index]!.payload as Record<string, unknown>;
+      payload[index === 3 ? "content" : "output"] = instruction;
+      const retained = normalize(file(source.path, unsafe));
+      expect(JSON.stringify(retained.events)).toContain(nativeAuthority);
+      expect(scanAndRedactEvidence(JSON.stringify(retained)).secretStatus).toBe("blocked");
+    }
+  });
   // Failure story: mirrored events or a later answer can change the admitted population or leak into grading input.
   it("deduplicates Codex mirrored messages, pins cutoffs, and rejects mutated bytes", () => {
     const preview = previewAgentImport({ source: "codex", files: [codex()] });
@@ -31,6 +71,18 @@ describe("connected evidence immutable admission boundary", () => {
     expect(changed.boundaries[0]!.revisionHash).not.toBe(turns[0]!.revisionHash);
     const mutated = structuredClone(session); mutated.events[1]!.content = "tampered";
     expect(() => resolveConnectedBoundary(mutated, turns[0]!.id)).toThrow("connected_evidence_hash_mismatch");
+    // Status must not fail for large retained history or weaken evaluator size
+    // limits; metadata also rejects internally inconsistent boundary hashes.
+    const large = previewAgentImport({ source: "codex", files: [codex("x".repeat(1_100_000))] }).sessions[0]!;
+    const largeTurn = large.boundaries[0]!;
+    expect(resolveConnectedBoundaryMetadata(large, largeTurn.id)).toEqual(largeTurn);
+    expect(() => resolveConnectedBoundary(large, largeTurn.id)).toThrow("connected_evaluator_context_too_large");
+    expect(() => resolveConnectedBoundaryMetadata(mutated, turns[0]!.id)).toThrow("connected_evidence_hash_mismatch");
+    const wrongBoundary = structuredClone(large);
+    wrongBoundary.boundaries[0]!.inputHash = "0".repeat(64);
+    const { contentHash: _hash, ...wrongBody } = wrongBoundary;
+    wrongBoundary.contentHash = contentHash(wrongBody);
+    expect(() => resolveConnectedBoundaryMetadata(wrongBoundary, largeTurn.id)).toThrow("connected_boundary_hash_mismatch");
   });
   // Failure story: an ambiguous branch silently combines mutually exclusive outputs or tool results become user tasks.
   it("requires Claude branch selection and retains tool-only usage without inventing a request", () => {

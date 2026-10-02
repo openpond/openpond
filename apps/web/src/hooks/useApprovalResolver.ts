@@ -11,7 +11,7 @@ export function useApprovalResolver({
   setError: Dispatch<SetStateAction<string | null>>;
 }) {
   return useCallback(
-    async (approvalId: string, decision: ResolveApprovalRequest["decision"]): Promise<void> => {
+    async (approvalId: string, decision: ResolveApprovalRequest["decision"], answers?: ResolveApprovalRequest["answers"]): Promise<void> => {
       if (!connection) {
         const error = new Error("OpenPond App server is not connected.");
         setError(error.message);
@@ -19,7 +19,7 @@ export function useApprovalResolver({
       }
       setError(null);
       try {
-        await api.resolveApproval(connection, approvalId, { decision });
+        await api.resolveApproval(connection, approvalId, { decision, answers });
       } catch (approvalError) {
         const message =
           approvalError instanceof Error ? approvalError.message : String(approvalError);

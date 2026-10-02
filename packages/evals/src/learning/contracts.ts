@@ -122,6 +122,16 @@ export const LearningSourceContentSchema = z
     mapping: TaskSourceMappingSchema.nullable(),
     adapterVersion: z.string().trim().min(1).max(200).nullable(),
     reviewOrigin: LearningReviewOriginSchema.optional(),
+    /** Host-retained authorization for materializing neutral conversation
+     * evidence. The receipt is reauthorized at preparation and paid admission;
+     * this portable reference alone never grants access or training consent. */
+    capturedOrigin: z.object({
+      receiptId: ReleaseIdSchema,
+      ownerUserId: ReleaseIdSchema,
+      modelId: ReleaseIdSchema,
+      packageHash: ReleaseHashSchema,
+      taskset: LearningRevisionRefSchema,
+    }).strict().optional(),
   })
   .strict()
   .superRefine((source, context) => {

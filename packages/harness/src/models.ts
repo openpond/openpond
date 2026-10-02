@@ -16,6 +16,9 @@ export type ModelRef = z.infer<typeof ModelRefSchema>;
 export const PROVIDER_IDS = [
   "openpond",
   "codex",
+  "claude-code",
+  "grok-build",
+  "opencode",
   "anthropic",
   "openai",
   "xai",

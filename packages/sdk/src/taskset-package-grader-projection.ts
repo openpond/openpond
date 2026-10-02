@@ -53,7 +53,9 @@ export function projectLearningBatchGraders(binding: RewardBinding, rewards: Rew
     if (grader.kind === "human") {
       const asset = assets.find((asset) => asset.id === grader.rubricRef.id);
       if (!asset) throw new Error(`Reward ${grader.id} is missing its immutable rubric.`);
-      return GraderSpecSchema.parse({ ...base, rubric: verifyLearningTextAsset(asset, grader.rubricRef) });
+      return GraderSpecSchema.parse({ ...base, rubric: verifyLearningTextAsset(asset, grader.rubricRef),
+        metadata: { ...base.metadata, portableGrader: grader, portableRubricRef: grader.rubricRef },
+      });
     }
     return GraderSpecSchema.parse({ ...base, kind: grader.kind === "artifact" ? "file" : grader.kind });
   });

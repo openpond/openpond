@@ -24,6 +24,7 @@ const SUCCESS_STATUS_VISIBLE_MS = 6000;
 
 export const TerminalOverlay = memo(function TerminalOverlay({
   open,
+  disposeOnUnmount = false,
   connection,
   scope,
   tabs,
@@ -35,6 +36,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   onClose,
 }: {
   open: boolean;
+  disposeOnUnmount?: boolean;
   connection: ClientConnection | null;
   scope: TerminalScope;
   tabs: TerminalTab[];
@@ -395,10 +397,13 @@ export const TerminalOverlay = memo(function TerminalOverlay({
         window.clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
       }
+      if (disposeOnUnmount && socket.readyState === WebSocket.OPEN) {
+        for (const terminalId of startedTabsRef.current) socket.send(JSON.stringify({ type: "kill", terminalId }));
+      }
       if (socketRef.current === socket) socketRef.current = null;
       socket.close();
     };
-  }, [connection, connectionKey, handleServerMessage, hasTabs, onTabsChange, socketRetryKey]);
+  }, [connection, connectionKey, disposeOnUnmount, handleServerMessage, hasTabs, onTabsChange, socketRetryKey]);
 
   useEffect(() => {
     if (!socketOpen) return;
@@ -439,15 +444,13 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     if (!open || !queuedCommand) return;
     if (!terminalQueuedCommandAppliesToScope(queuedCommand, scope)) return;
     if (queuedCommandIdRef.current === queuedCommand.id) return;
-    if (scopedTabs.length === 0 || !activeTabId) {
-      addTab();
-      return;
-    }
+    // The opening effect owns initial tab creation; queuing a command must not create a second tab.
+    if (scopedTabs.length === 0 || !activeTabId) return;
     const activeTab = scopedTabs.find((tab) => tab.id === activeTabId);
     if (!activeTab || activeTab.status !== "running") return;
     queuedCommandIdRef.current = queuedCommand.id;
     sendInput(activeTab.id, `${queuedCommand.command}\n`);
-  }, [activeTabId, addTab, open, queuedCommand, scope, scopedTabs, sendInput]);
+  }, [activeTabId, open, queuedCommand, scope, scopedTabs, sendInput]);
 
   return (
     <div className={`guake-terminal-overlay ${open ? "open" : ""}`} aria-hidden={!open} inert={open ? undefined : true}>

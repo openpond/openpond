@@ -121,6 +121,14 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       const content = item.output ?? "";
       if (!content) continue;
       settleRunningActivityGroups(messages, item);
+      const retainedData = asRecord(item.data);
+      if (retainedData?.retainedHistory === true && typeof retainedData.nativeMessageId === "string") {
+        const nativeMessageId = retainedData.nativeMessageId;
+        const retained = messages.find((message) => message.id === nativeMessageId);
+        if (retained) { retained.content = content; retained.timestamp = item.timestamp; }
+        else messages.push({ id: nativeMessageId, role: "assistant", content, timestamp: item.timestamp, turnId: item.turnId });
+        continue;
+      }
       const previous = messages[messages.length - 1];
       if (previous?.role === "assistant" && previous.turnId === item.turnId && !previous.createImproveRun) {
         previous.content = `${previous.content ?? ""}${content}`;

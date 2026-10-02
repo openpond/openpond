@@ -29,6 +29,7 @@ import { createTurnRunner } from "./turn-runner.js";
 import { createAgentRuntimePorts } from "./agent-runtime-host.js";
 import { createEmbeddingToolResolver } from "./app-server-embedding.js";
 import { createHostedHarnessMemoryTools } from "../store/hosted-harness-memory-tools.js";
+import { createHostedWorkOutputTools } from "../store/hosted-work-output-tools.js";
 import { createHostedEmbeddingAdapter, createHostedSandboxRequest } from "./hosted-embedding-adapter.js";
 import { assertHostedWorkCapabilities } from "./hosted-capability-admission.js";
 import { resolveMaxHostedWorkspaceToolRounds } from "../server-entry-helpers.js";
@@ -116,6 +117,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const overlay = new HostedHarnessOverlayStorage(client);
   const harnessState = new HostedHarnessStateStorage(client);
   const turnRunner = createTurnRunner({
+    executionHost: "embedded",
     workInputsForSession: options.workInputsForSession,
     // The host worker validates and publishes automatic sandbox outputs before
     // committing its durable result. A second child scan would duplicate files
@@ -165,7 +167,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
     },
     ensureHarnessRunOverlay: (input) => overlay.ensureHarnessRunOverlay(input),
     processHarnessImprovementBoundary: improvement,
-    harnessModelTools: createHostedHarnessMemoryTools(client),
+    harnessModelTools: [...createHostedHarnessMemoryTools(client), ...createHostedWorkOutputTools(client)],
     loadBuiltInOpenPondSkills: async () => [],
     readBuiltInOpenPondSkill: unavailable,
     loadPersonalizationSoul: async () => (await loadHostedRuntimeSettings(client)).personalizationSoul,

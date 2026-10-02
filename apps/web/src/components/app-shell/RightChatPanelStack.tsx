@@ -144,6 +144,7 @@ export function RightChatPanelStack({
   onResolveApproval: (
     approvalId: string,
     decision: ResolveApprovalRequest["decision"],
+    answers?: ResolveApprovalRequest["answers"],
   ) => Promise<void>;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onSelectFiles: () => void;

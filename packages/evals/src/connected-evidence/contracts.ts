@@ -9,7 +9,7 @@ const Id = z.string().min(1).max(500);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Time = z.string().datetime().nullable();
 const Tokens = z.number().int().nonnegative().nullable();
-export const ConnectedSourceKindSchema = z.enum(["native_chat", "native_work", "codex", "claude_code", "hermes", "openclaw"]);
+export const ConnectedSourceKindSchema = z.enum(["native_chat", "native_work", "codex", "claude_code", "hermes", "openclaw", "opencode", "grok_build", "pi", "oh_my_pi"]);
 export const ConnectedUsageSchema = z.object({
   invocationId: Id, inputTokens: Tokens, outputTokens: Tokens, cachedInputTokens: Tokens,
   totalTokens: Tokens, provenance: z.enum(["billed_invocation", "reported_invocation", "reported_cumulative"]),
@@ -34,6 +34,7 @@ export const ConnectedSessionSchema = z.object({
   schemaVersion: z.literal(CONNECTED_EVIDENCE_VERSION), normalizerVersion: z.literal(CONNECTED_NORMALIZER_VERSION),
   origin: ConnectedSourceKindSchema, sessionId: Id, branchId: Id.nullable(), parentSessionId: Id.nullable(),
   exporterVersion: z.string().max(200).nullable(),
+  acquisition: z.object({ machineId: Id, sourceInstanceId: Id }).strict().optional(),
   sourceFiles: z.array(z.object({ path: Id, contentHash: Hash, sizeBytes: z.number().int().nonnegative() }).strict()).max(CONNECTED_EVIDENCE_LIMITS.files),
   events: z.array(ConnectedEventSchema).max(CONNECTED_EVIDENCE_LIMITS.events),
   unmappedEvents: z.array(ConnectedEventSchema).max(CONNECTED_EVIDENCE_LIMITS.events),
@@ -53,8 +54,8 @@ export function hasRecordedConnectedAnswer(event: ConnectedEvent) {
   return typeof event.content !== "object" || !("text" in event.content) || typeof event.content.text === "string" && event.content.text.trim().length > 0;
 }
 
-/** Bytes stay in one immutable snapshot; cases retain cutoffs, not copied history. */
-export function resolveConnectedBoundary(sessionValue: unknown, boundaryId: string) {
+/** Shared integrity verification for metadata and evaluator evidence. */
+function verifiedConnectedBoundary(sessionValue: unknown, boundaryId: string) {
   const session = ConnectedSessionSchema.parse(sessionValue);
   const { contentHash: actual, ...body } = session;
   if (contentHash(body) !== actual) throw new Error("connected_evidence_hash_mismatch");
@@ -67,7 +68,16 @@ export function resolveConnectedBoundary(sessionValue: unknown, boundaryId: stri
   const answers = observed.filter(hasRecordedConnectedAnswer);
   const answer = boundary.projection === "conversation" ? answers.map(event => event.content) : answers.at(-1)?.content ?? null;
   if ((answers.length ? contentHash(answer) : null) !== boundary.outputHash) throw new Error("connected_output_hash_mismatch");
-  const value = { input, observed, answer, boundary };
+  return { input, observed, answer, boundary };
+}
+/** Status/discovery returns no evaluator payload. Large retained histories still
+ * require the exact session, input, observed-output and answer hashes to match. */
+export function resolveConnectedBoundaryMetadata(sessionValue: unknown, boundaryId: string): ConnectedBoundary {
+  return verifiedConnectedBoundary(sessionValue, boundaryId).boundary;
+}
+/** Bytes stay in one immutable snapshot; cases retain cutoffs, not copied history. */
+export function resolveConnectedBoundary(sessionValue: unknown, boundaryId: string) {
+  const value = verifiedConnectedBoundary(sessionValue, boundaryId);
   if (new TextEncoder().encode(JSON.stringify(value)).length > CONNECTED_EVIDENCE_LIMITS.evaluatorBytes)
     throw new Error("connected_evaluator_context_too_large");
   return value;

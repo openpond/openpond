@@ -383,7 +383,7 @@
   z-index: 90;
 }
 
-.provider-details-dialog {
+.git-dialog.provider-details-dialog {
   width: min(760px, calc(100vw - 36px));
   max-height: min(760px, calc(100vh - 52px));
   overflow: auto;
@@ -1182,3 +1182,7 @@
     transform: rotate(360deg);
   }
 }
+
+.native-agent-setup { padding: 16px 20px; }
+.native-agent-setup .provider-card-form { padding: 0; }
+.native-agent-setup p { margin: 0; }

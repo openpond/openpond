@@ -358,6 +358,9 @@ export const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
 export const RUNNABLE_CHAT_PROVIDER_IDS = [
   "openpond",
   "codex",
+  "claude-code",
+  "grok-build",
+  "opencode",
   ...OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS,
 ] as const satisfies readonly ChatProvider[];
 const RUNNABLE_CHAT_PROVIDER_ID_SET = new Set<ChatProvider>(RUNNABLE_CHAT_PROVIDER_IDS);
@@ -602,6 +605,7 @@ export function providerOptionsFromSettings(
   const enabledOnly = options.enabledOnly ?? false;
   const rows: Array<DropdownOption & { value: ChatProvider }> = [];
   for (const providerId of PROVIDER_IDS) {
+    if (!["openpond", "codex", "openai", "claude-code", "grok-build", "opencode"].includes(providerId)) continue;
     if (!RUNNABLE_CHAT_PROVIDER_ID_SET.has(providerId)) continue;
     if (options.localOnly && providerId === "openpond") continue;
     const status = providerStatus(settings, providerId);
@@ -735,6 +739,9 @@ export function normalizeChatModel(
   settings?: ProviderSettings | null,
 ): string {
   const trimmed = model?.trim();
+  // Native catalogs are session-scoped and loaded lazily. Preserve an explicit
+  // choice until the runtime validates it against that session's live catalog.
+  if (trimmed && ["opencode", "grok-build", "claude-code"].includes(provider)) return trimmed;
   if (provider === "codex" && (trimmed === "codex-default" || trimmed === "gpt-5.5")) {
     return DEFAULT_CODEX_CHAT_MODEL;
   }

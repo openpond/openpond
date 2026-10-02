@@ -1,3 +1,4 @@
+import type { ClientConnection } from "../../api/api-client";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
@@ -19,6 +20,8 @@ import type {
 } from "@openpond/contracts";
 import { PROVIDER_IDS } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
+import type { CheckNativeProvider } from "./native-provider-check";
+import { DESKTOP_AGENT_PROVIDERS, isAcpProvider, NativeAgentProviderDetails } from "./NativeAgentProviderDetails";
 import {
   chatModelLabel,
   chatProviderLabel,
@@ -28,6 +31,8 @@ import {
 } from "../../lib/app-models";
 
 type ProviderSettingsSectionProps = {
+  checkNativeProvider: CheckNativeProvider;
+  connection: ClientConnection | null;
   account: BootstrapPayload["account"] | null;
   codex: BootstrapPayload["codex"] | null;
   providers: ProviderSettings | null;
@@ -68,6 +73,7 @@ function providerStateLabel(status: ProviderStatus | null | undefined): string {
   if (status.credential.connected) return "Configured";
   if (status.credential.lastError || status.lastError) return "Needs attention";
   if (status.id === "codex") return "Needs Codex login";
+  if (isAcpProvider(status.id)) return "Check connection";
   if (status.routing.localByok) return "Needs key";
   return status.enabled ? "Enabled" : "Off";
 }
@@ -84,6 +90,7 @@ function providerStateTone(status: ProviderStatus | null | undefined): string {
 function credentialSummary(status: ProviderStatus): string {
   if (!status.credential.connected) return status.credential.lastError ?? "Not connected";
   if (status.credential.redacted) return status.credential.redacted;
+  if (status.credential.source === "native_agent_login") return "Native login";
   if (status.credential.source === "chatgpt_subscription") return "ChatGPT subscription";
   return status.credential.source;
 }
@@ -101,6 +108,7 @@ function usesZaiCodingPlan(status: ProviderStatus, settings: ProviderSettings): 
 
 export function providerCredentialLabel(status: ProviderStatus, settings: ProviderSettings): string {
   if (!status.credential.connected || !status.routing.localByok) return "";
+  if (status.credential.source === "native_agent_login") return "Native login";
   if (status.credential.source === "chatgpt_subscription") return "Subscription";
   if (usesZaiCodingPlan(status, settings)) return "Coding Plan key";
   return "API key";
@@ -120,7 +128,7 @@ function providerMeta(status: ProviderStatus, settings: ProviderSettings): strin
     cache ? modelCountLabel : "",
     modelLabel,
   ].filter(Boolean);
-  return parts.join(" · ");
+  return parts.join(", ");
 }
 
 function canToggleProvider(providerId: ChatProvider): boolean {
@@ -186,6 +194,8 @@ export function visibleProviderModelOptions(
 }
 
 export function ProviderSettingsSection({
+  checkNativeProvider,
+  connection,
   account,
   codex,
   providers,
@@ -200,15 +210,7 @@ export function ProviderSettingsSection({
   validateProvider,
 }: ProviderSettingsSectionProps) {
   const [detailsProviderId, setDetailsProviderId] = useState<ChatProvider | null>(null);
-  const [showSubscriptionProvidersOnly, setShowSubscriptionProvidersOnly] = useState(false);
-  const allProviderRows = useMemo(
-    () => providerRowsForSubscriptionFilter(providers, false),
-    [providers],
-  );
-  const providerRows = useMemo(
-    () => providerRowsForSubscriptionFilter(providers, showSubscriptionProvidersOnly),
-    [providers, showSubscriptionProvidersOnly],
-  );
+  const providerRows = DESKTOP_AGENT_PROVIDERS.filter((id) => providers?.statuses[id]);
   const detailsStatus = detailsProviderId ? providers?.statuses[detailsProviderId] ?? null : null;
   function openProviderDetails(providerId: ChatProvider, loadModels: boolean) {
     setDetailsProviderId(providerId);
@@ -223,17 +225,9 @@ export function ProviderSettingsSection({
         <div className="provider-manager-panel">
           <div className="account-list-heading provider-manager-heading">
             <div className="provider-manager-title-row">
-              <span>Model providers</span>
-              <label className="settings-check-row compact provider-subscription-filter">
-                <input
-                  type="checkbox"
-                  checked={showSubscriptionProvidersOnly}
-                  onChange={(event) => setShowSubscriptionProvidersOnly(event.currentTarget.checked)}
-                />
-                <span>Subscriptions</span>
-              </label>
+              <span>Agent providers</span>
             </div>
-            <small>{providerRows.length} of {allProviderRows.length} presets</small>
+            <small>OpenPond account access is managed in Account settings.</small>
           </div>
           {providerRows.length > 0 ? (
             <div className="provider-manager-scroll" role="list">
@@ -260,7 +254,7 @@ export function ProviderSettingsSection({
                       <span />
                     </label>
                     <div className="provider-row-main">
-                      <strong>{status.displayName}</strong>
+                      <strong>{providerId === "codex" ? "Codex / ChatGPT" : status.displayName}</strong>
                     </div>
                     <div className={`provider-row-status ${providerStateTone(status)}`}>
                       {rowBusy ? <Loader2 size={13} className="settings-spin" /> : null}
@@ -297,6 +291,8 @@ export function ProviderSettingsSection({
 
       {detailsProviderId && detailsStatus && providers ? (
         <ProviderDetailsDialog
+          checkNativeProvider={checkNativeProvider}
+          connection={connection}
           account={account}
           codex={codex}
           providerId={detailsProviderId}
@@ -317,6 +313,8 @@ export function ProviderSettingsSection({
 }
 
 function ProviderDetailsDialog({
+  checkNativeProvider,
+  connection,
   account,
   codex,
   providerId,
@@ -331,6 +329,8 @@ function ProviderDetailsDialog({
   onStartOpenAiSubscriptionAuth,
   onValidate,
 }: {
+  checkNativeProvider: CheckNativeProvider;
+  connection: ClientConnection | null;
   account: BootstrapPayload["account"] | null;
   codex: BootstrapPayload["codex"] | null;
   providerId: ChatProvider;
@@ -353,7 +353,7 @@ function ProviderDetailsDialog({
   const credentialTabsId = useId();
   const lastDialogProviderIdRef = useRef(providerId);
   const modelCount = Math.max(cache?.models.length ?? 0, status.modelIds.length);
-  const localByok = status.routing.localByok && isRunnableChatProvider(providerId) && providerId !== "codex";
+  const localByok = status.routing.localByok && isRunnableChatProvider(providerId) && providerId !== "codex" && !isAcpProvider(providerId);
   const credentialTabs = useMemo(() => (localByok ? providerCredentialTabs(status) : []), [localByok, status]);
   const hasSubscriptionTab = credentialTabs.includes("subscription");
   const [credentialTab, setCredentialTab] =
@@ -416,17 +416,17 @@ function ProviderDetailsDialog({
           </div>
         ) : null}
 
-        <dl className="provider-dialog-stats">
+        {!DESKTOP_AGENT_PROVIDERS.includes(providerId) ? <dl className="provider-dialog-stats">
           <div>
             <dt>Credential</dt>
             <dd title={credentialSummary(status)}>{credentialSummary(status)}</dd>
           </div>
           {!showingSubscriptionDetails ? (
             <>
-              <div>
+              {!isAcpProvider(providerId) ? <div>
                 <dt>Base URL</dt>
                 <dd title={baseUrlLabel}>{baseUrlLabel}</dd>
-              </div>
+              </div> : null}
               <div>
                 <dt>Model</dt>
                 <dd title={config?.defaultModel ?? status.defaultModel ?? undefined}>
@@ -436,7 +436,7 @@ function ProviderDetailsDialog({
               <div>
                 <dt>Models</dt>
                 <dd title={cache?.lastError ?? undefined}>
-                  {modelCount} cached · {formatDate(cache?.fetchedAt)}
+                  {modelCount} cached, {formatDate(cache?.fetchedAt)}
                 </dd>
               </div>
             </>
@@ -461,14 +461,13 @@ function ProviderDetailsDialog({
               </dd>
             </div>
           ) : null}
-        </dl>
+        </dl> : null}
 
         {providerId === "codex" ? (
-          <CodexProviderDetails
-            providerBusy={providerBusy}
-            status={status}
-            onValidate={onValidate}
-          />
+          <>{config ? <NativeAgentProviderDetails connection={connection} key={providerId} providerId={providerId} config={config} status={status} busy={providerBusy !== null} onCheck={checkNativeProvider} /> : null}
+          <div className="provider-dialog-body"><h3>ChatGPT with the OpenPond harness</h3><p>Native Codex and the OpenPond harness keep their own connections. Choose the execution path in the model picker.</p><p>{settings.statuses.openai?.credential.connected ? "OpenPond harness connected" : "OpenPond harness not connected"}</p><button type="button" className="settings-secondary" disabled={providerBusy !== null} onClick={() => void onStartOpenAiSubscriptionAuth("browser")}>Connect ChatGPT for OpenPond</button><button type="button" className="settings-secondary" disabled={providerBusy !== null} onClick={() => void onSaveConfig("openai", { enabled: !settings.providers.openai?.enabled })}>{settings.providers.openai?.enabled ? "Disable" : "Enable"} OpenPond harness route</button></div></>
+        ) : isAcpProvider(providerId) && config ? (
+          <NativeAgentProviderDetails connection={connection} key={providerId} providerId={providerId} config={config} status={status} busy={providerBusy !== null} onCheck={checkNativeProvider} />
         ) : localByok && config && cache ? (
           <LocalByokProviderDetails
             credentialTab={credentialTab}
@@ -492,40 +491,6 @@ function ProviderDetailsDialog({
           </div>
         ) : null}
       </section>
-    </div>
-  );
-}
-
-function CodexProviderDetails({
-  providerBusy,
-  status,
-  onValidate,
-}: {
-  providerBusy: string | null;
-  status: ProviderStatus;
-  onValidate: (provider: ChatProvider, request?: { baseUrl?: string; modelId?: string }) => Promise<void>;
-}) {
-  const validateBusy = providerBusy === "codex:validate";
-  return (
-    <div className="provider-dialog-body codex-provider-body">
-      <div className="provider-dialog-note codex-provider-note">
-        <KeyRound size={15} />
-        <span>
-          Uses your local <code>codex login</code> session through the Codex app server. This route is separate from
-          OpenAI Platform API-key billing.
-        </span>
-      </div>
-      <div className="settings-button-row codex-provider-actions">
-        <button
-          type="button"
-          className="settings-secondary"
-          disabled={validateBusy}
-          onClick={() => void onValidate("codex", { modelId: status.defaultModel ?? undefined })}
-        >
-          {validateBusy ? <Loader2 size={14} className="settings-spin" /> : <CheckCircle2 size={14} />}
-          <span>{validateBusy ? "Testing" : "Test Codex login"}</span>
-        </button>
-      </div>
     </div>
   );
 }

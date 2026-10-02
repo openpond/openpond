@@ -39,6 +39,7 @@ export type ComposerProps = {
   teamMentionMembers?: TeamChatMember[];
   onTeamUseModelChange?: (value: boolean) => void;
   prompt: string;
+  readOnlyReason?: string | null;
   composeNotice?: ComposerNotice | null;
   mentionApps?: OpenPondApp[];
   connectedAppMentions?: ConnectedAppMentionOption[];

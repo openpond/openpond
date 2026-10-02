@@ -13,7 +13,7 @@ export function connectedFileIdentity(file: ConnectedFile) {
 export function normalizeConnectedSession(input: {
   origin: ConnectedSourceKind; sessionId: string; branchId?: string | null; parentSessionId?: string | null;
   exporterVersion?: string | null; files: ConnectedFile[]; events: ConnectedEvent[]; warnings?: string[]; contextComplete?: boolean; includeConversation?: boolean;
-  unmappedEvents?: ConnectedEvent[];
+  unmappedEvents?: ConnectedEvent[]; acquisition?: { machineId: string; sourceInstanceId: string };
 }): ConnectedSession {
   if (input.events.length + (input.unmappedEvents?.length ?? 0) > CONNECTED_EVIDENCE_LIMITS.events) throw new Error("connected_event_limit");
   const events = input.events.map((event, sequence) => ({ ...event, sequence }));
@@ -21,7 +21,7 @@ export function normalizeConnectedSession(input: {
   const starts = events.flatMap((event, index) => event.kind === "message" && event.role === "user" ? [index] : []);
   if (!starts.length) throw new Error("The session has no retained user request.");
   if (starts.length + (input.includeConversation === false ? 0 : 1) > CONNECTED_EVIDENCE_LIMITS.boundaries) throw new Error("connected_boundary_limit");
-  const familyKey = `family-${contentHash([input.origin, input.parentSessionId ?? input.sessionId]).slice(0, 32)}`;
+  const familyKey = `family-${contentHash([input.origin, ...(input.acquisition ? [input.acquisition.sourceInstanceId] : []), input.parentSessionId ?? input.sessionId]).slice(0, 32)}`;
   const boundaries = starts.map((start, position): ConnectedBoundary => {
     const end = starts[position + 1] ?? events.length;
     const observed = events.slice(start + 1, end);
@@ -36,7 +36,7 @@ export function normalizeConnectedSession(input: {
     const compacted = events.slice(0, start + 1).some(event => event.kind === "compaction");
     const unknown = observed.some(event => event.kind === "unknown");
     return {
-      id: `case-${contentHash([input.origin, input.sessionId, input.branchId ?? null, events[start]!.id]).slice(0, 40)}`,
+      id: `case-${contentHash([input.origin, ...(input.acquisition ? [input.acquisition.sourceInstanceId] : []), input.sessionId, input.branchId ?? null, events[start]!.id]).slice(0, 40)}`,
       familyKey, projection: "turn", requestEventId: events[start]!.id, start, end,
       inputHash: contentHash(events.slice(0, start + 1)), outputHash: answer ? contentHash(answer.content) : null,
       revisionHash: contentHash(observed), terminal: status === "completed" || status === "failed" || status === "cancelled" ? status : "unknown",
@@ -51,7 +51,7 @@ export function normalizeConnectedSession(input: {
   if (input.includeConversation !== false) {
     const first = boundaries[0]!, last = boundaries.at(-1)!;
     const observed = events.slice(first.start + 1), answers = observed.filter(hasRecordedConnectedAnswer);
-    boundaries.push({ ...first, id: `conversation-${contentHash([input.origin, input.sessionId, input.branchId ?? null]).slice(0, 40)}`,
+    boundaries.push({ ...first, id: `conversation-${contentHash([input.origin, ...(input.acquisition ? [input.acquisition.sourceInstanceId] : []), input.sessionId, input.branchId ?? null]).slice(0, 40)}`,
       projection: "conversation", end: events.length, outputHash: answers.length ? contentHash(answers.map(event => event.content)) : null,
       revisionHash: contentHash(observed), terminal: last.terminal, coverage: { ...first.coverage,
         answer: answers.length > 0, process: boundaries.some(item => item.coverage.process === "partial") ? "partial" : boundaries.some(item => item.coverage.process === "retained") ? "retained" : "absent",
@@ -62,6 +62,7 @@ export function normalizeConnectedSession(input: {
   const body = { schemaVersion: CONNECTED_EVIDENCE_VERSION, normalizerVersion: CONNECTED_NORMALIZER_VERSION,
     origin: input.origin, sessionId: input.sessionId, branchId: input.branchId ?? null, parentSessionId: input.parentSessionId ?? null,
     exporterVersion: input.exporterVersion ?? null, sourceFiles: input.files.map(connectedFileIdentity).sort((a, b) => a.path.localeCompare(b.path)),
+    ...(input.acquisition ? { acquisition: input.acquisition } : {}),
     events, unmappedEvents: (input.unmappedEvents ?? []).map((event, sequence) => ({ ...event, sequence })), boundaries, warnings: input.warnings ?? [] };
   const session = ConnectedSessionSchema.parse({ ...body, contentHash: contentHash(body) });
   if (new TextEncoder().encode(JSON.stringify(session)).length > CONNECTED_EVIDENCE_LIMITS.decodedBytes) throw new Error("connected_normalized_size_limit");
