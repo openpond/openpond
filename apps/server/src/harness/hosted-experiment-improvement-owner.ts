@@ -16,7 +16,7 @@ import {profileOriginFilesHash} from "../evaluations/local-experiment-profile-or
 import {compiledCandidateExecutableIdentity} from "./experiment-candidate-equivalence.js";
 import {resolveContainedRegularFile} from "./local-harness-workspace-files.js";
 import {sha256} from "@openpond/harness";
-import {profileEvaluationsForRelease} from "./local-profile-evaluation-runtime.js";
+import {profileEvaluationsForRuntime} from "./local-profile-evaluation-runtime.js";
 import {withRemoteProfileCandidateSnapshot} from "./experiment-profile-remote-freeze.js";
 import {applyCandidateProfileSource,compileOriginalCandidateProfile} from "./experiment-profile-git-source.js";
 import {createAuthoringModelToolDefinitions} from "../openpond/authoring-tool-registry.js";
@@ -73,10 +73,18 @@ export async function runHostedExperimentImprovementOwner(raw:unknown,signal:Abo
   adopt:async()=>readback(),readAdoption:async()=>input.adoptionReadback?readback():null,rollback:async()=>readback()});
  const tools=createExperimentCandidateTools({store,improvements:service,actorId:async()=>actor.actorId,teamId:async()=>actor.teamId,loadProfile:async selected=>{if(contentHash(selected)!==contentHash(ref))throw new Error("Candidate requested another source owner.");return profile;},agentRuntime:input.agentRuntime,operationSignal:signal,loadAgentRuntime:createCandidateAgentRuntimeLoader({storeDir:input.storeDir,loadArchive:createWorkAgentSdkArchiveLoader({storeDir:input.storeDir})})});
  if(input.operation==="describe"){
-  const record=await store.getHarnessReleaseRecord(workspace.currentChannel.release!.contentHash);if(!record)throw new Error("Hosted source release is unavailable.");
+  await authorizer();
+  const selected=workspace.currentChannel.release;
+  const record=selected?await store.getHarnessReleaseRecord(selected.contentHash):null;
+  if(!selected||!record||record.workspaceId!==workspace.id
+    ||record.harnessRelease.id!==selected.id||record.harnessRelease.contentHash!==selected.contentHash
+    ||workspace.ownerScope.kind!=="personal"||workspace.ownerScope.id!==actor.actorId){
+    throw new Error("Hosted source release is unavailable to its admitted owner.");
+  }
   const compiled=await compileLocalHarnessSource({workspaceId:typeof record.agentSnapshot.metadata.workspaceId==="string"?record.agentSnapshot.metadata.workspaceId:workspaceId,sourceDir:path.join(record.bundlePath,"source")});
   if(compiled.harnessRelease.contentHash!==record.harnessRelease.contentHash)throw new Error("Hosted source compiler readback changed.");
-  const catalog=await profileEvaluationsForRelease({store,ref,sourceRevision:source.sourceRevision,harnessRelease:workspace.currentChannel.release!}),readJson=(name:string)=>{const bytes=compiled.sourceFiles.find(file=>file.path===name)?.bytes;return bytes?JSON.parse(Buffer.from(bytes).toString("utf8")):null;};
+  const catalog=await profileEvaluationsForRuntime({runtime:{release:record},ref,sourceRevision:source.sourceRevision,harnessRelease:selected}),readJson=(name:string)=>{const bytes=compiled.sourceFiles.find(file=>file.path===name)?.bytes;return bytes?JSON.parse(Buffer.from(bytes).toString("utf8")):null;};
+  await authorizer();
   return{workspaceId,ownerRevision:workspace.revision,profileRef:ref,baseRelease:workspace.currentChannel.release,profileSourceRevision:source.sourceRevision,manifest:compiled.manifest,executable:compiledCandidateExecutableIdentity(compiled),catalogHash:catalog.catalogHash,workflows:readJson("workflows/catalog.json"),actions:readJson("workflows/actions.json")};
  }
  if(input.operation==="command"){
