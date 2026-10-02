@@ -4,7 +4,7 @@ import { createInterface } from "node:readline/promises";
 import { saveGlobalConfig, type LocalConfig } from "../../config";
 import { DEFAULT_OPENPOND_WEB_BASE_URL } from "../../urls";
 
-export const UI_API_KEY_URL = `${DEFAULT_OPENPOND_WEB_BASE_URL}/settings/api-keys`;
+export const UI_API_KEY_URL = `${DEFAULT_OPENPOND_WEB_BASE_URL}/console/services/identity-access/api-keys`;
 
 export function resolveApiKey(config: LocalConfig): string | null {
   const envKey = process.env.OPENPOND_API_KEY?.trim();

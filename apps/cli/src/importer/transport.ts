@@ -83,6 +83,7 @@ export const collectorTransport: CollectorTransport = {
     const input = {
       upload,
       source: connection.source.source,
+      ...(entry.branchLeafId ? { branchLeafId: entry.branchLeafId } : {}),
       destination: {
         kind: "existing" as const,
         projectId: connection.projectId,

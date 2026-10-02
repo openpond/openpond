@@ -21,6 +21,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
  }
  if(value.type==='user') {
   session=value.session_id;
+  if(value.message.content[0].text==='foreign-stream') { send({type:'stream_event',session_id:'foreign',event:{type:'content_block_delta',delta:{type:'text_delta',text:'must-not-leak'}}}); return; }
   send({type:'stream_event',event:{type:'content_block_delta',delta:{type:'text_delta',text:'streamed'}}});
   send({type:'control_request',request_id:'permission',request:{subtype:'can_use_tool',tool_use_id:'tool',tool_name:'Write',input:{path:'fixture'}}});
  }
@@ -31,7 +32,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   const updates: string[] = [];
   const controller = new AbortController();
   const client = new ClaudeCliClient({ command: executable, args: [], cwd: directory, requestTimeoutMs: 2_000,
-    onUpdate: async (_id, value) => { updates.push(String((value.content as { text: string }).text)); },
+    onUpdate: async (_id, value) => { if (value.sessionUpdate === "agent_message_chunk") updates.push(String((value.content as { text: string }).text)); },
     onPermission: async (_request, signal) => { requested(); signal.addEventListener("abort", () => { permissionAborted = true; }); return new Promise(() => undefined); },
   });
   try {
@@ -45,5 +46,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
     expect(await prompt).toEqual({ stopReason: "cancelled" });
     expect(updates).toEqual(["streamed"]);
     expect(permissionAborted).toBe(true);
+    await expect(client.prompt(session.sessionId, [{ type: "text", text: "foreign-stream" }])).rejects.toThrow("changed native session identity");
+    expect(updates).not.toContain("must-not-leak");
   } finally { await client.stop(); await rm(directory, { recursive: true, force: true }); }
 });

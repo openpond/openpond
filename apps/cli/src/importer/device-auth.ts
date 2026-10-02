@@ -14,7 +14,7 @@ import {
   resolveApiBaseUrlOption,
 } from "../cli/common";
 import { DEFAULT_OPENPOND_API_BASE_URL } from "../urls";
-import type { NativeSource } from "@openpond/evals/native-conversations";
+import { NATIVE_SOURCE_NAMES, type NativeSource } from "@openpond/evals/native-conversations";
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 const Envelope = z
@@ -106,7 +106,7 @@ export async function authorizeImporter(
         publicKey,
         machineId: source.machineId,
         sourceInstanceId: source.instanceId,
-        sourceLabel: source.source,
+        sourceLabel: NATIVE_SOURCE_NAMES[source.source],
         sourceRoot: source.root,
         ...(optionString(options, "team")
           ? { requestedTeamId: optionString(options, "team") }

@@ -3,12 +3,15 @@ import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { RefreshCw, Loader2, CircleAlert } from "../icons";
+import type { CollectorStatus, NativeBranchChoice, NativeBranchInspection } from "@openpond/evals/native-conversations";
+import { NativeImporterStatus, type ImporterControl } from "./NativeImporterStatus";
+import { NativeBranchPicker } from "./NativeBranchPicker";
 
 type HistoryPayload = {
   items: Array<{ id: string; source: string; title: string; cwd: string | null; updatedAt: string }>;
   nextCursors: Record<string, string>;
   warnings: string[];
-  collector: { running: boolean; desiredState: "running" | "stopped"; connections: Array<{ source: string; queued: number; admitted: number; error: string | null }> };
+  collector: CollectorStatus;
 };
 export function NativeConversationSources({ connection, selectedSessionId, onOpen }: { connection: ClientConnection | null; selectedSessionId: string | null; onOpen(session: Session): void }) {
   const [following, setFollowing] = useState<{ id: string; sessionId: string } | null>(null);
@@ -17,6 +20,7 @@ export function NativeConversationSources({ connection, selectedSessionId, onOpe
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [branchSelection, setBranchSelection] = useState<{ id: string; inspection: NativeBranchInspection } | null>(null);
   const refresh = useCallback(async () => {
     if (!connection) return;
     setBusy("refresh");
@@ -46,14 +50,22 @@ export function NativeConversationSources({ connection, selectedSessionId, onOpe
     } catch (error) { setError(error instanceof Error ? error.message : "Could not load more conversations."); }
     finally { setBusy(null); }
   }
-  async function open(id: string) {
+  async function open(id: string, branch?: NativeBranchChoice) {
     if (!connection) return;
     setBusy(id);
-    try { const session = await apiFetch<Session>(connection, "/v1/native-history/open", { method: "POST", body: JSON.stringify({ id }) }); setFollowing({ id, sessionId: session.id }); onOpen(session); }
+    try {
+      if (!branch) {
+        const inspection = await apiFetch<NativeBranchInspection>(connection, "/v1/native-history/branches", { method: "POST", body: JSON.stringify({ id }) });
+        if (inspection.branches.length > 1) { setBranchSelection({ id, inspection }); setError(null); return; }
+      }
+      const session = await apiFetch<Session>(connection, "/v1/native-history/open", { method: "POST", body: JSON.stringify({ id, branch }) });
+      setFollowing(branch ? null : { id, sessionId: session.id }); setBranchSelection(null);
+      setError(session.metadata?.nativeHistoryProjection && !session.nativeAgent ? typeof session.metadata.nativeReadOnlyReason === "string" ? session.metadata.nativeReadOnlyReason : "Read-only history: the native source does not report its original working directory." : null); onOpen(session);
+    }
     catch (error) { setError(error instanceof Error ? error.message : "Could not read this conversation."); }
     finally { setBusy(null); }
   }
-  async function control(command: "start" | "stop" | "sync" | "install") {
+  async function control(command: ImporterControl) {
     if (!connection) return;
     setBusy(command);
     try { await apiFetch(connection, "/v1/native-history/collector", { method: "POST", body: JSON.stringify({ command }) }); await refresh(); }
@@ -75,11 +87,12 @@ export function NativeConversationSources({ connection, selectedSessionId, onOpe
     {command ? <NativeSetupTerminal connection={connection} command={command} onClose={() => { setCommand(null); void refresh(); }} /> : null}
     {expanded ? <>
       <button type="button" disabled={busy !== null} onClick={() => void connect()}>Import conversations</button>
-      {history?.items.map((item) => <button type="button" key={item.id} className="sidebar-row sidebar-task-row native-conversation-row" disabled={busy !== null} title={`${item.source}\n${item.cwd ?? "Working directory unavailable"}\n${item.updatedAt}`} onClick={() => void open(item.id)}><span>{item.title || "Untitled conversation"}</span><small>{item.source}</small></button>)}
+      {branchSelection ? <NativeBranchPicker title={history?.items.find(item => item.id === branchSelection.id)?.title ?? ""} inspection={branchSelection.inspection} busy={busy !== null} onSelect={branch => void open(branchSelection.id, branch)} onRefresh={() => void open(branchSelection.id)} onClose={() => setBranchSelection(null)} /> : null}
+      {history?.items.map((item) => <button type="button" key={item.id} className="sidebar-row sidebar-task-row native-conversation-row" disabled={busy !== null} title={`${item.source}\n${item.cwd ?? "Working directory unavailable"}\n${item.updatedAt}`} onClick={() => void open(item.id)}><span>{item.title || "Untitled conversation"}</span><small>{item.source}{!item.cwd ? " (read-only)" : ""}</small></button>)}
       {history && Object.keys(history.nextCursors).length ? <button type="button" disabled={busy !== null} onClick={() => void more()}>Load more conversations</button> : null}
       {history && history.items.length === 0 ? <p>No saved conversations found in configured source locations.</p> : null}
       {history?.warnings.map((warning) => <p key={warning}><CircleAlert size={12} aria-hidden="true" /> {warning}</p>)}
-      {history?.collector.connections.length ? <div className="sidebar-section"><strong>{history.collector.running ? "Importer running" : history.collector.desiredState === "stopped" ? "Importer stopped" : "Importer offline"}</strong><button type="button" disabled={busy !== null} onClick={() => void control("sync")}>Sync now</button><button type="button" disabled={busy !== null} onClick={() => void control("install")}>Repair background service</button><button type="button" disabled={busy !== null} onClick={() => void control(history.collector.desiredState === "stopped" ? "start" : "stop")}>{history.collector.desiredState === "stopped" ? "Start" : "Stop"} importer</button></div> : <p>To upload these conversations, connect a source with the OpenPond Importer. Local history stays available without cloud sync.</p>}
+      {history?.collector.connections.length ? <NativeImporterStatus status={history.collector} busy={busy !== null} onControl={(command) => void control(command)} /> : <p>To upload these conversations, connect a source with the OpenPond Importer. Local history stays available without cloud sync.</p>}
     </> : null}
     {error ? <p role="status"><CircleAlert size={12} aria-hidden="true" /> {error}</p> : null}
   </section>;

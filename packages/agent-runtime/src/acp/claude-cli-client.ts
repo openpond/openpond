@@ -85,6 +85,9 @@ export class ClaudeCliClient {
     void this.updates.catch((error: Error) => { this.fail(error); void this.stop(); });
   }
   private receive(message: AcpObject): void {
+    if (typeof message.session_id === "string" && message.session_id !== this.sessionId) {
+      this.fail(new Error("Claude changed native session identity.")); void this.stop(); return;
+    }
     if (message.type === "control_response") {
       const response = record(message.response), id = String(response.request_id), pending = this.pending.get(id);
       if (!pending) return; clearTimeout(pending.timer); this.pending.delete(id);

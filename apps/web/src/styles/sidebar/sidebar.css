@@ -1786,3 +1786,13 @@ button.sidebar-project-location-row:disabled {
 .native-conversation-row { width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 8px; text-align: left; }
 .native-conversation-row > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .native-conversation-row > small { flex-shrink: 0; color: var(--text-secondary, #a1a1aa); font-size: 10px; }
+.native-importer-status, .native-importer-connection { display: grid; gap: 6px; }
+.native-importer-connection { padding: 8px 0; }
+.native-importer-connection > span { display: flex; align-items: center; gap: 6px; }
+.native-importer-connection > progress { width: 100%; }
+.native-importer-connection > small { color: var(--text-muted); overflow-wrap: anywhere; }
+.native-branch-picker { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
+.native-branch-picker > button { display: grid; gap: 4px; padding: 8px; text-align: left; border: 1px solid var(--border); border-radius: 6px; }
+.native-branch-picker > button > span, .native-branch-picker code { overflow-wrap: anywhere; }
+.native-branch-picker small, .native-branch-picker code { color: var(--text-muted); font-size: 11px; }
+.native-branch-picker > div { display: flex; justify-content: space-between; gap: 8px; }

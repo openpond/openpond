@@ -61,3 +61,38 @@ it("round-trips exact editor bytes and enforces canonical transport and managed 
   expect(() => createTasksetDraftFile("large.bin", new Uint8Array(MAX_TASKSET_DRAFT_EDIT_FILE_BYTES + 1))).toThrow();
   expect(() => decodeTasksetDraftFileContent({ encoding: "utf8", data: "a".repeat(MAX_TASKSET_DRAFT_EDIT_FILE_BYTES + 1) })).toThrow();
 });
+
+// Human review must publish an immutable rubric without fabricated automated
+// calibration, while fixture-free automated graders and human optimizer rewards
+// remain inadmissible through the same package compiler.
+it("publishes human-only review as pending without weakening automated reward gates", async () => {
+  const { compileTasksetDraftWorkspace } = await import("../src/taskset-draft-package-compiler.js");
+  const { gradeEvidence } = await import("@openpond/evals/graders");
+  const now = "2026-10-02T00:00:00.000Z";
+  const draft = createTasksetDraft({ profileId: "workspace", id: "owner-review", name: "Owner review", now });
+  const source = {
+    schemaVersion: "openpond.generatedDatasetSource.v1", kind: "generated", id: "source",
+    profileId: "workspace", title: "Reviewed fixture", sourceHash: "a".repeat(64), occurredAt: now,
+    licensingStatus: "approved", secretScanStatus: "passed", piiScanStatus: "passed",
+    generatorId: "test", generatorVersion: "1", seed: 0, generatorHash: "a".repeat(64), metadata: {},
+  };
+  const human = { id: "owner", version: "1", label: "Owner rubric", kind: "human", weight: 1,
+    hardGate: false, rewardEligible: false, privileged: true, rubric: "Assess the recorded answer.", reviewerRole: "owner", metadata: {} };
+  const ready = TasksetDraftSchema.parse({ ...draft, objective: "Review the recorded answer", sourceRefs: [source],
+    tasks: [{ schemaVersion: "openpond.taskData.v1", id: "case", clusterKey: "family", split: "frozen_eval",
+      input: { prompt: "Request" }, expectedOutput: null, privilegedContextRef: null, sourceRefs: [source.id], metadata: {} }],
+    graders: [human], graderFixtures: [] });
+  const compile = (value: typeof ready) => compileTasksetDraftWorkspace({
+    workspace: createTasksetDraftWorkspace({ schemaVersion: "openpond.tasksetDraftWorkspace.v1", draft: value, files: [] }),
+    preparation: null, adapterId: "openpond-test",
+  });
+  const published = compile(ready);
+  expect(published.verifierSet.calibrationReceiptRefs).toEqual([]);
+  expect(published.taskset.graders[0]).toMatchObject({ kind: "human", rewardEligible: false, reviewerRole: "owner" });
+  const grade = await gradeEvidence({ task: published.taskset.tasks[0]!, graders: published.taskset.graders,
+    evidence: { output: { text: "Recorded answer" }, artifactRefs: [], runtimeEventRefs: [] } });
+  expect(grade[0]).toMatchObject({ status: "pending", score: null, rewardEligible: false });
+  expect(() => compile(TasksetDraftSchema.parse({ ...ready, graders: [{ ...human, rewardEligible: true }] }))).toThrow(/online optimizer reward/);
+  const automated = { ...human, id: "automated", kind: "content", config: { match: "exact", expected: "answer" } };
+  expect(() => compile(TasksetDraftSchema.parse({ ...ready, graders: [human, automated] }))).toThrow(/grader fixtures/);
+});
