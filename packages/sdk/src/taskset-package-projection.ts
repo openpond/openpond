@@ -72,6 +72,7 @@ export function prepareImportedTasksetPackage(input: {
       sourceCommit: null, repairHistory: [], createdAt: input.createdAt },
     readiness: null, contentHash: "00000000", createdAt: input.createdAt, updatedAt: input.createdAt,
     metadata: { importedPackageHash: value.contentHash,
+      tasksetOutputContract: release.metadata.tasksetOutputContract ?? null,
       ...(learning ? { learning } : {}),
       portableFileInventory: value.files.map(file => ({ asset: file.asset, sourcePath: file.asset.path })),
       ...(resources ? { taskDefinition: learningRef(resources.taskDefinition),
