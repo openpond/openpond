@@ -14,7 +14,7 @@ import { contentHash } from "@openpond/harness";
 const IdSchema = z.string().trim().min(1).max(200);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const ModelStarterAttemptPolicySchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("hosted_chat"), modelId: IdSchema, localRuntime:z.union([z.object({providerId:z.literal("custom-openai-compatible"),configurationHash:HashSchema,maximumRequestCostUsd:z.number().finite().positive().max(10000),requestTimeoutMs:z.number().int().min(1000).max(300000)}).strict(),ClaudeCodeRuntimeSchema]).optional(), candidate: z.object({ artifactId: IdSchema, contentHash: HashSchema, preparationId: IdSchema, dispatchId: IdSchema, baseProfileId: IdSchema, workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/) }).strict().optional(), harness: StandaloneHarnessExperimentSourceSchema.optional(), messages: EvaluationMessagesSchema.optional(), maxOutputTokens: z.number().int().min(1).max(4_096).default(1_024), temperature: z.number().min(0).max(2).default(0), topP: z.number().gt(0).max(1).default(1) }).strict(),
+  z.object({ kind: z.literal("hosted_chat"), modelId: IdSchema, localRuntime:z.union([z.object({providerId:z.literal("custom-openai-compatible"),configurationHash:HashSchema,maximumRequestCostUsd:z.number().finite().positive().max(10000),requestTimeoutMs:z.number().int().min(1000).max(300000)}).strict(),ClaudeCodeRuntimeSchema]).optional(), candidate: z.object({ artifactId: IdSchema, contentHash: HashSchema, preparationId: IdSchema, dispatchId: IdSchema, baseProfileId: IdSchema, workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/) }).strict().optional(), harness: StandaloneHarnessExperimentSourceSchema.optional(), messages: EvaluationMessagesSchema.optional(), maxOutputTokens: z.number().int().min(1).max(1_000_000).default(100_000), temperature: z.number().min(0).max(2).default(0), topP: z.number().gt(0).max(1).default(1) }).strict(),
   z.object({ kind: z.literal("fixture"), fixtureId: IdSchema }).strict(),
 ]);
 /** The server resolves task input, private state, verifier and fixture script.
@@ -31,7 +31,7 @@ export type ModelStarterAttemptRequest = z.infer<typeof ModelStarterAttemptReque
 export const ModelStarterAttemptChoicesQuerySchema = z.object({ modelProjectId: IdSchema.nullable(), taskset: ModelProjectVersionedRefSchema, afterTaskId: IdSchema.optional(), limit: z.number().int().min(1).max(100).default(25) }).strict();
 export const ModelStarterAttemptChoicesSchema = z.object({
   modelProjectId: IdSchema.nullable(), taskset: ModelProjectVersionedRefSchema, available: z.boolean(), unavailableReason: z.string().max(1_000).nullable(),
-  models: z.array(z.object({ id: IdSchema, name: z.string().max(500) }).strict()).max(200),
+  models: z.array(z.object({ id: IdSchema, name: z.string().max(500), maximumOutputTokens: z.number().int().min(1).max(1_000_000).optional() }).strict()).max(200),
   tasks: z.array(z.object({ id: IdSchema, split: TaskSplitSchema, inputPreview: z.string().max(500), fixtures: z.array(z.object({ id: IdSchema, label: z.string().max(200) }).strict()).max(1_000) }).strict()).max(100),
   nextCursor: IdSchema.nullable(),
 }).strict();
