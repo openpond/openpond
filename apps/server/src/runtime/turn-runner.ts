@@ -1372,6 +1372,19 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const providerTurnId = `openpond-${turn.id}`;
         const model =
           turnModelRef?.modelId || input.model || DEFAULT_OPENPOND_CHAT_MODEL;
+        const providerSettings = loadProviderSettings
+          ? await loadProviderSettings()
+          : null;
+        const contextLimitTokens = trustedProviderContextLimit({
+          provider: "openpond",
+          model,
+          settings: providerSettings,
+        });
+        const modelOutputLimit = trustedProviderOutputLimit({
+          provider: "openpond",
+          model,
+          settings: providerSettings,
+        });
         await updateStoredTurn(turn.id, (current) => ({
           ...current,
           providerTurnId,
@@ -1425,6 +1438,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           turnPermissions,
           provider: "openpond",
           model,
+          modelOutputLimit,
+          contextLimitTokens,
           messages,
           systemPrompt,
           resourceEvents: hostedPriorEvents,
