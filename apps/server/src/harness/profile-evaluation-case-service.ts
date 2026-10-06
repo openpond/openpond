@@ -14,7 +14,6 @@ import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-
 import type { ProfileEvaluationDefinition } from "@openpond/evals";
 import type { TasksetPackage } from "openpond-sdk/taskset-packages";
 import { createProfileWorkflowEvaluationExecutor } from "./profile-evaluation-turn-executor.js";
-import { assertRfqEvaluationPaidDispatchQualified } from "../training/rfq-evaluation-paid-preflight.js";
 
 const ProfileEvaluationCaseRequestSchema = z.object({
   manifest: TasksetRunManifestSchema,
@@ -49,9 +48,6 @@ export function createProfileEvaluationCaseService(input: {
       || selected.sourceRevision !== parsed.binding.sourceRevision) {
       throw new Error("Evaluation Profile differs from the app-server's authorized selection.");
     }
-    // Direct case execution must meet the same gate as run and suite paths.
-    // Keep this before createSession/sendTurn, including resumed members.
-    assertRfqEvaluationPaidDispatchQualified(selected.ref.profileId);
     const discovered = await input.loadCatalog({
       ref: selected.ref, sourceRevision: selected.sourceRevision,
       harnessRelease: parsed.binding.harnessRelease,
