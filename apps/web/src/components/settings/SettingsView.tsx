@@ -297,7 +297,7 @@ export function SettingsView({
             {...accountSettings}
           />
         ) : section === "ponder" ? (
-          <PonderSettingsSection key={JSON.stringify([payload?.account.activeProfile, payload?.preferences.defaultTeamId])} connection={connection} />
+          <PonderSettingsSection key={JSON.stringify([payload?.account.activeProfile, payload?.account.baseUrl, payload?.account.profile?.id, payload?.account.state, payload?.preferences.defaultTeamId])} connection={connection} />
         ) : section === "notifications" ? (
           <NotificationsSettingsSection
             currentUserId={teamChatCurrentUserId}

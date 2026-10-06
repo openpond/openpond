@@ -1,6 +1,10 @@
-import { contentHash } from "@openpond/harness";
+import { contentHash, contentHashArrayPrefixes } from "@openpond/harness";
 import { CONNECTED_EVIDENCE_LIMITS, CONNECTED_EVIDENCE_VERSION, CONNECTED_NORMALIZER_VERSION, ConnectedSessionSchema, hasRecordedConnectedAnswer,
   type ConnectedBoundary, type ConnectedEvent, type ConnectedFile, type ConnectedSession, type ConnectedSourceKind } from "./contracts.js";
+
+export class ConnectedSessionWithoutUserRequestError extends Error {
+  constructor() { super("The session has no retained user request."); }
+}
 
 export function connectedTimestamp(value: unknown, units: "seconds" | "milliseconds" = "milliseconds"): string | null {
   if (typeof value !== "number" && typeof value !== "string") return null;
@@ -19,9 +23,11 @@ export function normalizeConnectedSession(input: {
   const events = input.events.map((event, sequence) => ({ ...event, sequence }));
   if (new Set(events.map(event => event.id)).size !== events.length) throw new Error("connected_duplicate_event");
   const starts = events.flatMap((event, index) => event.kind === "message" && event.role === "user" ? [index] : []);
-  if (!starts.length) throw new Error("The session has no retained user request.");
+  if (!starts.length) throw new ConnectedSessionWithoutUserRequestError();
   if (starts.length + (input.includeConversation === false ? 0 : 1) > CONNECTED_EVIDENCE_LIMITS.boundaries) throw new Error("connected_boundary_limit");
   const familyKey = `family-${contentHash([input.origin, ...(input.acquisition ? [input.acquisition.sourceInstanceId] : []), input.parentSessionId ?? input.sessionId]).slice(0, 32)}`;
+  const inputHashes = contentHashArrayPrefixes(events, starts.map(start => start + 1));
+  const firstCompaction = events.findIndex(event => event.kind === "compaction");
   const boundaries = starts.map((start, position): ConnectedBoundary => {
     const end = starts[position + 1] ?? events.length;
     const observed = events.slice(start + 1, end);
@@ -33,12 +39,12 @@ export function normalizeConnectedSession(input: {
     const terminal = [...observed].reverse().find(event => event.kind === "terminal");
     const status = terminal && typeof terminal.content === "object" && terminal.content !== null && !Array.isArray(terminal.content)
       ? terminal.content.status : null;
-    const compacted = events.slice(0, start + 1).some(event => event.kind === "compaction");
+    const compacted = firstCompaction >= 0 && firstCompaction <= start;
     const unknown = observed.some(event => event.kind === "unknown");
     return {
       id: `case-${contentHash([input.origin, ...(input.acquisition ? [input.acquisition.sourceInstanceId] : []), input.sessionId, input.branchId ?? null, events[start]!.id]).slice(0, 40)}`,
       familyKey, projection: "turn", requestEventId: events[start]!.id, start, end,
-      inputHash: contentHash(events.slice(0, start + 1)), outputHash: answer ? contentHash(answer.content) : null,
+      inputHash: inputHashes[position]!, outputHash: answer ? contentHash(answer.content) : null,
       revisionHash: contentHash(observed), terminal: status === "completed" || status === "failed" || status === "cancelled" ? status : "unknown",
       coverage: { answer: Boolean(answer), context: input.contextComplete === false ? "unknown" : compacted ? "compacted" : "retained",
         process: !tools.length ? unknown ? "partial" : "absent" : incomplete || unknown ? "partial" : "retained",
@@ -70,6 +76,11 @@ export function normalizeConnectedSession(input: {
 }
 
 export function connectedJsonLines(file: ConnectedFile): Record<string, unknown>[] {
+  // Native tool results and image blocks can occupy one large JSONL record.
+  // Bound the whole decoded input before parsing, rather than rejecting valid
+  // evidence solely because its exporter uses a single physical line.
+  if (new TextEncoder().encode(file.text).length > CONNECTED_EVIDENCE_LIMITS.decodedBytes)
+    throw new Error("Decoded source files exceed 64 MiB.");
   const lines = file.text.replace(/^\uFEFF/u, "").split(/\r?\n/u);
   if (lines.length > CONNECTED_EVIDENCE_LIMITS.events + 1) throw new Error("connected_event_limit");
   return lines.flatMap((line, index) => {

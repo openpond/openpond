@@ -151,8 +151,7 @@ import {
 } from "./openpond/sandboxes.js";
 import { createHostedSavedWork } from "./openpond/saved-work.js";
 import { hostedSavedWorkRoutePayloads } from "./openpond/saved-work-route-payloads.js";
-import { createPonderActivityBridge } from "./openpond/ponder-activity-bridge.js";
-import { requestHostedPonder } from "./openpond/ponder-pal.js";
+import { createDesktopManagedAgentRoutes, createDesktopPonderActivityBridge } from "./runtime/task-inbox/desktop-agent-services.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
 import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
@@ -299,10 +298,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     logger,
     store,
   });
-  const ponderActivityBridge = createPonderActivityBridge({ storeDir, deviceId: serverId,
+  const ponderActivityBridge = createDesktopPonderActivityBridge({ storeDir, deviceId: serverId,
     subscribe: subscribeRuntimeEvents,
-    teamId: async () => (await loadAppPreferences()).defaultTeamId,
-    request: async request => requestHostedPonder({ ...request, teamId: (await loadAppPreferences()).defaultTeamId ?? undefined }),
+    loadAppPreferences: () => loadAppPreferences(),
     sessionTitle: async id => (await store.getSession(id))?.title ?? "Local chat",
     workflows: async () => ({ workflows: await store.listChatWorkflows(), runs: await store.listChatWorkflowRuns(null, 500) }),
     warn: message => logger.warn(message),
@@ -1315,6 +1313,14 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   }
 
   const runRecordedManualHostedContextCompaction = createManualCompactionRecorder({ home: storeDir, safeUpsertModelUsageRecord, streamOpenPondHostedChatTurn: streamSelectedOpenPondChatTurn, localByokRuntimeState, providerSecretPaths });
+  const desktopManagedAgentRoutes = createDesktopManagedAgentRoutes({
+    store,
+    getSession,
+    turnRunner,
+    localByokRuntimeState,
+    refreshCodexStatus,
+    loadAppPreferences,
+  });
 
   async function compactSession(
     sessionId: string,
@@ -1740,7 +1746,6 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       ...harnessSettingsRoutes,
       ...refinerSettingsRoutes,
       ...hostedSavedWorkRoutePayloads,
-      ponderRequestPayload: async request => requestHostedPonder({ ...request, teamId: (await loadAppPreferences()).defaultTeamId ?? undefined }),
       ...chatWorkflows.routePayloads,
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
@@ -1842,6 +1847,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       browserControlComplete: browserControlQueue.completeRequest,
       browserControlStatus: browserControlQueue.status,
       agentRuntime,
+      ...desktopManagedAgentRoutes,
       createSession: createSessionWithAutoTitle,
       patchSession: patchSessionPayload,
       sendTurn,

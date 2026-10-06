@@ -15,6 +15,7 @@ import type {
   ProviderModel,
   ProviderSettings,
   Session,
+  TaskInput,
   SessionUserQuestion,
   SidebarFileBookmark,
   SubagentRoleId,
@@ -221,7 +222,7 @@ export type HarnessRefinerActivity = {
 
 export type ChatMessage = {
   id: string;
-  role: "user" | "assistant" | "activity_group" | "error" | "status_divider";
+  role: "user" | "assistant" | "activity_group" | "error" | "status_divider" | "task_message";
   content?: string;
   errorKind?: "opchat_quota_exceeded";
   attachments?: ChatAttachmentSummary[];
@@ -242,6 +243,11 @@ export type ChatMessage = {
   createImproveRun?: CreateImproveRun | null;
   userQuestion?: SessionUserQuestion;
   reasoningContent?: string;
+  taskMessage?: {
+    input: TaskInput;
+    direction: "received" | "sent";
+    peer: { sessionId: string; title: string; provider: string };
+  };
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;

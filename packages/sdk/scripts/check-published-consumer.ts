@@ -44,7 +44,11 @@ async function main(): Promise<void> {
   try {
     const dependencies = [tarball];
     if (process.argv.includes("--local-evals")) {
-      // Test the actual release artifacts before the new Evals version reaches npm.
+      // Evals consumes the matching Harness API; qualify the complete local
+      // cohort instead of mixing a new Evals artifact with registry Harness.
+      const packedHarness = JSON.parse(execFileSync("npm", ["pack", path.resolve(packageRoot, "../harness"), "--json", "--ignore-scripts", "--pack-destination", consumer], { encoding: "utf8" })) as PackResult;
+      if (!packedHarness[0]?.filename) throw new Error("npm pack did not produce a Harness tarball.");
+      dependencies.push(path.join(consumer, packedHarness[0].filename));
       const packedEvals = JSON.parse(execFileSync("npm", ["pack", path.resolve(packageRoot, "../evals"), "--json", "--ignore-scripts", "--pack-destination", consumer], { encoding: "utf8" })) as PackResult;
       if (!packedEvals[0]?.filename) throw new Error("npm pack did not produce an Evals tarball.");
       dependencies.push(path.join(consumer, packedEvals[0].filename));

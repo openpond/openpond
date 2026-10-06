@@ -640,7 +640,10 @@ function registerIpcHandlers(): void {
     notificationIds.add(payload.id);
     if (notificationIds.size > 1000) notificationIds.delete(notificationIds.values().next().value!);
     const notification = new Notification({ title: payload.title, body: payload.body });
-    notification.on("click", showMainWindow); notification.show();
+    notification.on("click", () => {
+      showMainWindow();
+      if (payload.ponder === true) mainWindow?.webContents.send("openpond:ponder-notification", { id: payload.id });
+    }); notification.show();
     return true;
   });
   handleTrackedIpc("openpond:window:close", (event) => {

@@ -1178,22 +1178,41 @@ button.user-message-attachment {
   gap: 7px;
   min-width: 0;
   margin-top: -5px;
+  flex-wrap: wrap;
   color: #767676;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .assistant-message-footer {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 120ms ease;
-  }
-
-  .message-row.assistant:hover .assistant-message-footer,
-  .message-row.assistant:focus-within .assistant-message-footer {
-    opacity: 1;
-    pointer-events: auto;
-  }
+.task-message-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border-left: 2px solid #64c7d655;
+  padding-left: 12px;
 }
+
+.task-message-attribution {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.task-message-attribution button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #64c7d6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-message-attribution button:focus-visible {
+  outline: 2px solid #64c7d6;
+  outline-offset: 2px;
+}
+
 
 .message-copy-button {
   display: inline-grid;
@@ -1232,6 +1251,7 @@ button.user-message-attachment {
   opacity: 0.55;
 }
 
+.message-content-size,
 .message-kv-cache-metric {
   color: inherit;
   font-size: 12px;

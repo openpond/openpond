@@ -505,6 +505,7 @@ export type TurnRunnerDependencies = {
 };
 
 export type TurnRunner = TurnDispatcherPort & {
+  admitUserLocalMessage(input: import("@openpond/contracts").TaskInputAdmission): Promise<TaskInput>;
   steerSessionTurn(sessionId: string, payload: unknown): Promise<TaskInput>;
   readTaskInbox(sessionId: string): Promise<import("@openpond/contracts").TaskInboxSnapshot>;
   queueTaskInput(sessionId: string, payload: unknown, idempotencyKey: string): Promise<TaskInput>;
