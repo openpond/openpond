@@ -257,6 +257,7 @@ interface Window {
     token?: string;
   };
   openpond?: {
+    notify?: (input: { id: string; title: string; body: string }) => Promise<boolean>;
     getConnection: () => Promise<OpenPondConnection>;
     getDesktopRuntimeInfo?: () => Promise<OpenPondDesktopRuntimeInfo>;
     reloadDesktopApp?: () => Promise<{ ok: boolean; error?: string }>;

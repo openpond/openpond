@@ -9,6 +9,7 @@ import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeNativeAgent } from "../apps/server/src/runtime/native-agents/setup.js";
+import { nativeCapabilityProbeKey, nativeCapabilityProbeKeys } from "../apps/server/src/runtime/native-agents/capability-probes.js";
 
 // Claude's supported auth status command exits 1 when signed out. Treating
 // that as a broken installation hides the login action from ordinary users.
@@ -101,6 +102,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
     const ready = await probeNativeAgent("opencode", { binaryPath, sourceHome: directory }, { force: true });
     expect(ready.status).toBe("ready");
     expect(ready.session?.models?.availableModels.map(model => model.modelId)).toEqual(["local-model"]);
+    expect(await nativeCapabilityProbeKeys(directory)).toContain(nativeCapabilityProbeKey("opencode", "setup-only"));
     expect((await readFile(trace, "utf8")).trim().split("\n")).toEqual(["initialize", "session/new"]);
     await writeFile(join(directory, "hang"), "1");
     await writeFile(trace, "");

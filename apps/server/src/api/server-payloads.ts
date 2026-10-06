@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import {createLocalExternalDatasetPreparation} from "../harness/local-external-dataset-preparation.js";
 import {resolveHostedApiAccess} from "../openpond/hosted-api-access.js";
@@ -194,7 +195,16 @@ export function createServerPayloads(deps: {
   } = deps;
   const attachmentRootDir =
     deps.attachmentRootDir ?? path.join(storeDir, "attachments");
-  const nativeHistoryPayload = createNativeHistory({ store, storeDir, appendRuntimeEvent });
+  const nativeHistoryPayload = createNativeHistory({ store, storeDir, appendRuntimeEvent,
+    canResume: async (provider, cwd) => {
+      const file = await readProvidersFile(path.join(storeDir, "providers.json"));
+      if (!file.providers[provider]?.enabled) return false;
+      const available = await stat(cwd).then((value) => value.isDirectory()).catch(() => false);
+      if (!available) return false;
+      const status = await probeNativeAgent(provider, file.providers[provider]);
+      return status.status === "ready" && status.capabilities?.loadSession === true;
+    },
+  });
   const {
     appendAppPage,
     loadOpenPondData,
@@ -326,12 +336,12 @@ export function createServerPayloads(deps: {
     return providerSettingsPayload();
   }
 
-  async function providerSettingsPayload(): Promise<ProviderSettings> {
+  async function providerSettingsPayload(options: { refreshCatalog?: boolean } = {}): Promise<ProviderSettings> {
     return providerDiagnostics.track("provider_settings", null, async () => {
       const [openPond, providerState, secrets, managedAdapterModels] =
         await Promise.all([
           loadOpenPondData({ force: false }),
-          loadProvidersFileWithCatalog({ refresh: true }),
+          loadProvidersFileWithCatalog({ refresh: options.refreshCatalog ?? true }),
           readProviderSecrets(providerSecretPaths),
           listManagedAdapterProviderModels(store),
         ]);
@@ -681,7 +691,9 @@ export function createServerPayloads(deps: {
     for (const [providerId, cache] of Object.entries(settings.modelCaches)) {
       modelCaches[providerId] = {
         ...cache,
-        models: providerId === "openpond" ? cache.models : [],
+        // Saved native catalogs are small and needed before a selected agent's
+        // capability refresh completes. Broad BYOK catalogs stay lazy.
+        models: providerId === "openpond" || providerId === "codex" || isNativeAgentId(providerId) ? cache.models : [],
       };
     }
     return {
@@ -1800,9 +1812,17 @@ export function createServerPayloads(deps: {
         return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { [definition.homeVariable]: launch.sourceHome }) };
       }
       const result = await probeNativeAgent(provider, file.providers[provider], { signal, force: input.action !== "capabilities", authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
-      const settings = await providerSettingsPayload();
+      const settings = await providerSettingsPayload({ refreshCatalog: false });
       if (nativeAgentLaunch(provider, settings.providers[provider]).instanceId !== result.instanceId) throw new Error("Provider configuration changed during the check. Refresh the connection.");
       signal?.throwIfAborted();
+      const discoveredModels = settings.modelCaches[provider];
+      if (result.status === "ready" && result.session?.models && discoveredModels) {
+        await updateProvidersFile(providersFilePath, (latest) => {
+          signal?.throwIfAborted();
+          if (nativeAgentLaunch(provider, latest.providers[provider]).instanceId !== result.instanceId) throw new Error("Provider configuration changed during the check. Refresh the connection.");
+          return { ...latest, modelCaches: { ...latest.modelCaches, [provider]: discoveredModels } };
+        });
+      }
       return { ...result, settings };
     },
     updateProviderSettingsPayload,

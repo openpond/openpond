@@ -1,3 +1,4 @@
+import { ConversationServingOwner } from "./ConversationServingOwner";
 import { executeHostedLearningCommand } from "../../../api/hosted-learning-command";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ModelProject } from "@openpond/contracts";
@@ -55,6 +56,7 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
   if (editing) return <Suspense fallback={<p>Opening learning settings…</p>}><Settings client={client} project={editing.project} policy={editing.policy} onClose={() => { setEditing(null); setRevision(value => value + 1); }} /></Suspense>;
   if (reviewing) return <Suspense fallback={<p>Opening hosted review…</p>}><Review api={client} {...reviewing} onBack={() => { setReviewing(null); setRevision(value => value + 1); }} /></Suspense>;
   return <section className="training-detail-section" aria-label="Hosted continual learning">
+    <ConversationServingOwner connection={connection} model={model} readOnly={readOnly} />
     <h2>Continual learning</h2><p>Hosted learning continues while Desktop is closed.</p>
     <LearningError error={mutationError ?? error} />
     {!readOnly && value ? <button type="button" className="training-button secondary" disabled={busy || Boolean(pending.current)} onClick={() => setEditing({ project: value.project, policy: value.policy })}>{value.policy ? "Learning settings" : "Configure learning"}</button> : null}

@@ -1,23 +1,24 @@
 import { createHash } from "node:crypto";
-import { access } from "node:fs/promises";
-import { nativeTerminalCommand } from "./terminal-command.js";
+import { handleNativeImporter } from "./importer.js";
 import { join } from "node:path";
 import { z } from "zod";
 import { SessionSchema, TurnSchema, type RuntimeEvent, type Session } from "@openpond/contracts";
-import { discoverSources, listSessions, readSession, inspectSessionBranches, collectorDirectory, collectorMachineId, collectorStatus, controlCollector, startCollectorService, installCollectorService, type NativeSource, type NativeSession, type NativeBranchChoice } from "@openpond/evals/native-conversations";
+import { discoverSources, listSessions, readSession, inspectSessionBranches, collectorDirectory, collectorMachineId, collectorStatus, type NativeSource, type NativeSession, type NativeBranchChoice } from "@openpond/evals/native-conversations";
 import type { SqliteStore } from "../../store/store.js";
 import { readProvidersFile } from "../../openpond/provider-settings.js";
 import { nativeAgentLaunch, type NativeAgentId } from "./config.js";
 import { event } from "../../utils.js";
+import { matchingNativeHistorySession, retainNativeSidebarShell } from "./history-sidebar.js";
 import { nativeEventText as text, ownedNativeBoundaryIds } from "./history-ownership.js";
+import { nativeCapabilityProbeKey, nativeCapabilityProbeKeys } from "./capability-probes.js";
 const providerFor = { claude_code: "claude-code", opencode: "opencode", grok_build: "grok-build" } as const;
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** Read-only native acquisition, with local projections for the existing chat UI. No cloud admission. */
-export function createNativeHistory(deps: { store: SqliteStore; storeDir: string; appendRuntimeEvent(value: RuntimeEvent): Promise<void> }) {
+export function createNativeHistory(deps: { store: SqliteStore; storeDir: string; appendRuntimeEvent(value: RuntimeEvent): Promise<void>; canResume?(provider: NativeAgentId, cwd: string): Promise<boolean> }) {
   const selected = new Map<string, { source: NativeSource; session: NativeSession; provider: NativeAgentId }>();
   const opening = new Map<string, Promise<Session>>();
-  async function list(cursors: Record<string, string> = {}) {
+  async function list(cursors: Record<string, string> = {}, retain = false) {
     const directory = collectorDirectory(); const machineId = await collectorMachineId(directory);
     const file = await readProvidersFile(join(deps.storeDir, "providers.json"));
     const locations: Partial<Record<NativeSource["source"], string>> = {};
@@ -29,16 +30,35 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
     const items: Array<{ id: string; source: string; title: string; cwd: string | null; updatedAt: string; nativeSessionId: string; sourceInstanceId: string }> = [];
     const warnings: string[] = [];
     const nextCursors: Record<string, string> = {};
+    const shells = retain ? await deps.store.sessionShells() : [];
     for (const source of sources) {
       if (Object.keys(cursors).length && !cursors[source.instanceId]) continue;
       if (!source.capabilities.history) { if (source.available && source.reason) warnings.push(`${source.source}: ${source.reason}`); continue; }
       const provider = providerFor[source.source as keyof typeof providerFor];
       try {
+        const launch = nativeAgentLaunch(provider, file.providers[provider]);
+        const probes = await nativeCapabilityProbeKeys(launch.sourceHome);
         const page = await listSessions(source, { limit: 50, cursor: cursors[source.instanceId] });
         for (const session of page.items) {
           const id = hash([source.instanceId, session.nativeSessionId]);
+          if (probes.has(nativeCapabilityProbeKey(provider, session.nativeSessionId))) {
+            selected.delete(id);
+            // A concurrent discovery refresh can observe session/new before its
+            // registry append finishes. Reconcile only that known projection.
+            const retained = shells.find((shell) => shell.provider === provider && shell.metadata?.sourceInstanceId === source.instanceId &&
+              (shell.metadata?.nativeHistoryId === id || shell.id === `native-${id}`));
+            if (retained && !retained.archived) {
+              const updated = await deps.store.updateSession(retained.id, (current) => ({ ...current, archived: true }));
+              if (updated) await deps.appendRuntimeEvent(event({ sessionId: updated.id, name: "session.updated", source: "server", data: { session: updated } }));
+            }
+            continue;
+          }
           selected.set(id, { source, session, provider });
           items.push({ id, source: provider, title: session.title, cwd: session.cwd, updatedAt: session.updatedAt, nativeSessionId: session.nativeSessionId, sourceInstanceId: source.instanceId });
+          if (retain) {
+            const result = await retainNativeSidebarShell(deps.store, shells, { id, source, session, provider, instanceId: nativeAgentLaunch(provider, file.providers[provider]).instanceId });
+            if (result.changed) await deps.appendRuntimeEvent(event({ sessionId: result.session.id, name: "session.updated", source: "server", data: { session: result.session, retainedHistory: true } }));
+          }
         }
         if (page.nextCursor) nextCursors[source.instanceId] = page.nextCursor;
       } catch (error) { warnings.push(`${provider}: ${error instanceof Error ? error.message : "History unavailable"}`); }
@@ -46,7 +66,17 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
     return { sources, nextCursors, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), warnings, collector: await collectorStatus(directory) };
   }
   async function selection(id: string) {
-    if (!selected.has(id)) await list();
+    if (!selected.has(id)) {
+      const retained = await deps.store.getSession(`native-${id}`) ?? (await deps.store.sessionShells()).find((session) => session.metadata?.nativeHistoryId === id);
+      let page = await list();
+      const seen = new Set<string>();
+      for (let index = 0; retained && !selected.has(id) && Object.keys(page.nextCursors).length && index < 100; index++) {
+        const key = JSON.stringify(page.nextCursors);
+        if (seen.has(key)) break;
+        seen.add(key);
+        page = await list(page.nextCursors);
+      }
+    }
     const item = selected.get(id); if (!item) throw new Error("Native history selection expired; refresh the source list.");
     return item;
   }
@@ -56,27 +86,33 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
     const existing = opening.get(openingKey); if (existing) return existing;
     const operation = (async () => {
       const item = await selection(id);
+      const config = (await readProvidersFile(join(deps.storeDir, "providers.json"))).providers[item.provider];
+      const launch = nativeAgentLaunch(item.provider, config);
+      if ((await nativeCapabilityProbeKeys(launch.sourceHome)).has(nativeCapabilityProbeKey(item.provider, item.session.nativeSessionId)))
+        throw new Error("Capability discovery sessions cannot be opened as user conversations.");
       if (branch && item.provider !== "claude-code") throw new Error("Explicit branch selection is only supported for Claude Code.");
       const retained = await readSession(item.source, item.session, branch ? { branchLeafId: branch.leafId, expectedBranchRevision: branch.revision } : {});
       const native = retained.preview.sessions.find((session) => session.sessionId === item.session.nativeSessionId);
       if (!native) throw new Error("Source history does not match the selected native session.");
-      const config = (await readProvidersFile(join(deps.storeDir, "providers.json"))).providers[item.provider];
-      const instance = nativeAgentLaunch(item.provider, config).instanceId;
+      const instance = launch.instanceId;
       const shells = await deps.store.sessionShells();
-      const owned = !branch ? shells.find((session) => session.nativeAgent?.provider === item.provider && session.nativeAgent.instanceId === instance && session.nativeAgent.sessionId === native.sessionId) : undefined;
+      const owned = !branch ? matchingNativeHistorySession(shells, { id, source: item.source, session: item.session, provider: item.provider, instanceId: instance }) : undefined;
+      const qualified = owned?.nativeAgent;
+      const alreadyQualified = qualified?.provider === item.provider && qualified.instanceId === instance && qualified.sessionId === native.sessionId && qualified.cwd === item.session.cwd;
+      const canResume = Boolean(!branch && item.session.cwd && (alreadyQualified || item.source.capabilities.nativeResume || await deps.canResume?.(item.provider, item.session.cwd)));
       const sessionId = owned?.id ?? `native-${projectionId}`;
       let session = owned ?? await deps.store.getSession(sessionId);
       const timestamp = item.session.updatedAt;
       if (!session) {
         session = SessionSchema.parse({ id: sessionId, experience: "work", provider: item.provider, title: `${item.session.title}${branch ? ` · Branch ${branch.leafId.slice(0, 8)}` : ""}`, appId: null, appName: null, cwd: item.session.cwd, codexThreadId: null, createdAt: timestamp, updatedAt: timestamp, status: "idle", pinned: false, archived: false, order: 0,
-          nativeAgent: item.session.cwd && !branch ? { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: item.session.cwd } : null,
-          metadata: { nativeHistoryProjection: true, sourceInstanceId: item.source.instanceId, sourceMachineId: item.source.machineId, nativeSource: item.source.source, nativeResumeAvailable: Boolean(item.session.cwd) && !branch, nativeSourceHash: native.contentHash, ...(branch ? { nativeBranch: branch, nativeReadOnlyReason: "Read-only Claude branch snapshot. Choose another branch from Local agents to inspect it." } : {}) } });
+          nativeAgent: canResume ? { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: item.session.cwd! } : null,
+          metadata: { nativeHistoryId: id, nativeHistoryProjection: true, nativeHistoryLoaded: true, sourceInstanceId: item.source.instanceId, sourceMachineId: item.source.machineId, nativeSource: item.source.source, nativeResumeAvailable: canResume, nativeSourceHash: native.contentHash, ...(!canResume ? { nativeReadOnlyReason: "Connect this agent in Settings → Providers to continue this saved conversation." } : {}), ...(branch ? { nativeBranch: branch, nativeReadOnlyReason: "Read-only Claude branch snapshot. Choose another branch through Import conversations to inspect it." } : {}) } });
         await deps.store.insertSessionAtFront(session);
         await deps.appendRuntimeEvent(event({ sessionId, name: "session.started", source: "server", data: { session, retainedHistory: true } }));
       }
-      if (session.metadata?.nativeHistoryProjection && !session.nativeAgent && item.session.cwd && !branch && !session.metadata.nativeBranch) {
-        const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, cwd: item.session.cwd, nativeAgent: { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: item.session.cwd! }, metadata: { ...current.metadata, nativeResumeAvailable: true } }));
-        if (updated) session = updated;
+      if (session.metadata?.nativeHistoryProjection && !session.nativeAgent && canResume && !session.metadata.nativeBranch) {
+        const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, cwd: item.session.cwd, nativeAgent: { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: item.session.cwd! }, metadata: { ...current.metadata, nativeResumeAvailable: true, nativeReadOnlyReason: null } }));
+        if (updated) { session = updated; await deps.appendRuntimeEvent(event({ sessionId, name: "session.updated", source: "server", data: { session, retainedHistory: true } })); }
       }
       const events = await deps.store.runtimeEventsForSession(sessionId);
       const existingIds = new Set(events.map((event) => event.id));
@@ -113,12 +149,18 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
         const terminalId = `native-terminal-${hash([projectionId, boundary.id, boundary.revisionHash, boundary.terminal])}`;
         if (!existingIds.has(terminalId)) await deps.appendRuntimeEvent({ id: terminalId, sessionId, turnId: retainedTurnId, name: status === "completed" ? "turn.completed" : status === "failed" ? "turn.failed" : "turn.interrupted", timestamp: turn.completedAt!, source: "provider", data: { retainedHistory: true, sourceTerminal: boundary.terminal } });
       }
+      if (session.metadata?.nativeHistoryLoaded === false) {
+        const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, metadata: { ...current.metadata,
+          nativeHistoryLoaded: true, nativeSourceHash: native.contentHash,
+          nativeReadOnlyReason: current.nativeAgent ? null : "The source does not report a qualified original working directory; this conversation is read-only." } }));
+        if (updated) { session = updated; await deps.appendRuntimeEvent(event({ sessionId, name: "session.updated", source: "server", data: { session, retainedHistory: true } })); }
+      }
       return session;
     })();
     opening.set(openingKey, operation); try { return await operation; } finally { opening.delete(openingKey); }
   }
-  return async (action: string, payload: unknown) => {
-    if (action === "list") return list(z.object({ cursors: z.record(z.string().max(200), z.string().max(4096)).optional() }).parse(payload ?? {}).cursors);
+  const handle = async (action: string, payload: unknown) => {
+    if (action === "list") { const input = z.object({ cursors: z.record(z.string().max(200), z.string().max(4096)).optional(), retain: z.boolean().optional() }).parse(payload ?? {}); return list(input.cursors, input.retain); }
     if (action === "branches") {
       const { id } = z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }).parse(payload);
       const item = await selection(id);
@@ -128,33 +170,15 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       const { id, branch } = z.object({ id: z.string().regex(/^[a-f0-9]{64}$/), branch: z.object({ leafId: z.string().min(1).max(200), revision: z.string().regex(/^[a-f0-9]{64}$/) }).optional() }).parse(payload);
       return open(id, branch);
     }
-    if (action === "collector") {
-      const { command, connectionId } = z.object({ command: z.enum(["status", "start", "stop", "sync", "install", "connect", "reconnect", "pause", "resume", "disconnect"]), connectionId: z.string().min(1).max(256).optional() }).parse(payload);
-      const directory = collectorDirectory();
-      if (command === "status") return collectorStatus(directory);
-      if (command === "install" || command === "connect" || command === "reconnect" || command === "pause" || command === "resume" || command === "disconnect") {
-        const cli = process.env.OPENPOND_COLLECTOR_CLI;
-        const executable = process.env.OPENPOND_COLLECTOR_EXECUTABLE;
-        if (!cli || !executable) throw new Error("The bundled Importer is unavailable. Install the OpenPond CLI to connect a source.");
-        await access(cli); await access(executable);
-        const environment = { ELECTRON_RUN_AS_NODE: "1", ...(process.env.OPENPOND_HOME ? { OPENPOND_HOME: process.env.OPENPOND_HOME } : {}) };
-        if (command === "pause" || command === "resume" || command === "disconnect") {
-          const status = await collectorStatus(directory);
-          const retained = status.connections.find(item => item.id === connectionId);
-          if (!retained) throw new Error("Select a retained Importer connection.");
-          if (retained.state === "disconnected") throw new Error("Reconnect this source through Import conversations before changing its state.");
-          return { command: nativeTerminalCommand(executable, [cli, "import", command, retained.id, "--collector-dir", directory], environment) };
-        }
-        if (command === "reconnect") {
-          if (!(await collectorStatus(directory)).connections.some(item => item.id === connectionId)) throw new Error("Select a retained Importer connection.");
-          return { command: nativeTerminalCommand(executable, [cli, "import", "reconnect", connectionId!, "--collector-dir", directory], environment) };
-        }
-        if (command === "connect") return { command: nativeTerminalCommand(executable, [cli, "import", "connect", "--collector-dir", directory], environment) };
-        return installCollectorService({ directory, executable, args: [cli], environment });
-      }
-      if (command === "start") return startCollectorService(directory);
-      return controlCollector(directory, command);
-    }
+    if (action === "collector") return handleNativeImporter(payload, deps.storeDir);
     throw new Error("Unknown native history action.");
+  };
+  // Discovery and opening share canonical session writes. A stale inventory must
+  // never race another client into inserting the same source-qualified shell.
+  let mutationQueue: Promise<unknown> = Promise.resolve();
+  return (action: string, payload: unknown): Promise<unknown> => {
+    const operation = mutationQueue.then(() => handle(action, payload));
+    mutationQueue = operation.catch(() => undefined);
+    return operation;
   };
 }

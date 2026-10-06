@@ -151,6 +151,7 @@ import {
 } from "./openpond/sandboxes.js";
 import { createHostedSavedWork } from "./openpond/saved-work.js";
 import { hostedSavedWorkRoutePayloads } from "./openpond/saved-work-route-payloads.js";
+import { createPonderActivityBridge } from "./openpond/ponder-activity-bridge.js";
 import { requestHostedPonder } from "./openpond/ponder-pal.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
@@ -297,6 +298,14 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   } = createRuntimeEventBus({
     logger,
     store,
+  });
+  const ponderActivityBridge = createPonderActivityBridge({ storeDir, deviceId: serverId,
+    subscribe: subscribeRuntimeEvents,
+    teamId: async () => (await loadAppPreferences()).defaultTeamId,
+    request: async request => requestHostedPonder({ ...request, teamId: (await loadAppPreferences()).defaultTeamId ?? undefined }),
+    sessionTitle: async id => (await store.getSession(id))?.title ?? "Local chat",
+    workflows: async () => ({ workflows: await store.listChatWorkflows(), runs: await store.listChatWorkflowRuns(null, 500) }),
+    warn: message => logger.warn(message),
   });
   const workQueues = createServerWorkQueues(logger);
   const browserControlQueue = createBrowserControlQueue();
@@ -687,7 +696,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     modelJudge: taskEvaluationModelJudge,
   });
   const { datasetStorageService, datasetStoragePayload, modelProjectHosting,
-    trainingService, managedAdapterSyncService, managedAdapterChatRuntime,
+    trainingService, conversationServingOwner, managedAdapterSyncService, managedAdapterChatRuntime,
     streamSelectedOpenPondChatTurn } = createManagedTrainingComposition({
       store, storeDir, resolveAccess: resolveHostedApiAccess,
       account: async () => (await bootstrapPayload()).account,
@@ -748,6 +757,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     taskMiner: taskMinerService,
     evaluation: taskEvaluationService,
     training: trainingService,
+    conversationServingOwner,
     chatSearch: trainingChatSearchService,
     datasetArtifacts: datasetArtifactService,
     datasetImports: datasetImportService,
@@ -1729,7 +1739,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       ...harnessSettingsRoutes,
       ...refinerSettingsRoutes,
       ...hostedSavedWorkRoutePayloads,
-      ponderRequestPayload: requestHostedPonder,
+      ponderRequestPayload: async request => requestHostedPonder({ ...request, teamId: (await loadAppPreferences()).defaultTeamId ?? undefined }),
       ...chatWorkflows.routePayloads,
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
@@ -1899,6 +1909,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     codexSessions: codexSessions.values(),
     markClosing: () => {
       closing = true;
+      ponderActivityBridge.close();
     },
     backgroundLoops: [
       taskMinerBackgroundLoop,

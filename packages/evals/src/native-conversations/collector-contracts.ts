@@ -44,6 +44,10 @@ export interface CollectorStatus {
     id: string;
     state: CollectorConnection["state"];
     projectId: string;
+    teamId: string;
+    accountBaseUrl: string | null;
+    sourceInstanceId: string;
+    sourceRoot: string;
     source: NativeSource["source"];
     queued: number;
     admitted: number;

@@ -6,6 +6,7 @@ export const RuntimeEventNameSchema = z.enum([
   "task.input",
   "task.wait",
   "session.started",
+  "session.updated",
   "session.title.updated",
   "turn.started",
   "assistant.delta",

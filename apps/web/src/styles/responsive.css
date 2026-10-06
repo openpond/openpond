@@ -17,6 +17,11 @@
     transform: translateX(0);
   }
 
+  .sidebar-resize-handle {
+    grid-column: 1 / -1;
+    left: min(var(--sidebar-width), 86vw);
+  }
+
   .main-pane.chat-start {
     padding: 0;
   }

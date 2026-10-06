@@ -1559,6 +1559,8 @@ export function MainPane({
       ) : view === "apps" ? (
         <Suspense fallback={null}>
           <AppsView
+            payload={bootstrap}
+            onPayload={onPayload}
             account={bootstrap?.account ?? null}
             connection={connection}
             defaultTeamId={bootstrap?.preferences.defaultTeamId ?? null}
@@ -1883,8 +1885,7 @@ export function MainPane({
           <section className="start-panel">
             <Suspense fallback={null}>
               <NewExperienceSwitcher
-                value={ponderMode === "clean" ? "ponder" : experience === "chat" ? "chat" : "work"}
-                allowPonder={Boolean(bootstrap?.account.activeProfile)}
+                value={experience === "chat" ? "chat" : "work"}
                 onChange={(mode) => {
                   if (mode === "ponder") { onPonderModeChange?.("clean"); return; }
                   onPonderModeChange?.(null);

@@ -5,6 +5,7 @@ import {
   type CSSProperties,
 } from "react";
 import { Sidebar } from "../sidebar/Sidebar";
+import { DesktopNavigationRail } from "../sidebar/DesktopNavigationRail";
 import { CloudSetupDialog } from "../workspace/CloudSetupDialog";
 import { AppLazyPanels, AppSettingsRoute } from "./AppLazyPanels";
 import { AppToast as AppToastView } from "./AppToast";
@@ -44,9 +45,19 @@ export function AppShellController({
   return (
     <PageChromeProvider>
     <div className={className} style={style}>
-      <RenderCommitBoundary id="sidebar">
-        <Sidebar {...sidebar} />
-      </RenderCommitBoundary>
+      <DesktopNavigationRail sidebar={sidebar} open={topBar.sidebarOpen} />
+      {topBar.sidebarAvailable !== false ? <RenderCommitBoundary id="sidebar">
+        <Sidebar {...sidebar} open={topBar.sidebarOpen} />
+        {topBar.sidebarOpen ? (
+          <div
+            className="sidebar-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            onPointerDown={sidebar.onSidebarResizeStart}
+          />
+        ) : null}
+      </RenderCommitBoundary> : null}
 
       <div className="content-shell">
         <AppTopBar {...topBar} />

@@ -10,6 +10,7 @@ import type { TaskInboxRepository } from "./repository.js";
 import type { ActiveTurn } from "../turns/ports.js";
 import { taskWorkspaceIdentity, workspaceRelationship } from "./workspace-identity.js";
 import { canCoordinateTasks } from "./scope.js";
+import { isNativeAgentId } from "../native-agents/config.js";
 
 export function createTaskInboxRuntime(deps: {
   store: TaskInboxRepository;
@@ -63,6 +64,8 @@ export function createTaskInboxRuntime(deps: {
 
   async function steer(sessionId: string, payload: unknown): Promise<TaskInput> {
     const input = SteerTurnRequestSchema.parse(payload);
+    const session = await deps.getSession(sessionId);
+    if (isNativeAgentId(session.provider)) throw new Error("This agent cannot accept a correction during its active request. Queue it for the next turn instead.");
     return admit({ id: randomUUID(), sessionId, senderSessionId: null, senderKind: "user", kind: "steer",
       body: input.prompt, payload: {}, idempotencyKey: input.idempotencyKey, replyTo: null, expectedTurnId: input.expectedTurnId });
   }
@@ -74,6 +77,9 @@ export function createTaskInboxRuntime(deps: {
   }
 
   async function mutate(sessionId: string, id: string, change: TaskInputMutation): Promise<TaskInput> {
+    if (change.action === "steer" && isNativeAgentId((await deps.getSession(sessionId)).provider)) {
+      throw new Error("This agent cannot accept a correction during its active request. Keep this message queued for the next turn.");
+    }
     const input = await deps.store.mutateTaskInput(sessionId, id, change);
     await notify(input);
     return input;
@@ -290,6 +296,9 @@ export function createTaskInboxRuntime(deps: {
         active.codexTurnId = undefined;
         for (const input of await deps.store.sealNativeTaskInboxTurn(active.session.id, active.turn.id, ownerId)) await record(input);
       });
+    },
+    async finishNative(sessionId: string, turnId: string) {
+      for (const input of await deps.store.sealNativeTaskInboxTurn(sessionId, turnId, ownerId)) await record(input);
     },
     async recover() {
       for (const owner of await deps.store.recoverTaskInboxOwners(ownerId)) {

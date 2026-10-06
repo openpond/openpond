@@ -1,3 +1,4 @@
+import type { ConversationServingOwner } from "./conversation-serving-owner.js";
 import type { BoundJudgeProvider } from "@openpond/evals/learning";
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskCreatorService } from "./task-creator.js";
@@ -27,6 +28,7 @@ export interface TrainingApiDependencies {
   benchmarkTasksets: ReturnType<typeof createBenchmarkTasksetService>;
   harnessRefinerBenchmarks?: ReturnType<typeof createHarnessRefinerBenchmarkService>;
   preferenceComparisons?: ReturnType<typeof createPreferenceComparisonService>;
+  conversationServingOwner?: ConversationServingOwner;
   modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
   modelStarters?: ReturnType<typeof createModelStarterRuntime>;
   modelStream?: TasksetWorkModelStream;
