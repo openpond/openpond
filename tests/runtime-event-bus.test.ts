@@ -7,7 +7,7 @@ import { createRuntimeEventBus } from "../apps/server/src/runtime/runtime-event-
 import type { SqliteStore } from "../apps/server/src/store/store";
 
 describe("runtime event bus assistant delta coalescing", () => {
-  test("flushes coalesced assistant deltas before non-delta events", async () => {
+  test("flushes separate answer and reasoning streams before non-delta events", async () => {
     const events: RuntimeEvent[] = [];
     const writes: string[] = [];
     const bus = createRuntimeEventBus({
@@ -25,6 +25,14 @@ describe("runtime event bus assistant delta coalescing", () => {
       name: "assistant.delta",
       output: "lo",
     }));
+    await bus.appendRuntimeEvent(runtimeEvent("reasoning-1", {
+      name: "assistant.reasoning.delta",
+      output: "Check ",
+    }));
+    await bus.appendRuntimeEvent(runtimeEvent("reasoning-2", {
+      name: "assistant.reasoning.delta",
+      output: "inputs",
+    }));
 
     expect(events).toEqual([]);
     expect(writes).toEqual([]);
@@ -36,11 +44,13 @@ describe("runtime event bus assistant delta coalescing", () => {
 
     expect(events.map((event) => [event.id, event.name, event.output])).toEqual([
       ["delta-1", "assistant.delta", "Hello"],
+      ["reasoning-1", "assistant.reasoning.delta", "Check inputs"],
       ["done", "turn.completed", undefined],
     ]);
-    expect(writes).toHaveLength(2);
+    expect(writes).toHaveLength(3);
     expect(writes[0]).toContain('"output":"Hello"');
-    expect(writes[1]).toContain('"name":"turn.completed"');
+    expect(writes[1]).toContain('"name":"assistant.reasoning.delta"');
+    expect(writes[2]).toContain('"name":"turn.completed"');
   });
 
   test("flushes coalesced assistant deltas on the timer when no terminal event follows", async () => {
