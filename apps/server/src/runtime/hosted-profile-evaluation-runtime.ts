@@ -152,6 +152,7 @@ export function createHostedProfileEvaluationRuntime(input: {
       selectedWorkflows,
       loadTasksetPackage,
       placement: "remote",
+      boundedWorkComputeAvailable: true,
       modelConfigurationHash: async (modelRef, request) => {
         if (
           modelRef.providerId !== "openpond" ||
