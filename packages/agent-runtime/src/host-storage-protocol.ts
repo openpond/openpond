@@ -26,6 +26,7 @@ export const HostStorageScopeSchema = z.object({
 }).strict();
 
 export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
+  z.object({contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id, operation: z.literal("profile-evaluations/grade"), params: z.object({action:z.enum(["upload","execute"]),callId:id,sessionId:id,turnId:id,sha256:z.string().regex(/^[a-f0-9]{64}$/),sizeBytes:z.number().int().positive().max(20000000),offset:z.number().int().nonnegative().max(20000000).optional(),contentsBase64:z.string().max(131072).optional()}).strict()}).strict(),
   z.object({contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id, operation: z.literal("profile-evaluations/sandbox"), params: z.object({
     sessionId: id, turnId: id,
     action: z.enum(["upload", "exec", "read", "stop"]),
@@ -380,7 +381,7 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
 
 export const HostStorageCapabilitySchema = z.object({
   contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION),
-  operations: z.array(z.enum(["experiment/policy", "experiment/environment", "sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "output/list", "output/read", "output/readBytes", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write", "harness/state/read", "profile-evaluations/execute", "profile-evaluations/sandbox", "harness/review/execute", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(50),
+  operations: z.array(z.enum(["experiment/policy", "experiment/environment", "sandbox/request", "embedding/authorize", "output/begin", "output/chunk", "output/complete", "output/saveSandboxFile", "output/list", "output/read", "output/readBytes", "settings/get", "harness/get", "harness/overlay/get", "harness/overlay/put", "harness/overlay/freezeProposal", "harness/memory/get", "harness/memory/list", "harness/memory/search", "harness/memory/write", "harness/state/read", "profile-evaluations/execute", "profile-evaluations/sandbox", "profile-evaluations/grade", "harness/review/execute", "harness/workspace/transition", "task-inbox/execute", "refiner/execute", "create-improve/execute", "approval/get", "approval/upsert", "usage/getByRequestId", "usage/upsert", "usage/page", "session/count", "session/get", "session/page", "session/put", "turn/count", "turn/wakeCount", "turn/get", "turn/put", "turn/latest", "turn/page", "thread/turnPage", "event/append", "events/page", "events/latestAssistantText"])).max(50),
   allowedTools: z.array(id).max(128),
   maxPageSize: pageSize,
   maxRequestBytes: z.number().int().min(1).max(8_388_608),

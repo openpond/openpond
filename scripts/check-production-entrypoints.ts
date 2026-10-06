@@ -35,7 +35,6 @@ for (const relativePath of [
   "packages/training-sdk/src/cli.ts",
   // Compiled into public Evals execution-source exports by its package build.
   "packages/evals/src/javascript-verifier-worker.ts",
-  "apps/server/src/evaluations/workbook-inspector-worker.ts",
   "packages/evals/src/javascript-isolate-process-entry.ts",
   "packages/evals/src/sql-execution-process-entry.ts",
 ]) {

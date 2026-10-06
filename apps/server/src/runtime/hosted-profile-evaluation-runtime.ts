@@ -1,3 +1,4 @@
+import {createHostedProfileVerifier} from "../evaluations/profile-sandbox-verifier.js";
 import type { AgentHostStorageClient } from "@openpond/agent-runtime";
 import {
   CreateSessionRequestSchema,
@@ -174,6 +175,7 @@ export function createHostedProfileEvaluationRuntime(input: {
         manifest,
         packageValue,
         signal,
+        executeSandboxVerifier: createHostedProfileVerifier(input.client),
         authorize: async () => {
           const source = manifest.profileEvaluation;
           if (

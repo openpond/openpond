@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {readLocalProfileArtifacts} from "../evaluations/local-profile-artifacts.js";
-import {workbookProbeSheets} from "../evaluations/workbook-inspection-contract.js";
 import path from "node:path";
 import {
   ChatModelRefSchema, ProfileComponentBindingSchema, ProfileWorkflowBindingSchema,
@@ -121,7 +120,6 @@ export function createProfileEvaluationCaseService(input: {
       attempt: {artifactRefs: result.artifactRefs, profileNative: result.retainedEvidenceRef?.sessionId && result.retainedEvidenceRef.turnId
         ? {sessionId: result.retainedEvidenceRef.sessionId, turnId: result.retainedEvidenceRef.turnId, traceHash: result.traceHash} : null},
       events: id => input.store.runtimeEventsForTurn(id), signal,
-      probeSheets: workbookProbeSheets(releasedPackage?.taskset.metadata),
       authorize: async () => {
         signal?.throwIfAborted();
         const current = await input.selectedProfile();
@@ -129,8 +127,8 @@ export function createProfileEvaluationCaseService(input: {
         if (external) await external.authorize();
       }});
     // Keep the policy output hash reconstructible from its sealed trace.
-    // Inspected artifacts are a separate evaluator-owned input, never text
+    // Saved artifact bytes are a separate evaluator-owned input, never text
     // supplied by the model or a field mapped from that text.
-    return {...result, evidence: {...result.evidence, artifacts}};
+    return {...result, evidence: {...result.evidence, artifacts, caseOwner: {...result.retainedEvidenceRef, traceHash:result.traceHash}}};
   };
 }

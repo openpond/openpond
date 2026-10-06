@@ -5,7 +5,6 @@
   "license": "MIT",
   "main": "./dist/index.js",
   "dependencies": {
-    "@ironcalc/wasm": "0.8.4",
     "@openpond/agent-runtime": "workspace:*",
     "@openpond/app-server": "workspace:*",
     "@openpond/cloud": "workspace:*",
@@ -14,13 +13,11 @@
     "@openpond/evals": "workspace:*",
     "@openpond/harness": "workspace:*",
     "@openpond/logging": "workspace:*",
-    "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*",
     "@openpond/training-sdk": "workspace:*",
     "cron-parser": "^5.6.1",
     "eval-protocol": "0.1.13",
-    "exceljs": "4.4.0",
     "node-pty": "^1.1.0",
     "openai": "4.104.0",
     "openpond-sdk": "workspace:*",
@@ -28,8 +25,8 @@
     "shell-quote": "^1.9.0",
     "ws": "^8.20.1",
     "yaml": "^2.9.0",
-    "yauzl": "3.2.0",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "@openpond/persistence": "workspace:*"
   },
   "exports": {
     ".": {
@@ -66,7 +63,7 @@
   },
   "private": true,
   "scripts": {
-    "build": "tsc -b && node ../../scripts/stage-server-runtime-assets.mjs && tsx ../../scripts/build/workbook-inspector.ts",
+    "build": "tsc -b && node ../../scripts/stage-server-runtime-assets.mjs",
     "dev": "pnpm --dir ../.. run build:server && node dist/index.js",
     "serve": "pnpm --dir ../.. run build:server && node dist/index.js serve",
     "web": "pnpm --dir ../.. run build:web && pnpm --dir ../.. run build:server && node dist/index.js web"
@@ -75,7 +72,6 @@
   "types": "./dist/index.d.ts",
   "devDependencies": {
     "@types/pngjs": "^6.0.5",
-    "@types/ws": "^8.18.1",
-    "@types/yauzl": "2.10.3"
+    "@types/ws": "^8.18.1"
   }
 }

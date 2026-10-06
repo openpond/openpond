@@ -1,3 +1,4 @@
+import {executeLocalProfileVerifier} from "./profile-sandbox-verifier.js";
 import {verifySelectedRewardClosure,type SelectedRewardClosure} from "./local-reward-grading.js";
 import { ScheduledTransportNotInvokedError } from "./evaluation-schedule-admission-guard.js";
 import { contentHash, type ImmutableAssetRef } from "@openpond/harness";
@@ -30,6 +31,8 @@ export async function gradeLocalExperimentCase(input:{store:SqliteLocalExperimen
     if(!spec)throw new LocalExperimentError("local_grader_pin_unavailable","The scoring pass requires the exact retained grader release.",422);
     return spec;
   });
+  if(specs.some(spec=>spec.kind==="custom_verifier"&&spec.runtime==="sandbox_process")&&(!input.package||input.selectedRewards))
+    throw new LocalExperimentError("local_private_process_package_required","Process grading requires the exact retained Dataset package and its private assets.",422);
   const artifacts=input.evidence.output && typeof input.evidence.output==="object" && Array.isArray(input.evidence.output.artifacts) ? input.evidence.output.artifacts : [];
   const grades=[];
   for(const [index,spec] of specs.entries()) {
@@ -59,13 +62,13 @@ export async function gradeLocalExperimentCase(input:{store:SqliteLocalExperimen
       }}),
       customVerifier:async({grader,task,evidence})=> {
         await input.beforeDispatch?.();
-        const result=await executeJavaScriptVerifierInWorker({source:await readPrivate(grader.verifierRef),exportName:grader.exportName,
+        const result=grader.runtime==="sandbox_process" ? await executeLocalProfileVerifier({packageValue:input.package!,grader,task,evidence:{...evidence,artifacts},signal:input.signal,authorize:async()=>{await input.beforeDispatch?.();}}) : await executeJavaScriptVerifierInWorker({source:await readPrivate(grader.verifierRef),exportName:grader.exportName,
           runtime:grader.runtime,timeoutMs:grader.timeoutMs,signal:input.signal,
           value:{task,attempt:evidence,input:task.input,output:evidence.output,artifacts,expectedOutput:task.expectedOutput,evaluatorContext:fields.evaluatorContext,
             infrastructureError:evidence.infrastructureError??null}});
         await input.beforeDispatch?.();
         return {score:result.score,passed:result.passed,rewardEligible:grader.rewardEligible,failureClass:null,
-          feedback:[result.feedback],visibleEvidenceRefs:[],privilegedEvidenceRefs:[...result.evidenceRefs,...artifacts.flatMap(artifact=>artifact.inspectionRef?.id?[artifact.inspectionRef.id]:[])]};
+          feedback:[result.feedback],visibleEvidenceRefs:[],privilegedEvidenceRefs:result.evidenceRefs};
       },
     });
     await input.beforeDispatch?.();
