@@ -9,7 +9,6 @@ export async function assertNativeProfilePrivateGrading(raw:TasksetPackage){
  if(value.taskset.metrics?.aggregation==='custom')throw new Error('The native Profile owner has not qualified its authored aggregate metric executor.');
  for(const grader of value.taskset.graders){
   if(grader.kind==='model_judge'&&grader.calibrationStatus!=='passed')throw new Error('Select a calibrated private model judge before dispatch.');
-  if(grader.kind==='custom_verifier'&&grader.runtime!=='isolated_javascript')throw new Error('The native Profile requires a separately admitted process verifier owner.');
   const ref='verifierRef' in grader?grader.verifierRef:'rubricRef' in grader?grader.rubricRef:null;if(!ref)continue;
   const file=value.files.find(file=>file.asset.id===ref.id);if(!file||file.asset.visibility==='policy'||contentHash(file.asset)!==contentHash(ref))throw new Error('The private grader differs from its actual pinned package asset.');
   new TextDecoder('utf8',{fatal:true}).decode(decodeTasksetPackageFile(file));

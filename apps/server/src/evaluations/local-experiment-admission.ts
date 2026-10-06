@@ -45,13 +45,14 @@ export function localExperimentAdmissions(definition:LocalExperimentDefinition,r
   const execution=resolveTasksetPackageExecution(value);
   if(value.taskset.policy.connectedAppScopes.length)throw new LocalExperimentError("local_connected_scope_not_qualified","This Dataset requires connected scopes that have not been admitted for local execution.",422);
   for(const capability of value.taskset.capabilities.filter(capability=>capability.required)) {
+    if(capability.id==="tools" && profileAdmitted && capability.scopes.every(scope=>
+      ["work_exec","work_save_output"].includes(scope) && value.taskset.tools.some(tool=>tool.name===scope)))continue;
     // Grading runs behind the local owner after target execution. Its private
     // closure never becomes a model/tool capability or policy-visible input.
     if(capability.id!=="private-verifier")throw new LocalExperimentError("local_capability_not_qualified","This Dataset requires capabilities not supplied by the local execution owner.",422);
     const scopes=capability.scopes.length?capability.scopes:value.taskset.policy.hiddenGraderRefs;
     if(scopes.some(scope=>!value.taskset.policy.hiddenGraderRefs.includes(scope)||
-      !value.taskset.graders.some(grader=>grader.id===scope&&grader.privileged&&grader.kind!=="human"&&
-        (grader.kind!=="custom_verifier"||grader.runtime!=="sandbox_process"))))
+      !value.taskset.graders.some(grader=>grader.id===scope&&grader.privileged&&grader.kind!=="human")))
       throw new LocalExperimentError("local_capability_not_qualified","The required private grader scope has no supported exact local grader owner.",422);
   }
   if(!execution&&value.taskset.tools.length&&!profileAdmitted)throw new LocalExperimentError("local_tool_target_not_qualified","This Dataset's tools require a released native target executor.",422);

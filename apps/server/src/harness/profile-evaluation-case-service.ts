@@ -1,10 +1,11 @@
 import { z } from "zod";
+import {readLocalProfileArtifacts} from "../evaluations/local-profile-artifacts.js";
 import path from "node:path";
 import {
   ChatModelRefSchema, ProfileComponentBindingSchema, ProfileWorkflowBindingSchema,
   ReleaseHashSchema, ReleaseIdSchema, contentHash,
 } from "@openpond/harness";
-import { CHAT_ATTACHMENT_LIMITS, ChatAttachmentSchema, OpenPondProfileRefSchema, type OpenPondProfileRef, type Session, type Turn } from "@openpond/contracts";
+import { CHAT_ATTACHMENT_LIMITS, ChatAttachmentSchema, OpenPondProfileRefSchema, type OpenPondProfileRef, type Session, type Turn, type ChatAttachment } from "@openpond/contracts";
 import { TasksetReleaseSchema, TasksetRunManifestSchema, assertProfileEvaluationRunAdmission, policyTaskView } from "@openpond/evals";
 import { decodeTasksetPackageFile } from "openpond-sdk/taskset-packages";
 
@@ -31,11 +32,12 @@ const ProfileEvaluationCaseRequestSchema = z.object({
 export function createProfileEvaluationCaseService(input: {
   store: Pick<HarnessStateStore, "runtimeEventsForTurn">;
   storeDir?: string;
+  readManagedArtifact?: Parameters<typeof readLocalProfileArtifacts>[0]["readManaged"];
   loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
   loadCatalog: ProfileEvaluationCatalogSource;
   resolveExternalDataset?:ProfileExternalDatasetResolver;
-  admitSession?:(session:Session,manifest:import("@openpond/evals").TasksetRunManifest,taskId:string,seed:string)=>Promise<void>;
-  settleSession?:(id:string)=>void;
+  admitSession?:(session:Session,manifest:import("@openpond/evals").TasksetRunManifest,taskId:string,seed:string,attachments?:ChatAttachment[])=>Promise<void>;
+  settleSession?:(id:string)=>void|Promise<void>;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   createSession: (request: unknown) => Promise<Session>;
   sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
@@ -79,7 +81,7 @@ export function createProfileEvaluationCaseService(input: {
     if (policyTask.artifactRefs.length && !input.storeDir) {
       throw new Error("Evaluation case attachment storage is unavailable.");
     }
-    const releasedPackage = external?.packageValue??(policyTask.artifactRefs.length ? await input.loadTasksetPackage(
+    const releasedPackage = external?.packageValue??(policyTask.artifactRefs.length || task.requiredOutputs?.length ? await input.loadTasksetPackage(
       definition, selected.ref.profileId, parsed.binding.harnessRelease,
     ) : null);
     if (releasedPackage && (releasedPackage.contentHash !== parsed.manifest.packageHash
@@ -104,7 +106,7 @@ export function createProfileEvaluationCaseService(input: {
       manifest: parsed.manifest, profileRef: selected.ref, binding: parsed.binding,
       modelRef: parsed.modelRef, modelConfigurationHash: parsed.modelConfigurationHash,
       createSession: input.createSession, sendTurn: input.sendTurn,
-      ...(input.admitSession?{admitSession:(session:Session)=>input.admitSession!(session,parsed.manifest,parsed.taskId,parsed.seed)}:{}),
+      ...(input.admitSession?{admitSession:(session:Session)=>input.admitSession!(session,parsed.manifest,parsed.taskId,parsed.seed,attachments)}:{}),
       ...(input.settleSession?{settleSession:input.settleSession}:{}),
       interruptSessionTurn: input.interruptSessionTurn,
       runtimeEventsForTurn: (turnId) => input.store.runtimeEventsForTurn(turnId),
@@ -112,7 +114,21 @@ export function createProfileEvaluationCaseService(input: {
     });
     if(external)await external.authorize();
     signal?.throwIfAborted();
-    return execute({ task: policyTask, seed: parsed.seed, source,
+    const result = await execute({ task: policyTask, seed: parsed.seed, source,
       ...(signal ? { signal } : {}) });
+    const artifacts = await readLocalProfileArtifacts({storeDir: input.storeDir, readManaged: input.readManagedArtifact,
+      attempt: {artifactRefs: result.artifactRefs, profileNative: result.retainedEvidenceRef?.sessionId && result.retainedEvidenceRef.turnId
+        ? {sessionId: result.retainedEvidenceRef.sessionId, turnId: result.retainedEvidenceRef.turnId, traceHash: result.traceHash} : null},
+      events: id => input.store.runtimeEventsForTurn(id), signal,
+      authorize: async () => {
+        signal?.throwIfAborted();
+        const current = await input.selectedProfile();
+        if (!current || contentHash(current) !== contentHash(selected)) throw new Error("The current artifact Profile authority changed.");
+        if (external) await external.authorize();
+      }});
+    // Keep the policy output hash reconstructible from its sealed trace.
+    // Saved artifact bytes are a separate evaluator-owned input, never text
+    // supplied by the model or a field mapped from that text.
+    return {...result, evidence: {...result.evidence, artifacts, caseOwner: {...result.retainedEvidenceRef, traceHash:result.traceHash}}};
   };
 }
