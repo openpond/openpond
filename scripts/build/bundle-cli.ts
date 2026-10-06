@@ -3,12 +3,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { bundleNode, fromRoot, makeExecutable } from "./shared-esbuild.js";
-import {buildWorkbookInspector} from "./workbook-inspector.js";
 
 export type CliBundleSurface = "all" | "cli" | "package";
 
 export async function bundleCli(surface: CliBundleSurface = "all"): Promise<void> {
-  await buildWorkbookInspector();
   const entryPoints: Record<string, string> = {};
   if (surface === "all" || surface === "cli") entryPoints.cli = fromRoot("apps", "cli", "src", "cli", "main.ts");
   if (surface === "all" || surface === "package") {

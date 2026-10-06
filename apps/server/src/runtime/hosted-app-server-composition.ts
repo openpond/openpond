@@ -124,8 +124,8 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const commandOwner=createHostedProfileCommandOwner(client);
   const admittedRuntime = storage.admittedProfileRelease?.hostExecution
     ? await loadHostedHarnessRuntime(client,storage.admittedProfileRelease.harnessRelease) : null;
-  if (storage.admittedProfileRelease?.hostExecution && (!admittedRuntime || (!capabilities.operations.includes("output/readBytes") || !capabilities.operations.includes("profile-evaluations/sandbox"))))
-    throw new Error("Hosted evaluation requires the admitted release and durable workbook byte owner.");
+  if (storage.admittedProfileRelease?.hostExecution && (!admittedRuntime || (!capabilities.operations.includes("output/readBytes") || !capabilities.operations.includes("profile-evaluations/sandbox") || !capabilities.operations.includes("profile-evaluations/grade"))))
+    throw new Error("Hosted evaluation requires its admitted release, managed artifact owner and private sandbox grader.");
   const evaluationOutputs = createWorkOutputService({deviceId: "hosted-evaluation", storeDir,
     runtimeEventsForSession: id => core.runtimeEventsForSession(id),
     managedPersistence: {...artifactOwner.persistence, sourceTurnStartedAt: async (sessionId,turnId) => {

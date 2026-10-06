@@ -174,7 +174,6 @@ async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void>
 async function ensurePackageRuntimeBuild(env: NodeJS.ProcessEnv): Promise<void> {
   if (reuseBuild(env, "OPENPOND_TEST_REUSE_PACKAGE_BUILD") || packageRuntimeBuildReady) return;
   await runCommand(pnpmBinary, ["run", "build:sdk"], { env });
-  await runCommand(pnpmBinary, ["exec", "tsx", "scripts/build/workbook-inspector.ts"], { env });
   packageRuntimeBuildReady = true;
 }
 

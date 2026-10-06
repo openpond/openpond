@@ -13,9 +13,6 @@ import {
   type RuntimeEvent,
   type FileOutputRef,
 } from "@openpond/contracts";
-import { inspectWorkbook } from "./workbook-inspector.js";
-import { retainWorkbookInspection } from "./workbook-inspection-retention.js";
-import { XLSX_MEDIA_TYPE } from "./workbook-inspection-contract.js";
 /** The private evaluator resolves only an actual sealed case's canonical saved
  * outputs. Caller paths, unsaved scratch and newer revisions supply no evidence. */
 export async function readLocalProfileArtifacts(input: {
@@ -30,7 +27,6 @@ export async function readLocalProfileArtifacts(input: {
   };
   events(turnId: string): Promise<RuntimeEvent[]>;
   authorize(): Promise<void>;
-  probeSheets?: string[];
   signal?: AbortSignal;
   readManaged?: (
     output: FileOutputRef,
@@ -139,40 +135,5 @@ export async function readLocalProfileArtifacts(input: {
     });
   }
   await input.authorize();
-  const inspected = [];
-  for (const artifact of artifacts) {
-    if (artifact.contentType !== XLSX_MEDIA_TYPE) {
-      inspected.push(artifact);
-      continue;
-    }
-    await input.authorize();
-    input.signal?.throwIfAborted();
-    const workbook = await inspectWorkbook({
-      bytes: Buffer.from(artifact.base64, "base64"),
-      probeSheets: input.probeSheets,
-      signal: input.signal,
-    });
-    await input.authorize();
-    input.signal?.throwIfAborted();
-    const snapshot = { artifact: artifact.reference, workbook },
-      hash = contentHash(snapshot);
-    const serialized = JSON.stringify(snapshot);
-    await retainWorkbookInspection(input.storeDir!, hash, serialized);
-    await input.authorize();
-    input.signal?.throwIfAborted();
-    // Binary contents remain in canonical storage; grading receives bounded
-    // trusted cell evidence, avoiding redundant base64 in the JS isolate.
-    const { base64: _, ...identity } = artifact;
-    inspected.push({
-      ...identity,
-      workbook,
-      inspectionRef: {
-        id: `workbook-inspection-${hash}`,
-        contentHash: hash,
-        mediaType: "application/json",
-        sizeBytes: Buffer.byteLength(serialized),
-      },
-    });
-  }
-  return inspected;
+  return artifacts;
 }

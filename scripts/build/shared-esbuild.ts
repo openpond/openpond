@@ -32,9 +32,6 @@ export async function bundleNode(options: BuildOptions): Promise<BuildResult> {
         }
       : {}),
     ...options,
-    plugins: [{name: "workbook-inspector-source", setup(builder) {
-      builder.onResolve({filter: /workbook-inspector-source\.js$/}, () => ({path: fromRoot("apps/server/dist/evaluations/workbook-inspector-source.js")}));
-    }}, ...(options.plugins ?? [])],
   });
 }
 

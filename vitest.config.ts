@@ -1,5 +1,4 @@
 import { defineConfig } from "vitest/config";
-import {fileURLToPath} from "node:url";
 import {
   CLI_INTEGRATION_TESTS,
   ROOT_IMAGE_TESTS,
@@ -49,7 +48,6 @@ const memory = {
 };
 
 export default defineConfig({
-  resolve: {alias: {"./workbook-inspector-source.js": fileURLToPath(new URL("./apps/server/dist/evaluations/workbook-inspector-source.js", import.meta.url))}},
   esbuild: {
     jsx: "automatic",
     jsxImportSource: "react",
