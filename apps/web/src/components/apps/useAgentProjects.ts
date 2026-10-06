@@ -13,7 +13,7 @@ export function useAgentProjects(
   account: AccountState | null,
   teamId: string | null,
 ) {
-  const key = JSON.stringify([account?.activeProfile, teamId]);
+  const key = JSON.stringify([account?.activeProfile, account?.profile?.id, teamId]);
   const cached = connection ? retained.get(connection)?.get(key) : undefined;
   const [state, setState] = useState<{
     key: string;
@@ -23,10 +23,9 @@ export function useAgentProjects(
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [revision, setRevision] = useState(0);
-  const value =
-    state?.key === key && state.connection === connection
-      ? state.value
-      : cached;
+  const value = account?.state === "signed_in"
+    ? state?.key === key && state.connection === connection ? state.value : cached
+    : undefined;
   useEffect(() => {
     if (!connection || !teamId || account?.state !== "signed_in") return;
     const controller = new AbortController();

@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatAttachment } from "@openpond/contracts";
+import type { ChatAttachment, Session } from "@openpond/contracts";
 import { ApiRequestError, apiFetch, type ClientConnection } from "../../api/api-client";
 import type { ChatMessage } from "../../lib/app-models";
 import { Composer, type ComposerProps } from "../chat/Composer";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
+import { PonderRecommendations } from "./PonderRecommendations";
+import { usePonderRecommendations } from "./usePonderRecommendations";
+import type { PonderRecommendation } from "./ponder-recommendations";
+import { usePonderLocalMessage } from "./usePonderLocalMessage";
+import { PonderLocalMessageControl } from "./PonderLocalMessageControl";
 
-type Binding = { conversationId: string; introductionSeenVersion: number };
-type Message = { id: string; role: string; text: string; createdAt: string };
+type Binding = { bindingId: string; conversationId: string; introductionSeenVersion: number };
+type Message = { id: string; role: string; text: string; createdAt: string; source: string | null };
 type Turn = { id: string; status: string; lastSequence: number; wait?: { id: string; kind: string; title: string; options: string[] } | null;
   outputs?: Array<{ id: string; name: string; downloadURL?: string | null }> };
 type Conversation = { id: string; messages: Message[]; activeTurn: Turn | null };
@@ -33,16 +38,17 @@ function displayError(cause: unknown): string {
 }
 
 function conversationMessages(conversation: Conversation | null): ChatMessage[] {
-  return (conversation?.messages ?? []).filter((message) => message.role === "user" || message.role === "assistant")
+  return (conversation?.messages ?? []).filter((message) => (message.role === "user" || message.role === "assistant") && message.source !== "ponder-recommendation")
     .map((message) => ({ id: message.id, role: message.role as "user" | "assistant",
       content: message.text, timestamp: message.createdAt }));
 }
 
-export function PonderDesktopPanel({ connection, presentation, composer, onOpenWork }: {
+export function PonderDesktopPanel({ connection, presentation, composer, onOpenWork, sessions }: {
   connection: ClientConnection;
   presentation: "clean" | "activity";
   composer: SharedComposerProps;
   onOpenWork: (conversationId: string) => void;
+  sessions: Session[];
 }) {
   const [binding, setBinding] = useState<Binding | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -53,8 +59,45 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
   const [events, setEvents] = useState<TurnEvent[]>([]);
   const [linkedWork, setLinkedWork] = useState<LinkedWork[]>([]);
   const activityCursor = useRef<string | null>(null);
+  const recommendations = usePonderRecommendations(connection, binding?.bindingId ?? null);
+  const [editingRecommendation, setEditingRecommendation] = useState<PonderRecommendation | null>(null);
+  const localMessage = usePonderLocalMessage(connection, binding?.bindingId ?? null);
+  const chatDraft = useRef("");
+  const activeContext = useRef({ connection, bindingId: binding?.bindingId, destination: localMessage.sessionId ?? editingRecommendation?.id ?? "chat", draft });
+  activeContext.current = { connection, bindingId: binding?.bindingId, destination: localMessage.sessionId ?? editingRecommendation?.id ?? "chat", draft };
+  const submitting = useRef(false);
+  const mounted = useRef(true);
+  function returnToChat() {
+    localMessage.select(null);
+    setEditingRecommendation(null);
+    setDraft(chatDraft.current);
+  }
+  function editRecommendation(item: PonderRecommendation) {
+    if (!localMessage.sessionId && !editingRecommendation) chatDraft.current = draft;
+    localMessage.select(null);
+    setEditingRecommendation(item);
+    setDraft(item.proposedText ?? "");
+  }
+  function chooseLocalTarget(id: string | null) {
+    if (!id) { returnToChat(); return; }
+    if (!localMessage.sessionId && !editingRecommendation) chatDraft.current = draft;
+    setEditingRecommendation(null);
+    localMessage.select(id);
+    setDraft("");
+  }
+  async function recommendationAction(item: PonderRecommendation, action: "send" | "dismiss") {
+    const context = activeContext.current;
+    const wasEditing = editingRecommendation?.id === item.id;
+    const sent = await recommendations.action(item, action, action === "send" ? wasEditing ? draft : item.proposedText ?? undefined : undefined);
+    if (sent && wasEditing && activeContext.current.connection === context.connection && activeContext.current.bindingId === context.bindingId && activeContext.current.destination === context.destination) {
+      // Preserve edits made while an action was awaiting acknowledgment.
+      if (activeContext.current.draft === context.draft) returnToChat();
+      else setEditingRecommendation(null);
+    }
+  }
 
   useEffect(() => {
+    mounted.current = true;
     let active = true;
     setBinding(null);
     setConversation(null);
@@ -63,11 +106,14 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
     activityCursor.current = null;
     setError(null);
     setDraft("");
+    chatDraft.current = "";
+    setSending(false);
     setWaitResponse("");
+    setEditingRecommendation(null);
     void apiFetch<Binding>(connection, "/v1/ponder", { method: "POST", body: "{}" })
       .then((value) => { if (active) { setBinding(value); setError(null); } })
       .catch((cause) => { if (active) setError(displayError(cause)); });
-    return () => { active = false; };
+    return () => { active = false; mounted.current = false; };
   }, [connection]);
 
   useEffect(() => {
@@ -149,19 +195,34 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
 
   async function send(attachments: ChatAttachment[] = [], options?: { promptOverride?: string }): Promise<boolean> {
     const prompt = (options?.promptOverride ?? draft).trim();
-    if (!binding || !prompt || sending) return false;
+    if (!binding || !prompt || submitting.current) return false;
+    const context = activeContext.current;
+    const stillCurrent = () => mounted.current && activeContext.current.connection === context.connection && activeContext.current.bindingId === context.bindingId && activeContext.current.destination === context.destination;
+    submitting.current = true;
     setSending(true);
     try {
+      if (localMessage.sessionId || editingRecommendation) {
+        if (attachments.length) throw new Error("Send task messages as text. Attachments can be sent in the task's own conversation.");
+        const sent = localMessage.sessionId ? await localMessage.send(prompt) : await recommendations.action(editingRecommendation!, "send", prompt);
+        if (!stillCurrent()) return false;
+        if (sent && activeContext.current.draft === context.draft) {
+          if (editingRecommendation) returnToChat();
+          else setDraft("");
+        }
+        return sent;
+      }
       const inputs = await Promise.all(attachments.map(uploadAttachment));
+      if (!stillCurrent()) return false;
       await apiFetch(connection, `/v1/ponder/conversations/${encodeURIComponent(binding.conversationId)}/turns`, {
         method: "POST", headers: { "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ prompt, attachments: inputs }),
       });
-      setDraft("");
+      if (!stillCurrent()) return false;
+      if (activeContext.current.draft === context.draft) setDraft("");
       setError(null);
       return true;
-    } catch (cause) { setError(displayError(cause)); return false; }
-    finally { setSending(false); }
+    } catch (cause) { if (stillCurrent()) setError(displayError(cause)); return false; }
+    finally { submitting.current = false; setSending(false); }
   }
 
   async function resolveWait(turn: Turn, response: { value: string } | { decision: "accepted" | "declined" }) {
@@ -213,6 +274,12 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
         </button>)}
       </section>}
       {messages.map((message) => <MessageRow key={message.id} message={message} connection={connection} />)}
+      <PonderRecommendations items={recommendations.items} busy={recommendations.busy} editingId={editingRecommendation?.id ?? null}
+        onEdit={editRecommendation}
+        onSend={item => { void recommendationAction(item, "send"); }}
+        onDismiss={item => { void recommendationAction(item, "dismiss"); }}
+        onOpen={onOpenWork} />
+      {recommendations.error ? <p role="alert">{recommendations.error}</p> : null}
       {activity && <MessageRow message={activity} connection={connection} />}
       {running && <ThinkingIndicator />}
       {conversation?.activeTurn?.wait && <section className="ponder-desktop-attention">
@@ -237,9 +304,14 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
         timestamp: new Date().toISOString() }} connection={connection} />}
     </section>
     <div className="composer-stack dock">
+      <PonderLocalMessageControl sessions={sessions} state={localMessage} onSelect={chooseLocalTarget} />
+      {editingRecommendation ? <div className="ponder-message-destination" role="status">
+        <span>Message to {editingRecommendation.target.title}</span><button type="button" onClick={returnToChat}>Return to Ponder chat</button>
+      </div> : null}
       <Composer {...composer} experience="chat" mode="dock" showProjectFooter={false} hideModelControls
         connection={connection} prompt={draft} onPromptChange={setDraft}
-        busy={sending || !binding} running={running} submissionScopeKey={`ponder:${binding?.conversationId ?? "loading"}`}
+        busy={sending || Boolean(recommendations.busy) || localMessage.busy || !binding || Boolean(localMessage.sessionId && (!localMessage.target?.canSendFollowup || localMessage.changed))}
+        running={running && !editingRecommendation && !localMessage.sessionId} submissionScopeKey={`ponder:${binding?.conversationId ?? "loading"}:${localMessage.sessionId ?? editingRecommendation?.id ?? "chat"}`}
         voiceInputChannelKey={`ponder:${binding?.conversationId ?? "loading"}`}
         onSubmit={(attachments, _action, _command, options) => send(attachments,
           options?.promptOverride ? { promptOverride: options.promptOverride } : undefined)}

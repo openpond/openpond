@@ -350,6 +350,9 @@ export function MainPane({
     null;
   const accountTeamScopeKey = JSON.stringify({
     account: bootstrap?.account.activeProfile ?? null,
+    baseUrl: bootstrap?.account.baseUrl ?? null,
+    owner: bootstrap?.account.profile?.id ?? null,
+    state: bootstrap?.account.state ?? null,
     teamId: bootstrap?.preferences.defaultTeamId ?? null,
   });
   const selectedProfileState =
@@ -1533,7 +1536,7 @@ export function MainPane({
         </Suspense>
       ) : null}
       {view === "chat" && ponderMode && connection && bootstrap?.account.activeProfile ? (
-        <PonderDesktopPanel connection={connection} presentation={ponderMode} composer={{
+        <PonderDesktopPanel key={accountTeamScopeKey} connection={connection} presentation={ponderMode} sessions={bootstrap.sessions} composer={{
           contextWindowStatus, providerSettings: bootstrap.providers ?? null,
           provider: activeProvider, model: activeModel, projectTarget, workspaceTarget,
           codexPermissionMode, codexReasoningEffort, openPondCommandAccessMode,

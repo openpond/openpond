@@ -324,6 +324,10 @@ export function createTaskInboxRuntime(deps: {
     stopScheduling() { closed = true; },
     async close() { closed = true; await Promise.allSettled(dispatching.values()); },
     async notifyAccepted(input: TaskInput) { await notify(TaskInputSchema.parse(input)); },
+    admitUserLocalMessage(input: TaskInputAdmission) {
+      if (input.senderKind !== "user" || input.senderSessionId !== null) throw new Error("Local message admission requires a user input.");
+      return admit(input);
+    },
   };
 }
 
