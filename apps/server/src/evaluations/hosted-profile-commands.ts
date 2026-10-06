@@ -9,6 +9,7 @@ import {
 import { sha256 } from "@openpond/harness";
 import { z } from "zod";
 import type { CandidateCommandReceipt } from "../harness/experiment-candidate-command.js";
+import { confinedProfileOutputPath } from "../harness/profile-evaluation-output-path.js";
 
 export type ProfileCaseCommand = {
   sessionId: string;
@@ -151,16 +152,7 @@ export function createHostedProfileCommandOwner(client: AgentHostStorageClient) 
       }),
     readOutput: (input: { sessionId: string; turnId: string; path: string; signal: AbortSignal }) =>
       serial(input.sessionId, async () => {
-        const selected = input.path
-          .replace(/^\/workspace\/work\/outputs\//, "")
-          .replace(/^outputs\//, "");
-        if (
-          !selected ||
-          selected.startsWith("/") ||
-          selected.split(/[\\/]/).some((part) => !part || part === "." || part === "..") ||
-          selected.includes("\0")
-        )
-          throw new Error("Select one case output file.");
+        const selected = confinedProfileOutputPath(input.path);
         const chunks: Buffer[] = [];
         let size: number | null = null,
           hash: string | null = null;
