@@ -1743,7 +1743,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const initialInputs = await taskInbox.include(sessionId, turn.id, initialRequestId);
       const providerTurn = await runtime.client.startTurn({
         threadId: runtime.threadId,
-        prompt: codexPromptWithHarnessContext([providerPrompt, ...initialInputs.map(taskInputModelText)].join("\n\n"), [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")),
+        prompt: codexPromptWithHarnessContext([providerPrompt, ...initialInputs.filter(input => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n"), [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")),
         cwd: turnCwd ?? session.cwd,
         model: codexModel,
         approvalPolicy: turnPermissions.approvalPolicy,
@@ -1863,6 +1863,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     steerSessionTurn: taskInbox.steer,
     readTaskInbox: (sessionId) => inboxStore.taskInboxSnapshot(sessionId),
     queueTaskInput: taskInbox.queue,
+    admitUserLocalMessage: taskInbox.admitUserLocalMessage,
     updateTaskInput: taskInbox.mutate,
     recoverTaskInbox: taskInbox.recover,
     isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),

@@ -8,6 +8,16 @@ export async function handlePonderRoutes({ deps, request, requestUrl, response }
       method: request.method as "GET" | "POST", ...(request.method === "POST" ? { body: await readJson(request) as Record<string, unknown> } : {}) }));
     return true;
   }
+  if (["/v1/ponder/recommendations", "/v1/ponder/notifications"].includes(path) && request.method === "GET") {
+    sendJson(response, 200, await deps.ponderRequestPayload({ path: path.slice(3) + requestUrl.search, method: "GET" }));
+    return true;
+  }
+  const recommendationAction = /^\/v1\/ponder\/recommendations\/([a-zA-Z0-9_-]+)\/action$/.exec(path);
+  const notificationRead = /^\/v1\/ponder\/notifications\/([a-zA-Z0-9_-]+)\/read$/.exec(path);
+  if ((recommendationAction || notificationRead) && request.method === "POST") {
+    sendJson(response, 200, await deps.ponderRequestPayload({ path: path.slice(3), method: "POST", body: await readJson(request, { maxBytes: 128 * 1024 }) as Record<string, unknown> }));
+    return true;
+  }
   if (path === "/v1/ponder" && request.method === "POST") {
     sendJson(response, 200, await deps.ponderRequestPayload({ path: "/ponder", method: "POST" }));
     return true;
