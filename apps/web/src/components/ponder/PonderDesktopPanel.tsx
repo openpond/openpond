@@ -6,7 +6,7 @@ import { Composer, type ComposerProps } from "../chat/Composer";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
 import { PonderRecommendations } from "./PonderRecommendations";
 import { usePonderRecommendations } from "./usePonderRecommendations";
-import type { PonderRecommendation } from "./ponder-recommendations";
+import { hostedRecommendationSendBlocked, type PonderRecommendation } from "./ponder-recommendations";
 import { usePonderLocalMessage } from "./usePonderLocalMessage";
 import { PonderLocalMessageControl } from "./PonderLocalMessageControl";
 
@@ -62,6 +62,8 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
   const recommendations = usePonderRecommendations(connection, binding?.bindingId ?? null);
   const [editingRecommendation, setEditingRecommendation] = useState<PonderRecommendation | null>(null);
   const localMessage = usePonderLocalMessage(connection, binding?.bindingId ?? null);
+  const currentEditingRecommendation = editingRecommendation ? recommendations.items.find(item => item.id === editingRecommendation.id) : null;
+  const editingUnavailable = Boolean(editingRecommendation && (!currentEditingRecommendation || currentEditingRecommendation.state !== "proposed" || currentEditingRecommendation.revision !== editingRecommendation.revision || hostedRecommendationSendBlocked(currentEditingRecommendation)));
   const chatDraft = useRef("");
   const activeContext = useRef({ connection, bindingId: binding?.bindingId, destination: localMessage.sessionId ?? editingRecommendation?.id ?? "chat", draft });
   activeContext.current = { connection, bindingId: binding?.bindingId, destination: localMessage.sessionId ?? editingRecommendation?.id ?? "chat", draft };
@@ -202,6 +204,7 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
     setSending(true);
     try {
       if (localMessage.sessionId || editingRecommendation) {
+        if (editingUnavailable) throw new Error("Review the latest task state before sending this proposed message.");
         if (attachments.length) throw new Error("Send task messages as text. Attachments can be sent in the task's own conversation.");
         const sent = localMessage.sessionId ? await localMessage.send(prompt) : await recommendations.action(editingRecommendation!, "send", prompt);
         if (!stillCurrent()) return false;
@@ -306,11 +309,11 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
     <div className="composer-stack dock">
       <PonderLocalMessageControl sessions={sessions} state={localMessage} onSelect={chooseLocalTarget} />
       {editingRecommendation ? <div className="ponder-message-destination" role="status">
-        <span>Message to {editingRecommendation.target.title}</span><button type="button" onClick={returnToChat}>Return to Ponder chat</button>
+        <span>Message to {editingRecommendation.target.title}{editingUnavailable ? " — review the latest task state before sending" : ""}</span><button type="button" onClick={returnToChat}>Return to Ponder chat</button>
       </div> : null}
       <Composer {...composer} experience="chat" mode="dock" showProjectFooter={false} hideModelControls
         connection={connection} prompt={draft} onPromptChange={setDraft}
-        busy={sending || Boolean(recommendations.busy) || localMessage.busy || !binding || Boolean(localMessage.sessionId && (!localMessage.target?.canSendFollowup || localMessage.changed))}
+        busy={sending || editingUnavailable || Boolean(recommendations.busy) || localMessage.busy || !binding || Boolean(localMessage.sessionId && (!localMessage.target?.canSendFollowup || localMessage.changed))}
         running={running && !editingRecommendation && !localMessage.sessionId} submissionScopeKey={`ponder:${binding?.conversationId ?? "loading"}:${localMessage.sessionId ?? editingRecommendation?.id ?? "chat"}`}
         voiceInputChannelKey={`ponder:${binding?.conversationId ?? "loading"}`}
         onSubmit={(attachments, _action, _command, options) => send(attachments,
