@@ -15,7 +15,6 @@ import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalProfileEvaluationRun } from "../store/store-evaluation-results.js";
 import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
 import { createProfileEvaluationCaseService } from "./profile-evaluation-case-service.js";
-import { assertRfqEvaluationPaidDispatchQualified } from "../training/rfq-evaluation-paid-preflight.js";
 
 const RunRequestSchema = z.object({
   manifest: TasksetRunManifestSchema,
@@ -42,7 +41,6 @@ export function createProfileEvaluationRunService(input: {
       || selected.sourceRevision !== parsed.binding.sourceRevision) {
       throw new Error("Evaluation Profile differs from the app-server's authorized selection.");
     }
-    assertRfqEvaluationPaidDispatchQualified(selected.ref.profileId);
     const discovered = await input.loadCatalog({
       ref: selected.ref, sourceRevision: selected.sourceRevision,
       harnessRelease: parsed.binding.harnessRelease,
