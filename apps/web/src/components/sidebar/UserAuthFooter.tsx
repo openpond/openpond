@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChartColumnStacked, Power, Settings, Shapes, UserRound } from "../icons";
 import type { AccountState } from "@openpond/contracts";
 import type { OpenPondOrganization } from "../../lib/organization-types";
+import { AccountHelpSubmenu } from "./AccountHelpSubmenu";
 
 type UserAuthFooterProps = {
   account: AccountState | null;
@@ -11,8 +12,11 @@ type UserAuthFooterProps = {
   onOpenChange: (open: boolean) => void;
   onOpenActivity?: () => void;
   onOpenSettings: () => void;
+  onOpenWalkthroughs: () => void;
+  walkthroughsActive: boolean;
   onSelectTeam?: (teamId: string) => Promise<void>;
   onLogOut?: () => Promise<void>;
+  railTooltip?: string;
 };
 
 type UserAuthIdentity = {
@@ -63,8 +67,11 @@ export function UserAuthFooter({
   onOpenActivity,
   onOpenChange,
   onOpenSettings,
+  onOpenWalkthroughs,
+  walkthroughsActive,
   onSelectTeam,
   onLogOut,
+  railTooltip,
 }: UserAuthFooterProps) {
   const [switchingTeamId, setSwitchingTeamId] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -99,6 +106,7 @@ export function UserAuthFooter({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`${identity.label} account menu`}
+        data-rail-tooltip={railTooltip}
         onClick={() => onOpenChange(!open)}
       >
         <span className="user-auth-avatar" aria-hidden="true">
@@ -178,6 +186,8 @@ export function UserAuthFooter({
             <Settings size={15} />
             <span>Settings</span>
           </button>
+          <AccountHelpSubmenu onOpenWalkthroughs={onOpenWalkthroughs} walkthroughsActive={walkthroughsActive}
+            onCloseAccount={() => onOpenChange(false)} />
           {account?.state === "signed_in" && onLogOut ? (
             <button
               type="button"

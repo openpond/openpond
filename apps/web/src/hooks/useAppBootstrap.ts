@@ -64,6 +64,7 @@ const STARTUP_SPLASH_SLOW_THRESHOLD_MS = 1200;
 const ORGANIZATION_REFRESH_INTERVAL_MS = 60_000;
 
 export function useAppBootstrap(params: {
+  selectedSessionId: string | null;
   setDraftModel: SetState<string>;
   setDraftProvider: SetState<ChatProvider>;
   setCodexPermissionMode: SetState<CodexPermissionMode>;
@@ -75,6 +76,7 @@ export function useAppBootstrap(params: {
   setSelectedSessionId: SetState<string | null>;
 }) {
   const {
+    selectedSessionId,
     setDraftModel,
     setDraftProvider,
     setCodexPermissionMode,
@@ -279,10 +281,12 @@ export function useAppBootstrap(params: {
   }, []);
 
   useEffect(() => {
+    if (selectedSessionId) return;
     const preferences = normalizePreferences(bootstrap?.preferences);
     setDraftProvider(preferences.defaultChatProvider);
     setDraftModel(preferences.defaultChatModel);
   }, [
+    selectedSessionId,
     bootstrap?.preferences.defaultChatProvider,
     bootstrap?.preferences.defaultChatModel,
     setDraftModel,

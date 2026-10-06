@@ -46,7 +46,13 @@ export class ClaudeCliClient {
     try {
       const init = await this.control({ subtype: "initialize", hooks: null });
       const models = Array.isArray(init.models) ? init.models.map(record).filter((model) => typeof model.value === "string") : [];
-      return { sessionId, models: { currentModelId: this.model, availableModels: models.map((model) => ({ modelId: String(model.value), name: String(model.displayName ?? model.value) })) }, modes: { currentModeId: String(init.current_permission_mode ?? "manual"), availableModes: [{ id: "manual", name: "Ask for permissions" }, { id: "plan", name: "Plan" }] } };
+      const defaultDescription = models.find((model) => model.value === "default")?.description;
+      // Claude describes its resolved default using another advertised model's
+      // display name. Show that identity while retaining the native default alias.
+      const resolvedDefault = typeof defaultDescription === "string" ? models.find((model) =>
+        model.value !== "default" && typeof model.displayName === "string" &&
+        (defaultDescription === model.displayName || defaultDescription.startsWith(`${model.displayName} ·`))) : undefined;
+      return { sessionId, models: { currentModelId: this.model, availableModels: models.map((model) => ({ modelId: String(model.value), name: model.value === "default" && resolvedDefault ? `${resolvedDefault.displayName} (default)` : String(model.displayName ?? model.value), ...(typeof model.description === "string" ? { description: model.description } : {}) })) }, modes: { currentModeId: String(init.current_permission_mode ?? "manual"), availableModes: [{ id: "manual", name: "Ask for permissions" }, { id: "plan", name: "Plan" }] } };
     } catch (error) { await this.stop(); throw error; }
   }
   async setModel(sessionId: string, modelId: string): Promise<void> { this.assertSession(sessionId); await this.control({ subtype: "set_model", model: modelId }); this.model = modelId; }

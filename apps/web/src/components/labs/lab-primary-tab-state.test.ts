@@ -92,6 +92,10 @@ describe("Settings and other Desktop destinations", () => {
     expect(settingsReturnRoute({ ...settings, returnTo: "//attacker.invalid/models" })).toEqual({ kind: "chat", sessionId: null });
     expect(desktopRouteFromLocation({ pathname: "/settings/unknown" })).toBeNull();
     expect(desktopPath({ kind: "view", view: "scheduled" })).toBe("/workflows");
+    for (const view of ["team", "community"] as const) {
+      const route = { kind: "view" as const, view };
+      expect(desktopRouteFromLocation(new URL(desktopPath(route), "https://local.invalid"))).toEqual(route);
+    }
     expect(desktopRouteFromLocation({ pathname: "/chat/session%201" })).toEqual({ kind: "chat", sessionId: "session 1" });
   });
 });

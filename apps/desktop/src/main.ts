@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { prepareDesktopBrowserHome } from "./desktop-browser-home.js";
-import { app, BrowserWindow, Menu, dialog, ipcMain, shell, systemPreferences, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, Menu, Notification, dialog, ipcMain, shell, systemPreferences, type MenuItemConstructorOptions } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -629,6 +629,18 @@ function registerIpcHandlers(): void {
     if (!window) return false;
     if (window.isMaximized()) window.unmaximize();
     else window.maximize();
+    return true;
+  });
+  const notificationIds = new Set<string>();
+  handleTrackedIpc("openpond:notification", (_event, raw: unknown) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid notification.");
+    const payload = raw as Record<string, unknown>;
+    if (typeof payload.id !== "string" || payload.id.length > 300 || typeof payload.title !== "string" || payload.title.length > 160 || typeof payload.body !== "string" || payload.body.length > 500) throw new Error("Invalid notification.");
+    if (!Notification.isSupported() || notificationIds.has(payload.id)) return false;
+    notificationIds.add(payload.id);
+    if (notificationIds.size > 1000) notificationIds.delete(notificationIds.values().next().value!);
+    const notification = new Notification({ title: payload.title, body: payload.body });
+    notification.on("click", showMainWindow); notification.show();
     return true;
   });
   handleTrackedIpc("openpond:window:close", (event) => {

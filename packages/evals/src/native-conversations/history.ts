@@ -13,6 +13,7 @@ import { connectedJsonLines, object } from "../connected-evidence/normalize.js";
 import { claudeGraph } from "../connected-evidence/sources/claude-branches.js";
 import { contentHash } from "@openpond/harness";
 import { listDatabaseSessions, readDatabaseSession } from "./database.js";
+import { claudeConversationTitle, retainedConversationTitle } from "./titles.js";
 import {
   NATIVE_READ_LIMIT,
   type NativeSession,
@@ -151,6 +152,23 @@ export async function listSessions(
               text = prefix.slice(0, end + 1);
             }
           }
+          // Claude appends custom titles and summaries to the end of its log.
+          // Read a bounded tail too, without importing the entire conversation.
+          const size = (await handle.stat()).size;
+          if (source.source === "claude_code" && size > read.bytesRead) {
+            const tailStart = Math.max(read.bytesRead, size - buffer.length);
+            const tailBuffer = Buffer.alloc(buffer.length + 1);
+            const tailRead = await handle.read(tailBuffer, 0, tailBuffer.length, tailStart - 1);
+            let tail = tailBuffer.subarray(0, tailRead.bytesRead).toString("utf8");
+            const firstEnd = tail.indexOf("\n");
+            tail = firstEnd < 0 ? "" : tail.slice(firstEnd + 1);
+            if (!tail.endsWith("\n")) {
+              const end = tail.lastIndexOf("\n");
+              try { JSON.parse(tail.slice(end + 1)); }
+              catch { tail = tail.slice(0, end + 1); }
+            }
+            text += `\n${tail}`;
+          }
         } finally {
           await handle.close();
         }
@@ -177,8 +195,9 @@ export async function listSessions(
             : source.source === "opencode"
               ? object(header.info)
               : header;
-      const id =
-        typeof payload.id === "string"
+      const id = source.source === "claude_code"
+        ? basename(path || source.root).replace(/\.jsonl(?:\.zst)?$/u, "")
+        : typeof payload.id === "string"
           ? payload.id
           : typeof payload.sessionId === "string"
             ? payload.sessionId
@@ -190,7 +209,9 @@ export async function listSessions(
         ? rows.find((row) => row.sessionId === id && row.type === "user" && typeof row.cwd === "string" && isAbsolute(row.cwd))
         : undefined;
       let cwd = claudeMessage?.cwd ?? payload.cwd;
-      let title = id;
+      let title = source.source === "claude_code"
+        ? claudeConversationTitle(rows, id)
+        : retainedConversationTitle(payload.title, id);
       if (source.source === "grok_build" && path.endsWith("updates.jsonl")) {
         try {
           const summary = object(JSON.parse(await readSelectedFile(source, join(dirname(path), "summary.json"))));

@@ -2,6 +2,7 @@ import type { Session } from "@openpond/contracts";
 import { describe, expect, test } from "vitest";
 
 import { tasksetNameFromId } from "../apps/web/src/lib/session-tasksets";
+import { orderSidebarInbox, sidebarActivityTimes, sidebarInboxDateGroups } from "../apps/web/src/lib/sidebar-inbox";
 import {
   mergeSidebarTaskOrder,
   sidebarTaskEmptyLabel,
@@ -10,6 +11,36 @@ import {
 } from "../apps/web/src/lib/sidebar-task-list";
 
 const NOW = "2026-07-29T12:00:00.000Z";
+
+// Running work stays reachable at the top. On completion it moves to the
+// newest recent position, which persists after reload without diagnostics bumps.
+test("inbox keeps running work first and completed work newest in recent activity", () => {
+  const older = session({ id: "older-running", status: "active", createdAt: "2026-07-27T12:00:00.000Z" });
+  const child = session({ id: "finished-child", parentSessionId: older.id, createdAt: "2026-07-28T12:00:00.000Z" });
+  const recent = session({ id: "recent-idle" });
+  const completedAt = "2026-07-29T12:01:00.000Z";
+  const activity = sidebarActivityTimes([
+    { id: "completion", name: "turn.completed", sessionId: child.id, timestamp: completedAt },
+    { id: "late-start", name: "turn.started", sessionId: child.id, timestamp: "2026-07-29T11:00:00.000Z" },
+    { id: "refresh", name: "session.updated", sessionId: older.id, timestamp: "2026-07-29T12:02:00.000Z" },
+  ]);
+  const running = new Set([older.id]);
+  const activeRows = orderSidebarInbox([recent, older, child, child], activity, running);
+  expect(activeRows.map(row => row.id)).toEqual([older.id, child.id, recent.id]);
+  const activeGroups = sidebarInboxDateGroups(activeRows, activity, running, new Date(NOW));
+  expect(activeGroups[0]?.sessions).toEqual([older]);
+  expect(new Set(activeGroups.map(group => group.key)).size).toBe(activeGroups.length);
+  const stopped = new Set<string>();
+  const rows = orderSidebarInbox(activeRows, activity, stopped);
+  expect(rows.map(row => row.id)).toEqual([child.id, recent.id, older.id]);
+  const retained = rows.map(row => row.id === child.id ? { ...row, metadata: { ...row.metadata, sidebarActivityAt: completedAt } } : row);
+  expect(orderSidebarInbox(retained, {}, stopped).map(row => row.id)).toEqual(rows.map(row => row.id));
+  const groups = sidebarInboxDateGroups(rows, activity, stopped, new Date(NOW));
+  expect(groups.flatMap(group => group.sessions)).toEqual(rows);
+  expect(new Set(groups.map(group => group.key)).size).toBe(groups.length);
+  const nextActivity = { ...activity, [older.id]: "2026-07-29T12:03:00.000Z" };
+  expect(orderSidebarInbox(rows, nextActivity, stopped).map(row => row.id)).toEqual([older.id, child.id, recent.id]);
+});
 
 describe("sidebar task filters", () => {
   const active = session({

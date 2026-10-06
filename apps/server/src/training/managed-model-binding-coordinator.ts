@@ -34,6 +34,7 @@ export function createManagedModelBindingCoordinator(
     current: ModelBinding | null;
     next: ModelBinding | null;
     timestamp: string;
+    servingGrant?: { id: string; expectedRevision: number; authorizationHash: string };
   }): Promise<{ previous: ModelBinding | null }> {
     let previous = input.current;
     let deactivatedVersion: number | null = null;
@@ -57,6 +58,7 @@ export function createManagedModelBindingCoordinator(
         expectedActiveBindingId: previous?.id ?? null,
         next: input.next,
         timestamp: input.timestamp,
+        servingGrant: input.servingGrant,
       });
     } catch (error) {
       if (previous && deactivatedVersion) {

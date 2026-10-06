@@ -209,7 +209,7 @@ export class SqliteTaskInboxStore extends SqliteHumanReviewStore {
       return pendingTaskInputs(db, sessionId, turnId).map((input) => writeTaskInput(db, {
         ...input, updatedAt: new Date().toISOString(),
         ...(input.kind === "steer"
-          ? { state: "rejected", error: "Codex finished before this correction could be dispatched. Send it as a follow-up." }
+          ? { state: "rejected", error: "The agent finished before this correction could be dispatched. Send it as a follow-up." }
           : { turnId: null }),
       }));
     });

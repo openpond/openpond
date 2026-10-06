@@ -16,7 +16,7 @@ function savedIntent(storageKey: string): PendingIntent | null {
   } catch { return null; }
 }
 
-export function useTaskInbox(connection: ClientConnection | null, sessionId: string | null, events: readonly RuntimeEvent[]) {
+export function useTaskInbox(connection: ClientConnection | null, sessionId: string | null, events: readonly RuntimeEvent[], canSteer = true) {
   const queries = useQueryClient();
   const scope = connectionQueryScope(connection);
   const queryKey = useMemo(() => ["task-inbox", scope, sessionId] as const, [scope, sessionId]);
@@ -66,6 +66,10 @@ export function useTaskInbox(connection: ClientConnection | null, sessionId: str
 
   async function send(kind: PendingIntent["kind"], body: string, request?: SendTurnRequest): Promise<boolean> {
     if (!connection || !sessionId) return false;
+    if (kind === "steer" && !canSteer) {
+      setFailure({ scope: operationScope, message: "This agent accepts follow-ups on its next turn. Queue your message instead." });
+      return false;
+    }
     const storageKey = `openpond:task-input:${connection.serverUrl}:${sessionId}`;
     const previous = savedIntent(storageKey);
     const retrying = previous?.body === body && previous.kind === kind;
@@ -101,7 +105,7 @@ export function useTaskInbox(connection: ClientConnection | null, sessionId: str
   }
 
   return {
-    enabled, snapshot: state.data ?? null,
+    enabled, snapshot: state.data ? { ...state.data, acceptingInput: state.data.acceptingInput && canSteer } : null,
     busyId: operation?.scope === operationScope ? operation.id : null,
     error: failure?.scope === operationScope ? failure.message : state.error?.message ?? null,
     steer: (body: string) => send("steer", body),

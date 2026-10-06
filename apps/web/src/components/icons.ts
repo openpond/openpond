@@ -115,3 +115,8 @@ export { default as Workflow } from "lucide-react/dist/esm/icons/workflow.js";
 export { default as WrapText } from "lucide-react/dist/esm/icons/wrap-text.js";
 export { default as X } from "lucide-react/dist/esm/icons/x.js";
 export { default as XCircle } from "lucide-react/dist/esm/icons/circle-x.js";
+
+export { default as Inbox } from "lucide-react/dist/esm/icons/inbox.js";
+export { default as List } from "lucide-react/dist/esm/icons/list.js";
+export { default as Sparkles } from "lucide-react/dist/esm/icons/sparkles.js";
+export { default as Terminal } from "lucide-react/dist/esm/icons/terminal.js";

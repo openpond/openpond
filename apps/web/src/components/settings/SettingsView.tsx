@@ -1,3 +1,4 @@
+import { PonderSettingsSection } from "./PonderSettingsSection";
 import { ConfigurationSettings } from "./ConfigurationSettings";
 import {
   lazy,
@@ -295,6 +296,8 @@ export function SettingsView({
             onToast={onToast}
             {...accountSettings}
           />
+        ) : section === "ponder" ? (
+          <PonderSettingsSection key={JSON.stringify([payload?.account.activeProfile, payload?.preferences.defaultTeamId])} connection={connection} />
         ) : section === "notifications" ? (
           <NotificationsSettingsSection
             currentUserId={teamChatCurrentUserId}

@@ -35,6 +35,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   {
     items: [
       { section: "account", label: "Account", Icon: UserCircle },
+      { section: "ponder", label: "Ponder Pal", Icon: Bot },
       { section: "notifications", label: "Notifications", Icon: Bell },
       { section: "providers", label: "Providers", Icon: MessageSquare },
       { section: "usage", label: "Activity", Icon: ChartColumnStacked },

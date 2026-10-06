@@ -48,9 +48,9 @@ it("keeps profile discovery and explicit source authority separate", async () =>
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
-// Claude queue records precede the cwd owner. Guessing from the first row or
-// another session can resume a conversation in the wrong working directory.
-it("uses matching native Claude message metadata for cwd after queue bookkeeping", async () => {
+// Claude queue records precede user/title metadata. Another session's records
+// must not supply identity or title, and tail-appended names must remain visible.
+it("uses owned Claude identity, cwd and titles after bookkeeping and late title records", async () => {
   const directory = await mkdtemp(join(tmpdir(), "claude-native-history-"));
   const sessionId = "a635de7e-1111-4222-8333-444444444444";
   const path = join(directory, `${sessionId}.jsonl`);
@@ -60,9 +60,16 @@ it("uses matching native Claude message metadata for cwd after queue bookkeeping
     const source = { source: "claude_code" as const, root: directory, machineId: "machine", instanceId: "instance", acquisition: "files" as const, available: true, capabilities: { history: true, live: true, nativeResume: false } };
     const result = await listSessions(source);
     expect(result.items).toHaveLength(1);
-    expect(result.items[0]).toMatchObject({ nativeSessionId: sessionId, cwd: directory });
+    expect(result.items[0]).toMatchObject({ nativeSessionId: sessionId, cwd: directory, title: "fixture" });
+    await writeFile(path, [...rows,
+      { type: "assistant", sessionId, message: { content: "x".repeat(600_000) } },
+      { type: "summary", summary: "Provider summary" },
+      { type: "custom-title", sessionId, customTitle: "Named by the user" },
+      { type: "custom-title", sessionId: "foreign", customTitle: "Wrong account's name" },
+    ].map((row) => JSON.stringify(row)).join("\n") + "\n");
+    expect((await listSessions(source)).items[0]).toMatchObject({ nativeSessionId: sessionId, cwd: directory, title: "Named by the user" });
     await writeFile(path, rows.slice(0, -1).map((row) => JSON.stringify(row)).join("\n") + "\n");
-    expect((await listSessions(source)).items[0]?.cwd).toBeNull();
+    expect((await listSessions(source)).items[0]).toMatchObject({ nativeSessionId: sessionId, cwd: null, title: sessionId });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

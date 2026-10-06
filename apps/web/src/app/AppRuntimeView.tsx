@@ -1,3 +1,5 @@
+import { sidebarActivityTimes } from "../lib/sidebar-inbox";
+import { usePonderActivity } from "../components/ponder/usePonderActivity";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CHAT_MODEL,
@@ -339,6 +341,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     toggleRightSidebar,
     removeProject,
   } = secondary;
+  usePonderActivity(connection, bootstrap?.account.activeProfile && bootstrap.preferences.defaultTeamId
+    ? JSON.stringify([bootstrap.account.baseUrl, bootstrap.account.activeProfile, bootstrap.preferences.defaultTeamId]) : null);
   const ponderIntroScope = bootstrap?.account.activeProfile && bootstrap?.preferences.defaultTeamId
     ? `${bootstrap.account.activeProfile.handle}:${bootstrap.preferences.defaultTeamId}` : null;
   useEffect(() => {
@@ -464,7 +468,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [sidebarFileOpenRequest, setSidebarFileOpenRequest] =
     useState<SidebarFileOpenRequest | null>(null);
 
-  const openTeamChatFromHeader = useCallback(() => {
+  const openTeamChatFromHeader = useCallback(async () => {
+    if (!await navigateDesktopRoute({ kind: "view", view: "team" })) return;
     setSelectedAppId(null);
     setSelectedProjectId(null);
     setSelectedSessionId(null);
@@ -478,7 +483,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setView,
   ]);
 
-  const discoverCommunitiesFromHeader = useCallback(() => {
+  const discoverCommunitiesFromHeader = useCallback(async () => {
+    if (!await navigateDesktopRoute({ kind: "view", view: "community" })) return;
     setSelectedAppId(null);
     setSelectedProjectId(null);
     setSelectedSessionId(null);
@@ -837,6 +843,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     showToast,
     training.actions,
   ]);
+  const sidebarActivity = useMemo(() => sidebarActivityTimes([...runtimeIndexes.eventsBySessionId.values()].flat()), [runtimeIndexes.eventsBySessionId]);
   if (!startup.ready) {
     return <AppSplash startup={startup} />;
   }
@@ -887,6 +894,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   }
 
   const desktopShell = isDesktopShell();
+  const sidebarAvailable = productArea === "console" || view === "chat";
+  const visibleSidebarOpen = sidebarAvailable && sidebarOpen;
   const platform = connection?.platform ?? navigator.platform;
   const isMac = desktopShell && isMacPlatform(platform);
   const viewTerminalScope: TerminalScope = activeTerminalScope;
@@ -905,7 +914,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const appShellClassName = [
     "app-shell",
     isMac ? "platform-macos" : "",
-    sidebarOpen ? "sidebar-open" : "sidebar-closed",
+    visibleSidebarOpen ? "sidebar-open" : "sidebar-closed",
     sidebarResizing ? "sidebar-resizing" : "",
     diffPanelResizing ? "diff-panel-resizing" : "",
   ]
@@ -994,6 +1003,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         className={appShellClassName}
         style={appShellStyle}
         sidebar={{
+          activityTimes: sidebarActivity,
           onOpenPonder: () => {
             navigateDesktopRoute({ kind: "chat", sessionId: null });
             setSelectedSessionId(null);
@@ -1020,6 +1030,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           teamMembers: teamChat.members,
           teamThreads: teamChat.threads,
           ...communitySidebar,
+          onOpenTeamChat: openTeamChatFromHeader,
+          discoverCommunities: discoverCommunitiesFromHeader,
           account,
           connection,
           profile: bootstrap?.profile,
@@ -1110,11 +1122,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           commitTaskPreviewDrop,
         }}
         topBar={{
-          sidebarOpen,
+          sidebarOpen: visibleSidebarOpen,
+          sidebarAvailable,
           title: view === "chat" && ponderMode ? "Ponder Pal" : title,
           backAction: labDetailNavigation.backAction,
           breadcrumbs: labDetailNavigation.breadcrumbs,
-          conversationId: view === "chat" ? selectedSessionId : null,
           workspaceName: viewWorkspaceName,
           workspaceId: viewWorkspaceId,
           busy,
@@ -1162,10 +1174,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           onBootstrap: applyBootstrapPayload,
           onOpenSandboxWorkspace: openSandboxWorkspace,
           onShowSidebar: () => setSidebarOpen(true),
-          onOpenTeamChat: openTeamChatFromHeader,
-          onDiscoverCommunities: discoverCommunitiesFromHeader,
-          collaborationView:
-            view === "team" || view === "community" ? view : null,
           platform,
           showWorkspaceControls:
             view !== "team" &&
@@ -1221,9 +1229,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             onCodexReasoningEffortChange: changeCodexReasoningEffort,
             onOpenPondCommandAccessModeChange: changeOpenPondCommandAccessMode,
             onOpenProviderSettings: () => {
-              setSettingsSection("providers");
-              setView("settings");
-              navigateDesktopRoute({ kind: "settings", section: "providers" });
+              void navigateDesktopRoute({ kind: "view", view: "apps" });
             },
             onSendMessage: teamChat.sendMessage,
             onPublishProfileAgent: publishTeamProfileAgent,
@@ -1385,7 +1391,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setView,
           onOpenProfileSettings: openProfileSettings,
           onOpenProviderSettings: () => {
-            void navigateDesktopRoute({ kind: "settings", section: "providers" });
+            void navigateDesktopRoute({ kind: "view", view: "apps" });
           },
           onOpenTrainingSettings: () => {
             void navigateDesktopRoute({ kind: "settings", section: "training" });

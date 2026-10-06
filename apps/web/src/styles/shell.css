@@ -1,16 +1,19 @@
 .app-shell {
+  /* Match Sandbox's Console navigation and workspace surfaces. */
+  --shell-navigation-bg: #191919;
+  --bg: #101010;
   position: relative;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  background: var(--bg);
+  background: var(--shell-navigation-bg);
   overflow: hidden;
   transition: grid-template-columns 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .app-shell.sidebar-open {
-  background: var(--panel);
+  background: var(--shell-navigation-bg);
 }
 
 .app-shell.sidebar-closed {
@@ -43,21 +46,24 @@
   width: min(var(--sidebar-width), 86vw);
   min-height: 0;
   overflow: hidden;
-  background: var(--panel);
+  background: var(--shell-navigation-bg);
   color: var(--text);
   transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
 
 .sidebar-resize-handle {
+  /* Resize from the workspace side of the divider, outside sidebar controls. */
   position: absolute;
-  top: 0;
-  right: 0;
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+  top: 43px;
+  left: 100%;
   bottom: 0;
-  z-index: 20;
+  z-index: 21;
   display: grid;
   place-items: center;
-  width: 12px;
+  width: 6px;
   cursor: col-resize;
   color: #9b9b9b;
 }
@@ -75,17 +81,13 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid var(--border);
-  border-left: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  border-top-left-radius: 13px;
-  background: var(--bg);
+  background: var(--shell-navigation-bg);
 }
 
 .content-shell::before {
   content: "";
   position: absolute;
-  top: 0;
+  top: 43px;
   bottom: 0;
   left: 0;
   z-index: 40;
@@ -104,8 +106,7 @@
 }
 
 .app-titlebar {
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  background: var(--shell-navigation-bg);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -125,7 +126,6 @@
 .titlebar-left,
 .titlebar-right,
 .titlebar-actions,
-.titlebar-collaboration-actions,
 .window-controls,
 .titlebar-title,
 .titlebar-breadcrumbs,
@@ -139,12 +139,13 @@
   gap: 10px;
 }
 
-.titlebar-actions {
-  gap: 9px;
+.titlebar-left > .page-chrome-title-target {
+  flex: 1 1 0;
+  overflow: hidden;
 }
 
-.titlebar-collaboration-actions {
-  gap: 4px;
+.titlebar-actions {
+  gap: 9px;
 }
 
 .titlebar-right {
@@ -156,15 +157,9 @@
   gap: 7px;
 }
 
-.window-control,
-.window-control *,
-.window-controls,
-.titlebar-title,
-.titlebar-title *,
-.titlebar-breadcrumbs,
-.titlebar-breadcrumbs button,
-.titlebar-icon,
-.titlebar-right {
+/* Only actual controls opt out; title text and layout gaps drag the window. */
+.app-titlebar :is(button, a, input, select, textarea, [role="button"], [role="menu"], [role="menuitem"], [role="menuitemradio"], [role="switch"], [contenteditable="true"]),
+.app-titlebar :is(button, a, [role="button"], [role="menu"], [role="menuitem"], [role="menuitemradio"], [role="switch"]) * {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
@@ -244,50 +239,13 @@
 }
 
 .titlebar-title strong {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #f1f1f1;
   font-size: 13px;
   font-weight: 500;
-}
-
-.titlebar-copy-target {
-  cursor: text;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.titlebar-copy-menu {
-  position: fixed;
-  z-index: 120;
-  display: grid;
-  width: 190px;
-  padding: 4px;
-  border: 0;
-  border-radius: 8px;
-  background: #252525;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
-
-.titlebar-copy-menu button {
-  width: 100%;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text);
-  padding: 7px 9px;
-  text-align: left;
-  font: inherit;
-  font-size: 13px;
-}
-
-.titlebar-copy-menu button:hover,
-.titlebar-copy-menu button:focus-visible {
-  background: rgba(255, 255, 255, 0.09);
-  outline: none;
 }
 
 .titlebar-title span {

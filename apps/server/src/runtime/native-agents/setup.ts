@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { AcpClient, ClaudeCliClient, type AcpSessionResult } from "@openpond/agent-runtime";
 import { ProviderModelSchema, type ProviderSettings, type ProviderConfig } from "@openpond/contracts";
 import { isNativeAgentId, NATIVE_AGENTS, nativeAgentLaunch, type NativeAgentId } from "./config.js";
+import { createNativeCapabilityProbe } from "./capability-probes.js";
 
 export type NativeAgentSetupResult = {
   provider: NativeAgentId;
@@ -66,7 +67,7 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       if (options.authMethodId) await client.authenticate(options.authMethodId);
       else if (provider === "grok-build" && info.authMethods?.some((method) => method.id === "cached_token")) await client.authenticate("cached_token");
       signal.throwIfAborted();
-      result.session = await client.createSession(homedir());
+      result.session = await createNativeCapabilityProbe(provider, launch.sourceHome, () => client.createSession(homedir()));
       signal.throwIfAborted();
       result.status = "ready";
     } catch (error) {

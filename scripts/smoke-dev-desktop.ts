@@ -169,7 +169,7 @@ async function main(): Promise<void> {
       );
     }
 
-    const sharedSurfaceStyles = await verifySharedSurfaceStyles(cdp);
+    const navigation = await verifyDesktopNavigation(cdp);
     const renderCommits = await runComposerCommitProof(cdp);
 
     const chat = options.skipChat
@@ -242,7 +242,7 @@ async function main(): Promise<void> {
           : [],
       },
       chat,
-      sharedSurfaceStyles,
+      navigation,
       renderCommits,
       timings: {
         totalSmokeMs: Date.now() - startedAt,
@@ -269,260 +269,67 @@ async function main(): Promise<void> {
   }
 }
 
-async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
-  experienceMenuStyled: boolean;
-  experienceOptions: string[];
-  activeExperience: string | null;
-  keyboardMenuPassed: boolean;
+async function verifyDesktopNavigation(cdp: CdpClient): Promise<{
+  keyboardNavigationPassed: boolean;
   workModeSelected: boolean;
   workComposerAvailable: boolean;
-  ambientHandoffAbsent: boolean;
-  topBarSelectorAbsent: boolean;
-  teamRowStyled: boolean;
 }> {
-  const initial = await evaluateValue<{
-    triggerDisplay: string;
-    triggerLabel: string | null;
-    wordmarkDisplay: string | null;
-    teamRowDisplay: string | null;
-    teamRowBackgroundColor: string | null;
-  }>(
-    cdp,
-    `(() => {
-      const trigger = document.querySelector(".sidebar-experience-trigger");
-      if (!(trigger instanceof HTMLButtonElement)) throw new Error("Experience menu trigger is missing.");
-      const existingTeamRow = document.querySelector(".team-sidebar-row");
-      const teamRow = existingTeamRow instanceof HTMLElement
-        ? existingTeamRow
-        : Object.assign(document.createElement("button"), { className: "team-sidebar-row" });
-      if (!existingTeamRow) {
-        teamRow.style.position = "fixed";
-        teamRow.style.visibility = "hidden";
-        document.body.append(teamRow);
-      }
-      const teamRowStyle = getComputedStyle(teamRow);
-      const result = {
-        triggerDisplay: getComputedStyle(trigger).display,
-        triggerLabel: trigger.getAttribute("aria-label"),
-        wordmarkDisplay: trigger.querySelector(".sidebar-wordmark") instanceof HTMLImageElement
-          ? getComputedStyle(trigger.querySelector(".sidebar-wordmark")).display
-          : null,
-        teamRowDisplay: teamRowStyle.display,
-        teamRowBackgroundColor: teamRowStyle.backgroundColor
-      };
-      if (!existingTeamRow) teamRow.remove();
-      return result;
-    })()`
-  );
-
-  const experienceMenuStyled =
-    ["flex", "inline-flex"].includes(initial.triggerDisplay) &&
-    initial.wordmarkDisplay === "block";
-  if (!experienceMenuStyled) {
-    throw new Error(
-      `Experience menu styles were not loaded: ${JSON.stringify(initial)}`
-    );
-  }
-  const teamRowStyled =
-    initial.teamRowDisplay === "grid" &&
-    initial.teamRowBackgroundColor === "rgba(0, 0, 0, 0)";
-  if (!teamRowStyled) {
-    throw new Error(
-      `Team sidebar row styles were not loaded: ${JSON.stringify(initial)}`
-    );
-  }
-
-  await evaluateValue<boolean>(
-    cdp,
-    `(() => {
-      const trigger = document.querySelector(".sidebar-experience-trigger");
-      if (!(trigger instanceof HTMLButtonElement)) return false;
-      trigger.focus();
-      return document.activeElement === trigger;
-    })()`
-  );
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key: "ArrowDown",
-    code: "ArrowDown",
-  });
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyUp",
-    key: "ArrowDown",
-    code: "ArrowDown",
-  });
-  const keyboardMenu = await waitFor(
-    async () =>
-      evaluateValue<{
-        labels: string[];
-        focusedProductArea: string | null;
-      } | null>(
-        cdp,
-        `(() => {
-          const menu = document.querySelector(".sidebar-experience-popover");
-          if (!(menu instanceof HTMLElement)) return null;
-          const labels = [...menu.querySelectorAll("[role='menuitemradio'] strong")]
-            .map((item) => item.textContent?.trim() ?? "");
-          const focusedProductArea =
-            document.activeElement instanceof HTMLElement
-              ? document.activeElement.dataset.productArea ?? null
-              : null;
-          if (labels.length === 0 || focusedProductArea === null) return null;
-          return {
-            labels,
-            focusedProductArea
-          };
-        })()`
-      ),
-    5_000,
-    "Experience menu did not open from the keyboard."
-  ).catch(async (error: unknown) => {
-    const focusState = await evaluateValue(cdp, `(() => ({
-      focused: document.hasFocus(),
-      activeElement: document.activeElement?.outerHTML?.slice(0, 1000),
-      trigger: document.querySelector(".sidebar-experience-trigger")?.outerHTML,
-      menu: document.querySelector(".sidebar-experience-popover")?.outerHTML
-    }))()`);
-    throw new Error(`${String(error)} Focus state: ${JSON.stringify(focusState)}`);
-  });
-  const keyboardMenuPassed =
-    keyboardMenu.labels.length > 0 &&
-    keyboardMenu.focusedProductArea === "chat";
-  if (!keyboardMenuPassed) {
-    throw new Error(
-      `Experience keyboard menu failed: ${JSON.stringify(keyboardMenu)}`
-    );
-  }
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key: "Escape",
-    code: "Escape",
-  });
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyUp",
-    key: "Escape",
-    code: "Escape",
-  });
+  // Exercise destination changes with real keyboard input. The rail replaced
+  // the old product menu; successful navigation must still reveal usable views.
+  await selectDesktopDestination(cdp, "Apps");
   await waitFor(
-    async () =>
-      evaluateValue<boolean>(
-        cdp,
-        `!document.querySelector(".sidebar-experience-popover") &&
-          document.activeElement === document.querySelector(".sidebar-experience-trigger")`
-      ),
-    5_000,
-    "Experience menu did not close and restore focus on Escape."
+    () => evaluateValue<boolean>(cdp,
+      `Boolean(document.querySelector("[role='tablist'][aria-label='Apps pages']"))`),
+    DEFAULT_TIMEOUT_MS,
+    "Apps did not render after keyboard navigation."
   );
-
-  const experienceOptions = keyboardMenu.labels;
-  await selectProductArea(cdp, "models", "Models");
+  await selectDesktopDestination(cdp, "Console");
   await waitFor(
-    async () =>
-      evaluateValue<boolean>(
-        cdp,
-        `Boolean(
-          document.querySelector("[aria-label='Models']") &&
-          !document.querySelector(".work-starter-prompts")
-        )`
-      ),
-    5_000,
-    "Models controls did not render after switching products."
+    () => evaluateValue<boolean>(cdp,
+      `Boolean(document.querySelector("[aria-label='Models']"))`),
+    DEFAULT_TIMEOUT_MS,
+    "Console controls did not render after keyboard navigation."
   );
-  await selectProductArea(cdp, "chat", "Chat");
+  await selectDesktopDestination(cdp, "Home");
   await selectTaskMode(cdp, "work", "Work");
-  const workState = await evaluateValue<{
-    composerAvailable: boolean;
-    handoffCount: number;
-    topBarSelectorCount: number;
-  }>(
-    cdp,
-    `(() => ({
-      composerAvailable: Boolean(
-        document.querySelector(".composer-inline-input[role='textbox']")
-      ),
-      handoffCount: document.querySelectorAll(".experience-handoff-bar").length,
-      topBarSelectorCount: document.querySelectorAll(".experience-selector").length
-    }))()`
-  );
-  if (!workState.composerAvailable) {
-    throw new Error("Work task mode did not render the composer.");
-  }
-  if (workState.handoffCount !== 0 || workState.topBarSelectorCount !== 0) {
-    throw new Error(
-      `Work rendered retired global UI: ${JSON.stringify(workState)}`
-    );
-  }
-
+  const workComposerAvailable = await evaluateValue<boolean>(cdp,
+    `Boolean(document.querySelector(".composer-inline-input[role='textbox']"))`);
+  if (!workComposerAvailable) throw new Error("Work task mode did not render the composer.");
   await selectTaskMode(cdp, "chat", "Chat");
-
-  return {
-    experienceMenuStyled,
-    experienceOptions,
-    activeExperience: "Chat",
-    keyboardMenuPassed,
-    workModeSelected: true,
-    workComposerAvailable: workState.composerAvailable,
-    ambientHandoffAbsent: workState.handoffCount === 0,
-    topBarSelectorAbsent: workState.topBarSelectorCount === 0,
-    teamRowStyled,
-  };
+  return { keyboardNavigationPassed: true, workModeSelected: true, workComposerAvailable };
 }
 
-async function selectProductArea(
-  cdp: CdpClient,
-  productArea: "chat" | "models",
-  label: string
-): Promise<void> {
-  const opened = await evaluateValue<boolean>(
-    cdp,
-    `(() => {
-      const trigger = document.querySelector(".sidebar-experience-trigger");
-      if (!(trigger instanceof HTMLButtonElement)) return false;
-      trigger.click();
-      return true;
-    })()`
-  );
-  if (!opened)
-    throw new Error(`Could not open the product menu for ${label}.`);
+async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<void> {
   await waitFor(
-    async () =>
-      evaluateValue<boolean>(
-        cdp,
-        `document.querySelector(".sidebar-experience-popover") instanceof HTMLElement`
-      ),
-    5_000,
-    `Product menu did not open for ${label}.`
-  );
-  const selected = await evaluateValue<boolean>(
-    cdp,
-    `(() => {
-      const option = document.querySelector(
-        ${JSON.stringify(
-          `.sidebar-experience-popover [data-product-area="${productArea}"]`
-        )}
+    () => evaluateValue<boolean>(cdp, `(() => {
+      const button = document.querySelector(
+        ${JSON.stringify(`nav[aria-label="Desktop destinations"] button[aria-label="${label}"]`)}
       );
-      if (!(option instanceof HTMLButtonElement)) return false;
-      option.click();
-      return true;
-    })()`
-  );
-  if (!selected) throw new Error(`Could not select the ${label} product.`);
-  await waitFor(
-    async () =>
-      evaluateValue<boolean>(
-        cdp,
-        `document.querySelector(".sidebar-experience-trigger")?.getAttribute("aria-label") ===
-          ${JSON.stringify(`OpenPond product: ${label}`)}`
-      ),
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.focus();
+      return document.activeElement === button;
+    })()`),
     5_000,
-    `${label} did not become the active product.`
-  ).catch(async (error: unknown) => {
-    const routeState = await evaluateValue(cdp, `({
-      location: location.href,
-      product: document.querySelector(".sidebar-experience-trigger")?.getAttribute("aria-label")
-    })`);
-    throw new Error(`${String(error)} Route state: ${JSON.stringify(routeState)}`);
+    `Could not focus the ${label} destination.`
+  );
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13,
+    text: "\r", unmodifiedText: "\r",
   });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13,
+  });
+  await waitFor(
+    () => evaluateValue<boolean>(cdp, `(() => {
+      const button = document.querySelector(
+        ${JSON.stringify(`nav[aria-label="Desktop destinations"] button[aria-label="${label}"]`)}
+      );
+      return button?.getAttribute(${JSON.stringify(label === "Console" ? "aria-expanded" : "aria-current")}) ===
+        ${JSON.stringify(label === "Console" ? "true" : "page")};
+    })()`),
+    5_000,
+    `${label} did not become the active destination.`
+  );
 }
 
 async function selectTaskMode(
