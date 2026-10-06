@@ -7,6 +7,7 @@ import {
   type ProviderSettings,
 } from "@openpond/contracts";
 import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
+import { admittedHostedModelLimits } from "../runtime/hosted-model-limits.js";
 
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_HOSTED_CONTEXT_TOKENS = 128_000;
@@ -58,6 +59,8 @@ export function trustedProviderContextLimit(input: {
 }): number | null {
   const model = input.model?.trim();
   if (!model) return null;
+  const admitted = admittedHostedModelLimits({ provider: input.provider, model });
+  if (admitted?.contextWindow) return admitted.contextWindow;
   const cache = input.settings?.modelCaches[input.provider];
   const cachedModel = cache?.models.find((candidate) => candidate.id === model);
   if (cachedModel?.contextWindow) return cachedModel.contextWindow;
@@ -74,6 +77,8 @@ export function trustedProviderOutputLimit(input: {
 }): number | null {
   const model = input.model?.trim();
   if (!model) return null;
+  const admitted = admittedHostedModelLimits({ provider: input.provider, model });
+  if (admitted?.outputLimit) return admitted.outputLimit;
   const cachedModel = input.settings?.modelCaches[input.provider]?.models.find(
     (candidate) => candidate.id === model,
   );

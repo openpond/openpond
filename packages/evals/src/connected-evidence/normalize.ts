@@ -1,4 +1,4 @@
-import { contentHash } from "@openpond/harness";
+import { contentHash, contentHashArrayPrefixes } from "@openpond/harness";
 import { CONNECTED_EVIDENCE_LIMITS, CONNECTED_EVIDENCE_VERSION, CONNECTED_NORMALIZER_VERSION, ConnectedSessionSchema, hasRecordedConnectedAnswer,
   type ConnectedBoundary, type ConnectedEvent, type ConnectedFile, type ConnectedSession, type ConnectedSourceKind } from "./contracts.js";
 
@@ -22,6 +22,8 @@ export function normalizeConnectedSession(input: {
   if (!starts.length) throw new Error("The session has no retained user request.");
   if (starts.length + (input.includeConversation === false ? 0 : 1) > CONNECTED_EVIDENCE_LIMITS.boundaries) throw new Error("connected_boundary_limit");
   const familyKey = `family-${contentHash([input.origin, ...(input.acquisition ? [input.acquisition.sourceInstanceId] : []), input.parentSessionId ?? input.sessionId]).slice(0, 32)}`;
+  const inputHashes = contentHashArrayPrefixes(events, starts.map(start => start + 1));
+  const firstCompaction = events.findIndex(event => event.kind === "compaction");
   const boundaries = starts.map((start, position): ConnectedBoundary => {
     const end = starts[position + 1] ?? events.length;
     const observed = events.slice(start + 1, end);
@@ -33,12 +35,12 @@ export function normalizeConnectedSession(input: {
     const terminal = [...observed].reverse().find(event => event.kind === "terminal");
     const status = terminal && typeof terminal.content === "object" && terminal.content !== null && !Array.isArray(terminal.content)
       ? terminal.content.status : null;
-    const compacted = events.slice(0, start + 1).some(event => event.kind === "compaction");
+    const compacted = firstCompaction >= 0 && firstCompaction <= start;
     const unknown = observed.some(event => event.kind === "unknown");
     return {
       id: `case-${contentHash([input.origin, ...(input.acquisition ? [input.acquisition.sourceInstanceId] : []), input.sessionId, input.branchId ?? null, events[start]!.id]).slice(0, 40)}`,
       familyKey, projection: "turn", requestEventId: events[start]!.id, start, end,
-      inputHash: contentHash(events.slice(0, start + 1)), outputHash: answer ? contentHash(answer.content) : null,
+      inputHash: inputHashes[position]!, outputHash: answer ? contentHash(answer.content) : null,
       revisionHash: contentHash(observed), terminal: status === "completed" || status === "failed" || status === "cancelled" ? status : "unknown",
       coverage: { answer: Boolean(answer), context: input.contextComplete === false ? "unknown" : compacted ? "compacted" : "retained",
         process: !tools.length ? unknown ? "partial" : "absent" : incomplete || unknown ? "partial" : "retained",
