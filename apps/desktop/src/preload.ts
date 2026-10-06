@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("openpond", {
   notify: (payload: unknown) => ipcRenderer.invoke("openpond:notification", payload),
+  onPonderNotification: (callback: (payload: { id: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { id: string }) => callback(payload);
+    ipcRenderer.on("openpond:ponder-notification", listener);
+    return () => ipcRenderer.removeListener("openpond:ponder-notification", listener);
+  },
   getConnection: () => ipcRenderer.invoke("openpond:connection"),
   getDesktopRuntimeInfo: () => ipcRenderer.invoke("openpond:desktop:runtimeInfo"),
   reloadDesktopApp: () => ipcRenderer.invoke("openpond:desktop:reload"),

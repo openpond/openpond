@@ -30,23 +30,70 @@ const ROUND_CONSTANTS = new Uint32Array([
   0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ]);
 
-export function sha256Hex(value: string | Uint8Array): string {
-  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
-  const paddedLength = Math.ceil((bytes.byteLength + 9) / 64) * 64;
-  const padded = new Uint8Array(paddedLength);
-  padded.set(bytes);
-  padded[bytes.byteLength] = 0x80;
+/** Cloneable byte-stream state; digest leaves the state available for further updates. */
+export class Sha256State {
+  private state = new Uint32Array(INITIAL_STATE);
+  private pending = new Uint8Array(64);
+  private pendingLength = 0;
+  private byteLength = 0;
+  private words = new Uint32Array(64);
 
-  const bitLength = bytes.byteLength * 8;
-  const view = new DataView(padded.buffer);
-  view.setUint32(paddedLength - 8, Math.floor(bitLength / 0x1_0000_0000), false);
-  view.setUint32(paddedLength - 4, bitLength >>> 0, false);
+  /** Strings are independently UTF-8 encoded chunks. Use bytes when a text
+   * stream may split a surrogate pair between updates. */
+  update(value: string | Uint8Array): this {
+    const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+    if (!Number.isSafeInteger(this.byteLength + bytes.length)) throw new RangeError("SHA-256 input is too large");
+    this.byteLength += bytes.length;
+    let offset = 0;
+    if (this.pendingLength) {
+      const count = Math.min(64 - this.pendingLength, bytes.length);
+      this.pending.set(bytes.subarray(0, count), this.pendingLength);
+      this.pendingLength += count;
+      offset += count;
+      if (this.pendingLength === 64) {
+        this.compress(this.pending);
+        this.pendingLength = 0;
+      }
+    }
+    while (offset + 64 <= bytes.length) {
+      this.compress(bytes.subarray(offset, offset + 64));
+      offset += 64;
+    }
+    if (offset < bytes.length) {
+      this.pending.set(bytes.subarray(offset));
+      this.pendingLength = bytes.length - offset;
+    }
+    return this;
+  }
 
-  const state = new Uint32Array(INITIAL_STATE);
-  const words = new Uint32Array(64);
-  for (let offset = 0; offset < paddedLength; offset += 64) {
+  clone(): Sha256State {
+    const copy = new Sha256State();
+    copy.state.set(this.state);
+    copy.pending.set(this.pending);
+    copy.pendingLength = this.pendingLength;
+    copy.byteLength = this.byteLength;
+    return copy;
+  }
+
+  digestHex(): string {
+    const copy = this.clone();
+    const padding = new Uint8Array(copy.pendingLength < 56 ? 64 : 128);
+    padding.set(copy.pending.subarray(0, copy.pendingLength));
+    padding[copy.pendingLength] = 0x80;
+    const bitLength = copy.byteLength * 8;
+    const view = new DataView(padding.buffer);
+    view.setUint32(padding.length - 8, Math.floor(bitLength / 0x1_0000_0000), false);
+    view.setUint32(padding.length - 4, bitLength >>> 0, false);
+    copy.compress(padding.subarray(0, 64));
+    if (padding.length === 128) copy.compress(padding.subarray(64));
+    return Array.from(copy.state, (word) => word.toString(16).padStart(8, "0")).join("");
+  }
+
+  private compress(bytes: Uint8Array): void {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, 64);
+    const state = this.state, words = this.words;
     for (let index = 0; index < 16; index += 1) {
-      words[index] = view.getUint32(offset + index * 4, false);
+      words[index] = view.getUint32(index * 4, false);
     }
     for (let index = 16; index < 64; index += 1) {
       const previous = words[index - 15]!;
@@ -92,8 +139,10 @@ export function sha256Hex(value: string | Uint8Array): string {
     state[6] = (state[6]! + g) >>> 0;
     state[7] = (state[7]! + h) >>> 0;
   }
+}
 
-  return Array.from(state, (word) => word.toString(16).padStart(8, "0")).join("");
+export function sha256Hex(value: string | Uint8Array): string {
+  return new Sha256State().update(value).digestHex();
 }
 
 function rotateRight(value: number, bits: number): number {

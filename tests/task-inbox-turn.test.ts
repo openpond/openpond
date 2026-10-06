@@ -6,6 +6,14 @@ import { join } from "node:path";
 import { writeProvidersFile, normalizeProvidersFile } from "../apps/server/src/openpond/provider-settings.js";
 import { hostedCompactionPriorEvents, openRouterProviderSettingsWithContextWindow } from "./helpers/byok-turn-runner-harness";
 import { createTurnRunnerTestHarness, turnRunnerTestSession } from "./helpers/turn-runner-test-harness";
+import { qualifyLocalManagedMessaging } from "./helpers/local-managed-live-qualification";
+
+// Failure story: an installed adapter acknowledges transport but never consumes
+// a queued follow-up, loses original-session context, or duplicates it on restart.
+// Real models run only with explicit qualification authorization/environment.
+test.runIf(process.env.OPENPOND_QUALIFY_LOCAL_MESSAGING === "1").each(["claude-code", "opencode", "codex"] as const)(
+  "installed %s consumes local follow-ups in the original session", qualifyLocalManagedMessaging, 240_000,
+);
 
 function gate() { let resolve!: () => void; const promise = new Promise<void>((done) => { resolve = done; }); return { promise, resolve }; }
 

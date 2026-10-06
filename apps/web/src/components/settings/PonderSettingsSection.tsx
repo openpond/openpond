@@ -8,6 +8,7 @@ type Settings = {
   watchLocalThreads: boolean;
   watchWorkflows: boolean;
   notifications: "off" | "attention" | "all";
+  supervision: { mode: "off" | "recommend"; intervalMinutes: 5 | 10 };
 };
 type Payload = {
   settings: Settings;
@@ -28,6 +29,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
     watchLocalThreads: true,
     watchWorkflows: true,
     notifications: "attention",
+    supervision: { mode: "off", intervalMinutes: 5 },
   });
   const [reload, setReload] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +47,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
       watchLocalThreads: true,
       watchWorkflows: true,
       notifications: "attention",
+      supervision: { mode: "off", intervalMinutes: 5 },
     });
     setError(null);
     void apiFetch<Payload>(connection, "/v1/ponder/settings", { signal: controller.signal })
@@ -128,7 +131,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
               });
             }}
           >
-            <option value="default">OpenPond default</option>
+            <option value="default">Ponder model — shared Qwen, then your accepted version</option>
             {payload?.models.map((model) => (
               <option
                 key={`${model.providerId}|${model.modelId}`}
@@ -184,6 +187,19 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
         <p>
           Activity gives Ponder Pal context. It does not automatically message or change your tasks.
         </p>
+        <label>
+          <input type="checkbox" checked={draft.supervision.mode === "recommend"}
+            onChange={event => setDraft({ ...draft, supervision: { ...draft.supervision, mode: event.target.checked ? "recommend" : "off" } })} />
+          Recommend changes when hosted work needs attention
+        </label>
+        <label>
+          Check for missed updates
+          <select value={draft.supervision.intervalMinutes}
+            onChange={event => setDraft({ ...draft, supervision: { ...draft.supervision, intervalMinutes: Number(event.target.value) as 5 | 10 } })}>
+            <option value={5}>Every 5 minutes</option><option value={10}>Every 10 minutes</option>
+          </select>
+        </label>
+        <p>Task updates trigger reviews. Unchanged work is skipped. You review and send each proposed message.</p>
         <label>
           Notifications
           <select

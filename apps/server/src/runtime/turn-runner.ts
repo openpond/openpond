@@ -1214,6 +1214,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         ),
         attachmentContext
       );
+      const peerInput = typeof input.metadata?.taskInputId === "string" ? await inboxStore.getTaskInput(input.metadata.taskInputId) : null;
+      const peerInputId = peerInput?.sessionId === sessionId && peerInput.turnId === turn.id && peerInput.senderSessionId && peerInput.senderKind !== "user" ? peerInput.id : null;
       await appendRuntimeEvent(
         event({
           sessionId,
@@ -1223,6 +1225,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           appId: session.appId,
           args: {
             prompt: input.prompt,
+            ...(peerInputId ? { taskInputId: peerInputId } : {}),
             cwd: initialCwd,
             provider: activeProvider,
             ...(turnModelRef ? { modelRef: turnModelRef } : {}),
@@ -1372,6 +1375,19 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const providerTurnId = `openpond-${turn.id}`;
         const model =
           turnModelRef?.modelId || input.model || DEFAULT_OPENPOND_CHAT_MODEL;
+        const providerSettings = loadProviderSettings
+          ? await loadProviderSettings()
+          : null;
+        const contextLimitTokens = trustedProviderContextLimit({
+          provider: "openpond",
+          model,
+          settings: providerSettings,
+        });
+        const modelOutputLimit = trustedProviderOutputLimit({
+          provider: "openpond",
+          model,
+          settings: providerSettings,
+        });
         await updateStoredTurn(turn.id, (current) => ({
           ...current,
           providerTurnId,
@@ -1425,6 +1441,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           turnPermissions,
           provider: "openpond",
           model,
+          modelOutputLimit,
+          contextLimitTokens,
           messages,
           systemPrompt,
           resourceEvents: hostedPriorEvents,
@@ -1743,7 +1761,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const initialInputs = await taskInbox.include(sessionId, turn.id, initialRequestId);
       const providerTurn = await runtime.client.startTurn({
         threadId: runtime.threadId,
-        prompt: codexPromptWithHarnessContext([providerPrompt, ...initialInputs.map(taskInputModelText)].join("\n\n"), [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")),
+        prompt: codexPromptWithHarnessContext([providerPrompt, ...initialInputs.filter(input => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n"), [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")),
         cwd: turnCwd ?? session.cwd,
         model: codexModel,
         approvalPolicy: turnPermissions.approvalPolicy,
@@ -1863,6 +1881,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     steerSessionTurn: taskInbox.steer,
     readTaskInbox: (sessionId) => inboxStore.taskInboxSnapshot(sessionId),
     queueTaskInput: taskInbox.queue,
+    admitUserLocalMessage: taskInbox.admitUserLocalMessage,
     updateTaskInput: taskInbox.mutate,
     recoverTaskInbox: taskInbox.recover,
     isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),

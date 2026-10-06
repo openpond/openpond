@@ -32,15 +32,37 @@ export function createTaskInboxRuntime(deps: {
   const dispatching = new Map<string, Promise<void>>();
   const reschedule = new Set<string>();
   const requests = new Map<string, AbortController>();
+  const recordedInputsByTurn = new Map<string, Set<string>>();
   let closed = false;
 
   async function record(input: TaskInput): Promise<void> {
-    await deps.appendRuntimeEvent(event({
-      sessionId: input.sessionId, turnId: input.turnId ?? undefined,
-      name: "task.input", source: "server", status: input.state === "rejected" ? "failed" : input.state === "pending" ? "pending" : "completed",
-      output: input.error ?? `${input.senderKind === "user" ? "Input" : "Peer message"} ${input.state}.`,
-      data: { input },
-    }));
+    await serial.run(`receipt:${input.id}`, async () => {
+      // Admission and provider settlement can race. Publish the durable current
+      // receipt, never a stale pending snapshot after its completion event.
+      input = await deps.store.getTaskInput(input.id) ?? input;
+      if (input.turnId && (input.state === "pending" || (input.state === "included" && !input.error))) {
+        const ids = recordedInputsByTurn.get(input.turnId) ?? new Set<string>();
+        ids.add(input.id);
+        recordedInputsByTurn.set(input.turnId, ids);
+      }
+      const sender = input.senderSessionId ? await deps.getSession(input.senderSessionId).catch(() => null) : null;
+      const recipient = sender ? await deps.getSession(input.sessionId).catch(() => null) : null;
+      const authorized = sender && recipient && await canCoordinateTasks(sender, recipient, deps.getSession);
+      const peer = (session: Session) => ({ sessionId: session.id, title: authorized ? session.title : "Another task", provider: authorized ? session.provider : "" });
+      await deps.appendRuntimeEvent(event({
+        sessionId: input.sessionId, turnId: input.turnId ?? undefined,
+        name: "task.input", source: "server", status: input.state === "rejected" ? "failed" : input.state === "pending" ? "pending" : "completed",
+        output: input.error ?? `${input.senderKind === "user" ? "Input" : "Peer message"} ${input.state}.`,
+        data: { input, ...(sender ? { delivery: { direction: "received", peer: peer(sender) } } : {}) },
+      }));
+      if (sender && recipient && sender.id !== recipient.id) {
+        await deps.appendRuntimeEvent(event({
+          sessionId: sender.id, name: "task.input", source: "server",
+          status: input.state === "rejected" ? "failed" : input.state === "pending" ? "pending" : "completed",
+          data: { input, delivery: { direction: "sent", peer: peer(recipient) } },
+        }));
+      }
+    });
   }
 
   async function notify(input: TaskInput): Promise<void> {
@@ -141,7 +163,11 @@ export function createTaskInboxRuntime(deps: {
     for (const input of await deps.store.pendingTaskInputs(sessionId, turnId)) {
       if (!input.senderSessionId) continue;
       try { await authorize(input.senderSessionId, sessionId); }
-      catch { await deps.store.rejectTaskInput(input.id, "Peer access changed before delivery."); }
+      catch {
+        await deps.store.rejectTaskInput(input.id, "Peer access changed before delivery.");
+        const rejected = await deps.store.getTaskInput(input.id);
+        if (rejected) await record(rejected);
+      }
     }
     const inputs = await deps.store.includeTaskInputs(sessionId, turnId, ownerId, requestId);
     for (const input of inputs) await record(input);
@@ -160,8 +186,10 @@ export function createTaskInboxRuntime(deps: {
         await active.codexRuntime.client.steerTurn({ threadId: active.codexRuntime.threadId,
           expectedTurnId: active.codexTurnId, prompt: inputs.map(taskInputModelText).join("\n\n") });
         await deps.store.settleTaskInputRequest(requestId, "resolved");
+        for (const input of inputs) { const current = await deps.store.getTaskInput(input.id); if (current) await record(current); }
       } catch (error) {
         await deps.store.settleTaskInputRequest(requestId, "failed");
+        for (const input of inputs) { const current = await deps.store.getTaskInput(input.id); if (current) await record(current); }
         throw error;
       }
     });
@@ -303,6 +331,10 @@ export function createTaskInboxRuntime(deps: {
     async recover() {
       for (const owner of await deps.store.recoverTaskInboxOwners(ownerId)) {
         await deps.recoverInterruptedTurn(owner.sessionId, owner.turnId);
+        const snapshot = await deps.store.taskInboxSnapshot(owner.sessionId);
+        for (const input of snapshot.inputs) {
+          if (input.turnId === owner.turnId) await record(input);
+        }
         signals.notify(owner.sessionId);
       }
       for (const id of await deps.store.taskInboxWakeTargets()) schedule(id);
@@ -316,6 +348,13 @@ export function createTaskInboxRuntime(deps: {
     },
     async settled(sessionId: string, turnId: string, outcome: "completed" | "failed" | "interrupted") {
       await deps.store.closeTaskInboxTurn(sessionId, turnId, ownerId, outcome);
+      const recorded = recordedInputsByTurn.get(turnId);
+      recordedInputsByTurn.delete(turnId);
+      for (const id of recorded ?? []) {
+        const current = await deps.store.getTaskInput(id);
+        if (current) await record(current);
+      }
+      recordedInputsByTurn.delete(turnId);
       signals.notify(sessionId);
       await deps.appendRuntimeEvent(event({ sessionId, turnId, name: "task.inbox", source: "server", status: "completed", data: { outcome } }));
       if (outcome === "completed") schedule(sessionId);
@@ -324,6 +363,10 @@ export function createTaskInboxRuntime(deps: {
     stopScheduling() { closed = true; },
     async close() { closed = true; await Promise.allSettled(dispatching.values()); },
     async notifyAccepted(input: TaskInput) { await notify(TaskInputSchema.parse(input)); },
+    admitUserLocalMessage(input: TaskInputAdmission) {
+      if (input.senderKind !== "user" || input.senderSessionId !== null) throw new Error("Local message admission requires a user input.");
+      return admit(input);
+    },
   };
 }
 

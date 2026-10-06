@@ -198,11 +198,12 @@ export function createServerPayloads(deps: {
   const nativeHistoryPayload = createNativeHistory({ store, storeDir, appendRuntimeEvent,
     canResume: async (provider, cwd) => {
       const file = await readProvidersFile(path.join(storeDir, "providers.json"));
-      if (!file.providers[provider]?.enabled) return false;
+      if (!file.providers[provider]?.enabled) return { available: false, reason: "Enable the original agent in Connections before continuing this conversation." };
       const available = await stat(cwd).then((value) => value.isDirectory()).catch(() => false);
-      if (!available) return false;
+      if (!available) return { available: false, reason: "The original working folder is missing or inaccessible. Restore it, then reopen this conversation." };
       const status = await probeNativeAgent(provider, file.providers[provider]);
-      return status.status === "ready" && status.capabilities?.loadSession === true;
+      const qualified = status.status === "ready" && status.capabilities?.loadSession === true;
+      return { available: qualified, reason: qualified ? null : status.error ?? "This agent does not advertise original-session continuation. Check its installation and login in Connections, then reopen the conversation." };
     },
   });
   const {

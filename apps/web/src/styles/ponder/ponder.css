@@ -11,3 +11,12 @@
 .ponder-linked-work button:focus-visible { outline: 2px solid #64c7d6; outline-offset: 2px; }
 .ponder-linked-work span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ponder-linked-work small { flex: none; color: var(--muted); }
+.ponder-recommendations { display: grid; gap: 12px; margin: 16px 0; }
+.ponder-recommendation { padding: 14px 16px; border: 1px solid #64c7d655; border-radius: 12px; background: #64c7d60a; overflow-wrap: anywhere; }
+.ponder-recommendation-target { max-width: 100%; color: var(--text); background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+.ponder-recommendation p { margin: 10px 0; }
+.ponder-recommendation blockquote { margin: 12px 0; padding-left: 12px; border-left: 2px solid #64c7d655; white-space: pre-wrap; }
+.ponder-recommendation details, .ponder-recommendation small { color: var(--muted); font-size: 12px; }
+.ponder-recommendation-actions, .ponder-message-destination { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.ponder-recommendation-actions button, .ponder-message-destination button { padding: 6px 10px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.ponder-message-destination { padding: 8px 14px; margin: 0; font-size: 12px; color: var(--muted); }

@@ -1,0 +1,167 @@
+.agent-learning-control {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+}
+.agent-learning-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-learning-settings {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.agent-learning-control-row > small {
+  margin-left: auto;
+}
+.agent-learning-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.agent-learning-form {
+  display: grid;
+  gap: 18px;
+}
+.agent-learning-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+.agent-learning-form legend {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.agent-learning-form label,
+.agent-learning-policy-picker,
+.agent-learning-control > label,
+.agent-learning-join > label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  color: #c3c3c3;
+}
+.agent-learning-form input:not([type="checkbox"]),
+.agent-learning-form select,
+.agent-learning-policy-picker select,
+.agent-learning-control select,
+.agent-learning-join select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #191919;
+  color: #eee;
+}
+.agent-learning-policy-picker {
+  margin-bottom: 16px;
+}
+.agent-learning-form p,
+.agent-learning-join p {
+  margin: 0;
+  color: #a6a6a6;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.agent-learning-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.agent-learning-form .agent-learning-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-learning-options {
+  max-height: 244px;
+  overflow: auto;
+  border: 1px solid #333;
+  border-radius: 6px;
+}
+.agent-learning-form .agent-learning-option {
+  min-height: 49px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.agent-learning-option + .agent-learning-option {
+  border-top: 1px solid #2d2d2d;
+}
+.agent-learning-option > span {
+  flex: 1;
+  min-width: 0;
+}
+.agent-learning-option small {
+  display: block;
+  color: #999;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.agent-learning-option img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.agent-learning-option > small {
+  text-transform: capitalize;
+}
+.agent-learning-options > p {
+  padding: 14px;
+}
+.agent-learning-form details {
+  display: grid;
+  gap: 14px;
+}
+.agent-learning-form details summary {
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #bbb;
+  cursor: pointer;
+}
+.agent-learning-footer {
+  justify-content: flex-end;
+}
+.agent-learning-join {
+  display: grid;
+  gap: 18px;
+  width: min(520px, calc(100vw - 32px));
+}
+.agent-learning-join h2 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+  padding-right: 20px;
+}
+.agent-learning-join .settings-button-row {
+  justify-content: flex-end;
+}
+.agent-learning-discard {
+  margin-bottom: 18px;
+  padding: 12px 0;
+}
+.agent-learning-discard p {
+  font-size: 13px;
+}
+.agent-learning-control button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+@media (max-width: 620px) {
+  .agent-learning-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

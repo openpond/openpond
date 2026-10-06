@@ -14,6 +14,8 @@ import { useAgentInventory } from "./useAgentInventory";
 import { useAgentDialogFocus } from "./useAgentDialogFocus";
 import type { ReactNode } from "react";
 import { AgentConversationSetup } from "./AgentConversationSetup";
+import { AgentLearningControl } from "./learning/AgentLearningControl";
+import { useLearningOptions } from "./learning/client";
 import "../../styles/apps/connected-agents.css";
 import "../../styles/settings/settings-forms.css";
 import "../../styles/settings/settings-lists.css";
@@ -38,14 +40,11 @@ export function ConnectedAgentsView({
   const visibilityKey = `openpond-agent-cards:${JSON.stringify(payload?.account.activeProfile ?? null)}`;
   const [hidden, setHidden] = useState<string[]>(() => {
     try {
-      const value: unknown = JSON.parse(
-        localStorage.getItem(visibilityKey) ?? "null",
-      );
+      const value: unknown = JSON.parse(localStorage.getItem(visibilityKey) ?? "null");
       return Array.isArray(value)
         ? value.filter(
             (id): id is string =>
-              typeof id === "string" &&
-              AGENT_SOURCES.some((item) => item.id === id),
+              typeof id === "string" && AGENT_SOURCES.some((item) => item.id === id),
           )
         : ["oh_my_pi"];
     } catch {
@@ -93,51 +92,41 @@ export function ConnectedAgentsView({
     payload?.preferences.defaultTeamId ??
     account?.accounts.find((item) => item.isActive)?.apiKeyAccess?.teamId ??
     null;
-  const onError = useCallback(
-    (message: string | null) => setActionError(message),
-    [],
-  );
+  const onError = useCallback((message: string | null) => setActionError(message), []);
   const onProviders = useCallback((providers: ProviderSettings) => {
     const current = latest.current;
-    if (alive.current && current.payload)
-      current.onPayload({ ...current.payload, providers });
+    if (alive.current && current.payload) current.onPayload({ ...current.payload, providers });
   }, []);
-  const onNativeProvider = useCallback(
-    (provider: string, settings: ProviderSettings) => {
-      const current = latest.current;
-      if (!alive.current || !current.payload) return;
-      const retained = current.payload.providers;
-      const next = {
-        ...current.payload,
-        providers: {
-          ...retained,
-          statuses: {
-            ...retained.statuses,
-            [provider]: settings.statuses[provider],
-          },
-          modelCaches: {
-            ...retained.modelCaches,
-            [provider]: settings.modelCaches[provider],
-          },
+  const onNativeProvider = useCallback((provider: string, settings: ProviderSettings) => {
+    const current = latest.current;
+    if (!alive.current || !current.payload) return;
+    const retained = current.payload.providers;
+    const next = {
+      ...current.payload,
+      providers: {
+        ...retained,
+        statuses: {
+          ...retained.statuses,
+          [provider]: settings.statuses[provider],
         },
-      };
-      latest.current = { ...current, payload: next };
-      current.onPayload(next);
-    },
-    [],
-  );
+        modelCaches: {
+          ...retained.modelCaches,
+          [provider]: settings.modelCaches[provider],
+        },
+      },
+    };
+    latest.current = { ...current, payload: next };
+    current.onPayload(next);
+  }, []);
   useNativeAgentConnections(connection, payload?.providers, onNativeProvider, providerRevision);
-  const onPreferences = useCallback(
-    (value: { preferences: BootstrapPayload["preferences"] }) => {
-      const current = latest.current;
-      if (current.payload)
-        current.onPayload({
-          ...current.payload,
-          preferences: value.preferences,
-        });
-    },
-    [],
-  );
+  const onPreferences = useCallback((value: { preferences: BootstrapPayload["preferences"] }) => {
+    const current = latest.current;
+    if (current.payload)
+      current.onPayload({
+        ...current.payload,
+        preferences: value.preferences,
+      });
+  }, []);
   const providerActions = useProviderSettings({
     connection,
     onError,
@@ -148,12 +137,13 @@ export function ConnectedAgentsView({
     providers: payload?.providers,
   });
   const projectState = useAgentProjects(connection, account, teamId);
-  const {
-    projects,
-    projectId,
-    loading: projectLoading,
-    error: projectError,
-  } = projectState;
+  const { projects, projectId, loading: projectLoading, error: projectError } = projectState;
+  const learning = useLearningOptions(
+    connection,
+    teamId,
+    JSON.stringify([account?.activeProfile ?? null, account?.profile?.id ?? null]),
+    account?.state === "signed_in",
+  );
   const baseUrl = account?.baseUrl ?? account?.activeProfile?.baseUrl;
   const learningUrl =
     baseUrl && teamId
@@ -170,8 +160,7 @@ export function ConnectedAgentsView({
       });
       await refresh();
     } catch (failure) {
-      const message =
-        failure instanceof Error ? failure.message : "Importer action failed.";
+      const message = failure instanceof Error ? failure.message : "Importer action failed.";
       setActionError(message);
       onToast?.(message, "error");
     } finally {
@@ -209,7 +198,7 @@ export function ConnectedAgentsView({
             onClick={() => {
               void refresh();
               projectState.refresh();
-              setProviderRevision(value => value + 1);
+              setProviderRevision((value) => value + 1);
             }}
           >
             <RefreshCw size={15} />
@@ -224,23 +213,19 @@ export function ConnectedAgentsView({
             </button>
             {moreOpen ? (
               <div className="agent-more-menu">
-                {AGENT_SOURCES.filter((item) => hidden.includes(item.id)).map(
-                  (item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      onClick={() => {
-                        setHidden((items) =>
-                          items.filter((id) => id !== item.id),
-                        );
-                        setMoreOpen(false);
-                      }}
-                    >
-                      <Plus size={14} />
-                      <span>{item.name}</span>
-                    </button>
-                  ),
-                )}
+                {AGENT_SOURCES.filter((item) => hidden.includes(item.id)).map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onClick={() => {
+                      setHidden((items) => items.filter((id) => id !== item.id));
+                      setMoreOpen(false);
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>{item.name}</span>
+                  </button>
+                ))}
                 {hidden.length === 0 ? <span>All agents shown</span> : null}
               </div>
             ) : null}
@@ -256,9 +241,7 @@ export function ConnectedAgentsView({
           onChange={(event) => projectState.select(event.target.value)}
         >
           <option value="">
-            {projectLoading && !projects.length
-              ? "Fetching projects…"
-              : "Select project"}
+            {projectLoading && !projects.length ? "Fetching projects…" : "Select project"}
           </option>
           {projects.map((item) => (
             <option key={item.id} value={item.id}>
@@ -271,27 +254,34 @@ export function ConnectedAgentsView({
       {error ? <p role="alert">{error}</p> : null}
       {actionError ? <p role="alert">{actionError}</p> : null}
       <div className="agent-connections-grid">
-        {AGENT_SOURCES.filter((item) => !hidden.includes(item.id)).map(
-          (agent) => (
-            <AgentConnectionCard
-              key={agent.id}
-              agent={agent}
-              account={account}
-              native={
-                agent.provider
-                  ? payload?.providers.statuses[agent.provider]
-                  : null
-              }
-              inventory={inventory}
-              projects={projects}
-              teamId={teamId}
-              learningUrl={learningUrl}
-              connected={Boolean(connection)}
-              onHide={() => setHidden((items) => [...items, agent.id])}
-              onManage={() => setSelected(agent)}
-            />
-          ),
-        )}
+        {AGENT_SOURCES.filter((item) => !hidden.includes(item.id)).map((agent) => (
+          <AgentConnectionCard
+            key={`${JSON.stringify([account?.activeProfile, account?.profile?.id])}:${teamId}:${projectId}:${agent.id}`}
+            agent={agent}
+            account={account}
+            native={agent.provider ? payload?.providers.statuses[agent.provider] : null}
+            inventory={inventory}
+            projects={projects}
+            teamId={teamId}
+            learningControl={
+              <AgentLearningControl
+                agent={agent}
+                inventory={inventory}
+                connection={connection}
+                teamId={teamId}
+                projectId={projectId}
+                projectName={
+                  projects.find((item) => item.id === projectId)?.content.name ?? "Selected Project"
+                }
+                query={learning}
+                signedIn={account?.state === "signed_in"}
+              />
+            }
+            connected={Boolean(connection)}
+            onHide={() => setHidden((items) => [...items, agent.id])}
+            onManage={() => setSelected(agent)}
+          />
+        ))}
       </div>
       {inventory ? (
         <div className="agent-importer-footer">
@@ -312,9 +302,7 @@ export function ConnectedAgentsView({
           <button
             type="button"
             disabled={actionBusy}
-            onClick={() =>
-              void service(inventory.collector.running ? "stop" : "start")
-            }
+            onClick={() => void service(inventory.collector.running ? "stop" : "start")}
           >
             {inventory.collector.running ? "Stop" : "Start"} importer
           </button>
@@ -339,9 +327,7 @@ export function ConnectedAgentsView({
           onRefreshModels={providerActions.refreshProviderModels}
           onSaveConfig={providerActions.saveProviderConfig}
           onSaveCredential={providerActions.saveProviderCredential}
-          onStartOpenAiSubscriptionAuth={
-            providerActions.startOpenAiSubscriptionAuth
-          }
+          onStartOpenAiSubscriptionAuth={providerActions.startOpenAiSubscriptionAuth}
           onValidate={providerActions.validateProvider}
           conversationPanel={conversationPanel}
         />
@@ -365,10 +351,7 @@ function ImportOnlyDialog({
 }) {
   const ref = useAgentDialogFocus(onClose);
   return (
-    <div
-      className="git-dialog-backdrop provider-dialog-backdrop"
-      onMouseDown={onClose}
-    >
+    <div className="git-dialog-backdrop provider-dialog-backdrop" onMouseDown={onClose}>
       <section
         ref={ref}
         className="git-dialog provider-details-dialog agent-setup-dialog"
@@ -377,15 +360,15 @@ function ImportOnlyDialog({
         aria-label={`${agent.name} connection`}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <button
-          type="button"
-          className="git-dialog-close"
-          aria-label="Close"
-          onClick={onClose}
-        >
+        <button type="button" className="git-dialog-close" aria-label="Close" onClick={onClose}>
           <X size={16} />
         </button>
-        <div className="provider-dialog-header"><div><h2>{agent.name}</h2><span>Conversation syncing</span></div></div>
+        <div className="provider-dialog-header">
+          <div>
+            <h2>{agent.name}</h2>
+            <span>Conversation syncing</span>
+          </div>
+        </div>
         {children}
       </section>
     </div>

@@ -7,8 +7,14 @@ import { SessionSchema, SubagentRunSchema, TaskWaitSchema, TurnSchema, type Task
 import { SqliteStore } from "../apps/server/src/store/store";
 import { createTaskInboxRuntime } from "../apps/server/src/runtime/task-inbox/runtime";
 import { createTaskCoordinationMcp } from "../apps/server/src/runtime/task-inbox/codex-mcp";
+import { createLocalManagedMessaging } from "../apps/server/src/runtime/task-inbox/local-managed-messaging";
+import { createServer, type ServerResponse } from "node:http";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
+import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src/api/http-routes";
 
 import { createSubagentCompletionRuntime } from "../apps/server/src/runtime/subagents/completion-runtime";
+import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const dispose of cleanup.splice(0).reverse()) await dispose(); });
@@ -32,6 +38,106 @@ function input(overrides: Partial<TaskInputAdmission> = {}): TaskInputAdmission 
   return { id: "input-1", sessionId: "a", senderSessionId: null, senderKind: "user", kind: "steer",
     body: "Preserve the API", payload: {}, idempotencyKey: "intent-1", replyTo: null, expectedTurnId: "turn-a", ...overrides };
 }
+
+// Failure story: a remote/unauthenticated request bypasses desktop Send, or an
+// ambiguous HTTP retry duplicates a persisted message after a runtime restart.
+test("desktop message HTTP admission enforces local authority and durable retry identity", async () => {
+  const f = await fixture();
+  await f.store.updateSession("a", session => ({ ...session, provider: "claude-code", cwd: "/tmp/owned-http-message",
+    nativeAgent: { provider: "claude-code", instanceId: "installation", sessionId: "original-session", cwd: "/tmp/owned-http-message" } }));
+  const messaging = () => createLocalManagedMessaging({ store: f.store,
+    getSession: async id => (await f.store.getSession(id))!, latestTurn: id => f.store.latestTurnForSession(id),
+    readiness: async () => ({ available: true, canSteer: false, reason: null }), approvalBlocked: async () => true,
+    admit: admission => f.store.admitTaskInput(admission) });
+  const deps = { host: "127.0.0.1", getActualPort: () => (server.address() as AddressInfo).port,
+    token: "desktop-message-test", version: "test", runtimeVersion: "test", logger: { info() {}, warn() {}, error() {} },
+    subscribers: new Set<ServerResponse>(), localManagedMessaging: messaging() } as unknown as HttpRouteDeps;
+  const server = createServer(createHttpRequestHandler(deps));
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/sessions/a`;
+  const headers = { authorization: "Bearer desktop-message-test", "content-type": "application/json", origin: "http://127.0.0.1:17876" };
+  try {
+    expect((await fetch(`${url}/local-message-target`)).status).toBe(401);
+    expect((await fetch(`${url}/local-message-target`, { headers: { ...headers, "x-forwarded-for": "203.0.113.5" } })).status).toBe(403);
+    expect((await fetch(`${url}/local-message-target`, { headers: { ...headers, origin: "https://remote.example" } })).status).toBe(403);
+    expect(await f.store.taskInputsForSession("a")).toHaveLength(0);
+    const observed = await (await fetch(`${url}/local-message-target`, { headers })).json() as { targetRevision: string };
+    const body = { authority: "user_click", mode: "followup", prompt: "Reviewed edited task message",
+      expectedTargetRevision: observed.targetRevision, idempotencyKey: "http-reviewed-click" };
+    const send = (value: unknown) => fetch(`${url}/local-messages`, { method: "POST", headers, body: JSON.stringify(value) });
+    const admitted = await send(body); expect(admitted.status).toBe(202);
+    const receipt = await admitted.json() as { id: string; state: string; body: string };
+    expect(receipt).toMatchObject({ state: "pending", body: body.prompt });
+    await f.reopen(); deps.localManagedMessaging = messaging();
+    await f.store.updateSession("a", session => ({ ...session, nativeAgent: { ...session.nativeAgent!, sessionId: "changed-session" } }));
+    const retry = await send(body); expect(retry.status).toBe(202);
+    expect((await retry.json() as { id: string }).id).toBe(receipt.id);
+    expect((await send({ ...body, idempotencyKey: "new-stale-click" })).status).toBe(409);
+    expect((await send({ ...body, prompt: "Changed after delivery" })).status).toBe(409);
+    expect((await send({ ...body, authority: "model_decision" })).status).toBe(422);
+    expect(await f.store.taskInputsForSession("a")).toHaveLength(1);
+  } finally { server.close(); await once(server, "close"); }
+});
+
+// Failure story: a recommendation targets another native session after refresh,
+// retries launch duplicate work after restart, or Send silently resumes paused work.
+test("local Send binds the original managed target and preserves paused, approval and retry boundaries", async () => {
+  const f = await fixture();
+  await f.store.updateSession("a", (session) => ({ ...session, provider: "claude-code", cwd: "/tmp/owned-message-test",
+    nativeAgent: { provider: "claude-code", instanceId: "owned-installation", sessionId: "owned-vendor-session", cwd: "/tmp/owned-message-test" } }));
+  let available = true, approvalBlocked = true;
+  const service = createLocalManagedMessaging({
+    store: f.store, getSession: async (id) => (await f.store.getSession(id))!, latestTurn: (id) => f.store.latestTurnForSession(id),
+    readiness: async () => ({ available, reason: available ? null : "Agent disabled", canSteer: false }),
+    approvalBlocked: async () => approvalBlocked, admit: (admission) => f.store.admitTaskInput(admission),
+  });
+  await f.store.openTaskInboxTurn("a", "turn-a", "owner");
+  const observed = await service.inspect("a");
+  expect(observed).toMatchObject({ managedSessionId: "owned-vendor-session", approvalBlocked: true, canSendFollowup: true, canSteer: false });
+  const intent = { authority: "user_click", mode: "followup", prompt: "Reviewed edited instruction", expectedTargetRevision: observed.targetRevision,
+    idempotencyKey: "reviewed-click", recommendationId: "recommendation-test" };
+  const [first, retry] = await Promise.all([service.send("a", intent), service.send("a", intent)]);
+  expect(retry.id).toBe(first.id);
+  expect(first).toMatchObject({ state: "pending", turnId: null, kind: "queued" });
+  expect(await f.store.pendingTaskInputs("a", "turn-a")).toEqual([]);
+  await expect(service.send("a", { ...intent, prompt: "Changed text" })).rejects.toThrow("different content");
+  await expect(service.send("a", { ...intent, mode: "steer", expectedTurnId: "turn-a", idempotencyKey: "unsupported-steer" })).rejects.toThrow("no longer accepting");
+  await f.store.closeTaskInboxTurn("a", "turn-a", "owner", "interrupted");
+  approvalBlocked = false;
+  expect((await service.inspect("a")).paused).toBe(true);
+  expect(await f.store.reserveTaskFollowup("a", "unauthorized-resume", "owner")).toBeNull();
+  await f.reopen();
+  const recovered = createLocalManagedMessaging({ store: f.store, getSession: async (id) => (await f.store.getSession(id))!,
+    latestTurn: (id) => f.store.latestTurnForSession(id), readiness: async () => ({ available, reason: "Agent disabled", canSteer: false }),
+    approvalBlocked: async () => false, admit: (admission) => f.store.admitTaskInput(admission) });
+  await f.store.updateSession("a", (session) => ({ ...session, nativeAgent: { ...session.nativeAgent!, sessionId: "other-vendor-session" } }));
+  expect((await recovered.send("a", intent)).id).toBe(first.id);
+  await expect(recovered.send("a", { ...intent, idempotencyKey: "new-click" })).rejects.toThrow("target changed");
+  available = false;
+  const unavailable = await recovered.inspect("a");
+  expect(unavailable).toMatchObject({ canSendFollowup: false, unavailableReason: "Agent disabled" });
+  await expect(recovered.send("a", { ...intent, expectedTargetRevision: unavailable.targetRevision, idempotencyKey: "disabled-click" })).rejects.toThrow("disabled");
+  expect((await recovered.inspect("outsider")).canSendFollowup).toBe(false);
+  available = true;
+  await f.store.updateSession("a", (session) => ({ ...session, metadata: { nativeHistoryProjection: true, nativeResumeAvailable: false } }));
+  const imported = await recovered.inspect("a");
+  expect(imported).toMatchObject({ canSendFollowup: false });
+  await expect(recovered.send("a", { ...intent, expectedTargetRevision: imported.targetRevision, idempotencyKey: "imported-click" })).rejects.toThrow("imported");
+  await f.store.updateSession("a", session => ({ ...session, metadata: { ...session.metadata, nativeResumeAvailable: true } }));
+  const qualified = await recovered.inspect("a");
+  expect(qualified.canSendFollowup).toBe(true);
+  expect(await recovered.send("a", { ...intent, expectedTargetRevision: qualified.targetRevision, idempotencyKey: "qualified-click" })).toMatchObject({ state: "pending", kind: "queued" });
+  await f.store.updateSession("a", (session) => ({ ...session, metadata: { nativeHistoryProjection: false } }));
+  const raced = createLocalManagedMessaging({ store: f.store, getSession: async (id) => (await f.store.getSession(id))!,
+    latestTurn: (id) => f.store.latestTurnForSession(id), readiness: async () => ({ available: true, reason: null, canSteer: false }),
+    approvalBlocked: async () => false, admit: async (admission) => {
+      await f.store.updateSession("a", (session) => ({ ...session, nativeAgent: { ...session.nativeAgent!, sessionId: "changed-during-admission" } }));
+      return f.store.admitTaskInput(admission);
+    } });
+  const beforeRace = await raced.inspect("a");
+  await expect(raced.send("a", { ...intent, expectedTargetRevision: beforeRace.targetRevision, idempotencyKey: "raced-click" })).rejects.toThrow("before message admission");
+  expect(await f.store.taskInputsForSession("a")).toHaveLength(2);
+});
 
 // Failure story: a correction accepted during finalization is lost, replayed twice, or attached to a different assignment.
 test("durable admission, inclusion, replacement and sealing agree on one turn", async () => {
@@ -84,32 +190,80 @@ test("owner recovery preserves uncertain inclusion and reclaims only unstarted r
   await expect(f.store.renewTaskInboxTurn("a", "turn-a", "old-owner")).rejects.toThrow("ownership was lost");
 });
 
-// Failure story: cross-project data leaks, dependency cycles deadlock, or an earlier execution satisfies a new-work wait.
+// Failure story: cross-project data leaks, dependency cycles deadlock, or a
+// replayed/failed peer delivery is duplicated or falsely shown as delivered.
 test("authorization, cycle prevention and generation-specific event waits share durable state", async () => {
   const f = await fixture();
   const runtime = createTaskInboxRuntime({ store: f.store,
     getSession: async (id) => { const session = await f.store.getSession(id); if (!session) throw new Error("missing"); return session; },
     listSessions: () => f.store.sessionShells(), getTurn: (id) => f.store.getTurn(id), latestTurn: (id) => f.store.latestTurnForSession(id),
     getSubagentRun: async () => null, getActiveTurn: () => undefined, recoverInterruptedTurn: async () => {},
-    startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: (work) => work(), appendRuntimeEvent: async () => {},
+    startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: (work) => work(), appendRuntimeEvent: async (value) => { await f.store.appendRuntimeEvent(value); },
   });
   cleanup.push(runtime.close);
   await expect(runtime.send({ senderSessionId: "outsider", sessionId: "a", body: "secret", idempotencyKey: "denied" })).rejects.toThrow("authorized project");
   await f.store.insertTurn({ ...f.turn, id: "old-b", sessionId: "b", status: "completed" });
   const receipt = await runtime.send({ senderSessionId: "a", sessionId: "b", body: "New work", kind: "followup", idempotencyKey: "new" });
+  expect((await runtime.send({ senderSessionId: "a", sessionId: "b", body: "New work", kind: "followup", idempotencyKey: "new" })).id).toBe(receipt.id);
+  for (const [sessionId, direction, peerId] of [["a", "sent", "b"], ["b", "received", "a"]]) {
+    const messages = buildChatMessages(await f.store.runtimeEventsForSession(sessionId!));
+    expect(messages.filter(message => message.role === "task_message")).toHaveLength(1);
+    expect(messages[0]?.taskMessage).toMatchObject({ direction, peer: { sessionId: peerId }, input: { id: receipt.id, state: "pending" } });
+  }
   const waiting = runtime.wait({ sessionId: "a", turnId: "turn-a", callId: "wait-new", targetSessionId: "b", targetInputId: receipt.id, signal: new AbortController().signal });
   await vi.waitFor(async () => expect(await f.store.taskWaitsForSession("a")).toHaveLength(1));
   await expect(f.store.createTaskWait(TaskWaitSchema.parse({ id: "cycle", sessionId: "b", turnId: "new-b", targetSessionId: "a", targetTurnId: "turn-a", afterSequence: 0,
     deadline: new Date(Date.now() + 10_000).toISOString(), state: "waiting", createdAt: "now", updatedAt: "now" }))).rejects.toThrow("cycle");
   await f.store.reserveTaskFollowup("b", "new-b", runtime.ownerId);
   await f.store.insertTurn({ ...f.turn, id: "new-b", sessionId: "b", status: "completed" });
+  await runtime.include("b", "new-b", "peer-request");
+  await f.store.appendRuntimeEvent({ id: "peer-turn-started", sessionId: "b", turnId: "new-b", name: "turn.started", timestamp: new Date().toISOString(),
+    args: { prompt: "Internal coordination envelope", taskInputId: receipt.id } });
+  await f.store.settleTaskInputRequest("peer-request", "resolved");
+  await runtime.settled("b", "new-b", "completed");
+  for (const sessionId of ["a", "b"]) {
+    const messages = buildChatMessages(await f.store.runtimeEventsForSession(sessionId));
+    expect(messages.filter(message => message.taskMessage?.input.id === receipt.id)).toHaveLength(1);
+    expect(messages.find(message => message.taskMessage?.input.id === receipt.id)?.taskMessage?.input.state).toBe("resolved");
+    expect(messages.some(message => message.role === "user" && message.content === "Internal coordination envelope")).toBe(false);
+  }
   runtime.signals.notify("b");
   expect(await waiting).toMatchObject({ state: "completed", targetInputId: receipt.id });
   await f.store.openTaskInboxTurn("a", "turn-a", runtime.ownerId);
   const pending = await runtime.send({ senderSessionId: "b", sessionId: "a", body: "Previously authorized update", idempotencyKey: "access-change" });
-  await f.store.updateSession("b", (session) => ({ ...session, localProjectId: "other" }));
+  await f.store.updateSession("b", (session) => ({ ...session, localProjectId: "other", title: "Private title after access changed" }));
   expect(await runtime.include("a", "turn-a", "after-access-change")).toEqual([]);
   expect(await f.store.getTaskInput(pending.id)).toMatchObject({ state: "rejected" });
+  const received = buildChatMessages(await f.store.runtimeEventsForSession("a"));
+  expect(received.filter(message => message.taskMessage?.input.id === pending.id)).toHaveLength(1);
+  expect(received.find(message => message.taskMessage?.input.id === pending.id)?.taskMessage?.input).toMatchObject({ state: "rejected", error: expect.any(String) });
+  expect(JSON.stringify(received)).not.toContain("Private title after access changed");
+});
+
+// Failure story: after a process crash, a visible peer receipt keeps claiming
+// successful inclusion even though the durable provider outcome is uncertain.
+test("runtime recovery updates both peer timelines without replaying uncertain work", async () => {
+  const f = await fixture();
+  const createInbox = () => createTaskInboxRuntime({ store: f.store,
+    getSession: async id => (await f.store.getSession(id))!, listSessions: () => f.store.sessionShells(),
+    getTurn: id => f.store.getTurn(id), latestTurn: id => f.store.latestTurnForSession(id),
+    getSubagentRun: async () => null, getActiveTurn: () => undefined, recoverInterruptedTurn: async () => {},
+    startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: work => work(),
+    appendRuntimeEvent: async value => { await f.store.appendRuntimeEvent(value); },
+  });
+  const first = createInbox();
+  await f.store.openTaskInboxTurn("a", "turn-a", first.ownerId);
+  const receipt = await first.send({ senderSessionId: "b", sessionId: "a", body: "Inspect this issue", idempotencyKey: "peer-before-crash" });
+  await first.include("a", "turn-a", "uncertain-peer-request");
+  await first.close(); await f.reopen();
+  const second = createInbox(); cleanup.push(second.close);
+  await second.recover();
+  expect(await f.store.taskInboxPaused("a")).toBe(true);
+  for (const sessionId of ["a", "b"]) {
+    const messages = buildChatMessages(await f.store.runtimeEventsForSession(sessionId));
+    expect(messages.filter(message => message.taskMessage?.input.id === receipt.id)).toHaveLength(1);
+    expect(messages.find(message => message.taskMessage?.input.id === receipt.id)?.taskMessage?.input).toMatchObject({ state: "included", error: expect.stringContaining("uncertain") });
+  }
 });
 
 // Failure story: arrival between a condition read and sleeping is missed indefinitely.

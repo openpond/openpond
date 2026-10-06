@@ -14,6 +14,7 @@ import { claudeGraph } from "../connected-evidence/sources/claude-branches.js";
 import { contentHash } from "@openpond/harness";
 import { listDatabaseSessions, readDatabaseSession } from "./database.js";
 import { claudeConversationTitle, retainedConversationTitle } from "./titles.js";
+import { NativeSessionNotReadyError } from "./readiness.js";
 import {
   NATIVE_READ_LIMIT,
   type NativeSession,
@@ -327,6 +328,8 @@ export async function readSession(
     },
     ...input,
   });
+  if (preview.issues.length && preview.issues.every(issue => issue.code === "no_user_request"))
+    throw new NativeSessionNotReadyError();
   if (preview.issues.length)
     throw new Error(preview.issues.map((issue) => issue.message).join("; "));
   if (

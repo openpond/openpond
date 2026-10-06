@@ -15,6 +15,8 @@ import { handleSandboxRoutes } from "./sandbox-routes.js";
 import { handleSavedWorkRoutes } from "./saved-work-routes.js";
 import { handlePonderRoutes } from "./ponder-routes.js";
 import { handleSessionRoutes } from "./session-routes.js";
+import { handleLocalManagedMessageRoutes } from "./local-managed-message-routes.js";
+import { handleConversationLearningRoutes } from "./conversation-learning-routes.js";
 import { handleSettingsRoutes } from "./settings-routes.js";
 import { handleUsageRoutes } from "./usage-routes.js";
 import { handleTeamChatRoutes } from "./team-chat-routes.js";
@@ -39,6 +41,7 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   {id:"experiment-improvements",handle:handleExperimentImprovementRoutes},
   { id: "human-review", handle: handleHumanReviewRoutes },
   { id: "learning", handle: handleLearningRoutes },
+  { id: "conversation-learning", handle: handleConversationLearningRoutes },
   { id: "create-improve", handle: handleCreateImproveRoutes },
   { id: "communities", handle: handleCommunityRoutes },
   { id: "chat-workflows", handle: handleChatWorkflowRoutes },
@@ -55,4 +58,5 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "settings-providers", handle: handleSettingsRoutes },
   { id: "workspace", handle: handleWorkspaceRoutes },
   { id: "sessions", handle: handleSessionRoutes },
+  { id: "local-managed-messages", handle: handleLocalManagedMessageRoutes },
 ];

@@ -18,12 +18,11 @@ export function buildChatTimelineRows(
   messages: ChatMessage[],
   options: { showThinkingIndicator?: boolean } = {},
 ): ChatTimelineRow[] {
-  const finalAssistantMessageId = latestAssistantMessageId(messages);
   const rows: ChatTimelineRow[] = messages.map((message) => ({
     id: `message:${message.id}`,
     type: "message",
     message,
-    showFooter: message.id === finalAssistantMessageId,
+    showFooter: message.role === "assistant",
   }));
   if (options.showThinkingIndicator) {
     rows.push({

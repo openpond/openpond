@@ -3,7 +3,6 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
-  Copy,
   CreditCard,
   ExternalLink,
   Globe2,
@@ -20,12 +19,9 @@ import type {
 import type { ClientConnection } from "../../api";
 import { useChatAttachmentImageUrl } from "../../hooks/useChatAttachmentImageUrl";
 import type { ChatMessage, ChatSource } from "../../lib/app-models";
-import {
-  formatMessageTimestamp,
-  formatMessageTimestampTitle,
-} from "../../lib/chat-messages";
 import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
-import { copyToClipboard } from "../../lib/clipboard";
+import { MessageFooter } from "./MessageFooter";
+import { TaskMessageRow } from "./TaskMessageRow";
 import { MarkdownText } from "./MarkdownText";
 import { StreamingMarkdownText } from "./StreamingMarkdownText";
 import { ChatActivitySummary } from "./ChatActivitySummary";
@@ -86,10 +82,11 @@ export const MessageRow = memo(function MessageRow({
   onOpenProfileSettings,
   onResolveUserQuestion,
   onOpenSession,
-  showFooter = false,
+  showFooter = true,
   userAttachmentDisplay = "full",
   workspaceRootPath = null,
 }: MessageRowProps) {
+  if (message.role === "task_message") return <TaskMessageRow message={message} onOpenSession={onOpenSession} />;
   if (message.role === "status_divider") {
     return <StatusDivider message={message} />;
   }
@@ -159,9 +156,6 @@ export const MessageRow = memo(function MessageRow({
     );
   }
 
-  const timestampLabel = formatMessageTimestamp(message.timestamp);
-  const timestampTitle = formatMessageTimestampTitle(message.timestamp);
-  const kvCacheLabel = formatKvCacheRate(kvCacheSummary?.cacheHitRate ?? null);
   const profileActionAgentName =
     message.actionRun && isProfileActionRun(message.actionRun)
       ? profileActionAgentLabel(message.actionRun)
@@ -253,52 +247,11 @@ export const MessageRow = memo(function MessageRow({
           onResolve={onResolveUserQuestion}
         />
       ) : null}
-      {(showFooter || kvCacheSummary) ? (
-        <div className="assistant-message-footer">
-          {timestampLabel && (
-            <time
-              className="message-timestamp"
-              dateTime={message.timestamp}
-              title={timestampTitle}
-            >
-              {timestampLabel}
-            </time>
-          )}
-          {kvCacheSummary ? (
-            <>
-              {timestampLabel ? (
-                <span className="message-footer-separator" aria-hidden="true" />
-              ) : null}
-              <span
-                className="message-kv-cache-metric"
-                aria-label={`KV cache reuse ${kvCacheLabel}`}
-              >
-                KV {kvCacheLabel}
-              </span>
-            </>
-          ) : null}
-          <button
-            type="button"
-            className="message-copy-button"
-            title="Copy message"
-            aria-label="Copy assistant message"
-            disabled={!message.content}
-            onClick={() => {
-              if (message.content) void copyToClipboard(message.content);
-            }}
-          >
-            <Copy size={14} />
-          </button>
-        </div>
-      ) : null}
+      {(showFooter || kvCacheSummary) ? <MessageFooter content={message.content} timestamp={message.timestamp} kvCacheSummary={kvCacheSummary} /> : null}
     </article>
   );
 },
 areMessageRowPropsEqual);
-
-function formatKvCacheRate(rate: number | null): string {
-  return rate === null ? "—" : `${Math.round(rate * 100)}%`;
-}
 
 const ReasoningSection = memo(function ReasoningSection({
   activeWorkspaceAppId,
@@ -452,6 +405,7 @@ function chatMessageShallowEqual(
     previous.createImproveRun === next.createImproveRun &&
     previous.userQuestion === next.userQuestion &&
     previous.reasoningContent === next.reasoningContent
+    && previous.taskMessage === next.taskMessage
   );
 }
 

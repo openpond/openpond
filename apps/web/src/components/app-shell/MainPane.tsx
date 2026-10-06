@@ -95,7 +95,8 @@ import {
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
-import { PonderDesktopPanel } from "../ponder/PonderDesktopPanel";
+import { MainPanePonder } from "./MainPanePonder";
+import { mainPaneAccountScopeKey } from "./main-pane-account-scope";
 
 import {
   AppsView,
@@ -348,10 +349,7 @@ export function MainPane({
     selectedProfileSession?.currentProfile ??
     bootstrap?.profileLibrary?.lastUsed ??
     null;
-  const accountTeamScopeKey = JSON.stringify({
-    account: bootstrap?.account.activeProfile ?? null,
-    teamId: bootstrap?.preferences.defaultTeamId ?? null,
-  });
+  const accountTeamScopeKey = mainPaneAccountScopeKey(bootstrap);
   const selectedProfileState =
     profileStateForRef(
       bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
@@ -1533,7 +1531,7 @@ export function MainPane({
         </Suspense>
       ) : null}
       {view === "chat" && ponderMode && connection && bootstrap?.account.activeProfile ? (
-        <PonderDesktopPanel connection={connection} presentation={ponderMode} composer={{
+        <MainPanePonder key={accountTeamScopeKey} connection={connection} presentation={ponderMode} composer={{
           contextWindowStatus, providerSettings: bootstrap.providers ?? null,
           provider: activeProvider, model: activeModel, projectTarget, workspaceTarget,
           codexPermissionMode, codexReasoningEffort, openPondCommandAccessMode,
@@ -1545,17 +1543,7 @@ export function MainPane({
           onCodexReasoningEffortChange: changeCodexReasoningEffort,
           onOpenPondCommandAccessModeChange: changeOpenPondCommandAccessMode,
           showToast,
-        }} onOpenWork={(conversationId) => {
-          if (!projectsAccountBaseUrl) {
-            showToast("OpenPond account URL is unavailable for this Work task.", "error");
-            return;
-          }
-          try {
-            handleOpenBrowserLink(new URL(`/tasks/${encodeURIComponent(conversationId)}`, projectsAccountBaseUrl).toString(), { newTab: true });
-          } catch {
-            showToast("OpenPond account URL is invalid for this Work task.", "error");
-          }
-        }} />
+        }} accountBaseUrl={projectsAccountBaseUrl} onOpenBrowserLink={handleOpenBrowserLink} />
       ) : view === "apps" ? (
         <Suspense fallback={null}>
           <AppsView

@@ -9,6 +9,8 @@ import { SqliteStore } from "../apps/server/src/store/store.js";
 import { createNativeHistory } from "../apps/server/src/runtime/native-agents/history.js";
 import { nativeAgentLaunch } from "../apps/server/src/runtime/native-agents/config.js";
 import { createNativeCapabilityProbe } from "../apps/server/src/runtime/native-agents/capability-probes.js";
+import { previewAgentImport } from "@openpond/evals/connected-evidence";
+import { buildChatMessages } from "../apps/web/src/lib/chat-messages.js";
 
 const acquisition = vi.hoisted(() => ({
   discover: vi.fn(), list: vi.fn(), read: vi.fn(), sourceHome: "/fixture-account",
@@ -25,6 +27,51 @@ vi.mock("../apps/server/src/openpond/provider-settings.js", () => ({
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const dispose of cleanup.splice(0).reverse()) await dispose(); acquisition.sourceHome = "/fixture-account"; });
+
+// Failure story: retained Claude/OpenCode tool wrappers appear as an answer or
+// lose their arguments/results, while a legitimate JSON/bracket answer is altered.
+test("native source import renders retained text and tool activity without rewriting evidence", async () => {
+  const f = await fixture();
+  const answer = "The result is [1, 2].";
+  const rows = [
+    { uuid: "u", parentUuid: null, type: "user", message: { content: "Inspect the result" } },
+    { uuid: "c", parentUuid: "u", type: "assistant", message: { content: [{ type: "tool_use", id: "call", name: "Bash", input: { command: "printf result" } }] } },
+    { uuid: "r", parentUuid: "c", type: "user", message: { content: [{ type: "tool_result", tool_use_id: "call", content: [{ type: "text", text: "[1, 2]" }] }] } },
+    { uuid: "a", parentUuid: "r", type: "assistant", message: { content: [{ type: "text", text: answer }], stop_reason: "end_turn" } },
+  ].map((row, index) => ({ ...row, sessionId: "vendor-id", timestamp: new Date(1000 + index * 1000).toISOString() }));
+  const opencode = { info: { id: "vendor-id" }, messages: [
+    { info: { id: "u", sessionID: "vendor-id", role: "user", time: { created: 1000 } }, parts: [{ id: "p-u", sessionID: "vendor-id", messageID: "u", type: "text", text: "Inspect the result" }] },
+    { info: { id: "a", sessionID: "vendor-id", role: "assistant", parentID: "u", time: { created: 2000, completed: 3000 }, finish: "stop" }, parts: [
+      { id: "p-tool", sessionID: "vendor-id", messageID: "a", type: "tool", callID: "call", tool: "bash", state: { input: { command: "printf result" }, output: "[1, 2]", status: "completed" } },
+      { id: "p-a", sessionID: "vendor-id", messageID: "a", type: "text", text: answer },
+    ] },
+  ] };
+  const examples = [
+    { origin: "claude_code" as const, transcript: rows.map(row => JSON.stringify(row)).join("\n") },
+    { origin: "opencode" as const, transcript: JSON.stringify(opencode) },
+  ];
+  for (const { origin, transcript } of examples) {
+    const preview = previewAgentImport({ source: origin, files: [{ path: origin === "claude_code" ? "history.jsonl" : "history.json", text: transcript }] });
+    expect(preview.issues).toEqual([]);
+    const original = JSON.stringify(preview);
+    const selectedSource = { ...source(`${origin}-instance`, false), source: origin };
+    acquisition.discover.mockResolvedValue([selectedSource]);
+    acquisition.list.mockResolvedValue({ items: [native(selectedSource.instanceId)], nextCursor: null });
+    acquisition.read.mockResolvedValue({ preview });
+    const handle = f.api(); await handle("list");
+    const opened = await handle("open", { id: selectionId(selectedSource.instanceId) }) as Session;
+    await f.reopen();
+    const events = await f.store.runtimeEventsForSession(opened.id);
+    const messages = buildChatMessages(events);
+    expect(messages.filter(message => message.role === "assistant").map(message => message.content)).toEqual([answer]);
+    expect(messages.filter(message => message.role === "user").map(message => message.content)).toEqual(["Inspect the result"]);
+    const activity = messages.flatMap(message => message.activities ?? []);
+    expect(activity.some(item => item.content === "printf result")).toBe(true);
+    expect(JSON.stringify(activity)).toContain("[1, 2]");
+    expect(JSON.stringify(preview)).toBe(original);
+    expect(events.filter(event => event.name.startsWith("tool.")).every(event => event.action === "native_tool")).toBe(true);
+  }
+});
 
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "native-sidebar-"));
@@ -163,7 +210,7 @@ test("explicit open qualifies an acquisition-only history after native identity 
   acquisition.discover.mockResolvedValue([selectedSource, claudeSource]);
   acquisition.list.mockImplementation(async (value: NativeSource) => ({ items: [native(value.instanceId)], nextCursor: null }));
   acquisition.read.mockImplementation(async (value: NativeSource, session: NativeSession) => historyRead(value, session));
-  const canResume = vi.fn(async () => false);
+  const canResume = vi.fn(async (): Promise<boolean | { available: boolean; reason: string | null }> => ({ available: false, reason: "Original working folder is missing." }));
   const handle = f.api(canResume);
   await handle("list", { retain: true });
   expect(canResume).not.toHaveBeenCalled();
@@ -174,6 +221,7 @@ test("explicit open qualifies an acquisition-only history after native identity 
   expect(denied).toMatchObject({ id: retainedId, nativeAgent: null, metadata: { nativeHistoryLoaded: true, nativeResumeAvailable: false } });
   expect(denied.metadata?.nativeReadOnlyReason).toBeTruthy();
   expect(canResume).toHaveBeenCalledWith("opencode", "/workspace");
+  expect((await f.store.getSession(retainedId))?.metadata?.nativeReadOnlyReason).toBe("Original working folder is missing.");
 
   canResume.mockResolvedValue(true);
   const eventBoundary = f.events.length;

@@ -4,7 +4,7 @@ import { contentHash } from "@openpond/harness";
 export const CONNECTED_EVIDENCE_VERSION = "openpond.connectedEvidence.v1" as const;
 export const CONNECTED_NORMALIZER_VERSION = "connected-evidence-1" as const;
 export const CONNECTED_EVIDENCE_LIMITS = { files: 100, sourceBytes: 32 * 1024 * 1024, decodedBytes: 64 * 1024 * 1024,
-  lineBytes: 2 * 1024 * 1024, events: 100_000, sessions: 1_000, boundaries: 5_000, evaluatorBytes: 2 * 1024 * 1024 } as const;
+  lineBytes: 64 * 1024 * 1024, events: 100_000, sessions: 1_000, boundaries: 5_000, evaluatorBytes: 2 * 1024 * 1024 } as const;
 const Id = z.string().min(1).max(500);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Time = z.string().datetime().nullable();

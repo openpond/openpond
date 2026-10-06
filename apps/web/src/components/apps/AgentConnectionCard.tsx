@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { AccountState, ProviderStatus } from "@openpond/contracts";
 import type { TrainingProject } from "openpond-sdk/training-projects";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
@@ -12,7 +13,7 @@ export function AgentConnectionCard({
   inventory,
   projects,
   teamId,
-  learningUrl,
+  learningControl,
   connected,
   onHide,
   onManage,
@@ -23,18 +24,15 @@ export function AgentConnectionCard({
   inventory: AgentInventory | null;
   projects: TrainingProject[];
   teamId: string | null;
-  learningUrl: string | null;
+  learningControl: ReactNode;
   connected: boolean;
   onHide(): void;
   onManage(): void;
 }) {
   const connections =
-    inventory?.collector.connections.filter(
-      (item) => item.source === agent.id,
-    ) ?? [];
+    inventory?.collector.connections.filter((item) => item.source === agent.id) ?? [];
   const readable = inventory?.sources.some(
-    (item) =>
-      item.source === agent.id && item.available && item.capabilities.history,
+    (item) => item.source === agent.id && item.available && item.capabilities.history,
   );
   return (
     <article className="agent-connection-card" aria-label={agent.name}>
@@ -53,9 +51,7 @@ export function AgentConnectionCard({
       {agent.id === "openpond_chat" ? (
         <>
           <small>
-            {account?.state === "signed_in"
-              ? "Connected to OpenPond"
-              : "Sign in to OpenPond"}
+            {account?.state === "signed_in" ? "Connected to OpenPond" : "Sign in to OpenPond"}
           </small>
           <p>Use Ponder Pal from the sidebar.</p>
           <button
@@ -97,22 +93,14 @@ export function AgentConnectionCard({
                   <span>{collectionState(item, inventory!.collector)}</span>
                   <small>
                     {projects.find(
-                      (project) =>
-                        project.id === item.projectId && item.teamId === teamId,
+                      (project) => project.id === item.projectId && item.teamId === teamId,
                     )?.content.name ?? item.projectId}{" "}
                     · {item.admitted} tasks
                   </small>
-                  {item.teamId !== teamId ? (
-                    <small>Team: {item.teamId}</small>
-                  ) : null}
-                  {item.queued ? (
-                    <small>{item.queued} updates queued</small>
-                  ) : null}
+                  {item.teamId !== teamId ? <small>Team: {item.teamId}</small> : null}
+                  {item.queued ? <small>{item.queued} updates queued</small> : null}
                   {item.lastAdmissionAt ? (
-                    <small>
-                      Last sync:{" "}
-                      {new Date(item.lastAdmissionAt).toLocaleString()}
-                    </small>
+                    <small>Last sync: {new Date(item.lastAdmissionAt).toLocaleString()}</small>
                   ) : null}
                   {item.error ? <small role="alert">{item.error}</small> : null}
                 </div>
@@ -129,18 +117,7 @@ export function AgentConnectionCard({
           </div>
         </>
       )}
-      {learningUrl ? (
-        <a
-          className="agent-learning-link"
-          href={learningUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Continual learning ↗
-        </a>
-      ) : (
-        <small>Select a hosted project for continual learning.</small>
-      )}
+      {learningControl}
     </article>
   );
 }

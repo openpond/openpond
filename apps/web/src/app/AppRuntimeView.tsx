@@ -342,7 +342,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     removeProject,
   } = secondary;
   usePonderActivity(connection, bootstrap?.account.activeProfile && bootstrap.preferences.defaultTeamId
-    ? JSON.stringify([bootstrap.account.baseUrl, bootstrap.account.activeProfile, bootstrap.preferences.defaultTeamId]) : null);
+    ? JSON.stringify([bootstrap.account.baseUrl, bootstrap.account.activeProfile, bootstrap.account.profile?.id, bootstrap.account.state, bootstrap.preferences.defaultTeamId]) : null, () => {
+      void navigateDesktopRoute({ kind: "chat", sessionId: null }).then(accepted => {
+        if (!accepted) return;
+        setSelectedSessionId(null); setView("chat"); setPonderMode("activity");
+      });
+    });
   const ponderIntroScope = bootstrap?.account.activeProfile && bootstrap?.preferences.defaultTeamId
     ? `${bootstrap.account.activeProfile.handle}:${bootstrap.preferences.defaultTeamId}` : null;
   useEffect(() => {
