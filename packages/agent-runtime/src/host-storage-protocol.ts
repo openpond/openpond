@@ -26,7 +26,7 @@ export const HostStorageScopeSchema = z.object({
 }).strict();
 
 export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
-  z.object({contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id, operation: z.literal("profile-evaluations/grade"), params: z.object({action:z.enum(["upload","execute"]),callId:id,sessionId:id,turnId:id,sha256:z.string().regex(/^[a-f0-9]{64}$/),sizeBytes:z.number().int().positive().max(20000000),offset:z.number().int().nonnegative().max(20000000).optional(),contentsBase64:z.string().max(131072).optional()}).strict()}).strict(),
+  z.object({contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id, operation: z.literal("profile-evaluations/grade"), params: z.object({action:z.enum(["upload","execute"]),callId:id,sessionId:id,turnId:id,sha256:z.string().regex(/^[a-f0-9]{64}$/),sizeBytes:z.number().int().positive().max(20000000),timeoutMs:z.number().int().positive().max(300000),offset:z.number().int().nonnegative().max(20000000).optional(),contentsBase64:z.string().max(131072).optional()}).strict()}).strict(),
   z.object({contractVersion: z.literal(HOST_STORAGE_CONTRACT_VERSION), requestId: id, operation: z.literal("profile-evaluations/sandbox"), params: z.object({
     sessionId: id, turnId: id,
     action: z.enum(["upload", "exec", "read", "stop"]),

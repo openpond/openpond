@@ -145,6 +145,7 @@ export function createHostedProfileVerifier(
       turnId: owner.turnId,
       sha256: createHash("sha256").update(bytes).digest("hex"),
       sizeBytes: bytes.length,
+      timeoutMs: input.grader.timeoutMs,
     };
     const request = (params: Record<string, unknown>, timeout = 120000) =>
       client.request(
