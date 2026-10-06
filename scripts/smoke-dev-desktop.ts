@@ -280,14 +280,14 @@ async function verifyDesktopNavigation(cdp: CdpClient): Promise<{
   await waitFor(
     () => evaluateValue<boolean>(cdp,
       `Boolean(document.querySelector("[role='tablist'][aria-label='Apps pages']"))`),
-    5_000,
+    DEFAULT_TIMEOUT_MS,
     "Apps did not render after keyboard navigation."
   );
   await selectDesktopDestination(cdp, "Console");
   await waitFor(
     () => evaluateValue<boolean>(cdp,
       `Boolean(document.querySelector("[aria-label='Models']"))`),
-    5_000,
+    DEFAULT_TIMEOUT_MS,
     "Console controls did not render after keyboard navigation."
   );
   await selectDesktopDestination(cdp, "Home");
@@ -314,6 +314,7 @@ async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<
   );
   await cdp.send("Input.dispatchKeyEvent", {
     type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13,
+    text: "\r", unmodifiedText: "\r",
   });
   await cdp.send("Input.dispatchKeyEvent", {
     type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13,
