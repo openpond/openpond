@@ -30,6 +30,7 @@ export async function gradeLocalExperimentCase(input:{store:SqliteLocalExperimen
     if(!spec)throw new LocalExperimentError("local_grader_pin_unavailable","The scoring pass requires the exact retained grader release.",422);
     return spec;
   });
+  const artifacts=input.evidence.output && typeof input.evidence.output==="object" && Array.isArray(input.evidence.output.artifacts) ? input.evidence.output.artifacts : [];
   const grades=[];
   for(const [index,spec] of specs.entries()) {
     input.signal.throwIfAborted();
@@ -60,11 +61,11 @@ export async function gradeLocalExperimentCase(input:{store:SqliteLocalExperimen
         await input.beforeDispatch?.();
         const result=await executeJavaScriptVerifierInWorker({source:await readPrivate(grader.verifierRef),exportName:grader.exportName,
           runtime:grader.runtime,timeoutMs:grader.timeoutMs,signal:input.signal,
-          value:{task,attempt:evidence,input:task.input,output:evidence.output,expectedOutput:task.expectedOutput,evaluatorContext:fields.evaluatorContext,
+          value:{task,attempt:evidence,input:task.input,output:evidence.output,artifacts,expectedOutput:task.expectedOutput,evaluatorContext:fields.evaluatorContext,
             infrastructureError:evidence.infrastructureError??null}});
         await input.beforeDispatch?.();
         return {score:result.score,passed:result.passed,rewardEligible:grader.rewardEligible,failureClass:null,
-          feedback:[result.feedback],visibleEvidenceRefs:[],privilegedEvidenceRefs:result.evidenceRefs};
+          feedback:[result.feedback],visibleEvidenceRefs:[],privilegedEvidenceRefs:[...result.evidenceRefs,...artifacts.flatMap(artifact=>artifact.inspectionRef?.id?[artifact.inspectionRef.id]:[])]};
       },
     });
     await input.beforeDispatch?.();

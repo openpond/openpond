@@ -1,3 +1,7 @@
+import {createHostedProfileCommandOwner} from "../evaluations/hosted-profile-commands.js";
+import {createHostProfileEvaluationTools} from "../harness/host-profile-evaluation-tools.js";
+import {createWorkOutputService} from "../work/work-output-service.js";
+import {createHostedProfileArtifactOwner} from "../evaluations/hosted-profile-artifacts.js";
 import { createHostedProfileEvaluationRuntime } from "./hosted-profile-evaluation-runtime.js";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -116,6 +120,41 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   });
   const overlay = new HostedHarnessOverlayStorage(client);
   const harnessState = new HostedHarnessStateStorage(client);
+  const artifactOwner = createHostedProfileArtifactOwner(client);
+  const commandOwner=createHostedProfileCommandOwner(client);
+  const admittedRuntime = storage.admittedProfileRelease?.hostExecution
+    ? await loadHostedHarnessRuntime(client,storage.admittedProfileRelease.harnessRelease) : null;
+  if (storage.admittedProfileRelease?.hostExecution && (!admittedRuntime || (!capabilities.operations.includes("output/readBytes") || !capabilities.operations.includes("profile-evaluations/sandbox"))))
+    throw new Error("Hosted evaluation requires the admitted release and durable workbook byte owner.");
+  const evaluationOutputs = createWorkOutputService({deviceId: "hosted-evaluation", storeDir,
+    runtimeEventsForSession: id => core.runtimeEventsForSession(id),
+    managedPersistence: {...artifactOwner.persistence, sourceTurnStartedAt: async (sessionId,turnId) => {
+      const turn=await core.getTurn(turnId);
+      if (!turn || turn.sessionId!==sessionId || !turn.startedAt) throw new Error("The managed output has no actual started case turn.");
+      return turn.startedAt;
+    }},
+  });
+  const isolatedTools = admittedRuntime ? createHostProfileEvaluationTools({readOutput:commandOwner.readOutput,executeCommand:commandOwner.execute,settleRemote:commandOwner.settle,runtimeNode:"node",runtimeAgentRoot:"/workspace/runtime",storeDir, release: admittedRuntime.release,
+    getSession, getTurn: id => core.getTurn(id), saveOutput: evaluationOutputs.saveOwnedOutputBytes,
+    recordOutput: async (sessionId,turnId,data) => {await appendRuntimeEvent({id:randomUUID(),timestamp:new Date().toISOString(),
+      name:"workspace_action_result",source:"server",sessionId,turnId,action:"work_output_save",status:"completed",data});},
+    authorize: async () => {
+      const current=await loadHostedHarnessRuntime(client,storage.admittedProfileRelease!.harnessRelease);
+      if (!current || current.release.harnessRelease.contentHash!==admittedRuntime.release.harnessRelease.contentHash)
+        throw new Error("The hosted isolated evaluation source authority changed.");
+    },
+  }) : null;
+  const embeddingTools = createEmbeddingToolResolver(embedding, async (turnId, bindings) => {
+      const turn = await core.getTurn(turnId);
+      if (!turn) throw new Error("Embedded turn is unavailable.");
+      const session = await getSession(turn.sessionId);
+      const previous = session.metadata?.embeddingToolBindings;
+      const admittedBindings = [...bindings].sort((a, b) => a.name.localeCompare(b.name));
+      if (previous !== undefined && contentHash(previous) !== contentHash(admittedBindings))
+        throw new Error("Embedded tool bindings changed; start a new thread.");
+      await updateSession(session.id, { metadata: { ...session.metadata, embeddingToolBindings: admittedBindings } });
+      await core.updateTurn(turnId, current => ({ ...current,metadata: { ...current.metadata, toolBindings: admittedBindings } }));
+  });
   const turnRunner = createTurnRunner({
     executionHost: "embedded",
     workInputsForSession: options.workInputsForSession,
@@ -123,19 +162,13 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
     // committing its durable result. A second child scan would duplicate files
     // and has no host-generated visual validation receipt.
     attachmentRootDir: path.join(storeDir, "attachments"),
-    resolveModelTools: createEmbeddingToolResolver(embedding, async (turnId, bindings) => {
-      const turn = await core.getTurn(turnId);
-      if (!turn) throw new Error("Embedded turn is unavailable.");
-      const session = await getSession(turn.sessionId);
-      const previous = session.metadata?.embeddingToolBindings;
-      const admittedBindings = [...bindings].sort((a, b) => a.name.localeCompare(b.name));
-      if (previous !== undefined && contentHash(previous) !== contentHash(admittedBindings)) {
-        throw new Error("Embedded tool bindings changed; start a new thread.");
-      }
-      await updateSession(session.id, { metadata: { ...session.metadata, embeddingToolBindings: admittedBindings } });
-      await core.updateTurn(turnId, current => ({ ...current,
-        metadata: { ...current.metadata, toolBindings: admittedBindings } }));
-    }),
+    isolatedProfileEvaluationForTurn: isolatedTools ? async session => {
+      if (session.metadata?.profileEvaluationRun===undefined) return false;
+      if (!isolatedTools.ownsSession(session.id)) throw new Error("The hosted evaluation has no actual isolated case owner.");
+      return true;
+    } : undefined,
+    executeProfileEvaluationAction: isolatedTools?.executeAction,
+    resolveModelTools: context => isolatedTools?.ownsSession(context.session.id) ? isolatedTools.resolveTools(context) : embeddingTools(context),
     hostedToolFlags: { toolMode: "native", nativeToolTransport: true,
       nativeToolProviderDenylist: [], textToolFallback: false },
     store: core, inboxStore: storage.inbox,
@@ -185,7 +218,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   await turnRunner.recoverTaskInbox();
   let recoveredReviews = false;
   const sendTurn: typeof turnRunner.sendTurn = async (sessionId, payload) => {
-    if (SendTurnRequestSchema.parse(payload).attachments?.length) {
+    if (SendTurnRequestSchema.parse(payload).attachments?.length && !isolatedTools?.ownsSession(sessionId)) {
       throw new Error("Hosted attachments require managed-file admission.");
     }
     const session = await getSession(sessionId);
@@ -203,6 +236,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   };
   const evaluations = storage.admittedProfileRelease?.hostExecution ? createHostedProfileEvaluationRuntime({
     client, core, release: storage.admittedProfileRelease, storeDir,
+    readManagedArtifact: artifactOwner.read, admitSession: isolatedTools!.admitSession, settleSession: isolatedTools!.settleSession,
     createSession, sendTurn, interruptSessionTurn: turnRunner.interruptSessionTurn,
   }) : null;
   let closing = false;
@@ -273,6 +307,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
     close: async () => {
       if (closing) return;
       closing = true;
+      isolatedTools?.close();
       await turnRunner.close();
       await Promise.all([turnFollowUpQueue.drain(), subagentQueue.drain(), refinerQueue.drain()]);
       await closeEventSubscribers();

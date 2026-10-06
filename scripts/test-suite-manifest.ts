@@ -122,6 +122,7 @@ export const ROOT_SYSTEM_TESTS = [
 // bubblewrap and Python. Run explicitly on a qualified host; unavailable
 // confinement must fail these proofs rather than count as successful isolation.
 export const ROOT_QUALIFICATION_TESTS = [
+  "tests/profile-workbook-grading.integration.test.ts",
   "tests/candidate-command-isolation.test.ts",
   "tests/python-correctness-preset.integration.test.ts",
   "tests/profile-external-dataset-boundary.test.ts",

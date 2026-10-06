@@ -1,4 +1,5 @@
 import {readLocalProfileArtifacts} from "./local-profile-artifacts.js";
+import {workbookProbeSheets} from "./workbook-inspection-contract.js";
 import { ScheduledTransportNotInvokedError, currentScheduledAdmissionGuard,type ScheduledAdmissionGuard } from "./evaluation-schedule-admission-guard.js";
 import {retainClaudeProcessEvidence} from "./claude-process-evidence.js";
 import { randomUUID } from "node:crypto";
@@ -181,7 +182,7 @@ export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:str
               throw new LocalExperimentError("local_profile_receipt_conflict","Profile output or trace differs from the exact admitted case.");
           }
           const task=packageValue.taskset.tasks.find(task=>task.id===admission.taskId)!;
-          const artifacts=await readLocalProfileArtifacts({storeDir:deps.storeDir,attempt:outcome,events:async id=>{if(!deps.runtimeEventsForTurn)throw new Error("The actual artifact trace owner is unavailable.");return deps.runtimeEventsForTurn(id);},authorize:async()=>{await requireActor(execution.ownerActorId);await requireTeam(execution.teamId);controller.signal.throwIfAborted();}});
+          const artifacts=await readLocalProfileArtifacts({storeDir:deps.storeDir,attempt:outcome,probeSheets:workbookProbeSheets(packageValue.taskset.metadata),signal:controller.signal,events:async id=>{if(!deps.runtimeEventsForTurn)throw new Error("The actual artifact trace owner is unavailable.");return deps.runtimeEventsForTurn(id);},authorize:async()=>{await requireActor(execution.ownerActorId);await requireTeam(execution.teamId);controller.signal.throwIfAborted();}});
           const grade=await gradeLocalExperimentCase({store:deps.store,ownerId,teamId:execution.teamId,executionId:execution.id,caseId:admission.receiptId,
             package:packageValue,task,evidence:{output:{text:outcome.output??"",...(artifacts.length?{artifacts}:{})},runtimeEventRefs:outcome.native?.runtimeEventRefs??outcome.profileNative?.runtimeEventRefs??outcome.externalProcess?.runtimeEventRefs??[],artifactRefs:artifacts.map(artifact=>artifact.reference.id),infrastructureError:outcome.status==="completed"?null:outcome.error??outcome.status},
             evaluatorContext:localEvaluatorContext(outcome),

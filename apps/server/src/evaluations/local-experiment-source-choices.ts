@@ -68,7 +68,7 @@ export function createLocalExperimentSourceChoices(deps: {
           const value=validateTasksetPackage(await deps.loadPackage(definition,entry.ref.profileId,catalog.harnessRelease));
           if(value.taskset.id!==definition.tasksetRelease.id||value.taskset.contentHash!==definition.tasksetRelease.contentHash)throw new Error("Local Profile Dataset changed its exact binding.");
           if(value.taskset.tasks.length>10_000||value.taskset.environment.kind!=="text"||value.taskset.tools.some(tool=>!["work_exec","work_save_output"].includes(tool.name))||value.taskset.policy.connectedAppScopes.length
-            ||value.taskset.capabilities.some(item=>item.required&&item.id!=="private-verifier")||value.taskset.tasks.some(task=>task.artifactRefs.some(asset=>asset.visibility!=="policy"||asset.mediaType!=="application/pdf"||asset.sizeBytes>10000000)))continue;
+            ||value.taskset.capabilities.some(item=>item.required&&item.id!=="private-verifier"&&!(item.id==="tools"&&item.scopes.every(scope=>["work_exec","work_save_output"].includes(scope)&&value.taskset.tools.some(tool=>tool.name===scope))))||value.taskset.tasks.some(task=>task.artifactRefs.some(asset=>asset.visibility!=="policy"||asset.mediaType!=="application/pdf"||asset.sizeBytes>10000000)))continue;
           await assertNativeProfilePrivateGrading(value);
           const id=`local-profile-${contentHash([entry.ref,catalog.harnessRelease,definition.id])}`;
           packages.set(id,value);
