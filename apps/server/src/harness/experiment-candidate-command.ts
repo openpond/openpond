@@ -6,7 +6,7 @@ export type CandidateCommandAuthority = {
   candidateId: string; candidateRevision: number; ownerId: string; sessionId: string; turnId: string;
   sourceRoot: string;
   /** Trusted server-owned Work adapter only; never accepted from model commands. */
-  layout?: "work";
+  layout?: "work" | "profile_case";
   /** Explicit selected component paths; the rest of the candidate is mounted read-only. */
   writablePaths: readonly string[];
   protectedPaths?: readonly string[];
@@ -45,6 +45,8 @@ export function createCandidateCommandExecutor(deps: {
       if (within.startsWith("..") || path.isAbsolute(within)) throw new Error("Candidate mount symlink escapes its admitted source.");
       args.push(binding, target, `${mountRoot}${within ? `/${within.split(path.sep).join("/")}` : ""}`);
     }
+    if (authority.layout === "profile_case")
+      args.push("--symlink", "work/inputs", "/workspace/inputs", "--symlink", "work/outputs", "/workspace/outputs");
     for (const mount of authority.runtimeMounts ?? []) {
       const destination = path.posix.normalize(mount.destination), source = await realpath(mount.source);
       if ((!destination.startsWith("/runtime/") && destination!=="/workspace/node_modules") || destination === "/runtime/node" || destination.includes("\0") || source === sourceRoot || source.startsWith(`${sourceRoot}${path.sep}`))
