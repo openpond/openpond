@@ -70,6 +70,9 @@ export async function prepareHostedProfileEvaluation(input: z.infer<typeof reque
       return{binding,packageValue,authorize:async()=>{verifyExternalDatasetPackage({binding,...external});}};
     }:undefined,
     loadCatalog, selectedWorkflows: async () => selected, placement: "remote",
+    // This private companion prepares for the same ledger-backed case VM
+    // owner as the hosted execution runtime. It never allocates compute.
+    boundedWorkComputeAvailable: true,
     loadTasksetPackage: async definition => {
       const packageValue = await loadReleasedProfileEvaluationTaskset({ runtime, definition, harnessRelease });
       if (!packageValue) throw new Error("Hosted evaluation Taskset is absent from its published Profile release.");
