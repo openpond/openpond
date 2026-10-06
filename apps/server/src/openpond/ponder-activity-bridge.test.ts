@@ -64,8 +64,7 @@ test("handles a rejected captured scope before its queue turn and continues sync
     expect(onUnhandled).not.toHaveBeenCalled();
   } finally {
     releaseFirstRequest.resolve();
-    bridge.close();
-    await bridge.flush();
+    await bridge.close();
     process.off("unhandledRejection", onUnhandled);
     await rm(storeDir, { recursive: true, force: true });
   }
