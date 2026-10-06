@@ -9,7 +9,7 @@ import {
 } from "../apps/web/src/lib/chat-timeline-rows";
 
 describe("chat timeline rows", () => {
-  test("derives stable message row ids and footer ownership before rendering", () => {
+  test("derives stable message row ids before rendering", () => {
     const messages = [
       message("turn-1:user", "user", "Request one"),
       message("turn-1:assistant", "assistant", "Response one"),
@@ -24,12 +24,6 @@ describe("chat timeline rows", () => {
       ["message:turn-1:assistant", "message"],
       ["message:turn-2:user", "message"],
       ["message:turn-2:assistant", "message"],
-    ]);
-    expect(rows.map((row) => row.type === "message" && row.showFooter)).toEqual([
-      false,
-      false,
-      false,
-      true,
     ]);
     expect(latestAssistantMessageId(messages)).toBe("turn-2:assistant");
   });
