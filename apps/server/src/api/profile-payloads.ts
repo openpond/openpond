@@ -109,15 +109,31 @@ export function createProfilePayloads(deps: {
   });
 
   async function profileEvaluationsPayload(params?: unknown) {
+    if (params && typeof params === "object" && "view" in params) {
+      z.object({ view: z.literal("history") }).strict().parse(params);
+      const library = await loadOpenPondProfileLibrary();
+      if (!library.lastUsed) throw new Error("Select a Profile before loading its evaluation history.");
+      const [runs, comparisons, suiteRuns, reports] = await Promise.all([
+        deps.store.listProfileEvaluationRuns(library.lastUsed),
+        deps.store.listProfileEvaluationComparisons(library.lastUsed),
+        deps.store.listProfileEvaluationSuiteRuns(library.lastUsed),
+        profileReports.list(),
+      ]);
+      return { profileRef: library.lastUsed, runs, comparisons, suiteRuns, reports };
+    }
+    // Retained evidence belongs to its admitted Profile and run. Reading it
+    // does not require the current source tree to be clean or releasable.
+    if (params && typeof params === "object" && !Array.isArray(params) && "runId" in params) {
+      const inspection = ProfileEvaluationInspectionRequestSchema.parse(params);
+      const library = await loadOpenPondProfileLibrary();
+      if (!library.lastUsed) throw new Error("Select a Profile before inspecting its evaluations.");
+      return inspectProfileEvaluationRun({ store: deps.store, profileRef: library.lastUsed, ...inspection });
+    }
     const requestedRef = params && typeof params === "object" && "profileRef" in params
       ? z.object({profileRef:OpenPondProfileRefSchema}).strict().parse(params).profileRef : undefined;
     if (requestedRef && requestedRef.source !== "local")
       throw new Error("Read hosted Profile catalogs through their current authorized source owner.");
     const workflows = await profileWorkflowsPayload(requestedRef);
-    if (params && typeof params === "object" && !Array.isArray(params) && "runId" in params) {
-      const inspection = ProfileEvaluationInspectionRequestSchema.parse(params);
-      return inspectProfileEvaluationRun({ store: deps.store, profileRef: workflows.profileRef, ...inspection });
-    }
     const evaluations = await profileEvaluationsForRelease({
       store: deps.store,
       ref: workflows.profileRef,

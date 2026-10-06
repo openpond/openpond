@@ -372,6 +372,82 @@
   background: var(--panel);
 }
 
+.profile-table-scroll {
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.profile-evaluation-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.profile-evaluation-table th,
+.profile-evaluation-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.profile-evaluation-table thead th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.profile-evaluation-table small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.profile-evaluation-dialog {
+  width: min(1100px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.profile-evaluation-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+.profile-evaluation-dialog-header,
+.profile-evaluation-scope {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-evaluation-dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.profile-evaluation-dialog pre,
+.profile-evaluations-detail pre {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.profile-evaluation-dialog button:disabled,
+.profile-evaluations button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .profile-evaluations-suites {
   display: flex;
   flex-wrap: wrap;
@@ -438,7 +514,8 @@
   gap: 12px;
 }
 
-.profile-evaluations button {
+.profile-evaluations button,
+.profile-evaluation-dialog button {
   flex: none;
   padding: 6px 10px;
   border: 1px solid var(--border);

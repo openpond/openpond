@@ -1,3 +1,4 @@
+import { createConversationServingOwner } from "./conversation-serving-owner.js";
 import { createTrainingActivityAuthorityResolver } from "./resolve-training-activity-authority.js";
 import { createTrainingService } from "./training-service.js";
 import { createModelProjectHostingService } from "./model-project-hosting.js";
@@ -75,8 +76,14 @@ export function createManagedTrainingComposition(deps: CompositionDependencies) 
   const streamSelectedOpenPondChatTurn = createManagedAdapterHostedChatStream({
     managed: managedAdapterChatRuntime, hosted: deps.streamHosted,
   });
+  const conversationServingOwner = createConversationServingOwner({ store, training: trainingService, hosting: modelProjectHosting, synchronization: managedAdapterSyncService, registry, resolveAccess: async () => {
+    await actorId();
+    return resolveManagedAdapterUserAccess({ teamId: await deps.defaultTeam() });
+  } });
+  conversationServingOwner.start();
+  deps.onStartupFailure(() => conversationServingOwner.close());
   managedAdapterSyncService.start();
   return {datasetStorageService, datasetStoragePayload, modelProjectHosting,
-    trainingService, managedAdapterSyncService, managedAdapterChatRuntime,
+    trainingService, conversationServingOwner, managedAdapterSyncService, managedAdapterChatRuntime,
     streamSelectedOpenPondChatTurn};
 }

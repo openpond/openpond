@@ -1,5 +1,7 @@
+import { ConnectedAgentsView } from "./ConnectedAgentsView";
 import type {
   AccountState,
+  BootstrapPayload,
   ConnectedAppCatalogEntry,
   ConnectedAppId,
   ConnectedAppStatusRow,
@@ -8,7 +10,7 @@ import {
   buildConnectedAppInstallUrl,
   buildConnectedAppStatusRows,
 } from "@openpond/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import "../../styles/apps/apps.css";
 import { api, type ClientConnection } from "../../api";
 import { connectedAppIconUrl, OPENPOND_ICON_URL } from "../../lib/public-assets";
@@ -22,6 +24,8 @@ import {
 
 type AppsViewProps = {
   account: AccountState | null;
+  payload: BootstrapPayload | null;
+  onPayload(payload: BootstrapPayload): void;
   connection: ClientConnection | null;
   defaultTeamId?: string | null;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
@@ -32,7 +36,9 @@ type AppFilter = (typeof APP_FILTERS)[number];
 
 const FEATURED_APP_IDS = new Set<ConnectedAppId>(["slack", "google", "github", "mcp"]);
 
-export function AppsView({ account, connection, defaultTeamId, onToast }: AppsViewProps) {
+export function AppsView({ account, connection, defaultTeamId, onToast, payload, onPayload }: AppsViewProps) {
+  const [page, setPage] = useState<"agents" | "apps">("agents");
+  const tabsId = useId();
   const [selectedApp, setSelectedApp] = useState<ConnectedAppStatusRow | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<AppFilter>("For agents");
@@ -52,7 +58,7 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
 
   useEffect(() => {
     let active = true;
-    if (!connection) {
+    if (!connection || page !== "apps") {
       setStatusRows(buildConnectedAppStatusRows());
       setStatusTeamId(null);
       return () => {
@@ -77,7 +83,7 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
     return () => {
       active = false;
     };
-  }, [connection]);
+  }, [connection, page]);
 
   function openInstallUrl(app: ConnectedAppStatusRow) {
     const url = buildConnectedAppInstallUrl({
@@ -91,7 +97,16 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
   }
 
   return (
-    <section className="connected-apps-view" aria-label="Apps">
+    <div className="apps-workspace-view">
+      <div className="apps-page-tabs" role="tablist" aria-label="Apps pages" onKeyDown={event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === "Home" ? "agents" : event.key === "End" ? "apps" : page === "agents" ? "apps" : "agents";
+        setPage(next);
+        event.currentTarget.querySelector<HTMLElement>(`#${CSS.escape(`${tabsId}-${next}`)}`)?.focus();
+      }}>{([{ value: "agents", label: "Connections" }, { value: "apps", label: "Apps" }] as const).map(item => <button key={item.value} type="button" role="tab" id={`${tabsId}-${item.value}`} aria-controls={`${tabsId}-${item.value}-panel`} tabIndex={page === item.value ? 0 : -1} aria-selected={page === item.value} onClick={() => setPage(item.value)}>{item.label}</button>)}</div>
+      <div role="tabpanel" id={`${tabsId}-${page}-panel`} aria-labelledby={`${tabsId}-${page}`}>
+      {page === "agents" ? <ConnectedAgentsView key={JSON.stringify([account?.activeProfile, defaultTeamId])} connection={connection} payload={payload} onPayload={onPayload} onToast={onToast} /> : <section className="connected-apps-view" aria-label="Apps">
       <div className="connected-apps-header">
         <div>
           <h1>Apps</h1>
@@ -161,7 +176,9 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
           onInstall={() => openInstallUrl(selectedApp)}
         />
       ) : null}
-    </section>
+    </section>}
+      </div>
+    </div>
   );
 }
 

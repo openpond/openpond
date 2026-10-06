@@ -130,6 +130,19 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     sendJson(response, 200, await deps.trainingPayload("activity", {}, requestUrl));
     return true;
   }
+  const conversationServing = /^\/v1\/training\/models\/([^/]+)\/conversation-serving(?:\/(register|authorize|revoke))?$/.exec(requestUrl.pathname);
+  if (conversationServing && (request.method === "GET" && !conversationServing[2] || request.method === "POST" && conversationServing[2])) {
+    try {
+      const scope = { modelId: decodeURIComponent(conversationServing[1]!), profileId: requestUrl.searchParams.get("profileId") };
+      const payload = request.method === "POST" ? { ...await readJson(request, { maxBytes: 65536 }) as object, ...scope } : scope;
+      const result = await deps.trainingPayload(`conversation_serving_${conversationServing[2] ?? "state"}`, payload, requestUrl);
+      response.setHeader("Cache-Control", "no-store");
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, error instanceof ZodError ? 400 : 409, { code: "conversation_serving_request_failed", error: error instanceof Error ? error.message : "The native serving owner could not complete this operation." });
+    }
+    return true;
+  }
   const hostedLearning = /^\/v1\/training\/models\/([^/]+)\/hosted-learning(\/sources|\/review)?$/.exec(requestUrl.pathname);
   if (hostedLearning && (request.method === "GET" && hostedLearning[2] !== "/review" || request.method === "POST" && hostedLearning[2] !== "/sources")) {
     const scope = { modelId: decodeURIComponent(hostedLearning[1]!), profileId: requestUrl.searchParams.get("profileId") };

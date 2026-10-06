@@ -11,7 +11,8 @@ import {
   UploadCloud,
 } from "../icons";
 import { effectiveReasoningEffortForModel, reasoningEffortOptionsForModel } from "../../lib/app-models";
-import type { DropdownOption } from "../../lib/app-models";
+import { modelDisplayLabel } from "../../lib/model-display";
+import { modelSelectionForGroup, type ComposerModelGroup } from "./composer-model-options";
 import type {
   WorkspaceTargetOptionState,
   WorkspaceTargetState,
@@ -514,7 +515,6 @@ export function ComposerModelMenu({
   reasoningEffort,
   showReasoning,
   onModelSelectionChange,
-  onProviderSetupOpen,
   onReasoningEffortChange,
 }: {
   disabled: boolean;
@@ -526,7 +526,6 @@ export function ComposerModelMenu({
   reasoningEffort: CodexReasoningEffort;
   showReasoning: boolean;
   onModelSelectionChange: (provider: ChatProvider, model: string) => void;
-  onProviderSetupOpen?: () => void;
   onReasoningEffortChange: (value: CodexReasoningEffort) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -541,7 +540,7 @@ export function ComposerModelMenu({
   const selectedReasoning =
     reasoningOptions.find((option) => option.value === effectiveReasoningEffort) ??
     reasoningOptions[0]!;
-  const modelLabel = compactModelLabel(selectedModel?.label ?? model);
+  const modelLabel = compactModelLabel(selectedModel?.label ?? model) || selectedGroup?.label || provider;
   const triggerLabel = showReasoning
     ? `${modelLabel} ${selectedReasoning.shortLabel ?? selectedReasoning.label}`
     : modelLabel;
@@ -611,7 +610,7 @@ export function ComposerModelMenu({
                 onClick={() => setPanel("model")}
               >
                 <span>Model</span>
-                <span className="codex-model-menu-value">{selectedModel?.label ?? model}</span>
+                <span className="codex-model-menu-value">{modelDisplayLabel(selectedModel?.label ?? model) || "Agent default"}</span>
                 <ChevronRight size={14} />
               </button>
               {showReasoning ? (
@@ -652,11 +651,9 @@ export function ComposerModelMenu({
                       aria-checked={selected}
                       className={selected ? "selected" : ""}
                       onClick={() => {
-                        const nextModel =
-                          group.options.find((option) => option.value === group.defaultModel) ??
-                          group.options[0];
-                        if (!nextModel) return;
-                        onModelSelectionChange(group.provider, nextModel.value);
+                        const selection = modelSelectionForGroup(group);
+                        if (!selection) return;
+                        onModelSelectionChange(selection.provider, selection.model);
                         setPanel("root");
                       }}
                     >
@@ -666,20 +663,6 @@ export function ComposerModelMenu({
                   );
                 })}
               </div>
-              <button
-                type="button"
-                className="codex-model-setup-action"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  onProviderSetupOpen?.();
-                }}
-              >
-                <span className="codex-model-menu-option-label">
-                  <Plus size={13} />
-                  <span>New Model/Provider</span>
-                </span>
-              </button>
             </>
           ) : panel === "model" ? (
             <>
@@ -708,29 +691,15 @@ export function ComposerModelMenu({
                         setPanel("root");
                       }}
                     >
-                      <span>{option.label}</span>
+                      <span>{modelDisplayLabel(option.label)}</span>
                       {selected ? <Check size={14} /> : null}
                     </button>
                   );
                 })}
                 {!selectedGroup?.options.length ? (
-                  <div className="codex-model-menu-empty">No models from this provider</div>
+                  <div className="codex-model-menu-empty" role="status">No models available. Connect or check this provider in Settings.</div>
                 ) : null}
               </div>
-              <button
-                type="button"
-                className="codex-model-setup-action"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  onProviderSetupOpen?.();
-                }}
-              >
-                <span className="codex-model-menu-option-label">
-                  <Plus size={13} />
-                  <span>New Model/Provider</span>
-                </span>
-              </button>
             </>
           ) : (
             <div className="codex-model-menu-effort">
@@ -768,13 +737,6 @@ export function ComposerModelMenu({
   );
 }
 
-export type ComposerModelGroup = {
-  provider: ChatProvider;
-  label: string;
-  defaultModel: string;
-  options: DropdownOption[];
-};
-
 function compactModelLabel(label: string): string {
-  return label.replace(/^GPT-/, "").replace(/\s+Codex Spark$/, " Spark").replace(/\s+Codex$/, " Codex");
+  return modelDisplayLabel(label).replace(/^GPT-/, "").replace(/\s+Codex Spark$/, " Spark").replace(/\s+Codex$/, " Codex");
 }

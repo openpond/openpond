@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("openpond", {
+  notify: (payload: unknown) => ipcRenderer.invoke("openpond:notification", payload),
   getConnection: () => ipcRenderer.invoke("openpond:connection"),
   getDesktopRuntimeInfo: () => ipcRenderer.invoke("openpond:desktop:runtimeInfo"),
   reloadDesktopApp: () => ipcRenderer.invoke("openpond:desktop:reload"),

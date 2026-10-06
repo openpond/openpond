@@ -1,5 +1,5 @@
 import { NativeAgentControls } from "./NativeAgentControls";
-import { useMemo, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useMemo, useState, type CSSProperties, type RefObject } from "react";
 import {
   ArrowUp,
   Pause,
@@ -29,7 +29,9 @@ import type { ContextWindowStatus } from "../../lib/context-window";
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { VoiceInputButton } from "../voice/VoiceInputButton";
-import { ComposerModelMenu, type ComposerModelGroup } from "./ComposerControls";
+import { ComposerModelMenu } from "./ComposerControls";
+import { composerModelGroups } from "./composer-model-options";
+import { cachedNativeAgentCatalog, nativeAgentCatalogKey } from "./native-agent-catalog";
 import {
   ComposerProfileTargetControl,
   type ComposerProfileTargetState,
@@ -147,23 +149,40 @@ export function ComposerPrimaryControls({
   stopIcon?: "pause" | "stop";
   stopLabel?: string;
 }) {
-  const [nativeSettings, setNativeSettings] = useState<{ provider: string; settings: ProviderSettings } | null>(null);
-  const providerSettings = nativeSettings?.provider === provider ? nativeSettings.settings : initialProviderSettings;
+  const instance = nativeAgentCatalogKey(provider, initialProviderSettings?.providers[provider]);
+  const [nativeSettings, setNativeSettings] = useState<{ connection: ClientConnection; provider: string; instance: string; settings: ProviderSettings } | null>(null);
+  const cached = connection ? cachedNativeAgentCatalog(connection, provider, initialProviderSettings?.providers[provider]) : null;
+  const refreshedSettings = nativeSettings?.connection === connection && nativeSettings.provider === provider && nativeSettings.instance === instance
+    ? nativeSettings.settings : cached?.settings ?? null;
+  const providerSettings = useMemo(() => {
+    if (!refreshedSettings) return initialProviderSettings;
+    if (!initialProviderSettings) return refreshedSettings;
+    return { ...initialProviderSettings,
+      providers: { ...initialProviderSettings.providers, [provider]: refreshedSettings.providers[provider] },
+      statuses: { ...initialProviderSettings.statuses, [provider]: refreshedSettings.statuses[provider] },
+      modelCaches: { ...initialProviderSettings.modelCaches, [provider]: refreshedSettings.modelCaches[provider] },
+    };
+  }, [initialProviderSettings, refreshedSettings, provider]);
+  const receiveNativeSettings = useCallback((value: { provider: string; settings: ProviderSettings }) => {
+    if (connection) setNativeSettings({ connection, provider: value.provider, instance, settings: value.settings });
+  }, [connection, instance]);
+  const nativeProvider = ["claude-code", "opencode", "grok-build"].includes(provider);
+  const displayedModel = modelValue || defaultModelForProvider(provider, providerSettings);
   const [voiceInputActive, setVoiceInputActive] = useState(false);
   const showModelReasoningMenu = providerModelSupportsReasoning(
     provider,
-    modelValue,
+    displayedModel,
     providerSettings
   );
   const modelGroups = useMemo(
     () =>
       composerModelGroups({
-        currentModelOptions: nativeSettings?.provider === provider ? modelOptionsForProvider(provider, providerSettings) : modelOptions,
+        currentModelOptions: refreshedSettings ? modelOptionsForProvider(provider, providerSettings) : modelOptions,
         currentProvider: provider,
         providerOptions,
         providerSettings,
       }),
-    [modelOptions, provider, providerOptions, providerSettings, nativeSettings?.provider],
+    [modelOptions, provider, providerOptions, providerSettings, refreshedSettings],
   );
   const teamModelGroups = useMemo(
     () => modelGroups.filter((group) => TEAM_CHAT_LOCAL_PROVIDER_IDS.has(group.provider)),
@@ -220,7 +239,7 @@ export function ComposerPrimaryControls({
         {teamUseModel ? (
           <ComposerModelMenu
             disabled={busy}
-            model={modelValue}
+            model={displayedModel}
             modelGroups={teamModelGroups}
             placement={dropdownPlacement}
             provider={provider}
@@ -228,8 +247,7 @@ export function ComposerPrimaryControls({
             reasoningEffort={codexReasoningEffort}
             showReasoning={showModelReasoningMenu}
             onModelSelectionChange={changeModelSelection}
-            onProviderSetupOpen={onProviderSetupOpen}
-            onReasoningEffortChange={onCodexReasoningEffortChange}
+                onReasoningEffortChange={onCodexReasoningEffortChange}
           />
         ) : null}
         <VoiceInputButton
@@ -288,6 +306,7 @@ export function ComposerPrimaryControls({
           }}
         />
       </div>
+      {!hideModelControls && nativeProvider ? <NativeAgentControls connection={connection} provider={provider} providerSettings={providerSettings} placement={dropdownPlacement} onSettings={receiveNativeSettings} onSetup={onProviderSetupOpen} disabled={busy || disabled} /> : null}
       {showCommandAccess && provider === "codex" ? (
         <DropdownSelect
           compact
@@ -307,7 +326,7 @@ export function ComposerPrimaryControls({
             onCodexPermissionModeChange(value as CodexPermissionMode)
           }
         />
-      ) : showCommandAccess ? (
+      ) : showCommandAccess && !nativeProvider ? (
         <DropdownSelect
           compact
           className="permission-select"
@@ -386,10 +405,9 @@ export function ComposerPrimaryControls({
           ) : null}
         </span>
       </span>}
-      {!hideModelControls && <NativeAgentControls connection={connection} provider={provider} onSettings={setNativeSettings} onSetup={onProviderSetupOpen} disabled={busy || disabled} />}
       {!hideModelControls && <ComposerModelMenu
         disabled={busy}
-        model={modelValue}
+        model={displayedModel}
         modelGroups={modelGroups}
         placement={dropdownPlacement}
         provider={provider}
@@ -397,7 +415,6 @@ export function ComposerPrimaryControls({
         reasoningEffort={codexReasoningEffort}
         showReasoning={showModelReasoningMenu}
         onModelSelectionChange={changeModelSelection}
-        onProviderSetupOpen={onProviderSetupOpen}
         onReasoningEffortChange={onCodexReasoningEffortChange}
       />}
       <VoiceInputButton
@@ -465,32 +482,4 @@ function ComposerSubmissionControls({
       )}
     </button>
   );
-}
-
-function composerModelGroups({
-  currentModelOptions,
-  currentProvider,
-  providerOptions,
-  providerSettings,
-}: {
-  currentModelOptions: DropdownOption[];
-  currentProvider: ChatProvider;
-  providerOptions: DropdownOption[];
-  providerSettings?: ProviderSettings | null;
-}): ComposerModelGroup[] {
-  return providerOptions.flatMap((providerOption) => {
-    if (providerOption.value === "setup-provider") return [];
-    const nextProvider = providerOption.value as ChatProvider;
-    const options = nextProvider === currentProvider
-      ? currentModelOptions
-      : modelOptionsForProvider(nextProvider, providerSettings);
-    return options.length > 0
-      ? [{
-          provider: nextProvider,
-          label: providerOption.label,
-          defaultModel: defaultModelForProvider(nextProvider, providerSettings),
-          options,
-        }]
-      : [];
-  });
 }

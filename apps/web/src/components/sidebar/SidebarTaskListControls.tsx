@@ -24,6 +24,7 @@ import {
 
 export function SidebarTaskListControls({
   filter,
+  activityOrder = false,
   groupByProject,
   noun,
   onFilterChange,
@@ -41,6 +42,7 @@ export function SidebarTaskListControls({
   tasksets,
 }: {
   filter: SidebarTaskFilter;
+  activityOrder?: boolean;
   groupByProject: boolean;
   noun: "chats" | "tasks";
   onFilterChange: (filter: SidebarTaskFilter) => void;
@@ -122,7 +124,7 @@ export function SidebarTaskListControls({
               </span>
               <span>Only running {noun}, including pinned</span>
             </button>
-            {noun === "tasks" ? (
+            {noun === "tasks" && !activityOrder ? (
               <button
                 type="button"
                 role="menuitemcheckbox"
@@ -135,7 +137,7 @@ export function SidebarTaskListControls({
                 <span>Group by project</span>
               </button>
             ) : null}
-            {SIDEBAR_TASK_SORT_OPTIONS.map((option) => (
+            {!activityOrder ? SIDEBAR_TASK_SORT_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -151,7 +153,7 @@ export function SidebarTaskListControls({
                 </span>
                 <span>{option.label}</span>
               </button>
-            ))}
+            )) : <p className="empty-row">Latest activity first</p>}
           </div>
         ) : null}
       </div>

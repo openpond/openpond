@@ -8,13 +8,13 @@ export type DesktopRoute =
   | { kind: "models_unavailable"; pathname: string; search: string }
   | { kind: "settings"; section: SettingsSection; returnTo?: string }
   | { kind: "chat"; sessionId: string | null }
-  | { kind: "view"; view: "apps" | "outputs" | "projects" | "scheduled" | "get-started" };
+  | { kind: "view"; view: "apps" | "outputs" | "projects" | "scheduled" | "get-started" | "team" | "community" };
 type NavigationMode = "push" | "replace";
 type NavigationGuard = (destination: string) => boolean | Promise<boolean>;
 const guards = new Set<NavigationGuard>();
 const listeners = new Set<() => void>();
 const settingsSections = new Set<SettingsSection>(["account", "notifications", "harness", "harness-refiner", "harness-continuous-review", "harness-contents", "harness-releases", "profile", "skills", "configuration", "context", "training", "subagents", "editor", "providers", "dataset-storage", "remote", "usage", "personalization", "diagnostics"]);
-const viewPaths = { apps: "/apps", outputs: "/outputs", projects: "/projects", scheduled: "/workflows", "get-started": "/get-started" } as const;
+const viewPaths = { apps: "/apps", outputs: "/outputs", projects: "/projects", scheduled: "/workflows", "get-started": "/get-started", team: "/team", community: "/community" } as const;
 let listening = false;
 let cacheKey = "";
 let cachedDesktop: DesktopRoute | null = null;

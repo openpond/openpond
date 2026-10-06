@@ -93,6 +93,11 @@
   z-index: 90;
 }
 
+.composer-primary-controls .permission-select .dropdown-menu {
+  left: 0;
+  right: auto;
+}
+
 .composer-primary-controls .dropdown-select.compact .dropdown-trigger,
 .composer-primary-controls .codex-model-trigger {
   border: 0;

@@ -1,3 +1,4 @@
+import { sessionWithSidebarActivity } from "./session-sidebar-activity.js";
 import { readCache, listCache, writeCache } from "@openpond/persistence";
 import type {
   Approval,
@@ -1650,9 +1651,24 @@ export class SqliteStore extends SqliteTaskInboxStore implements RuntimeHistoryS
     await this.ready;
     const write = this.writeQueue.then(async () => {
       const safeRuntimeEvent = sanitizeRuntimeEvent(runtimeEvent);
-      const persistedRuntimeEvent = await this.insertRuntimeEventRecord(safeRuntimeEvent);
-      this.data.events.push(persistedRuntimeEvent);
-      return persistedRuntimeEvent;
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        const persistedRuntimeEvent = await this.insertRuntimeEventRecord(safeRuntimeEvent);
+        const sessionIndex = this.data.sessions.findIndex((session) => session.id === persistedRuntimeEvent.sessionId);
+        const currentSession = this.data.sessions[sessionIndex];
+        const session = currentSession ? sessionWithSidebarActivity(currentSession, persistedRuntimeEvent) : null;
+        if (session && session !== currentSession) {
+          await this.run("UPDATE sessions SET payload = ? WHERE id = ?", [JSON.stringify(session), session.id]);
+          await this.upsertSessionShellProjection(session, sessionIndex);
+        }
+        await this.exec("COMMIT");
+        this.data.events.push(persistedRuntimeEvent);
+        if (session && session !== currentSession) this.data.sessions[sessionIndex] = session;
+        return persistedRuntimeEvent;
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
     });
     this.writeQueue = write.then(() => undefined, () => undefined);
     return await write;

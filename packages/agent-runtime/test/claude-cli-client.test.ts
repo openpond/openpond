@@ -16,7 +16,7 @@ let session;
 readline.createInterface({input:process.stdin}).on('line', line => {
  const value = JSON.parse(line);
  if(value.type==='control_request') {
-  send({type:'control_response',response:{subtype:'success',request_id:value.request_id,response:{models:[{value:'haiku',displayName:'Haiku'}]}}});
+  send({type:'control_response',response:{subtype:'success',request_id:value.request_id,response:{models:[{value:'haiku',displayName:'Haiku'},{value:'default',displayName:'Default',description:'Haiku · Native configured default'}]}}});
   if(value.request.subtype==='interrupt') send({type:'result',session_id:session,is_error:true,errors:['interrupted']});
  }
  if(value.type==='user') {
@@ -38,6 +38,11 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   try {
     const session = await client.createSession(directory);
     expect(session.models?.availableModels[0]?.modelId).toBe("haiku");
+    // Resolving the default's displayed identity must preserve its routing alias.
+    expect(session.models?.currentModelId).toBe("default");
+    expect(session.models?.availableModels.map((model) => model.modelId)).toEqual(["haiku", "default"]);
+    await expect(client.setModel("foreign", "haiku")).rejects.toThrow("does not belong");
+    await client.setModel(session.sessionId, "haiku");
     await expect(client.prompt("foreign", [{ type: "text", text: "ignored" }])).rejects.toThrow("does not belong");
     const prompt = client.prompt(session.sessionId, [{ type: "text", text: "run" }], controller.signal);
     await ready;

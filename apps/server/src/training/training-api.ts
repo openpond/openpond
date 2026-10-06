@@ -155,6 +155,14 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       if (action === "check_model_starter") return deps.modelStarters.check(input, await deps.training.destinations());
       return deps.modelStarters.create(input);
     }
+    if (action.startsWith("conversation_serving_")) {
+      if (!deps.conversationServingOwner) throw new Error("The native serving owner is unavailable.");
+      if (action === "conversation_serving_state") return deps.conversationServingOwner.state(payload);
+      if (action === "conversation_serving_register") return deps.conversationServingOwner.register(payload);
+      if (action === "conversation_serving_authorize") return deps.conversationServingOwner.authorize(payload);
+      if (action === "conversation_serving_revoke") return deps.conversationServingOwner.revoke(payload);
+      throw new Error("Unknown conversation serving operation.");
+    }
     if (action === "learning_command") return learningRuntime().command(payload);
     if (action === "learning_read") return learningRuntime().read(payload);
     if (action === "learning_credentials") return learningRuntime().credentials(payload);
