@@ -1531,7 +1531,7 @@ export function MainPane({
         </Suspense>
       ) : null}
       {view === "chat" && ponderMode && connection && bootstrap?.account.activeProfile ? (
-        <MainPanePonder key={accountTeamScopeKey} connection={connection} presentation={ponderMode} sessions={bootstrap.sessions} composer={{
+        <MainPanePonder key={accountTeamScopeKey} connection={connection} presentation={ponderMode} composer={{
           contextWindowStatus, providerSettings: bootstrap.providers ?? null,
           provider: activeProvider, model: activeModel, projectTarget, workspaceTarget,
           codexPermissionMode, codexReasoningEffort, openPondCommandAccessMode,

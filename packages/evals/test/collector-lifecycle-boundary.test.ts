@@ -1,12 +1,57 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import { runCollector } from "../src/native-conversations/collector.js";
 import { collectorDestinations, collectorDestinationLinks } from "../src/native-conversations/collector-destinations.js";
 import { CollectorStore } from "../src/native-conversations/collector-store.js";
 import type { CollectorConnection } from "../src/native-conversations/collector-contracts.js";
 import { listSessions, readSession } from "../src/native-conversations/history.js";
+
+// Failure story: a real empty OpenCode session permanently poisons the collector
+// as a source failure, or skipping it prevents its later completed turn admission.
+it("skips empty OpenCode history and admits the same identity once it has a completed request", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "collector-empty-opencode-"));
+  const database = new DatabaseSync(join(directory, "opencode.db"));
+  database.exec(`
+    CREATE TABLE session(id TEXT PRIMARY KEY,title TEXT,directory TEXT,parent_id TEXT,version TEXT,time_created INTEGER,time_updated INTEGER);
+    CREATE TABLE message(id TEXT PRIMARY KEY,session_id TEXT,data TEXT,time_created INTEGER,time_updated INTEGER);
+    CREATE TABLE part(id TEXT PRIMARY KEY,session_id TEXT,message_id TEXT,data TEXT,time_created INTEGER,time_updated INTEGER);
+    INSERT INTO session VALUES('original','QA conversation','/workspace',NULL,'test',1000,1000);
+  `);
+  const stateDirectory = join(directory, "state");
+  const store = await CollectorStore.open(stateDirectory);
+  const connection: CollectorConnection = { id: "empty", teamId: "team", projectId: "project", apiBaseUrl: "http://localhost", revision: 1,
+    since: null, keepSyncing: false, state: "active", source: { source: "opencode", root: directory, machineId: "machine", instanceId: "instance",
+      acquisition: "sqlite", available: true, capabilities: { history: true, live: true, nativeResume: false } } };
+  let admissions = 0;
+  async function scan(revision: number) {
+    const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 5000);
+    store.put({ ...connection, revision }); store.set("desiredState", "running");
+    try {
+      await runCollector({ directory: stateDirectory, signal: controller.signal, transport: {
+        heartbeat: async current => ({ revision: current.revision, state: current.state }),
+        admit: async (_, entry) => { admissions++; expect(JSON.parse(entry.files[0]!.text).info.id).toBe("original"); },
+        pause: async current => { controller.abort(); return { revision: current.revision + 1, state: "paused" }; },
+      } });
+    } finally { clearTimeout(deadline); controller.abort(); }
+  }
+  try {
+    await scan(1);
+    expect(admissions).toBe(0);
+    expect(store.status().connections[0]).toMatchObject({ error: null, backfill: { skipped: 1, failed: 0 } });
+    const insertMessage = database.prepare("INSERT INTO message VALUES(?,?,?,?,?)"), insertPart = database.prepare("INSERT INTO part VALUES(?,?,?,?,?,?)");
+    for (const [id, role, text] of [["request", "user", "Explain the tradeoff"], ["answer", "assistant", "Use the simpler design"]]) {
+      insertMessage.run(id!, "original", JSON.stringify({ role, time: { created: role === "user" ? 2000 : 3000 }, ...(role === "assistant" ? { finish: "stop" } : {}) }), role === "user" ? 2000 : 3000, 3000);
+      insertPart.run(`${id}-text`, "original", id!, JSON.stringify({ type: "text", text }), 3000, 3000);
+    }
+    database.exec("UPDATE session SET time_updated=3000 WHERE id='original'");
+    await scan(3);
+    expect(admissions).toBe(1);
+    expect(store.status().connections[0]).toMatchObject({ error: null, admitted: 1, queued: 0 });
+  } finally { database.close(); store.close(); await rm(directory, { recursive: true, force: true }); }
+});
 
 // A parser privacy correction must invalidate the old mtime cache and create a
 // new immutable revision, while preserving already admitted task identities.

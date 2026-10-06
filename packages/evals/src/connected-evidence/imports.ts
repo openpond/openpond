@@ -6,7 +6,7 @@ import {
   type ConnectedSession,
   type ConnectedSourceKind,
 } from "./contracts.js";
-import { connectedJsonLines, normalizeConnectedSession } from "./normalize.js";
+import { connectedJsonLines, normalizeConnectedSession, ConnectedSessionWithoutUserRequestError } from "./normalize.js";
 import { parseGrokBuildSession } from "./sources/grok-build.js";
 import { parsePiSession } from "./sources/pi.js";
 import { parseOpenCodeSession } from "./sources/opencode.js";
@@ -31,7 +31,7 @@ export type AgentImportPreview = {
   source: ExternalAgentSource;
   sourceHash: string;
   sessions: ConnectedSession[];
-  issues: { file: string; message: string }[];
+  issues: { file: string; message: string; code?: "no_user_request" }[];
 };
 
 /** Never admits malformed files partly or executes referenced paths/commands. */
@@ -94,6 +94,7 @@ export function previewAgentImport(input: {
     } catch (error) {
       issues.push({
         file,
+        ...(error instanceof ConnectedSessionWithoutUserRequestError ? { code: "no_user_request" as const } : {}),
         message:
           error instanceof Error ? error.message : "Unsupported session.",
       });

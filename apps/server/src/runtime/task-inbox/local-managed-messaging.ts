@@ -25,9 +25,11 @@ export function createLocalManagedMessaging(deps: {
     ]);
     const managedSessionId = session.provider === "codex" ? session.codexThreadId : session.nativeAgent?.sessionId ?? null;
     const supported = ["codex", "claude-code", "opencode", "grok-build"].includes(session.provider);
+    const qualifiedHistory = session.metadata?.nativeResumeAvailable === true && !session.metadata?.nativeBranch
+      && session.nativeAgent?.provider === session.provider && session.nativeAgent.cwd === session.cwd;
     const unavailableReason = session.archived || session.status === "closed" ? "This task is closed or archived."
       : session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template" || session.workspaceKind === "sandbox_app" ? "This target is hosted; use its hosted message action."
-      : session.metadata?.nativeHistoryProjection === true || isCodexHistorySessionId(session.id) ? "This imported conversation is observation-only for recommendations. Continue it directly in the desktop before sending a task follow-up."
+      : (session.metadata?.nativeHistoryProjection === true && !qualifiedHistory) || isCodexHistorySessionId(session.id) ? "This imported conversation has not been qualified for original-session continuation. Open it in the desktop and check its connection before sending a task follow-up."
       : !supported || !managedSessionId ? "This conversation has no managed local session. Imported history alone cannot receive messages."
       : !ready.available ? ready.reason ?? "The original managed agent is unavailable."
       : null;

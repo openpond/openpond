@@ -2,6 +2,10 @@ import { contentHash, contentHashArrayPrefixes } from "@openpond/harness";
 import { CONNECTED_EVIDENCE_LIMITS, CONNECTED_EVIDENCE_VERSION, CONNECTED_NORMALIZER_VERSION, ConnectedSessionSchema, hasRecordedConnectedAnswer,
   type ConnectedBoundary, type ConnectedEvent, type ConnectedFile, type ConnectedSession, type ConnectedSourceKind } from "./contracts.js";
 
+export class ConnectedSessionWithoutUserRequestError extends Error {
+  constructor() { super("The session has no retained user request."); }
+}
+
 export function connectedTimestamp(value: unknown, units: "seconds" | "milliseconds" = "milliseconds"): string | null {
   if (typeof value !== "number" && typeof value !== "string") return null;
   const time = new Date(typeof value === "number" && units === "seconds" ? value * 1_000 : value);
@@ -19,7 +23,7 @@ export function normalizeConnectedSession(input: {
   const events = input.events.map((event, sequence) => ({ ...event, sequence }));
   if (new Set(events.map(event => event.id)).size !== events.length) throw new Error("connected_duplicate_event");
   const starts = events.flatMap((event, index) => event.kind === "message" && event.role === "user" ? [index] : []);
-  if (!starts.length) throw new Error("The session has no retained user request.");
+  if (!starts.length) throw new ConnectedSessionWithoutUserRequestError();
   if (starts.length + (input.includeConversation === false ? 0 : 1) > CONNECTED_EVIDENCE_LIMITS.boundaries) throw new Error("connected_boundary_limit");
   const familyKey = `family-${contentHash([input.origin, ...(input.acquisition ? [input.acquisition.sourceInstanceId] : []), input.parentSessionId ?? input.sessionId]).slice(0, 32)}`;
   const inputHashes = contentHashArrayPrefixes(events, starts.map(start => start + 1));
@@ -72,6 +76,11 @@ export function normalizeConnectedSession(input: {
 }
 
 export function connectedJsonLines(file: ConnectedFile): Record<string, unknown>[] {
+  // Native tool results and image blocks can occupy one large JSONL record.
+  // Bound the whole decoded input before parsing, rather than rejecting valid
+  // evidence solely because its exporter uses a single physical line.
+  if (new TextEncoder().encode(file.text).length > CONNECTED_EVIDENCE_LIMITS.decodedBytes)
+    throw new Error("Decoded source files exceed 64 MiB.");
   const lines = file.text.replace(/^\uFEFF/u, "").split(/\r?\n/u);
   if (lines.length > CONNECTED_EVIDENCE_LIMITS.events + 1) throw new Error("connected_event_limit");
   return lines.flatMap((line, index) => {
