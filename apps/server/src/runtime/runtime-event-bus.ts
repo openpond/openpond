@@ -315,7 +315,7 @@ export function createRuntimeEventBus({
 
 function isCoalescibleAssistantDelta(runtimeEvent: RuntimeEvent): boolean {
   return (
-    runtimeEvent.name === "assistant.delta" &&
+    (runtimeEvent.name === "assistant.delta" || runtimeEvent.name === "assistant.reasoning.delta") &&
     Boolean(runtimeEvent.output) &&
     !runtimeEvent.action &&
     !runtimeEvent.args &&
@@ -328,6 +328,7 @@ function isCoalescibleAssistantDelta(runtimeEvent: RuntimeEvent): boolean {
 
 function assistantDeltaKey(runtimeEvent: RuntimeEvent): string {
   return [
+    runtimeEvent.name,
     runtimeEvent.sessionId ?? "",
     runtimeEvent.turnId ?? "",
     runtimeEvent.source ?? "",
