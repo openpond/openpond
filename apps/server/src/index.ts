@@ -307,6 +307,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     workflows: async () => ({ workflows: await store.listChatWorkflows(), runs: await store.listChatWorkflowRuns(null, 500) }),
     warn: message => logger.warn(message),
   });
+  onStartupFailure(() => ponderActivityBridge.close());
   const workQueues = createServerWorkQueues(logger);
   const browserControlQueue = createBrowserControlQueue();
   const codexSessions = new Map<string, RuntimeCodexSession>();
@@ -1909,9 +1910,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     codexSessions: codexSessions.values(),
     markClosing: () => {
       closing = true;
-      ponderActivityBridge.close();
     },
     backgroundLoops: [
+      { stop: ponderActivityBridge.close },
+      { stop: conversationServingOwner.close },
       taskMinerBackgroundLoop,
       localAgentScheduleLoop,
       chatWorkflows,

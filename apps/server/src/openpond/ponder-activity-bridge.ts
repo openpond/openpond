@@ -42,6 +42,7 @@ export function createPonderActivityBridge(input: {
   let closed = false;
   let tail: Promise<void> = Promise.resolve();
   const queue = (fn: () => Promise<void>) => {
+    if (closed) return;
     tail = tail.then(fn).catch(() => input.warn("Ponder Pal activity sync will retry."));
   };
   async function scope() {
@@ -76,6 +77,7 @@ export function createPonderActivityBridge(input: {
     await rename(file + ".tmp", file);
   }
   const unsubscribe = input.subscribe((event) => {
+    if (closed) return;
     if (
       !event.sessionId ||
       ![
@@ -179,9 +181,11 @@ export function createPonderActivityBridge(input: {
   queue(flush);
   return {
     close() {
+      if (closed) return tail;
       closed = true;
       clearInterval(timer);
       unsubscribe();
+      return tail;
     },
     flush: () => {
       queue(flush);

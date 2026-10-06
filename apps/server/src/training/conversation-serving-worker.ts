@@ -125,7 +125,7 @@ export function createConversationServingWorker(deps: ConversationServingOwnerDe
       }
     }
   }
-  function reconcile() { if (!active) active = once().finally(() => { active = null; }); return active; }
+  function reconcile() { if (closed) return Promise.resolve(); if (!active) active = once().finally(() => { active = null; }); return active; }
   function start() {
     if (closed || timer || active) return;
     const tick = () => { timer = null; void reconcile().finally(() => { if (!closed) { timer = setTimeout(tick, 10000); timer.unref?.(); } }); };
