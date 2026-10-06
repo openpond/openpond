@@ -63,7 +63,7 @@ export function createLocalProfileExperimentOwner(deps:{
       throw new LocalExperimentError("local_profile_source_conflict","Prepare this exact Profile and Dataset through the local runtime before running. Hosted or changed source receipts are not local authority.",422);
 
     if(value.taskset.environment.kind!=="text"||value.taskset.tools.some(tool=>!["work_exec","work_save_output"].includes(tool.name))||value.taskset.policy.connectedAppScopes.length
-      ||value.taskset.capabilities.some(item=>item.required&&item.id!=="private-verifier"))
+      ||value.taskset.capabilities.some(item=>item.required&&item.id!=="private-verifier"&&!(item.id==="tools"&&item.scopes.every(scope=>["work_exec","work_save_output"].includes(scope)&&value.taskset.tools.some(tool=>tool.name===scope)))))
       throw new LocalExperimentError("local_profile_environment_not_qualified","This Profile requires an additional admitted local tool or Work environment.",422);
     const population=configuration.request.population,expected=prepared.manifest.population;
     const keys=new Set(population.map(member=>JSON.stringify([member.taskId,member.seed])));
@@ -109,7 +109,7 @@ export function createLocalProfileExperimentOwner(deps:{
         await resolveLocalProfileExperimentSource(deps.store,source.harnessRelease,prepared.profileRef,deps.authorizeOrigin);
         if(contentHash(session.currentProfile)!==contentHash(prepared.profileRef))throw new Error("Local Profile session acquired another Profile.");
         await ensureLocalHarnessRunOverlay({store:deps.store,runId:session.id,workspace:runtime.workspace,harnessRelease:source.harnessRelease,admittedAt:session.createdAt});
-        sessionId=session.id;if(isolated)await isolated.admitSession(session,prepared.manifest,input.admission.taskId,input.admission.seed);sessions.set(session.id,{binding,stream,profile:prepared.profileRef,source,isolated});
+        sessionId=session.id;if(isolated)await isolated.admitSession(session,prepared.manifest,input.admission.taskId,input.admission.seed,attachments);sessions.set(session.id,{binding,stream,profile:prepared.profileRef,source,isolated});
       }});
     try {
       const result=await executor({task:{id:task.id,input:input.admission.request.input,policyVisibleContext:input.admission.request.policyVisibleContext,artifactRefs:task.artifactRefs,tags:task.tags},seed:input.admission.seed,source,signal});

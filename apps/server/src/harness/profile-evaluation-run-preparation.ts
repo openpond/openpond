@@ -66,6 +66,8 @@ export function createProfileEvaluationRunPreparationService(input: {
   resolveExternalDataset?: ProfileExternalDatasetResolver;
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
   placement: "local" | "remote" | "colocated";
+  /** Trusted host's case VM owner reserves compute against the run ledger. */
+  boundedWorkComputeAvailable?: boolean;
 }) {
   return async (request: unknown, options?: { requireExpectedManifestHash?: boolean; selectedWorkflows?: SelectedWorkflows }) => {
     const parsed = PrepareRequestSchema.parse(request);
@@ -109,8 +111,8 @@ export function createProfileEvaluationRunPreparationService(input: {
     if (!textCase && !workCase) {
       throw new Error("Profile evaluation supports text cases or Work cases with the built-in execution and output tools.");
     }
-    if (parsed.maximumSpendUsd !== undefined && !textCase) {
-      throw new Error("Bounded hosted Profile evaluation currently qualifies text cases without external compute.");
+    if (parsed.maximumSpendUsd !== undefined && workCase && !input.boundedWorkComputeAvailable) {
+      throw new Error("This host has not admitted budgeted Work compute.");
     }
     if (taskset.tasks.some((task) => task.artifactRefs.length > CHAT_ATTACHMENT_LIMITS.maxAttachments
       || task.artifactRefs.some((asset) => asset.visibility !== "policy"
