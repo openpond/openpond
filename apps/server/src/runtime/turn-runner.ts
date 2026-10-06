@@ -1214,6 +1214,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         ),
         attachmentContext
       );
+      const peerInput = typeof input.metadata?.taskInputId === "string" ? await inboxStore.getTaskInput(input.metadata.taskInputId) : null;
+      const peerInputId = peerInput?.sessionId === sessionId && peerInput.turnId === turn.id && peerInput.senderSessionId && peerInput.senderKind !== "user" ? peerInput.id : null;
       await appendRuntimeEvent(
         event({
           sessionId,
@@ -1223,6 +1225,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           appId: session.appId,
           args: {
             prompt: input.prompt,
+            ...(peerInputId ? { taskInputId: peerInputId } : {}),
             cwd: initialCwd,
             provider: activeProvider,
             ...(turnModelRef ? { modelRef: turnModelRef } : {}),

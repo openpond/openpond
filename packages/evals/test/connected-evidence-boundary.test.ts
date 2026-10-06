@@ -73,7 +73,9 @@ describe("connected evidence immutable admission boundary", () => {
     expect(() => resolveConnectedBoundary(mutated, turns[0]!.id)).toThrow("connected_evidence_hash_mismatch");
     // Status must not fail for large retained history or weaken evaluator size
     // limits; metadata also rejects internally inconsistent boundary hashes.
-    const large = previewAgentImport({ source: "codex", files: [codex("x".repeat(1_100_000))] }).sessions[0]!;
+    // A valid tool/answer may occupy a JSONL record above the old 2 MiB line
+    // ceiling. Retain it intact without widening evaluator context admission.
+    const large = previewAgentImport({ source: "codex", files: [codex("x".repeat(2_300_000))] }).sessions[0]!;
     const largeTurn = large.boundaries[0]!;
     expect(resolveConnectedBoundaryMetadata(large, largeTurn.id)).toEqual(largeTurn);
     expect(() => resolveConnectedBoundary(large, largeTurn.id)).toThrow("connected_evaluator_context_too_large");

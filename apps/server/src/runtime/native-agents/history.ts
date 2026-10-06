@@ -15,7 +15,7 @@ const providerFor = { claude_code: "claude-code", opencode: "opencode", grok_bui
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** Read-only native acquisition, with local projections for the existing chat UI. No cloud admission. */
-export function createNativeHistory(deps: { store: SqliteStore; storeDir: string; appendRuntimeEvent(value: RuntimeEvent): Promise<void>; canResume?(provider: NativeAgentId, cwd: string): Promise<boolean> }) {
+export function createNativeHistory(deps: { store: SqliteStore; storeDir: string; appendRuntimeEvent(value: RuntimeEvent): Promise<void>; canResume?(provider: NativeAgentId, cwd: string): Promise<boolean | { available: boolean; reason: string | null }> }) {
   const selected = new Map<string, { source: NativeSource; session: NativeSession; provider: NativeAgentId }>();
   const opening = new Map<string, Promise<Session>>();
   async function list(cursors: Record<string, string> = {}, retain = false) {
@@ -99,14 +99,24 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       const owned = !branch ? matchingNativeHistorySession(shells, { id, source: item.source, session: item.session, provider: item.provider, instanceId: instance }) : undefined;
       const qualified = owned?.nativeAgent;
       const alreadyQualified = qualified?.provider === item.provider && qualified.instanceId === instance && qualified.sessionId === native.sessionId && qualified.cwd === item.session.cwd;
-      const canResume = Boolean(!branch && item.session.cwd && (alreadyQualified || item.source.capabilities.nativeResume || await deps.canResume?.(item.provider, item.session.cwd)));
+      const resume = !branch && item.session.cwd
+        ? alreadyQualified || item.source.capabilities.nativeResume || await deps.canResume?.(item.provider, item.session.cwd)
+        : false;
+      const canResume = typeof resume === "object" ? resume.available : Boolean(resume);
+      const readOnlyReason = branch
+        ? "Read-only Claude branch snapshot. Open the original conversation to continue; this selected branch remains unchanged."
+        : !item.session.cwd
+          ? "This saved conversation does not record its original working folder. It can be inspected here, but cannot be safely resumed."
+          : canResume ? null
+            : typeof resume === "object" && resume.reason ? resume.reason
+              : "This agent has not confirmed support for resuming the original session. Check its installation and login in Connections, then reopen this conversation.";
       const sessionId = owned?.id ?? `native-${projectionId}`;
       let session = owned ?? await deps.store.getSession(sessionId);
       const timestamp = item.session.updatedAt;
       if (!session) {
         session = SessionSchema.parse({ id: sessionId, experience: "work", provider: item.provider, title: `${item.session.title}${branch ? ` · Branch ${branch.leafId.slice(0, 8)}` : ""}`, appId: null, appName: null, cwd: item.session.cwd, codexThreadId: null, createdAt: timestamp, updatedAt: timestamp, status: "idle", pinned: false, archived: false, order: 0,
           nativeAgent: canResume ? { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: item.session.cwd! } : null,
-          metadata: { nativeHistoryId: id, nativeHistoryProjection: true, nativeHistoryLoaded: true, sourceInstanceId: item.source.instanceId, sourceMachineId: item.source.machineId, nativeSource: item.source.source, nativeResumeAvailable: canResume, nativeSourceHash: native.contentHash, ...(!canResume ? { nativeReadOnlyReason: "Connect this agent in Settings → Providers to continue this saved conversation." } : {}), ...(branch ? { nativeBranch: branch, nativeReadOnlyReason: "Read-only Claude branch snapshot. Choose another branch through Import conversations to inspect it." } : {}) } });
+          metadata: { nativeHistoryId: id, nativeHistoryProjection: true, nativeHistoryLoaded: true, sourceInstanceId: item.source.instanceId, sourceMachineId: item.source.machineId, nativeSource: item.source.source, nativeResumeAvailable: canResume, nativeSourceHash: native.contentHash, nativeReadOnlyReason: readOnlyReason, ...(branch ? { nativeBranch: branch } : {}) } });
         await deps.store.insertSessionAtFront(session);
         await deps.appendRuntimeEvent(event({ sessionId, name: "session.started", source: "server", data: { session, retainedHistory: true } }));
       }
@@ -149,10 +159,10 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
         const terminalId = `native-terminal-${hash([projectionId, boundary.id, boundary.revisionHash, boundary.terminal])}`;
         if (!existingIds.has(terminalId)) await deps.appendRuntimeEvent({ id: terminalId, sessionId, turnId: retainedTurnId, name: status === "completed" ? "turn.completed" : status === "failed" ? "turn.failed" : "turn.interrupted", timestamp: turn.completedAt!, source: "provider", data: { retainedHistory: true, sourceTerminal: boundary.terminal } });
       }
-      if (session.metadata?.nativeHistoryLoaded === false) {
+      if (session.metadata?.nativeHistoryProjection && (session.metadata.nativeHistoryLoaded === false || session.metadata.nativeReadOnlyReason !== readOnlyReason)) {
         const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, metadata: { ...current.metadata,
           nativeHistoryLoaded: true, nativeSourceHash: native.contentHash,
-          nativeReadOnlyReason: current.nativeAgent ? null : "The source does not report a qualified original working directory; this conversation is read-only." } }));
+          nativeResumeAvailable: canResume, nativeReadOnlyReason: readOnlyReason } }));
         if (updated) { session = updated; await deps.appendRuntimeEvent(event({ sessionId, name: "session.updated", source: "server", data: { session, retainedHistory: true } })); }
       }
       return session;

@@ -20,7 +20,3 @@
 .ponder-recommendation-actions, .ponder-message-destination { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
 .ponder-recommendation-actions button, .ponder-message-destination button { padding: 6px 10px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
 .ponder-message-destination { padding: 8px 14px; margin: 0; font-size: 12px; color: var(--muted); }
-.ponder-local-message-control { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 14px; font-size: 12px; color: var(--muted); }
-.ponder-local-message-control label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.ponder-local-message-control select { max-width: min(300px, 100%); color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
-.ponder-local-message-control button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); }

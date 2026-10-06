@@ -14,6 +14,7 @@ import type { AddressInfo } from "node:net";
 import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src/api/http-routes";
 
 import { createSubagentCompletionRuntime } from "../apps/server/src/runtime/subagents/completion-runtime";
+import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const dispose of cleanup.splice(0).reverse()) await dispose(); });
@@ -118,10 +119,14 @@ test("local Send binds the original managed target and preserves paused, approva
   await expect(recovered.send("a", { ...intent, expectedTargetRevision: unavailable.targetRevision, idempotencyKey: "disabled-click" })).rejects.toThrow("disabled");
   expect((await recovered.inspect("outsider")).canSendFollowup).toBe(false);
   available = true;
-  await f.store.updateSession("a", (session) => ({ ...session, metadata: { nativeHistoryProjection: true, nativeResumeAvailable: true } }));
+  await f.store.updateSession("a", (session) => ({ ...session, metadata: { nativeHistoryProjection: true, nativeResumeAvailable: false } }));
   const imported = await recovered.inspect("a");
   expect(imported).toMatchObject({ canSendFollowup: false });
   await expect(recovered.send("a", { ...intent, expectedTargetRevision: imported.targetRevision, idempotencyKey: "imported-click" })).rejects.toThrow("imported");
+  await f.store.updateSession("a", session => ({ ...session, metadata: { ...session.metadata, nativeResumeAvailable: true } }));
+  const qualified = await recovered.inspect("a");
+  expect(qualified.canSendFollowup).toBe(true);
+  expect(await recovered.send("a", { ...intent, expectedTargetRevision: qualified.targetRevision, idempotencyKey: "qualified-click" })).toMatchObject({ state: "pending", kind: "queued" });
   await f.store.updateSession("a", (session) => ({ ...session, metadata: { nativeHistoryProjection: false } }));
   const raced = createLocalManagedMessaging({ store: f.store, getSession: async (id) => (await f.store.getSession(id))!,
     latestTurn: (id) => f.store.latestTurnForSession(id), readiness: async () => ({ available: true, reason: null, canSteer: false }),
@@ -131,7 +136,7 @@ test("local Send binds the original managed target and preserves paused, approva
     } });
   const beforeRace = await raced.inspect("a");
   await expect(raced.send("a", { ...intent, expectedTargetRevision: beforeRace.targetRevision, idempotencyKey: "raced-click" })).rejects.toThrow("before message admission");
-  expect(await f.store.taskInputsForSession("a")).toHaveLength(1);
+  expect(await f.store.taskInputsForSession("a")).toHaveLength(2);
 });
 
 // Failure story: a correction accepted during finalization is lost, replayed twice, or attached to a different assignment.
@@ -185,32 +190,80 @@ test("owner recovery preserves uncertain inclusion and reclaims only unstarted r
   await expect(f.store.renewTaskInboxTurn("a", "turn-a", "old-owner")).rejects.toThrow("ownership was lost");
 });
 
-// Failure story: cross-project data leaks, dependency cycles deadlock, or an earlier execution satisfies a new-work wait.
+// Failure story: cross-project data leaks, dependency cycles deadlock, or a
+// replayed/failed peer delivery is duplicated or falsely shown as delivered.
 test("authorization, cycle prevention and generation-specific event waits share durable state", async () => {
   const f = await fixture();
   const runtime = createTaskInboxRuntime({ store: f.store,
     getSession: async (id) => { const session = await f.store.getSession(id); if (!session) throw new Error("missing"); return session; },
     listSessions: () => f.store.sessionShells(), getTurn: (id) => f.store.getTurn(id), latestTurn: (id) => f.store.latestTurnForSession(id),
     getSubagentRun: async () => null, getActiveTurn: () => undefined, recoverInterruptedTurn: async () => {},
-    startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: (work) => work(), appendRuntimeEvent: async () => {},
+    startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: (work) => work(), appendRuntimeEvent: async (value) => { await f.store.appendRuntimeEvent(value); },
   });
   cleanup.push(runtime.close);
   await expect(runtime.send({ senderSessionId: "outsider", sessionId: "a", body: "secret", idempotencyKey: "denied" })).rejects.toThrow("authorized project");
   await f.store.insertTurn({ ...f.turn, id: "old-b", sessionId: "b", status: "completed" });
   const receipt = await runtime.send({ senderSessionId: "a", sessionId: "b", body: "New work", kind: "followup", idempotencyKey: "new" });
+  expect((await runtime.send({ senderSessionId: "a", sessionId: "b", body: "New work", kind: "followup", idempotencyKey: "new" })).id).toBe(receipt.id);
+  for (const [sessionId, direction, peerId] of [["a", "sent", "b"], ["b", "received", "a"]]) {
+    const messages = buildChatMessages(await f.store.runtimeEventsForSession(sessionId!));
+    expect(messages.filter(message => message.role === "task_message")).toHaveLength(1);
+    expect(messages[0]?.taskMessage).toMatchObject({ direction, peer: { sessionId: peerId }, input: { id: receipt.id, state: "pending" } });
+  }
   const waiting = runtime.wait({ sessionId: "a", turnId: "turn-a", callId: "wait-new", targetSessionId: "b", targetInputId: receipt.id, signal: new AbortController().signal });
   await vi.waitFor(async () => expect(await f.store.taskWaitsForSession("a")).toHaveLength(1));
   await expect(f.store.createTaskWait(TaskWaitSchema.parse({ id: "cycle", sessionId: "b", turnId: "new-b", targetSessionId: "a", targetTurnId: "turn-a", afterSequence: 0,
     deadline: new Date(Date.now() + 10_000).toISOString(), state: "waiting", createdAt: "now", updatedAt: "now" }))).rejects.toThrow("cycle");
   await f.store.reserveTaskFollowup("b", "new-b", runtime.ownerId);
   await f.store.insertTurn({ ...f.turn, id: "new-b", sessionId: "b", status: "completed" });
+  await runtime.include("b", "new-b", "peer-request");
+  await f.store.appendRuntimeEvent({ id: "peer-turn-started", sessionId: "b", turnId: "new-b", name: "turn.started", timestamp: new Date().toISOString(),
+    args: { prompt: "Internal coordination envelope", taskInputId: receipt.id } });
+  await f.store.settleTaskInputRequest("peer-request", "resolved");
+  await runtime.settled("b", "new-b", "completed");
+  for (const sessionId of ["a", "b"]) {
+    const messages = buildChatMessages(await f.store.runtimeEventsForSession(sessionId));
+    expect(messages.filter(message => message.taskMessage?.input.id === receipt.id)).toHaveLength(1);
+    expect(messages.find(message => message.taskMessage?.input.id === receipt.id)?.taskMessage?.input.state).toBe("resolved");
+    expect(messages.some(message => message.role === "user" && message.content === "Internal coordination envelope")).toBe(false);
+  }
   runtime.signals.notify("b");
   expect(await waiting).toMatchObject({ state: "completed", targetInputId: receipt.id });
   await f.store.openTaskInboxTurn("a", "turn-a", runtime.ownerId);
   const pending = await runtime.send({ senderSessionId: "b", sessionId: "a", body: "Previously authorized update", idempotencyKey: "access-change" });
-  await f.store.updateSession("b", (session) => ({ ...session, localProjectId: "other" }));
+  await f.store.updateSession("b", (session) => ({ ...session, localProjectId: "other", title: "Private title after access changed" }));
   expect(await runtime.include("a", "turn-a", "after-access-change")).toEqual([]);
   expect(await f.store.getTaskInput(pending.id)).toMatchObject({ state: "rejected" });
+  const received = buildChatMessages(await f.store.runtimeEventsForSession("a"));
+  expect(received.filter(message => message.taskMessage?.input.id === pending.id)).toHaveLength(1);
+  expect(received.find(message => message.taskMessage?.input.id === pending.id)?.taskMessage?.input).toMatchObject({ state: "rejected", error: expect.any(String) });
+  expect(JSON.stringify(received)).not.toContain("Private title after access changed");
+});
+
+// Failure story: after a process crash, a visible peer receipt keeps claiming
+// successful inclusion even though the durable provider outcome is uncertain.
+test("runtime recovery updates both peer timelines without replaying uncertain work", async () => {
+  const f = await fixture();
+  const createInbox = () => createTaskInboxRuntime({ store: f.store,
+    getSession: async id => (await f.store.getSession(id))!, listSessions: () => f.store.sessionShells(),
+    getTurn: id => f.store.getTurn(id), latestTurn: id => f.store.latestTurnForSession(id),
+    getSubagentRun: async () => null, getActiveTurn: () => undefined, recoverInterruptedTurn: async () => {},
+    startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: work => work(),
+    appendRuntimeEvent: async value => { await f.store.appendRuntimeEvent(value); },
+  });
+  const first = createInbox();
+  await f.store.openTaskInboxTurn("a", "turn-a", first.ownerId);
+  const receipt = await first.send({ senderSessionId: "b", sessionId: "a", body: "Inspect this issue", idempotencyKey: "peer-before-crash" });
+  await first.include("a", "turn-a", "uncertain-peer-request");
+  await first.close(); await f.reopen();
+  const second = createInbox(); cleanup.push(second.close);
+  await second.recover();
+  expect(await f.store.taskInboxPaused("a")).toBe(true);
+  for (const sessionId of ["a", "b"]) {
+    const messages = buildChatMessages(await f.store.runtimeEventsForSession(sessionId));
+    expect(messages.filter(message => message.taskMessage?.input.id === receipt.id)).toHaveLength(1);
+    expect(messages.find(message => message.taskMessage?.input.id === receipt.id)?.taskMessage?.input).toMatchObject({ state: "included", error: expect.stringContaining("uncertain") });
+  }
 });
 
 // Failure story: arrival between a condition read and sleeping is missed indefinitely.

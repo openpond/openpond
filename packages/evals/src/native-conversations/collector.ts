@@ -3,6 +3,7 @@ import { watch } from "node:fs";
 import { contentHash } from "@openpond/harness";
 import { randomUUID } from "node:crypto";
 import { listSessions, readSession } from "./history.js";
+import { NativeSessionNotReadyError } from "./readiness.js";
 import { CollectorStore } from "./collector-store.js";
 import {
   CollectorErrors,
@@ -238,6 +239,11 @@ export async function runCollector(input: {
           if (scanRevision)
             store.scanned(connection.id, scanKey, scanRevision);
         } catch (error) {
+          if (error instanceof NativeSessionNotReadyError) {
+            store.progress.read(connection.id, scanKey, false);
+            if (scanRevision) store.scanned(connection.id, scanKey, scanRevision);
+            continue;
+          }
           store.progress.failed(
             connection.id,
             scanKey,

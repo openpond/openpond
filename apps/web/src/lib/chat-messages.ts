@@ -26,6 +26,8 @@ import { classifyChatError, displayChatErrorMessage } from "./chat-errors";
 import { attachTurnDeliverables } from "./chat-deliverables";
 import { asRecord, findLast } from "./chat-message-utils";
 import { mergeChatSources, webSearchSourcesFromEvent } from "./chat-sources";
+import { taskMessageFromEvent } from "./chat-task-messages";
+import { projectNativeHistoryTool } from "./chat-native-history";
 
 export { activityGroupSummary } from "./chat-activities";
 
@@ -42,10 +44,23 @@ export function buildCachedChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
   const displayedTaskInputIds = new Set<string>();
+  const peerMessages = new Map<string, ChatMessage>();
   const pendingSourcesByTurnId = new Map<string, ChatMessage["sources"]>();
+  const nativeToolNames = new Map<string, string>();
 
-  for (const item of items) {
+  for (const original of items) {
+    const item = projectNativeHistoryTool(original, nativeToolNames);
     if (item.name === "task.input") {
+      const peer = taskMessageFromEvent(item);
+      if (peer) {
+        const current = peerMessages.get(peer.id);
+        if (!current) { peerMessages.set(peer.id, peer); messages.push(peer); }
+        else {
+          const next = peer.taskMessage!.input, previous = current.taskMessage!.input;
+          if (next.revision > previous.revision || (next.revision === previous.revision && next.updatedAt >= previous.updatedAt)) Object.assign(current, peer);
+        }
+        continue;
+      }
       const parsed = TaskInputSchema.safeParse(asRecord(item.data)?.input);
       if (parsed.success && parsed.data.senderKind === "user" && parsed.data.kind === "steer" && !displayedTaskInputIds.has(parsed.data.id)) {
         displayedTaskInputIds.add(parsed.data.id);
@@ -59,6 +74,14 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       removeSupersededSteerInterruption(messages, item);
       const prompt = extractPrompt(item.args);
       if (prompt) {
+        const inputId = asRecord(item.args)?.taskInputId;
+        const peer = typeof inputId === "string" ? peerMessages.get(`task-input:${inputId}:received`) : null;
+        if (peer?.taskMessage?.input.kind === "followup") {
+          // This turn was created by the inbox; render its original message once,
+          // rather than exposing the provider coordination wrapper as a user chat.
+          peer.turnId = item.turnId;
+          continue;
+        }
         const marker = codexControlMessage(prompt);
         if (marker) {
           appendActivityMessage(messages, {

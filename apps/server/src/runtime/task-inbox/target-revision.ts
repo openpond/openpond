@@ -7,6 +7,8 @@ export function localManagedTargetRevision(session: Session, latestTurnId: strin
     managedSessionId: session.provider === "codex" ? session.codexThreadId : session.nativeAgent?.sessionId ?? null,
     nativeAgent: session.nativeAgent ?? null, cwd: session.cwd,
     nativeHistoryProjection: session.metadata?.nativeHistoryProjection === true,
+    nativeResumeAvailable: session.metadata?.nativeResumeAvailable === true,
+    nativeBranch: session.metadata?.nativeBranch ?? null,
     workspaceKind: session.workspaceKind ?? null, workspaceId: session.workspaceId ?? null,
     localProjectId: session.localProjectId ?? null, latestTurnId,
   })).digest("hex");
