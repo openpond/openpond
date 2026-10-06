@@ -5,6 +5,7 @@ import { createProfileEvaluationCaseService } from "./profile-evaluation-case-se
 import { createProfileEvaluationRunService } from "./profile-evaluation-run-service.js";
 import { createProfileEvaluationSuiteService } from "./profile-evaluation-suite-service.js";
 import type { createProfileEvaluationRunPreparationService } from "./profile-evaluation-run-preparation.js";
+import {createProfilePrivateGradingOwner} from "./profile-private-grading.js";
 
 type CaseDependencies = Parameters<typeof createProfileEvaluationCaseService>[0];
 type SuiteDependencies = Parameters<typeof createProfileEvaluationSuiteService>[0];
@@ -25,13 +26,21 @@ export function createProfileEvaluationRuntime(input: {
   };
   const loadCatalog: CaseDependencies["loadCatalog"] = request =>
     profileEvaluationsForRelease({ ...request, store: input.store });
+  const loadTasksetPackage: CaseDependencies["loadTasksetPackage"] = (definition, profileId, harnessRelease) =>
+    loadLocalProfileEvaluationTaskset({ store: input.store, storeDir: input.storeDir, definition, profileId, harnessRelease });
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
     ...input, loadCatalog, selectedProfile: selectedEvaluationProfile,
-    loadTasksetPackage: (definition, profileId, harnessRelease) =>
-      loadLocalProfileEvaluationTaskset({ store: input.store, storeDir: input.storeDir, definition, profileId, harnessRelease }),
+    loadTasksetPackage,
   });
   const executeProfileEvaluationRun = createProfileEvaluationRunService({
     store: input.store, loadCatalog, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
+    loadTasksetPackage,
+    privateGrading: (manifest, packageValue, signal) => createProfilePrivateGradingOwner({manifest, packageValue, signal, authorize: async () => {
+      const selected = await selectedEvaluationProfile(), source = manifest.profileEvaluation;
+      if (!source || selected.ref.profileId !== source.profileId || selected.sourceRevision !== source.sourceRevision) throw new Error("The private grading Profile authority changed.");
+      const catalog = await loadCatalog({...selected, harnessRelease: source.harnessRelease});
+      if (catalog.catalogHash !== source.catalogHash) throw new Error("The private grading catalog changed.");
+    }}),
   });
   const profileEvaluationRunPayload = async (request: unknown) =>
     executeProfileEvaluationRun(await input.prepare(request, { requireExpectedManifestHash: true }));

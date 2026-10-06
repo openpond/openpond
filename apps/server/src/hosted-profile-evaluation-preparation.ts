@@ -1,3 +1,4 @@
+import {preflightProfilePrivateGrading} from "./harness/profile-private-grading.js";
 import { readFile, realpath, lstat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -60,6 +61,7 @@ export async function prepareHostedProfileEvaluation(input: z.infer<typeof reque
     return{packageValue:validateTasksetPackage(value.packageValue),graders:value.graders satisfies ExternalDatasetGraderPin[]};
   })():null;
   return createProfileEvaluationRunPreparationService({
+    privateGradingPreflight: value => preflightProfilePrivateGrading(value, false),
     sourceCandidate:input.sourceCandidate,
     resolveExternalDataset:external?async(binding)=>{
       const packageValue=verifyExternalDatasetPackage({binding,...external});

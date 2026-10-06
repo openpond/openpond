@@ -27,7 +27,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
   /** Trusted execution owner, never supplied by a public case payload. */
   assertSpendAuthority?:typeof assertProfileEvaluationSpendAuthority;
   ownedSessionMetadata?:Record<string,unknown>;
-  settleSession?:(id:string)=>void;
+  settleSession?:(id:string)=>void|Promise<void>;
   admitSession?:(session:Session)=>Promise<void>;
   validateTerminalTurn?:(session:Session,turn:Turn)=>Promise<void>;
   maximumOutputBytes?:number;
@@ -176,7 +176,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       terminal: turn.status === "completed"&&!outputOverflow,
       failureClass: turn.status === "completed"&&!outputOverflow ? null : turn.status === "interrupted" ? "cancelled" : "infrastructure_failure",
     };
-    }finally{input.settleSession?.(session.id);}
+    }finally{await input.settleSession?.(session.id);}
   };
 }
 

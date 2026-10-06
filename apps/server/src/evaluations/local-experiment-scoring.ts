@@ -1,4 +1,5 @@
 import {readLocalProfileArtifacts} from "./local-profile-artifacts.js";
+import {workbookProbeSheets} from "./workbook-inspection-contract.js";
 import {ExperimentScoringRequestSchema} from "openpond-sdk/experiments";
 import {verifySelectedRewardClosure,type LocalRewardGradingResolver} from "./local-reward-grading.js";
 import { z } from "zod";
@@ -60,7 +61,7 @@ export function createLocalExperimentScoring(deps:{runtimeEventsForTurn?:(id:str
           controller.signal.throwIfAborted();
           if(!row.result)throw new LocalExperimentError("local_scoring_evidence_missing","This original case has no retained target output.",422);
           const retained=localRetainedCase(row.result),task=originalPackage.taskset.tasks.find(task=>task.id===row.admission.taskId)!;
-          const artifacts=await readLocalProfileArtifacts({storeDir:deps.storeDir,attempt:retained.attempt,events:async id=>{if(!deps.runtimeEventsForTurn)throw new Error("The actual artifact trace owner is unavailable.");return deps.runtimeEventsForTurn(id);},authorize:current});
+          const artifacts=await readLocalProfileArtifacts({storeDir:deps.storeDir,attempt:retained.attempt,probeSheets:workbookProbeSheets(originalPackage.taskset.metadata),signal:controller.signal,events:async id=>{if(!deps.runtimeEventsForTurn)throw new Error("The actual artifact trace owner is unavailable.");return deps.runtimeEventsForTurn(id);},authorize:current});
           const grade=await gradeLocalExperimentCase({store:deps.store,ownerId:deps.ownerId,teamId:execution.teamId,executionId:execution.id,caseId:row.receiptId,
             ...(independent?{selectedRewards:independent}:{package:value!}),beforeDispatch:current,task,evidence:{output:{text:retained.attempt.output??"",...(artifacts.length?{artifacts}:{})},runtimeEventRefs:retained.attempt.native?.runtimeEventRefs??retained.attempt.profileNative?.runtimeEventRefs??[],artifactRefs:Array.isArray(retained.attempt.artifactRefs)?retained.attempt.artifactRefs.map(ref=>{if(!ref||typeof ref!=="object"||!("id" in ref)||typeof ref.id!=="string")throw new Error("The retained artifact identity changed.");return ref.id;}):[],
               infrastructureError:row.status==="completed"?null:row.error??row.status},
