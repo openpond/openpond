@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
-import type { PonderRecommendation } from "./ponder-recommendations";
+import { hostedRecommendationSendBlocked, type PonderRecommendation } from "./ponder-recommendations";
 
 export function usePonderRecommendations(connection: ClientConnection, bindingId: string | null) {
   const [items, setItems] = useState<PonderRecommendation[]>([]);
@@ -38,6 +38,10 @@ export function usePonderRecommendations(connection: ClientConnection, bindingId
 
   const action = useCallback(async (item: PonderRecommendation, action: "send" | "dismiss" | "read", message?: string) => {
     if (pending.current || !bindingId) return false;
+    if (action === "send" && hostedRecommendationSendBlocked(item)) {
+      setError("Resolve this task's wait or cancellation before sending a new message.");
+      return false;
+    }
     const retry = action === "send" && (item.state === "submitting" || item.state === "failed");
     if (retry && (!item.submittedText || item.submissionRevision === null)) return false;
     const expectedRevision = retry ? item.submissionRevision : item.revision;
