@@ -56,9 +56,9 @@ export function createHostedProfileCommandOwner(client: AgentHostStorageClient) 
       key = `${area}/${relative}/${hash}`,
       done = uploaded.get(input.sessionId) ?? new Set<string>();
     if (done.has(key)) return;
-    if (!bytes.length || bytes.length > 10000000)
+    if (bytes.length > 10000000)
       throw new Error("The public case file exceeds its admitted bound.");
-    for (let offset = 0; offset < bytes.length; offset += 98304) {
+    for (let offset = 0; offset === 0 || offset < bytes.length; offset += 98304) {
       input.signal.throwIfAborted();
       await request(
         {

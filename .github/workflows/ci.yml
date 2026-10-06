@@ -311,6 +311,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:sdk
       - run: pnpm exec tsc -b apps/server
+      - run: pnpm exec tsx scripts/build/workbook-inspector.ts
       - run: pnpm run agent-sdk:build
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

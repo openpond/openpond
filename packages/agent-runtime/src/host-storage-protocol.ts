@@ -32,7 +32,7 @@ export const HostStorageRequestSchema = z.discriminatedUnion("operation", [
     area: z.enum(["policy", "runtime"]).optional(),
     path: z.string().min(1).max(4096).optional(),
     sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-    sizeBytes: z.number().int().min(1).max(10_000_000).optional(),
+    sizeBytes: z.number().int().min(0).max(10_000_000).optional(),
     offset: z.number().int().min(0).max(10_000_000).optional(),
     contentsBase64: z.string().max(131072).optional(),
     command: z.string().min(1).max(20_000).optional(),
