@@ -214,20 +214,21 @@ export function Composer({
   onPauseGoal,
 }: ComposerProps) {
   const nativeReadOnlyReason = useMemo(() => {
-    if (readOnlyReason) return readOnlyReason;
     for (let index = taskEvents.length - 1; index >= 0; index--) {
       const event = taskEvents[index]!;
-      if (event.sessionId !== taskSessionId || !["session.started", "session.title.updated"].includes(event.name)) continue;
+      if (event.sessionId !== taskSessionId || !["session.started", "session.updated", "session.title.updated"].includes(event.name)) continue;
       const data = event.data;
       const session = SessionSchema.safeParse(data && typeof data === "object" && "session" in data ? data.session : null);
-      if (session.success && typeof session.data.metadata?.nativeReadOnlyReason === "string") return session.data.metadata.nativeReadOnlyReason;
+      if (session.success) return typeof session.data.metadata?.nativeReadOnlyReason === "string" ? session.data.metadata.nativeReadOnlyReason : null;
     }
-    return null;
+    return readOnlyReason;
   }, [readOnlyReason, taskEvents, taskSessionId]);
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
-  const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
+  const canSteerNativeTurn = !["claude-code", "opencode", "grok-build"].includes(provider);
+  const useActiveSteering = steerActiveResponses && canSteerNativeTurn;
+  const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents, canSteerNativeTurn);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -431,7 +432,7 @@ export function Composer({
   const sendTooltip = serializingAttachments
     ? "Preparing files"
     : running
-      ? steerActiveResponses ? "Steer" : "Queue for next turn"
+      ? useActiveSteering ? "Steer" : "Queue for next turn"
       : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments;
@@ -1400,7 +1401,7 @@ export function Composer({
 
   async function submitComposer() {
     if (running) {
-      if (steerActiveResponses) await submitImmediateSteer();
+      if (useActiveSteering) await submitImmediateSteer();
       else await stageCurrentSteerDraft();
       return;
     }
@@ -1503,7 +1504,7 @@ export function Composer({
     }
     if (options.submit) {
       if (running) {
-        if (steerActiveResponses) await submitImmediateSteer(next.value);
+        if (useActiveSteering) await submitImmediateSteer(next.value);
         else await stageCurrentSteerDraft(next.value);
         return;
       }

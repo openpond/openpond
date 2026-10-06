@@ -29,6 +29,9 @@ import type { ClientConnection } from "../../api";
 
 export type SidebarProps = {
   onOpenPonder?: () => void;
+  onOpenTeamChat: () => void;
+  onSelectSession?: (session: Session) => void;
+  activityTimes?: Readonly<Record<string, string>>;
   productArea: ProductArea;
   onProductAreaChange: (productArea: ProductArea) => void;
   experience: Experience;

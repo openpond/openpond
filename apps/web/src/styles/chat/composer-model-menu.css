@@ -3,6 +3,11 @@
   min-width: 0;
 }
 
+/* Keep the open menu above the separate footer's stacking context. */
+.composer-input-shell:has(.codex-model-trigger.active, .dropdown-trigger.active) {
+  z-index: 5;
+}
+
 .codex-model-trigger {
   display: inline-flex;
   align-items: center;
@@ -102,6 +107,8 @@
   display: grid;
   gap: 3px;
   min-height: 0;
+  max-height: min(207px, calc(100vh - 185px));
+  grid-auto-rows: 32px;
   overflow: auto;
   scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
   scrollbar-width: thin;
@@ -176,13 +183,6 @@
 
 .codex-model-menu .codex-model-menu-option-label > svg {
   flex: 0 0 auto;
-}
-
-.codex-model-menu .codex-model-setup-action {
-  margin-top: 3px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0 0 6px 6px;
-  padding-top: 7px;
 }
 
 .codex-model-menu button:hover,

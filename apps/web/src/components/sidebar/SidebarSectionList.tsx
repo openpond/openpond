@@ -1,3 +1,6 @@
+import { Inbox, List } from "../icons";
+import { clientChoiceStorage } from "../../lib/client-choice-storage";
+import { orderSidebarInbox, sidebarInboxDateGroups, sidebarInboxTime } from "../../lib/sidebar-inbox";
 import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import type { Session } from "@openpond/contracts";
 import { useEffect, useMemo, useState } from "react";
@@ -112,6 +115,8 @@ export function groupSidebarTaskRows(
 
 export function SidebarSectionList({
   activeSessions,
+  activityTimes = {},
+  onSelectSession,
   archiveSession,
   archivedSessions,
   chatRowsVisibleCount,
@@ -163,6 +168,9 @@ export function SidebarSectionList({
   clearSidebarDrag,
   dragItem,
 }: SidebarProps) {
+  const [presentation, setPresentation] = useState(() => clientChoiceStorage.getItem("openpond.sidebar.presentation.v1") === "inbox" ? "inbox" : "grouped");
+  useHydratedClientChoice(() => setPresentation(clientChoiceStorage.getItem("openpond.sidebar.presentation.v1") === "inbox" ? "inbox" : "grouped"));
+  const inboxView = presentation === "inbox";
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
   const [groupByProject, setGroupByProject] = useState(true);
@@ -210,7 +218,7 @@ export function SidebarSectionList({
   );
   const inProgressSessionIds = useMemo(() => {
     const next = new Set(runningSessionIds);
-    for (const session of activeSessions) {
+    for (const session of [...activeSessions, ...Object.values(childSessionRowsByParentId).flat()]) {
       const goalRuntime = goalRuntimeBySessionId.get(session.id);
       const subagentRuntime = subagentRuntimeBySessionId.get(session.id);
       if (
@@ -224,6 +232,7 @@ export function SidebarSectionList({
     return next;
   }, [
     activeSessions,
+    childSessionRowsByParentId,
     goalRuntimeBySessionId,
     runningSessionIds,
     subagentRuntimeBySessionId,
@@ -375,12 +384,12 @@ export function SidebarSectionList({
     Object.entries(childSessionRowsByParentId)
       .filter(
         ([parentSessionId, childSessions]) =>
-          childSessions.length > 0 &&
+          childSessions.some((child) => !child.archived) &&
           (subagentRuntimeBySessionId.get(parentSessionId)?.activeCount ?? 0) >
             0
       )
       .flatMap(([parentSessionId, childSessions]) =>
-        childSessions.map(
+        childSessions.filter((child) => !child.archived).map(
           (childSession) => [parentSessionId, childSession.id] as const
         )
       )
@@ -429,6 +438,7 @@ export function SidebarSectionList({
   }
 
   function selectSession(session: Session) {
+    if (onSelectSession) { onSelectSession(session); return; }
     navigateDesktopRoute({ kind: "chat", sessionId: session.id });
     setSelectedSessionId(session.id);
     const projectId = sidebarProjectIdBySessionId[session.id] ?? null;
@@ -439,6 +449,7 @@ export function SidebarSectionList({
 
   function childSessionsFor(session: Session): Session[] {
     return (childSessionRowsByParentId[session.id] ?? []).filter((child) =>
+      !child.archived &&
       isSidebarTaskVisible(child, {
         inProgressSessionIds,
         onlyRunningTasks,
@@ -482,8 +493,7 @@ export function SidebarSectionList({
             key={session.id}
             session={session}
             selected={view === "chat" && selectedSessionId === session.id}
-            hideIcon
-            nested
+              nested
             running={inProgressSessionIds.has(session.id)}
             goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
             subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
@@ -536,7 +546,7 @@ export function SidebarSectionList({
     const childSessions = childSessionsFor(session);
     const groupClassName = "sidebar-session-group";
     const dragProps =
-      taskSort === "manual"
+      !inboxView && taskSort === "manual"
         ? {
             onDragStart: (event: React.DragEvent<HTMLDivElement>) =>
               startTaskDrag(event, {
@@ -574,7 +584,8 @@ export function SidebarSectionList({
             !archived && view === "chat" && selectedSessionId === session.id
           }
           archived={archived}
-          hideIcon
+          inbox={inboxView}
+          activityAt={sidebarInboxTime(session, activityTimes)}
           placeholder={isDragged}
           running={inProgressSessionIds.has(session.id)}
           goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
@@ -608,7 +619,7 @@ export function SidebarSectionList({
           onRename={renameSession}
           {...dragProps}
         />
-        {!isDragged ? renderChildSessionRows(session) : null}
+        {!inboxView && !isDragged ? renderChildSessionRows(session) : null}
       </div>
     );
   }
@@ -725,7 +736,6 @@ export function SidebarSectionList({
           }
           session={session}
           selected={view === "chat" && selectedSessionId === session.id}
-          hideIcon
           placeholder={placeholder}
           running={inProgressSessionIds.has(session.id)}
           goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
@@ -786,8 +796,63 @@ export function SidebarSectionList({
     );
   }
 
+  const listControls = <SidebarTaskListControls
+            activityOrder={inboxView}
+            filter={taskFilter}
+            groupByProject={groupByProject}
+            noun={taskNoun}
+            onFilterChange={changeTaskFilter}
+            onGroupByProjectChange={setGroupByProject}
+            onOnlyRunningTasksChange={(nextValue) => {
+              setTaskVisibility((current) => {
+                const next = { ...current, onlyRunningTasks: nextValue };
+                writeSidebarTaskVisibilityPreferences(next);
+                return next;
+              });
+              setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
+            }}
+            onShowCodexChatsChange={(nextValue) => {
+              setTaskVisibility((current) => {
+                const next = { ...current, showCodexChats: nextValue };
+                writeSidebarTaskVisibilityPreferences(next);
+                return next;
+              });
+              setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
+            }}
+            onTasksetChange={changeTasksetFilter}
+            onSortChange={changeTaskSort}
+            onlyRunningTasks={onlyRunningTasks}
+            openMenu={sectionMenuOpen}
+            setOpenMenu={setSectionMenuOpen}
+            showCodexChats={showCodexChats}
+            sort={taskSort}
+            selectedTasksetId={selectedTasksetId}
+            tasksets={tasksetOptions}
+          />;
+  const inboxChildren = sidebarTaskRows({ activeSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => !session.archived), doneSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => session.archived), filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: "recent" });
+  const inboxRows = orderSidebarInbox([...filteredTaskRows, ...inboxChildren], activityTimes, inProgressSessionIds);
+
   return (
     <div className="sidebar-sections">
+      <div className="sidebar-threads-header">
+        <span>Threads</span>
+        <div className="sidebar-threads-header-actions">
+          {inboxView ? listControls : null}
+          <button type="button" className={`sidebar-icon${inboxView ? " active" : ""}`}
+            aria-label={inboxView ? "Show grouped threads" : "Show thread inbox"}
+            title={inboxView ? "Grouped threads" : "Thread inbox"} aria-pressed={inboxView}
+            onClick={() => { const next = inboxView ? "grouped" : "inbox"; setPresentation(next); clientChoiceStorage.setItem("openpond.sidebar.presentation.v1", next); }}>
+            {inboxView ? <List size={16} /> : <Inbox size={16} />}
+          </button>
+        </div>
+      </div>
+      {inboxView ? <section className="sidebar-thread-inbox" aria-label="Thread inbox">
+        {sidebarInboxDateGroups(inboxRows, activityTimes, inProgressSessionIds).map((group) => <div key={group.key}>
+          {group.label ? <h3 className="sidebar-inbox-date">{group.label}</h3> : null}
+          {group.sessions.map((session) => renderTaskSession(session, { projectLabel: sidebarProjectIdBySessionId[session.id] ? projectLabelForSession(session) : null }))}
+        </div>)}
+        {inboxRows.length === 0 ? <div className="empty-row">{sidebarTaskEmptyLabel(taskFilter, taskNoun)}</div> : null}
+      </section> : <>
       {visiblePinnedRows.length > 0 ? (
         <SidebarSection
           label="Pinned"
@@ -832,38 +897,7 @@ export function SidebarSectionList({
         collapsed={ordinaryCollapsedByMode[projectsMode]}
         onToggleCollapsed={() => setOrdinaryCollapsedByMode((current) => ({ ...current, [projectsMode]: !current[projectsMode] }))}
         actionsVisible={sectionMenuOpen === "chats" || sectionMenuOpen === "tasks-filter" || taskFilter !== "active" || onlyRunningTasks || !showCodexChats}
-        actions={<SidebarTaskListControls
-            filter={taskFilter}
-            groupByProject={groupByProject}
-            noun={taskNoun}
-            onFilterChange={changeTaskFilter}
-            onGroupByProjectChange={setGroupByProject}
-            onOnlyRunningTasksChange={(nextValue) => {
-              setTaskVisibility((current) => {
-                const next = { ...current, onlyRunningTasks: nextValue };
-                writeSidebarTaskVisibilityPreferences(next);
-                return next;
-              });
-              setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
-            }}
-            onShowCodexChatsChange={(nextValue) => {
-              setTaskVisibility((current) => {
-                const next = { ...current, showCodexChats: nextValue };
-                writeSidebarTaskVisibilityPreferences(next);
-                return next;
-              });
-              setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
-            }}
-            onTasksetChange={changeTasksetFilter}
-            onSortChange={changeTaskSort}
-            onlyRunningTasks={onlyRunningTasks}
-            openMenu={sectionMenuOpen}
-            setOpenMenu={setSectionMenuOpen}
-            showCodexChats={showCodexChats}
-            sort={taskSort}
-            selectedTasksetId={selectedTasksetId}
-            tasksets={tasksetOptions}
-          />}
+        actions={listControls}
       >
         {(experience === "chat" || !groupByProject
           ? visibleTaskRows
@@ -893,6 +927,7 @@ export function SidebarSectionList({
             </div>
           ) : null}
       </SidebarSection>
+      </>}
       <SidebarTaskDetailPopover
         detail={activeTaskDetail}
         onClose={() => setActiveTaskDetail(null)}

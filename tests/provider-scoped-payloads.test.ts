@@ -1,10 +1,12 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { ProviderSettingsSchema, type ProviderSettings } from "@openpond/contracts";
+import { ProviderSettingsSchema, ProviderModelCacheSchema, ProviderConfigSchema, type ProviderSettings, type BootstrapPayload } from "@openpond/contracts";
 
 import { createOpenPondServer } from "../apps/server/src/index";
+import { providersConfigPath } from "../apps/server/src/paths";
+import { writeProvidersFile, readProvidersFile } from "../apps/server/src/openpond/provider-settings";
 
 async function api<T>(
   serverUrl: string,
@@ -40,6 +42,43 @@ function expectNoBootstrapShape(value: {
 }
 
 describe("provider scoped API payloads", () => {
+  // Failure story: a new composer loses saved native model choices until a
+  // potentially slow probe completes, although their exact IDs are already cached.
+  test.skipIf(process.platform === "win32")("includes saved native catalogs in bootstrap and preserves newly discovered IDs without changing defaults", async () => {
+    const storeDir = await mkdtemp(join(tmpdir(), "openpond-bootstrap-native-models-"));
+    const binaryPath = join(storeDir, "fixture-agent");
+    await writeFile(binaryPath, `#!${process.execPath}\n` + String.raw`
+require('node:readline').createInterface({input:process.stdin}).on('line', line => {
+ const request=JSON.parse(line);
+ let result;
+ if(request.method==='initialize') result={protocolVersion:1,agentCapabilities:{},authMethods:[]};
+ else if(request.method==='session/new') result={sessionId:'fixture-catalog',models:{currentModelId:'openai/exact-native-model',availableModels:[{modelId:'openai/exact-native-model',name:'Fixture model'}]}};
+ else process.exit(9);
+ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:request.id,result})+'\n');
+});`, { mode: 0o700 });
+    const ids = ["claude-code", "grok-build", "opencode", "openrouter"];
+    await writeProvidersFile(providersConfigPath(storeDir), {
+      version: 1, providers: { opencode: ProviderConfigSchema.parse({ enabled: true, binaryPath, sourceHome: storeDir, defaultModel: "explicit-default" }) }, catalogCache: null,
+      modelCaches: Object.fromEntries(ids.map((providerId) => [providerId, ProviderModelCacheSchema.parse({
+        providerId, source: "provider", models: [{ providerId, id: `${providerId}/exact-model`, displayName: "Fixture model", source: "provider" }],
+      })])),
+    });
+    const server = await createOpenPondServer({ port: 0, storeDir, silent: true, version: "bootstrap-native-models-test" });
+    try {
+      const bootstrap = await api<BootstrapPayload>(server.url, server.token, "/v1/bootstrap?ensureProfile=0");
+      for (const providerId of ids.slice(0, 3)) {
+        expect(bootstrap.providers.modelCaches[providerId]?.models.map((model) => model.id)).toContain(`${providerId}/exact-model`);
+      }
+      expect(bootstrap.providers.modelCaches.openrouter?.models).toEqual([]);
+      await api(server.url, server.token, "/v1/providers/opencode/native-setup", { method: "POST", body: JSON.stringify({ action: "capabilities" }) });
+      const saved = await readProvidersFile(providersConfigPath(storeDir));
+      expect(saved.modelCaches.opencode?.models.map((model) => model.id)).toEqual(["openai/exact-native-model"]);
+      expect(saved.providers.opencode?.defaultModel).toBe("explicit-default");
+    } finally {
+      await server.close(); await rm(storeDir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   test(
     "returns provider settings from provider mutations, refresh, and validation without full bootstrap",
     async () => {

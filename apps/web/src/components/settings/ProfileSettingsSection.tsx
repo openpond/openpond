@@ -251,6 +251,7 @@ export function ProfileSettingsSection({
                 profile={profile}
               />
               <ProfileEvaluationsSection
+                key={JSON.stringify(payload?.profileLibrary?.lastUsed ?? null)}
                 connection={connection}
                 focusTarget={evaluationTarget}
                 selectedProfileKey={payload?.profileLibrary?.lastUsed

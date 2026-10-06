@@ -186,3 +186,43 @@ test("peer follow-up remains queued until the current assignment completes", asy
   expect(await f.store.reserveTaskFollowup("a", "future-turn", "owner")).toMatchObject({ id: receipt.id, turnId: "future-turn" });
   expect(await f.store.includeTaskInputs("a", "future-turn", "owner", "future-request")).toEqual([expect.objectContaining({ id: receipt.id })]);
 });
+
+// Failure story: native active steering slips through input promotion, or a late
+// message is lost while a completed native request is sealed for the next turn.
+test("native requests reject steering through both entry points and preserve late messages across restart", async () => {
+  const f = await fixture();
+  await f.store.updateSession("a", (session) => ({ ...session, provider: "opencode" }));
+  const runtime = createTaskInboxRuntime({ store: f.store,
+    getSession: async (id) => { const session = await f.store.getSession(id); if (!session) throw new Error("missing"); return session; },
+    listSessions: () => f.store.sessionShells(), getTurn: (id) => f.store.getTurn(id), latestTurn: (id) => f.store.latestTurnForSession(id),
+    getSubagentRun: async () => null, getActiveTurn: () => undefined, recoverInterruptedTurn: async () => {},
+    startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: (work) => work(), appendRuntimeEvent: async () => {},
+  });
+  await f.store.openTaskInboxTurn("a", "turn-a", runtime.ownerId);
+  await expect(runtime.steer("a", { prompt: "Do not interrupt", expectedTurnId: "turn-a", idempotencyKey: "steer" })).rejects.toThrow("Queue");
+  const queued = await f.store.admitTaskInput(input({ kind: "queued", expectedTurnId: null }));
+  await expect(runtime.mutate("a", queued.id, { action: "steer", expectedRevision: queued.revision, expectedTurnId: "turn-a" })).rejects.toThrow("queued");
+  expect(await f.store.getTaskInput(queued.id)).toMatchObject({ kind: "queued", state: "pending", turnId: null });
+  const included = await f.store.admitTaskInput(input({ id: "before-dispatch", kind: "message", idempotencyKey: "before", expectedTurnId: null }));
+  expect(await runtime.include("a", "turn-a", "native-request")).toEqual([expect.objectContaining({ id: included.id, state: "included" })]);
+  await f.store.settleTaskInputRequest("native-request", "resolved");
+  const late = await f.store.admitTaskInput(input({ id: "late-peer", kind: "message", idempotencyKey: "late", expectedTurnId: null }));
+  const stale = await f.store.admitTaskInput(input({ id: "stale-steer", idempotencyKey: "stale" }));
+  await runtime.finishNative("a", "turn-a");
+  expect(await f.store.getTaskInput(late.id)).toMatchObject({ state: "pending", turnId: null });
+  expect(await f.store.getTaskInput(stale.id)).toMatchObject({ state: "rejected" });
+  await f.store.closeTaskInboxTurn("a", "turn-a", runtime.ownerId, "completed");
+  await runtime.close();
+  await f.reopen();
+  expect(await f.store.getTaskInput(included.id)).toMatchObject({ state: "resolved", requestIds: ["native-request"] });
+  const next = await f.store.reserveTaskFollowup("a", "next-turn", "next-owner");
+  expect(next).toMatchObject({ id: queued.id });
+  const nextInputs = await f.store.includeTaskInputs("a", "next-turn", "next-owner", "next-request");
+  expect(nextInputs.map((row) => row.id)).toEqual([queued.id, late.id]);
+  await f.store.settleTaskInputRequest("next-request", "failed");
+  await f.store.closeTaskInboxTurn("a", "next-turn", "next-owner", "failed");
+  await f.reopen();
+  expect(await f.store.getTaskInput(late.id)).toMatchObject({ state: "included", error: expect.stringContaining("failed") });
+  expect(await f.store.taskInboxPaused("a")).toBe(true);
+  expect(await f.store.reserveTaskFollowup("a", "no-replay", "restarted-owner")).toBeNull();
+});

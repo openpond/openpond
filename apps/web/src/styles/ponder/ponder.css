@@ -1,5 +1,7 @@
-.sidebar-ponder-entry { width: calc(100% - 24px); margin: 4px 12px; padding: 11px 14px; border: 1px solid #64c7d655; border-radius: 12px; background: #64c7d611; color: var(--text); text-align: left; cursor: pointer; }
-.sidebar-ponder-entry span { color: #74d4df; margin-right: 8px; }
+.sidebar-ponder-fixed { flex: 0 0 auto; }
+.sidebar .sidebar-row.sidebar-ponder-entry { border-color: #64c7d655; background: #64c7d611; color: var(--text); font-weight: 400; cursor: pointer; }
+.sidebar:has(.sidebar-thread-inbox) .sidebar-ponder-entry { min-height: 54px; padding-top: 8px; padding-bottom: 8px; }
+.sidebar-ponder-entry:focus-visible { outline: 2px solid #74d4df; outline-offset: 2px; }
 .new-experience-option[data-experience="ponder"] { box-shadow: inset 0 0 0 1px rgba(100, 199, 214, .72); }
 .ponder-desktop-attention { margin: 16px 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
 .ponder-desktop-attention button { margin: 8px 8px 0 0; }

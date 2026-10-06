@@ -1,4 +1,5 @@
 import type { DragEvent } from "react";
+import { modelDisplayLabel } from "./model-display";
 import type {
   AppPreferences,
   ChatModelRef,
@@ -47,6 +48,7 @@ export type AppView =
   | "scheduled"
   | "settings";
 export type SettingsSection =
+  | "ponder"
   | "account"
   | "notifications"
   | "harness"
@@ -570,7 +572,7 @@ function modelOptionFromProviderModel(model: ProviderModel): DropdownOption {
   ].filter(Boolean);
   return {
     value: model.id,
-    label: model.displayName || model.id,
+    label: modelDisplayLabel(model.displayName || model.id),
     description: details.join(" · ") || undefined,
   };
 }
@@ -653,7 +655,7 @@ export function modelOptionsForProvider(
         Boolean(value?.trim()) &&
         (provider !== "openpond" || value !== DEFAULT_OPENPOND_CHAT_MODEL),
     )
-    .map((value) => ({ value, label: value }));
+    .map((value) => ({ value, label: modelDisplayLabel(value) }));
   const fallback = provider === "openpond" && fromCache.length > 0
     ? []
     : fallbackModelOptions(provider);

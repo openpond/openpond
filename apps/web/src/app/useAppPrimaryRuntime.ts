@@ -243,6 +243,7 @@ export function useAppPrimaryRuntime() {
     setEvents,
     setSessions,
   } = useAppBootstrap({
+    selectedSessionId,
     setDraftModel,
     setDraftProvider,
     setCodexPermissionMode,

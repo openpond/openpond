@@ -18,6 +18,8 @@ import type {
 import {
   Bookmark,
   BookmarkX,
+  Check,
+  RotateCcw,
   ChevronDown,
   ChevronRight,
   Cloud,
@@ -25,7 +27,6 @@ import {
   Folder,
   FolderGit2,
   FileText,
-  MessageSquare,
   MoreHorizontal,
   Pin,
   PinOff,
@@ -47,23 +48,13 @@ import { SidebarTaskMenu } from "./SidebarTaskMenu";
 import { RenameChatDialog } from "./RenameChatDialog";
 import { isTaskDraftSession } from "../../lib/task-drafts";
 import { SidebarAnimatedTitle } from "./SidebarAnimatedTitle";
+import { ConversationSourceIcon } from "./ConversationSourceIcon";
+import { SidebarRelativeTime } from "./SidebarRelativeTime";
+import "../../styles/sidebar/thread-inbox.css";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
 const PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE = 260;
-const sidebarUpdatedDateFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-});
-const sidebarUpdatedTimeFormatter = new Intl.DateTimeFormat("en-US", {
-  hour: "numeric",
-  minute: "2-digit",
-});
-const sidebarUpdatedDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
 function syncedRunningPulseStyle(): CSSProperties {
   return {
     animationDelay: `${-(Date.now() % SIDEBAR_RUNNING_PULSE_MS)}ms`,
@@ -195,7 +186,6 @@ export function SidebarSessionRow({
   selected,
   icon,
   archived = false,
-  hideIcon = false,
   nested = false,
   dragging,
   placeholder,
@@ -204,6 +194,8 @@ export function SidebarSessionRow({
   subagentRuntime,
   terminalIndicator,
   projectLabel,
+  inbox = false,
+  activityAt,
   ariaDescribedBy,
   childSessionCount = 0,
   childSessionsExpanded = false,
@@ -223,7 +215,6 @@ export function SidebarSessionRow({
   selected: boolean;
   icon?: ReactNode;
   archived?: boolean;
-  hideIcon?: boolean;
   nested?: boolean;
   dragging?: boolean;
   placeholder?: boolean;
@@ -232,6 +223,8 @@ export function SidebarSessionRow({
   subagentRuntime?: SubagentRuntimeStatus | null;
   terminalIndicator?: SidebarTerminalIndicator | null;
   projectLabel?: string | null;
+  inbox?: boolean;
+  activityAt?: number;
   metadataPresentation?: "inline" | "hover-detail" | "flyout";
   ariaDescribedBy?: string;
   childSessionCount?: number;
@@ -254,7 +247,6 @@ export function SidebarSessionRow({
   const subagentRunning = (subagentRuntime?.activeCount ?? 0) > 0;
   const hasChildSessions =
     childSessionCount > 0 && Boolean(onToggleChildSessions);
-  const effectiveHideIcon = hideIcon && !hasChildSessions;
   const rowRunning =
     subagentRunning ||
     goalRunning ||
@@ -269,6 +261,7 @@ export function SidebarSessionRow({
     "sidebar-task-row",
     isTaskDraftSession(session) ? "is-draft" : "",
     rowRunning ? "has-running-dot" : "",
+    inbox ? "sidebar-inbox-row" : "",
   ].filter(Boolean).join(" ");
   const runningDotStyle = useMemo(syncedRunningPulseStyle, []);
   const taskActions = (
@@ -289,7 +282,6 @@ export function SidebarSessionRow({
       selected={selected}
       dataSessionId={session.id}
       dragging={dragging}
-      iconless={effectiveHideIcon}
       nested={nested}
       placeholder={placeholder}
       className={rowClassName || undefined}
@@ -302,7 +294,9 @@ export function SidebarSessionRow({
       onDrop={onDrop}
       onDoubleClick={onRename ? () => setRenameOpen(true) : undefined}
     >
-      {effectiveHideIcon ? null : hasChildSessions ? (
+      <span className="sidebar-source-slot">{icon ?? <ConversationSourceIcon session={session} />}</span>
+      <span className="sidebar-title-slot">
+      {hasChildSessions ? (
         <button
           type="button"
           className="sidebar-child-toggle"
@@ -328,12 +322,10 @@ export function SidebarSessionRow({
             <ChevronRight size={13} />
           )}
         </button>
-      ) : (
-        icon ?? <MessageSquare size={15} />
-      )}
+      ) : null}
       <span
         className="row-label-shell"
-        title={projectLabel || undefined}
+        title={session.title}
       >
         <span className="sidebar-session-title-line">
           <span
@@ -344,6 +336,11 @@ export function SidebarSessionRow({
             <SidebarAnimatedTitle title={session.title} />
           </span>
         </span>
+        {inbox ? <span className="sidebar-inbox-project">
+          {projectLabel ? <><span className="sidebar-inbox-project-name">{projectLabel}</span><span aria-hidden="true">|</span></> : null}
+          <SidebarRelativeTime value={activityAt ?? session.createdAt} />
+        </span> : null}
+      </span>
       </span>
       <div className="row-meta">
         <span className="row-meta-status">
@@ -361,6 +358,12 @@ export function SidebarSessionRow({
           ) : null}
         </span>
         {taskActions}
+        {inbox ? <button type="button" className="sidebar-inbox-done"
+          aria-label={`${archived ? "Reopen" : "Mark done"}: ${session.title}`}
+          title={archived ? "Reopen" : "Mark done (does not stop running work)"}
+          onClick={(event) => { event.stopPropagation(); onArchive(); }}>
+          {archived ? <RotateCcw size={19} /> : <Check size={21} />}
+        </button> : null}
       </div>
     </SidebarInteractiveRow>
   );
@@ -593,7 +596,7 @@ export function SidebarProjectRow({
         <span className="row-label-shell">
           <span className="sidebar-project-title-line">
             <span className="row-label">{project.name}</span>
-            <SidebarUpdatedAt value={project.updatedAt} />
+            <span className="sidebar-row-updated-at"><span aria-hidden="true">| </span><SidebarRelativeTime value={project.updatedAt} /></span>
             {disclosure ? (
               <span className="sidebar-project-caret" aria-hidden="true">
                 {expanded ? (
@@ -658,43 +661,6 @@ export function SidebarProjectRow({
       )}
     </div>
   );
-}
-
-function SidebarUpdatedAt({
-  value,
-}: {
-  value: string | null | undefined;
-}) {
-  const label = formatSidebarUpdatedDate(value);
-  if (!label || !value) return null;
-
-  const date = new Date(value);
-  return (
-    <time
-      className="sidebar-row-updated-at"
-      dateTime={value}
-      title={`Last updated ${sidebarUpdatedDateTimeFormatter.format(date)}`}
-    >
-      {label}
-    </time>
-  );
-}
-
-function formatSidebarUpdatedDate(
-  value: string | null | undefined,
-  now = new Date(),
-): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const time = sidebarUpdatedTimeFormatter.format(date);
-  const updatedToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-  return updatedToday
-    ? time
-    : `${sidebarUpdatedDateFormatter.format(date)} ${time}`;
 }
 
 function SidebarTerminalStatusIcon({

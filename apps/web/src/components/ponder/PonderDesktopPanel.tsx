@@ -239,13 +239,11 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
     <div className="composer-stack dock">
       <Composer {...composer} experience="chat" mode="dock" showProjectFooter={false} hideModelControls
         connection={connection} prompt={draft} onPromptChange={setDraft}
-        busy={sending || !binding} running={false} submissionScopeKey={`ponder:${binding?.conversationId ?? "loading"}`}
+        busy={sending || !binding} running={running} submissionScopeKey={`ponder:${binding?.conversationId ?? "loading"}`}
         voiceInputChannelKey={`ponder:${binding?.conversationId ?? "loading"}`}
         onSubmit={(attachments, _action, _command, options) => send(attachments,
           options?.promptOverride ? { promptOverride: options.promptOverride } : undefined)}
         onStop={() => conversation?.activeTurn ? stop(conversation.activeTurn) : undefined} />
-      {running && conversation?.activeTurn && <button className="ponder-stop-turn" type="button"
-        onClick={() => void stop(conversation.activeTurn!)}>Stop response</button>}
     </div>
   </div>;
 }

@@ -191,3 +191,22 @@
   opacity: 0.62;
   cursor: wait;
 }
+
+.user-auth-help { position: relative; }
+.user-auth-help-chevron { margin-left: auto; }
+.user-auth-help-submenu {
+  position: absolute;
+  left: calc(100% + 6px);
+  bottom: 0;
+  width: 220px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 12px;
+  background: #1d1d1d;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+}
+.user-auth-help-submenu svg { flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .user-auth-help-submenu { position: static; width: 100%; box-shadow: none; padding-left: 20px; }
+}

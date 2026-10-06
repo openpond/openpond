@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import { buildProviderSettings, getProviderPreset } from "../apps/server/src/openpond/provider-registry";
-import { ProviderCatalogSchema } from "@openpond/contracts";
+import { ProviderCatalogSchema, ProviderModelCacheSchema } from "@openpond/contracts";
+import { composerModelGroups, modelSelectionForGroup } from "../apps/web/src/components/chat/composer-model-options";
 import {
   defaultProviderCredentialTab,
   providerCredentialTabs,
@@ -13,10 +14,47 @@ import {
   defaultReasoningEffortForModel,
   effectiveReasoningEffortForModel,
   modelOptionsForProvider,
+  modelRefForTurn,
+  normalizeChatModel,
+  providerOptionsFromSettings,
   reasoningEffortOptionsForModel,
 } from "../apps/web/src/lib/app-models";
 
 describe("provider model option capping", () => {
+
+  // Failure story: a native provider with a lazy catalog is unreachable from the
+  // picker, or presentation cleanup changes its exact advertised routing ID.
+  test("selects a native provider before discovery and routes its later advertised models without changing defaults", () => {
+    const settings = buildProviderSettings({ file: { version: 1, providers: {
+      "claude-code": { enabled: true, baseUrl: null, defaultModel: null, modelOverrides: [], updatedAt: null },
+      opencode: { enabled: true, baseUrl: null, defaultModel: null, modelOverrides: [], updatedAt: null },
+    }, modelCaches: {} } });
+    const defaults = JSON.stringify(settings.providers);
+    const options = providerOptionsFromSettings(settings, { enabledOnly: true });
+    const groups = (providerSettings = settings) => composerModelGroups({ currentProvider: "openpond",
+      currentModelOptions: modelOptionsForProvider("openpond", providerSettings), providerOptions: options, providerSettings });
+    const native = groups().find((group) => group.provider === "claude-code")!;
+    expect(native.options).toEqual([]);
+    const initial = modelSelectionForGroup(native)!;
+    expect(initial).toEqual({ provider: "claude-code", model: "" });
+    expect(modelRefForTurn(initial.provider, initial.model, settings)).toBeUndefined();
+    const discovered = { ...settings, modelCaches: { ...settings.modelCaches,
+      "claude-code": ProviderModelCacheSchema.parse({ providerId: "claude-code", source: "provider", models: [
+        { providerId: "claude-code", id: "haiku", displayName: "Claude Haiku", source: "provider" },
+      ] }),
+      opencode: ProviderModelCacheSchema.parse({ providerId: "opencode", source: "provider", models: [
+        { providerId: "opencode", id: "openai/gpt-5.4", displayName: "openai/gpt-5.4", source: "provider" },
+      ] }),
+    } };
+    const selected = modelSelectionForGroup(groups(discovered).find((group) => group.provider === "claude-code")!)!;
+    expect(modelRefForTurn(selected.provider, normalizeChatModel(selected.provider, selected.model, discovered), discovered))
+      .toEqual({ providerId: "claude-code", modelId: "haiku" });
+    const namespaced = modelSelectionForGroup(groups(discovered).find((group) => group.provider === "opencode")!)!;
+    expect(modelRefForTurn(namespaced.provider, namespaced.model, discovered)).toEqual({ providerId: "opencode", modelId: "openai/gpt-5.4" });
+    expect(modelOptionsForProvider("opencode", discovered)[0]?.label).not.toContain("openai/");
+    expect(JSON.stringify(settings.providers)).toBe(defaults);
+    expect(JSON.stringify(discovered.providers)).toBe(defaults);
+  });
 
   test("uses hosted model capabilities for OpenPond's visible models and efforts", () => {
     const preset = getProviderPreset("openpond");

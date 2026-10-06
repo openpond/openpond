@@ -21,7 +21,6 @@ import {
   SquarePen,
 } from "../icons";
 import { DropdownSelect } from "../DropdownSelect";
-import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView } from "../../lib/app-models";
 import { newExperienceTitle } from "../../lib/experience-options";
@@ -62,14 +61,14 @@ export function SidebarNewTask({
   return (
     <div className="sidebar-new-task">
       <button
-        className="nav-command nav-command-new-task"
+        className="sidebar-row sidebar-task-row sidebar-new-task-entry"
         type="button"
-        onClick={() => {
-          navigateDesktopRoute({ kind: "chat", sessionId: null });
+        onClick={async () => {
+          if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
           beginNewChat(null);
         }}
       >
-        <SquarePen size={18} />
+        <span className="conversation-source-icon" aria-hidden="true"><SquarePen size={18} /></span>
         <span>{newExperienceTitle(experience)}</span>
       </button>
     </div>
@@ -206,33 +205,6 @@ export function SidebarNavigation({
           </button>
         </>
       ) : null}
-    </nav>
-  );
-}
-
-export function SidebarUtilityNavigation({
-  setSectionMenuOpen,
-  setSelectedAppId,
-  setSelectedProjectId,
-  setSelectedSessionId,
-  setView,
-  view,
-}: SidebarDestinationProps) {
-  function selectWalkthroughs() {
-    setSelectedAppId(null);
-    setSelectedProjectId(null);
-    setSelectedSessionId(null);
-    setSectionMenuOpen(null);
-    setView("get-started");
-    navigateDesktopRoute({ kind: "view", view: "get-started" });
-  }
-
-  return (
-    <nav className="sidebar-utility-nav" aria-label="Resources">
-      <SidebarHelpMenu
-        onOpenWalkthroughs={selectWalkthroughs}
-        walkthroughsActive={view === "get-started"}
-      />
     </nav>
   );
 }

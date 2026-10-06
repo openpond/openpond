@@ -3,6 +3,11 @@ import type { HttpRouteContext } from "../http-route-types.js";
 
 export async function handlePonderRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   const path = requestUrl.pathname;
+  if (["/v1/ponder/settings", "/v1/ponder/activity"].includes(path) && ["GET", "POST"].includes(request.method ?? "")) {
+    sendJson(response, 200, await deps.ponderRequestPayload({ path: path.slice(3) + requestUrl.search,
+      method: request.method as "GET" | "POST", ...(request.method === "POST" ? { body: await readJson(request) as Record<string, unknown> } : {}) }));
+    return true;
+  }
   if (path === "/v1/ponder" && request.method === "POST") {
     sendJson(response, 200, await deps.ponderRequestPayload({ path: "/ponder", method: "POST" }));
     return true;

@@ -249,6 +249,7 @@ export function liveSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[]
     if (!data || typeof data !== "object" || Array.isArray(data)) continue;
     const sessionKey =
       runtimeEvent.name === "session.started" ||
+      runtimeEvent.name === "session.updated" ||
       runtimeEvent.name === "session.title.updated"
         ? "session"
         : runtimeEvent.name === "subagent.started" ||

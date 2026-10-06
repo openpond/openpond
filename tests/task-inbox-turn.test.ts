@@ -1,4 +1,9 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { writeProvidersFile, normalizeProvidersFile } from "../apps/server/src/openpond/provider-settings.js";
 import { hostedCompactionPriorEvents, openRouterProviderSettingsWithContextWindow } from "./helpers/byok-turn-runner-harness";
 import { createTurnRunnerTestHarness, turnRunnerTestSession } from "./helpers/turn-runner-test-harness";
 
@@ -95,4 +100,65 @@ test("peer follow-up uses the recipient's persisted execution permissions", asyn
   expect(observed).toEqual(["read-only"]);
   expect(harness.state.turns.filter((turn) => turn.sessionId === "recipient")).toHaveLength(2);
   await harness.runner.close();
+});
+
+// Failure story: a native turn starts from a queued instruction but never dispatches
+// its receipt or a pending peer message; it is falsely completed merely at enqueue.
+// This runs the real native ACP transport against an isolated fixture executable.
+test.skipIf(process.platform === "win32").each(["resolved", "failed"] as const)("native dispatch includes pending inputs once and records a %s provider request", async (outcome) => {
+  const directory = await mkdtemp(join(tmpdir(), "native-inbox-dispatch-"));
+  const binaryPath = join(directory, "fixture-acp");
+  const trace = join(directory, "prompt.json"), ready = join(directory, "ready"), release = join(directory, "release");
+  const sessionId = "native-recipient";
+  const harness = createTurnRunnerTestHarness({ sessions: [
+    turnRunnerTestSession({ id: sessionId, experience: "chat", provider: "opencode", modelRef: null, cwd: directory, localProjectId: "shared" }),
+    turnRunnerTestSession({ id: "peer", experience: "chat", localProjectId: "shared" }),
+  ], dependencies: { storageHome: directory, defaultSessionCwd: () => directory } });
+  try {
+    await writeProvidersFile(join(directory, "providers.json"), normalizeProvidersFile({ providers: { opencode: { enabled: true, binaryPath, sourceHome: directory } } }));
+    await writeFile(binaryPath, `#!${process.execPath}\n` + `
+const fs = require('node:fs');
+const send = value => process.stdout.write(JSON.stringify(value)+'\\n');
+require('node:readline').createInterface({input:process.stdin}).on('line', line => {
+ const request = JSON.parse(line);
+ const reply = result => send({jsonrpc:'2.0', id:request.id, result});
+ if(request.method==='initialize') reply({protocolVersion:1,agentCapabilities:{},authMethods:[]});
+ else if(request.method==='session/new') {
+  fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
+  const timer = setInterval(() => { if(fs.existsSync(${JSON.stringify(release)})) { clearInterval(timer); reply({sessionId:'exact-vendor-session'}); } }, 10);
+  } else if(request.method==='session/prompt') {
+  fs.writeFileSync(${JSON.stringify(trace)}, JSON.stringify(request.params));
+  if(${JSON.stringify(outcome)}==='failed') { send({jsonrpc:'2.0',id:request.id,error:{code:-32000,message:'Fixture provider failed after inclusion'}}); return; }
+  send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'exact-vendor-session',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Fixture response'}}}});
+  reply({stopReason:'end_turn'});
+ } else reply({});
+});
+`, { mode: 0o700 });
+    const queued = await harness.runner.queueTaskInput(sessionId, { prompt: "Original queued assignment" }, "queued-native-assignment");
+    await vi.waitFor(async () => expect(await readFile(ready, "utf8")).toBe("ready"));
+    const pending = await harness.dependencies.store.admitTaskInput({ id: "peer-before-dispatch", sessionId, senderSessionId: "peer", senderKind: "task", kind: "message",
+      body: "Preserve this pending peer instruction", payload: {}, idempotencyKey: "peer-before", replyTo: null, expectedTurnId: null });
+    expect(await harness.dependencies.store.getTaskInput(queued.id)).toMatchObject({ state: "pending" });
+    expect(await harness.dependencies.store.getTaskInput(pending.id)).toMatchObject({ state: "pending" });
+    await writeFile(release, "release");
+    await harness.dependencies.turnFollowUpQueue.drain();
+    const params = JSON.parse(await readFile(trace, "utf8")) as { sessionId: string; prompt: Array<{ text: string }> };
+    expect(params.sessionId).toBe("exact-vendor-session");
+    const prompt = params.prompt[0]!.text;
+    expect(prompt.split("Original queued assignment")).toHaveLength(2);
+    expect(prompt).toContain(pending.body);
+    expect(harness.state.turns).toHaveLength(1);
+    const turn = harness.state.turns[0]!;
+    expect(turn).toMatchObject({ status: outcome === "resolved" ? "completed" : "failed", metadata: { nativePromptHash: createHash("sha256").update(prompt).digest("hex") } });
+    const inputs = (await harness.runner.readTaskInbox(sessionId)).inputs;
+    expect(inputs.map((input) => ({ id: input.id, state: input.state, turnId: input.turnId }))).toEqual([
+      { id: queued.id, state: outcome === "resolved" ? "resolved" : "included", turnId: turn.id }, { id: pending.id, state: outcome === "resolved" ? "resolved" : "included", turnId: turn.id },
+    ]);
+    expect(inputs.every((input) => input.requestIds.length === 1)).toBe(true);
+    expect(harness.state.events.some((event) => event.name === "assistant.delta" && event.output === "Fixture response")).toBe(outcome === "resolved");
+    if (outcome === "failed") {
+      expect(inputs.every((input) => input.error?.includes("failed"))).toBe(true);
+      expect(await harness.dependencies.store.taskInboxPaused(sessionId)).toBe(true);
+    }
+  } finally { await harness.runner.close(); await rm(directory, { recursive: true, force: true }); }
 });

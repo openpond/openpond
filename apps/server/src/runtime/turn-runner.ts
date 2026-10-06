@@ -1668,7 +1668,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
         const definitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
+        let nativeRequestId: string | null = null;
         const providerTurnId = await nativeAgents.run({ content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
+          preparePrompt: async (prompt) => {
+            nativeRequestId = `native-start:${turn.id}`;
+            const inputs = await taskInbox.include(sessionId, turn.id, nativeRequestId);
+            return [prompt, ...inputs.filter((input) => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n");
+          },
+          settlePrompt: async (outcome) => {
+            if (nativeRequestId) await inboxStore.settleTaskInputRequest(nativeRequestId, outcome);
+          },
           coordination: definitions.length ? {
             tools: definitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
             execute: async (name, args, callId, signal) => {
@@ -1685,6 +1694,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           } : undefined,
         });
         throwIfInterrupted(controller.signal);
+        await taskInbox.finishNative(sessionId, turn.id);
         await appendWorkspaceDiffEvent(session, turn.id, { baseline: initialWorkspaceDiff });
         const completed = await completeTurn(sessionId, turn.id, providerTurnId);
         await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", appId: session.appId, status: "completed", data: { provider: session.provider } }));

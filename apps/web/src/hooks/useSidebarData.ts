@@ -98,7 +98,7 @@ export function useSidebarData({
   );
   const sidebarProjectIdBySessionId = useMemo(() => {
     const rows: Record<string, string> = {};
-    for (const session of [...activeSessions, ...archivedSessions]) {
+    for (const session of sessions) {
       const projectKey = sidebarProjectKeyForSession(
         session,
         localProjectIds,
@@ -107,10 +107,20 @@ export function useSidebarData({
       );
       if (projectKey) rows[session.id] = projectKey;
     }
+    const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+    for (const session of sessions) {
+      if (rows[session.id]) continue;
+      const visited = new Set([session.id]);
+      let parentId = session.parentSessionId;
+      while (parentId && !visited.has(parentId)) {
+        if (rows[parentId]) { rows[session.id] = rows[parentId]!; break; }
+        visited.add(parentId);
+        parentId = sessionsById.get(parentId)?.parentSessionId;
+      }
+    }
     return rows;
   }, [
-    activeSessions,
-    archivedSessions,
+    sessions,
     cloudProjectIds,
     localProjectIds,
     projectPathIndex,
@@ -158,7 +168,7 @@ export function useSidebarData({
   const childSessionRowsByParentId = useMemo(() => {
     const rows: Record<string, Session[]> = {};
     for (const session of sessions) {
-      if (session.archived || !isSubagentChildSession(session)) continue;
+      if (!isSubagentChildSession(session)) continue;
       const parentRows = rows[session.parentSessionId];
       if (parentRows) {
         parentRows.push(session);

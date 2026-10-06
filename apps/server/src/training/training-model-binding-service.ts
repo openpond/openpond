@@ -78,6 +78,8 @@ export function createTrainingModelBindingService(
     role: ModelBindingRole;
     roleTargetId: string;
     promotedBy?: string;
+    expectedActiveBindingId?: string | null;
+    servingGrant?: { id: string; expectedRevision: number; authorizationHash: string };
   }) {
     const role = ModelBindingRoleSchema.parse(input.role);
     const roleTargetId = input.roleTargetId.trim();
@@ -120,7 +122,8 @@ export function createTrainingModelBindingService(
       role,
       roleTargetId,
     });
-    if (current?.modelArtifactLineageId === model.id) return current;
+    if (current?.modelArtifactLineageId === model.id && (input.expectedActiveBindingId === undefined || current.promotedBy === input.promotedBy)) return current;
+    if (input.expectedActiveBindingId !== undefined && (current?.id ?? null) !== input.expectedActiveBindingId) throw new Error("The authorized serving binding changed before automatic activation.");
     const timestamp = new Date().toISOString();
     const binding = ModelBindingSchema.parse({
       schemaVersion: "openpond.modelBinding.v1",
@@ -164,6 +167,7 @@ export function createTrainingModelBindingService(
         current,
         next: binding,
         timestamp,
+        servingGrant: input.servingGrant,
       })
     ).previous;
     await deps.store.saveModelArtifactLineage({

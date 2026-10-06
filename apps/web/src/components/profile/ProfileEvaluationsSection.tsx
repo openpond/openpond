@@ -1,22 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 
-import { api, type ClientConnection, type ProfileEvaluationDiscovery, type ProfileEvaluationPreparedRun, type ProfileEvaluationRunRequest } from "../../api";
+import { api, type ClientConnection, type ProfileEvaluationDiscovery, type ProfileEvaluationPreparedRun, type ProfileEvaluationRunRequest, type ProfileWorkflowDiscovery } from "../../api";
 import type { ProviderSettings } from "@openpond/contracts";
 import { ProfileEvaluationComparisonMatrix } from "./ProfileEvaluationComparisonMatrix";
 import "../../styles/profile/profile-page.css";
+import { ProfileWorkflowsSection } from "./ProfileWorkflowsSection";
+import { ProfileEvaluationRunTable } from "./ProfileEvaluationRunTable";
+import { ProfileEvaluationRunDialog } from "./ProfileEvaluationRunDialog";
+import { loadProfileEvaluationHistory, type ProfileEvaluationHistory } from "../../api/profile-evaluation-inspection";
+import { displayScore, displayTimestamp, targetLabel, type EvaluationRun, type EvaluationTarget } from "./profile-evaluation-display";
 
-function targetLabel(target: ProfileEvaluationDiscovery["definitions"][number]["target"]): string {
-  switch (target.kind) {
-    case "profile": return "Complete Profile";
-    case "workflow": return `Workflow · ${target.workflowId}`;
-    case "skill": return `Skill · ${target.skillPath}`;
-    case "agent_action": return `Agent action · ${target.actionId}`;
-  }
-}
-
-function displayTimestamp(value: string): string {
-  const timestamp = new Date(value);
-  return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString();
+function matchesTarget(target: EvaluationTarget, focus: ProfileEvaluationTarget): boolean {
+  return target.kind === focus.kind && (focus.kind === "profile"
+    || target.kind === "workflow" && target.workflowId === focus.id
+    || target.kind === "skill" && target.skillPath === focus.id);
 }
 
 type ModelChoice = { key: string; providerId: ProfileEvaluationRunRequest["modelRef"]["providerId"]; modelId: string; label: string };
@@ -47,10 +44,15 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
   focusTarget?: ProfileEvaluationTarget | null;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
+  const [workflows, setWorkflows] = useState<ProfileWorkflowDiscovery | null>(null);
+  const [history, setHistory] = useState<ProfileEvaluationHistory | null>(null);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [evaluationScope, setEvaluationScope] = useState<ProfileEvaluationTarget | null>(null);
+  const [inspectedRun, setInspectedRun] = useState<EvaluationRun | null>(null);
+  const appliedFocus = useRef<ProfileEvaluationTarget | null>(null);
   const [discovery, setDiscovery] = useState<ProfileEvaluationDiscovery | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [caseLimit, setCaseLimit] = useState(50);
-  const [runLimit, setRunLimit] = useState(20);
   const [comparisonLimit, setComparisonLimit] = useState(20);
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
@@ -68,6 +70,9 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
   useEffect(() => {
     if (!connection || !selectedProfileKey) {
       setDiscovery(null);
+      setHistory(null);
+      setWorkflows(null);
+      setInspectedRun(null);
       setModels([]);
       setPlan(null);
       return;
@@ -75,9 +80,14 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
     let active = true;
     setLoading(true);
     setDiscovery(null);
+    setHistory(null);
+    setWorkflows(null);
+    setWorkflowError(null);
+    setEvaluationScope(null);
+    setInspectedRun(null);
+    appliedFocus.current = null;
     setSelectedId(null);
     setCaseLimit(50);
-    setRunLimit(20);
     setComparisonLimit(20);
     setSelectedRunIds([]);
     setModels([]);
@@ -85,6 +95,16 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
     setPlan(null);
     setRunNotice(null);
     setError(null);
+    void loadProfileEvaluationHistory(connection).then(result => {
+      if (active) setHistory(result);
+    }).catch((caught: unknown) => {
+      if (active) setError(caught instanceof Error ? caught.message : String(caught));
+    });
+    void api.profileWorkflows(connection).then(result => {
+      if (active) setWorkflows(result);
+    }).catch((caught: unknown) => {
+      if (active) setWorkflowError(caught instanceof Error ? caught.message : String(caught));
+    });
     void api.profileEvaluations(connection).then((result) => {
       if (active) setDiscovery(result);
     }).catch((caught: unknown) => {
@@ -104,20 +124,35 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
   }, [connection, selectedProfileKey]);
 
   useEffect(() => {
-    if (!focusTarget || !discovery) return;
-    const definition = discovery.definitions.find((entry) => entry.target.kind === focusTarget.kind
-      && (focusTarget.kind === "profile" || focusTarget.kind === "workflow" && entry.target.kind === "workflow" && entry.target.workflowId === focusTarget.id
-        || focusTarget.kind === "skill" && entry.target.kind === "skill" && entry.target.skillPath === focusTarget.id));
+    if (!focusTarget || !discovery || appliedFocus.current === focusTarget) return;
+    appliedFocus.current = focusTarget;
+    const definition = discovery.definitions.find(entry => matchesTarget(entry.target, focusTarget));
+    setEvaluationScope(focusTarget);
     setSelectedId(definition?.id ?? null);
+    setPlan(null);
+    setCaseLimit(50);
     setRunNotice(definition ? null : "No evaluation definition is saved for this Profile component.");
     sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [discovery, focusTarget]);
 
   if (!selectedProfileKey) return null;
   const selected = discovery?.definitions.find((definition) => definition.id === selectedId);
-  const runs = selected
-    ? discovery?.runs.filter((run) => run.manifest.profileEvaluation?.definitionId === selected.id) ?? []
-    : [];
+  const definitions = discovery?.definitions.filter(definition => !evaluationScope || matchesTarget(definition.target, evaluationScope)) ?? [];
+  const retained = history ?? discovery;
+  const evaluationCatalog = discovery ? { ...discovery, runs: retained?.runs ?? [], suiteRuns: retained?.suiteRuns ?? [] } : null;
+  const runs = retained?.runs.filter(run => evaluationScope
+    ? Boolean(run.manifest.profileEvaluation && matchesTarget(run.manifest.profileEvaluation.target, evaluationScope))
+    : !selected || run.manifest.profileEvaluation?.definitionId === selected.id) ?? [];
+  const busy = preparing || running || Boolean(runningSuiteId);
+  const openWorkflowEvaluations = (workflowId: string) => {
+    const scope: ProfileEvaluationTarget = { kind: "workflow", id: workflowId };
+    setEvaluationScope(scope);
+    setSelectedId(discovery?.definitions.find(entry => matchesTarget(entry.target, scope))?.id ?? null);
+    setPlan(null);
+    setRunNotice(null);
+    setCaseLimit(50);
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const prepareRun = async () => {
     const model = models.find((choice) => choice.key === selectedModelKey);
     if (!connection || !selected || !model || preparing) return;
@@ -147,9 +182,10 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
       const result = await api.profileEvaluationRun(connection, {
         ...plan.request, expectedManifestHash: plan.prepared.manifest.contentHash,
       });
-      setDiscovery(await api.profileEvaluations(connection));
       setPlan(null);
+      setInspectedRun(result);
       setRunNotice(`Run ${result.manifest.id} ${result.passed ? "passed" : "did not pass"}.`);
+      setHistory(await loadProfileEvaluationHistory(connection));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -169,7 +205,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
         suiteId,
         modelRef: { providerId: model.providerId, modelId: model.modelId },
       });
-      setDiscovery(await api.profileEvaluations(connection));
+      setHistory(await loadProfileEvaluationHistory(connection));
       setRunNotice(`Suite ${result.id} ${result.passed ? "passed" : "did not pass"}.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -188,7 +224,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
     setError(null);
     try {
       await api.profileEvaluationCompare(connection, selectedRunIds);
-      setDiscovery(await api.profileEvaluations(connection));
+      setHistory(await loadProfileEvaluationHistory(connection));
       setSelectedRunIds([]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -202,7 +238,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
     setError(null);
     try {
       const report = await api.profileEvaluationSaveReport(connection, kind, id);
-      setDiscovery(await api.profileEvaluations(connection));
+      setHistory(await loadProfileEvaluationHistory(connection));
       setRunNotice(`Report ${report.id} saved to Profile source. Commit and publish the Profile when ready.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -211,6 +247,10 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
     }
   };
   return (
+    <>
+    {workflows ? <ProfileWorkflowsSection catalog={workflows} evaluations={evaluationCatalog}
+      onEvaluate={openWorkflowEvaluations} onOpenRun={setInspectedRun} busy={busy} /> : null}
+    {workflowError ? <p role="alert">{workflowError}</p> : null}
     <section ref={sectionRef} aria-label="Profile evaluations" className="profile-evaluations">
       <div className="profile-workflows-header">
         <h3>Evaluations</h3>
@@ -219,11 +259,13 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
       {loading ? <p>Loading evaluations…</p> : null}
       {error ? <p role="alert">{error}</p> : null}
       {runNotice ? <p role="status">{runNotice}</p> : null}
-      {discovery && discovery.definitions.length === 0 ? <p>No evaluations in this Profile yet.</p> : null}
+      {evaluationScope ? <div className="profile-evaluation-scope"><strong>{evaluationScope.kind === "workflow" ? `Workflow · ${evaluationScope.id}` : evaluationScope.kind === "skill" ? `Skill · ${evaluationScope.id}` : "Complete Profile"}</strong>
+        <button type="button" disabled={busy} onClick={() => { setEvaluationScope(null); setSelectedId(null); setPlan(null); setRunNotice(null); }}>Show all evaluations</button></div> : null}
+      {discovery && !definitions.length ? <p>{evaluationScope ? "No evaluation definitions target this component. Add a definition in the Profile’s evals catalog to run it. Retained runs are shown below." : "No evaluations in this Profile yet."}</p> : null}
       {discovery?.suites.length ? (
         <div className="profile-evaluations-suites" aria-label="Evaluation suites">
           <label htmlFor="profile-evaluation-suite-model">Suite model</label>
-          <select id="profile-evaluation-suite-model" value={selectedModelKey} disabled={Boolean(runningSuiteId)} onChange={(event) => setSelectedModelKey(event.target.value)}>
+          <select id="profile-evaluation-suite-model" value={selectedModelKey} disabled={busy} onChange={(event) => { setSelectedModelKey(event.target.value); setPlan(null); }}>
             {models.map((model) => <option key={model.key} value={model.key}>{model.label}</option>)}
           </select>
           {models.length === 0 ? <p>Connect a provider and load its models in Providers settings to run a suite.</p> : null}
@@ -231,10 +273,10 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
             <div key={suite.id} className="profile-evaluations-suite">
               <strong>{suite.label}</strong>
               <span>{suite.scope === "profile" ? "Profile suite" : "Component suite"} · {suite.definitionIds.length} checks</span>
-              <button type="button" disabled={!selectedModelKey || Boolean(runningSuiteId) || running} onClick={() => void runSuite(suite.id)}>
+              <button type="button" disabled={!selectedModelKey || busy} onClick={() => void runSuite(suite.id)}>
                 {runningSuiteId === suite.id ? "Running suite…" : "Run suite"}
               </button>
-              {discovery.suiteRuns.filter((run) => run.suiteId === suite.id).slice(0, 5).map((run) => (
+              {(retained?.suiteRuns ?? []).filter((run) => run.suiteId === suite.id).slice(0, 5).map((run) => (
                 <details key={run.id} className="profile-evaluations-suite-run">
                   <summary>{displayTimestamp(run.completedAt)} · {run.passed ? "Passed" : "Did not pass"} · {run.members.length} checks</summary>
                   <small>Profile source {run.sourceRevision.slice(0, 12)} · Suite run {run.id}</small>
@@ -246,6 +288,10 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
                       <strong>{run.sourceRevision === discovery.sourceRevision
                         ? discovery.definitions.find((definition) => definition.id === member.definitionId)?.label ?? member.definitionId
                         : member.definitionId}</strong>
+                      <button type="button" onClick={() => {
+                        const retainedRun = retained?.runs.find(run => run.manifest.id === member.runManifest.id);
+                        if (retainedRun) setInspectedRun(retainedRun);
+                      }} disabled={!retained?.runs.some(run => run.manifest.id === member.runManifest.id)}>View results</button>
                       <span>{member.passed ? "Passed" : "Did not pass"} · {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`} · Run {member.runManifest.id}</span>
                     </li>
                   ))}</ul>
@@ -255,42 +301,37 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
           ))}
         </div>
       ) : null}
-      {discovery?.definitions.map((definition) => {
-        const latest = discovery.runs.find((run) => run.manifest.profileEvaluation?.definitionId === definition.id);
-        return (
-          <div className="profile-evaluations-row" key={definition.id}>
-            <div>
-              <strong>{definition.label}</strong>
-              <p>{definition.description || targetLabel(definition.target)}</p>
-              <small>{targetLabel(definition.target)} · {definition.taskIds.length} tasks · {definition.seeds.length} seeds</small>
-              {latest ? <small>Latest: {latest.passed ? "Passed" : "Did not pass"} · {latest.metric.value === null ? "No score" : `${Math.round(latest.metric.value * 100)}%`} · {displayTimestamp(latest.completedAt)}</small> : null}
-            </div>
-            <button type="button" aria-expanded={selectedId === definition.id} onClick={() => {
-              setSelectedId(selectedId === definition.id ? null : definition.id);
-              setCaseLimit(50);
-              setRunLimit(20);
-              setPlan(null);
-            }}>
-              {selectedId === definition.id ? "Hide details" : "View details"}
-            </button>
-          </div>
-        );
-      })}
+      {definitions.length ? <div className="profile-table-scroll"><table className="profile-evaluation-table">
+        <thead><tr><th scope="col">Evaluation</th><th scope="col">Target</th><th scope="col">Tasks / seeds</th><th scope="col">Latest result</th><th scope="col">Actions</th></tr></thead>
+        <tbody>{definitions.map(definition => {
+          const latest = retained?.runs.find(run => run.manifest.profileEvaluation?.definitionId === definition.id);
+          return <tr key={definition.id}>
+            <th scope="row"><strong>{definition.label}</strong><small>{definition.description}</small></th>
+            <td>{targetLabel(definition.target)}</td><td>{definition.taskIds.length} / {definition.seeds.length}</td>
+            <td>{latest ? <button type="button" onClick={() => setInspectedRun(latest)}>{latest.passed ? "Passed" : "Did not pass"} · {displayScore(latest.metric.value)}<small>{displayTimestamp(latest.completedAt)}</small></button> : "Not run"}</td>
+            <td><button type="button" disabled={busy} aria-expanded={selectedId === definition.id} onClick={() => {
+              setSelectedId(current => current === definition.id ? null : definition.id);
+              setCaseLimit(50); setPlan(null); setRunNotice(null);
+            }}>{selectedId === definition.id ? "Hide details" : "View / Run Evaluation"}</button></td>
+          </tr>;
+        })}</tbody></table></div> : null}
       {selected ? (
         <div className="profile-evaluations-detail">
           <h4>{selected.label}</h4>
           <p>Taskset {selected.tasksetRelease.id} · {selected.tasksetRelease.contentHash.slice(0, 12)}</p>
-          <p>Frozen split: {selected.split} · Minimum pass rate: {Math.round(selected.criterion.minimumPassRate * 100)}%</p>
+          <p>Frozen split: {selected.split} · Minimum pass rate: {Math.round(selected.criterion.minimumPassRate * 100)}% · {selected.criterion.requireComplete ? "All attempts required" : "Incomplete runs allowed"}</p>
+          <p>This evaluation runs the selected component against its Taskset’s frozen cases and graders.</p>
+          <details><summary>Evaluation definition</summary><pre>{JSON.stringify(selected, null, 2)}</pre></details>
           <div className="profile-evaluations-run-form">
               <label htmlFor="profile-evaluation-model">Model</label>
-              <select id="profile-evaluation-model" value={selectedModelKey} disabled={preparing || running} onChange={(event) => {
+              <select id="profile-evaluation-model" value={selectedModelKey} disabled={busy} onChange={(event) => {
                 setSelectedModelKey(event.target.value);
                 setPlan(null);
               }}>
                 {models.map((model) => <option key={model.key} value={model.key}>{model.label}</option>)}
               </select>
               {models.length === 0 ? <p>Connect a provider and load its models in Providers settings to run this check.</p> : null}
-              <button type="button" disabled={!selectedModelKey || preparing || running} onClick={() => void prepareRun()}>
+              <button type="button" disabled={!selectedModelKey || busy} onClick={() => void prepareRun()}>
                 {preparing ? "Checking run…" : "Check run setup"}
               </button>
               {plan ? (
@@ -309,29 +350,17 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
             {selected.taskIds.length > caseLimit ? <button type="button" onClick={() => setCaseLimit((limit) => limit + 50)}>Show more cases</button> : null}
             <span>Seeds: {selected.seeds.join(", ")}</span>
           </div>
-          <div className="profile-evaluations-history">
-            <strong>Run history</strong>
-            {runs.length === 0 ? <p>No runs for this check yet.</p> : (
-              <ul>{runs.slice(0, runLimit).map((run) => (
-                <li key={run.manifest.id}>
-                  <span>{displayTimestamp(run.completedAt)} · {run.passed ? "Passed" : "Did not pass"} · {run.receiptRefs.length} attempts</span>
-                  <small>Model {run.manifest.policy.kind === "model" ? `${run.manifest.policy.model.provider}/${run.manifest.policy.model.model}` : "fixture"} · Source {run.manifest.profileEvaluation?.sourceRevision.slice(0, 10)} · Run {run.manifest.id}</small>
-                  <button type="button" disabled={Boolean(savingReportId)} onClick={() => void saveReport("run", run.manifest.id)}>
-                    {savingReportId === run.manifest.id ? "Saving report…" : "Save report to Profile"}
-                  </button>
-                </li>
-              ))}</ul>
-            )}
-            {runs.length > runLimit ? <button type="button" onClick={() => setRunLimit((limit) => limit + 20)}>Show more runs</button> : null}
-          </div>
         </div>
       ) : null}
-      {discovery && discovery.runs.length > 1 ? (
+      {retained ? <ProfileEvaluationRunTable key={selectedId ?? JSON.stringify(evaluationScope)} runs={runs}
+        definitions={discovery?.definitions ?? []} sourceRevision={discovery?.sourceRevision ?? ""} onOpen={setInspectedRun}
+        onSave={id => void saveReport("run", id)} savingReportId={savingReportId} /> : null}
+      {retained && retained.runs.length > 1 ? (
         <div className="profile-evaluations-detail" aria-label="Compare evaluation runs">
           <h4>Compare runs</h4>
           <p>Select two or more runs. Comparisons require the same Taskset, cases, environment, grading policy, limits, and runtime.</p>
           <div className="profile-evaluations-comparison-runs">
-            {discovery.runs.slice(0, comparisonLimit).map((run) => (
+            {retained.runs.slice(0, comparisonLimit).map((run) => (
               <label key={run.manifest.id}>
                 <input type="checkbox" checked={selectedRunIds.includes(run.manifest.id)} onChange={() => toggleRun(run.manifest.id)} disabled={comparing} />
                 <span>
@@ -341,16 +370,16 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
               </label>
             ))}
           </div>
-          {discovery.runs.length > comparisonLimit ? <button type="button" onClick={() => setComparisonLimit((limit) => limit + 20)}>Show more runs</button> : null}
+          {retained.runs.length > comparisonLimit ? <button type="button" onClick={() => setComparisonLimit((limit) => limit + 20)}>Show more runs</button> : null}
           <button type="button" disabled={selectedRunIds.length < 2 || comparing} onClick={() => void compareRuns()}>
             {comparing ? "Comparing…" : `Save comparison of ${selectedRunIds.length} runs`}
           </button>
         </div>
       ) : null}
-      {discovery && discovery.comparisons.length > 0 ? (
+      {retained && retained.comparisons.length > 0 ? (
         <div className="profile-evaluations-detail" aria-label="Saved evaluation comparisons">
           <h4>Saved comparisons</h4>
-          <ul>{discovery.comparisons.map((comparison) => (
+          <ul>{retained.comparisons.map((comparison) => (
             <li key={comparison.id}>
               <strong>{displayTimestamp(comparison.createdAt)} · {comparison.members.length} runs</strong>
               <button type="button" disabled={Boolean(savingReportId)} onClick={() => void saveReport("comparison", comparison.id)}>
@@ -366,10 +395,10 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
           ))}</ul>
         </div>
       ) : null}
-      {discovery?.reports.length ? (
+      {retained?.reports.length ? (
         <div className="profile-evaluations-detail" aria-label="Profile evaluation reports">
           <h4>Reports saved in Profile source</h4>
-          <ul>{discovery.reports.map((report) => (
+          <ul>{retained.reports.map((report) => (
             <li key={report.id}>
               <strong>{displayTimestamp(report.createdAt)} · {report.summary.passedChecks}/{report.summary.totalChecks} checks passed</strong>
               <small>Tested source {report.testedSources.map((source) => source.sourceRevision.slice(0, 10)).join(", ")} · Evidence {report.evidence.map((ref) => ref.id).join(", ")}</small>
@@ -378,5 +407,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
         </div>
       ) : null}
     </section>
+    {connection && inspectedRun ? <ProfileEvaluationRunDialog key={inspectedRun.manifest.id} connection={connection} run={inspectedRun} onClose={() => setInspectedRun(null)} /> : null}
+    </>
   );
 }

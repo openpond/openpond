@@ -1,3 +1,4 @@
+import { ConversationServingGrantSchema } from "../training/conversation-serving-contracts.js";
 import type {
   ModelComparisonSeries,
   ModelComparisonSeriesEntry,
@@ -24,9 +25,9 @@ import {
 import { isArtifactCollectionRecoveryTransition, isCheckpointResumeTransition } from "./model-run-recovery-transitions.js";
 export { isCheckpointResumeTransition } from "./model-run-recovery-transitions.js";
 import type { PayloadRow } from "../types.js";
-import { SqliteLearningStore } from "./store-learning.js";
+import { SqliteConversationServingStore } from "./store-conversation-serving.js";
 
-export class SqliteTrainingModelStore extends SqliteLearningStore {
+export class SqliteTrainingModelStore extends SqliteConversationServingStore {
   async saveModelCurrencySnapshot(snapshotInput: ModelCurrencySnapshot): Promise<ModelCurrencySnapshot> {
     const snapshot = ModelCurrencySnapshotSchema.parse(snapshotInput);
     const existing = await this.getModelCurrencySnapshot(snapshot.id);
@@ -693,6 +694,7 @@ export class SqliteTrainingModelStore extends SqliteLearningStore {
     role: ModelBinding["role"];
     roleTargetId: string;
     expectedActiveBindingId: string | null;
+    servingGrant?: { id: string; expectedRevision: number; authorizationHash: string };
     next: ModelBinding | null;
     timestamp: string;
   }): Promise<{ previous: ModelBinding | null; active: ModelBinding | null }> {
@@ -716,6 +718,11 @@ export class SqliteTrainingModelStore extends SqliteLearningStore {
     const write = this.writeQueue.then(async () => {
       await this.exec("BEGIN IMMEDIATE");
       try {
+        if (input.servingGrant) {
+          const retained = await this.get<PayloadRow>("SELECT payload FROM conversation_serving_grants WHERE id = ?", [input.servingGrant.id]);
+          const grant = retained ? ConversationServingGrantSchema.parse(JSON.parse(retained.payload)) : null;
+          if (!grant?.enabled || grant.revision !== input.servingGrant.expectedRevision || grant.authorizedConfigurationHash !== input.servingGrant.authorizationHash || grant.profileId !== input.profileId || grant.role !== input.role || grant.roleTargetId !== input.roleTargetId || grant.expectedBindingId !== input.expectedActiveBindingId) throw new Error("The native serving authorization changed before the binding commit.");
+        }
         const row = await this.get<PayloadRow>(
           "SELECT payload FROM model_bindings WHERE profile_id = ? AND role = ? AND role_target_id = ? AND status = 'active' LIMIT 1",
           [input.profileId, input.role, input.roleTargetId],

@@ -1,5 +1,8 @@
+import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
+import { useAgentDialogFocus } from "../apps/useAgentDialogFocus";
+import "../../styles/settings/provider-connections.css";
 import type { ClientConnection } from "../../api/api-client";
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   CheckCircle2,
   CircleAlert,
@@ -24,7 +27,6 @@ import type { CheckNativeProvider } from "./native-provider-check";
 import { DESKTOP_AGENT_PROVIDERS, isAcpProvider, NativeAgentProviderDetails } from "./NativeAgentProviderDetails";
 import {
   chatModelLabel,
-  chatProviderLabel,
   isRunnableChatProvider,
   modelOptionsForProvider,
   type DropdownOption,
@@ -123,12 +125,11 @@ function providerMeta(status: ProviderStatus, settings: ProviderSettings): strin
   const modelCountLabel = modelCount === 1 ? "1 model" : `${modelCount} models`;
   const credentialLabel = providerCredentialLabel(status, settings);
   const parts = [
-    providerStateLabel(status),
     credentialLabel,
     cache ? modelCountLabel : "",
     modelLabel,
   ].filter(Boolean);
-  return parts.join(", ");
+  return parts.join(" · ");
 }
 
 function canToggleProvider(providerId: ChatProvider): boolean {
@@ -210,7 +211,7 @@ export function ProviderSettingsSection({
   validateProvider,
 }: ProviderSettingsSectionProps) {
   const [detailsProviderId, setDetailsProviderId] = useState<ChatProvider | null>(null);
-  const providerRows = DESKTOP_AGENT_PROVIDERS.filter((id) => providers?.statuses[id]);
+  const providerRows = DESKTOP_AGENT_PROVIDERS.filter(id => providers?.statuses[id]);
   const detailsStatus = detailsProviderId ? providers?.statuses[detailsProviderId] ?? null : null;
   function openProviderDetails(providerId: ChatProvider, loadModels: boolean) {
     setDetailsProviderId(providerId);
@@ -218,19 +219,14 @@ export function ProviderSettingsSection({
   }
 
   return (
-    <section className="account-settings">
+    <section className="account-settings provider-connections-settings">
       <h1>Providers</h1>
+      <div className="provider-connections-intro"><p>Manage your installed agents and login. Sync their conversations from Connections.</p><button type="button" className="settings-secondary" onClick={() => void navigateDesktopRoute({ kind: "view", view: "apps" })}>Connections & apps</button></div>
 
       {providers ? (
-        <div className="provider-manager-panel">
-          <div className="account-list-heading provider-manager-heading">
-            <div className="provider-manager-title-row">
-              <span>Agent providers</span>
-            </div>
-            <small>OpenPond account access is managed in Account settings.</small>
-          </div>
+        <div className="provider-connections-panel">
           {providerRows.length > 0 ? (
-            <div className="provider-manager-scroll" role="list">
+            <div className="provider-connections-grid" role="list">
               {providerRows.map((providerId) => {
                 const status = providers.statuses[providerId]!;
                 const cache = providers.modelCaches[providerId];
@@ -240,34 +236,33 @@ export function ProviderSettingsSection({
                 const toggleEnabled = canToggleProvider(providerId);
                 const checked = providerId === "openpond" || Boolean(providers.providers[providerId]?.enabled);
                 return (
-                  <div className="provider-manager-row" role="listitem" key={providerId}>
+                  <div className="provider-connection-card" role="listitem" key={providerId}>
+                    <div className="provider-connection-identity"><strong>{status.displayName}</strong>
                     <label className="provider-toggle" aria-label={`Enable ${status.displayName}`}>
                       <input
                         type="checkbox"
                         checked={checked}
                         disabled={!toggleEnabled || rowBusy}
                         onChange={(event) => {
-                          openProviderDetails(providerId, false);
                           void saveProviderConfig(providerId, { enabled: event.currentTarget.checked });
                         }}
                       />
                       <span />
                     </label>
-                    <div className="provider-row-main">
-                      <strong>{providerId === "codex" ? "Codex / ChatGPT" : status.displayName}</strong>
                     </div>
-                    <div className={`provider-row-status ${providerStateTone(status)}`}>
+                    <div className={`provider-connection-status ${providerStateTone(status)}`}>
                       {rowBusy ? <Loader2 size={13} className="settings-spin" /> : null}
-                      <span>{providerMeta(status, providers)}</span>
+                      <span>{providerStateLabel(status)}</span>
                     </div>
+                    <p>{providerMeta(status, providers) || (status.enabled ? "Check your installation and sign in to use this agent." : "Enable this agent to use it in chats.")}</p>
                     <button
                       type="button"
-                      className="settings-secondary provider-details-button"
+                      className="settings-secondary"
                       onClick={() => {
                         openProviderDetails(providerId, needsModelLoad);
                       }}
                     >
-                      Details
+                      Manage
                     </button>
                   </div>
                 );
@@ -275,8 +270,7 @@ export function ProviderSettingsSection({
             </div>
           ) : (
             <div className="empty-account-list provider-manager-empty">
-              <strong>No subscription providers</strong>
-              <span>Turn off the filter to show API-key providers.</span>
+              <strong>No agent providers available</strong>
             </div>
           )}
         </div>
@@ -312,7 +306,7 @@ export function ProviderSettingsSection({
   );
 }
 
-function ProviderDetailsDialog({
+export function ProviderDetailsDialog({
   checkNativeProvider,
   connection,
   account,
@@ -328,7 +322,9 @@ function ProviderDetailsDialog({
   onSaveCredential,
   onStartOpenAiSubscriptionAuth,
   onValidate,
+  conversationPanel,
 }: {
+  conversationPanel?: ReactNode;
   checkNativeProvider: CheckNativeProvider;
   connection: ClientConnection | null;
   account: BootstrapPayload["account"] | null;
@@ -348,6 +344,9 @@ function ProviderDetailsDialog({
   onStartOpenAiSubscriptionAuth: (method: "browser" | "device") => Promise<unknown>;
   onValidate: (provider: ChatProvider, request?: { baseUrl?: string; modelId?: string }) => Promise<void>;
 }) {
+  const dialogRef = useAgentDialogFocus(onClose);
+  const [tab, setTab] = useState<"setup" | "sync">("setup");
+  const agentTabsId = useId();
   const config = settings.providers[providerId];
   const cache = settings.modelCaches[providerId];
   const credentialTabsId = useId();
@@ -378,7 +377,8 @@ function ProviderDetailsDialog({
   return (
     <div className="git-dialog-backdrop provider-dialog-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        className="git-dialog provider-details-dialog"
+        ref={dialogRef}
+        className={`git-dialog provider-details-dialog${conversationPanel ? " agent-setup-dialog" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={`${status.displayName} provider details`}
@@ -390,13 +390,21 @@ function ProviderDetailsDialog({
         <div className="provider-dialog-header">
           <div>
             <h2>{status.displayName}</h2>
-            <span>{chatProviderLabel(providerId, settings)}</span>
+            <span>{DESKTOP_AGENT_PROVIDERS.includes(providerId) ? "Installation and login" : "API and subscription settings"}</span>
           </div>
           <div className={`provider-state-pill ${providerStateTone(status)}`}>
             {providerStateLabel(status)}
           </div>
         </div>
 
+        {DESKTOP_AGENT_PROVIDERS.includes(providerId) && config ? <label className="provider-chat-toggle"><span className="provider-toggle"><input type="checkbox" aria-label={`Enable ${status.displayName} for chat`} checked={config.enabled} disabled={providerBusy !== null} onChange={event => void onSaveConfig(providerId, { enabled: event.target.checked })} /><span aria-hidden="true" /></span><span>Use {status.displayName} for chats</span></label> : null}
+        {conversationPanel ? <div className="surface-tabs provider-agent-tabs" role="tablist" aria-label="Agent settings" onKeyDown={event => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const next = tab === "setup" ? "sync" : "setup";
+          setTab(next); event.currentTarget.querySelector<HTMLElement>(`#${CSS.escape(`${agentTabsId}-${next}`)}`)?.focus();
+        }}><button type="button" role="tab" id={`${agentTabsId}-setup`} aria-controls={`${agentTabsId}-setup-panel`} aria-selected={tab === "setup"} tabIndex={tab === "setup" ? 0 : -1} onClick={() => setTab("setup")}>Agent setup</button><button type="button" role="tab" id={`${agentTabsId}-sync`} aria-controls={`${agentTabsId}-sync-panel`} aria-selected={tab === "sync"} tabIndex={tab === "sync" ? 0 : -1} onClick={() => setTab("sync")}>Conversation sync</button></div> : null}
+        <div hidden={tab !== "setup"} id={`${agentTabsId}-setup-panel`} role={conversationPanel ? "tabpanel" : undefined} aria-labelledby={conversationPanel ? `${agentTabsId}-setup` : undefined}>
         {localByok ? (
           <div className="surface-tabs provider-mode-tabs" role="tablist" aria-label={`${status.displayName} mode`}>
             {credentialTabs.map((tab) => (
@@ -464,10 +472,10 @@ function ProviderDetailsDialog({
         </dl> : null}
 
         {providerId === "codex" ? (
-          <>{config ? <NativeAgentProviderDetails connection={connection} key={providerId} providerId={providerId} config={config} status={status} busy={providerBusy !== null} onCheck={checkNativeProvider} /> : null}
+          <>{config ? <NativeAgentProviderDetails connection={connection} key={providerId} providerId={providerId} config={config} status={status} cachedModels={cache?.models ?? []} busy={providerBusy !== null} onCheck={checkNativeProvider} /> : null}
           <div className="provider-dialog-body"><h3>ChatGPT with the OpenPond harness</h3><p>Native Codex and the OpenPond harness keep their own connections. Choose the execution path in the model picker.</p><p>{settings.statuses.openai?.credential.connected ? "OpenPond harness connected" : "OpenPond harness not connected"}</p><button type="button" className="settings-secondary" disabled={providerBusy !== null} onClick={() => void onStartOpenAiSubscriptionAuth("browser")}>Connect ChatGPT for OpenPond</button><button type="button" className="settings-secondary" disabled={providerBusy !== null} onClick={() => void onSaveConfig("openai", { enabled: !settings.providers.openai?.enabled })}>{settings.providers.openai?.enabled ? "Disable" : "Enable"} OpenPond harness route</button></div></>
         ) : isAcpProvider(providerId) && config ? (
-          <NativeAgentProviderDetails connection={connection} key={providerId} providerId={providerId} config={config} status={status} busy={providerBusy !== null} onCheck={checkNativeProvider} />
+          <NativeAgentProviderDetails connection={connection} key={providerId} providerId={providerId} config={config} status={status} cachedModels={cache?.models ?? []} busy={providerBusy !== null} onCheck={checkNativeProvider} />
         ) : localByok && config && cache ? (
           <LocalByokProviderDetails
             credentialTab={credentialTab}
@@ -490,6 +498,8 @@ function ProviderDetailsDialog({
             <span>Adapter pending</span>
           </div>
         ) : null}
+        </div>
+        {tab === "sync" ? <div role="tabpanel" id={`${agentTabsId}-sync-panel`} aria-labelledby={`${agentTabsId}-sync`}>{conversationPanel}</div> : null}
       </section>
     </div>
   );
