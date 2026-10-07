@@ -206,7 +206,8 @@ export type TurnEventSink = {
   appendAssistantText(
     session: Session,
     turnId: string,
-    text: string
+    text: string,
+    providerRequestId?: string
   ): Promise<void>;
   appendHostedContextUsage(input: {
     session: Session;

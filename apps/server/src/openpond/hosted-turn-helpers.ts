@@ -79,7 +79,8 @@ export type HostedTurnHelpers = {
   appendAssistantText(
     session: Session,
     turnId: string,
-    text: string
+    text: string,
+    providerRequestId?: string
   ): Promise<void>;
   appendHostedContextUsage(input: {
     session: Session;
@@ -231,7 +232,8 @@ export function createHostedTurnHelpers(deps: {
   async function appendAssistantText(
     session: Session,
     turnId: string,
-    text: string
+    text: string,
+    providerRequestId?: string
   ): Promise<void> {
     if (!text) return;
     const assistantEvent = event({
@@ -241,6 +243,7 @@ export function createHostedTurnHelpers(deps: {
         source: "provider",
         appId: session.appId,
         output: text,
+        ...(providerRequestId ? { data: { providerRequestId } } : {}),
       });
     await appendRuntimeEvent(assistantEvent);
   }

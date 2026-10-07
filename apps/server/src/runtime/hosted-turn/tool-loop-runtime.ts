@@ -1,4 +1,6 @@
 import {candidateAuthoringToolNames} from "../../harness/experiment-candidate-tool-catalog.js";
+import { contentHash } from "@openpond/harness";
+import { recoverHostedOutputLimit } from "./output-limit-recovery.js";
 import { workspaceToolCorrectionMessage, trainingHarnessForTurn } from "./tool-loop-support.js";
 import {
   DEFAULT_SESSION_EXPERIENCE,
@@ -227,7 +229,7 @@ export function createHostedToolLoopRuntime(deps: {
     ) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
     appPreferences: AppPreferences | null;
     streamCompactionChatTurn?: Parameters<PrepareHostedProviderRequest>[0]["streamCompactionChatTurn"];
-  }): Promise<Session> {
+  }): Promise<{ session: Session; providerResponse: { requestId: string; contentHash: string } }> {
     let session = params.session;
     const messages = [...params.messages];
     const systemPrompt = `${params.systemPrompt}\n\n${TASK_COORDINATION_INSTRUCTIONS}`;
@@ -238,7 +240,7 @@ export function createHostedToolLoopRuntime(deps: {
         provider: params.provider,
         model: params.model,
       });
-    const maxOutputTokens = hostedRequestedOutputTokens({
+    let maxOutputTokens = hostedRequestedOutputTokens({
       maxContextTokens: contextLimitTokens,
       modelOutputLimit: params.modelOutputLimit,
     });
@@ -429,12 +431,13 @@ export function createHostedToolLoopRuntime(deps: {
       }
       return true;
     }
-    return runProviderRoundLoop<Session>({
+    return runProviderRoundLoop<{ session: Session; providerResponse: { requestId: string; contentHash: string } }>({
       turnId: params.turn.id,
       maxRounds: maxHostedWorkspaceToolRounds,
       signal: params.signal,
       runRound: async (round) => {
         const { index } = round;
+        let providerRequestId = round.requestId;
         throwIfInterrupted(params.signal);
         const request = deps.taskInbox.beginRequest(session.id, params.signal);
         let partialText = "";
@@ -483,6 +486,7 @@ export function createHostedToolLoopRuntime(deps: {
             const usageRequestId = attempt === 0
               ? round.requestId
               : `${round.requestId}:overflow-retry`;
+            providerRequestId = usageRequestId;
             const usageRecorder = await startProviderRequestUsageRecorder({
               session,
               turn: params.turn,
@@ -520,7 +524,7 @@ export function createHostedToolLoopRuntime(deps: {
                 }
                 if (delta.text) {
                   partialText += delta.text;
-                  await appendAssistantText(session, params.turn.id, delta.text);
+                  await appendAssistantText(session, params.turn.id, delta.text, usageRequestId);
                 }
               },
               onCompleted: async () => usageRecorder.complete(),
@@ -590,6 +594,16 @@ export function createHostedToolLoopRuntime(deps: {
       const latestContinuation = providerRound.continuation;
       const latestUsage = providerRound.usage;
       const finishReason = providerRound.finishReason;
+      if (finishReason === "length") {
+        maxOutputTokens = await recoverHostedOutputLimit({
+          messages, response: providerRound, maximumOutputTokens: maxOutputTokens,
+          modelOutputLimit: params.modelOutputLimit, maxContextTokens: contextLimitTokens,
+          sessionId: session.id, turnId: params.turn.id, requestId: providerRequestId,
+          appendRuntimeEvent,
+          recordUsage: () => appendContextUsage({ messages, usage: latestUsage, includeCompletion: true }),
+        });
+        return { type: "continue" };
+      }
       for (const toolCallBatch of providerRound.toolCallBatches) {
         nativeToolAccumulator.append(toolCallBatch);
       }
@@ -662,7 +676,7 @@ export function createHostedToolLoopRuntime(deps: {
             usage: latestUsage,
             includeCompletion: true,
           });
-          return { type: "complete", result: session };
+          return { type: "complete", result: { session, providerResponse: { requestId: providerRequestId, contentHash: contentHash(assistantText) } } };
         }
         if (
           trainingHarnessRound?.requiredToolName &&
@@ -850,7 +864,7 @@ export function createHostedToolLoopRuntime(deps: {
           includeCompletion: true,
         });
         if (!await deps.inboxStore.sealTaskInboxTurn(session.id, params.turn.id, deps.taskInbox.ownerId)) return { type: "continue" };
-        return { type: "complete", result: session };
+        return { type: "complete", result: { session, providerResponse: { requestId: providerRequestId, contentHash: contentHash(assistantText) } } };
       }
 
       messages.push(assistantMessage);
@@ -959,7 +973,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Please send the request again or narrow the workspace target so I can continue from the current context.",
           ].join(" ")
         );
-        return session;
+        throw new Error(`Hosted workspace tool iteration limit (${limitLabel}) exhausted before completion.`);
       },
     });
   }
