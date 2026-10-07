@@ -148,6 +148,7 @@ import {
   cloudProjectFromSandboxRecord,
 } from "./server-payload-helpers.js";
 import { createCodexHistoryPayloads } from "./codex-history-payloads.js";
+import { createPlanUsageService } from "../providers/plan-usage-service.js";
 import { createProfilePayloads } from "./profile-payloads.js";
 import { localProjectActionCatalog } from "../project-actions/local-project-actions.js";
 import {
@@ -195,6 +196,12 @@ export function createServerPayloads(deps: {
   } = deps;
   const attachmentRootDir =
     deps.attachmentRootDir ?? path.join(storeDir, "attachments");
+  const readPlanUsage = createPlanUsageService();
+  async function providerPlanUsagePayload(provider: string) {
+    if (provider !== "codex" && provider !== "claude-code") throw new Error("Unsupported plan usage provider");
+    const file = await readProvidersFile(providersFilePath);
+    return readPlanUsage(provider, file.providers[provider]);
+  }
   const nativeHistoryPayload = createNativeHistory({ store, storeDir, appendRuntimeEvent,
     canResume: async (provider, cwd) => {
       const file = await readProvidersFile(path.join(storeDir, "providers.json"));
@@ -1792,6 +1799,7 @@ export function createServerPayloads(deps: {
     updateAppPreferencesPayload,
     providerSettingsPayload,
     nativeHistoryPayload,
+    providerPlanUsagePayload,
     nativeAgentSetupPayload: async (provider: string, payload: unknown, signal?: AbortSignal) => {
       const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
       if (provider === "codex") {

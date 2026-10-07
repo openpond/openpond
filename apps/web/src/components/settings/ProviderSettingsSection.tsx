@@ -25,6 +25,7 @@ import { PROVIDER_IDS } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
 import type { CheckNativeProvider } from "./native-provider-check";
 import { DESKTOP_AGENT_PROVIDERS, isAcpProvider, NativeAgentProviderDetails } from "./NativeAgentProviderDetails";
+import { ProviderPlanUsage } from "./ProviderPlanUsage";
 import {
   chatModelLabel,
   isRunnableChatProvider,
@@ -255,6 +256,7 @@ export function ProviderSettingsSection({
                       <span>{providerStateLabel(status)}</span>
                     </div>
                     <p>{providerMeta(status, providers) || (status.enabled ? "Check your installation and sign in to use this agent." : "Enable this agent to use it in chats.")}</p>
+                    {providerId === "codex" || providerId === "claude-code" ? <ProviderPlanUsage connection={connection} provider={providerId} /> : null}
                     <button
                       type="button"
                       className="settings-secondary"

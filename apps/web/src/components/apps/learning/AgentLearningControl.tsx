@@ -216,9 +216,7 @@ export function AgentLearningControl({
                   : "Off"}
         </small>
       </div>
-      {!projectId ? (
-        <small>Select a hosted Project for continual learning.</small>
-      ) : !bindings.length && query.data ? (
+      {projectId && !bindings.length && query.data ? (
         <small>Sync this agent to the selected Project to use its local connection.</small>
       ) : null}
       {error ? <small role="alert">{error}</small> : null}
