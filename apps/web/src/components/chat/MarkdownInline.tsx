@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ClientConnection } from "../../api";
-import { useLocalImageUrl } from "../../hooks/useLocalImageUrl";
+import { useLocalImageResource, useLocalImageUrl } from "../../hooks/useLocalImageUrl";
 import type { LocalImageUrlResolver } from "../../hooks/useLocalImageUrl";
-import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
+import { useWorkspaceImageResource, useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import type { WorkspaceImageUrlResolver } from "../../hooks/useWorkspaceImageUrl";
 import { matchChatFilePathAt, normalizeChatFilePath } from "../../lib/chat-file-links";
 import { publicAssetUrl } from "../../lib/public-assets";
@@ -21,7 +21,7 @@ export type LinkContextMenu =
   | { kind: "file"; displayPath: string; path: string; x: number; y: number };
 
 export type OpenBrowserLink = (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
-export type OpenFileLink = (path: string) => void;
+export type OpenFileLink = (path: string, options?: { source?: boolean }) => void;
 
 export type MarkdownContext = {
   activeWorkspaceAppId: string | null;
@@ -35,6 +35,7 @@ export type MarkdownContext = {
   localImageUrls: LocalImageUrlResolver;
   workspaceImageUrls: WorkspaceImageUrlResolver;
   workspaceRootPath: string | null;
+  fileBasePath?: string | null;
 };
 
 type ImageLink =
@@ -67,6 +68,7 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
   const nodes: ReactNode[] = [];
   let index = 0;
   let textStart = 0;
+  let previousFile: { path: string; end: number } | null = null;
 
   const flushText = (end: number) => {
     if (end > textStart) nodes.push(content.slice(textStart, end));
@@ -78,13 +80,16 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
       const closing = content.indexOf("`", index + 1);
       if (closing > index + 1) {
         const codeContent = content.slice(index + 1, closing);
-        const imagePath = context.onOpenFileInSidebar && isStandaloneInlineCodeFileLink(codeContent, content, index, closing + 1)
-          ? normalizeChatFilePath(codeContent, { workspaceRootPath: context.workspaceRootPath })
+        const rangeBase: string | null = previousFile && previousFile.path.lastIndexOf("/") > 0 && /^(?:\s*(?:\.\.\.|…)\s*)$/.test(content.slice(previousFile.end, index))
+          && !/[\/]/.test(codeContent) ? previousFile.path.slice(0, previousFile.path.lastIndexOf("/")) : null;
+        const imagePath: ReturnType<typeof normalizeChatFilePath> = context.onOpenFileInSidebar
+          ? normalizeChatFilePath(codeContent, { workspaceRootPath: context.workspaceRootPath, fileBasePath: rangeBase || context.fileBasePath })
           : null;
         flushText(index);
         nodes.push(imagePath
           ? renderFileLink(imagePath.displayPath, imagePath.path, imagePath.displayPath, context, nodes.length)
           : <code key={nodes.length}>{codeContent}</code>);
+        previousFile = imagePath ? { path: imagePath.path, end: closing + 1 } : null;
         index = closing + 1;
         textStart = index;
         continue;
@@ -174,7 +179,7 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
     }
 
     const filePath = context.onOpenFileInSidebar
-      ? matchChatFilePathAt(content, index, { workspaceRootPath: context.workspaceRootPath })
+      ? matchChatFilePathAt(content, index, { workspaceRootPath: context.workspaceRootPath, fileBasePath: context.fileBasePath })
       : null;
     if (filePath) {
       flushText(index);
@@ -188,7 +193,7 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
       const closing = content.indexOf("**", index + 2);
       if (closing > index + 2) {
         flushText(index);
-        nodes.push(<strong key={nodes.length}>{content.slice(index + 2, closing)}</strong>);
+        nodes.push(<strong key={nodes.length}>{renderInline(content.slice(index + 2, closing), context)}</strong>);
         index = closing + 2;
         textStart = index;
         continue;
@@ -199,7 +204,7 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
       const closing = content.indexOf("__", index + 2);
       if (closing > index + 2) {
         flushText(index);
-        nodes.push(<strong key={nodes.length}>{content.slice(index + 2, closing)}</strong>);
+        nodes.push(<strong key={nodes.length}>{renderInline(content.slice(index + 2, closing), context)}</strong>);
         index = closing + 2;
         textStart = index;
         continue;
@@ -253,22 +258,13 @@ function matchBareLinkAt(content: string, start: number): { href: string; end: n
   return { href: normalizedHref, end: start + href.length };
 }
 
-function isStandaloneInlineCodeFileLink(codeContent: string, content: string, start: number, end: number): boolean {
-  if (isResourceFileRef(codeContent)) return true;
-  return !content.slice(0, start).trim() && !content.slice(end).trim();
-}
-
-function isResourceFileRef(value: string): boolean {
-  return /^(?:workspace|sandbox):file:/i.test(value.trim());
-}
-
 function renderLink(label: string, href: string, context: MarkdownContext, key: number): ReactNode {
   const cleanHref = cleanLinkHref(href);
   const image = imageLinkForHref(cleanHref, context);
   const external = /^https?:\/\//i.test(cleanHref);
   const browserHref = image?.kind === "url" ? image.src : image?.src ?? cleanHref;
   const filePath = context.onOpenFileInSidebar
-    ? normalizeChatFilePath(cleanHref, { workspaceRootPath: context.workspaceRootPath })
+    ? normalizeChatFilePath(cleanHref, { workspaceRootPath: context.workspaceRootPath, fileBasePath: context.fileBasePath })
     : null;
   if (!image && filePath) {
     return renderFileLink(label, filePath.path, filePath.displayPath, context, key);
@@ -413,7 +409,7 @@ function MarkdownFileLink({
         context.onPreviewImage(null);
         context.onOpenLinkMenu(positionFileMenu(path, displayPath, event.clientX, event.clientY));
       }}
-      title={displayPath}
+      title={path}
     >
       {label}
     </a>
@@ -433,16 +429,19 @@ function MarkdownFileImageReference({
   label: ReactNode;
   path: string;
 }) {
-  const workspaceSrc = useWorkspaceImageUrl(
+  const workspaceResource = useWorkspaceImageResource(
     context.connection,
     image.kind === "workspace" ? image.appId : null,
     image.kind === "workspace" ? image.path : null,
   );
-  const localSrc = useLocalImageUrl(
+  const localResource = useLocalImageResource(
     context.connection,
     image.kind === "local" ? image.path : null,
   );
-  const src = image.kind === "url" ? image.src : image.kind === "local" ? localSrc : workspaceSrc;
+  const resource = image.kind === "local" ? localResource : workspaceResource;
+  const src = image.kind === "url" ? image.src : resource.url;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = Boolean(src && failedSrc === src) || (image.kind !== "url" && resource.status === "error");
   const title = image.title || displayPath;
 
   return (
@@ -450,8 +449,13 @@ function MarkdownFileImageReference({
       <MarkdownFileLink context={context} displayPath={displayPath} label={label} path={path} />
       <button
         type="button"
-        className={`markdown-file-image-preview ${src ? "ready" : "loading"}`}
+        className={`markdown-file-image-preview ${failed ? "error" : src ? "ready" : "loading"}`}
         onClick={() => {
+          if (failed) {
+            setFailedSrc(null);
+            if (image.kind !== "url") resource.retry();
+            return;
+          }
           if (image.kind === "url") {
             context.onOpenImage({ src: image.src, title });
             return;
@@ -464,8 +468,11 @@ function MarkdownFileImageReference({
           context.onOpenWorkspaceImage({ appId: image.appId, path: image.path, title });
         }}
         title={title}
+        aria-label={failed ? `Retry preview for ${title}` : `Preview ${title}`}
       >
-        {src ? <img alt={title} decoding="async" loading="lazy" src={src} /> : <span aria-hidden="true" />}
+        {failed ? <span>Preview unavailable · Retry</span> : src
+          ? <img alt={title} decoding="async" loading="lazy" src={src} onError={() => setFailedSrc(src)} />
+          : <span>Loading preview…</span>}
       </button>
     </span>
   );
@@ -695,7 +702,7 @@ function localImagePathFromHref(href: string): string | null {
 }
 
 function isAbsoluteLocalImageHref(value: string): boolean {
-  return /^file:\/\//i.test(value) || /^\//.test(value) || /^[A-Za-z]:[\\/]/.test(value);
+  return /^file:\/\//i.test(value) || /^(?:\/|~\/)/.test(value) || /^[A-Za-z]:[\\/]/.test(value);
 }
 
 function workspaceRelativeImagePath(value: string, workspaceRootPath: string | null): string | null {

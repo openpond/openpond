@@ -325,6 +325,10 @@ describe("workspace diff", () => {
     const repoPath = await createTempDir("openpond-codex-cwd-workspace-");
     const storeDir = await createTempDir("openpond-codex-cwd-store-");
     await writeFile(path.join(repoPath, "README.md"), "# Codex cwd\n", "utf8");
+    const outputDir = await createTempDir("openpond-local-output-");
+    const outputPath = path.join(outputDir, "report.pdf");
+    const outputBytes = Buffer.from("%PDF-1.4\nlocal output\n%%EOF\n");
+    await writeFile(outputPath, outputBytes);
     const store = new SqliteStore(storeDir);
     const payloads = createServerWorkspacePayloads({
       store,
@@ -349,6 +353,22 @@ describe("workspace diff", () => {
       expect(diff.appId).toBe(workspaceId);
       expect(diff.repoFiles).toContain("README.md");
       expect(file.content).toBe("# Codex cwd\n");
+      // Explicit local outputs open outside the cwd, while workspace-relative
+      // traversal and the shared/hosted workspace loader remain contained.
+      const output = await payloads.workspaceFilePayload(workspaceId, outputPath);
+      expect(output.path).toBe(outputPath);
+      expect(Buffer.from(output.content ?? "", "base64")).toEqual(outputBytes);
+      const homePath = `~/${path.relative(os.homedir(), outputPath)}`;
+      const homeOutput = await payloads.workspaceFilePayload(workspaceId, homePath);
+      expect(homeOutput.path).toBe(homePath);
+      expect(homeOutput.content).toBe(output.content);
+      const imagePath = path.join(outputDir, "slide.png");
+      const imageBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7l8S8AAAAASUVORK5CYII=", "base64");
+      await writeFile(imagePath, imageBytes);
+      expect((await payloads.workspaceImagePayload(workspaceId, imagePath)).bytes).toEqual(imageBytes);
+      await expect(payloads.workspaceImagePayload(workspaceId, path.relative(repoPath, imagePath))).rejects.toThrow("Image not found");
+      await expect(payloads.workspaceFilePayload(workspaceId, path.relative(repoPath, outputPath))).rejects.toThrow("File not found");
+      await expect(loadWorkspaceFileAtPath(repoPath, outputPath)).rejects.toThrow("File not found");
     } finally {
       await store.close();
     }

@@ -63,6 +63,8 @@ export function NativeAgentControls({ connection, provider, providerSettings, di
         label: provider === "claude-code" && mode.id === "manual" ? "Ask" : mode.name,
         ...(provider === "claude-code" ? { description: mode.id === "plan"
           ? "Inspect and plan before making changes."
+          : mode.id === "bypassPermissions"
+          ? "Run tools and commands without permission prompts."
           : "Ask before actions that require permission." } : {}),
       }))}
       onChange={(value) => void save({ nativeMode: value })}

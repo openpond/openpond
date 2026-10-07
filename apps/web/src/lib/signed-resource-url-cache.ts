@@ -27,6 +27,8 @@ type FailedEntry = {
 
 type CacheEntry = ReadyEntry | LoadingEntry | FailedEntry;
 
+export type SignedResourceState = { url: string | null; status: "loading" | "ready" | "error" };
+
 export class SignedResourceUrlCache {
   private readonly entries = new Map<string, CacheEntry>();
   private connection: ClientConnection | null = null;
@@ -118,6 +120,43 @@ export class SignedResourceUrlCache {
   clear(): void {
     this.generation += 1;
     this.entries.clear();
+  }
+
+  /** Keep mounted previews fresh, including after a transient signing failure. */
+  watch(
+    key: string,
+    loader: () => Promise<{ expiresAt: number; url: string }>,
+    publish: (state: SignedResourceState) => void,
+  ): { refresh: (force?: boolean) => void; close: () => void } {
+    let closed = false;
+    let revision = 0;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const run = async (force = false) => {
+      if (closed) return;
+      const currentRevision = ++revision;
+      clearTimeout(timer);
+      if (force && this.entries.get(key)?.state !== "loading") this.entries.delete(key);
+      const cached = this.get(key);
+      publish({ url: cached, status: cached ? "ready" : "loading" });
+      const url = await this.load(key, loader);
+      if (closed || currentRevision !== revision) return;
+      publish({ url, status: url ? "ready" : "error" });
+      if (!url) {
+        if (++failures <= 3) timer = setTimeout(() => void run(), [5_000, 15_000, 30_000][failures - 1]);
+        return;
+      }
+      failures = 0;
+      const entry = this.entries.get(key);
+      const refreshAfter = Math.max(1_000, (entry?.expiresAt ?? this.now() + 60_000)
+        - this.now() - (this.options.expirySkewMs ?? DEFAULT_EXPIRY_SKEW_MS));
+      timer = setTimeout(() => void run(), refreshAfter);
+    };
+    void run();
+    return {
+      refresh: (force = false) => { failures = 0; void run(force); },
+      close: () => { closed = true; revision += 1; clearTimeout(timer); },
+    };
   }
 
   size(): number {

@@ -115,22 +115,23 @@ describe("signed workspace image URLs", () => {
     });
   });
 
-  test("mints scoped local image URLs without exposing the server capability token", () => {
+  test.each(["/tmp/pixel.png", "~/openpond-rl-deck/diagram.png"])("mints scoped local image URLs for %s without exposing the server capability token", (imagePath) => {
     const token = "server-capability-secret";
     const response = signedLocalImageUrlPayload(
-      { path: "/tmp/pixel.png" },
+      { path: imagePath },
       new URL("http://127.0.0.1:17876/v1/assets/local-image-url"),
       token,
     );
     const url = new URL(response.url);
 
     expect(url.pathname).toBe("/v1/assets/local-image");
-    expect(url.searchParams.get("path")).toBe("/tmp/pixel.png");
+    const absolutePath = imagePath.startsWith("~/") ? path.join(os.homedir(), imagePath.slice(2)) : imagePath;
+    expect(url.searchParams.get("path")).toBe(absolutePath);
     expect(url.searchParams.get("signature")).toBeTruthy();
     expect(response.url).not.toContain(token);
     expect(verifySignedLocalImageRequest(url, token)).toEqual({
       ok: true,
-      claims: { path: "/tmp/pixel.png", expiresAt: response.expiresAt },
+      claims: { path: absolutePath, expiresAt: response.expiresAt },
     });
   });
 

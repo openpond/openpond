@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
+import type { SqliteStore } from "./store/store.js";
+import { recoverTemporarySessionTitle } from "./session-title-recovery.js";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import type { streamOpenPondHostedChatTurn } from "@openpond/runtime";
 import { event } from "./utils.js";
 
 export const SESSION_TITLE_MODEL =
   "accounts/fireworks/models/deepseek-v4-flash";
-export const SESSION_TITLE_REASONING_EFFORT = "low";
+export const SESSION_TITLE_REASONING_EFFORT = "off";
 
 const TITLE_TIMEOUT_MS = 12_000;
 const MAX_TITLE_WORDS = 7;
@@ -73,16 +76,31 @@ export function withPendingAutoTitle(payload: unknown): unknown {
   if (!prompt || !payload || typeof payload !== "object" || Array.isArray(payload)) {
     return payload;
   }
-  return { ...(payload as Record<string, unknown>), title: "" };
+  const input = payload as Record<string, unknown>;
+  const metadata = input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+    ? input.metadata as Record<string, unknown> : {};
+  return { ...input, title: "", metadata: { ...metadata, titleSource: "pending",
+    autoTitle: { prompt: prompt.slice(0, 20_000), title: "", attempts: 0, nextAttemptAt: 0 } } };
+}
+
+type AutoTitle = { prompt: string; title: string; attempts: number; nextAttemptAt: number };
+function pendingTitle(session: Session | null): AutoTitle | null {
+  if (!session || !["pending", "fallback"].includes(String(session.metadata?.titleSource))) return null;
+  const state = session.metadata?.autoTitle as AutoTitle | undefined;
+  return state && typeof state.prompt === "string" && state.title === session.title &&
+    Number.isInteger(state.attempts) && state.attempts >= 0 && Number.isFinite(state.nextAttemptAt) ? state : null;
 }
 
 export function createSessionTitleService(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
-  getSession: (sessionId: string) => Promise<Session>;
+  store: Pick<SqliteStore, "getSession" | "updateSession" | "sessionShells" | "runtimeEventsForSession" | "getTurn">;
   logger: SessionTitleLogger;
   stream: typeof streamOpenPondHostedChatTurn;
-  updateSession: (sessionId: string, patch: Partial<Session>) => Promise<Session>;
 }) {
+  const jobs = new Map<string, Promise<void>>();
+  let recovery: Promise<void> | null = null;
+  const lifetime = new AbortController();
+  const retryDelays = [5_000, 30_000];
   async function generate(prompt: string): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(
@@ -99,10 +117,10 @@ export function createSessionTitleService(deps: {
           { role: "user", content: titleRequestMessage(prompt) },
         ],
         reasoningEffort: SESSION_TITLE_REASONING_EFFORT,
-        maxTokens: 32,
+        maxTokens: 128,
         temperature: 0.2,
         requestId: `session-title-${randomUUID()}`,
-        signal: controller.signal,
+        signal: AbortSignal.any([controller.signal, lifetime.signal]),
       })) {
         if (delta.type === "text_delta" && delta.text) generated += delta.text;
       }
@@ -116,43 +134,83 @@ export function createSessionTitleService(deps: {
     }
   }
 
-  async function run(sessionId: string, prompt: string): Promise<void> {
-    let title: string;
-    let titleSource: "model" | "fallback" = "model";
-    try {
-      title = await generate(prompt);
-    } catch (error) {
-      title = fallbackSessionTitle(prompt);
-      titleSource = "fallback";
-      deps.logger.warn("session title generation used local fallback", {
-        error: error instanceof Error ? error.message : String(error),
-        model: SESSION_TITLE_MODEL,
-        sessionId,
+  async function run(sessionId: string): Promise<void> {
+    while (!lifetime.signal.aborted) {
+      const state = pendingTitle(await deps.store.getSession(sessionId));
+      if (!state || state.attempts >= 3) return;
+      const wait = state.nextAttemptAt - Date.now();
+      if (wait > 0) await delay(wait, undefined, { signal: lifetime.signal, ref: false });
+      // Recheck after a retry delay; a manual rename may have cancelled the job.
+      const ready = pendingTitle(await deps.store.getSession(sessionId));
+      if (!ready || ready.attempts !== state.attempts) return;
+      let title: string;
+      let titleSource: "model" | "fallback" = "model";
+      try {
+        title = await generate(state.prompt);
+      } catch (error) {
+        if (lifetime.signal.aborted) return;
+        title = fallbackSessionTitle(state.prompt);
+        titleSource = "fallback";
+        deps.logger.warn("session title generation used temporary title", {
+          error: error instanceof Error ? error.message : String(error),
+          model: SESSION_TITLE_MODEL, sessionId, attempt: state.attempts + 1,
+        });
+      }
+      if (lifetime.signal.aborted) return;
+      let changed = false;
+      const session = await deps.store.updateSession(sessionId, (current) => {
+        const latest = pendingTitle(current);
+        if (!latest || latest.attempts !== state.attempts || latest.prompt !== state.prompt) return current;
+        changed = true;
+        return { ...current, title, metadata: { ...current.metadata, titleSource,
+          autoTitle: titleSource === "model" ? null : { ...state, title, attempts: state.attempts + 1,
+            nextAttemptAt: Date.now() + (retryDelays[state.attempts] ?? 0) } } };
       });
+      if (!changed || !session) return;
+      await deps.appendRuntimeEvent(event({ sessionId, name: "session.title.updated", source: "server",
+        status: "completed", data: { session, model: SESSION_TITLE_MODEL, titleSource } }));
+      if (titleSource === "model") return;
     }
+  }
 
-    const current = await deps.getSession(sessionId).catch(() => null);
-    if (!current || current.title.trim()) return;
-    const session = await deps.updateSession(sessionId, { title });
-    await deps.appendRuntimeEvent(
-      event({
-        sessionId,
-        name: "session.title.updated",
-        source: "server",
-        status: "completed",
-        data: { session, model: SESSION_TITLE_MODEL, titleSource },
-      }),
-    );
+  function schedule(sessionId: string): Promise<void> {
+    if (lifetime.signal.aborted) return Promise.resolve();
+    const existing = jobs.get(sessionId);
+    if (existing) return existing;
+    const job = run(sessionId).catch((error) => {
+      if (!lifetime.signal.aborted) deps.logger.warn("session title generation failed", {
+        error: error instanceof Error ? error.message : String(error), sessionId,
+      });
+    }).finally(() => jobs.delete(sessionId));
+    jobs.set(sessionId, job);
+    return job;
   }
 
   return {
-    schedule(sessionId: string, prompt: string) {
-      void run(sessionId, prompt).catch((error) => {
-        deps.logger.warn("session title generation failed", {
-          error: error instanceof Error ? error.message : String(error),
-          sessionId,
-        });
-      });
+    wrapCreateSession(createSession: (payload: unknown) => Promise<Session>) {
+      void this.recover().catch((error) => deps.logger.warn("Session title recovery failed", { error: String(error) }));
+      return async (payload: unknown): Promise<Session> => {
+        const session = await createSession(withPendingAutoTitle(payload));
+        if (autoTitlePromptFromPayload(payload)) void schedule(session.id);
+        return session;
+      };
+    },
+    schedule,
+    recover(): Promise<void> {
+      if (recovery) return recovery;
+      recovery = (async () => {
+        for (const session of await deps.store.sessionShells()) {
+          if (lifetime.signal.aborted) return;
+          const recovered = await recoverTemporarySessionTitle(deps.store, session);
+          if (pendingTitle(recovered)) void schedule(session.id);
+        }
+      })().finally(() => { recovery = null; });
+      return recovery;
+    },
+    async close() {
+      lifetime.abort();
+      await recovery?.catch(() => undefined);
+      await Promise.allSettled(jobs.values());
     },
   };
 }

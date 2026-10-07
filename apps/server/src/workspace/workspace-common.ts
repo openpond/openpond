@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import type { OpenPondApp, WorkspaceState } from "@openpond/contracts";
 import { runWorkspaceCommand as runCommand } from "./workspace-command.js";
 
@@ -273,6 +274,7 @@ function cleanLocalAssetPath(value: string): string | null {
       cleaned = cleaned.replace(/^file:\/\//, "");
     }
   }
+  if (cleaned.startsWith("~/")) cleaned = path.join(os.homedir(), cleaned.slice(2));
   if (!path.isAbsolute(cleaned)) return null;
   return cleaned;
 }

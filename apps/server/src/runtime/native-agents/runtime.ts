@@ -1,3 +1,5 @@
+import { createProviderRequestUsageRecord } from "../model-usage-recorder.js";
+import { createSafeModelUsagePersistence } from "../turns/model-usage-persistence.js";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { AcpClient, ClaudeCliClient, type AcpObject, type AcpSessionResult } from "@openpond/agent-runtime";
@@ -5,16 +7,18 @@ import type { Session, Turn } from "@openpond/contracts";
 import type { TurnRunnerDependencies } from "../turns/ports.js";
 import { readProvidersFile } from "../../openpond/provider-settings.js";
 import { event } from "../../utils.js";
+import { findLocalProject } from "../../workspace/local-projects.js";
 import { isNativeAgentId, nativeAgentLaunch } from "./config.js";
 import { nativeAgentEvent } from "./events.js";
 import { invalidateNativeAgent } from "./setup.js";
 import { createNativeAgentApprovals } from "./approvals.js";
 import { createTaskCoordinationMcp, type TaskCoordinationBridge } from "../task-inbox/codex-mcp.js";
 
-type RunningSession = { visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; turnId: string | null; replaying: boolean; session: Session; coordinated: boolean; close(): Promise<void> };
+type RunningSession = { turn: Turn | null; startedAt: string; firstTokenMs: number | null; visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; additionalDirectories: string[]; turnId: string | null; replaying: boolean; session: Session; coordinated: boolean; close(): Promise<void> };
 export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "store" | "storageHome" | "updateSession" | "appendRuntimeEvent" | "upsertApproval">) {
   const runtimes = new Map<string, RunningSession>();
   const approvals = createNativeAgentApprovals(deps);
+  const persistUsage = createSafeModelUsagePersistence({ upsert: deps.store.upsertModelUsageRecord?.bind(deps.store), appendRuntimeEvent: deps.appendRuntimeEvent });
   async function ensure(session: Session, cwd: string, coordination?: TaskCoordinationBridge): Promise<RunningSession> {
     if (!isNativeAgentId(session.provider)) throw new Error("Not a native ACP provider.");
     if (session.metadata?.nativeHistoryProjection && !session.nativeAgent) throw new Error("This retained conversation has no qualified native resume reference. It is available for inspection only.");
@@ -23,8 +27,14 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
     const config = file.providers[session.provider];
     if (!config?.enabled) throw new Error("Enable this agent in Providers before starting a native chat.");
     const launch = nativeAgentLaunch(session.provider, config);
+    const project = session.workspaceKind === "local_project" && session.workspaceId
+      ? await findLocalProject({ home: deps.storageHome }, session.workspaceId)
+      : null;
+    const additionalDirectories = session.provider === "claude-code"
+      ? [...new Set(project?.sourceFolders?.filter((folder) => folder !== cwd) ?? [])].sort()
+      : [];
     const existing = runtimes.get(session.id);
-    if (existing && existing.instanceId === launch.instanceId && existing.cwd === cwd && existing.coordinated === Boolean(coordination)) return existing;
+    if (existing && existing.instanceId === launch.instanceId && existing.cwd === cwd && JSON.stringify(existing.additionalDirectories) === JSON.stringify(additionalDirectories) && existing.coordinated === Boolean(coordination)) return existing;
     if (existing) { runtimes.delete(session.id); await existing.close(); }
     if (session.nativeAgent && (session.nativeAgent.provider !== session.provider || session.nativeAgent.instanceId !== launch.instanceId || session.nativeAgent.cwd !== cwd)) {
       throw new Error("Native session belongs to a different agent account/configuration or workspace. Restore its original configuration to continue.");
@@ -34,9 +44,17 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
     let bridgeClosing: Promise<void> | null = null;
     const closeBridge = () => bridgeClosing ??= bridge ? bridge.close() : Promise.resolve();
     const Client = session.provider === "claude-code" ? ClaudeCliClient : AcpClient;
-    const client = new Client({ ...launch, cwd,
+    const client = new Client({ ...launch, cwd, additionalDirectories,
       onUpdate: async (_nativeSessionId, update) => {
         if (!runtime || runtime.replaying || !runtime.turnId) return;
+        if (runtime.firstTokenMs === null && ["agent_message_chunk", "agent_thought_chunk", "tool_call"].includes(String(update.sessionUpdate))) runtime.firstTokenMs = Math.max(0, Date.now() - Date.parse(runtime.startedAt));
+        if (update.sessionUpdate === "usage_update" && runtime.session.provider === "claude-code") {
+          await persistUsage(createProviderRequestUsageRecord({ session: runtime.session, turn: runtime.turn,
+            provider: runtime.session.provider, model: typeof update.model === "string" ? update.model : "unknown",
+            requestId: `claude:${runtime.session.id}:${runtime.turnId}`, requestOrdinal: 0,
+            startedAt: runtime.startedAt, completedAt: new Date().toISOString(), firstTokenMs: runtime.firstTokenMs,
+            usage: update.usage, status: update.status === "failed" ? "failed" : update.status === "interrupted" ? "interrupted" : "completed" }));
+        }
         const normalized = nativeAgentEvent(runtime.session, runtime.turnId, update);
         if (normalized && ["assistant.delta", "assistant.reasoning.delta", "tool.started", "tool.completed"].includes(normalized.name)) runtime.visibleUpdates++;
         if (normalized) await deps.appendRuntimeEvent(normalized);
@@ -55,7 +73,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
         ? await client.loadSession(session.nativeAgent.sessionId, cwd, servers)
         : await client.createSession(cwd, servers);
       const updated = await deps.updateSession(session.id, { nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd }, metadata: { ...session.metadata, nativeHistoryProjection: false } });
-      runtime = { visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, turnId: null, replaying: false, session: updated, coordinated: Boolean(bridge), close: async () => { await client.stop(); await closeBridge(); } };
+      runtime = { turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: Boolean(bridge), close: async () => { await client.stop(); await closeBridge(); } };
       runtimes.set(session.id, runtime);
       await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "diagnostic", action: "native_configuration", source: "provider", data: { provider: session.provider, nativeSessionId: native.sessionId, capabilities: info.agentCapabilities, models: native.models, modes: native.modes, configOptions: native.configOptions } }));
       return runtime;
@@ -68,6 +86,9 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
       if (input.content?.some((part) => part.type === "image") && !runtime.imageInput) throw new Error("This native agent does not advertise image input. Choose a supported model/agent or attach text instead.");
       if (runtime.turnId) throw new Error("Native conversation already has an active turn.");
       runtime.turnId = input.turn.id;
+      runtime.turn = input.turn;
+      runtime.startedAt = new Date().toISOString();
+      runtime.firstTokenMs = null;
       runtime.visibleUpdates = 0;
       try {
         if (input.model && input.model !== runtime.native.models?.currentModelId) {
@@ -101,7 +122,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
       } catch (error) {
         await input.settlePrompt?.("failed");
         throw error;
-      } finally { runtime.turnId = null; }
+      } finally { runtime.turnId = null; runtime.turn = null; }
     },
     async close(): Promise<void> { const active = [...runtimes.values()]; runtimes.clear(); await Promise.allSettled(active.map((runtime) => runtime.close())); },
   };

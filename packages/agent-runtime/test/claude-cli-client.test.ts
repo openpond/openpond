@@ -1,8 +1,67 @@
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { ClaudeCliClient } from "../src/acp/claude-cli-client.js";
+
+// A missing launch opt-in makes YOLO fail only after selection; enabling bypass
+// at launch would silently skip approvals. Cover both fresh and resumed sessions.
+it.skipIf(process.platform === "win32").each([false, true])("switches Claude permissions explicitly for resumed=%s", async (resume) => {
+  const directory = await mkdtemp(join(tmpdir(), "openpond-claude-permissions-"));
+  const executable = join(directory, "claude");
+  await writeFile(executable, `#!${process.execPath}\n` + String.raw`
+const readline = require('node:readline');
+const send = value => process.stdout.write(JSON.stringify(value)+'\n');
+const args = process.argv.slice(2);
+if (args[args.indexOf('--add-dir') + 1] !== require('node:path').join(process.cwd(), 'attached project')) process.exit(1);
+let mode = args.includes('--dangerously-skip-permissions') ? 'bypassPermissions' : 'manual';
+const finish = () => send({type:'result',is_error:false});
+readline.createInterface({input:process.stdin}).on('line', line => {
+ const value = JSON.parse(line);
+ if(value.type==='control_request') {
+  const request = value.request;
+  if(request.subtype==='set_permission_mode') {
+   if(request.mode==='bypassPermissions' && !args.includes('--allow-dangerously-skip-permissions')) {
+    send({type:'control_response',response:{subtype:'error',request_id:value.request_id,error:'Bypass was not enabled at launch'}});
+    return;
+   }
+   mode=request.mode;
+  }
+  send({type:'control_response',response:{subtype:'success',request_id:value.request_id,response:{current_permission_mode:mode}}});
+ }
+ if(value.type==='user') {
+  send({type:'stream_event',event:{type:'content_block_delta',delta:{type:'text_delta',text:mode}}});
+  if(mode==='bypassPermissions') finish();
+  else send({type:'control_request',request_id:'permission',request:{subtype:'can_use_tool',tool_use_id:'tool',tool_name:'Write',input:{path:'fixture'}}});
+ }
+ if(value.type==='control_response' && value.response.request_id==='permission') finish();
+});`, { mode: 0o700 });
+  let approvals = 0;
+  const observedModes: string[] = [];
+  const client = new ClaudeCliClient({ command: executable, args: [], cwd: directory, requestTimeoutMs: 2_000,
+    additionalDirectories: [join(directory, "attached project")],
+    onUpdate: async (_id, value) => { if (value.sessionUpdate === "agent_message_chunk") observedModes.push(String((value.content as { text: string }).text)); },
+    onPermission: async () => { approvals++; return { outcome: { outcome: "selected", optionId: "allow" } }; },
+  });
+  try {
+    const session = resume ? await client.loadSession(randomUUID(), directory) : await client.createSession(directory);
+    expect(session.modes?.currentModeId).toBe("manual");
+    expect(session.modes?.availableModes.some((mode) => mode.id === "bypassPermissions")).toBe(true);
+    const prompt = () => client.prompt(session.sessionId, [{ type: "text", text: "run" }]);
+    await prompt();
+    expect(approvals).toBe(1);
+    await expect(client.setMode("foreign", "bypassPermissions")).rejects.toThrow("does not belong");
+    await expect(client.setMode(session.sessionId, "unsupported")).rejects.toThrow("Unsupported");
+    await client.setMode(session.sessionId, "bypassPermissions");
+    await prompt();
+    expect(approvals).toBe(1);
+    await client.setMode(session.sessionId, "manual");
+    await prompt();
+    expect(approvals).toBe(2);
+    expect(observedModes).toEqual(["manual", "bypassPermissions", "manual"]);
+  } finally { await client.stop(); await rm(directory, { recursive: true, force: true }); }
+});
 
 // Native login stays outside OpenPond. This boundary catches cross-session replies,
 // lost streamed updates, and permissions surviving a cancelled native CLI turn.

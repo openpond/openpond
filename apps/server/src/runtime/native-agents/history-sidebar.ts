@@ -27,7 +27,7 @@ export async function retainNativeSidebarShell(store: SqliteStore, shells: Sessi
     const titleChanged = existing.metadata?.nativeSourceTitle !== input.session.title;
     if (!sourceChanged && !needsIdentity && !titleChanged) return { session: existing, changed: false };
     const updated = await store.updateSession(existing.id, (current) => ({ ...current,
-      title: current.title === current.metadata?.nativeSourceTitle ? input.session.title : current.title,
+      title: current.metadata?.titleSource !== "manual" && current.title === current.metadata?.nativeSourceTitle ? input.session.title : current.title,
       metadata: { ...current.metadata, nativeHistoryId: input.id,
         sourceInstanceId: input.source.instanceId, sourceMachineId: input.source.machineId,
         nativeSource: input.source.source, nativeSourceTitle: input.session.title,

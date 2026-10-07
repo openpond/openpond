@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useSignedImageResource } from "./useSignedImageResource";
 import { api, type ClientConnection } from "../api";
 import { signedResourceCacheKey, signedResourceUrlCache } from "../lib/signed-resource-url-cache";
 
@@ -11,21 +12,13 @@ export function useLocalImageUrl(
   connection: ClientConnection | null,
   path: string | null | undefined,
 ): string | null {
-  const resolver = useLocalImageUrlResolver(connection);
-  const [url, setUrl] = useState<string | null>(() => resolver.getUrl(path));
+  return useLocalImageResource(connection, path).url;
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    setUrl(resolver.getUrl(path));
-    void resolver.loadUrl(path).then((nextUrl) => {
-      if (!cancelled) setUrl(nextUrl);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [path, resolver]);
-
-  return url;
+export function useLocalImageResource(connection: ClientConnection | null, path: string | null | undefined) {
+  const load = useCallback(() => api.signLocalImageUrl(connection!, { path: path! }), [connection, path]);
+  return useSignedImageResource(connection,
+    connection && path ? signedResourceCacheKey(connection, "local-image", path) : null, load);
 }
 
 export function useLocalImageUrlResolver(connection: ClientConnection | null): LocalImageUrlResolver {

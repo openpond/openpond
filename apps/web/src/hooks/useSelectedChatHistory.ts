@@ -13,11 +13,10 @@ import {
 } from "../lib/runtime-indexes";
 import type { RuntimeEventStore } from "../lib/runtime-event-store";
 import {
-  latestRuntimeEventSequence,
   mergeRuntimeEventLists,
-  mergeRuntimeEventsIntoSessionPageCache,
 } from "../lib/runtime-event-lists";
 import { upsertSessionPreservingLocalSidebarStateAndRecency } from "../lib/session-state";
+import { createSessionEventSync } from "../lib/session-event-sync";
 
 type ChatHistoryLoadState = {
   cursorSequence: number | null;
@@ -33,7 +32,6 @@ export function useSelectedChatHistory(input: {
   approvals: Approval[];
   codexHistoryEvents: RuntimeEvent[];
   connection: ClientConnection | null;
-  latestServerSequence: number | null | undefined;
   runtimeIndexes: ReturnType<typeof buildRuntimeIndexes>;
   runtimeEventStore: RuntimeEventStore;
   selectedSessionId: string | null;
@@ -41,13 +39,11 @@ export function useSelectedChatHistory(input: {
   setCodexHistoryEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setCodexHistorySessions: Dispatch<SetStateAction<Session[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
-  setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
 }) {
   const {
     approvals,
     codexHistoryEvents,
     connection,
-    latestServerSequence,
     runtimeIndexes,
     runtimeEventStore,
     selectedSessionId,
@@ -210,133 +206,44 @@ export function useSelectedChatHistory(input: {
   const selectedPagedSessionEvents = selectedSessionId
     ? (pagedSessionEvents[selectedSessionId] ?? EMPTY_RUNTIME_EVENTS)
     : EMPTY_RUNTIME_EVENTS;
-  const selectedRuntimeEventCount = useMemo(
-    () => runtimeEventStore.getSessionEvents(selectedSessionId).length,
-    [runtimeEventStore, selectedSessionId],
-  );
-  const selectedForwardEventSyncKeyRef = useRef<string | null>(null);
-
   useEffect(() => {
-    if (!connection || !selectedSessionId || isCodexHistorySessionId(selectedSessionId))
-      return undefined;
-    if (chatHistoryLoadingSessionIdsRef.current.has(selectedSessionId)) return undefined;
-    if (selectedPagedSessionEvents.length > 0 || selectedRuntimeEventCount > 0) return undefined;
-
-    const latestSequence = latestServerSequence;
-    if (!latestSequence) return undefined;
-
+    if (!connection || !selectedSessionId || isCodexHistorySessionId(selectedSessionId)) return;
     const historySessionId = selectedSessionId;
-    const beforeSequence = latestSequence + 1;
-    chatHistoryLoadingSessionIdsRef.current.add(historySessionId);
-    setChatHistoryLoadStates((current) => ({
-      ...current,
-      [historySessionId]: {
-        cursorSequence: current[historySessionId]?.cursorSequence ?? beforeSequence,
-        hasMore: current[historySessionId]?.hasMore ?? true,
-        loading: true,
-        totalMatchingEvents: current[historySessionId]?.totalMatchingEvents ?? null,
-      },
-    }));
-
-    void api
-      .runtimeEventsPage(connection, {
-        sessionId: historySessionId,
-        beforeSequence,
-        limit: CHAT_HISTORY_PAGE_LIMIT,
-      })
-      .then((page) => {
-        const pageEvents = page.events.map((entry) => entry.event);
-        setPagedSessionEvents((current) => ({
-          ...current,
-          [historySessionId]: mergeRuntimeEventLists(
-            pageEvents,
-            current[historySessionId] ?? EMPTY_RUNTIME_EVENTS,
-          ),
-        }));
-        setChatHistoryLoadStates((current) => ({
-          ...current,
-          [historySessionId]: {
-            cursorSequence: page.previousSequence,
-            hasMore: page.hasMore,
-            loading: false,
+    const sync = createSessionEventSync({
+      sessionId: historySessionId,
+      store: runtimeEventStore,
+      fetchPage: (request) => api.runtimeEventsPage(connection, request),
+      onPage: (page, initial) => {
+        if (!initial) return;
+        setChatHistoryLoadStates((current) => {
+          const prior = current[historySessionId];
+          const hasOlderPage = prior?.cursorSequence != null && prior.cursorSequence < page.previousSequence;
+          return { ...current, [historySessionId]: {
+            cursorSequence: hasOlderPage ? prior.cursorSequence : page.previousSequence,
+            hasMore: hasOlderPage ? prior.hasMore : page.hasMore,
+            loading: prior?.loading ?? false,
             totalMatchingEvents: page.totalMatchingEvents,
-          },
-        }));
-      })
-      .catch((historyError) => {
-        setError(historyError instanceof Error ? historyError.message : String(historyError));
-        setChatHistoryLoadStates((current) => ({
-          ...current,
-          [historySessionId]: {
-            cursorSequence: current[historySessionId]?.cursorSequence ?? beforeSequence,
-            hasMore: current[historySessionId]?.hasMore ?? true,
-            loading: false,
-            totalMatchingEvents: current[historySessionId]?.totalMatchingEvents ?? null,
-          },
-        }));
-      })
-      .finally(() => {
-        chatHistoryLoadingSessionIdsRef.current.delete(historySessionId);
-      });
-
-    return undefined;
-  }, [
-    latestServerSequence,
-    connection,
-    selectedPagedSessionEvents.length,
-    selectedRuntimeEventCount,
-    selectedSessionId,
-    setError,
-  ]);
-  useEffect(() => {
-    if (!connection || !selectedSessionId || isCodexHistorySessionId(selectedSessionId))
-      return undefined;
-    if (chatHistoryLoadingSessionIdsRef.current.has(selectedSessionId)) return undefined;
-    if (!latestServerSequence) return undefined;
-
-    const selectedEvents = mergeRuntimeEventLists(
-      selectedPagedSessionEvents,
-      runtimeEventStore.getSessionEvents(selectedSessionId),
-    );
-    const latestSelectedSequence = latestRuntimeEventSequence(selectedEvents);
-    if (!latestSelectedSequence || latestSelectedSequence >= latestServerSequence) return undefined;
-
-    const syncKey = `${selectedSessionId}:${latestSelectedSequence}:${latestServerSequence}`;
-    if (selectedForwardEventSyncKeyRef.current === syncKey) return undefined;
-    selectedForwardEventSyncKeyRef.current = syncKey;
-
-    let cancelled = false;
-    void api
-      .runtimeEventsPage(connection, {
-        sessionId: selectedSessionId,
-        afterSequence: latestSelectedSequence,
-        limit: CHAT_HISTORY_PAGE_LIMIT,
-      })
-      .then((page) => {
-        if (cancelled) return;
-        const pageEvents = page.events.map((entry) => entry.event);
-        if (pageEvents.length === 0) return;
-        setPagedSessionEvents((current) =>
-          mergeRuntimeEventsIntoSessionPageCache(current, selectedSessionId, pageEvents),
-        );
-      })
-      .catch((historyError) => {
-        if (cancelled) return;
-        selectedForwardEventSyncKeyRef.current = null;
-        setError(historyError instanceof Error ? historyError.message : String(historyError));
-      });
-
+          } };
+        });
+      },
+      onError: (error) => setError(error instanceof Error ? error.message : String(error)),
+    });
+    const refresh = () => { if (document.visibilityState === "visible") void sync.refresh(); };
+    void sync.refresh();
+    // A task can outlive a disconnected or suspended renderer. Reconcile its
+    // persisted events even when the global stream still appears connected.
+    const timer = window.setInterval(refresh, 10_000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("openpond-runtime-connected", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
-      cancelled = true;
+      sync.close();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("openpond-runtime-connected", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
-  }, [
-    latestServerSequence,
-    connection,
-    runtimeEventStore,
-    selectedPagedSessionEvents,
-    selectedSessionId,
-    setError,
-  ]);
+  }, [connection, runtimeEventStore, selectedSessionId, serverId, setError]);
   const selectedRuntimeIndexes = useMemo(() => {
     if (isCodexHistorySessionId(selectedSessionId))
       return buildRuntimeIndexes(codexHistoryEvents, []);

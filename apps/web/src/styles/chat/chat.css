@@ -1016,6 +1016,11 @@ button.user-message-attachment {
   cursor: progress;
 }
 
+.markdown-file-image-preview.error {
+  cursor: pointer;
+  padding: 12px;
+}
+
 .markdown-file-image-preview.loading span {
   display: block;
   width: 100%;
@@ -1251,7 +1256,6 @@ button.user-message-attachment {
   opacity: 0.55;
 }
 
-.message-content-size,
 .message-kv-cache-metric {
   color: inherit;
   font-size: 12px;
