@@ -4,6 +4,7 @@
   "description": "Portable immutable Harness releases, workspaces, improvements, traces, tools, and model identities for OpenPond",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/types/index.d.ts",
   "files": [
