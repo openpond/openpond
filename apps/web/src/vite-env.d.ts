@@ -288,6 +288,9 @@ interface Window {
       onRevealRequest: (callback: (request: BrowserRevealRequest) => void) => () => void;
     };
     files?: {
+      saveImage?: (input: { url: string; suggestedName: string }) => Promise<{
+        ok: boolean; canceled: boolean; path?: string; error?: string;
+      }>;
       reveal: (input: { path: string }) => Promise<{ ok: boolean; error?: string }>;
       saveAs: (input: { path: string; suggestedName: string }) => Promise<{
         ok: boolean;

@@ -143,6 +143,7 @@ export function createSessionStore(deps: {
         {
           ...session,
           ...input,
+          ...(input.title !== undefined ? { metadata: { ...session.metadata, ...input.metadata, titleSource: "manual", autoTitle: null } } : {}),
           updatedAt: session.updatedAt,
         },
         input

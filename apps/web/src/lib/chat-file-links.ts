@@ -6,6 +6,7 @@ export type ChatFilePathMatch = {
 
 export type ChatFilePathOptions = {
   workspaceRootPath?: string | null;
+  fileBasePath?: string | null;
 };
 
 export type ChatWorkspaceRootOptions = {
@@ -23,6 +24,7 @@ const FILE_EXTENSIONS = new Set([
   "cpp",
   "css",
   "csv",
+  "docx",
   "env",
   "gif",
   "go",
@@ -30,6 +32,7 @@ const FILE_EXTENSIONS = new Set([
   "h",
   "hpp",
   "html",
+  "htm",
   "ico",
   "java",
   "jpeg",
@@ -45,6 +48,8 @@ const FILE_EXTENSIONS = new Set([
   "mjs",
   "mov",
   "mp4",
+  "pdf",
+  "pptx",
   "png",
   "py",
   "rs",
@@ -56,6 +61,7 @@ const FILE_EXTENSIONS = new Set([
   "ts",
   "tsx",
   "txt",
+  "xlsx",
   "webp",
   "webm",
   "yaml",
@@ -113,10 +119,15 @@ export function normalizeChatFilePath(
   if (!displayPath || /^https?:\/\//i.test(displayPath)) return null;
   const pathWithResourceRef = normalizeFileUrlPath(normalizeResourceFileRefPath(displayPath));
   const pathWithoutLine = pathWithResourceRef.replace(/:\d+(?::\d+)?$/, "");
-  if (!isLikelyFilePath(pathWithoutLine)) return null;
+  if (!isLikelyFilePath(pathWithoutLine.replace(/(\.html?)[?#].*$/i, "$1"))) return null;
   return {
     displayPath,
-    path: normalizeWorkspacePath(pathWithoutLine, options.workspaceRootPath),
+    path: normalizeWorkspacePath(
+      options.fileBasePath && !/^(?:workspace|sandbox):file:/i.test(displayPath) && !/^(?:[~/\\]|[A-Za-z]:|(?:workspace|sandbox):file:)/.test(pathWithoutLine)
+        ? `${options.fileBasePath.replace(/[\\/]+$/, "")}/${pathWithoutLine.replace(/^\.\//, "")}`
+        : pathWithoutLine,
+      options.workspaceRootPath,
+    ),
   };
 }
 
@@ -134,7 +145,8 @@ function normalizeResourceFileRefPath(path: string): string {
 function normalizeFileUrlPath(path: string): string {
   if (!/^file:\/\//i.test(path)) return path;
   try {
-    return decodeURIComponent(new URL(path).pathname);
+    const url = new URL(path);
+    return decodeURIComponent(url.pathname) + (/\.html?$/i.test(url.pathname) ? url.search + url.hash : "");
   } catch {
     return path.replace(/^file:\/\//i, "");
   }
@@ -151,9 +163,11 @@ function normalizeWorkspacePath(path: string, workspaceRootPath: string | null |
 }
 
 function isLikelyFilePath(path: string): boolean {
+  if (/[\n\r]/.test(path) || /^[^/\\]*\s/.test(path) || /[=;?<>|]/.test(path)) return false;
+  if (/[\\/]$/.test(path) && /[^.~/\\]/.test(path)) return true;
   const fileName = path.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? path;
   if (EXTENSIONLESS_FILES.has(fileName)) return true;
-  if (fileName.startsWith(".") && fileName.length > 1) return true;
+  if (/^\.[A-Za-z_]/.test(fileName)) return true;
   const extension = fileName.includes(".") ? fileName.split(".").at(-1)?.toLowerCase() : null;
   return Boolean(extension && FILE_EXTENSIONS.has(extension));
 }
@@ -164,4 +178,10 @@ function isPathBoundary(value: string | undefined): boolean {
 
 function trimTrailingPathPunctuation(value: string): string {
   return value.replace(/[.,;!?]+$/, "").replace(/[\])}]+$/, "");
+}
+
+/** Only an explicit file-list declaration supplies a base for the following list. */
+export function chatFileListDirectory(content: string): string | null {
+  const match = /^(?:#{1,6}\s*)?(?:\*\*)?(?:files|outputs|deliverables|everything)(?:\*\*)?\s*(?:(?:is|are)\s+)?(?:\(\s*)?(?:in|at|under|:)\s*`((?:~[\/]|[\/]|[A-Za-z]:[\/])[^`\n]+[\/])`/i.exec(content.trim());
+  return match?.[1] ?? null;
 }

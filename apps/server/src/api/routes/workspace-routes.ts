@@ -103,6 +103,22 @@ export async function handleWorkspaceRoutes({ deps, request, requestUrl, respons
     );
     return true;
   }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/html-previews") {
+    sendJson(response, 200, await deps.htmlContentPreviewPayload(await readJson(request)));
+    return true;
+  }
+  const sandboxHtmlPreviewMatch = /^\/v1\/sandboxes\/([^/]+)\/html-preview$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && sandboxHtmlPreviewMatch) {
+    const body = await readJson(request) as { path?: unknown };
+    sendJson(response, 200, await deps.sandboxHtmlPreviewPayload(decodeURIComponent(sandboxHtmlPreviewMatch[1]!), typeof body?.path === "string" ? body.path : null));
+    return true;
+  }
+  const htmlPreviewMatch = /^\/v1\/workspaces\/([^/]+)\/html-preview$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && htmlPreviewMatch) {
+    const body = await readJson(request) as { path?: unknown };
+    sendJson(response, 200, await deps.workspaceHtmlPreviewPayload(decodeURIComponent(htmlPreviewMatch[1]!), typeof body?.path === "string" ? body.path : null));
+    return true;
+  }
   const workspaceFileMatch = /^\/v1\/workspaces\/([^/]+)\/file$/.exec(requestUrl.pathname);
   if (request.method === "GET" && workspaceFileMatch) {
     sendJson(

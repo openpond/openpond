@@ -122,11 +122,7 @@ import {
 } from "./codex-history.js";
 import { createCodexStatusService } from "./codex-status-service.js";
 import { createSessionStore } from "./store/session-store.js";
-import {
-  autoTitlePromptFromPayload,
-  createSessionTitleService,
-  withPendingAutoTitle,
-} from "./session-title-service.js";
+import { createSessionTitleService } from "./session-title-service.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
@@ -379,6 +375,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     checkoutWorkspaceBranchPayload,
     workspaceDiffPayload,
     workspaceFilePayload,
+    workspaceHtmlPreviewPayload,
+    htmlContentPreviewPayload,
+    sandboxHtmlPreviewPayload,
     saveWorkspaceFilePayload,
     workspaceImagePayload,
     workspaceLspTouchPayload,
@@ -480,17 +479,11 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   });
   const sessionTitleService = createSessionTitleService({
     appendRuntimeEvent,
-    getSession,
+    store,
     logger,
     stream: streamOpenPondHostedChatTurn,
-    updateSession,
   });
-  const createSessionWithAutoTitle: typeof createSession = async (payload) => {
-    const prompt = autoTitlePromptFromPayload(payload);
-    const session = await createSession(withPendingAutoTitle(payload));
-    if (prompt) sessionTitleService.schedule(session.id, prompt);
-    return session;
-  };
+  const createSessionWithAutoTitle = sessionTitleService.wrapCreateSession(createSession);
 
   const {
     activeWorkspace,
@@ -1816,6 +1809,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       checkoutWorkspaceBranchPayload,
       workspaceDiffPayload,
       workspaceFilePayload,
+      workspaceHtmlPreviewPayload,
+      htmlContentPreviewPayload,
+      sandboxHtmlPreviewPayload,
       saveWorkspaceFilePayload,
       workspaceImagePayload,
       ...createMediaPayloads(attachmentRootDir, storeDir),
@@ -1929,6 +1925,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     closeEventSubscribers,
     terminalWebSockets,
     runtimeClosers: [
+      sessionTitleService.close,
       ()=>closeCoordinatedEvaluations({schedules,localExperiments,benchmarks:harnessRefinerBenchmarks,improvements,advancedBoundary,drainWork:turnRunner.close}),
       trainingApi.learning.close,
       waitForOpenPondRefresh,

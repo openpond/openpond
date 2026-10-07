@@ -48,7 +48,7 @@ function compactionDetail(
 }
 
 function isProviderManagedExternally(provider: ChatProvider): boolean {
-  return provider === "codex";
+  return provider === "codex" || provider === "claude-code";
 }
 
 function isOpenPondHostedProvider(provider: ChatProvider): boolean {
@@ -77,26 +77,30 @@ export function contextWindowStatusFromUsage(input: {
     const summary = `${percent}% full`;
     const tokensLabel = `${formatTokenCount(usedTokens)} / ${formatTokenCount(maxTokens)} tokens used`;
 
+    const detail = isProviderManagedExternally(input.provider)
+      ? `Context and compaction are managed by ${input.provider === "claude-code" ? "Claude Code" : "Codex app-server"}.`
+      : compactionDetail(input.preferences, percent);
     return {
       usedTokens,
       maxTokens,
       percent,
       summary,
       tokensLabel,
-      detail: compactionDetail(input.preferences, percent),
-      tooltip: `Context window: ${summary} ${tokensLabel}. ${compactionDetail(input.preferences, percent)}`,
+      detail,
+      tooltip: `Context window: ${summary} ${tokensLabel}. ${detail}`,
       tone: contextTone(percent),
     };
   }
 
   if (isProviderManagedExternally(input.provider)) {
-    const detail = "Context is managed by Codex app-server.";
+    const providerName = input.provider === "claude-code" ? "Claude Code" : "Codex app-server";
+    const detail = `Context is managed by ${providerName}.`;
     return {
       usedTokens: 0,
       maxTokens: null,
       percent: null,
       summary: "Managed externally",
-      tokensLabel: "Codex app-server",
+      tokensLabel: providerName,
       detail,
       tooltip: `Context window: ${detail}`,
       tone: "unknown",

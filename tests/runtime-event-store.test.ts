@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
 import { RuntimeEventStore } from "../apps/web/src/lib/runtime-event-store";
+import { createSessionEventSync } from "../apps/web/src/lib/session-event-sync";
+import type { RuntimeEventPagePayload } from "../apps/web/src/api";
 
 describe("RuntimeEventStore", () => {
   test("routes one batch to exact sessions and preserves unaffected snapshots", () => {
@@ -147,6 +149,59 @@ describe("RuntimeEventStore", () => {
     ]);
   });
 });
+
+// A live connection can miss a range while a later event still arrives. The
+// visible transcript must recover the gap, including the completion status.
+test("reconciles a stale visible chat across paged gaps and overlapping live events", async () => {
+  const store = new RuntimeEventStore();
+  store.append([event("a-1", "a", 1), event("other-100", "other", 100)]);
+  const pages = [page([1, 2]), page([3], true), page([4, 5])];
+  pages[2]!.events[1]!.event.name = "turn.completed";
+  const fetchPage = vi.fn(async () => pages.shift()!);
+  const errors = vi.fn();
+  const sync = createSessionEventSync({ sessionId: "a", store, fetchPage, onPage: () => undefined, onError: errors });
+  await sync.refresh();
+  expect(fetchPage.mock.calls[0]).toEqual([{ sessionId: "a", beforeSequence: Number.MAX_SAFE_INTEGER, limit: 500 }]);
+  store.append([event("a-4", "a", 4)]);
+  await sync.refresh();
+  expect(fetchPage.mock.calls.slice(1)).toEqual([
+    [{ sessionId: "a", afterSequence: 2, limit: 500 }],
+    [{ sessionId: "a", afterSequence: 3, limit: 500 }],
+  ]);
+  expect(store.getSessionEvents("a").map((item) => item.sequence)).toEqual([1, 2, 3, 4, 5]);
+  expect(store.getSessionEvents("a").at(-1)?.name).toBe("turn.completed");
+  expect(store.getSessionEvents("other").map((item) => item.sequence)).toEqual([100]);
+  expect(errors).not.toHaveBeenCalled();
+  sync.close();
+});
+
+// Switching servers/tasks while a read is pending must not restore data into a
+// cleared store. A failed read must also remain retryable without skipping it.
+test("retries failed visible-chat reads and ignores responses after disposal", async () => {
+  const store = new RuntimeEventStore();
+  let finish!: (value: RuntimeEventPagePayload) => void;
+  const delayed = new Promise<RuntimeEventPagePayload>((resolve) => { finish = resolve; });
+  const fetchPage = vi.fn().mockRejectedValueOnce(new Error("offline")).mockReturnValueOnce(delayed);
+  const errors = vi.fn();
+  const onPage = vi.fn();
+  const sync = createSessionEventSync({ sessionId: "a", store, fetchPage, onPage, onError: errors });
+  await sync.refresh();
+  expect(errors).toHaveBeenCalledOnce();
+  const pending = sync.refresh();
+  expect(fetchPage.mock.calls[1]).toEqual(fetchPage.mock.calls[0]);
+  sync.close();
+  store.clear();
+  finish(page([1, 2]));
+  await pending;
+  expect(store.getAllEvents()).toEqual([]);
+  expect(onPage).not.toHaveBeenCalled();
+});
+
+function page(sequences: number[], hasMore = false): RuntimeEventPagePayload {
+  return { sessionId: "a", events: sequences.map((sequence) => ({ sequence, event: event(`a-${sequence}`, "a", sequence) })),
+    afterSequence: 0, beforeSequence: null, nextSequence: sequences.at(-1) ?? 0, previousSequence: sequences[0] ?? 0,
+    limit: 500, hasMore, totalMatchingEvents: 5, remainingMatchingEvents: hasMore ? 3 : sequences.length };
+}
 
 function event(id: string, sessionId: string, sequence: number): RuntimeEvent {
   return {

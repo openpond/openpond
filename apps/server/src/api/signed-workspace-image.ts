@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 import path from "node:path";
+import { homedir } from "node:os";
 import {
   localVideoContentType,
   normalizeWorkspaceFilePath,
@@ -266,6 +267,7 @@ function normalizeSignedLocalAssetPath(value: string): string | null {
       cleaned = cleaned.replace(/^file:\/\//, "");
     }
   }
+  if (cleaned.startsWith("~/")) cleaned = path.join(homedir(), cleaned.slice(2));
   if (!path.isAbsolute(cleaned)) return null;
   return path.resolve(cleaned);
 }

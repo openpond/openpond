@@ -21,7 +21,7 @@ export function WorkspaceFileTree({
   repoFiles: string[];
   selectedPath?: string | null;
   getFileBookmarkStatus?: (path: string) => SidebarFileStatus | null;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (path: string, options?: { source?: boolean }) => void;
   onSetFileBookmarkStatus?: (
     path: string,
     status: SidebarFileStatus | "none",
@@ -76,7 +76,7 @@ function FileTreeNodeRow({
   rootPath?: string | null;
   selectedPath?: string | null;
   getFileBookmarkStatus?: (path: string) => SidebarFileStatus | null;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (path: string, options?: { source?: boolean }) => void;
   onSetFileBookmarkStatus?: (
     path: string,
     status: SidebarFileStatus | "none",
@@ -140,6 +140,11 @@ function FileTreeNodeRow({
           </small>
         )}
       </button>
+      {/\.html?$/i.test(resolvedPath) && (
+        <button type="button" className="workspace-file-tree-bookmark-actions" title="View source" aria-label={`View source for ${node.name}`} onClick={() => onOpenFile(resolvedPath, { source: true })}>
+          &lt;/&gt;
+        </button>
+      )}
       {onSetFileBookmarkStatus ? (
         <WorkspaceFileBookmarkActions
           className="workspace-file-tree-bookmark-actions"

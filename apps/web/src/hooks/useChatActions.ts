@@ -732,6 +732,7 @@ export function useChatActions({
         : undefined);
     setError(null);
     let turnSessionId: string | null = null;
+    let turnAccepted = false;
     let pendingUserMessage: PendingChatUserMessage | null = null;
     try {
       if (!repositoryWorkTurn && providerForTurn === "codex") {
@@ -1270,6 +1271,7 @@ export function useChatActions({
             )
           : undefined,
       });
+      turnAccepted = true;
       refreshBootstrapAfterAcceptedTurn(connection);
       const workspaceId = session.workspaceId ?? session.appId;
       if (
@@ -1301,7 +1303,7 @@ export function useChatActions({
                 : candidate
             )
           );
-        } else {
+        } else if (!turnAccepted) {
           setSessions((current) =>
             current.map((candidate) =>
               candidate.id === turnSessionId && candidate.status === "active"
