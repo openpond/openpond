@@ -2,6 +2,7 @@ import type { ServerResponse } from "node:http";
 import type { RuntimeEvent } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import { sanitizeRuntimeEvent } from "./runtime-event-sanitizer.js";
+import { createRuntimeEventWriteQueue } from "./runtime-event-write-queue.js";
 
 type RuntimeEventLogger = {
   info(message: string, metadata?: Record<string, unknown>): void;
@@ -24,6 +25,7 @@ type RuntimeEventSubscriber = {
 
 const DEFAULT_ASSISTANT_DELTA_FLUSH_MS = 40;
 const MAX_ASSISTANT_DELTA_BUFFER_CHARS = 4096;
+const MAX_PENDING_ASSISTANT_STREAMS = 128;
 const MAX_PENDING_SUBSCRIBER_EVENTS = 1_000;
 const EVENT_CATCHUP_PAGE_SIZE = 500;
 
@@ -56,6 +58,7 @@ export function createRuntimeEventBus({
   const subscribers = new Set<RuntimeEventSubscriber>();
   const runtimeListeners = new Set<(event: RuntimeEvent) => void>();
   const pendingAssistantDeltas = new Map<string, PendingAssistantDelta>();
+  const writes = createRuntimeEventWriteQueue(persistAndBroadcastRuntimeEvent);
 
   function logRuntimeEvent(runtimeEvent: RuntimeEvent): void {
     if (
@@ -175,54 +178,66 @@ export function createRuntimeEventBus({
   }
 
   async function appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void> {
+    await writes.waitForCapacity();
     const safeRuntimeEvent = sanitizeRuntimeEvent(runtimeEvent);
     if (isCoalescibleAssistantDelta(safeRuntimeEvent)) {
-      queueAssistantDelta(safeRuntimeEvent);
+      await queueAssistantDelta(safeRuntimeEvent);
       return;
     }
     await flushAssistantDeltas();
-    await persistAndBroadcastRuntimeEvent(safeRuntimeEvent);
+    await writes.append(safeRuntimeEvent);
   }
 
   async function closeEventSubscribers(): Promise<void> {
-    await flushAssistantDeltas();
-    for (const subscriber of Array.from(subscribers)) {
-      subscribers.delete(subscriber);
-      try {
-        subscriber.response.end();
-      } catch {
-        subscriber.response.destroy();
+    try {
+      await flushAssistantDeltas();
+    } finally {
+      for (const subscriber of Array.from(subscribers)) {
+        subscribers.delete(subscriber);
+        try {
+          subscriber.response.end();
+        } catch {
+          subscriber.response.destroy();
+        }
       }
     }
   }
 
-  function queueAssistantDelta(runtimeEvent: RuntimeEvent): void {
+  async function queueAssistantDelta(runtimeEvent: RuntimeEvent): Promise<void> {
     const key = assistantDeltaKey(runtimeEvent);
-    const existing = pendingAssistantDeltas.get(key);
-    if (existing) {
-      existing.event = {
-        ...existing.event,
-        output: `${existing.event.output ?? ""}${runtimeEvent.output ?? ""}`,
-        timestamp: runtimeEvent.timestamp,
-      };
-      resetAssistantDeltaTimer(key, existing);
-      if ((existing.event.output ?? "").length >= MAX_ASSISTANT_DELTA_BUFFER_CHARS) {
-        void flushAssistantDelta(key).catch((error) => {
-          logger.warn("assistant delta flush failed", { error });
-        });
+    const output = runtimeEvent.output ?? "";
+    let offset = 0;
+    while (offset < output.length) {
+      while (!pendingAssistantDeltas.has(key) && pendingAssistantDeltas.size >= MAX_PENDING_ASSISTANT_STREAMS) {
+        await flushAssistantDeltas();
       }
-      return;
+      const existing = pendingAssistantDeltas.get(key);
+      const used = existing?.event.output?.length ?? 0;
+      let end = Math.min(output.length, offset + MAX_ASSISTANT_DELTA_BUFFER_CHARS - used);
+      // Don't turn a split surrogate pair into invalid UTF-8 in remote storage.
+      if (end < output.length && /[\uD800-\uDBFF]/.test(output[end - 1] ?? "")
+        && /[\uDC00-\uDFFF]/.test(output[end] ?? "")) end -= 1;
+      if (end === offset) {
+        await flushAssistantDelta(key);
+        continue;
+      }
+      const fragment = output.slice(offset, end);
+      if (existing) {
+        existing.event = { ...existing.event, output: `${existing.event.output ?? ""}${fragment}`, timestamp: runtimeEvent.timestamp };
+      } else {
+        const pending: PendingAssistantDelta = { event: { ...runtimeEvent,
+          id: offset === 0 ? runtimeEvent.id : `${runtimeEvent.id}:part:${offset}`, output: fragment }, timer: null };
+        pendingAssistantDeltas.set(key, pending);
+        startAssistantDeltaTimer(key, pending);
+      }
+      offset = end;
+      if (offset < output.length || (pendingAssistantDeltas.get(key)?.event.output?.length ?? 0) >= MAX_ASSISTANT_DELTA_BUFFER_CHARS) {
+        await flushAssistantDelta(key);
+      }
     }
-    const pending: PendingAssistantDelta = {
-      event: runtimeEvent,
-      timer: null,
-    };
-    pendingAssistantDeltas.set(key, pending);
-    resetAssistantDeltaTimer(key, pending);
   }
 
-  function resetAssistantDeltaTimer(key: string, pending: PendingAssistantDelta): void {
-    if (pending.timer) clearTimeout(pending.timer);
+  function startAssistantDeltaTimer(key: string, pending: PendingAssistantDelta): void {
     pending.timer = setTimeout(() => {
       void flushAssistantDelta(key).catch((error) => {
         logger.warn("assistant delta flush failed", { error });
@@ -233,6 +248,7 @@ export function createRuntimeEventBus({
   async function flushAssistantDeltas(): Promise<void> {
     const keys = Array.from(pendingAssistantDeltas.keys());
     for (const key of keys) await flushAssistantDelta(key);
+    await writes.drain();
   }
 
   async function flushAssistantDelta(key: string): Promise<void> {
@@ -240,7 +256,7 @@ export function createRuntimeEventBus({
     if (!pending) return;
     pendingAssistantDeltas.delete(key);
     if (pending.timer) clearTimeout(pending.timer);
-    await persistAndBroadcastRuntimeEvent(pending.event);
+    await writes.append(pending.event);
   }
 
   return {
