@@ -170,16 +170,18 @@ describe("runtime event bus assistant delta coalescing", () => {
         events.push(persisted); active -= 1; return persisted;
       } } as SqliteStore });
     const producer = (async () => {
-      for (let index = 0; index < 20; index += 1) {
+      for (let index = 0; index < 100; index += 1) {
         await bus.appendRuntimeEvent(runtimeEvent(`stream-${index}`, { name: "assistant.reasoning.delta", output: "A" }));
         produced += 1;
-        await delay(8);
+        // Chunks keep arriving faster than the flush window; the deadline
+        // must stay tied to the first chunk rather than being postponed.
+        await delay(2);
       }
     })();
     try {
       await vi.advanceTimersByTimeAsync(1000);
       expect(maximumActive).toBe(1);
-      expect(produced).toBeLessThan(20);
+      expect(produced).toBeLessThan(100);
       expect(events).toHaveLength(0);
     } finally {
       release();
@@ -188,7 +190,7 @@ describe("runtime event bus assistant delta coalescing", () => {
       await bus.closeEventSubscribers();
       vi.useRealTimers();
     }
-    expect(events.map(event => event.output).join("")).toBe("A".repeat(20));
+    expect(events.map(event => event.output).join("")).toBe("A".repeat(100));
   });
 
   test("compacts large command output before persistence and streaming", async () => {
