@@ -50,11 +50,11 @@ describe("Profile evaluation run inspection", () => {
     const harnessRelease = { id: "harness", contentHash: contentHash("harness") };
     const manifest = { ...run.manifest, profileEvaluation: { sourceRevision: "revision", harnessRelease, target: { kind: "profile" as const } },
       policy: { kind: "model", model: { provider: "openpond", model: "test-model" } } };
-    const events = [{ id: "event", turnId: "turn", name: "assistant.delta", output: "pond" },
-      { id: "completed", turnId: "turn", name: "turn.completed", output: "" }];
+    const events = [{ id: "event", turnId: "turn", name: "assistant.delta", output: "pond", data: { providerRequestId: "fixture-response" } },
+      { id: "completed", turnId: "turn", name: "turn.completed", data: { providerResponse: { requestId: "fixture-response", contentHash: contentHash("pond") } } }];
     const session = { id: "session", currentProfile: profileRef, metadata: {
       profileEvaluationRun: { id: manifest.id, contentHash: manifest.contentHash }, taskId: receipt.taskId, seed: receipt.seed } };
-    const turn = { id: "turn", sessionId: session.id, startedAt: "2026-09-30T00:00:00Z", completedAt: "2026-09-30T00:00:01Z",
+    const turn = { id: "turn", sessionId: session.id, status: "completed", startedAt: "2026-09-30T00:00:00Z", completedAt: "2026-09-30T00:00:01Z",
       prompt: "Return pond", error: null, modelRef: { providerId: "openpond", modelId: "test-model" }, harnessSnapshot: { harnessRelease } };
     const retainedReceipt = { ...receipt, startedAt: turn.startedAt, completedAt: turn.completedAt,
       traceHash: contentHash(events), outputHash: contentHash({ text: "pond" }), metadata: { retainedEvidenceRef: { sessionId: session.id, turnId: turn.id } } };

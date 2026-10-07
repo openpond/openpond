@@ -71,7 +71,9 @@ test("bounded Profile cases require the exact host-authorized run ceiling before
   const sendTurn = vi.fn(async () => ({ id: "evaluation-turn", status: "completed", startedAt: manifest.createdAt,
     completedAt: manifest.createdAt, modelRef, harnessSnapshot: { harnessRelease } }) as Turn);
   const execute = createProfileWorkflowEvaluationExecutor({ manifest: bounded, profileRef, binding, modelRef,
-    modelConfigurationHash, createSession, sendTurn, runtimeEventsForTurn: async () => [] });
+    modelConfigurationHash, createSession, sendTurn, runtimeEventsForTurn: async () => [{
+      id: "final", name: "turn.completed", timestamp: manifest.createdAt, data: { providerResponse: { requestId: "fixture-response", contentHash: contentHash("") } },
+    }] });
   const member = { task: { id: task.id, input: task.input, policyVisibleContext: {}, artifactRefs: [], tags: [] }, seed: "1", source };
   vi.stubEnv("OPENPOND_API_KEY", "");
   vi.stubEnv("OPENPOND_OPCHAT_API_URL", "");
@@ -104,8 +106,8 @@ test("workflow case runs in an exact source-bound app-server session", async () 
     harnessSnapshot: { harnessRelease },
   }) as Turn);
   const runtimeEventsForTurn = vi.fn(async () => ([{
-    id: "assistant-event", name: "assistant.delta", timestamp: manifest.createdAt, output: "done",
-  }] as RuntimeEvent[]));
+    id: "assistant-event", name: "assistant.delta", timestamp: manifest.createdAt, output: "done", data: { providerRequestId: "fixture-response" },
+  }, { id: "final", name: "turn.completed", timestamp: manifest.createdAt, data: { providerResponse: { requestId: "fixture-response", contentHash: contentHash("done") } } }] as RuntimeEvent[]));
   const execute = createProfileWorkflowEvaluationExecutor({
     manifest, profileRef, binding, modelRef, modelConfigurationHash,
     createSession, sendTurn, runtimeEventsForTurn,
@@ -123,18 +125,19 @@ test("workflow case runs in an exact source-bound app-server session", async () 
   }));
   expect(JSON.stringify(sendTurn.mock.calls[0])).not.toContain("expectedOutput");
   expect(result.evidence.output).toEqual({ text: "done" });
-  expect(result.evidence.runtimeEventRefs).toEqual(["assistant-event"]);
+  expect(result.evidence.runtimeEventRefs).toEqual(["assistant-event", "final"]);
   expect(result.terminal).toBe(true);
 });
 
 test("long streamed workflow turns keep complete output and bounded grader evidence", async () => {
   const deltas = Array.from({ length: 10_001 }, (_, index) => ({
     id: `delta-${index}`, name: "assistant.delta", timestamp: manifest.createdAt,
-    output: index === 10_000 ? "done" : "",
+    output: index === 10_000 ? "done" : "", data: { providerRequestId: "fixture-response" },
   })) as RuntimeEvent[];
   const events = [
     { id: "action-result", name: "workspace_action_result", timestamp: manifest.createdAt },
     ...deltas,
+    { id: "final", name: "turn.completed", timestamp: manifest.createdAt, data: { providerResponse: { requestId: "fixture-response", contentHash: contentHash("done") } } },
   ] as RuntimeEvent[];
   const execute = createProfileWorkflowEvaluationExecutor({
     manifest, profileRef, binding, modelRef, modelConfigurationHash,
@@ -150,7 +153,7 @@ test("long streamed workflow turns keep complete output and bounded grader evide
     seed: "1", source,
   });
   expect(result.evidence.output).toEqual({ text: "done" });
-  expect(result.evidence.runtimeEventRefs).toEqual(["action-result", "delta-10000"]);
+  expect(result.evidence.runtimeEventRefs).toEqual(["action-result", "delta-10000", "final"]);
   expect(result.traceHash).toBe(contentHash(events));
   let overflowHash:string|undefined;
   const bounded=createProfileWorkflowEvaluationExecutor({manifest,profileRef,binding,modelRef,modelConfigurationHash,
@@ -200,7 +203,8 @@ test("Skill case sends only policy-visible input through its exact component bin
     manifest: componentManifest, profileRef, binding: componentBinding,
     modelRef, modelConfigurationHash, createSession, sendTurn,
     runtimeEventsForTurn: async () => ([{
-      id: "skill-output", name: "assistant.delta", timestamp: manifest.createdAt, output: "reviewed",
+      id: "skill-output", name: "assistant.delta", timestamp: manifest.createdAt, output: "reviewed", data: { providerRequestId: "fixture-response" },
+    }, { id: "skill-final", name: "turn.completed", timestamp: manifest.createdAt, data: { providerResponse: { requestId: "fixture-response", contentHash: contentHash("reviewed") } },
     }] as RuntimeEvent[]),
   });
   const result = await execute({
@@ -301,7 +305,8 @@ test("whole-Profile case uses the bound release without a workflow input", async
     manifest: componentManifest, profileRef, binding: componentBinding,
     modelRef, modelConfigurationHash, createSession, sendTurn,
     runtimeEventsForTurn: async () => ([{
-      id: "profile-output", name: "assistant.delta", timestamp: manifest.createdAt, output: "complete",
+      id: "profile-output", name: "assistant.delta", timestamp: manifest.createdAt, output: "complete", data: { providerRequestId: "fixture-response" },
+    }, { id: "profile-final", name: "turn.completed", timestamp: manifest.createdAt, data: { providerResponse: { requestId: "fixture-response", contentHash: contentHash("complete") } },
     }] as RuntimeEvent[]),
   });
   const result = await execute({
