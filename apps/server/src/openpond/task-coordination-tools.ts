@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TASK_INPUT_MAX_CHARS } from "@openpond/contracts";
+import { TASK_INPUT_MAX_CHARS } from "@openpond/contracts/task-inbox";
 import type { TaskInboxRuntime } from "../runtime/task-inbox/runtime.js";
 import type { ModelToolDefinition, ModelToolExecutionContext } from "./model-tool-registry.js";
 

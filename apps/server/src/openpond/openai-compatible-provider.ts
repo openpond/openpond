@@ -1,12 +1,6 @@
 import { createHash } from "node:crypto";
-import {
-  ProviderModelSchema,
-  type ProviderId,
-  type CodexReasoningEffort,
-  type ProviderModel,
-  type ProviderModelCapabilities,
-  type ProviderSettings,
-} from "@openpond/contracts";
+import { ProviderModelSchema, type ProviderId, type ProviderModel, type ProviderModelCapabilities, type ProviderSettings } from "@openpond/contracts/providers";
+import { type CodexReasoningEffort } from "@openpond/contracts/settings";
 import type {
   HostedChatMessage,
   HostedChatContinuation,

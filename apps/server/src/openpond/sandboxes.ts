@@ -11,7 +11,7 @@ import type {
   SandboxIntegrationConnectionStatusFilter,
   SandboxScheduleCreateInput,
 } from "openpond-sdk";
-import { buildConnectedAppStatusRows } from "@openpond/contracts";
+import { buildConnectedAppStatusRows } from "@openpond/contracts/connected-apps";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { RuntimeAccountContext } from "@openpond/runtime";
 import {

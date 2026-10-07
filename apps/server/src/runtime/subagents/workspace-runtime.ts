@@ -1,13 +1,9 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  SubagentRunSchema,
-  type RuntimeEvent,
-  type Session,
-  type SubagentRoleSettings,
-  type SubagentRun,
-} from "@openpond/contracts";
+import { SubagentRunSchema, type SubagentRoleSettings, type SubagentRun } from "@openpond/contracts/subagents";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 import { resolveWorkspaceExecutionTarget } from "../../workspace/workspace-execution-target.js";
 import { runWorkspaceCommand, truncatePatch } from "../../workspace/workspaces.js";
 import { now, textFromUnknown } from "../../utils.js";

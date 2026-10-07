@@ -25,9 +25,9 @@ import {
 import { isArtifactCollectionRecoveryTransition, isCheckpointResumeTransition } from "./model-run-recovery-transitions.js";
 export { isCheckpointResumeTransition } from "./model-run-recovery-transitions.js";
 import type { PayloadRow } from "../types.js";
-import { SqliteConversationServingStore } from "./store-conversation-serving.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
-export class SqliteTrainingModelStore extends SqliteConversationServingStore {
+export class SqliteTrainingModelStore extends SqliteStoreDomain {
   async saveModelCurrencySnapshot(snapshotInput: ModelCurrencySnapshot): Promise<ModelCurrencySnapshot> {
     const snapshot = ModelCurrencySnapshotSchema.parse(snapshotInput);
     const existing = await this.getModelCurrencySnapshot(snapshot.id);
@@ -802,35 +802,6 @@ export class SqliteTrainingModelStore extends SqliteConversationServingStore {
       profileId ? [profileId] : [],
       ModelBindingSchema.parse,
     );
-  }
-
-  protected async upsertPayload(sql: string, params: unknown[]): Promise<void> {
-    await this.ready;
-    const write = this.writeQueue.then(() => this.run(sql, params));
-    this.writeQueue = write.catch(() => undefined);
-    await write;
-  }
-
-  protected async listParsedPayloads<T>(
-    sql: string,
-    params: unknown[],
-    parse: (value: unknown) => T,
-  ): Promise<T[]> {
-    await this.ready;
-    await this.writeQueue;
-    const rows = await this.all<PayloadRow>(sql, params);
-    return rows.map((row) => parse(JSON.parse(row.payload)));
-  }
-
-  protected async getParsedPayload<T>(
-    sql: string,
-    params: unknown[],
-    parse: (value: unknown) => T,
-  ): Promise<T | null> {
-    await this.ready;
-    await this.writeQueue;
-    const row = await this.get<PayloadRow>(sql, params);
-    return row ? parse(JSON.parse(row.payload)) : null;
   }
 }
 

@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { ResolveApprovalRequestSchema, type Approval, type RuntimeEvent } from "@openpond/contracts";
+import { ResolveApprovalRequestSchema } from "@openpond/contracts/requests";
+import { type Approval } from "@openpond/contracts/approvals";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
 import type { AcpPermissionRequest, AcpPermissionResult } from "@openpond/agent-runtime";
 import { event, now } from "../../utils.js";
 import { z } from "zod";

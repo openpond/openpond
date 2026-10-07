@@ -1,12 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { HarnessSourceManifestSchema } from "@openpond/contracts";
+import { HarnessSourceManifestSchema } from "@openpond/contracts/harness-sources";
 
 import type { ModelToolDefinition } from "../openpond/model-tool-registry.js";
 import type { HarnessStateStore } from "../store/harness-state-store.js";
 import { loadLocalHarnessRuntimeForAgentRun } from "./local-harness-run-overlay.js";
-import { inspectRefinerProfile, updateRefinerProfile } from "../refiner/refiner-profile-service.js";
 import { loadBundledAuthoringProfileSkill } from "../runtime/bundled-authoring-skills.js";
 
 const MAX_INSPECT_BYTES = 24_000;
@@ -24,7 +23,7 @@ export function createLocalHarnessModelToolDefinitions(input: {
       execute: async (context) => modelResult(
         context.callId,
         "refiner_profile_inspect",
-        await inspectRefinerProfile(input.storeDir),
+        await (await import("../refiner/refiner-profile-service.js")).inspectRefinerProfile(input.storeDir),
       ),
     },
     {
@@ -77,7 +76,7 @@ export function createLocalHarnessModelToolDefinitions(input: {
       },
       execute: async (context) => {
         const authoringSkill = await loadBundledAuthoringProfileSkill("openpond-refiner-authoring");
-        return modelResult(context.callId, "refiner_profile_update", await updateRefinerProfile(input.storeDir, {
+        return modelResult(context.callId, "refiner_profile_update", await (await import("../refiner/refiner-profile-service.js")).updateRefinerProfile(input.storeDir, {
           profile: context.args.profile,
           activate: context.args.activate,
           reason: boundedText(context.args.reason, 10_000),

@@ -1,13 +1,10 @@
-import {
-  type HarnessMemoryEntry,
-  type HarnessMemoryWrite,
-} from "@openpond/contracts";
+import { type HarnessMemoryEntry, type HarnessMemoryWrite } from "@openpond/contracts/harness-memory";
 import { contentHash } from "@openpond/harness";
 
 import type { PayloadRow } from "../types.js";
-import { SqliteSidebarFileBookmarkStore } from "./store-sidebar-file-bookmarks.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
-export class SqliteHarnessMemoryStore extends SqliteSidebarFileBookmarkStore {
+export class SqliteHarnessMemoryStore extends SqliteStoreDomain {
   async listHarnessMemories(
     workspaceId: string,
     options: { includeDeleted?: boolean } = {},

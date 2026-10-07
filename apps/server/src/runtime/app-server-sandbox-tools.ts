@@ -1,11 +1,7 @@
 import { Buffer } from "node:buffer";
 
-import {
-  WorkspaceToolResultSchema,
-  type Session,
-  type WorkspaceToolRequest,
-  type WorkspaceToolResult,
-} from "@openpond/contracts";
+import { WorkspaceToolResultSchema, type WorkspaceToolRequest, type WorkspaceToolResult } from "@openpond/contracts/workspace-tools";
+import { type Session } from "@openpond/contracts/sessions";
 
 import type { SandboxRequestAction } from "../openpond/sandboxes.js";
 

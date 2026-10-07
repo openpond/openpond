@@ -5,14 +5,14 @@ import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { validateTasksetPackage } from "openpond-sdk/taskset-packages";
 import type { streamOpenPondHostedChatTurn, loadOpenPondHostedModels } from "@openpond/runtime";
-import type { SqliteLocalExperimentStore } from "../store/store-local-experiments.js";
+import type { LocalExperimentStorage } from "../store/store-local-experiments.js";
 import { LocalExperimentScoreSchema, LocalExperimentExecutionSchema, LocalExperimentError, type LocalExperimentExecution } from "./local-experiment-contract.js";
 import { selectLocalPackageGraders } from "./local-experiment-admission.js";
 import { gradeLocalExperimentCase } from "./local-experiment-grading.js";
 import { localRetainedCase, sealLocalRetainedCase, localEvaluatorContext } from "./local-experiment-output.js";
 import { createLearningHostedJudgeProvider } from "../training/learning-hosted-judge-provider.js";
 
-export function createLocalExperimentScoring(deps:{runtimeEventsForTurn?:(id:string)=>Promise<import("@openpond/contracts").RuntimeEvent[]>;storeDir?:string;store:SqliteLocalExperimentStore;ownerId:string;requireTeam:(teamId:string)=>Promise<void>;
+export function createLocalExperimentScoring(deps:{runtimeEventsForTurn?:(id:string)=>Promise<import("@openpond/contracts").RuntimeEvent[]>;storeDir?:string;store:LocalExperimentStorage;ownerId:string;requireTeam:(teamId:string)=>Promise<void>;
   requireActor:(actorId:string)=>Promise<void>;
   requireExecution:(teamId:string,id:string)=>Promise<void>;
   streamForActor:(actorId:string,teamId:string)=>typeof streamOpenPondHostedChatTurn;

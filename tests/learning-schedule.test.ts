@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
 import { createLearningScheduleWorker, createLearningService, learningScheduleId, synchronizeLearningSchedule, type LearningRepository } from "@openpond/evals/learning";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { learningContext, learningNow } from "./helpers/learning-fixtures";
 import { learningIterationFixture } from "./helpers/learning-iteration-fixtures";
 import { withTempDirectory } from "./helpers/temp-directory";
@@ -16,7 +16,7 @@ describe("durable learning schedule fires", () => {
   // Downtime and duplicate replicas must not consume multiple batches or shift
   // a persisted occurrence to the retrying worker's current timestamp.
   test("coalesces downtime and preserves one exact fire across duplicate ticks and reopening", async () => withTempDirectory("learning-schedule-", async home => {
-    let store = new SqliteLearningStore(home);
+    let store = new SqliteStore(home);
     try {
       const time = clock(); const f = await learningIterationFixture(store.learningRepository(), time);
       const policy = await f.publishPolicy(); await f.approve(await f.submit());
@@ -28,7 +28,7 @@ describe("durable learning schedule fires", () => {
       const fire = await f.service.get(learningContext, "schedule_fire", first.lastFire!.id);
       expect(fire).toMatchObject({ scheduledAt: "2026-09-06T13:00:00.000Z", coalescedThroughAt: "2026-09-06T16:00:00.000Z", coalescedCount: 3, outcome: "reserved" });
       expect(first.nextRunAt).toBe("2026-09-06T17:00:00.000Z");
-      await store.close(); store = new SqliteLearningStore(home);
+      await store.close(); store = new SqliteStore(home);
       expect(await createLearningScheduleWorker(store.learningRepository(), { executionOwner: "hosted", now: time.now }).run(learningContext.scope, id, "restarted")).toEqual(first);
       const service = createLearningService(store.learningRepository());
       expect((await service.list(learningContext, "consumption")).items).toHaveLength(1);
@@ -40,7 +40,7 @@ describe("durable learning schedule fires", () => {
   // Approval changes eligibility, not cadence. A waiting timer consumes no
   // budget, and an active training/review chain prevents an overlapping batch.
   test("waits for human review until the next fire and records active-chain skips", async () => withTempDirectory("learning-schedule-review-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const time = clock(); const f = await learningIterationFixture(store.learningRepository(), time);
       const policy = await f.publishPolicy(); const evidence = await f.submit();
@@ -66,7 +66,7 @@ describe("durable learning schedule fires", () => {
   // Routine policy edits preserve the pending due time. Pausing prevents a
   // launch, and resuming or changing cadence establishes a new future timer.
   test("synchronizes policy edits and pause/resume atomically", async () => withTempDirectory("learning-schedule-edits-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const time = clock(); const f = await learningIterationFixture(store.learningRepository(), time);
       let policy = await f.publishPolicy(); const id = learningScheduleId(policy.id);
@@ -98,7 +98,7 @@ describe("durable learning schedule fires", () => {
   // A crash after sealing a batch but before the fire commits must roll back
   // consumption, retain the due identity, and stop retrying after its limit.
   test("rolls back partial reservation and bounds retries without losing the original fire", async () => withTempDirectory("learning-schedule-rollback-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const time = clock(); const repository = store.learningRepository();
       const f = await learningIterationFixture(repository, time);

@@ -18,12 +18,8 @@ import type {
   HostedChatTurnDelta,
   HostedChatTurnInput,
 } from "./types.js";
-import {
-  DEFAULT_OPENPOND_CHAT_MODEL,
-  ProviderCatalogSchema,
-  ProviderIdSchema,
-  type ProviderCatalog,
-} from "@openpond/contracts";
+import { DEFAULT_OPENPOND_CHAT_MODEL } from "@openpond/contracts/settings";
+import { ProviderCatalogSchema, ProviderIdSchema, type ProviderCatalog } from "@openpond/contracts/providers";
 import { loadOpenPondAccountContext } from "./account-context.js";
 import { errorMessage } from "./errors.js";
 

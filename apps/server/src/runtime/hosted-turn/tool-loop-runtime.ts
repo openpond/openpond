@@ -1,28 +1,19 @@
 import {candidateAuthoringToolNames} from "../../harness/experiment-candidate-tool-catalog.js";
 import { workspaceToolCorrectionMessage, trainingHarnessForTurn } from "./tool-loop-support.js";
-import {
-  DEFAULT_SESSION_EXPERIENCE,
-  TASK_COORDINATION_INSTRUCTIONS,
-  type AppPreferences,
-  type HarnessActionBinding,
-  type ChatProvider,
-  type ModelUsageRecord,
-  type OpenPondActionCatalogEntry,
-  type OpenPondApp,
-  type RuntimeEvent,
-  type Session,
-  type SubagentRoleSettings,
-  type Taskset,
-  type Turn,
-  type WorkspaceDiffSummary,
-} from "@openpond/contracts";
-import {
-  createAgentToolCatalogProjection,
-  runProviderRound,
-  runProviderRoundLoop,
-  type AgentToolCatalogProjection,
-  type ProviderRoundResult,
-} from "@openpond/agent-runtime";
+import { DEFAULT_SESSION_EXPERIENCE } from "@openpond/contracts/experiences";
+import { TASK_COORDINATION_INSTRUCTIONS } from "@openpond/contracts/task-inbox";
+import { type AppPreferences, type ChatProvider } from "@openpond/contracts/settings";
+import { type HarnessActionBinding } from "@openpond/contracts/harness-actions";
+import { type ModelUsageRecord } from "@openpond/contracts/usage";
+import { type OpenPondActionCatalogEntry } from "@openpond/contracts/action-catalog";
+import { type OpenPondApp } from "@openpond/contracts/apps";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
+import { type SubagentRoleSettings } from "@openpond/contracts/subagents";
+import { type Taskset } from "@openpond/contracts/tasksets";
+import { type WorkspaceDiffSummary } from "@openpond/contracts/workspaces";
+import { createAgentToolCatalogProjection, type AgentToolCatalogProjection } from "@openpond/agent-runtime/tools";
+import { runProviderRound, runProviderRoundLoop, type ProviderRoundResult } from "@openpond/agent-runtime/provider-loop";
 import type { HostedChatTool, HostedChatToolChoice, HostedChatToolCall, HostedChatContinuation } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import {

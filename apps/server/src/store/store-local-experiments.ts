@@ -3,7 +3,7 @@ import { readLocalExecutionActivity } from "./local-execution-activity.js";
 import { contentHash } from "@openpond/harness";
 import { validateTasksetPackage } from "openpond-sdk/taskset-packages";
 import { JudgeCallReservationSchema, type JudgeBudgetState, type JudgeCallReservation } from "@openpond/evals/learning";
-import { SqliteChatWorkflowStore } from "./store-chat-workflows.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { LOCAL_EXPERIMENT_SCHEMA_SQL } from "./store-local-experiment-schema.js";
 import { EVALUATION_OPERATION_SCHEMA_SQL,prepareEvaluationOperation,acknowledgeEvaluationOperation,retainEvaluationOperation,pendingEvaluationOperations,readPendingEvaluationOperation } from "./store-evaluation-operation-intents.js";
@@ -16,7 +16,9 @@ import { LocalExperimentError, LocalExperimentDefinitionSchema, type LocalExperi
 
 /** All admissions, operation receipts and reservations share the existing WAL
  * connection and write queue. A transaction never awaits a provider call. */
-export class SqliteLocalExperimentStore extends SqliteChatWorkflowStore {
+export type LocalExperimentStorage = Pick<SqliteLocalExperimentStore, keyof SqliteLocalExperimentStore>;
+
+export class SqliteLocalExperimentStore extends SqliteStoreDomain {
   private localTablesReady=false;
   private async localWrite<T>(apply:(db:OpenPondSqliteConnection)=>T):Promise<T> {
     await this.ready;

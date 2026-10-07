@@ -2,7 +2,7 @@ import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { ModelProjectSchema, TaskDataRecordSchema, type TaskDataRecord } from "@openpond/contracts";
 import { TaskInventoryItemSchema, TaskInventoryPageSchema, TaskInventoryQuerySchema, describeTaskInput, type TaskInventoryItem } from "openpond-sdk/taskset-drafts";
-import { SqliteTasksetDraftStore } from "./store-taskset-drafts.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
 export interface LocalTaskInventorySource { id: string; profileId: string; hash: string; revision: number; draft: boolean; modelId: string | null }
 const CursorSchema = z.object({ scope: z.string(), key: z.string(), ordinal: z.number().int().nonnegative() }).strict();
@@ -14,7 +14,7 @@ CREATE INDEX IF NOT EXISTS task_inventory_list ON task_inventory_rows(profile_id
 `;
 
 /** Rebuildable projections keep list queries independent of private source files. */
-export class SqliteTaskInventoryStore extends SqliteTasksetDraftStore {
+export class SqliteTaskInventoryStore extends SqliteStoreDomain {
   private async inventoryReady() { await this.ready; await this.writeQueue; this.database.exec(SQL); }
 
   async taskInventorySources(profileId: string, projectId?: string): Promise<LocalTaskInventorySource[]> {

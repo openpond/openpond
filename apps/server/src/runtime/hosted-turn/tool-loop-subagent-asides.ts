@@ -1,11 +1,6 @@
-import {
-  SubagentMessageDeliverySchema,
-  SubagentMessageSchema,
-  SubagentRunSchema,
-  type RuntimeEvent,
-  type Session,
-  type SubagentRun,
-} from "@openpond/contracts";
+import { SubagentMessageDeliverySchema, SubagentMessageSchema, SubagentRunSchema, type SubagentRun } from "@openpond/contracts/subagents";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 
 import { recordFromUnknown, truncateForModelAside } from "../turns/value-utils.js";
 import { PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS } from "./tool-loop-action-policy.js";

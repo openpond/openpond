@@ -1,9 +1,9 @@
 import { ConversationServingExecutionSchema, ConversationServingGrantSchema, type ConversationServingExecution, type ConversationServingGrant } from "../training/conversation-serving-contracts.js";
-import { SqliteLearningStore } from "./store-learning.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
 /** The serving owner retains its explicit grants and recovery intents in the
  * same durable SQLite owner as atomic Model bindings. */
-export class SqliteConversationServingStore extends SqliteLearningStore {
+export class SqliteConversationServingStore extends SqliteStoreDomain {
   private conversationTables: Promise<void> | null = null;
   private async ensureConversationTables() {
     await this.ready;

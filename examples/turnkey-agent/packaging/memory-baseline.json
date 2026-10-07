@@ -1,0 +1,356 @@
+{
+  "measuredOn": "2026-10-06",
+  "location": "local Linux, not QOS/TVC",
+  "app": {
+    "beforeOptionalComposition": {
+      "sha256": "327c383779edcaf824afd4f7b6ebc3337ea64c2c895f4718497dede22ff14539",
+      "runtime": "v24.18.0",
+      "samples": [
+        {
+          "run": 0,
+          "startupMs": 895.103159,
+          "ready": {
+            "rssMiB": 371.65234375,
+            "peakRssMiB": 371.65234375
+          },
+          "afterTurn": {
+            "rssMiB": 380.27734375,
+            "peakRssMiB": 380.27734375
+          },
+          "idle": {
+            "rssMiB": 380.27734375,
+            "peakRssMiB": 380.27734375
+          }
+        },
+        {
+          "run": 1,
+          "startupMs": 914.9655899999998,
+          "ready": {
+            "rssMiB": 371.74609375,
+            "peakRssMiB": 371.74609375
+          },
+          "afterTurn": {
+            "rssMiB": 379.62109375,
+            "peakRssMiB": 379.62109375
+          },
+          "idle": {
+            "rssMiB": 379.62109375,
+            "peakRssMiB": 379.62109375
+          }
+        },
+        {
+          "run": 2,
+          "startupMs": 889.0027310000005,
+          "ready": {
+            "rssMiB": 373.28515625,
+            "peakRssMiB": 373.28515625
+          },
+          "afterTurn": {
+            "rssMiB": 381.41015625,
+            "peakRssMiB": 381.41015625
+          },
+          "idle": {
+            "rssMiB": 381.41015625,
+            "peakRssMiB": 381.41015625
+          }
+        }
+      ],
+      "median": {
+        "readyRssMiB": 371.74609375,
+        "afterTurnRssMiB": 380.27734375,
+        "peakRssMiB": 380.27734375
+      }
+    },
+    "finalNode": {
+      "sha256": "cb75b83b2d82409e1eb981edbdb5f1ce9cd241263e0a06480fd3d7abaa9647c8",
+      "runtime": "v24.18.0",
+      "samples": [
+        {
+          "run": 0,
+          "startupMs": 653.983153,
+          "ready": {
+            "rssMiB": 258.59765625,
+            "peakRssMiB": 258.59765625
+          },
+          "afterTurn": {
+            "rssMiB": 274.47265625,
+            "peakRssMiB": 274.47265625
+          },
+          "idle": {
+            "rssMiB": 274.47265625,
+            "peakRssMiB": 274.47265625
+          }
+        },
+        {
+          "run": 1,
+          "startupMs": 684.8646800000006,
+          "ready": {
+            "rssMiB": 258.82421875,
+            "peakRssMiB": 258.82421875
+          },
+          "afterTurn": {
+            "rssMiB": 274.82421875,
+            "peakRssMiB": 274.82421875
+          },
+          "idle": {
+            "rssMiB": 274.82421875,
+            "peakRssMiB": 274.82421875
+          }
+        },
+        {
+          "run": 2,
+          "startupMs": 668.8438979999992,
+          "ready": {
+            "rssMiB": 258.64453125,
+            "peakRssMiB": 258.64453125
+          },
+          "afterTurn": {
+            "rssMiB": 275.39453125,
+            "peakRssMiB": 275.39453125
+          },
+          "idle": {
+            "rssMiB": 275.39453125,
+            "peakRssMiB": 275.39453125
+          }
+        }
+      ],
+      "median": {
+        "readyRssMiB": 258.64453125,
+        "afterTurnRssMiB": 274.82421875,
+        "peakRssMiB": 274.82421875
+      }
+    },
+    "finalStatic": {
+      "sha256": "3a556af1a7d3ff907a0d65021ff356ad0a39f03faa81786db8dd52661dfb7ef8",
+      "runtime": "packaged executable",
+      "samples": [
+        {
+          "run": 0,
+          "startupMs": 755.0712550000001,
+          "ready": {
+            "rssMiB": 242.375,
+            "peakRssMiB": 243.875
+          },
+          "afterTurn": {
+            "rssMiB": 251.5,
+            "peakRssMiB": 251.93359375
+          },
+          "idle": {
+            "rssMiB": 251.5,
+            "peakRssMiB": 251.93359375
+          }
+        },
+        {
+          "run": 1,
+          "startupMs": 798.890872,
+          "ready": {
+            "rssMiB": 241.74609375,
+            "peakRssMiB": 243.22265625
+          },
+          "afterTurn": {
+            "rssMiB": 250.83984375,
+            "peakRssMiB": 251.45703125
+          },
+          "idle": {
+            "rssMiB": 250.83984375,
+            "peakRssMiB": 251.45703125
+          }
+        },
+        {
+          "run": 2,
+          "startupMs": 785.1739020000005,
+          "ready": {
+            "rssMiB": 241.33984375,
+            "peakRssMiB": 242.85546875
+          },
+          "afterTurn": {
+            "rssMiB": 249.99609375,
+            "peakRssMiB": 250.90625
+          },
+          "idle": {
+            "rssMiB": 249.99609375,
+            "peakRssMiB": 250.90625
+          }
+        }
+      ],
+      "median": {
+        "readyRssMiB": 241.74609375,
+        "afterTurnRssMiB": 250.83984375,
+        "peakRssMiB": 251.45703125
+      }
+    }
+  },
+  "modelQ8": {
+    "location": "local Linux, not TVC",
+    "limits": {
+      "memory.max": "1073741824",
+      "memory.swap.max": "0"
+    },
+    "contextTokens": 4096,
+    "kvCache": "q8_0",
+    "batch": 128,
+    "threads": 2,
+    "turns": [
+      {
+        "kind": "plain",
+        "seconds": 56.091,
+        "response": {
+          "answer": "OK.",
+          "tools": []
+        }
+      },
+      {
+        "kind": "tool",
+        "seconds": 16.977,
+        "response": {
+          "answer": "The SHA-256 hash of \"OpenPond local model baseline 1\" is reported as `5156d1f429541ec090f59d3fb2fb8bf9a6c6ebf5e90215697838a7504d4693b4`.",
+          "tools": [
+            {
+              "sandboxId": "fixture",
+              "commandId": "local-1",
+              "sha256": "5156d1f429541ec090f59d3fb2fb8bf9a6c6ebf5e90215697838a7504d4693b4"
+            }
+          ]
+        }
+      },
+      {
+        "kind": "tool",
+        "seconds": 15.104,
+        "response": {
+          "answer": "The SHA-256 hash of \"OpenPond local model baseline 2\" is: `5ec2de887c9d54bcf7a30c3a963c74f910c7dcb55e92340df4fec5db53b001b8`.",
+          "tools": [
+            {
+              "sandboxId": "fixture",
+              "commandId": "local-2",
+              "sha256": "5ec2de887c9d54bcf7a30c3a963c74f910c7dcb55e92340df4fec5db53b001b8"
+            }
+          ]
+        }
+      },
+      {
+        "kind": "tool",
+        "seconds": 16.126,
+        "response": {
+          "answer": "The SHA-256 hash of \"OpenPond local model baseline 3\" is reported as `159398e3b1048e089a4fd210e7439ed6d45c6e80a8b2da0c70e45c68f7d6d0ef`.",
+          "tools": [
+            {
+              "sandboxId": "fixture",
+              "commandId": "local-3",
+              "sha256": "159398e3b1048e089a4fd210e7439ed6d45c6e80a8b2da0c70e45c68f7d6d0ef"
+            }
+          ]
+        }
+      }
+    ],
+    "modelFileBytes": 484220320,
+    "hashFixtureExecutions": 3,
+    "sandbox": "local sha256sum HTTP fixture, not Firecracker",
+    "samples": {
+      "modelStaged": {
+        "memory.current": 875839488,
+        "memory.peak": 875839488,
+        "stat": {
+          "anon": 10706944,
+          "file": 863559680,
+          "shmem": 484220928,
+          "file_mapped": 0
+        },
+        "events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n"
+      },
+      "modelReady": {
+        "memory.current": 1073639424,
+        "memory.peak": 1073741824,
+        "stat": {
+          "anon": 318263296,
+          "file": 751837184,
+          "shmem": 484220928,
+          "file_mapped": 478269440
+        },
+        "events": "low 0\nhigh 0\nmax 427\noom 0\noom_kill 0\noom_group_kill 0\n"
+      },
+      "appReady": {
+        "memory.current": 1069117440,
+        "memory.peak": 1073741824,
+        "stat": {
+          "anon": 522493952,
+          "file": 533348352,
+          "shmem": 484220928,
+          "file_mapped": 478355456
+        },
+        "events": "low 0\nhigh 0\nmax 1261\noom 0\noom_kill 0\noom_group_kill 0\n"
+      },
+      "turn0": {
+        "memory.current": 968679424,
+        "memory.peak": 1073741824,
+        "stat": {
+          "anon": 459468800,
+          "file": 500322304,
+          "shmem": 484220928,
+          "file_mapped": 478355456
+        },
+        "events": "low 0\nhigh 0\nmax 1387\noom 0\noom_kill 0\noom_group_kill 0\n"
+      },
+      "turn1": {
+        "memory.current": 979075072,
+        "memory.peak": 1073741824,
+        "stat": {
+          "anon": 468709376,
+          "file": 500322304,
+          "shmem": 484220928,
+          "file_mapped": 478355456
+        },
+        "events": "low 0\nhigh 0\nmax 1387\noom 0\noom_kill 0\noom_group_kill 0\n"
+      },
+      "turn2": {
+        "memory.current": 979906560,
+        "memory.peak": 1073741824,
+        "stat": {
+          "anon": 469884928,
+          "file": 500322304,
+          "shmem": 484220928,
+          "file_mapped": 478355456
+        },
+        "events": "low 0\nhigh 0\nmax 1387\noom 0\noom_kill 0\noom_group_kill 0\n"
+      },
+      "turn3": {
+        "memory.current": 980451328,
+        "memory.peak": 1073741824,
+        "stat": {
+          "anon": 470781952,
+          "file": 500326400,
+          "shmem": 484220928,
+          "file_mapped": 478355456
+        },
+        "events": "low 0\nhigh 0\nmax 1387\noom 0\noom_kill 0\noom_group_kill 0\n"
+      }
+    },
+    "appArtifact": {
+      "sha256": "3a556af1a7d3ff907a0d65021ff356ad0a39f03faa81786db8dd52661dfb7ef8",
+      "bytes": 76897034,
+      "name": "openpond-tvc"
+    },
+    "llamaServerArtifact": {
+      "sha256": "e6e7d88fba4900a49383a477caf8883b7e54480feaa34a8e6b34ce867b67980b",
+      "bytes": 17864,
+      "name": "llama-server"
+    },
+    "modelSha256": "9acfc1e001311f34b4252001b626f2e466d592a42065f66571bff3790d4e1b14",
+    "modelStartupSeconds": 0.809,
+    "appStartupSeconds": 0.832,
+    "passed": true,
+    "sampledCombinedPeakBytes": 1073741824,
+    "peakRssBytes": {
+      "model": 812220416,
+      "app": 279961600
+    },
+    "cgroupPeakBytes": 1073741824,
+    "cgroupEvents": "low 0\nhigh 0\nmax 1387\noom 0\noom_kill 0\noom_group_kill 0\n"
+  },
+  "modelQ4Trial": {
+    "passed": false,
+    "error": "<HTTPError 504: 'Gateway Timeout'>",
+    "cgroupPeakBytes": 1073741824,
+    "cgroupEvents": "low 0\nhigh 0\nmax 1281\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "requestDeadlineSeconds": 300
+  }
+}

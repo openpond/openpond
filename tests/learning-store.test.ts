@@ -6,7 +6,7 @@ import {
   createLearningService, previewTaskIntake, LearningSourceSchema,
 } from "@openpond/evals/learning";
 import { TasksetReleaseSchema, policyTaskView } from "@openpond/evals/tasksets";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { withTempDirectory } from "./helpers/temp-directory";
 import { learningContext, learningFixture, learningNow } from "./helpers/learning-fixtures";
 import { attemptFixture, withTrainingStore } from "./helpers/training-fixtures";
@@ -21,8 +21,8 @@ import { requireReleasedTaskset } from "../apps/server/src/training/local-taskse
 import { createModelProjectSaveRequest, HostedModelProjectTrainingSetupSchema, ModelProjectSchema } from "openpond-sdk/model-projects";
 import { createTasksetPackage, decodeTasksetPackageFile, tasksetPackageRewardBinding, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "openpond-sdk/taskset-packages";
 
-const withStore = (run: (store: SqliteLearningStore, home: string) => Promise<void>) => withTempDirectory("openpond-learning-", async (home) => {
-  const store = new SqliteLearningStore(home);
+const withStore = (run: (store: SqliteStore, home: string) => Promise<void>) => withTempDirectory("openpond-learning-", async (home) => {
+  const store = new SqliteStore(home);
   try { await run(store, home); } finally { await store.close(); }
 });
 
@@ -197,7 +197,7 @@ describe("durable task intake and admission", () => {
     expect(JSON.stringify(policyTaskView(release.tasks[0]!))).not.toContain("never show");
     expect((await fixture.service.get(learningContext, "evidence", evidence.id)).submission.observedOutput).toEqual({ answer: "wrong" });
     await store.close();
-    const restarted = new SqliteLearningStore(home);
+    const restarted = new SqliteStore(home);
     try {
       const page = await restarted.learningRepository().transaction(learningContext.scope, (tx) => tx.list("package", { limit: 1 }));
       expect(page.items).toEqual([release]);

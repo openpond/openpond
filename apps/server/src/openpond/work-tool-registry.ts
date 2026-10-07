@@ -5,11 +5,8 @@ import type {
   WorkspaceToolRequest,
   WorkspaceToolResult,
 } from "@openpond/contracts";
-import {
-  CreateHostedSavedWorkRequestSchema,
-  WORK_FORMAT_CAPABILITIES,
-  type CreateHostedSavedWorkRequest,
-} from "@openpond/contracts";
+import { CreateHostedSavedWorkRequestSchema, type CreateHostedSavedWorkRequest } from "@openpond/contracts/saved-work";
+import { WORK_FORMAT_CAPABILITIES } from "@openpond/contracts/work-formats";
 import type {
   ModelToolDefinition,
   ModelToolExecutionContext,

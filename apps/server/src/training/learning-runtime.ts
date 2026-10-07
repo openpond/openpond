@@ -4,13 +4,13 @@ import {
   LearningCommandRequestSchema, LearningReadRequestSchema, type TaskGradeExecutor,
   assertLearningRequestJson, type BoundJudgeProvider,
 } from "@openpond/evals/learning";
-import type { SqliteLearningStore } from "../store/store-learning.js";
+import type { LearningStorage } from "../store/store-learning.js";
 import { createLocalTaskGradeExecutor } from "./learning-grade-executor.js";
 import { createLocalRewardCheckExecutor } from "./learning-reward-check-executor.js";
 import { createLocalLearningCredentials } from "./learning-credentials.js";
 import { LearningDomainError } from "@openpond/evals/learning";
 
-export function createLocalLearningRuntime(store: SqliteLearningStore, options: {
+export function createLocalLearningRuntime(store: LearningStorage, options: {
   executor?: TaskGradeExecutor;
   judgeProvider?: BoundJudgeProvider;
   onError?: (error: unknown) => void;

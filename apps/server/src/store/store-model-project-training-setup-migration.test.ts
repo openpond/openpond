@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { sanitizeUnverifiableLearnedPreferenceBindings } from "./store-model-project-training-setup-migration.js";
+import { sanitizeUnverifiableLearnedPreferenceBindings } from "./store-learned-preference-migration-validation.js";
 
 const hash = (character: string) => character.repeat(64);
 

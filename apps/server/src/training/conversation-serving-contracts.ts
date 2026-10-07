@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ModelBindingRoleSchema } from "@openpond/contracts";
+import { ModelBindingRoleSchema } from "@openpond/contracts/training";
 const id = z.string().trim().min(1).max(240);
 export const ConversationServingGrantSchema = z.object({
   id, revision: z.number().int().positive(), ownerInstanceId: id,

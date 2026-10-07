@@ -1,9 +1,4 @@
-import {
-  nextCreateImproveRunRevision,
-  type CreateImproveRun,
-  type CreateImproveEvaluationReceipt,
-  type CreateImproveTarget,
-} from "@openpond/contracts";
+import { nextCreateImproveRunRevision, type CreateImproveRun, type CreateImproveEvaluationReceipt, type CreateImproveTarget } from "@openpond/contracts/create-pipeline";
 import {
   applyApprovedLocalCreateImproveRun,
   type LocalCreatePipelineCheckInput,
