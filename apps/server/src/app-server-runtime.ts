@@ -119,11 +119,7 @@ import { createTurnRunner } from "./runtime/turn-runner.js";
 import type { TurnRunnerDependencies } from "./runtime/turns/ports.js";
 import { resolveMaxHostedWorkspaceToolRounds } from "./server-entry-helpers.js";
 import { createSessionStore } from "./store/session-store.js";
-import {
-  autoTitlePromptFromPayload,
-  createSessionTitleService,
-  withPendingAutoTitle,
-} from "./session-title-service.js";
+import { createSessionTitleService } from "./session-title-service.js";
 import { SqliteStore } from "./store/store.js";
 import { event, now } from "./utils.js";
 import { createHostedOwnedAppServer } from "./runtime/hosted-app-server-composition.js";
@@ -374,17 +370,11 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   });
   const sessionTitleService = createSessionTitleService({
     appendRuntimeEvent,
-    getSession,
+    store: coreStore,
     logger,
     stream: streamOpenPondHostedChatTurn,
-    updateSession,
   });
-  const createSessionWithAutoTitle: typeof createSession = async (payload) => {
-    const prompt = autoTitlePromptFromPayload(payload);
-    const session = await createSession(embedded ? payload : withPendingAutoTitle(payload));
-    if (prompt && !embedded) sessionTitleService.schedule(session.id, prompt);
-    return session;
-  };
+  const createSessionWithAutoTitle = embedded ? createSession : sessionTitleService.wrapCreateSession(createSession);
   const workspace = createAppServerWorkspace({
     workspaceDir,
     logger,
@@ -800,6 +790,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     close: async () => {
       if (closing) return;
       closing = true;
+      await sessionTitleService.close();
       await experimentCases.close();
       await turnRunner.close();
       isolatedProfileTools?.close();

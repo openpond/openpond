@@ -1,3 +1,4 @@
+import { htmlContentPreviewUrl, isHtmlFilePath } from "../../lib/html-preview";
 import {
   lazy,
   Suspense,
@@ -31,11 +32,8 @@ import type {
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
-import {
-  normalizeChatFilePath,
-  resolveChatWorkspaceRootPath,
-} from "../../lib/chat-file-links";
-import { absoluteLocalVideoPath } from "../../lib/local-video";
+import { resolveChatWorkspaceRootPath } from "../../lib/chat-file-links";
+import { useChatFileOpen } from "../../hooks/useChatFileOpen";
 import { shouldShowThinkingIndicator } from "../../lib/chat-timeline-rows";
 import {
   composerSlashCommandAllowedInExperience,
@@ -1087,10 +1085,10 @@ export function MainPane({
         explicitFile: options?.explicitFile,
         newTab: options?.newTab,
       }).then((opened) => {
-        if (opened) onShowBrowserPanel();
-      });
+        if (opened && window.openpond?.browser) onShowBrowserPanel();
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not open browser.", "error"));
     },
-    [browserConversationId, onShowBrowserPanel]
+    [browserConversationId, onShowBrowserPanel, showToast]
   );
   const workspaceRootPath = resolveChatWorkspaceRootPath({
     projectTargetDetail: projectTarget.detail,
@@ -1098,38 +1096,17 @@ export function MainPane({
     workspaceRepoPath: workspaceState?.repoPath,
     workspaceTargetValue: workspaceTarget.value,
   });
-  const handleOpenFileInSidebar = useCallback(
-    (path: string) => {
-      const videoPath = absoluteLocalVideoPath(path, workspaceRootPath);
-      if (videoPath && connection) {
-        void api
-          .signLocalVideoUrl(connection, { path: videoPath })
-          .then(({ url }) => handleOpenBrowserLink(url))
-          .catch((error) => {
-            showToast(
-              error instanceof Error
-                ? error.message
-                : "Could not open this video.",
-              "error"
-            );
-          });
-        return;
-      }
-      const normalizedFile = normalizeChatFilePath(path, { workspaceRootPath });
-      onShowDiffPanel();
-      setOpenDiffFileRequest({
-        id: Date.now(),
-        path: normalizedFile?.path ?? path,
-      });
-    },
-    [
-      connection,
-      handleOpenBrowserLink,
-      onShowDiffPanel,
-      showToast,
-      workspaceRootPath,
-    ]
-  );
+  const handleOpenFileInSidebar = useChatFileOpen({
+    connection,
+    handleOpenBrowserLink,
+    activeWorkspaceAppId,
+    rightSidebarUsesSandbox,
+    rightSidebarSandboxId,
+    onShowDiffPanel,
+    showToast,
+    workspaceRootPath,
+    setOpenDiffFileRequest,
+  });
   const handleOpenAttachmentInSidebar = useCallback(
     async (attachment: ChatAttachmentSummary) => {
       if (
@@ -1153,12 +1130,16 @@ export function MainPane({
           content: null,
         };
         let imageUrl: string | undefined;
+        let htmlUrl: string | undefined;
         if (attachment.filePreview) {
           const payload = await api.chatAttachmentFile(
             connection,
             attachment.filePreview,
           );
           file.content = payload.content;
+          if (isHtmlFilePath(displayName)) {
+            htmlUrl = await htmlContentPreviewUrl(connection, displayName, payload.content);
+          }
         } else if (attachment.imagePreview) {
           const payload = await api.signChatAttachmentImageUrl(
             connection,
@@ -1166,10 +1147,12 @@ export function MainPane({
           );
           imageUrl = payload.url;
         }
-        onShowDiffPanel();
+        if (htmlUrl) handleOpenBrowserLink(htmlUrl);
+        else onShowDiffPanel();
         setOpenDiffFileRequest({
           id: Date.now(),
           path,
+          source: Boolean(htmlUrl),
           file,
           ...(imageUrl ? { imageUrl } : {}),
         });
@@ -1182,7 +1165,7 @@ export function MainPane({
         );
       }
     },
-    [connection, onShowDiffPanel, showToast],
+    [connection, handleOpenBrowserLink, onShowDiffPanel, showToast],
   );
   const workspaceStatusLoading =
     workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;

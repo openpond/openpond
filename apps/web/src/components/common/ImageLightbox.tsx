@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, X } from "../icons";
+import { saveImage } from "../../lib/save-image";
 
 export function ImageLightbox({
   open,
@@ -13,6 +14,8 @@ export function ImageLightbox({
   onClose: () => void;
 }) {
   const [failed, setFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -25,6 +28,7 @@ export function ImageLightbox({
 
   useEffect(() => {
     setFailed(false);
+    setSaveError(null);
   }, [src]);
 
   if (!open || !src) return null;
@@ -34,20 +38,20 @@ export function ImageLightbox({
     if (fromTitle && /\.[A-Za-z0-9]+$/.test(fromTitle)) return fromTitle;
     try {
       const url = new URL(src, window.location.href);
-      const fromUrl = url.pathname.split("/").pop()?.trim();
+      const filePath = url.searchParams.get("path") ?? url.searchParams.get("storageName") ?? url.pathname;
+      const fromUrl = filePath.split(/[\\/]/).pop()?.trim();
       if (fromUrl && /\.[A-Za-z0-9]+$/.test(fromUrl)) return fromUrl;
     } catch { /* ignore */ }
     return "image.png";
   })();
 
-  const handleDownload = () => {
-    const anchor = document.createElement("a");
-    anchor.href = src;
-    anchor.download = downloadFileName;
-    anchor.rel = "noopener";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+  const handleDownload = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try { await saveImage(src, downloadFileName); }
+    catch (error) { setSaveError(error instanceof Error ? error.message : "Could not save image."); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -71,6 +75,8 @@ export function ImageLightbox({
               type="button"
               aria-label="Download image"
               title="Download"
+              disabled={saving}
+              aria-busy={saving}
               onClick={handleDownload}
             >
               <Download size={16} />
@@ -80,6 +86,7 @@ export function ImageLightbox({
             </button>
           </div>
         </header>
+        {saveError && <div className="image-lightbox-error" role="alert">{saveError}</div>}
         <div className="image-lightbox-frame">
           {failed ? (
             <div className="image-lightbox-error">Image preview unavailable</div>

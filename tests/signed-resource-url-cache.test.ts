@@ -6,6 +6,40 @@ import {
 } from "../apps/web/src/lib/signed-resource-url-cache";
 
 describe("SignedResourceUrlCache", () => {
+  // A mounted thumbnail must recover without a remount, refresh expiring
+  // capabilities, and stop both timers and late publications after unmount.
+  test("mounted previews recover failed loads, renew expired URLs, and stop on close", async () => {
+    vi.useFakeTimers();
+    try {
+      const cache = new SignedResourceUrlCache({ expirySkewMs: 0 });
+      let calls = 0;
+      const loader = async () => {
+        if (++calls === 1) throw new Error("server restarting");
+        return { url: `url-${calls}`, expiresAt: Date.now() + 20_000 };
+      };
+      const publish = vi.fn();
+      const observer = cache.watch("image", loader, publish);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publish).toHaveBeenLastCalledWith({ url: null, status: "error" });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(publish).toHaveBeenLastCalledWith({ url: "url-2", status: "ready" });
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(publish).toHaveBeenLastCalledWith({ url: "url-3", status: "ready" });
+      observer.close();
+      const published = publish.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(calls).toBe(3);
+      expect(publish).toHaveBeenCalledTimes(published);
+      let resolve!: (value: { url: string; expiresAt: number }) => void;
+      const pending = cache.watch("late", () => new Promise(done => { resolve = done; }), publish);
+      pending.close();
+      const beforeResolve = publish.mock.calls.length;
+      resolve({ url: "late-url", expiresAt: Date.now() + 20_000 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publish).toHaveBeenCalledTimes(beforeResolve);
+    } finally { vi.useRealTimers(); }
+  });
+
   test("bounds entries with least-recently-used eviction", async () => {
     let now = 1_000;
     const cache = new SignedResourceUrlCache({ maxEntries: 2, now: () => now });

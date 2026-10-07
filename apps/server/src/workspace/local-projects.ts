@@ -327,7 +327,7 @@ async function saveLocalProject(store: SqliteStore, project: LocalProject): Prom
   putLocalRecord(store.home, "saved_local_projects", project.id, LocalProjectSchema.parse(project));
 }
 
-export async function listLocalProjects(store: SqliteStore): Promise<LocalProject[]> {
+export async function listLocalProjects(store: Pick<SqliteStore, "home">): Promise<LocalProject[]> {
   const projects = Object.values(listLocalRecords<LocalProject>(store.home, "saved_local_projects")).map((entry) => entry.value);
   const parsed = LocalProjectListSchema.parse(projects);
   return sortLocalProjects(
@@ -400,7 +400,7 @@ export async function upsertLocalProject(
   return { project, created: !existing };
 }
 
-export async function findLocalProject(store: SqliteStore, projectId: string): Promise<LocalProject | null> {
+export async function findLocalProject(store: Pick<SqliteStore, "home">, projectId: string): Promise<LocalProject | null> {
   return (await listLocalProjects(store)).find((project) => project.id === projectId) ?? null;
 }
 

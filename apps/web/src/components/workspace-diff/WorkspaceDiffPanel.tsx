@@ -1,3 +1,4 @@
+import { htmlContentPreviewUrl, htmlPreviewUrl, isHtmlFilePath } from "../../lib/html-preview";
 import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { RuntimeEvent, SidebarFileBookmark, SidebarFileStatus, SubagentLifecycleAction, WorkspaceDiffFile, WorkspaceDiffSummary, WorkspaceEditorPreferences, WorkspaceKind, WorkspaceLspActionResponse, WorkspaceLspDiagnostic, WorkspaceLspServerStatus } from "@openpond/contracts";
@@ -71,6 +72,7 @@ export function WorkspaceDiffPanel({
   onResizeStart,
   onToggleExpanded,
   onOpenBrowser,
+  onOpenBrowserUrl,
   onViewStateChange,
   onCloseSideChat,
   onOpenSideChat,
@@ -147,6 +149,7 @@ export function WorkspaceDiffPanel({
       onResizeStart={onResizeStart}
       onToggleExpanded={onToggleExpanded}
       onOpenBrowser={onOpenBrowser}
+      onOpenBrowserUrl={onOpenBrowserUrl}
       onViewStateChange={onViewStateChange}
       onCloseSideChat={onCloseSideChat}
       onOpenSideChat={onOpenSideChat}
@@ -276,6 +279,7 @@ function WorkspaceDiffPanelInner({
   onResizeStart,
   onToggleExpanded,
   onOpenBrowser,
+  onOpenBrowserUrl,
   onViewStateChange,
   onCloseSideChat,
   onOpenSideChat,
@@ -311,6 +315,7 @@ function WorkspaceDiffPanelInner({
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
   onOpenBrowser?: () => void;
+  onOpenBrowserUrl: (href: string, options?: { newTab?: boolean }) => void;
   onViewStateChange?: (state: WorkspaceDiffPanelViewState) => void;
   onCloseSideChat?: (panelId: string) => void;
   onOpenSideChat?: () => void;
@@ -358,6 +363,7 @@ function WorkspaceDiffPanelInner({
   const [lspServersByPath, setLspServersByPath] = useState<Record<string, WorkspaceLspServerStatus[]>>({});
   const [lspCheckingPath, setLspCheckingPath] = useState<string | null>(null);
   const [fileLoadingPath, setFileLoadingPath] = useState<string | null>(null);
+  const [htmlPreviewError, setHtmlPreviewError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   useErrorToast(workspaceError, { prefix: "Workspace" });
   useErrorToast(sandboxError, { prefix: "Sandbox files" });
@@ -643,10 +649,10 @@ function WorkspaceDiffPanelInner({
     if (!openFileRequest.file && !canOpenRequestedFile) return;
     lastOpenFileRequestIdRef.current = openFileRequest.id;
     if (openFileRequest.file) {
-      openProvidedFile(openFileRequest.file, openFileRequest.imageUrl);
+      openProvidedFile(openFileRequest.file, openFileRequest.imageUrl, openFileRequest.source);
       return;
     }
-    openFile(openFileRequest.path);
+    openFile(openFileRequest.path, { source: openFileRequest.source });
   }, [canOpenRequestedFile, openFileRequest]);
 
   useEffect(() => {
@@ -834,7 +840,14 @@ function WorkspaceDiffPanelInner({
     selectedDetailPath,
   ]);
 
-  function openFile(path: string) {
+  function openFile(path: string, options?: { source?: boolean }) {
+    setHtmlPreviewError(null);
+    const htmlWorkspaceId = sandboxMode ? sandboxId : appId;
+    if (isHtmlFilePath(path) && !options?.source && connection && htmlWorkspaceId) {
+      void htmlPreviewUrl(connection, htmlWorkspaceId, path, sandboxMode ? "sandbox" : "local").then(onOpenBrowserUrl)
+        .catch((error) => setHtmlPreviewError(error instanceof Error ? error.message : "Could not open HTML preview."));
+      return;
+    }
     const normalizedPath = normalizeWorkspaceDiffPath(path, workspaceRootPath);
     if (!normalizedPath) return;
     setProvidedFilePaths((current) => {
@@ -867,7 +880,12 @@ function WorkspaceDiffPanelInner({
     setSearchQuery("");
   }
 
-  function openProvidedFile(file: WorkspaceDiffFile, imageUrl?: string) {
+  function openProvidedFile(file: WorkspaceDiffFile, imageUrl?: string, source = false) {
+    if (isHtmlFilePath(file.path) && file.content != null && !source && connection) {
+      void htmlContentPreviewUrl(connection, file.path, file.content).then(onOpenBrowserUrl)
+        .catch((error) => setHtmlPreviewError(error instanceof Error ? error.message : "Could not open HTML preview."));
+      return;
+    }
     const normalizedPath = normalizeWorkspaceDiffPath(file.path, workspaceRootPath);
     if (!normalizedPath) return;
     const normalizedFile = { ...file, path: normalizedPath };
@@ -1493,6 +1511,7 @@ function WorkspaceDiffPanelInner({
         onToggleExpanded={onToggleExpanded}
       />
 
+      {htmlPreviewError && <div className="workspace-diff-empty" role="alert">{htmlPreviewError}</div>}
       {visibleTab === "goal" && hasGoalDetails ? (
         <GoalDetailsView
           createRuntime={goalDetails?.createRuntime ?? null}

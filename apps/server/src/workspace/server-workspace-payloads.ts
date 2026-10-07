@@ -1,5 +1,8 @@
+import { sandboxRequestPayload } from "../openpond/sandboxes.js";
+import { createHtmlPreviewService } from "./html-preview.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { loadLocalOutputFile, loadLocalOutputImage } from "./local-output-files.js";
 import {
   CreateLocalProjectRequestSchema,
   SaveWorkspaceFileRequestSchema,
@@ -45,7 +48,6 @@ import {
   loadWorkspaceFile,
   loadWorkspaceFileAtPath,
   loadWorkspaceImageFile,
-  loadWorkspaceImageFileAtPath,
   loadWorkspaceState,
   loadWorkspaceStateAtPath,
   pathExists,
@@ -328,18 +330,39 @@ export function createServerWorkspacePayloads(deps: {
     return WorkspaceDiffSummarySchema.parse(await loadWorkspaceDiff(storeDir, app, options));
   }
 
+  const htmlPreviews = createHtmlPreviewService();
+  async function htmlContentPreviewPayload(payload: unknown) {
+    const input = payload as { name?: unknown; content?: unknown } | null;
+    if (typeof input?.name !== "string" || typeof input.content !== "string") throw new Error("HTML name and content are required");
+    return htmlPreviews.openContent(input.name, input.content);
+  }
+  async function sandboxHtmlPreviewPayload(sandboxId: string, filePath: string | null) {
+    if (!filePath?.trim()) throw new Error("File path is required");
+    const root = filePath.startsWith("/workspace/") ? "/workspace" : path.posix.isAbsolute(filePath) ? path.posix.dirname(filePath) : ".";
+    return htmlPreviews.openRemote(path.posix.relative(root, filePath), async (assetPath) => {
+      const payload = await sandboxRequestPayload({ type: "download_file", sandboxId, payload: { path: path.posix.join(root, assetPath), maxBytes: 20 * 1024 * 1024 } }) as { file?: { contentsBase64?: string; truncated?: boolean } };
+      if (payload.file?.truncated || typeof payload.file?.contentsBase64 !== "string") throw new Error("Preview asset is unavailable or too large");
+      return Buffer.from(payload.file.contentsBase64, "base64");
+    });
+  }
+  async function workspaceHtmlPreviewPayload(appId: string, filePath: string | null) {
+    if (!filePath?.trim()) throw new Error("File path is required");
+    const local = await localPathWorkspaceForId(appId) ?? await findLocalWorkspace(appId);
+    return htmlPreviews.open(await workspaceRepoPathPayload(appId), filePath.trim(), Boolean(local));
+  }
+
   async function workspaceFilePayload(appId: string, filePath: string | null): Promise<WorkspaceDiffFile> {
     if (!filePath?.trim()) throw new Error("File path is required");
     const localPathWorkspace = await localPathWorkspaceForId(appId);
     if (localPathWorkspace) {
       return WorkspaceDiffFileSchema.parse(
-        await loadWorkspaceFileAtPath(localPathWorkspace.paths.repoPath, filePath)
+        await loadLocalOutputFile(localPathWorkspace.paths.repoPath, filePath)
       );
     }
     const localProject = await findLocalWorkspace(appId);
     if (localProject) {
       return WorkspaceDiffFileSchema.parse(
-        await loadWorkspaceFileAtPath(localProjectWorkspacePaths(localProject).repoPath, filePath)
+        await loadLocalOutputFile(localProjectWorkspacePaths(localProject).repoPath, filePath)
       );
     }
     const app = await findOpenPondApp(appId);
@@ -381,11 +404,11 @@ export function createServerWorkspacePayloads(deps: {
     if (!filePath?.trim()) throw new Error("Image path is required");
     const localPathWorkspace = await localPathWorkspaceForId(appId);
     if (localPathWorkspace) {
-      return loadWorkspaceImageFileAtPath(localPathWorkspace.paths.repoPath, filePath);
+      return loadLocalOutputImage(localPathWorkspace.paths.repoPath, filePath);
     }
     const localProject = await findLocalWorkspace(appId);
     if (localProject) {
-      return loadWorkspaceImageFileAtPath(localProjectWorkspacePaths(localProject).repoPath, filePath);
+      return loadLocalOutputImage(localProjectWorkspacePaths(localProject).repoPath, filePath);
     }
     const app = await findOpenPondApp(appId);
     return loadWorkspaceImageFile(storeDir, app, filePath);
@@ -498,6 +521,9 @@ export function createServerWorkspacePayloads(deps: {
     checkoutWorkspaceBranchPayload,
     workspaceDiffPayload,
     workspaceFilePayload,
+    workspaceHtmlPreviewPayload,
+    htmlContentPreviewPayload,
+    sandboxHtmlPreviewPayload,
     saveWorkspaceFilePayload,
     workspaceImagePayload,
     workspaceLspTouchPayload,
@@ -505,7 +531,7 @@ export function createServerWorkspacePayloads(deps: {
     workspaceLspSettingsStatusPayload,
     workspaceLspRuntimeStatusPayload,
     restartWorkspaceLspPayload,
-    closeWorkspaceLsp: () => workspaceLspManager.shutdown(),
+    closeWorkspaceLsp: async () => { await Promise.all([workspaceLspManager.shutdown(), htmlPreviews.close()]); },
     createLocalProjectPayload,
     deleteLocalProjectPayload,
     updateLocalProjectAgentSetupPayload,

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useSignedImageResource } from "./useSignedImageResource";
 import { api, type ClientConnection } from "../api";
 import { signedResourceCacheKey, signedResourceUrlCache } from "../lib/signed-resource-url-cache";
 
@@ -13,21 +14,13 @@ export function useWorkspaceImageUrl(
   appId: string | null | undefined,
   path: string | null | undefined,
 ): string | null {
-  const resolver = useWorkspaceImageUrlResolver(connection);
-  const [url, setUrl] = useState<string | null>(() => resolver.getUrl(appId, path));
+  return useWorkspaceImageResource(connection, appId, path).url;
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    setUrl(resolver.getUrl(appId, path));
-    void resolver.loadUrl(appId, path).then((nextUrl) => {
-      if (!cancelled) setUrl(nextUrl);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [appId, path, resolver]);
-
-  return url;
+export function useWorkspaceImageResource(connection: ClientConnection | null, appId: string | null | undefined, path: string | null | undefined) {
+  const load = useCallback(() => api.signWorkspaceImageUrl(connection!, { appId: appId!, path: path! }), [connection, appId, path]);
+  return useSignedImageResource(connection,
+    connection && appId && path ? signedResourceCacheKey(connection, "workspace-image", appId, path) : null, load);
 }
 
 export function useWorkspaceImageUrlResolver(connection: ClientConnection | null): WorkspaceImageUrlResolver {

@@ -28,6 +28,7 @@ import { asRecord, findLast } from "./chat-message-utils";
 import { mergeChatSources, webSearchSourcesFromEvent } from "./chat-sources";
 import { taskMessageFromEvent } from "./chat-task-messages";
 import { projectNativeHistoryTool } from "./chat-native-history";
+import { appendNativeAssistantMessage } from "./chat-native-message-stream";
 
 export { activityGroupSummary } from "./chat-activities";
 
@@ -47,6 +48,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   const peerMessages = new Map<string, ChatMessage>();
   const pendingSourcesByTurnId = new Map<string, ChatMessage["sources"]>();
   const nativeToolNames = new Map<string, string>();
+  const nativeMessagesById = new Map<string, ChatMessage>();
 
   for (const original of items) {
     const item = projectNativeHistoryTool(original, nativeToolNames);
@@ -137,6 +139,13 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
           createImproveRun,
         });
       }
+      continue;
+    }
+
+    const nativeMessage = appendNativeAssistantMessage(messages, nativeMessagesById, item);
+    if (nativeMessage) {
+      settleRunningActivityGroups(messages, item);
+      nativeMessage.sources = mergeChatSources(nativeMessage.sources, takePendingSources(pendingSourcesByTurnId, item.turnId) ?? []);
       continue;
     }
 

@@ -1,3 +1,4 @@
+import { isHtmlFilePath } from "../../lib/html-preview";
 import {
   useCallback,
   useEffect,
@@ -8,7 +9,7 @@ import {
 } from "react";
 import type { ClientConnection } from "../../api";
 import { copyToClipboard } from "../../lib/clipboard";
-import { normalizeChatFilePath } from "../../lib/chat-file-links";
+import { chatFileListDirectory, normalizeChatFilePath } from "../../lib/chat-file-links";
 import { useLocalImageUrlResolver } from "../../hooks/useLocalImageUrl";
 import { useWorkspaceImageUrlResolver } from "../../hooks/useWorkspaceImageUrl";
 import { ImageLightbox } from "../common/ImageLightbox";
@@ -122,7 +123,7 @@ export function MarkdownText({
           />
           <MarkdownBlockList
             blocks={mutableBlocks}
-            context={context}
+            context={{ ...context, fileBasePath: finalizedBlocks.reduce(nextFileListBase, null as string | null) }}
             keyPrefix="mutable"
             workspaceRootPath={workspaceRootPath}
           />
@@ -170,13 +171,22 @@ const MarkdownBlockList = memo(function MarkdownBlockList({
   return renderMarkdownBlocks(blocks, context, workspaceRootPath, keyPrefix);
 });
 
+function nextFileListBase(base: string | null, block: ReturnType<typeof parseBlocks>[number]): string | null {
+  if (block.type === "list") return base;
+  return "content" in block && typeof block.content === "string" && block.type !== "code"
+    ? chatFileListDirectory(block.content) : null;
+}
+
 function renderMarkdownBlocks(
   blocks: ReturnType<typeof parseBlocks>,
   context: MarkdownContext,
   workspaceRootPath: string | null,
   keyPrefix = "block",
 ): ReactNode[] {
+  let fileBasePath = context.fileBasePath ?? null;
   return blocks.map((block, index) => {
+    fileBasePath = nextFileListBase(fileBasePath, block);
+    const blockContext = { ...context, fileBasePath };
     const key = `${keyPrefix}-${index}`;
     if (block.type === "blockquote") {
       return (
@@ -200,7 +210,7 @@ function renderMarkdownBlocks(
           <div className="markdown-file-reference-block" key={key}>
             {fileReferenceLines.map((line, lineIndex) => (
               <div className="markdown-file-reference-line" key={lineIndex}>
-                {renderInline(line, context)}
+                {renderInline(line, blockContext)}
               </div>
             ))}
           </div>
@@ -229,7 +239,7 @@ function renderMarkdownBlocks(
           {item.checked === null ? null : (
             <MarkdownCheckbox checked={item.checked} />
           )}
-          <span>{renderInline(item.content, context)}</span>
+          <span>{renderInline(item.content, blockContext)}</span>
         </li>
       ));
       return block.ordered ? (
@@ -253,7 +263,7 @@ function renderMarkdownBlocks(
               : "h4";
       return (
         <HeadingTag className="markdown-heading" key={key}>
-          {renderInline(block.content, context)}
+          {renderInline(block.content, blockContext)}
         </HeadingTag>
       );
     }
@@ -264,7 +274,7 @@ function renderMarkdownBlocks(
             <thead>
               <tr>
                 {block.headers.map((header, headerIndex) => (
-                  <th key={headerIndex}>{renderInline(header, context)}</th>
+                  <th key={headerIndex}>{renderInline(header, blockContext)}</th>
                 ))}
               </tr>
             </thead>
@@ -285,7 +295,7 @@ function renderMarkdownBlocks(
     }
     return (
       <p className="markdown-paragraph" key={key}>
-        {renderInline(block.content, context)}
+        {renderInline(block.content, blockContext)}
       </p>
     );
   });
@@ -354,8 +364,13 @@ function MarkdownLinkMenu({
             onClose();
           }}
         >
-          Open in sidebar
+          {/[\\/]$/.test(menu.path) ? "Open folder" : isHtmlFilePath(menu.path) ? "Open in browser" : "Open in sidebar"}
         </button>
+        {isHtmlFilePath(menu.path) && (
+          <button type="button" role="menuitem" onClick={() => { onOpenFileInSidebar?.(menu.path, { source: true }); onClose(); }}>
+            View source
+          </button>
+        )}
         <button
           type="button"
           role="menuitem"

@@ -9,6 +9,25 @@ function renderMarkdown(content: string, props: Partial<ComponentProps<typeof Ma
 }
 
 describe("markdown checkbox rendering", () => {
+  // A generated deliverable list must resolve to its declared output directory,
+  // including nested formatting; that directory must not leak into later prose.
+  test("resolves formatted deliverable links within the declared list only", () => {
+    const markup = renderMarkdown([
+      "Everything is in `~/openpond-rl-deck/`:", "",
+      "- **`diagram-full-rl-pipeline.png`**",
+      "- __`pitch.html`__ and **`openpond-rl-pitch.pdf`**",
+      "- **`png-pitch/`**", "",
+      "Unrelated `pitch.html` in the workspace; reward .5 is a number.",
+    ].join("\n"), { onOpenFileInSidebar: () => {}, workspaceRootPath: "/repo" });
+    for (const file of ["diagram-full-rl-pipeline.png", "pitch.html", "openpond-rl-pitch.pdf", "png-pitch/"]) {
+      expect(markup).toContain(`title="~/openpond-rl-deck/${file}"`);
+      expect(markup).toContain(`>${file}</a>`);
+    }
+    expect(markup).toContain('title="pitch.html"');
+    expect(markup).not.toContain("`pitch.html`");
+    expect(markup).not.toContain('title=".5"');
+  });
+
   test("renders unchecked and checked task-list items as disabled checkboxes", () => {
     const markup = renderMarkdown("- [ ] Todo\n- [x] Done");
     expect(markup).toContain('aria-label="Unchecked item"');
@@ -101,14 +120,14 @@ describe("markdown checkbox rendering", () => {
     expect(markup).not.toContain("!screenshot");
   });
 
-  test("keeps prose references to code-spanned image paths as code", () => {
+  test("links prose references to code-spanned image paths", () => {
     const markup = renderMarkdown("I created `/tmp/image.png` for the smoke test.", {
       connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
       onOpenFileInSidebar: () => {},
       workspaceRootPath: "/home/glu/Projects/all/openpond",
     });
 
-    expect(markup).toContain("<code>/tmp/image.png</code>");
+    expect(markup).toContain(">/tmp/image.png</a>");
   });
 
   test("renders bare public image file paths as previews", () => {
