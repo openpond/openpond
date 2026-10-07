@@ -114,6 +114,7 @@ export function estimateHostedMessageTokensForProvider(input: {
 export function hostedRequestedOutputTokens(input: {
   maxContextTokens?: number | null;
   modelOutputLimit?: number | null;
+  requestedOutputTokens?: number;
 }): number {
   const contextBound = input.maxContextTokens
     ? Math.max(256, Math.floor(input.maxContextTokens / 8))
@@ -121,7 +122,7 @@ export function hostedRequestedOutputTokens(input: {
   const modelBound = input.modelOutputLimit && input.modelOutputLimit > 0
     ? Math.floor(input.modelOutputLimit)
     : Number.MAX_SAFE_INTEGER;
-  return Math.max(1, Math.min(DEFAULT_REQUESTED_OUTPUT_TOKENS, contextBound, modelBound));
+  return Math.max(1, Math.min(input.requestedOutputTokens ?? DEFAULT_REQUESTED_OUTPUT_TOKENS, contextBound, modelBound));
 }
 
 export function estimateHostedRequestBudget(input: {

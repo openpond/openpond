@@ -1056,10 +1056,16 @@ describe("local Harness workspace service", () => {
         caseSessions.push(request);
         return { id: "document-case-session" } as Awaited<ReturnType<Parameters<typeof createProfileEvaluationCaseService>[0]["createSession"]>>;
       },
-      sendTurn: async () => ({
-        id: "document-case-turn", status: "completed", startedAt: NOW, completedAt: NOW,
-        modelRef, harnessSnapshot: { harnessRelease: discoveredEvaluations.harnessRelease },
-      }) as Awaited<ReturnType<Parameters<typeof createProfileEvaluationCaseService>[0]["sendTurn"]>>,
+      sendTurn: async () => {
+        const id = `document-case-turn-${caseSessions.length}`;
+        await store.appendRuntimeEvent({ id: `${id}-completed`, name: "turn.completed",
+          sessionId: "document-case-session", turnId: id, timestamp: NOW,
+          data: { providerResponse: { requestId: `${id}-response`, contentHash: contentHash("") } },
+        });
+        return { id, status: "completed", startedAt: NOW, completedAt: NOW,
+          modelRef, harnessSnapshot: { harnessRelease: discoveredEvaluations.harnessRelease },
+        } as Awaited<ReturnType<Parameters<typeof createProfileEvaluationCaseService>[0]["sendTurn"]>>;
+      },
     });
     const caseResult = await executeCase({
       manifest: caseManifest, taskset: evaluationTaskset, profileRef, binding,
