@@ -7,7 +7,7 @@ import { event } from "../../utils.js";
  * calls. Earlier successful actions stay in context; unknown model limits fail. */
 export async function recoverHostedOutputLimit(input: {
   messages: HostedChatMessage[];
-  response: { text: string; continuation?: HostedChatContinuation };
+  response: { text: string; continuation?: HostedChatContinuation | null };
   maximumOutputTokens: number;
   maxContextTokens?: number | null;
   modelOutputLimit?: number | null;
