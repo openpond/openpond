@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { saveImageDownload } from "./desktop-image-download.js";
 import { prepareDesktopBrowserHome } from "./desktop-browser-home.js";
 import { app, BrowserWindow, Menu, Notification, dialog, ipcMain, shell, systemPreferences, type MenuItemConstructorOptions } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -572,15 +573,26 @@ function registerIpcHandlers(): void {
     if (result.canceled || !result.filePaths[0]) return { canceled: true, path: null };
     return { canceled: false, path: result.filePaths[0] };
   });
-  handleTrackedIpc("openpond:file:reveal", (_event, payload) => {
+  handleTrackedIpc("openpond:file:reveal", async (_event, payload) => {
     const rawPath = payload && typeof payload === "object" && !Array.isArray(payload)
       ? (payload as Record<string, unknown>).path
       : null;
-    if (typeof rawPath !== "string" || !path.isAbsolute(rawPath)) {
+    const expandedPath = typeof rawPath === "string" && rawPath.startsWith("~/")
+      ? path.join(app.getPath("home"), rawPath.slice(2)) : rawPath;
+    if (typeof expandedPath !== "string" || !path.isAbsolute(expandedPath)) {
       return { ok: false, error: "An absolute local file path is required." };
     }
-    shell.showItemInFolder(path.resolve(rawPath));
-    return { ok: true };
+    try {
+      const target = path.resolve(expandedPath);
+      if ((await fs.stat(target)).isDirectory()) {
+        const error = await shell.openPath(target);
+        return { ok: !error, ...(error ? { error } : {}) };
+      }
+      shell.showItemInFolder(target);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "The local path could not be opened." };
+    }
   });
   handleTrackedIpc("openpond:file:saveAs", async (event, payload) => {
     const record =
@@ -611,6 +623,8 @@ function registerIpcHandlers(): void {
     await fs.copyFile(sourcePath, result.filePath);
     return { ok: true, canceled: false, path: result.filePath };
   });
+  handleTrackedIpc("openpond:file:saveImage", (event, payload) =>
+    saveImageDownload(event.sender, payload, app.getPath("downloads")));
   handleTrackedIpc("openpond:microphone:request", () => requestMicrophoneAccess());
   handleTrackedIpc("openpond:renderer:error", (_event, payload) => {
     desktopLogger().error("renderer error", { payload });

@@ -663,7 +663,6 @@ export function useAppPrimaryRuntime() {
     approvals,
     codexHistoryEvents,
     connection,
-    latestServerSequence: bootstrap?.eventWindow?.latestSequence,
     runtimeIndexes,
     runtimeEventStore,
     selectedSessionId,
@@ -671,7 +670,6 @@ export function useAppPrimaryRuntime() {
     setCodexHistoryEvents,
     setCodexHistorySessions,
     setError,
-    setEvents,
   });
 
   const {

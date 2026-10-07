@@ -149,6 +149,10 @@ export function appendActivityToList(
   activity = activityFromEvent(item),
 ): ActivityItem[] {
   const next = [...activities];
+  if (item.name === "tool.started" && asRecord(item.data)?.nativeTool === true && activity.callId) {
+    const existing = findLast(next, (candidate) => candidate.callId === activity.callId && candidate.state === "running");
+    if (existing) { const timestamp = existing.timestamp; Object.assign(existing, activity, { timestamp }); return next; }
+  }
   if (mergeStreamedTextActivity(next, item, activity)) return next;
   if (mergeCommandActivity(next, item, activity)) return next;
   if (mergeToolActivity(next, item, activity)) return next;
@@ -250,6 +254,9 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
       ? { callId: activityCallId(item) ?? undefined }
       : {}),
     ...(kind && item.name === "command.output" ? { detail: commandOutputFromEvent(item) } : {}),
+    ...(kind !== "command" && item.name === "tool.started" && asRecord(item.data)?.nativeTool === true && item.args && Object.keys(item.args).length > 0
+      ? { detail: boundProjectedCommandOutput(JSON.stringify(item.args, null, 2)) } : {}),
+    ...(kind !== "command" && item.name === "tool.completed" && asRecord(item.data)?.nativeTool === true && item.output ? { detail: boundProjectedCommandOutput(item.output) } : {}),
     ...(kind === "command" ? { terminal: commandTerminalFromEvent(item) } : {}),
     ...(meta ? { meta } : {}),
     ...(receipt ? { receipt } : {}),
@@ -425,7 +432,7 @@ function activityLabel(item: RuntimeEvent): string {
   if (item.name === "skill.loaded") return "Loaded skill";
   if (item.name === "skill.load_failed") return "Skill load failed";
   if (item.name === "tool.started") return "Started";
-  if (item.name === "tool.completed") return "Ran";
+  if (item.name === "tool.completed") return item.status === "failed" ? "Failed" : "Ran";
   if (item.name === "command.output") return "Output";
   if (item.name === "workspace_action" || item.name === "workspace_action_result") {
     return workspaceActivityLabel(item);
@@ -513,6 +520,9 @@ function activityContent(item: RuntimeEvent, imagePreview?: ActivityItem["imageP
   const command = commandTextFromEvent(item);
   if (command) return command;
   if (item.name === "command.output") return cleanCommandOutput(item.output ?? "");
+  if (asRecord(item.data)?.nativeTool === true) {
+    return stringValue(asRecord(item.data), ["filePath", "toolName"]) ?? item.action ?? "Tool";
+  }
   if (item.name === "tool.started" || item.name === "tool.completed") {
     const data = item.data;
     if (data && typeof data === "object") {
