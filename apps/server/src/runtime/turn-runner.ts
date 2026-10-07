@@ -2,6 +2,7 @@ import { nativeImageContent } from "./native-agents/attachments.js";
 import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
+import path from "node:path";
 import {
   AppPreferencesSchema,
   DEFAULT_OPENPOND_CHAT_MODEL,
@@ -1206,7 +1207,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               ...attachmentContexts,
             ]
           : undefined;
-      const attachmentContext = chatAttachmentContext(attachmentContexts);
+      // Case admission copies these inputs into the isolated policy namespace.
+      // Keep host paths for upload, but advertise the path the model can open.
+      const attachmentContext = chatAttachmentContext(isolatedProfileEvaluation
+        ? attachmentContexts.map(attachment => ({ ...attachment,
+            localPath: `/workspace/work/inputs/${path.basename(attachment.name)}` }))
+        : attachmentContexts);
       let providerPrompt = formatPromptWithAttachmentContext(
         promptWithSteeringContext(
           promptWithUserQuestionResolution(input.prompt, userQuestionResolution),
