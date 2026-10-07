@@ -35,10 +35,18 @@ export function profileEvaluationOutput(
     return result;
   }
   if (status === "completed") {
-    const terminal = events.findLast(event => event.name === "turn.completed");
-    if (typeof terminal?.output !== "string")
+    const terminal = [...events].reverse().find(event => event.name === "turn.completed");
+    const marker = terminal?.data as { providerResponse?: { requestId?: unknown; contentHash?: unknown } } | undefined;
+    const response = marker?.providerResponse;
+    if (typeof response?.requestId !== "string" || !response.requestId
+      || typeof response.contentHash !== "string")
       throw new Error("Profile evaluation has no retained final provider response.");
-    return terminal.output;
+    const text = events.filter(event => event.name === "assistant.delta"
+      && (event.data as { providerRequestId?: unknown } | undefined)?.providerRequestId === response.requestId)
+      .map(event => event.output ?? "").join("");
+    if (contentHash(text) !== response.contentHash)
+      throw new Error("Profile evaluation final provider response differs from its retained trace.");
+    return text;
   }
   // Failed/interrupted turns retain partial text for inspection, never as a
   // completed response. Progress and truncated rounds remain in the full trace.
