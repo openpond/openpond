@@ -1,0 +1,12 @@
+{
+  "host": "0.0.0.0",
+  "port": 3000,
+  "authTokenSha256": "REPLACE_WITH_SHA256_OF_A_RANDOM_32_BYTE_TOKEN",
+  "modelEndpoint": "https://api.openai.com/v1",
+  "model": "REPLACE_WITH_ENABLED_MODEL_ID",
+  "sandboxEndpoint": "https://api.openpond.ai/v1/sandboxes",
+  "sandboxId": "REPLACE_WITH_TEST_SANDBOX_ID",
+  "sandboxTeamId": "REPLACE_WITH_TEST_TEAM_ID",
+  "requestTimeoutMs": 180000,
+  "maxConcurrentRequests": 1
+}
