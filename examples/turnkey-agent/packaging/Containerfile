@@ -1,4 +1,5 @@
-# Build context: dist/turnkey-agent, after package.sh verifies the ELF.
+# Build context: dist/turnkey-agent-local-model for embedded inference, or
+# dist/turnkey-agent for the external-service fixture; package and verify first.
 FROM scratch
 COPY --chmod=755 openpond-tvc /openpond-tvc
 ENTRYPOINT ["/openpond-tvc"]

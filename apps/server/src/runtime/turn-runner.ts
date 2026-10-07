@@ -882,6 +882,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    const remoteEnclave = await deps.isRemoteAgentModel?.(
+      input.modelRef?.providerId ?? session.modelRef?.providerId ?? session.provider,
+      input.modelRef?.modelId ?? input.model ?? session.modelRef?.modelId ?? "",
+    ) ?? false;
+    if (remoteEnclave && (input.attachments?.length || input.mentionedConnectedApps?.length || input.mentionedAppIds?.length || input.createImproveRun || session.profileWorkflowBinding || session.profileComponentBinding || input.workflowInput !== undefined)) {
+      throw new Error("This model accepts text messages only; attachments, connected apps, and local workflows are unavailable.");
+    }
     const candidateSession=session.metadata?.source==="experiment-improvement"||session.metadata?.refinementCandidate!==undefined;
     if(candidateSession&&(!admission||session.experience!=="work"||session.profileWorkflowBinding||session.profileComponentBinding||input.createImproveRun||input.mentionedAppIds?.length||input.mentionedConnectedApps?.length||input.openPondActionCatalog?.length||input.attachments?.length||input.cwd))throw new Error("Candidate Work requires its private owner admission and isolated source context.");
     const explicitModelChoice = Boolean(input.modelRef || input.model);
@@ -938,7 +945,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     // Session creation already resolves an omitted Profile to its admitted
     // default. A stored null is an explicit choice and must not acquire a
     // mutable personal Profile when an independent Harness case starts.
-    const selectedProfileRef = session.currentProfile ?? null;
+    const selectedProfileRef = remoteEnclave ? null : session.currentProfile ?? null;
     const selectedProfile = candidateSession || !selectedProfileRef || session.profileWorkflowBinding || session.profileComponentBinding ? null : loadOpenPondProfileStateForRef
       ? await loadOpenPondProfileStateForRef(selectedProfileRef)
       : loadOpenPondProfileState
@@ -947,7 +954,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     // Resolve the movable current channel exactly once at turn admission. All
     // later Skill reads use this immutable bundle even if another Work advances
     // the channel while this turn is running.
-    const selectedHarness = !candidateSession && loadSelectedHarnessRuntime
+    const selectedHarness = !remoteEnclave && !candidateSession && loadSelectedHarnessRuntime
       ? await loadSelectedHarnessRuntime(session)
       : null;
     let profileWorkflowInputHash: string | null = null;
@@ -1018,6 +1025,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ? null
       : input.createImproveRun;
     const profileSkillCommand =
+      !remoteEnclave &&
       !admission &&
       !authoringRoute &&
       experienceAllowsProfileSkills(session.experience) &&
@@ -1238,6 +1246,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           status: "started",
         })
       );
+      if (remoteEnclave) {
+        if (!deps.enclaveChat) throw new Error("This model connection is unavailable on this server.");
+        const reply = await deps.enclaveChat(turnModelRef?.modelId ?? input.model ?? "", input.prompt, controller.signal);
+        throwIfInterrupted(controller.signal);
+        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "assistant.delta", source: "provider", output: reply.answer,
+          data: { delta: reply.answer, provider: session.provider, remoteRequestId: reply.requestId, remoteThreadId: reply.threadId, remoteTurnId: reply.turnId, persistentHistory: false } }));
+        const completed = await completeTurn(sessionId, turn.id, reply.turnId);
+        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", status: "completed", data: { provider: session.provider } }));
+        return completed;
+      }
       if (selectedHarness?.workflowAction) {
         const bundlePath = selectedHarness.release.bundlePath;
         if (!bundlePath) throw new Error("Bound Profile action lacks its released source bundle.");

@@ -1,0 +1,26 @@
+--- a/common/common.cpp
++++ b/common/common.cpp
+@@ -1270,4 +1270,22 @@
+-    llama_model * model = llama_model_load_from_file(params.model.path.c_str(), mparams);
++    // OpenPond's approved pivot contains one aligned GGUF. The public llama.cpp
++    // file-pointer API maps its tensor data directly without extracting weights.
++    std::unique_ptr<FILE, decltype(&fclose)> embedded_file(nullptr, &fclose);
++    llama_model * model = nullptr;
++    if (const char * offset_text = std::getenv("OPENPOND_EMBEDDED_GGUF_OFFSET")) {
++        char * end = nullptr;
++        errno = 0;
++        const unsigned long long offset = std::strtoull(offset_text, &end, 10);
++        if (errno || end == offset_text || *end || offset > INT64_MAX || offset % 4096 != 0) {
++            throw std::runtime_error("Invalid embedded GGUF offset");
++        }
++        embedded_file.reset(fopen(params.model.path.c_str(), "rb"));
++        if (!embedded_file || fseeko(embedded_file.get(), static_cast<off_t>(offset), SEEK_SET)) {
++            throw std::runtime_error("Cannot open embedded GGUF");
++        }
++        model = llama_model_load_from_file_ptr(embedded_file.get(), mparams);
++    } else {
++        model = llama_model_load_from_file(params.model.path.c_str(), mparams);
++    }
+     if (model == NULL) {
+         return;
+     }

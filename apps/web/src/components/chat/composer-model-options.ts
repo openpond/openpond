@@ -4,6 +4,7 @@ import { defaultModelForProvider, modelOptionsForProvider, type DropdownOption }
 const nativeProviders = new Set(["claude-code", "opencode", "grok-build"]);
 
 export type ComposerModelGroup = {
+  key: string;
   provider: ChatProvider;
   label: string;
   defaultModel: string;
@@ -17,12 +18,22 @@ export function composerModelGroups({ currentModelOptions, currentProvider, prov
   providerOptions: DropdownOption[];
   providerSettings?: ProviderSettings | null;
 }): ComposerModelGroup[] {
-  return providerOptions.flatMap((providerOption) => {
+  return providerOptions.flatMap<ComposerModelGroup>((providerOption) => {
     if (providerOption.value === "setup-provider") return [];
     const provider = providerOption.value as ChatProvider;
     const options = provider === currentProvider ? currentModelOptions : modelOptionsForProvider(provider, providerSettings);
+    if (provider === "custom-openai-compatible") {
+      const cached = providerSettings?.modelCaches[provider]?.models ?? [];
+      const groups = new Map<string, DropdownOption[]>();
+      for (const option of options) {
+        const name = cached.find((entry) => entry.id === option.value)?.raw?.connectionProvider;
+        const label = typeof name === "string" ? name : providerOption.label;
+        groups.set(label, [...(groups.get(label) ?? []), option]);
+      }
+      return [...groups].map(([label, options]) => ({ key: `${provider}:${label}`, provider, label, defaultModel: options[0]!.value, options }));
+    }
     return options.length || nativeProviders.has(provider)
-      ? [{ provider, label: providerOption.label, defaultModel: defaultModelForProvider(provider, providerSettings), options }]
+      ? [{ key: provider, provider, label: providerOption.label, defaultModel: defaultModelForProvider(provider, providerSettings), options }]
       : [];
   });
 }

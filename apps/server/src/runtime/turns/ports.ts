@@ -309,6 +309,8 @@ export type TurnDispatcherPort = {
 };
 
 export type TurnRunnerDependencies = {
+  isRemoteAgentModel?: (providerId: string, modelId: string) => Promise<boolean>;
+  enclaveChat?: (modelId: string, prompt: string, signal: AbortSignal) => Promise<import("@openpond/contracts/enclave").EnclaveReply>;
   attachmentRootDir: string;
   store: TurnRepository;
   inboxStore?: TaskInboxRepository;
