@@ -1,5 +1,6 @@
 import {candidateAuthoringToolNames} from "../../harness/experiment-candidate-tool-catalog.js";
 import { contentHash } from "@openpond/harness";
+import { recoverHostedOutputLimit } from "./output-limit-recovery.js";
 import { workspaceToolCorrectionMessage, trainingHarnessForTurn } from "./tool-loop-support.js";
 import {
   DEFAULT_SESSION_EXPERIENCE,
@@ -594,32 +595,13 @@ export function createHostedToolLoopRuntime(deps: {
       const latestUsage = providerRound.usage;
       const finishReason = providerRound.finishReason;
       if (finishReason === "length") {
-        const nextOutputTokens = params.modelOutputLimit
-          ? hostedRequestedOutputTokens({
-              maxContextTokens: contextLimitTokens,
-              modelOutputLimit: params.modelOutputLimit,
-              requestedOutputTokens: maxOutputTokens * 2,
-            })
-          : maxOutputTokens;
-        await appendRuntimeEvent(event({
-          sessionId: session.id, turnId: params.turn.id, name: "diagnostic",
-          source: "server", status: "failed",
-          output: "The provider reached its output token limit before completing the response.",
-          data: { phase: "provider_output_limit", requestId: round.requestId,
-            maximumOutputTokens: maxOutputTokens, nextOutputTokens },
-        }));
-        await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
-        if (nextOutputTokens <= maxOutputTokens)
-          throw new Error(`Provider output token limit (${maxOutputTokens}) exhausted; the response is incomplete.`);
-        // Stay in this admitted turn. Completed actions from earlier rounds remain
-        // in context; no tool call from this truncated response is dispatched.
-        if (assistantText.trim() || latestContinuation) messages.push({
-          role: "assistant", content: assistantText,
-          ...(latestContinuation ? { continuation: latestContinuation } : {}),
+        maxOutputTokens = await recoverHostedOutputLimit({
+          messages, response: providerRound, maximumOutputTokens: maxOutputTokens,
+          modelOutputLimit: params.modelOutputLimit, maxContextTokens: contextLimitTokens,
+          sessionId: session.id, turnId: params.turn.id, requestId: providerRequestId,
+          appendRuntimeEvent,
+          recordUsage: () => appendContextUsage({ messages, usage: latestUsage, includeCompletion: true }),
         });
-        messages.push({ role: "user", content:
-          "The previous response reached its output token limit before finishing. Continue the unfinished task. No tool call from that truncated response was executed; do not repeat actions completed in earlier rounds." });
-        maxOutputTokens = nextOutputTokens;
         return { type: "continue" };
       }
       for (const toolCallBatch of providerRound.toolCallBatches) {
