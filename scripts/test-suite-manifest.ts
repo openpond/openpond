@@ -65,6 +65,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/project-links.test.ts",
   "tests/project-workflow-state.test.ts",
   "tests/provider-diagnostics.test.ts",
+  "tests/provider-plan-usage.test.ts",
   "tests/provider-scoped-payloads.test.ts",
   "tests/release-version.test.ts",
   "tests/distribution-growth.test.ts",

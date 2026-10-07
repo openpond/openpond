@@ -94,6 +94,11 @@ export class CodexAppServerClient {
     return this.request("account/read", {});
   }
 
+  async readRateLimits(): Promise<unknown> {
+    await this.initialize();
+    return this.request("account/rateLimits/read", {});
+  }
+
   async startThread(params: {
     cwd?: string | null;
     model?: string | null;
