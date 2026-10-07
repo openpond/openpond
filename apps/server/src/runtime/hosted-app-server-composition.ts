@@ -81,7 +81,7 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
   const admittedProfile = storage.admittedProfileRelease
     ? await loadHostedProfileStateAndLibrary(client, storage.admittedProfileRelease)
     : { profile: emptyProfile, profileLibrary: emptyProfileLibrary };
-  const { appendRuntimeEvent, closeEventSubscribers, subscribeRuntimeEvents } = createRuntimeEventBus({ logger, store: {
+  const { appendRuntimeEvent, closeEventSubscribers, subscribeRuntimeEvents } = createRuntimeEventBus({ logger, assistantDeltaFlushMs: 250, store: {
     appendRuntimeEvent: event => ["harness.refiner.queued", "harness.refiner.started", "harness.refiner.completed", "harness.refiner.failed"].includes(event.name)
       ? reviewStore.appendRuntimeEvent(event) : core.appendRuntimeEvent(event),
     runtimeEventPageRows: input => core.runtimeEventPageRows(input),
