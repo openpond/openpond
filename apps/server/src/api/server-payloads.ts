@@ -1,3 +1,4 @@
+import { withUrlModels } from "../enclave/provider.js";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -304,7 +305,7 @@ export function createServerPayloads(deps: {
       readProviderSecrets(providerSecretPaths),
       listManagedAdapterProviderModels(store),
     ]);
-    return applyNativeAgentStatus(withManagedAdapterProviderModels(
+    return withUrlModels(store.home, await applyNativeAgentStatus(withManagedAdapterProviderModels(
       buildProviderSettings({
         file: providerState.file,
         secrets,
@@ -313,7 +314,7 @@ export function createServerPayloads(deps: {
         catalog: providerState.catalog,
       }),
       managedAdapterModels
-    ));
+    )));
   }
 
   async function updateAppPreferencesPayload(
@@ -353,7 +354,7 @@ export function createServerPayloads(deps: {
           readProviderSecrets(providerSecretPaths),
           listManagedAdapterProviderModels(store),
         ]);
-      return applyNativeAgentStatus(withManagedAdapterProviderModels(
+      return withUrlModels(store.home, await applyNativeAgentStatus(withManagedAdapterProviderModels(
         buildProviderSettings({
           file: providerState.file,
           secrets,
@@ -362,7 +363,7 @@ export function createServerPayloads(deps: {
           catalog: providerState.catalog,
         }),
         managedAdapterModels
-      ));
+      )));
     });
   }
 
@@ -701,7 +702,7 @@ export function createServerPayloads(deps: {
         ...cache,
         // Saved native catalogs are small and needed before a selected agent's
         // capability refresh completes. Broad BYOK catalogs stay lazy.
-        models: providerId === "openpond" || providerId === "codex" || isNativeAgentId(providerId) ? cache.models : [],
+        models: providerId === "openpond" || providerId === "codex" || providerId === "tvc" || providerId === "custom-openai-compatible" || isNativeAgentId(providerId) ? cache.models : [],
       };
     }
     return {
@@ -1790,7 +1791,14 @@ export function createServerPayloads(deps: {
     resolveExternalDataset:createLocalExternalDatasetPreparation({store,storeDir,resolveAccess:resolveHostedApiAccess,identity:async()=>{const [bootstrap,preferences]=await Promise.all([bootstrapPayload(),loadAppPreferences()]);if(bootstrap.account.state!=="signed_in"||!bootstrap.account.profile?.id||!preferences.defaultTeamId)throw new Error("Sign in and select a workspace before preparing an external Dataset.");return{actorId:bootstrap.account.profile.id,teamId:preferences.defaultTeamId};}}),
   });
 
+  let enclaveService: ReturnType<typeof import("../enclave/connection.js").createEnclaveConnection> | undefined;
+  async function enclavePayload(action: import("../enclave/connection.js").EnclaveAction, payload?: unknown, signal?: AbortSignal) {
+    const module = await import("../enclave/connection.js");
+    enclaveService ??= module.createEnclaveConnection({ home: store.home });
+    return enclaveService(action, payload, signal);
+  }
   return {
+    enclavePayload,
     openPondCacheScope,
     upsertScaffoldApp,
     loadAppPreferences,

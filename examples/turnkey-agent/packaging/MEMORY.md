@@ -5,6 +5,27 @@ for a real CPU model plus the packaged app under one Linux cgroup limit. These
 measure different things: process RSS includes shared pages, while the cgroup
 accounts for charged anonymous memory, file pages, tmpfs and kernel memory.
 
+For the newer single-pivot static model package and its complete charged-tmpfs
+verification, use the [embedded inference workflow](../README.md). The dynamic
+model baseline below predates that package and excludes the full pivot budget.
+
+## Retained-heap profiling
+
+```sh
+pnpm exec tsx scripts/build/bundle-tvc.ts --profile
+node examples/turnkey-agent/packaging/profile-memory.mjs
+# Optional heap snapshot:
+node examples/turnkey-agent/packaging/profile-memory.mjs --snapshot
+```
+
+The separate profile bundle contains source maps and a module inventory. The
+profiler samples allocations before module loading, initializes the real
+app-server in a temporary home, forces GC after readiness, and writes memory
+and source-mapped allocation sites to `tmp/tvc-profile/capture-*`. It uses
+synthetic configuration and makes no inference/sandbox request. Sampling
+estimates retained allocations; it is not precise ownership, reclaimable
+savings, or a production RSS baseline. The normal bundle remains untouched.
+
 ## App measurement
 
 ```sh

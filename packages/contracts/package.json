@@ -160,6 +160,10 @@
     "./training": {
       "types": "./dist/training.d.ts",
       "import": "./dist/training.js"
+    },
+    "./enclave": {
+      "types": "./dist/enclave.d.ts",
+      "import": "./dist/enclave.js"
     }
   },
   "scripts": {

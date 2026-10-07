@@ -229,6 +229,8 @@ export async function validateOpenAiCompatibleProvider(input: {
 }
 
 export async function* streamOpenAiCompatibleChatCompletion(input: {
+  resolvedProvider?: OpenAiCompatibleResolvedProvider;
+  allowAnonymous?: boolean;
   providerId: ProviderId;
   settings: ProviderSettings;
   secrets: ProviderSecrets;
@@ -251,7 +253,7 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
     credential: ProviderChatGptSubscriptionCredential,
   ) => Promise<void>;
 }): AsyncGenerator<OpenAiCompatibleStreamDelta, void, unknown> {
-  const provider = resolveOpenAiCompatibleProvider(input);
+  const provider = input.resolvedProvider ?? resolveOpenAiCompatibleProvider(input);
   if (provider.auth.type === "chatgpt_subscription") {
     const subscriptionProvider = {
       ...provider,
@@ -271,7 +273,8 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
     );
     const response = await fetch(requestUrl, {
       method: "POST",
-      headers: providerHeaders(provider.auth.apiKey, "text/event-stream"),
+      redirect: "error",
+      headers: providerHeaders(provider.auth.apiKey, "text/event-stream", input.allowAnonymous),
       body: JSON.stringify(buildChatCompletionBody({
         providerId: provider.providerId,
         model: provider.model,
@@ -706,11 +709,11 @@ export function normalizeOpenAiCompatibleBaseUrl(value: string | null | undefine
   return url.toString().replace(/\/+$/, "");
 }
 
-function providerHeaders(apiKey: string, accept: string): Headers {
+function providerHeaders(apiKey: string, accept: string, allowAnonymous = false): Headers {
   const trimmed = apiKey.trim();
-  if (!trimmed) throw new Error("Provider API key is required.");
+  if (!trimmed && !allowAnonymous) throw new Error("Provider API key is required.");
   const headers = new Headers();
-  headers.set("Authorization", `Bearer ${trimmed}`);
+  if (trimmed) headers.set("Authorization", `Bearer ${trimmed}`);
   headers.set("Content-Type", "application/json");
   headers.set("Accept", accept);
   return headers;

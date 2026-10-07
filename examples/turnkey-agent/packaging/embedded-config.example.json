@@ -1,0 +1,10 @@
+{
+  "mode": "embedded",
+  "host": "0.0.0.0",
+  "port": 3000,
+  "authTokenSha256": "REPLACE_WITH_CALLER_TOKEN_SHA256",
+  "model": "smollm2-135m-instruct",
+  "contextTokens": 4096,
+  "requestTimeoutMs": 300000,
+  "maxConcurrentRequests": 1
+}
