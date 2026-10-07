@@ -7,6 +7,12 @@ export async function handleSettingsRoutes({
   requestUrl,
   response,
 }: HttpRouteContext): Promise<boolean> {
+  const planUsage = /^\/v1\/providers\/(codex|claude-code)\/plan-usage$/.exec(requestUrl.pathname);
+  if (planUsage && request.method === "GET" && deps.providerPlanUsagePayload) {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(response, 200, await deps.providerPlanUsagePayload(planUsage[1]!));
+    return true;
+  }
   const nativeHistory = /^\/v1\/native-history\/(list|open|branches|collector)$/.exec(requestUrl.pathname);
   if (nativeHistory && request.method === "POST" && deps.nativeHistoryPayload) {
     sendJson(response, 200, await deps.nativeHistoryPayload(nativeHistory[1]!, await readJson(request)));

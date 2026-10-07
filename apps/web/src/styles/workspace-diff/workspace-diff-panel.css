@@ -764,6 +764,9 @@
 }
 
 .workspace-document-preview-card a {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.08);
   color: #d7d7d7;
@@ -772,7 +775,8 @@
   text-decoration: none;
 }
 
-.workspace-document-preview-card a:hover {
+.workspace-document-preview-card a:hover,
+.workspace-document-preview-card a:focus-visible {
   background: rgba(255, 255, 255, 0.12);
   color: #f1f1f1;
 }
