@@ -6,6 +6,7 @@ import {contentHash,sha256} from "@openpond/harness";
 import {AgentHostStorageClient} from "@openpond/agent-runtime";
 import {createProfileExternalDatasetBinding,externalDatasetDefinitionId,createProfileEvaluationComparison,createVerifierSetRelease,type TasksetRunManifest} from "@openpond/evals";
 import {createTasksetPackage} from "openpond-sdk/taskset-packages";
+import {verifyHarnessExperimentManifest} from "../packages/sdk/src/model-taskset-runs-contracts";
 import {materializePortableTasksetRelease} from "../packages/taskset-sdk/src";
 import {tasksetFixture} from "./helpers/training-fixtures";
 import {prepareHostedProfileEvaluation} from "../apps/server/src/hosted-profile-evaluation-preparation";
@@ -51,6 +52,13 @@ it("executes the selected ordered external population against two actual compile
   await writeFile(path.join(companionDir,externalDatasetPackage),JSON.stringify({packageValue:value,graders}));
   const cold=await prepareHostedProfileEvaluation({compile:{repoPath,profileId:"team",repositoryId:"owned-repository",sourceRevision:contentHash(`accepted-${kind}`),workspaceId:`companion-${kind}`,outputDir:companionDir},externalDatasetPackage,action:"prepare",request:{id:`cold-${kind}`,createdAt:"2026-10-01T00:00:00.000Z",definitionId:externalDatasetDefinitionId(binding),externalDatasetBinding:binding,modelRef:{providerId:"openpond",modelId:"fixture-unpaid"},hostModelConfigurationHash:configHash,maximumSpendUsd:0.02}}) as {manifest:TasksetRunManifest};
   expect(cold.manifest.population.map(row=>[row.taskId,row.seed])).toEqual([["task_b","seed-b"],["task_a","seed-a"]]);expect(cold.manifest.limits.maximumSpendUsd).toBe(0.02);expect(cold.manifest.packageHash).toBe(value.contentHash);
+  // Production admission consumes the actual companion manifest through the SDK.
+  // Checking this boundary catches a producer/consumer receipt identity mismatch
+  // before a paid hosted run is rejected after an otherwise successful preview.
+  verifyHarnessExperimentManifest({schemaVersion:"openpond.modelTasksetRunRequest.v1",operationId:`cold-${kind}`,teamId:"team",modelProjectId:null,
+    taskset:{id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash},population:cold.manifest.population,
+    policy:{kind:"hosted_harness",modelId:"fixture-unpaid",profileRepositoryId:"owned-repository",source:cold.manifest.profileEvaluation!,externalDatasetBinding:binding,
+      modelConfigurationHash:configHash,packageHash:value.contentHash}},cold.manifest);
   const server=await createOpenPondAppServer({...options,profileExternalDataset:{binding,packageValue:value,graders},profileExternalDatasetClient:host});close.push(server.close);
   const prepared=await server.runtime.profileEvaluationPrepare({id:kind,createdAt:"2026-10-01T00:00:00.000Z",definitionId:externalDatasetDefinitionId(binding),externalDatasetBinding:binding,modelRef:{providerId:"openpond",modelId:"fixture-unpaid"},hostModelConfigurationHash:configHash}) as {manifest:TasksetRunManifest};
   expect(prepared.manifest.population.map(row=>[row.taskId,row.seed])).toEqual([["task_b","seed-b"],["task_a","seed-a"]]);
