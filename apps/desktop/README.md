@@ -38,7 +38,7 @@ pnpm package:linux
 pnpm package:mac
 ```
 
-`build:desktop` writes the bundled ESM main process and sandbox-compatible CommonJS preload directly to `apps/desktop/dist`. Staging creates a dependency-free app bundle plus a hashed target-specific runtime. The server uses Electron's built-in `node:sqlite`; only the server bundle, web build, node-pty, bindings, file-uri-to-path, and required icons enter the package.
+`build:desktop` writes the bundled ESM main process and sandbox-compatible CommonJS preload directly to `apps/desktop/dist`. TypeScript writes to `dist-types` so typechecking cannot overwrite the CommonJS preload with ESM and disconnect the desktop window controls. Staging creates a dependency-free app bundle plus a hashed target-specific runtime. The server uses Electron's built-in `node:sqlite`; only the server bundle, web build, node-pty, bindings, file-uri-to-path, and required icons enter the package.
 
 `pnpm desktop:package:check` reports artifact/resource sizes and rejects nonminimal `app.asar` contents, unexpected staged files, hash mismatches, foreign native binaries, maps, tests, sources, debug symbols, and static libraries.
 

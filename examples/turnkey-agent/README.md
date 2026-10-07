@@ -2,7 +2,7 @@
 
 This example embeds the **real OpenPond app-server** in a static Node executable. Each authenticated request creates a temporary SQLite home and harness, runs the existing model/tool loop, and removes its local state. The only tool computes a UTF-8 string's SHA-256 through the existing external Firecracker sandbox API. Its sandbox and team are bound by deployment configuration.
 
-Local bundle and static-executable integration are verified. Actual QuorumOS execution remains unverified; fixture success is not a TVC or Firecracker proof. Model inference and sandbox execution remain outside the enclave, and credentials/content pass through ordinary HTTPS ingress. This is an ephemeral compatibility example, not a confidential end-to-end service.
+App-server/SQLite startup and HTTP authentication are verified on a non-debug TVC deployment using QOS 0.12.1. The model → sandbox → model loop is verified locally against fixtures; a real external-service turn in TVC remains pending egress and sandbox credentials. Model inference and sandbox execution remain outside the enclave, and credentials/content pass through ordinary HTTPS ingress. This is an ephemeral compatibility example, not a confidential end-to-end service.
 
 ## Build and local verification
 
@@ -44,7 +44,7 @@ Copy `packaging/public-config.example.json` to a private working location. Confi
 
 Follow [Turnkey's quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart) to log in with an API key registered to the intended organization, initialize an app/operator, and generate the deployment template. Startup and `/health` require no egress, so they can be deployed first. Agent turns need outbound HTTPS; confirm organization egress enablement and enable egress on the app before testing real inference/tools.
 
-`packaging/deployment.example.json` documents the deployment fields. Use the supported QOS version from the current CLI/docs, your app ID, immutable image digest, and the packaged executable hash. Set `pivotArgs` to `["--config-json", JSON.stringify(publicConfig)]`, where the second element is one JSON string. Ports must match public config. Create and approve the deployment with the registered manifest operator. Keep debug off for the acceptance run; a debug app needs a separate quorum key and is not attested proof.
+`packaging/deployment.example.json` documents the deployment fields. Use a supported QOS version reported by the API/CLI, your app ID, immutable image digest, and the packaged executable hash. Set `pivotArgs` to `["--config-json", JSON.stringify(publicConfig)]`, where the second element is one JSON string. Ports must match public config. Create and approve the deployment with the registered manifest operator. Keep debug off for the acceptance run; a debug app needs a separate quorum key and is not attested proof.
 
 For local live-service testing, run the packaged executable with the same public configuration:
 
@@ -55,7 +55,7 @@ dist/turnkey-agent/openpond-tvc --config-json "$(cat /path/to/public-config.json
 Supply `TVC_AUTH_TOKEN`, `OPENAI_API_KEY`, and `OPENPOND_API_KEY` securely to the client environment, then run:
 
 ```sh
-node examples/turnkey-agent/client.mjs https://app-YOUR_APP_UUID.turnkey.cloud
+node examples/turnkey-agent/client.mjs https://YOUR_APP_DOMAIN_FROM_THE_API
 ```
 
 The client uses synthetic text, validates both the sandbox evidence and final answer against a locally computed digest, and prints only sanitized identifiers/digest. It never retries. Keep the app/deployment/manifest identity, debug status, image/executable hashes, health result, and real sandbox command ID with the run evidence.
