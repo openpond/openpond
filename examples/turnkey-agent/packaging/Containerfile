@@ -1,0 +1,4 @@
+# Build context: dist/turnkey-agent, after package.sh verifies the ELF.
+FROM scratch
+COPY --chmod=755 openpond-tvc /openpond-tvc
+ENTRYPOINT ["/openpond-tvc"]

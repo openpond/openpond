@@ -1,0 +1,12 @@
+{
+  "appId": "REPLACE_APP_UUID",
+  "qosVersion": "REPLACE_SUPPORTED_QOS_VERSION",
+  "pivotContainerImageUrl": "REPLACE_REGISTRY_IMAGE@sha256:REPLACE_LINUX_AMD64_MANIFEST_DIGEST",
+  "pivotPath": "/openpond-tvc",
+  "pivotArgs": ["--config-json", "REPLACE_WITH_SERIALIZED_PUBLIC_CONFIG"],
+  "expectedPivotDigest": "REPLACE_EXECUTABLE_SHA256",
+  "dangerousDeployDebugMode": false,
+  "publicIngressPort": 3000,
+  "healthCheckPort": 3000,
+  "healthCheckType": "TVC_HEALTH_CHECK_TYPE_HTTP"
+}
