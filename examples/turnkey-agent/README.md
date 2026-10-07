@@ -54,6 +54,8 @@ The separate profile bundle includes source maps and an esbuild module inventory
 
 The RSS benchmark uses a local synthetic model fixture and the real chat runtime, without an inspector or forced GC. Each run gets a fresh process and temporary home; it checks the response and records startup RSS, first-turn RSS, and the process high-water mark from `/proc`. Reports under `tmp/tvc-profile/benchmark-*` include the artifact hash, all samples, and medians. Compare both live heap and first-turn RSS: V8 allocation/GC thresholds can make RSS move differently from retained heap. Run the complete integration check against any candidate profile bundle with `node examples/turnkey-agent/check.mjs --bundle dist/turnkey-agent-profile/app.cjs`.
 
+For measured app memory, pinned Qwen3 0.6B inputs, and a real model/tool benchmark under a combined 1 GiB Linux cgroup cap, see [Local memory and model benchmarks](packaging/MEMORY.md). This local model baseline does not establish inference compatibility with QOS/TVC.
+
 Record the **linux/amd64 manifest digest**, not a multi-platform index digest. TVC extracts `/openpond-tvc`; the container filesystem is not available to the running program. Required skills/assets are embedded and extracted to a private temporary directory at startup. Local project compilation and terminal execution are unavailable.
 
 ## Configure and deploy

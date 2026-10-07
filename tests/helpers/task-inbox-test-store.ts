@@ -16,8 +16,10 @@ export function taskInboxTestStore(snapshot: () => Promise<{ turns: Turn[]; sess
     CREATE TABLE subagent_runs (id TEXT PRIMARY KEY, parent_session_id TEXT, parent_turn_id TEXT,
       child_session_id TEXT, role_id TEXT, status TEXT, payload TEXT, created_at TEXT, updated_at TEXT);`);
   db.exec(TASK_INBOX_SCHEMA_SQL);
-  const sqlStore = Object.create(SqliteTaskInboxStore.prototype) as SqliteTaskInboxStore;
-  Object.assign(sqlStore, { db, ready: Promise.resolve(), writeQueue: Promise.resolve() });
+  const sqlStore = new SqliteTaskInboxStore({
+    home: ":memory:", storePath: ":memory:", logger: undefined, db, database: db,
+    ready: Promise.resolve(), writeQueue: Promise.resolve(),
+  });
   const methods: Record<string, unknown> = { sessionShells: async () => [] };
   for (const name of Object.getOwnPropertyNames(SqliteTaskInboxStore.prototype)) {
     if (name === "constructor" || name === "inboxWrite") continue;

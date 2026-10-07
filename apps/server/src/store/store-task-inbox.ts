@@ -1,10 +1,7 @@
-import {
-  TASK_INPUT_BATCH_MAX_CHARS, TaskInputMutationSchema, TaskWaitSchema,
-  SubagentRunSchema, type SubagentRun,
-  type TaskInboxSnapshot, type TaskInput, type TaskInputAdmission, type TaskInputMutation, type TaskWait,
-} from "@openpond/contracts";
+import { TASK_INPUT_BATCH_MAX_CHARS, TaskInputMutationSchema, TaskWaitSchema, type TaskInboxSnapshot, type TaskInput, type TaskInputAdmission, type TaskInputMutation, type TaskWait } from "@openpond/contracts/task-inbox";
+import { SubagentRunSchema, type SubagentRun } from "@openpond/contracts/subagents";
 import { recoverTaskInboxOwners } from "./task-inbox-recovery.js";
-import { SqliteHumanReviewStore } from "./store-human-review.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 import { subagentRunParams } from "./store-codecs.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import {
@@ -14,7 +11,7 @@ import {
 
 const LEASE_MS = 90_000;
 
-export class SqliteTaskInboxStore extends SqliteHumanReviewStore {
+export class SqliteTaskInboxStore extends SqliteStoreDomain {
   private async inboxWrite<T>(operation: (db: OpenPondSqliteConnection) => T): Promise<T> {
     await this.ready;
     const write = this.writeQueue.then(() => {

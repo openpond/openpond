@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
-import {
-  DEFAULT_OPENPOND_CHAT_MODEL,
-  type ChatProvider,
-} from "@openpond/contracts";
+import { DEFAULT_OPENPOND_CHAT_MODEL, type ChatProvider } from "@openpond/contracts/settings";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
-import {
-  agentCompactionDecision,
-  runAgentCompactionProgram,
-} from "@openpond/agent-runtime";
+import { agentCompactionDecision, runAgentCompactionProgram } from "@openpond/agent-runtime/compaction";
 import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
 import {
   estimateHostedRequestBudget,

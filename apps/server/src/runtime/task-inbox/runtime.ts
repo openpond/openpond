@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { TaskSerialExecutor, TaskSignals } from "@openpond/agent-runtime";
-import {
-  SendTurnRequestSchema, SteerTurnRequestSchema, TaskInputSchema, taskInputModelText,
-  type RuntimeEvent, type Session, type TaskInput, type TaskInputAdmission, type TaskInputMutation,
-  type TaskPeer, type TaskWait, type Turn, type SubagentRun,
-} from "@openpond/contracts";
+import { TaskSerialExecutor, TaskSignals } from "@openpond/agent-runtime/task-signals";
+import { SendTurnRequestSchema } from "@openpond/contracts/requests";
+import { SteerTurnRequestSchema, TaskInputSchema, taskInputModelText, type TaskInput, type TaskInputAdmission, type TaskInputMutation, type TaskPeer, type TaskWait } from "@openpond/contracts/task-inbox";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
+import { type SubagentRun } from "@openpond/contracts/subagents";
 import { event } from "../../utils.js";
 import type { TaskInboxRepository } from "./repository.js";
 import type { ActiveTurn } from "../turns/ports.js";

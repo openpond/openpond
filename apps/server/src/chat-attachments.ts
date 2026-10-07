@@ -5,7 +5,7 @@ import type {
   ChatAttachment,
   ChatAttachmentSummary,
 } from "@openpond/contracts";
-import { countTextLines } from "@openpond/contracts";
+import { countTextLines } from "@openpond/contracts/chat-attachments";
 
 const ATTACHMENT_CONTEXT_TEXT_LIMIT = 120_000;
 const MAX_CHAT_ATTACHMENT_IMAGE_BYTES = 15 * 1024 * 1024;

@@ -2,7 +2,7 @@ import {retainHumanLocalPublication,readHumanLocalPublications,type HumanLocalPu
 import {writeHumanLiveControl,type HumanLiveControlInput} from "./human-live-control.js";
 import { HumanReviewSchema, type HumanReviewRepository, type HumanReviewTransaction, type HumanOperationReceipt } from "@openpond/evals/human-review";
 import { LearningDomainError } from "@openpond/evals/learning";
-import { SqliteLocalExperimentStore } from "./store-local-experiments.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 import { localCases, localDefinition, localExecution } from "./local-experiment-records.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 export const HUMAN_REVIEW_SQL = `
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS human_reviews(scope TEXT NOT NULL,id TEXT NOT NULL,re
 CREATE INDEX IF NOT EXISTS human_reviews_project_idx ON human_reviews(scope,project_id,id);
 CREATE TABLE IF NOT EXISTS human_review_operations(scope TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(scope,id));
 `;
-export class SqliteHumanReviewStore extends SqliteLocalExperimentStore {
+export class SqliteHumanReviewStore extends SqliteStoreDomain {
   async humanLiveControl(input:HumanLiveControlInput){await this.ready;const operation=this.writeQueue.then(()=>{const db=this.database;db.exec("BEGIN IMMEDIATE");try{const result=writeHumanLiveControl(db,input);db.exec("COMMIT");return result;}catch(error){db.exec("ROLLBACK");throw error;}});this.writeQueue=operation.then(()=>{},()=>{});return operation;}
   async humanLiveControlReceipt(input:Omit<HumanLiveControlInput,"phase">){await this.ready;await this.writeQueue;return writeHumanLiveControl(this.database,{...input,phase:"inspect"});}
   async rememberHumanLocalPublication(input:Parameters<typeof retainHumanLocalPublication>[1]){await this.ready;const write=this.writeQueue.then(()=>{const db=this.database;db.exec("BEGIN IMMEDIATE");try{retainHumanLocalPublication(db,input);db.exec("COMMIT");}catch(error){db.exec("ROLLBACK");throw error;}});this.writeQueue=write.then(()=>{},()=>{});return write;}
@@ -30,8 +30,8 @@ export class SqliteHumanReviewStore extends SqliteLocalExperimentStore {
       this.writeQueue = operation.then(()=>{},()=>{}); return operation;
     } };
   }
-  /** Human authority calls this only while its repository owns the connection/queue.
-   * It cannot await queued Experiment writes from within that transaction. */
+  /** Human authority can call this while its repository owns the connection/queue.
+   * The facade awaits domain loading but must not enqueue this read behind that transaction. */
   humanReviewLocalEvidence(scope:string,id:string) {
     const execution = localExecution(this.database,scope,id);
     const released = localDefinition(this.database,scope,execution.definition.id,execution.definition.revision);

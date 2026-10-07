@@ -10,7 +10,7 @@ import {
 import { z } from "zod";
 
 import type { PayloadRow } from "../types.js";
-import { SqliteHarnessWorkspaceStore } from "./store-harness-workspaces.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
 const LocalWorkEvidenceArtifactSchema = z.object({
   kind: z.enum([
@@ -49,7 +49,7 @@ export const StoredWorkFeedbackSchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
 }).strict();
 
-export class SqliteWorkEvidenceStore extends SqliteHarnessWorkspaceStore {
+export class SqliteWorkEvidenceStore extends SqliteStoreDomain {
   async saveWorkEvidenceProjection(
     input: StoredWorkEvidenceProjection,
   ): Promise<StoredWorkEvidenceProjection> {

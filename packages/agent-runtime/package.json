@@ -13,6 +13,62 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./acp/claude-cli-client": {
+      "types": "./dist/acp/claude-cli-client.d.ts",
+      "import": "./dist/acp/claude-cli-client.js"
+    },
+    "./acp/client": {
+      "types": "./dist/acp/client.d.ts",
+      "import": "./dist/acp/client.js"
+    },
+    "./acp/types": {
+      "types": "./dist/acp/types.d.ts",
+      "import": "./dist/acp/types.js"
+    },
+    "./canonical": {
+      "types": "./dist/canonical.d.ts",
+      "import": "./dist/canonical.js"
+    },
+    "./compaction": {
+      "types": "./dist/compaction.d.ts",
+      "import": "./dist/compaction.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js"
+    },
+    "./host-storage-client": {
+      "types": "./dist/host-storage-client.d.ts",
+      "import": "./dist/host-storage-client.js"
+    },
+    "./jsonl": {
+      "types": "./dist/jsonl.d.ts",
+      "import": "./dist/jsonl.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js"
+    },
+    "./provider-loop": {
+      "types": "./dist/provider-loop.d.ts",
+      "import": "./dist/provider-loop.js"
+    },
+    "./service": {
+      "types": "./dist/service.d.ts",
+      "import": "./dist/service.js"
+    },
+    "./snapshots": {
+      "types": "./dist/snapshots.d.ts",
+      "import": "./dist/snapshots.js"
+    },
+    "./task-signals": {
+      "types": "./dist/task-signals.d.ts",
+      "import": "./dist/task-signals.js"
+    },
+    "./tools": {
+      "types": "./dist/tools.d.ts",
+      "import": "./dist/tools.js"
     }
   },
   "scripts": {

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import {
   readOptionalFile, resolveConfigPath, PersistenceError, type ConfigDocument,
 } from "@openpond/persistence";
-import { PERSONALIZATION_TEMPLATES, DEFAULT_PERSONALIZATION_TEMPLATE_ID } from "@openpond/contracts";
+import { PERSONALIZATION_TEMPLATES, DEFAULT_PERSONALIZATION_TEMPLATE_ID } from "@openpond/contracts/settings";
 import { resolveRepositoryInstructions, type RepositoryInstructionResolution } from "../openpond/repository-instructions.js";
 
 export type InstructionSourceSnapshot = { role: "personality" | "user" | "repository"; path: string; hash: string };

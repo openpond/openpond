@@ -1,15 +1,4 @@
-import {
-  CONNECTED_APP_PROVIDER_TOOL_NAMES,
-  connectedAppBundleByProvider,
-  connectedAppProviderOperationById,
-  normalizeConnectedAppProviderFamilyId,
-  validateConnectedAppProviderOperationRequest,
-  type ConnectedAppProviderToolName,
-  type ConnectedAppProviderToolOperation,
-  type ConnectedAppToolCallRequest,
-  type ConnectedAppToolCallResponse,
-  type ConnectedAppProviderFamilyId,
-} from "@openpond/contracts";
+import { CONNECTED_APP_PROVIDER_TOOL_NAMES, connectedAppBundleByProvider, connectedAppProviderOperationById, normalizeConnectedAppProviderFamilyId, validateConnectedAppProviderOperationRequest, type ConnectedAppProviderToolName, type ConnectedAppProviderToolOperation, type ConnectedAppToolCallRequest, type ConnectedAppToolCallResponse, type ConnectedAppProviderFamilyId } from "@openpond/contracts/connected-apps";
 import type { ResolvedConnectedAppContext } from "./connected-app-context.js";
 import type {
   ModelToolDefinition,

@@ -1,13 +1,5 @@
-import {
-  nextCreateImproveRunRevision,
-  type CreateImproveCandidate,
-  type CreateImproveEvaluationReceipt,
-  type CreateImproveRun,
-  type CreateImproveRunAction,
-  type GradeResult,
-  type TaskAttemptResult,
-  type Taskset,
-} from "@openpond/contracts";
+import { nextCreateImproveRunRevision, type CreateImproveCandidate, type CreateImproveEvaluationReceipt, type CreateImproveRun, type CreateImproveRunAction } from "@openpond/contracts/create-pipeline";
+import { type GradeResult, type TaskAttemptResult, type Taskset } from "@openpond/contracts/tasksets";
 
 import { resolveLocalCreatePipelineTarget } from "../local-create-pipeline.js";
 import { runNormalizedAgentEvaluation } from "./agent-evaluation.js";

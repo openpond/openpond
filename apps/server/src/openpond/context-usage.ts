@@ -1,11 +1,5 @@
-import {
-  ContextUsageSnapshotSchema,
-  type ChatProvider,
-  type ContextUsageSource,
-  type ContextUsageSnapshot,
-  type HostedContextProvider,
-  type ProviderSettings,
-} from "@openpond/contracts";
+import { ContextUsageSnapshotSchema, type ChatProvider, type ContextUsageSource, type ContextUsageSnapshot, type HostedContextProvider } from "@openpond/contracts/settings";
+import { type ProviderSettings } from "@openpond/contracts/providers";
 import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
 import { admittedHostedModelLimits } from "../runtime/hosted-model-limits.js";
 

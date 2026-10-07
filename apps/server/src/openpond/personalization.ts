@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import {
-  DEFAULT_PERSONALIZATION_TEMPLATE_ID, PERSONALIZATION_TEMPLATES, PersonalizationSettingsSchema,
-  type PersonalizationSettings, type PersonalizationTemplate, type UpdatePersonalizationRequest,
-} from "@openpond/contracts";
+import { DEFAULT_PERSONALIZATION_TEMPLATE_ID, PERSONALIZATION_TEMPLATES, PersonalizationSettingsSchema, type PersonalizationSettings, type PersonalizationTemplate } from "@openpond/contracts/settings";
+import { type UpdatePersonalizationRequest } from "@openpond/contracts/requests";
 import { readConfig, updateConfig, readOptionalFile, atomicWriteFile, withFileLock, storagePaths, PersistenceError, isMissing } from "@openpond/persistence";
 import type { SqliteStore } from "../store/store.js";
 

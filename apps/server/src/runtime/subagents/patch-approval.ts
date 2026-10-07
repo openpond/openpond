@@ -1,13 +1,8 @@
-import {
-  ResolveApprovalRequestSchema,
-  SubagentProgressSchema,
-  SubagentRunSchema,
-  type Approval,
-  type ResolveApprovalRequest,
-  type RuntimeEvent,
-  type Session,
-  type SubagentRun,
-} from "@openpond/contracts";
+import { ResolveApprovalRequestSchema, type ResolveApprovalRequest } from "@openpond/contracts/requests";
+import { SubagentProgressSchema, SubagentRunSchema, type SubagentRun } from "@openpond/contracts/subagents";
+import { type Approval } from "@openpond/contracts/approvals";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 import { runWorkspaceCommand } from "../../workspace/workspaces.js";
 import { event, now } from "../../utils.js";
 import type { TurnRunnerDependencies } from "../turns/ports.js";

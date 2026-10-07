@@ -1,128 +1,82 @@
-import {createProfilePrivateGradingOwner,preflightProfilePrivateGrading} from "./harness/profile-private-grading.js";
-import {createWorkOutputService} from "./work/work-output-service.js";
-import {randomUUID} from "node:crypto";
-import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
-import { experimentSessionStreamResolver } from "./runtime/experiment-session-stream.js";
-import { createExperimentCaseService } from "./evaluations/experiment-case-service.js";
-import { createLocalExperimentPolicy } from "./evaluations/local-experiment-policy.js";
-import { createHostExperimentPolicy } from "./evaluations/host-experiment-policy.js";
-import { createHostExperimentEnvironment } from "./evaluations/host-experiment-environment.js";
-import { createHostExperimentNativeStream } from "./evaluations/host-experiment-native-stream.js";
+import { initializeHome,readPreferences } from "@openpond/persistence";
+import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 import { installPublishedExperimentSource } from "./harness/published-experiment-source.js";
 import { createStandaloneExperimentTurnOwner } from "./harness/standalone-experiment-turn-owner.js";
-import { standaloneExperimentToolDeclarations } from "./harness/standalone-experiment-tools.js";
-import { z } from "zod";
-import { initializeRefinerProfile } from "./refiner/refiner-profile-service.js";
-import { initializeHome, readPreferences } from "@openpond/persistence";
-import { onStartupFailure, ownHomeRuntime } from "./runtime/home-runtime-owner.js";
-import path from "node:path";
-import { mkdir } from "node:fs/promises";
-import { loadHostedHarnessRuntimeForSession } from "./store/hosted-harness-runtime.js";
-import { HostedHarnessOverlayStorage } from "./store/hosted-harness-overlay-storage.js";
-import { loadHostedRuntimeSettings } from "./store/hosted-runtime-settings.js";
+import { experimentSessionStreamResolver } from "./runtime/experiment-session-stream.js";
+import { onStartupFailure,ownHomeRuntime } from "./runtime/home-runtime-owner.js";
+import { lazyRuntimeService } from "./runtime/lazy-runtime-service.js";
+import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
 import type { TaskInboxRepository } from "./runtime/task-inbox/repository.js";
+import { createWorkOutputService } from "./work/work-output-service.js";
 
-import { createAppServer, type AppServerInstance } from "@openpond/app-server";
-import {
-  localPathWorkspaceId,
-  type Approval,
-  type ModelUsageRecord,
-  type OpenPondApp,
-  type RuntimeEvent,
-} from "@openpond/contracts";
+import { createAppServer,type AppServerInstance } from "@openpond/app-server";
 import {
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
   loadOpenPondProfileStateFromSource,
   readProfileSkill,
 } from "@openpond/cloud";
-import { createLogger } from "@openpond/logging";
+import { localPathWorkspaceId } from "@openpond/contracts/workspaces";
+import { type Approval } from "@openpond/contracts/approvals";
+import { type ModelUsageRecord } from "@openpond/contracts/usage";
+import { type OpenPondApp } from "@openpond/contracts/apps";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
 import { contentHash } from "@openpond/harness";
-import { STANDALONE_EXPERIMENT_MAX_POLICY_CALLS } from "@openpond/evals/experiments";
+import { createLogger } from "@openpond/logging";
 import {
-  getBundledRuntimeVersion,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
+  getBundledRuntimeVersion,
 } from "@openpond/runtime";
 
 import { VERSION } from "./constants.js";
-import {
-  ensureSelectedLocalHarnessWorkspace,
-  resolveSelectedLocalHarnessRelease,
-} from "./harness/local-harness-selection.js";
-import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-runtime.js";
+import { type HostProfileExternalDataset } from "./harness/host-profile-external-dataset.js";
 import { ensureExplicitProfileHarnessSource } from "./harness/local-explicit-profile-source.js";
-import { importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
-import { PROFILE_HARNESS_WORKSPACE_PREFIX } from "./harness/profile-harness-workspace-identity.js";
-import { ensureLocalProfileWorkflows, loadLocalHarnessRuntimeForSession, profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
-import { profileEvaluationsForRelease } from "./harness/local-profile-evaluation-runtime.js";
-import { profileTrainingSource } from "./harness/profile-training-source.js";
-import {createHostProfileExternalDataset,type HostProfileExternalDataset} from "./harness/host-profile-external-dataset.js";
-import {createHostProfileEvaluationTools} from "./harness/host-profile-evaluation-tools.js";
-import { createProfileEvaluationCaseService } from "./harness/profile-evaluation-case-service.js";
-import { createProfileEvaluationRunService } from "./harness/profile-evaluation-run-service.js";
-import { createProfileEvaluationSuiteService } from "./harness/profile-evaluation-suite-service.js";
-import { createProfileEvaluationComparisonService } from "./harness/profile-evaluation-comparison-service.js";
-import { buildProfileEvaluationReport } from "./harness/profile-evaluation-report-service.js";
-import { inspectProfileEvaluationRun, ProfileEvaluationInspectionRequestSchema } from "./harness/profile-evaluation-run-inspection.js";
-import { createProfileEvaluationRunPreparationService } from "./harness/profile-evaluation-run-preparation.js";
-import { loadLocalProfileEvaluationTaskset } from "./harness/local-profile-evaluation-taskset.js";
-import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
+import { createLocalHarnessEvaluationReviewModelStream } from "./harness/local-harness-evaluation-review-model.js";
+import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
 import {
   ensureLocalHarnessRunOverlay,
 } from "./harness/local-harness-run-overlay.js";
 import {
-  createLocalHarnessSettingsRoutePayloads,
-  localHarnessHistoryPayload,
-} from "./harness/local-harness-history.js";
-import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
-import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
-import {
-  activateRefinerRelease,
-  inspectRefinerProfile,
-  rollbackRefinerRelease,
-  updateRefinerProfile,
-} from "./refiner/refiner-profile-service.js";
+  ensureSelectedLocalHarnessWorkspace
+} from "./harness/local-harness-selection.js";
+import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-runtime.js";
+import { importLocalHarnessWorkspaceSource } from "./harness/local-harness-workspace-service.js";
+import { ensureLocalProfileWorkflows,loadLocalHarnessRuntimeForSession,profileWorkflowsForRelease } from "./harness/local-profile-workflow-runtime.js";
+import { PROFILE_HARNESS_WORKSPACE_PREFIX } from "./harness/profile-harness-workspace-identity.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
-import { listAppServerIntegrationConnections } from "./openpond/app-server-connected-apps.js";
-import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { loadPersonalizationSettings } from "./openpond/personalization.js";
-import { createHostedSavedWork } from "./openpond/saved-work.js";
-import { executeHostedTasksetAction } from "./openpond/hosted-tasksets.js";
-import { createProjectActionRunPayload } from "./project-actions/project-action-payload.js";
 import {
   createScriptedOpenPondChatStream,
   scriptedOpenPondModelsEnabled,
 } from "./openpond/scripted-chat-provider.js";
-import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import { appDataDir } from "./paths.js";
-import { createBackgroundWorkerQueue } from "./runtime/background-worker-queue.js";
-import { createAppServerWorkspace } from "./runtime/app-server-workspace.js";
-import { findLocalProject } from "./workspace/local-projects.js";
+import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import type { AppServerSandboxRequest } from "./runtime/app-server-sandbox-tools.js";
+import { createAppServerWorkspace } from "./runtime/app-server-workspace.js";
+import { createBackgroundWorkerQueue } from "./runtime/background-worker-queue.js";
 import {
   isBundledAuthoringSkillName,
   loadBundledAuthoringSkills,
   readBundledAuthoringProfileSkill,
 } from "./runtime/bundled-authoring-skills.js";
-import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
-import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
-import { createLocalHarnessEvaluationReviewModelStream } from "./harness/local-harness-evaluation-review-model.js";
-import { createLocalHarnessTasksetReviewControl } from "./harness/local-harness-taskset-review.js";
-import {
-  loadTasksetAuthoringProfileSkill,
-  readTasksetAuthoringProfileSkill,
-} from "./training/task-authoring-skill.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import type { TurnRunnerDependencies } from "./runtime/turns/ports.js";
 import { resolveMaxHostedWorkspaceToolRounds } from "./server-entry-helpers.js";
-import { createSessionStore } from "./store/session-store.js";
 import { createSessionTitleService } from "./session-title-service.js";
+import { createSessionStore } from "./store/session-store.js";
+import type { LocalHarnessReleaseRecord } from "./store/store-harness-workspaces.js";
 import { SqliteStore } from "./store/store.js";
-import { event, now } from "./utils.js";
-import { createHostedOwnedAppServer } from "./runtime/hosted-app-server-composition.js";
+import {
+  loadTasksetAuthoringProfileSkill,
+  readTasksetAuthoringProfileSkill,
+} from "./training/task-authoring-skill.js";
+import { event,now } from "./utils.js";
+import { findLocalProject } from "./workspace/local-projects.js";
 
 import {
   createEmbeddingToolResolver,
@@ -131,9 +85,9 @@ import {
   type AppServerWorkLifecycle,
 } from "./runtime/app-server-embedding.js";
 
-export type { AppServerEmbeddingOptions, AppServerServiceOptions, AppServerToolBinding, AppServerHarnessToolContext } from "./runtime/app-server-embedding.js";
-export { runAppServerJsonl } from "@openpond/app-server";
 export { AGENT_PROTOCOL_VERSION } from "@openpond/agent-runtime";
+export { runAppServerJsonl } from "@openpond/app-server";
+export type { AppServerEmbeddingOptions,AppServerHarnessToolContext,AppServerServiceOptions,AppServerToolBinding } from "./runtime/app-server-embedding.js";
 export type { AppServerSandboxRequest } from "./runtime/app-server-sandbox-tools.js";
 
 const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
@@ -216,7 +170,7 @@ export const APP_SERVER_COMPOSITION: readonly AppServerCompositionService[] = [
 
 export async function createOpenPondAppServer(options: OpenPondAppServerOptions = {}): Promise<OpenPondAppServerInstance> {
   if (options.runtimeStorage) {
-    return createHostedOwnedAppServer({ ...options, runtimeStorage: options.runtimeStorage });
+    return (await import("./runtime/hosted-app-server-composition.js")).createHostedOwnedAppServer({ ...options, runtimeStorage: options.runtimeStorage });
   }
   const storeDir = path.resolve(options.storeDir ?? appDataDir());
   return ownHomeRuntime(storeDir, () => createOwnedAppServer({ ...options, storeDir }));
@@ -224,26 +178,22 @@ export async function createOpenPondAppServer(options: OpenPondAppServerOptions 
 async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<OpenPondAppServerInstance> {
   const storeDir = path.resolve(options.storeDir ?? appDataDir());
   const embedded = Boolean(options.embedding);
-  const hostedRuntimeStorage = options.runtimeStorage;
-  if (hostedRuntimeStorage && (!options.hostStorageClient ||
-      hostedRuntimeStorage.client !== options.hostStorageClient)) {
-    throw new Error("Hosted runtime storage requires the authenticated host storage client.");
-  }
   if (embedded && !options.streamOpenPondHostedChatTurn) {
     throw new Error("Embedded Work requires an explicit model-stream adapter.");
   }
   const services = options.services ?? {};
-  const webSearch = selectService(services.webSearch, embedded, createWebSearchExecutorFromEnv);
-  const scheduling = selectService(services.scheduling, embedded, () => createHostedSavedWork);
-  const connectedApps = selectService(services.connectedApps, embedded, () => ({
-    execute: createCloudConnectedAppToolExecutor(), list: listAppServerIntegrationConnections,
-  }));
-  const tasksets = selectService(services.tasksets, embedded, () => executeHostedTasksetAction);
+  const webSearch = await selectService(services.webSearch, embedded, async () => (await import("./openpond/web-search.js")).createWebSearchExecutorFromEnv());
+  const scheduling = await selectService(services.scheduling, embedded, async () => (await import("./openpond/saved-work.js")).createHostedSavedWork);
+  const connectedApps = await selectService(services.connectedApps, embedded, async () => {
+    const [executor, connections] = await Promise.all([import("./openpond/connected-app-executor.js"), import("./openpond/app-server-connected-apps.js")]);
+    return { execute: executor.createCloudConnectedAppToolExecutor(), list: connections.listAppServerIntegrationConnections };
+  });
+  const tasksets = await selectService(services.tasksets, embedded, async () => (await import("./openpond/hosted-tasksets.js")).executeHostedTasksetAction);
   const backgroundReview = services.backgroundReview ?? !embedded;
   // A model-tool adapter does not configure the separate local evaluation workflow.
   const harnessEvaluationEnabled = !embedded && Boolean(tasksets);
   await initializeHome(storeDir);
-  await initializeRefinerProfile(storeDir);
+  if (backgroundReview) await (await import("./refiner/refiner-profile-service.js")).initializeRefinerProfile(storeDir);
   const workspaceDir = path.resolve(options.workspaceDir ?? process.cwd());
   await mkdir(workspaceDir, { recursive: true });
   const version = options.version ?? VERSION;
@@ -257,12 +207,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   const store = new SqliteStore(storeDir, { logger });
   onStartupFailure(() => store.close());
   await store.recentTurns(1);
-  const coreStore = hostedRuntimeStorage?.core ?? store;
-  const hostedHarnessOverlay = hostedRuntimeStorage && options.hostStorageClient
-    ? new HostedHarnessOverlayStorage(options.hostStorageClient) : null;
-  const loadRuntimePreferences = async () => hostedRuntimeStorage
-    ? (await loadHostedRuntimeSettings(options.hostStorageClient!)).preferences
-    : (await readPreferences(storeDir)).preferences;
+  const coreStore = store;
+  const loadRuntimePreferences = async () => (await readPreferences(storeDir)).preferences;
   const scheduleRecovery = reconcileInterruptedScheduledWork(storeDir);
   if (scheduleRecovery.recovered || scheduleRecovery.needsReview) logger.warn("Scheduled work requires review after restart", scheduleRecovery);
   const streamOpenPondHostedChatTurn = createScriptedOpenPondChatStream(
@@ -296,7 +242,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     if (!options.experimentPolicyClient || options.profileSource || options.harness || options.runtimeStorage)
       throw new Error("A published standalone Experiment source requires its isolated policy owner and local case store.");
     const source = options.experimentHarnessSource.sourcePackage;
-    publishedExperimentSource = await installPublishedExperimentSource({
+    publishedExperimentSource = await (await import("./harness/published-experiment-source.js")).installPublishedExperimentSource({
       store, storeDir, ownerId: options.experimentHarnessSource.ownerId, sourcePackage: source,
       reference: { harnessRelease: { id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash },
         agentSnapshot: { id: source.agentSnapshot.id, contentHash: source.agentSnapshot.contentHash }, sourcePackageHash: source.contentHash },
@@ -344,8 +290,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
 
   const hostedTurnHelpers = createHostedTurnHelpers({
     appendRuntimeEvent,
-    findLocalProject: (projectId) => hostedRuntimeStorage
-      ? Promise.resolve(null) : findLocalProject(store, projectId),
+    findLocalProject: (projectId) => findLocalProject(store, projectId),
     onRepositoryInstructionDiagnostic: (diagnostic, session) => {
       logger.warn("repository instruction file skipped", {
         diagnostic,
@@ -385,7 +330,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       throw new Error("Sandbox execution is not configured in this app-server deployment.");
     } : undefined),
   });
-  const harnessTasksetReview = harnessEvaluationEnabled ? await createLocalHarnessTasksetReviewControl({
+  const harnessTasksetReview = harnessEvaluationEnabled ? await (await import("./harness/local-harness-taskset-review.js")).createLocalHarnessTasksetReviewControl({
     store,
     storeDir,
     evaluationRuntime: {
@@ -416,7 +361,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     upsertApproval,
     appendRuntimeEvent,
   });
-  const projectActionRunPayload = selectService(services.projectActions, embedded, () => createProjectActionRunPayload({
+  const projectActionRunPayload = await selectService(services.projectActions, embedded, async () => (await import("./project-actions/project-action-payload.js")).createProjectActionRunPayload({
     appendRuntimeEvent,
     resolveProjectRoot: async () => null,
   }));
@@ -431,7 +376,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       ).catch(() => undefined);
     }
   };
-  const harnessImprovement = backgroundReview ? createLocalHarnessImprovementRuntime({
+  const harnessImprovement = backgroundReview ? (await import("./harness/local-harness-improvement-runtime.js")).createLocalHarnessImprovementRuntime({
     store,
     storeDir,
     queue: turnFollowUpQueue,
@@ -441,9 +386,9 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   }) : undefined;
   await harnessImprovement?.reconcilePending();
 
-  const externalDataset=options.profileExternalDataset?await (explicitProfileRelease&&options.profileExternalDatasetClient?createHostProfileExternalDataset({value:options.profileExternalDataset,release:explicitProfileRelease,sourceRevision:options.profileSource!.sourceRevision,client:options.profileExternalDatasetClient}):Promise.reject(new Error("External Dataset execution requires an explicit private Profile source owner."))):null;
+  const externalDataset=options.profileExternalDataset?await (explicitProfileRelease&&options.profileExternalDatasetClient?(await import("./harness/host-profile-external-dataset.js")).createHostProfileExternalDataset({value:options.profileExternalDataset,release:explicitProfileRelease,sourceRevision:options.profileSource!.sourceRevision,client:options.profileExternalDatasetClient}):Promise.reject(new Error("External Dataset execution requires an explicit private Profile source owner."))):null;
   const evaluationOutputOwner=createWorkOutputService({deviceId:`evaluation-${contentHash(storeDir).slice(0,24)}`,storeDir,runtimeEventsForSession:id=>coreStore.runtimeEventsForSession(id)});
-  const isolatedProfileTools=explicitProfileRelease?createHostProfileEvaluationTools({storeDir,release:explicitProfileRelease,getTurn:id=>coreStore.getTurn(id),getSession,saveOutput:evaluationOutputOwner.saveOwnedOutputBytes,recordOutput:async(sessionId,turnId,data)=>{await appendRuntimeEvent({id:randomUUID(),timestamp:new Date().toISOString(),name:"workspace_action_result",source:"server",sessionId,turnId,action:"work_output_save",status:"completed",output:`Saved ${data.outputRef.title} as immutable case output.`,data});},authorize:async params=>{if(externalDataset){await externalDataset.authorize(params);return;}const selected=await selectedEvaluationProfile();if(!selected||selected.ref.profileId!==options.profileSource?.profileId||selected.sourceRevision!==options.profileSource?.sourceRevision)throw new Error("The released evaluation source authority changed.");const retained=await store.getHarnessReleaseRecord(explicitProfileRelease!.harnessRelease.contentHash);if(!retained||retained.harnessRelease.contentHash!==explicitProfileRelease!.harnessRelease.contentHash)throw new Error("The isolated evaluation release is unavailable.");}}):null;
+  const isolatedProfileTools=explicitProfileRelease?(await import("./harness/host-profile-evaluation-tools.js")).createHostProfileEvaluationTools({storeDir,release:explicitProfileRelease,getTurn:id=>coreStore.getTurn(id),getSession,saveOutput:evaluationOutputOwner.saveOwnedOutputBytes,recordOutput:async(sessionId,turnId,data)=>{await appendRuntimeEvent({id:randomUUID(),timestamp:new Date().toISOString(),name:"workspace_action_result",source:"server",sessionId,turnId,action:"work_output_save",status:"completed",output:`Saved ${data.outputRef.title} as immutable case output.`,data});},authorize:async params=>{if(externalDataset){await externalDataset.authorize(params);return;}const selected=await selectedEvaluationProfile();if(!selected||selected.ref.profileId!==options.profileSource?.profileId||selected.sourceRevision!==options.profileSource?.sourceRevision)throw new Error("The released evaluation source authority changed.");const retained=await store.getHarnessReleaseRecord(explicitProfileRelease!.harnessRelease.contentHash);if(!retained||retained.harnessRelease.contentHash!==explicitProfileRelease!.harnessRelease.contentHash)throw new Error("The isolated evaluation release is unavailable.");}}):null;
   const embeddedToolResolver=options.embedding ? createEmbeddingToolResolver(options.embedding, async (turnId,bindings)=>{const turn=await coreStore.getTurn(turnId);if(!turn)throw new Error("Embedded turn is unavailable.");const session=await getSession(turn.sessionId),previous=session.metadata?.embeddingToolBindings,admittedBindings=[...bindings].sort((a,b)=>a.name.localeCompare(b.name));if(previous!==undefined&&contentHash(previous)!==contentHash(admittedBindings))throw new Error("Embedded tool bindings changed; start a new thread.");await updateSession(session.id,{metadata:{...session.metadata,embeddingToolBindings:admittedBindings}});await coreStore.updateTurn(turnId,current=>({...current,metadata:{...current.metadata,toolBindings:admittedBindings}}));}):undefined;
   const turnRunner = createTurnRunner({
     executionHost: embedded ? "embedded" : "local",
@@ -456,7 +401,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     ...(embedded ? { hostedToolFlags: { toolMode: "native" as const, nativeToolTransport: true, nativeToolProviderDenylist: [], textToolFallback: false } } : {}),
     attachmentRootDir: path.join(storeDir, "attachments"),
     store: coreStore,
-    inboxStore: hostedRuntimeStorage?.inbox ?? store,
+    inboxStore: store,
     createSession,
     upsertApproval,
     getSession,
@@ -486,12 +431,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     ...(embedded || services.profileActions === false ? { executeProfileSkillCommand: undefined } : {}),
     loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
-    loadSelectedHarnessRuntime: (session) => hostedRuntimeStorage
-      ? loadHostedHarnessRuntimeForSession(options.hostStorageClient!, session)
-      : loadLocalHarnessRuntimeForSession(store, session),
-    ensureHarnessRunOverlay: (input) => hostedHarnessOverlay
-      ? hostedHarnessOverlay.ensureHarnessRunOverlay(input)
-      : ensureLocalHarnessRunOverlay({ store, ...input }),
+    loadSelectedHarnessRuntime: (session) => loadLocalHarnessRuntimeForSession(store, session),
+    ensureHarnessRunOverlay: (input) => ensureLocalHarnessRunOverlay({ store, ...input }),
     harnessModelTools: createLocalHarnessModelToolDefinitions({ store, storeDir }).filter(tool =>
       backgroundReview || !["refiner_profile_inspect", "refiner_profile_update", "refine_request", "refine_status"].includes(tool.name)),
     loadBuiltInOpenPondSkills: async () => [
@@ -511,9 +452,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     createScheduledWork: scheduling,
     executeConnectedAppTool: connectedApps?.execute,
     listIntegrationConnections: connectedApps?.list,
-    loadPersonalizationSoul: async () => hostedRuntimeStorage
-      ? (await loadHostedRuntimeSettings(options.hostStorageClient!)).personalizationSoul
-      : (await loadPersonalizationSettings(store, storeDir)).soul,
+    loadPersonalizationSoul: async () => (await loadPersonalizationSettings(store, storeDir)).soul,
     loadAppPreferences: loadRuntimePreferences,
     maybeCreateScaffoldForTurn: hostedTurnHelpers.maybeCreateScaffoldForTurn,
     hostedSystemPrompt: hostedTurnHelpers.hostedSystemPrompt,
@@ -526,7 +465,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       ?? await options.resolveSessionModelStream?.(session, turn) ?? null),
     subagentQueue,
     maxHostedWorkspaceToolRounds: options.experimentHarnessSource
-      ? STANDALONE_EXPERIMENT_MAX_POLICY_CALLS
+      ? (await import("@openpond/evals/experiments")).STANDALONE_EXPERIMENT_MAX_POLICY_CALLS
       : resolveMaxHostedWorkspaceToolRounds(options.maxHostedWorkspaceToolRounds),
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
   });
@@ -559,11 +498,6 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   }
 
   let closing = false;
-  const harnessSettings = createLocalHarnessSettingsRoutePayloads({
-    store,
-    storeDir,
-    evaluationReviewStream: harnessEvaluationReviewStream,
-  });
   const selectedEvaluationProfile = async () => {
     if (options.profileSource) return {
       ref: { source: "openpond_git" as const, repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
@@ -574,18 +508,6 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       ? { ref: library.lastUsed, sourceRevision: profile.git.head } : null;
   };
 
-  const executeProfileEvaluationCase = createProfileEvaluationCaseService({
-    resolveExternalDataset:externalDataset?.resolveExternalDataset,
-    admitSession:isolatedProfileTools?.admitSession,settleSession:isolatedProfileTools?.settleSession,
-    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
-    loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({ store: store, storeDir: storeDir, definition, profileId, harnessRelease }),
-    store,
-    storeDir,
-    selectedProfile: selectedEvaluationProfile,
-    createSession: createSessionWithAutoTitle,
-    sendTurn: turnRunner.sendTurn,
-    interruptSessionTurn: turnRunner.interruptSessionTurn,
-  });
   const listProfileWorkflows = async () => {
     if (options.profileSource && explicitProfileRelease) {
       return profileWorkflowsForRelease({
@@ -599,59 +521,9 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     if (!library.lastUsed) throw new Error("Select a Profile before loading its workflows.");
     return ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
   };
-  const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
-    privateGradingPreflight:value=>preflightProfilePrivateGrading(value,false),
-    resolveExternalDataset:externalDataset?.resolveExternalDataset,sourceCandidate:externalDataset?.sourceCandidate,
-    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
-    selectedWorkflows: listProfileWorkflows,
-    loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({
-      store, storeDir, definition, profileId, harnessRelease,
-    }),
-    modelConfigurationHash: async (modelRef, request) => {
-      if (!options.profileSource || modelRef.providerId !== "openpond" || !request.hostModelConfigurationHash) {
-        throw new Error("Hosted Profile evaluation requires an explicit source and trusted OpenPond model configuration receipt.");
-      }
-      return request.hostModelConfigurationHash;
-    },
-    placement: "remote",
-  });
-  const executeProfileEvaluationRun = createProfileEvaluationRunService({
-    loadTasksetPackage:(definition,profileId,harnessRelease)=>loadLocalProfileEvaluationTaskset({store,storeDir,definition,profileId,harnessRelease}),
-    privateGrading:async(manifest,packageValue,signal)=>createProfilePrivateGradingOwner({manifest,packageValue,signal,authorize:async()=>{const selected=await selectedEvaluationProfile(),source=manifest.profileEvaluation;if(!selected||!source||selected.ref.profileId!==source.profileId||selected.sourceRevision!==source.sourceRevision)throw new Error("The current private Profile source changed.");if(externalDataset)await externalDataset.authorize({bindingHash:source.externalDatasetBinding!.contentHash,manifestHash:manifest.contentHash});const discovered=await profileEvaluationsForRelease({ref:selected.ref,sourceRevision:selected.sourceRevision,harnessRelease:source.harnessRelease,store});if(!source.externalDatasetBinding&&discovered.catalogHash!==source.catalogHash)throw new Error("The current private evaluation catalog changed.");}}),
-    resolveExternalDataset:externalDataset?.resolveExternalDataset,
-    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
-    store, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
-  });
-  const executeProfileEvaluationSuite = createProfileEvaluationSuiteService({
-    loadCatalog: request => profileEvaluationsForRelease({ ...request, store: store }),
-    store, selectedWorkflows: listProfileWorkflows,
-    prepareRun: prepareProfileEvaluationRun, executeRun: executeProfileEvaluationRun,
-  });
-  const experimentCases=createExperimentCaseService({
-    ...(publishedExperimentSource && options.experimentPolicyClient ? {
-      executeHarness: async (request: import("./evaluations/experiment-case-contract.js").ExperimentModelCase, signal: AbortSignal) => {
-        if (!request.harness || !standaloneExperimentOwner) throw new Error("Standalone Experiment source owner is unavailable.");
-        const result = await standaloneExperimentOwner.execute({ executionId: request.id, request, source: request.harness,
-          stream: createHostExperimentNativeStream(options.experimentPolicyClient!, request,
-            standaloneExperimentToolDeclarations(publishedExperimentSource!.release)), signal, maxOutputBytes: 262_144 });
-        return result.attempt;
-      },
-    } : {}),
-    ...(options.experimentPolicyClient ? {
-      resolveEnvironment: async (request: import("./evaluations/experiment-case-contract.js").ExperimentModelCase) =>
-        createHostExperimentEnvironment(options.experimentPolicyClient!, request),
-    } : {}),
-    resolvePolicy:async request=>options.experimentPolicyClient
-      ?createHostExperimentPolicy(options.experimentPolicyClient,request)
-      :createLocalExperimentPolicy({request,stream:streamOpenPondHostedChatTurn}),
-    executeProfile: request => {
-      if (options.experimentPolicyClient) throw new Error("A model-case owner cannot execute a Profile.");
-      return executeProfileEvaluationCase(request);
-    },
-  });
   if (publishedExperimentSource) {
     const retained = publishedExperimentSource;
-    standaloneExperimentOwner = createStandaloneExperimentTurnOwner({
+    standaloneExperimentOwner = (await import("./harness/standalone-experiment-turn-owner.js")).createStandaloneExperimentTurnOwner({
       store, createSession, sendTurn: turnRunner.sendTurn, interruptSessionTurn: turnRunner.interruptSessionTurn,
       authorizeWorkspace: async (reference, workspace) => {
         if (workspace.id !== retained.workspace.id || contentHash(workspace.ownerScope) !== contentHash(retained.workspace.ownerScope)
@@ -662,6 +534,21 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       },
     });
   }
+  const evaluations = lazyRuntimeService(async () => {
+    const { createAppServerEvaluations } = await import("./runtime/app-server-evaluations.js");
+    return createAppServerEvaluations({ options, store, storeDir, explicitProfileRelease, externalDataset,
+      isolatedProfileTools, selectedEvaluationProfile, listProfileWorkflows, createSessionWithAutoTitle,
+      turnRunner, streamOpenPondHostedChatTurn, publishedExperimentSource, standaloneExperimentOwner });
+  });
+  const evaluationRoutes = evaluations.methods(["listProfileEvaluations", "executeProfileEvaluationCase", "executeExperimentCase", "cancelExperimentCase", "executeProfileEvaluationRun", "prepareProfileEvaluationRun", "runPreparedProfileEvaluation", "runProfileEvaluationSuite", "compareProfileEvaluationRuns", "buildProfileEvaluationReport"]);
+  onStartupFailure(() => evaluations.close());
+  const harnessServices = lazyRuntimeService(async () => {
+    const { createAppServerHarnessServices } = await import("./runtime/app-server-harness-services.js");
+    return createAppServerHarnessServices({ store, storeDir, backgroundReview, harnessEvaluationEnabled,
+      harnessEvaluationReviewStream, harnessTasksetReview });
+  });
+  const harnessRoutes = harnessServices.methods(["inspectHarness", "reviewHarnessProposal", "reviewHarness", "acceptHarnessEvaluationReview", "materializeHarnessEvaluationTaskset", "runHarnessEvaluationBaseline", "validateHarness", "updateHarnessBackgroundReview", "diffHarness", "rollbackHarness", "inspectRefiner", "updateRefiner", "activateRefiner", "rollbackRefiner"]);
+  onStartupFailure(() => harnessServices.close());
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",
@@ -695,93 +582,12 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
         if (!options.profileSource || !explicitProfileRelease) {
           throw new Error("An explicit published Profile is required for hosted training source export.");
         }
-        return profileTrainingSource({ release: explicitProfileRelease, storeDir });
+        return (await import("./harness/profile-training-source.js")).profileTrainingSource({ release: explicitProfileRelease, storeDir });
       },
-      listProfileEvaluations: async (params?: unknown) => {
-        if (params && typeof params === "object" && !Array.isArray(params) && "runId" in params) {
-          const inspection = ProfileEvaluationInspectionRequestSchema.parse(params);
-          const selected = await selectedEvaluationProfile();
-          if (!selected) throw new Error("Select a Profile before inspecting an evaluation run.");
-          return inspectProfileEvaluationRun({ store, profileRef: selected.ref, ...inspection });
-        }
-        if (options.profileSource && explicitProfileRelease) {
-          const evaluations = await profileEvaluationsForRelease({
-            store,
-            ref: { source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId },
-            sourceRevision: options.profileSource.sourceRevision,
-            harnessRelease: { id: explicitProfileRelease.harnessRelease.id, contentHash: explicitProfileRelease.harnessRelease.contentHash },
-          });
-          const [runs, comparisons, suiteRuns] = await Promise.all([
-            store.listProfileEvaluationRuns({ source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId }),
-            store.listProfileEvaluationComparisons({ source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId }),
-            store.listProfileEvaluationSuiteRuns({ source: "openpond_git", repositoryId: options.profileSource.repositoryId, profileId: options.profileSource.profileId }),
-          ]);
-          return { ...evaluations, runs, comparisons, suiteRuns };
-        }
-        const [library, profile] = await Promise.all([loadOpenPondProfileLibrary(), loadOpenPondProfileState()]);
-        if (!library.lastUsed) throw new Error("Select a Profile before loading its evaluations.");
-        const workflows = await ensureLocalProfileWorkflows({ store, storeDir, ref: library.lastUsed, profile, reloadProfile: loadOpenPondProfileState });
-        const evaluations = await profileEvaluationsForRelease({
-          store,
-          ref: workflows.profileRef,
-          sourceRevision: workflows.sourceRevision,
-          harnessRelease: workflows.harnessRelease,
-        });
-        const [runs, comparisons, suiteRuns] = await Promise.all([
-          store.listProfileEvaluationRuns(workflows.profileRef),
-          store.listProfileEvaluationComparisons(workflows.profileRef),
-          store.listProfileEvaluationSuiteRuns(workflows.profileRef),
-        ]);
-        return { ...evaluations, runs, comparisons, suiteRuns };
-      },
-      executeProfileEvaluationCase,
-      executeExperimentCase:experimentCases.execute,
-      cancelExperimentCase:raw=>Promise.resolve(experimentCases.cancel(z.object({id:z.string().min(1)}).strict().parse(raw).id)),
-      executeProfileEvaluationRun,
-      prepareProfileEvaluationRun,
-      runPreparedProfileEvaluation: async (request) => executeProfileEvaluationRun(await prepareProfileEvaluationRun(request, { requireExpectedManifestHash: true })),
-      runProfileEvaluationSuite: executeProfileEvaluationSuite,
-      compareProfileEvaluationRuns: createProfileEvaluationComparisonService({ store, selectedProfile: selectedEvaluationProfile }),
-      buildProfileEvaluationReport: async (request) => {
-        const selected = await selectedEvaluationProfile();
-        if (!selected) throw new Error("Select a Profile before building an evaluation report.");
-        return buildProfileEvaluationReport({ store, profileRef: selected.ref, request });
-      },
-      inspectHarness: () => localHarnessHistoryPayload(store),
-      reviewHarnessProposal: guardService(backgroundReview, "Harness review", harnessSettings.reviewHarnessProposalPayload),
-      reviewHarness: guardService(harnessEvaluationEnabled, "Harness evaluation", (request) => reviewSelectedLocalHarnessEvaluation({
-        store,
-        request,
-        stream: harnessEvaluationReviewStream,
-        continuation: { storeDir, stream: harnessEvaluationReviewStream },
-      })),
-      acceptHarnessEvaluationReview: guardService(harnessEvaluationEnabled, "Tasksets", request => harnessTasksetReview!.acceptEvaluationReview(request)),
-      materializeHarnessEvaluationTaskset:
-        guardService(harnessEvaluationEnabled, "Tasksets", request => harnessTasksetReview!.materializeEvaluationTaskset(request)),
-      runHarnessEvaluationBaseline:
-        guardService(harnessEvaluationEnabled, "Tasksets", request => harnessTasksetReview!.runEvaluationBaseline(request)),
-      validateHarness: async () => {
-        const release = await resolveSelectedLocalHarnessRelease(store);
-        return release
-          ? {
-              valid: true,
-              workspaceId: release.workspaceId,
-              harnessRelease: release.harnessRelease,
-              agentSnapshot: release.agentSnapshot,
-            }
-          : {
-              valid: false,
-              reason: "No app-server Harness release is selected.",
-            };
-      },
-      updateHarnessBackgroundReview:
-        guardService(backgroundReview, "Background review", harnessSettings.updateHarnessBackgroundReviewPayload),
-      diffHarness: harnessSettings.harnessDiffPayload,
-      rollbackHarness: harnessSettings.rollbackHarnessPayload,
-      inspectRefiner: guardService(backgroundReview, "Refiner", () => inspectRefinerProfile(storeDir)),
-      updateRefiner: guardService(backgroundReview, "Refiner", (payload) => updateRefinerProfile(storeDir, payload)),
-      activateRefiner: guardService(backgroundReview, "Refiner", (payload) => activateRefinerRelease(storeDir, payload)),
-      rollbackRefiner: guardService(backgroundReview, "Refiner", (payload) => rollbackRefinerRelease(storeDir, payload)),
+      ...evaluationRoutes,
+
+      ...harnessRoutes,
+
       subscribeRuntimeEvents,
       observeRuntimeOperation: (runtimeEvent) => {
         logger.info("agent runtime operation", runtimeEvent);
@@ -791,8 +597,8 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       if (closing) return;
       closing = true;
       await sessionTitleService.close();
-      await experimentCases.close();
-      await turnRunner.close();
+      // Optional workflows can be waiting on turns; cancel both owners before draining.
+      await Promise.all([evaluations.close(), harnessServices.close(), turnRunner.close()]);
       isolatedProfileTools?.close();
       await Promise.all([
         turnFollowUpQueue.drain(),
@@ -858,15 +664,8 @@ function runtimeDiagnostic(
   });
 }
 
-function selectService<T>(override: T | false | undefined, embedded: boolean, defaultService: () => T): T | undefined {
+async function selectService<T>(override: T | false | undefined, embedded: boolean, defaultService: () => Promise<T>): Promise<T | undefined> {
   if (override === false) return undefined;
   if (override !== undefined) return override;
   return embedded ? undefined : defaultService();
-}
-
-function guardService<A extends unknown[], R>(enabled: boolean, name: string, handler: (...args: A) => Promise<R>) {
-  return async (...args: A): Promise<R> => {
-    if (!enabled) throw new Error(`${name} is disabled in this app-server deployment.`);
-    return handler(...args);
-  };
 }
