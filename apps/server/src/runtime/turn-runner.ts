@@ -1435,7 +1435,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           providerPrompt,
           systemPrompt
         );
-        session = await runHostedToolLoop({
+        const hostedResult = await runHostedToolLoop({
           harness: selectedHarness?.release.harnessRelease,
           harnessDeclarations: [
             ...(selectedHarness?.release.agentSnapshot?.toolDeclarations ?? []),
@@ -1485,11 +1485,14 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
                 yield { toolCalls: delta.toolCalls, raw: delta.raw };
               if (delta.type === "usage")
                 yield { raw: delta.raw, usage: delta.usage };
+              if (delta.type === "continuation")
+                yield { continuation: delta.continuation, raw: delta.raw };
               if (delta.type === "finish")
                 yield { finishReason: delta.finishReason, raw: delta.raw };
             }
           },
         });
+        session = hostedResult.session;
         await finalizeAttachedWorkSandbox(turn.id, "completed");
         await appendRuntimeEvent(
           event({
@@ -1499,6 +1502,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             source: "provider",
             appId: session.appId,
             status: "completed",
+            data: { providerResponse: hostedResult.providerResponse },
           })
         );
         const completed = await completeTurn(sessionId, turn.id, providerTurnId);
@@ -1602,7 +1606,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           providerPrompt,
           systemPrompt
         );
-        session = await runHostedToolLoop({
+        const hostedResult = await runHostedToolLoop({
           harness: selectedHarness?.release.harnessRelease,
           harnessDeclarations: [
             ...(selectedHarness?.release.agentSnapshot?.toolDeclarations ?? []),
@@ -1662,6 +1666,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             }
           },
         });
+        session = hostedResult.session;
         await finalizeAttachedWorkSandbox(turn.id, "completed");
         await appendRuntimeEvent(
           event({
@@ -1674,6 +1679,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             data: {
               provider: session.provider,
               model: runtimeModel,
+              providerResponse: hostedResult.providerResponse,
             },
           })
         );

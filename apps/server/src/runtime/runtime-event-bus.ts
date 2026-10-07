@@ -338,7 +338,7 @@ function isCoalescibleAssistantDelta(runtimeEvent: RuntimeEvent): boolean {
     !runtimeEvent.status &&
     !runtimeEvent.error &&
     !runtimeEvent.relatedDeploymentId &&
-    runtimeEvent.data === undefined
+    (runtimeEvent.data === undefined || assistantProviderRequestId(runtimeEvent) !== undefined)
   );
 }
 
@@ -349,5 +349,14 @@ function assistantDeltaKey(runtimeEvent: RuntimeEvent): string {
     runtimeEvent.turnId ?? "",
     runtimeEvent.source ?? "",
     runtimeEvent.appId ?? "",
+    assistantProviderRequestId(runtimeEvent) ?? "",
   ].join("\u0000");
+}
+
+function assistantProviderRequestId(runtimeEvent: RuntimeEvent): string | undefined {
+  const data = runtimeEvent.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)
+    || Object.keys(data).length !== 1) return undefined;
+  const requestId = (data as Record<string, unknown>).providerRequestId;
+  return typeof requestId === "string" && requestId ? requestId : undefined;
 }

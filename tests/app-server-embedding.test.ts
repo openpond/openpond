@@ -10,6 +10,8 @@ import { materializePortableTasksetRelease } from "../packages/taskset-sdk/src";
 import { tasksetFixture } from "./helpers/training-fixtures";
 import { createOpenPondAppServer, type OpenPondAppServerOptions } from "../apps/server/src/app-server-runtime";
 import { SqliteStore } from "../apps/server/src/store/store";
+import { profileEvaluationOutput } from "../apps/server/src/harness/profile-evaluation-policy-evidence";
+import type { RuntimeEvent } from "@openpond/contracts";
 import {
   compileLocalHarnessSource, createLocalHarnessWorkspace, localHarnessWorkspacePaths,
   materializeLocalHarnessRelease,
@@ -26,6 +28,7 @@ const declaration = {
 afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 async function fixture(timeoutMs = 5_000) {
@@ -71,6 +74,76 @@ function call(name: string, args: unknown) {
   return { type: "tool_call_delta" as const, raw: null, toolCalls: [{ id: "fixture-call", type: "function" as const,
     function: { name, arguments: JSON.stringify(args) } }] };
 }
+
+// A truncated round must not execute its apparently complete tool call, seal
+// progress text as the answer, or replay earlier actions. Real SQLite/RPC
+// history must distinguish successful recovery from model/iteration exhaustion.
+test.each(["recover", "output exhausted", "rounds exhausted"] as const)(
+  "retains an honest terminal response when %s", async mode => {
+    const paths = await fixture();
+    await mkdir(paths.workspaceDir, { recursive: true });
+    const sourcePath = path.join(paths.workspaceDir, "week-2.json");
+    await writeFile(sourcePath, JSON.stringify({ count: 12 }));
+    vi.stubEnv("OPENPOND_HOSTED_MODEL_ID", "fixture-model");
+    vi.stubEnv("OPENPOND_HOSTED_MODEL_CONTEXT_WINDOW", "262144");
+    vi.stubEnv("OPENPOND_HOSTED_MODEL_OUTPUT_LIMIT", mode === "output exhausted" ? "8192" : "16384");
+    const finalAnswer = { answer: 12, padding: "x".repeat(130_000) };
+    const requestLimits: number[] = [];
+    const finalized: string[] = [];
+    let round = 0;
+    const { server, threadId } = await start({ ...paths,
+      maxHostedWorkspaceToolRounds: mode === "rounds exhausted" ? 1 : 3,
+      finalizeWorkTurn: async ({ session, outcome }) => { finalized.push(outcome); return session; },
+      embedding: { allowedTools: ["lookup_fixture"], authorizeTool: async () => {},
+        resolveTools: async () => [{ name: "lookup_fixture", version: "1", inputSchema: argsSchema,
+          execute: async ({ args }) => {
+            if (args.week !== 2) throw new Error("A truncated tool call was dispatched");
+            return JSON.parse(await readFile(sourcePath, "utf8"));
+          } }],
+      },
+      streamOpenPondHostedChatTurn: async function* (request) {
+        requestLimits.push(request.maxTokens!);
+        round += 1;
+        if (round === 1 && mode !== "rounds exhausted") {
+          yield { type: "text_delta", raw: null, text: "Interim progress" };
+          yield call("lookup_fixture", { week: 1 });
+          yield { type: "finish", raw: null, finishReason: "length" };
+        } else if (round < 3) {
+          yield call("lookup_fixture", { week: 2 });
+          yield { type: "continuation", raw: null, continuation: {
+            kind: "chat_completions_reasoning", reasoningContent: "fixture continuation",
+          } };
+          yield { type: "finish", raw: null, finishReason: "tool_calls" };
+        } else {
+          expect(request.messages.some(message => message.continuation?.kind === "chat_completions_reasoning")).toBe(true);
+          const text = JSON.stringify(finalAnswer);
+          for (let offset = 0; offset < text.length; offset += 3000)
+            yield { type: "text_delta", raw: null, text: text.slice(offset, offset + 3000) };
+          yield { type: "finish", raw: null, finishReason: "stop" };
+        }
+      },
+    });
+    const outcome = await server.runtime.turnStart({ threadId, input: { prompt: "Read the fixture and return the result." } });
+    const history = await server.runtime.threadRead({ threadId }) as { events: RuntimeEvent[] };
+    const completed = history.events.filter(event => event.name === "turn.completed");
+    const toolResults = history.events.filter(event => event.name === "tool.completed" && event.action === "lookup_fixture");
+    if (mode === "recover") {
+      expect(outcome).toMatchObject({ turn: { status: "completed" } });
+      expect(requestLimits).toEqual([8192, 16384, 16384]);
+      expect(toolResults).toHaveLength(1);
+      expect(completed).toHaveLength(1);
+      expect(JSON.parse(profileEvaluationOutput(history.events, "workflow", "completed"))).toEqual(finalAnswer);
+      expect(history.events.filter(event => event.name === "assistant.delta").every(event => (event.output?.length ?? 0) <= 4096)).toBe(true);
+      expect(finalized).toEqual(["completed"]);
+    } else {
+      expect(outcome).toMatchObject({ turn: { status: "failed", error: expect.stringMatching(/limit.*exhausted/i) } });
+      expect(requestLimits).toEqual([8192]);
+      expect(completed).toHaveLength(0);
+      expect(toolResults).toHaveLength(mode === "rounds exhausted" ? 1 : 0);
+      expect(finalized).toEqual(["failed"]);
+    }
+  },
+);
 
 // Regression boundary: a released Harness executes a host implementation through the full
 // app-server, without discovering hosted apps, losing lifecycle callbacks or bypassing revocation.

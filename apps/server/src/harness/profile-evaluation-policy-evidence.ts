@@ -8,6 +8,7 @@ import {
   FileOutputRefSchema,
   type OpenPondProfileRef,
   type RuntimeEvent,
+  type Turn,
 } from "@openpond/contracts";
 import type { HarnessStateStore } from "../store/harness-state-store.js";
 
@@ -19,6 +20,7 @@ type EvidenceStore = Pick<
 export function profileEvaluationOutput(
   events: RuntimeEvent[],
   targetKind: string,
+  status: Turn["status"],
 ): string {
   if (targetKind === "agent_action") {
     const result = events.find(
@@ -32,6 +34,14 @@ export function profileEvaluationOutput(
       );
     return result;
   }
+  if (status === "completed") {
+    const terminal = events.findLast(event => event.name === "turn.completed");
+    if (typeof terminal?.output !== "string")
+      throw new Error("Profile evaluation has no retained final provider response.");
+    return terminal.output;
+  }
+  // Failed/interrupted turns retain partial text for inspection, never as a
+  // completed response. Progress and truncated rounds remain in the full trace.
   return events
     .filter(
       (event) =>
@@ -98,7 +108,7 @@ export async function readProfileEvaluationPolicyEvidence(input: {
       "Retained Profile policy trace differs from its immutable receipt.",
     );
   }
-  const text = profileEvaluationOutput(events, source.target.kind);
+  const text = profileEvaluationOutput(events, source.target.kind, turn.status);
   if (
     receipt.outputHash !== null &&
     contentHash({ text }) !== receipt.outputHash
