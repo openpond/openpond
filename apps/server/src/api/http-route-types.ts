@@ -182,6 +182,7 @@ export type HttpRouteDeps = {
   profileRunPayload: (payload: unknown) => Promise<unknown>;
   updateAppPreferencesPayload: (payload: unknown) => Promise<unknown>;
   providerSettingsPayload: () => Promise<unknown>;
+  providerPlanUsagePayload?: (provider: string) => Promise<unknown>;
   updateProviderSettingsPayload: (payload: unknown) => Promise<unknown>;
   listProviderModelsPayload: (
     providerId: string,

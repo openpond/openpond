@@ -11,6 +11,7 @@ import {
 } from "./workspace-diff-panel-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
 import { useErrorToast } from "../../app/AppToastContext";
+import { WorkspaceDocumentPreview } from "./WorkspaceDocumentPreview";
 
 const FILE_TRUNCATED_MARKER = "\n\n[file truncated]";
 const MonacoFileEditor = lazy(() => import("./WorkspaceMonacoEditor"));
@@ -217,7 +218,7 @@ export function FilePreview({
           <MarkdownText content={displayContent} />
         </div>
       ) : shouldRenderDocument ? (
-        <DocumentPreview file={file} contentBase64={displayContent} />
+        <WorkspaceDocumentPreview path={file.path} contentBase64={displayContent} />
       ) : editable && !contentIsTruncated ? (
         <Suspense fallback={<div className="workspace-diff-code-empty">Loading editor</div>}>
           <MonacoFileEditor
@@ -393,59 +394,8 @@ export function SplitDiffPreview({
 }
 
 
-function DocumentPreview({ file, contentBase64 }: { file: WorkspaceDiffFile; contentBase64: string }) {
-  const objectUrl = useMemo(() => {
-    const bytes = base64ToUint8Array(contentBase64);
-    if (!bytes) return null;
-    const blob = new Blob([new Uint8Array(bytes)], { type: documentMimeType(file.path) });
-    return URL.createObjectURL(blob);
-  }, [contentBase64, file.path]);
-
-  useEffect(() => {
-    return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [objectUrl]);
-
-  if (!objectUrl) {
-    return <div className="workspace-diff-code-empty">Document preview unavailable.</div>;
-  }
-
-  return (
-    <div className="workspace-document-preview">
-      <div className="workspace-document-preview-card">
-        <strong>{file.path.split("/").pop()}</strong>
-        <span>{/\.pdf$/i.test(file.path) ? "PDF document" : "Word document"}</span>
-        <a href={objectUrl} download={file.path.split("/").pop() || "document"}>
-          Download document
-        </a>
-      </div>
-      <iframe src={objectUrl} title={`${file.path} preview`} />
-    </div>
-  );
-}
-
-function documentMimeType(path: string): string {
-  return /\.pdf$/i.test(path)
-    ? "application/pdf"
-    : /\.docx$/i.test(path)
-    ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    : "application/msword";
-}
-
 function isLikelyBase64Document(value: string): boolean {
   return value.length > 0 && /^[A-Za-z0-9+/=\s]+$/.test(value);
-}
-
-function base64ToUint8Array(value: string): Uint8Array | null {
-  try {
-    const binary = atob(value.replace(/\s/g, ""));
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return bytes;
-  } catch {
-    return null;
-  }
 }
 
 type PatchRow =
