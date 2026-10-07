@@ -38,6 +38,7 @@ release-source-artifacts/
 release/
 release-cli/
 apps/*/dist/
+apps/desktop/dist-types/
 apps/desktop/stage/
 apps/*/build/
 !apps/desktop/build/
