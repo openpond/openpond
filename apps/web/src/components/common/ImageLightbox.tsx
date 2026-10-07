@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Download, X } from "../icons";
 import { saveImage } from "../../lib/save-image";
 
@@ -54,7 +55,8 @@ export function ImageLightbox({
     finally { setSaving(false); }
   };
 
-  return (
+  // Chat rows use rendering containment; mount outside them to cover the viewport.
+  return createPortal(
     <div
       className="image-lightbox-backdrop"
       role="presentation"
@@ -101,6 +103,7 @@ export function ImageLightbox({
           )}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
