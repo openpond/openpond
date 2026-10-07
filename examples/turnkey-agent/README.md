@@ -36,6 +36,24 @@ docker buildx imagetools inspect YOUR_REGISTRY/openpond-tvc:YOUR_TAG
 
 The minimal-environment check launches with no environment, no passwd database, no network, a read-only root, and a 1 GiB memory cap.
 
+### Profile startup memory
+
+```sh
+pnpm exec tsx scripts/build/bundle-tvc.ts --profile
+node examples/turnkey-agent/packaging/profile-memory.mjs
+# Optional large V8 heap snapshot for inspecting retainers:
+node examples/turnkey-agent/packaging/profile-memory.mjs --snapshot
+# Linux RSS before/after a real app-server turn (three fresh processes):
+node examples/turnkey-agent/packaging/benchmark-memory.mjs
+# Compare a preserved bundle or the final static executable:
+node examples/turnkey-agent/packaging/benchmark-memory.mjs --bundle /path/to/baseline/app.cjs
+node examples/turnkey-agent/packaging/benchmark-memory.mjs --executable dist/turnkey-agent/openpond-tvc
+```
+
+The separate profile bundle includes source maps and an esbuild module inventory. The profiler starts allocation sampling before module loading, initializes the real app-server in a temporary home, forces GC after readiness, and records memory plus source-mapped allocation sites in a new `tmp/tvc-profile/capture-*` directory. It uses synthetic configuration and makes no inference or sandbox request. The child shuts down and its temporary home is removed. `summary.json` records the Node version and bundle hash. Allocation samples estimate retained allocations, not precise ownership or reclaimable savings; instrumented RSS is not the production RSS baseline. The normal bundle and packaged executable are untouched.
+
+The RSS benchmark uses a local synthetic model fixture and the real chat runtime, without an inspector or forced GC. Each run gets a fresh process and temporary home; it checks the response and records startup RSS, first-turn RSS, and the process high-water mark from `/proc`. Reports under `tmp/tvc-profile/benchmark-*` include the artifact hash, all samples, and medians. Compare both live heap and first-turn RSS: V8 allocation/GC thresholds can make RSS move differently from retained heap. Run the complete integration check against any candidate profile bundle with `node examples/turnkey-agent/check.mjs --bundle dist/turnkey-agent-profile/app.cjs`.
+
 Record the **linux/amd64 manifest digest**, not a multi-platform index digest. TVC extracts `/openpond-tvc`; the container filesystem is not available to the running program. Required skills/assets are embedded and extracted to a private temporary directory at startup. Local project compilation and terminal execution are unavailable.
 
 ## Configure and deploy

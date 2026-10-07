@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { sqlExecutionProcessSource } from "./sql-execution-process-source.js";
 import { assertBoundedTaskJson } from "./task-schema.js";
 import { assertSqlExecutionRequest, SqlExecutionResultSchema, type SqlExecutionRequest, type SqlExecutionResult } from "./sql-execution-contract.js";
 export * from "./sql-execution-contract.js";
@@ -9,6 +8,8 @@ export async function executeSqlInProcess(input: { request: SqlExecutionRequest;
   input.signal?.throwIfAborted();
   if (!Number.isSafeInteger(input.timeoutMs) || input.timeoutMs < 1 || input.timeoutMs > 30_000) throw new Error("sql_timeout_invalid");
   const request = assertSqlExecutionRequest(input.request);
+  const { sqlExecutionProcessSource } = await import("./sql-execution-process-source.js");
+  input.signal?.throwIfAborted();
   const { signal } = input;
   const program = `globalThis.__openpondSqlInput = JSON.parse(${JSON.stringify(JSON.stringify(request))});\n${sqlExecutionProcessSource}`;
   return new Promise((resolve, reject) => {
