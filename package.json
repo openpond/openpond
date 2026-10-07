@@ -175,7 +175,11 @@
     "release:cli:patch": "tsx scripts/release-cli.ts patch",
     "release:cli:minor": "tsx scripts/release-cli.ts minor",
     "release:cli:major": "tsx scripts/release-cli.ts major",
-    "release:cli:stable": "tsx scripts/release-cli.ts --recover"
+    "release:cli:stable": "tsx scripts/release-cli.ts --recover",
+    "tvc:bundle": "tsx scripts/build/bundle-tvc.ts",
+    "tvc:typecheck": "tsc -p examples/turnkey-agent/tsconfig.json --pretty false",
+    "tvc:check": "node examples/turnkey-agent/check.mjs",
+    "tvc:package": "bash examples/turnkey-agent/packaging/package.sh"
   },
   "devDependencies": {
     "@electron/asar": "^3.4.1",

@@ -20,6 +20,7 @@ import type { ClientConnection } from "../../api";
 import { useChatAttachmentImageUrl } from "../../hooks/useChatAttachmentImageUrl";
 import type { ChatMessage, ChatSource } from "../../lib/app-models";
 import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
+import { userMessageDisplayContent } from "../../lib/chat-display-content";
 import { MessageFooter } from "./MessageFooter";
 import { TaskMessageRow } from "./TaskMessageRow";
 import { MarkdownText } from "./MarkdownText";
@@ -126,6 +127,7 @@ export const MessageRow = memo(function MessageRow({
   }
 
   if (message.role === "user") {
+    const displayContent = userMessageDisplayContent(message.content ?? "");
     const visibleAttachments = message.attachments ?? [];
     const compactAttachments = userAttachmentDisplay === "compact";
     const hasAttachments = visibleAttachments.length > 0;
@@ -133,6 +135,7 @@ export const MessageRow = memo(function MessageRow({
       !compactAttachments &&
         visibleAttachments.some((attachment) => attachment.kind === "image")
     );
+    if (!displayContent && !hasAttachments) return null;
     return (
       <article className="message-row user">
         <div
@@ -148,8 +151,8 @@ export const MessageRow = memo(function MessageRow({
               onOpenAttachment={onOpenAttachmentInSidebar}
             />
           ) : null}
-          {message.content ? (
-            <UserMessageContent content={message.content} />
+          {displayContent ? (
+            <UserMessageContent content={displayContent} />
           ) : null}
         </div>
       </article>
