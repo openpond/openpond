@@ -67,6 +67,7 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
     </div>
     <div className="desktop-rail-account">
       <UserAuthFooter account={sidebar.account} open={accountOpen} onOpenChange={setAccountOpen}
+        connection={sidebar.connection} onOpenProviders={() => void navigateDesktopRoute({ kind: "settings", section: "providers" })}
         railTooltip={accountOpen ? undefined : "Account"}
         organizations={sidebar.organizations} selectedTeamId={sidebar.teamChatOrganization?.teamId ?? null}
         onSelectTeam={sidebar.onSelectTeam} onLogOut={sidebar.onLogOut}
