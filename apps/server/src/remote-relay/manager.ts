@@ -28,7 +28,7 @@ import type { RemoteLocalAuthority } from "./admission.js";
 import { captureRemoteStarters } from "./starters.js";
 import { uploadRemoteArtifact } from "./artifacts.js";
 import { attachQualifiedLocalOwner, unresolvedLocalOwnership } from "./ownership-settings.js";
-import { createRemoteCommandExecution, executeRemoteCommand } from "./command-execution.js";
+import { createRemoteCommandExecution, executeRemoteCommand, readRemoteCommandReceiptQuery } from "./command-execution.js";
 
 import { createCatalogPublication } from "./catalog-publication.js";
 import {
@@ -582,60 +582,11 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           const request = z
             .object({ commandId: z.string(), payloadHash: z.string() })
             .parse(frame.payload);
-          // Capture before SQLite reads: an active job may commit and settle
-          // while those reads still return their earlier absent input/receipt.
-          const pendingExecution = commands.contains(request.commandId, request.payloadHash);
-          const receipt = await deps.store.getRemoteDeviceReceipt(
-            request.commandId,
-          );
-          if (!connectionCurrent()) return;
-          const input = await deps.store.getTaskInput(
-            `remote-input:${request.commandId}`,
-          );
-          if (!connectionCurrent()) return;
-          const admitted = input?.payload.remoteDevice as
-            | RemoteDispatchCommand
-            | undefined;
-          const cancellation = await deps.store.getRemoteDeviceCancellation(
-            request.commandId,
-          );
-          if (!connectionCurrent()) return;
-          if (cancellation && cancellation.payload_hash !== request.payloadHash)
-            throw new Error("remote_command_identity_changed");
-          if (
-            (receipt && receipt.payloadHash !== request.payloadHash) ||
-            (admitted && admitted.payloadHash !== request.payloadHash)
-          )
-            throw new Error("remote_command_identity_changed");
-          sendCurrent({
-            protocolVersion: 1,
-            type: "receipt_query_result",
-            requestId: frame.requestId,
-            payload: {
-              commandId: request.commandId,
-              payloadHash: request.payloadHash,
-              receipt:
-                receipt ??
-                (input && admitted
-                  ? {
-                      id: admitted.id,
-                      deviceId: admitted.deviceId,
-                      state: "admitted",
-                      revision: 2,
-                      payloadHash: admitted.payloadHash,
-                      action: admitted.action,
-                      targetId: admitted.targetId,
-                      localSessionId: input.sessionId,
-                      inputId: input.id,
-                      turnId: input.turnId,
-                      createdAt: input.createdAt,
-                      expiresAt: admitted.deadline,
-                    }
-                  : null),
-              notAdmitted: !receipt && !input && !pendingExecution,
-              cancelled: !!cancellation,
-            },
+          const response = await readRemoteCommandReceiptQuery({
+            request, requestId: frame.requestId, store: deps.store,
+            pending: commands.contains, current: connectionCurrent,
           });
+          if (response) sendCurrent(response);
         } else if (frame.type === "command_cancel") {
           const request = z
             .object({ commandId: z.string(), payloadHash: z.string() })
