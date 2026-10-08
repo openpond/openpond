@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readPonderLocalProjects } from "./openpond/ponder-project-snapshot.js";
 import {createAdvancedRefinerEvaluationSource} from "./training/advanced-refiner-evaluation-source.js";
 import {createAdvancedRefinerReviewQuality} from "./training/advanced-refiner-review-quality.js";
 import {createAdvancedRefinerPaidBoundary} from "./training/advanced-refiner-paid-boundary.js";
@@ -148,6 +149,10 @@ import {
 import { createHostedSavedWork } from "./openpond/saved-work.js";
 import { hostedSavedWorkRoutePayloads } from "./openpond/saved-work-route-payloads.js";
 import { createDesktopManagedAgentRoutes, createDesktopPonderActivityBridge } from "./runtime/task-inbox/desktop-agent-services.js";
+import { loadPonderInstallation } from "./openpond/ponder-installation.js";
+import { createPonderDesktopManager } from "./openpond/ponder-desktop-manager.js";
+import { PonderLocalOwnerSchema } from "./openpond/ponder-local-scope.js";
+import { createPonderUserSessionOwner } from "./openpond/ponder-user-session-owner.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
 import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
@@ -251,6 +256,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   const store = new SqliteStore(storeDir, { logger });
   onStartupFailure(() => store.close());
   await store.recentTurns(1);
+  // A previous process's lease cannot authorize admission in this process.
+  await store.clearPonderDesktopAuthority();
+  let beforePonderAuthorityChange = () => store.clearPonderDesktopAuthority();
   // A native permission request belongs to the process that issued it. Restart never approves it.
   for (const approval of await store.pendingApprovals()) {
     if (typeof approval.providerRequestId === "string" && approval.providerRequestId.startsWith("native-agent:")) await store.upsertApproval({ ...approval, status: "cancelled" });
@@ -294,10 +302,15 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     logger,
     store,
   });
-  const ponderActivityBridge = createDesktopPonderActivityBridge({ storeDir, deviceId: serverId,
+  const ponderInstallation = await loadPonderInstallation(storeDir);
+  const ponderActivityBridge = createDesktopPonderActivityBridge({ storeDir, deviceId: ponderInstallation.installationId,
     subscribe: subscribeRuntimeEvents,
     loadAppPreferences: () => loadAppPreferences(),
     sessionTitle: async id => (await store.getSession(id))?.title ?? "Local chat",
+    sessionOwner: async id => {
+      const owner = PonderLocalOwnerSchema.safeParse((await store.getSession(id))?.metadata?.ponderLocalOwner);
+      return owner.success ? owner.data : null;
+    },
     workflows: async () => ({ workflows: await store.listChatWorkflows(), runs: await store.listChatWorkflowRuns(null, 500) }),
     warn: message => logger.warn(message),
   });
@@ -450,6 +463,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     refreshCodexStatus,
     appendRuntimeEvent,
     isClosing: () => closing,
+    beforePonderAuthorityChange: () => beforePonderAuthorityChange(),
   });
   const projectActionRunPayload = createProjectActionRunPayload({
     appendRuntimeEvent,
@@ -459,6 +473,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
 
   const {
     createSession,
+    createUserSession,
+    createReservedSession,
     patchSession,
     getSession,
     updateSession,
@@ -474,6 +490,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       return workspacePath;
     },
     loadAppPreferences,
+    captureUserOwner: createPonderUserSessionOwner({ installationId: ponderInstallation.installationId,
+      getSession: id => store.getSession(id), loadAppPreferences }),
     appendRuntimeEvent,
     loadLastUsedProfile: async () =>
       (await loadOpenPondProfileLibrary()).lastUsed,
@@ -485,6 +503,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     stream: streamOpenPondHostedChatTurn,
   });
   const createSessionWithAutoTitle = sessionTitleService.wrapCreateSession(createSession);
+  const createUserSessionWithAutoTitle = sessionTitleService.wrapCreateSession(createUserSession);
 
   const {
     activeWorkspace,
@@ -1315,6 +1334,18 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     refreshCodexStatus,
     loadAppPreferences,
   });
+  const ponderDesktopManager = createPonderDesktopManager({ storeDir, installation: ponderInstallation, store,
+    sessions: { createReservedSession }, runner: turnRunner, loadAppPreferences,
+    providerSettings: () => providerSettingsPayload({ refreshCatalog: false }),
+    profileLibrary: loadOpenPondProfileLibrary,
+    localProjects: async () => readPonderLocalProjects(store.home),
+    readOutput: workOutputService.readWorkOutput,
+    outputs: async (sessionId, turnId) => (await workOutputService.listWorkOutputs([await getSession(sessionId)])).outputs
+      .filter(output => output.sourceTurnId === turnId),
+    inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect, warn: message => logger.warn(message) });
+  beforePonderAuthorityChange = ponderDesktopManager.beforeAuthorityChange;
+  desktopManagedAgentRoutes.ponderRequestPayload = ponderDesktopManager.request;
+  onStartupFailure(() => ponderDesktopManager.close());
 
   async function compactSession(
     sessionId: string,
@@ -1615,7 +1646,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       readTaskInbox: turnRunner.readTaskInbox,
       queueTaskInput: turnRunner.queueTaskInput,
       updateTaskInput: turnRunner.updateTaskInput,
-      createSession: createSessionWithAutoTitle,
+      createSession: createUserSessionWithAutoTitle,
       getSession,
       turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
       runtimeEventsForSession: (sessionId) =>
@@ -1712,7 +1743,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
 
   const { httpServer, terminalWebSockets } = createOpenPondHttpSurface({
     routeOptions: {
-      configuration: createConfigurationPayloads(storeDir),
+      configuration: createConfigurationPayloads(storeDir, ponderDesktopManager.beforeAuthorityChange),
       host,
       getActualPort: () => actualPort,
       token,
@@ -1846,6 +1877,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       browserControlStatus: browserControlQueue.status,
       agentRuntime,
       ...desktopManagedAgentRoutes,
+      ponderDesktopConnectionPayload: ponderDesktopManager.connection,
+      ponderDesktopAttachSessionPayload: ponderDesktopManager.attachSession,
+      ponderDesktopProjectsPayload: ponderDesktopManager.projects,
+      ponderDesktopShareProjectPayload: ponderDesktopManager.shareProject,
       createSession: createSessionWithAutoTitle,
       patchSession: patchSessionPayload,
       sendTurn,
@@ -1917,6 +1952,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     },
     backgroundLoops: [
       { stop: ponderActivityBridge.close },
+      { stop: ponderDesktopManager.close },
       { stop: conversationServingOwner.close },
       taskMinerBackgroundLoop,
       localAgentScheduleLoop,
@@ -1959,6 +1995,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   await turnRunner.recoverPendingSubagentCompletions();
   await turnRunner.recoverTaskInbox();
   workSandboxLifecycle.start();
+  void ponderDesktopManager.start().catch(error => logger.warn("Ponder desktop initialization failed", { error: String(error) }));
   if (options.httpEnabled !== false) {
     schedules.start();
     localAgentScheduleLoop.start();

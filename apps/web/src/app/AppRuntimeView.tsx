@@ -160,6 +160,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setError,
     showToast,
     applyBootstrapPayload,
+    applyPreferencesPayload,
     bootstrap,
     connection,
     startup,
@@ -398,10 +399,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         const preferencesPayload = await api.savePreferences(connection, {
           defaultTeamId: teamId,
         });
-        applyBootstrapPayload({
-          ...bootstrap,
-          preferences: preferencesPayload.preferences,
-        });
+        applyPreferencesPayload(preferencesPayload);
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : String(caught);
         setError(message);
@@ -409,20 +407,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         throw caught;
       }
     },
-    [applyBootstrapPayload, bootstrap, connection, setError, showToast],
+    [applyPreferencesPayload, bootstrap, connection, setError, showToast],
   );
   const logOutOpenPondAccount = useCallback(async () => {
     if (!connection) return;
     try {
       const signedOutPayload = await api.signOutOpenPondAccount(connection);
       applyBootstrapPayload(signedOutPayload);
-      const preferencesPayload = await api.savePreferences(connection, {
-        defaultTeamId: null,
-      });
-      applyBootstrapPayload({
-        ...signedOutPayload,
-        preferences: preferencesPayload.preferences,
-      });
       showToast("Logged out", "success");
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);

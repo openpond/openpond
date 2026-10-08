@@ -91,6 +91,13 @@
   white-space: pre-wrap;
 }
 
+.user-message-content.collapsed {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+
 .user-message-show-more {
   display: inline-flex;
   align-items: center;
@@ -499,7 +506,7 @@ button.user-message-attachment {
   min-height: 30px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--panel-soft);
   color: #d5d8dd;
   padding: 0 10px;
   font-size: 12px;
@@ -553,7 +560,7 @@ button.user-message-attachment {
 .assistant-source-pill:hover,
 .assistant-source-pill:focus-visible {
   border-color: rgba(126, 200, 255, 0.44);
-  background: rgba(126, 200, 255, 0.09);
+  background: color-mix(in srgb, #7ec8ff 9%, var(--panel-soft));
   color: #f0f8ff;
   outline: 0;
 }
@@ -1187,11 +1194,10 @@ button.user-message-attachment {
   color: #767676;
 }
 
-.task-message-body {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  border-left: 2px solid #64c7d655;
-  padding-left: 12px;
+.message-row.user.task-message-row {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .task-message-attribution {
@@ -1202,6 +1208,8 @@ button.user-message-attachment {
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+  max-width: min(620px, 72%);
+  justify-content: flex-end;
 }
 
 .task-message-attribution button {
@@ -1709,4 +1717,15 @@ button.user-message-attachment {
 
 .assistant-reasoning-content .markdown-paragraph {
   color: rgba(255, 255, 255, 0.58);
+}
+
+.message-row .assistant-message-footer,
+.ponder-transcript-message > .assistant-message-footer { opacity: 0; transition: opacity 120ms ease; }
+.message-row:hover .assistant-message-footer,
+.message-row:focus-within .assistant-message-footer,
+.ponder-transcript-message:hover > .assistant-message-footer,
+.ponder-transcript-message:focus-within > .assistant-message-footer { opacity: 1; }
+@media (hover: none) {
+  .message-row .assistant-message-footer,
+  .ponder-transcript-message > .assistant-message-footer { opacity: 1; }
 }

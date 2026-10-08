@@ -39,8 +39,7 @@ type AccountSettingsSectionProps = {
   ) => Promise<void>;
   removeAccount: (
     handleValue: string,
-    baseUrlValue?: string | null,
-    wasActive?: boolean
+    baseUrlValue?: string | null
   ) => Promise<boolean>;
   onPayload: (payload: BootstrapPayload) => void;
   onPreferences: (payload: PreferencesPayload) => void;
@@ -397,7 +396,7 @@ export function AccountSettingsSection({
       tone: "danger",
     });
     if (!confirmed) return false;
-    if (await removeAccount(candidateHandle, candidate.baseUrl, candidate.isActive)) {
+    if (await removeAccount(candidateHandle, candidate.baseUrl)) {
       onToast?.("Account removed", "success");
       return true;
     }

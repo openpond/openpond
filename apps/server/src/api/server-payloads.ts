@@ -178,6 +178,7 @@ export function createServerPayloads(deps: {
   refreshCodexStatus?: () => Promise<CodexStatus>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   isClosing: () => boolean;
+  beforePonderAuthorityChange?: () => Promise<void>;
 }) {
   const {
     store,
@@ -320,7 +321,15 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<{ preferences: AppPreferences; rawRevision: string }> {
     const { expectedRevision, ...input } = UpdateAppPreferencesRequestSchema.parse(payload);
+    if (input.defaultTeamId !== undefined) await deps.beforePonderAuthorityChange?.();
     const saved = await updatePreferences(storeDir, input, expectedRevision);
+    await appendRuntimeEvent(event({
+      name: "diagnostic",
+      source: "server",
+      action: "openpond.preferences.update",
+      status: "completed",
+      output: "Updated application preferences.",
+    }));
     return { preferences: saved.preferences, rawRevision: saved.config.rawRevision };
   }
 
@@ -1676,6 +1685,7 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<BootstrapPayload> {
     const input = SwitchOpenPondAccountRequestSchema.parse(payload);
+    await deps.beforePonderAuthorityChange?.();
     await switchOpenPondAccount(input);
     await appendRuntimeEvent(
       event({
@@ -1696,6 +1706,7 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<BootstrapPayload> {
     const input = SaveOpenPondAccountRequestSchema.parse(payload);
+    await deps.beforePonderAuthorityChange?.();
     await saveOpenPondAccount({
       handle: input.handle,
       apiKey: input.apiKey,
@@ -1724,6 +1735,7 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<BootstrapPayload> {
     const input = RemoveOpenPondAccountRequestSchema.parse(payload);
+    await deps.beforePonderAuthorityChange?.();
     await removeOpenPondAccount(input);
     await appendRuntimeEvent(
       event({
@@ -1741,6 +1753,7 @@ export function createServerPayloads(deps: {
   }
 
   async function signOutOpenPondAccountPayload(): Promise<BootstrapPayload> {
+    await deps.beforePonderAuthorityChange?.();
     await signOutOpenPondAccount();
     await appendRuntimeEvent(
       event({
@@ -1761,6 +1774,7 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<BootstrapPayload> {
     const input = UpdateOpenPondAccountConfigRequestSchema.parse(payload);
+    await deps.beforePonderAuthorityChange?.();
     await updateOpenPondAccountConfig({
       handle: input.handle,
       currentBaseUrl: input.currentBaseUrl ?? undefined,

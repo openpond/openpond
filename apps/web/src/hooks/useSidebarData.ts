@@ -34,6 +34,7 @@ import {
 type UseSidebarDataInput = {
   localProjects: LocalProject[];
   cloudProjects: CloudProject[];
+  teamId: string | null;
   sessions: Session[];
   runtimeIndexes: RuntimeIndexes;
   appPreferences: SidebarAppPreferences;
@@ -48,6 +49,7 @@ type UseSidebarDataInput = {
 export function useSidebarData({
   localProjects,
   cloudProjects,
+  teamId,
   sessions,
   runtimeIndexes,
   appPreferences,
@@ -209,6 +211,7 @@ export function useSidebarData({
   const cloudProjectRows = useMemo<SidebarProjectItem[]>(
     () =>
       cloudProjects
+        .filter((project) => Boolean(teamId) && project.teamId === teamId)
         .map((project, index) => {
           const id = projectSelectionKey("cloud", project.id);
           return {
@@ -222,7 +225,7 @@ export function useSidebarData({
           };
         })
         .sort(sortSidebarProjectRows),
-    [appPreferences, cloudProjects]
+    [appPreferences, cloudProjects, teamId]
   );
   const linkedCloudProjectIds = useMemo(
     () =>

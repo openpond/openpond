@@ -37,6 +37,8 @@ export * from "./team-chat.js";
 export * from "./community.js";
 export * from "./tasksets.js";
 export * from "./taskset-drafts.js";
+export * from "./ponder-desktop.js";
+export * from "./ponder-desktop-handoff-presentation.js";
 export * from "./dataset-sources.js";
 export * from "./dataset-artifacts.js";
 export * from "./dataset-imports.js";
@@ -100,3 +102,9 @@ export * from "./local-experiment-runs.js";
 
 export * from "./evaluation-operation-recovery.js";
 export * from "./provider-plan-usage.js";
+export * from "./ponder-desktop.js";
+
+export * from "./ponder-desktop-handoff-edit.js";
+export * from "./ponder-desktop-inspection.js";
+
+export * from "./ponder-desktop-project-sharing.js";

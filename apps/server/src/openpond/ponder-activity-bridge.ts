@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { RuntimeEvent } from "@openpond/contracts";
-import { loadOpenPondAccountContext } from "@openpond/runtime";
+import {
+  loadAuthenticatedOpenPondAccountContext,
+  type RuntimeAccountContext,
+} from "@openpond/runtime";
+import { ponderLocalOwner, type PonderLocalOwner } from "./ponder-local-scope.js";
 
 type Activity = {
   id: string;
@@ -20,11 +24,15 @@ export function createPonderActivityBridge(input: {
   storeDir: string;
   deviceId: string;
   teamId: () => Promise<string | null>;
-  request: (request: {
-    path: string;
-    method?: "GET" | "POST";
-    body?: Record<string, unknown>;
-  }) => Promise<Record<string, unknown>>;
+  request: (
+    request: {
+      path: string;
+      method?: "GET" | "POST";
+      body?: Record<string, unknown>;
+    },
+    context: RuntimeAccountContext,
+    teamId: string,
+  ) => Promise<Record<string, unknown>>;
   subscribe: (listener: (event: RuntimeEvent) => void) => () => void;
   workflows: () => Promise<{
     workflows: Array<{ id: string; name: string; updatedAt: string }>;
@@ -37,6 +45,7 @@ export function createPonderActivityBridge(input: {
     }>;
   }>;
   sessionTitle: (id: string) => Promise<string>;
+  sessionOwner: (id: string) => Promise<PonderLocalOwner | null>;
   warn: (message: string) => void;
 }) {
   let closed = false;
@@ -46,20 +55,43 @@ export function createPonderActivityBridge(input: {
     tail = tail.then(fn).catch(() => input.warn("Ponder Pal activity sync will retry."));
   };
   async function scope() {
-    const context = await loadOpenPondAccountContext();
+    const context = await loadAuthenticatedOpenPondAccountContext();
     const account = context?.accountState;
     if (!account?.activeProfile || account.state !== "signed_in") return null;
+    const currentOwner = ponderLocalOwner(
+      context,
+      input.deviceId,
+      await input.teamId(),
+      new URL(context.apiBaseUrl).origin,
+    );
+    if (!currentOwner?.teamId) return null;
     const key = createHash("sha256")
       .update(
         JSON.stringify([
           account.baseUrl,
           account.activeProfile,
-          await input.teamId(),
+          currentOwner.teamId,
           input.deviceId,
+          currentOwner.ownerUserId,
         ]),
       )
       .digest("hex");
-    return { key, file: path.join(input.storeDir, "ponder-activity", `${key}.json`) };
+    return {
+      key,
+      owner: currentOwner,
+      context,
+      file: path.join(input.storeDir, "ponder-activity", `${key}.json`),
+    };
+  }
+  async function owns(sessionId: string, owner: PonderLocalOwner) {
+    const stored = await input.sessionOwner(sessionId);
+    return (
+      stored?.installationId === owner.installationId &&
+      stored.profileId === owner.profileId &&
+      stored.ownerUserId === owner.ownerUserId &&
+      stored.teamId === owner.teamId &&
+      stored.audience === owner.audience
+    );
   }
   async function read(
     file: string,
@@ -100,6 +132,7 @@ export function createPonderActivityBridge(input: {
       if ("error" in captured) throw captured.error;
       const owner = captured.owner;
       if (!owner || closed) return;
+      if (!(await owns(event.sessionId!, owner.owner))) return;
       const title = await input.sessionTitle(event.sessionId!);
       const state = await read(owner.file);
       const activity: Activity = {
@@ -118,7 +151,11 @@ export function createPonderActivityBridge(input: {
   async function flush() {
     const owner = await scope();
     if (!owner || closed) return;
-    const payload = await input.request({ path: "/ponder/settings" });
+    const payload = await input.request(
+      { path: "/ponder/settings" },
+      owner.context,
+      owner.owner.teamId!,
+    );
     if ((await scope())?.key !== owner.key) return;
     const settings = payload.settings as Settings;
     const bindingId = payload.bindingId;
@@ -145,6 +182,7 @@ export function createPonderActivityBridge(input: {
           title: titles.get(run.workflowId) ?? "Workflow run",
         })),
       ]) {
+        if (!(await owns(row.resourceId, owner.owner))) continue;
         const key = `workflow:${row.id}`;
         const signature = `${row.updatedAt}:${row.status}`;
         if (state.observed[key] === signature) continue;
@@ -163,11 +201,15 @@ export function createPonderActivityBridge(input: {
     }
     if ((await scope())?.key !== owner.key || !state.pending.length) return;
     const batch = state.pending.slice(0, 100);
-    const result = await input.request({
-      path: "/ponder/activity",
-      method: "POST",
-      body: { bindingId, items: batch },
-    });
+    const result = await input.request(
+      {
+        path: "/ponder/activity",
+        method: "POST",
+        body: { bindingId, items: batch },
+      },
+      owner.context,
+      owner.owner.teamId!,
+    );
     if ((await scope())?.key !== owner.key) return;
     const acknowledged = new Set([
       ...(result.delivered as string[]),

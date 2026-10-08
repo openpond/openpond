@@ -15,15 +15,9 @@ export type {
   SaveOpenPondAccountInput,
   UpdateOpenPondAccountConfigInput,
 } from "./types.js";
-export {
-  loadOpenPondAccountContext,
-  switchOpenPondAccount,
-} from "./account-context.js";
-export {
-  createOpenPondRepoApp,
-  loadOpenPondAccountState,
-  loadOpenPondApps,
-} from "./apps.js";
+export { loadOpenPondAccountContext, switchOpenPondAccount } from "./account-context.js";
+export { loadAuthenticatedOpenPondAccountContext } from "./authenticated-account-context.js";
+export { createOpenPondRepoApp, loadOpenPondAccountState, loadOpenPondApps } from "./apps.js";
 export {
   loadOpenPondHostedModels,
   loadOpenPondHostedProviders,
@@ -55,10 +49,7 @@ export {
   updateOpenPondAppEnvironment,
 } from "./actions.js";
 export { getBundledRuntimeVersion } from "./version.js";
-export {
-  createReadyLineParser,
-  type ReadyLineParser,
-} from "./ready-line-parser.js";
+export { createReadyLineParser, type ReadyLineParser } from "./ready-line-parser.js";
 export {
   openUrlWithSystemBrowser,
   resolveSystemBrowserCommand,

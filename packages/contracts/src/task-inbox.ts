@@ -13,7 +13,7 @@ export const TaskInputSchema = z.object({
   sequence: z.number().int().nonnegative(),
   sessionId: z.string().min(1),
   senderSessionId: z.string().min(1).nullable(),
-  senderKind: z.enum(["user", "task", "runtime"]),
+  senderKind: z.enum(["user", "task", "runtime", "ponder"]),
   kind: TaskInputKindSchema,
   body: z.string().trim().min(1).max(TASK_INPUT_MAX_CHARS),
   payload: z.record(z.string(), z.unknown()).default({}),
@@ -96,7 +96,7 @@ export const TASK_COORDINATION_INSTRUCTIONS = [
 
 export function taskInputModelText(input: TaskInput): string {
   return [
-    input.senderKind === "user" ? "User update to the current assignment:" : input.senderKind === "runtime" ? "Runtime coordination notice:" : "Peer coordination message:",
+    input.senderKind === "user" ? "User update to the current assignment:" : input.senderKind === "runtime" ? "Runtime coordination notice:" : input.senderKind === "ponder" ? "Ponder message carrying the originating user's bounded instruction:" : "Peer coordination message:",
     `Message type: ${input.kind.toUpperCase()}`,
     `Message ID: ${input.id}`,
     `Recipient: ${input.sessionId}`,

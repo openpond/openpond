@@ -83,6 +83,7 @@ export function RightChatPane({
   onOpenFileInSidebar,
   onOpenProfileSettings,
   onOpenSession,
+  onOpenPonder,
   onProviderChange,
   onProviderSetupOpen,
   onPromptChange,
@@ -127,6 +128,7 @@ export function RightChatPane({
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
   onOpenSession?: (sessionId: string) => void;
+  onOpenPonder?: () => void;
   onProviderChange: (provider: ChatProvider) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (prompt: string) => void;
@@ -303,6 +305,7 @@ export function RightChatPane({
             onOpenProfileSettings={onOpenProfileSettings}
             onResolveUserQuestion={handleResolveUserQuestion}
             onOpenSession={onOpenSession}
+            onOpenPonder={onOpenPonder}
             userAttachmentDisplay={
               panel.provider === "codex" ? "compact" : "full"
             }
