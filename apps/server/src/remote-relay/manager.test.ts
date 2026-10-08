@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { z } from "zod";
+import type { RuntimeEvent } from "@openpond/contracts";
 import { WebSocketServer } from "ws";
 import { SqliteStore } from "../store/store.js";
 import { createSessionStore } from "../store/session-store.js";
@@ -25,8 +26,11 @@ it("authenticates its initial socket before publishing leased frames", async () 
   let disableTarget: unknown;
   let snapshotSeen = false;
   let rejectionError: unknown;
+  let listener = (_event: RuntimeEvent) => {};
+  const received: any[] = [];
   server.on("connection", connection => connection.on("message", raw => {
     const frame = JSON.parse(raw.toString());
+    received.push(frame);
     if (frame.type === "hello") {
       const parsed = z.object({ protocolVersion: z.literal(1), epoch: z.string().optional(), fence: z.number().int().positive().optional(),
         type: z.literal("hello"), payload: z.object({ ticket: z.literal("ticket") }) }).safeParse(frame);
@@ -50,8 +54,15 @@ it("authenticates its initial socket before publishing leased frames", async () 
       if (route.endsWith("connection-tickets")) return { ticket: "ticket", connectUrl: `ws://127.0.0.1:${address.port}` };
       if (route.endsWith("device-management")) { disableTarget = (body as { payload: { targetDeviceId?: string } }).payload.targetDeviceId; return { device: { id: deviceId, revision: 2 } }; }
       throw new Error("Unexpected device request");
-    } }), inspect: async () => { throw new Error("No tasks"); }, execute: async () => { z.object({ modelRef: z.object({ id: z.string() }) }).parse({ modelRef: null }); throw new Error("No commands"); },
-    outputs: async () => [], readOutput: async () => { throw new Error("No artifacts"); }, listen: () => () => {}, warn: () => {} });
+    } }), inspect: async id => {
+      const session = (await store.getSession(id))!;
+      const turn = await store.latestTurnForSession(id); const activeTurnId = turn?.status === "in_progress" ? turn.id : null;
+      return { sessionId: id, provider: session.provider, title: session.title, targetRevision: "fixture",
+        managedSessionId: "original-thread", latestTurnId: turn?.id ?? null, activeTurnId, paused: false,
+        approvalBlocked: false, canSendFollowup: true, canSteer: !!activeTurnId, unavailableReason: null,
+        inbox: { sessionId: id, activeTurnId, acceptingInput: !!activeTurnId, paused: false, inputs: [], waits: [] } };
+    }, execute: async () => { z.object({ modelRef: z.object({ id: z.string() }) }).parse({ modelRef: null }); throw new Error("No commands"); },
+    outputs: async () => [], readOutput: async () => { throw new Error("No artifacts"); }, listen: fn => { listener = fn; return () => {}; }, warn: () => {} });
   try {
     await manager.start();
     await expect.poll(() => manager.status().state, { timeout: 3000 }).toBe("connected");
@@ -64,6 +75,24 @@ it("authenticates its initial socket before publishing leased frames", async () 
     connection.send(JSON.stringify({ protocolVersion: 1, type: "subscribe", payload: { taskId: session.id, viewerId: "viewer" } }));
     connection.send(JSON.stringify({ protocolVersion: 1, type: "subscribe", requestId: "read-request", payload: { taskId: session.id, viewerId: "viewer" } }));
     await expect.poll(() => snapshotSeen, { timeout: 3000 }).toBe(true);
+    const turnId = randomUUID();
+    await store.insertTurn({ id: turnId, sessionId: session.id, providerTurnId: "provider-turn", prompt: "Controlled activation",
+      startedAt: new Date().toISOString(), completedAt: null, status: "in_progress", error: null, metadata: {}, createImproveRun: null });
+    const activation: RuntimeEvent = { id: randomUUID(), timestamp: new Date().toISOString(), sessionId: session.id,
+      turnId, name: "turn.started", source: "server", status: "started", args: { prompt: "Controlled activation" } };
+    await store.appendRuntimeEvent(activation); listener(activation);
+    // Short turns must publish the exact control revision before their live state.
+    await expect.poll(() => received.some(frame => frame.type === "events" && frame.payload.items.some((item: any) => item.turnId === turnId)), { timeout: 3000 }).toBe(true);
+    const catalogIndex = received.findIndex(frame => frame.type === "catalog" && frame.payload.tasks.some((task: any) => task.activeTurnId === turnId && task.capabilities.steer && task.capabilities.stop));
+    const eventIndex = received.findIndex(frame => frame.type === "events" && frame.payload.items.some((item: any) => item.turnId === turnId));
+    expect(catalogIndex).toBeGreaterThanOrEqual(0); expect(catalogIndex).toBeLessThan(eventIndex);
+    const catalogsBeforeTokens = received.filter(frame => frame.type === "catalog").length;
+    const token: RuntimeEvent = { id: randomUUID(), timestamp: new Date().toISOString(), sessionId: session.id,
+      turnId, name: "assistant.delta", source: "provider", output: "Bounded streaming text" };
+    await store.appendRuntimeEvent(token); listener(token);
+    await expect.poll(() => received.some(frame => frame.type === "events" && frame.payload.items.some((item: any) => item.text === token.output)), { timeout: 3000 }).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(received.filter(frame => frame.type === "catalog")).toHaveLength(catalogsBeforeTokens);
     connection.send(JSON.stringify({ protocolVersion: 1, type: "command", payload: { id: randomUUID(), deviceId,
       payloadHash: "a".repeat(64), action: "start", targetId: "starter", deadline: new Date(Date.now() + 60_000).toISOString() } }));
     await expect.poll(() => rejectionError, { timeout: 3000 }).toBe("remote_command_configuration_invalid");

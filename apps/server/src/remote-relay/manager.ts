@@ -46,6 +46,7 @@ export function createRemoteRelayManager(deps: {
   let closed = false;
   let generation = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let catalogTimer: ReturnType<typeof setTimeout> | null = null;
   let unlisten: (() => void) | null = null;
   let queue: Promise<unknown> = Promise.resolve();
   let state = "offline";
@@ -75,6 +76,7 @@ export function createRemoteRelayManager(deps: {
     socket.send(encoded);
   };
   async function disconnect() {
+    if (catalogTimer) clearTimeout(catalogTimer); catalogTimer = null;
     generation++; catalogDirty = true; catalogSignature = null; authority = null; epoch = null; activeClient = null; subscriptions.clear();
     transportLease = null;
     rejectReady?.(new Error("remote_connection_lost")); connectionReady = null; resolveReady = null; rejectReady = null;
@@ -248,11 +250,21 @@ export function createRemoteRelayManager(deps: {
     connection.on("error", error => deps.warn(`Remote relay connection: ${error.message}`));
   }
   function schedule() { if (closed) return; timer = setTimeout(() => { void serial(connect).catch(error => { state = "reconnecting"; deps.warn(`Remote relay: ${String(error)}`); }).finally(schedule); }, 15_000); timer.unref(); }
+  function scheduleCatalog() {
+    catalogDirty = true;
+    if (closed || catalogTimer || !authority) return;
+    catalogTimer = setTimeout(() => {
+      catalogTimer = null;
+      void serial(catalog).catch(() => { catalogDirty = true; void disconnect(); });
+    }, 100);
+    catalogTimer.unref();
+  }
   return {
     async start() {
       preference = await loadRemoteAccessPreference(deps.storeDir); await deps.store.initializeRemoteDeviceStore();
       unlisten = deps.listen(event => {
-        if (["session.started", "session.updated", "session.title.updated", "session.closed", "turn.started", "turn.completed", "turn.failed", "turn.interrupted", "approval.requested", "approval.resolved"].includes(event.name)) catalogDirty = true;
+        const semanticChange = ["session.started", "session.updated", "session.title.updated", "session.closed", "turn.started", "turn.completed", "turn.failed", "turn.interrupted", "approval.requested", "approval.resolved"].includes(event.name);
+        if (semanticChange) scheduleCatalog();
         const sessionId = event.sessionId;
         if (!authority || !sessionId || !subscriptions.has(sessionId)) return;
         const item = projectRemoteEvent(event, event.sequence ?? 0);
@@ -266,6 +278,7 @@ export function createRemoteRelayManager(deps: {
           if (!session) return;
           const { deviceOwnsLocalSession } = await import("./local-scope.js");
           if (!deviceOwnsLocalSession(session, selected.owner)) return;
+          if (semanticChange) await catalog();
           if (event.name === "turn.completed") item.artifactIds = (await deps.outputs(session))
             .filter(output => output.sourceTurnId === event.turnId).map(output => output.id).slice(0, 100);
           for (const part of projectRemoteEventChunks(await normalizeRemoteEventTurn(deps.store, event), event.sequence ?? 0)) {
