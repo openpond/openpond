@@ -53,7 +53,9 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     await delay(100); expect(await evaluate("window.__openpondVisual.height")).toBe(440);
     // Lazy mounting near the viewport edge must not wait for animation frames:
     // the initial 80px child can be fully clipped even when its host is visible.
-    await cdp.send("Page.navigate", { url: "data:text/html,<body></body>" });
+    await cdp.send("Page.navigate", { url: "data:text/html,<body id=clipped-host></body>" });
+    for (let i=0; i<30 && !await evaluate("!!document.getElementById('clipped-host')"); i++) await delay(100);
+    expect(await evaluate("!!document.getElementById('clipped-host')")).toBe(true);
     await evaluate(`(() => { window.measuredHeight=0; addEventListener('message', e => { if(e.data?.type==='openpond-visual-size')window.measuredHeight=e.data.height; }); const f=document.createElement('iframe');f.setAttribute('sandbox','allow-scripts');f.style.cssText='position:fixed;top:-300px;width:680px;height:640px';f.srcdoc=${JSON.stringify(htmlVisualDocument('<section style="height:640px">Clipped top</section>', "clipped"))};document.body.append(f); })()`);
     for (let i=0; i<30 && await evaluate("window.measuredHeight") !== 640; i++) await delay(100);
     expect(await evaluate("window.measuredHeight")).toBe(640);

@@ -13,7 +13,7 @@ const catalogs = new WeakMap<ClientConnection, Map<string, { value: NativeAgentC
 const CATALOG_REFRESH_MS = 30_000;
 
 export function nativeAgentCatalogKey(provider: string, config?: ProviderConfig) {
-  return JSON.stringify([provider, config?.binaryPath ?? null, config?.sourceHome ?? null, config?.enabled ?? true]);
+  return JSON.stringify([provider, config?.binaryPath ?? null, config?.sourceHome ?? null, config?.enabled ?? true, config?.acp ?? null]);
 }
 
 /** Retain choices during refresh, but never across accounts or installations. */

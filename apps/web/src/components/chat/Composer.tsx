@@ -1,3 +1,4 @@
+import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import {
   lazy,
@@ -225,7 +226,7 @@ export function Composer({
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
-  const canSteerNativeTurn = !["claude-code", "opencode", "grok-build"].includes(provider);
+  const canSteerNativeTurn = !(isRegisteredAcpProvider(provider) || ["claude-code", "opencode", "grok-build"].includes(provider));
   const useActiveSteering = steerActiveResponses && canSteerNativeTurn;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents, canSteerNativeTurn);
   const fileInputRef = useRef<HTMLInputElement | null>(null);

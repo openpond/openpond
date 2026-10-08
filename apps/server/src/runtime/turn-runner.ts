@@ -1398,7 +1398,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           })
         : [];
       const extraSystemContext = [
-        !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && (isNativeAgentId(session.provider) || session.provider === "codex") && htmlVisuals?.available() ? HTML_VISUAL_INSTRUCTIONS : "",
+        !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.provider === "codex" && htmlVisuals?.available() ? HTML_VISUAL_INSTRUCTIONS : "",
         selectedHarness?.instructionContext ?? null,
         subagentSystemContextForSession(session, subagentDelegation),
       ].filter(Boolean).join("\n\n");
@@ -1729,14 +1729,17 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const cwd = input.cwd ?? (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: session.workspaceKind !== "local_project" })) ?? session.cwd;
         if (!cwd) throw new Error("Choose a local working directory for this native agent.");
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
-        const definitions = [...(session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox)), ...(!session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
+        const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
+        const visualToolsEnabled = !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
+        const definitions = [...coordinationDefinitions, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : [])];
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         let nativeRequestId: string | null = null;
-        const providerTurnId = await nativeAgents.run({ content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
-          preparePrompt: async (prompt) => {
+        const providerTurnId = await nativeAgents.run({ content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
+          preparePrompt: async (prompt, capabilities) => {
             nativeRequestId = `native-start:${turn.id}`;
             const inputs = await taskInbox.include(sessionId, turn.id, nativeRequestId);
-            return [prompt, ...inputs.filter((input) => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n");
+            const toolInstructions = capabilities.taskTools ? [coordinationDefinitions.length ? TASK_COORDINATION_INSTRUCTIONS : "", visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : ""].filter(Boolean).join("\n\n") : "";
+            return [toolInstructions ? codexPromptWithHarnessContext(prompt, toolInstructions) : prompt, ...inputs.filter((input) => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n");
           },
           settlePrompt: async (outcome) => {
             if (nativeRequestId) await inboxStore.settleTaskInputRequest(nativeRequestId, outcome);
