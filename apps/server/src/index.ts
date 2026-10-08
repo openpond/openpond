@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 import { createModelUsagePersistence } from "./runtime/model-usage-persistence.js";
+import { createRemoteRelayManager } from "./remote-relay/manager.js";
+import { createRemoteCommandExecutor } from "./remote-relay/executor.js";
+import { remoteRelayAccount } from "./remote-relay/account.js";
+import { captureRemoteStarters } from "./remote-relay/starters.js";
+import { createRemoteOutputReader } from "./remote-relay/output-refs.js";
 import { createServerPonderActivity } from "./openpond/ponder-desktop-activity-service.js";
 import { readPonderLocalProjects } from "./openpond/ponder-project-snapshot.js";
 import {createAdvancedRefinerEvaluationSource} from "./training/advanced-refiner-evaluation-source.js";
@@ -1307,10 +1312,42 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     readOutput: workOutputService.readWorkOutput,
     outputs: async (sessionId, turnId) => (await workOutputService.listWorkOutputs([await getSession(sessionId)])).outputs
       .filter(output => output.sourceTurnId === turnId),
+    relayRequest: payload => remoteRelayManager.callerRequest(payload), relayWake: () => remoteRelayManager.wake(),
     inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect, warn: message => logger.warn(message) });
-  beforePonderAuthorityChange = ponderDesktopManager.beforeAuthorityChange;
+  const remoteRelayManager = createRemoteRelayManager({ storeDir, installation: ponderInstallation, store,
+    current: remoteRelayAccount(ponderInstallation.installationId, loadAppPreferences),
+    inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect,
+    execute: createRemoteCommandExecutor({ store, inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect,
+      admit: input => turnRunner.admitUserLocalMessage(input), interrupt: (...args) => turnRunner.interruptSessionTurn(...args),
+      createReserved: createReservedSession,
+      resolveApproval,
+      resolveStarter: async command => {
+        const current = await remoteRelayAccount(ponderInstallation.installationId, loadAppPreferences)();
+        if (!current) throw new Error("remote_account_unavailable");
+        const sessions = [];
+        for (const shell of await store.sessionShells()) { const session = await store.getSession(shell.id); if (session) sessions.push(session); }
+        const starter = captureRemoteStarters(sessions, current.owner).get(command.localStarterId!);
+        if (!starter || starter.target.revision !== command.expectedRevision || starter.target.projectId !== command.payload.projectId
+          || starter.target.revision !== command.payload.starterRevision) throw new Error("remote_starter_changed");
+        return starter.source;
+      } }),
+    outputs: createRemoteOutputReader(store),
+    readOutput: async (session, outputId) => {
+      const output = (await createRemoteOutputReader(store)(session)).find(output => output.id === outputId);
+      if (!output) throw new Error("remote_artifact_unavailable");
+      return workOutputService.readQualifiedWorkOutput(session, output);
+    },
+    caller: { needsConnection: ponderDesktopManager.needsRelay, requestAuthority: ponderDesktopManager.relayAuthority,
+      receiveOffers: payload => {
+        const offer = payload as { caller: string; operations: unknown; hasObligations: boolean };
+        if (offer.caller !== "ponder" || typeof offer.hasObligations !== "boolean") throw new Error("ponder_relay_offer_invalid");
+        ponderDesktopManager.receiveOperations(offer.operations, offer.hasObligations);
+      } },
+    listen: subscribeRuntimeEvents, warn: message => logger.warn(message) });
+  beforePonderAuthorityChange = async () => { await remoteRelayManager.beforeAuthorityChange(); await ponderDesktopManager.beforeAuthorityChange(); };
   desktopManagedAgentRoutes.ponderRequestPayload = ponderDesktopManager.request;
   onStartupFailure(() => ponderDesktopManager.close());
+  onStartupFailure(() => remoteRelayManager.close());
 
   async function compactSession(
     sessionId: string,
@@ -1708,7 +1745,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
 
   const { httpServer, terminalWebSockets } = createOpenPondHttpSurface({
     routeOptions: {
-      configuration: createConfigurationPayloads(storeDir, ponderDesktopManager.beforeAuthorityChange),
+      configuration: createConfigurationPayloads(storeDir, beforePonderAuthorityChange),
       host,
       getActualPort: () => actualPort,
       token,
@@ -1832,6 +1869,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       gitAvailabilityPayload,
       startGitInstallPayload,
       remoteAccessPayload: remoteAccess.status,
+      accountRemoteAccessPayload: (action, payload) => remoteRelayManager.settings(action, payload),
       enableRemoteAccessPayload: remoteAccess.enable,
       disableRemoteAccessPayload: remoteAccess.disable,
       voiceTranscriptionStatusPayload: voiceTranscription.status,
@@ -1918,6 +1956,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     backgroundLoops: [
       { stop: ponderActivityBridge.close },
       { stop: ponderDesktopManager.close },
+      { stop: remoteRelayManager.close },
       { stop: conversationServingOwner.close },
       taskMinerBackgroundLoop,
       localAgentScheduleLoop,
@@ -1961,6 +2000,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   await turnRunner.recoverTaskInbox();
   workSandboxLifecycle.start();
   void ponderDesktopManager.start().catch(error => logger.warn("Ponder desktop initialization failed", { error: String(error) }));
+  void remoteRelayManager.start().catch(error => logger.warn("Remote relay initialization failed", { error: String(error) }));
   if (options.httpEnabled !== false) {
     schedules.start();
     localAgentScheduleLoop.start();

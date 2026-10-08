@@ -56,6 +56,8 @@ export function createPonderDesktopManager(deps: {
   outputs(sessionId: string, turnId: string): Promise<FileOutputRef[]>;
   readOutput: ReturnType<typeof createWorkOutputService>["readWorkOutput"];
   warn(message: string): void;
+  relayRequest: NonNullable<Parameters<typeof createPonderDesktopClient>[0]["relayRequest"]>;
+  relayWake(): void;
 }) {
   let active: {
     key: string;
@@ -168,6 +170,7 @@ export function createPonderDesktopManager(deps: {
       owner: selected.owner,
       client: selected.client,
       binding,
+      relayRequest: deps.relayRequest,
     });
     const capture = async () => {
       // Authoritative session records contain ownership; sidebar projections do not grant authority.
@@ -267,6 +270,14 @@ export function createPonderDesktopManager(deps: {
     timer.unref();
   }
   return {
+    relayAuthority(deviceId: string, genericRuntimeId: string) {
+      return active?.valid ? active.runtime.relayAuthority(deviceId, genericRuntimeId) : null;
+    },
+    needsRelay: () => !!active?.valid && active.runtime.needsConnection(),
+    receiveOperations(payload: unknown, hasObligations: boolean) {
+      if (!active?.valid) throw new Error("ponder_relay_authority_unavailable");
+      active.runtime.receiveOperations(payload, hasObligations);
+    },
     async start() {
       await deps.store.clearPonderDesktopAuthority();
       try {
@@ -477,6 +488,7 @@ export function createPonderDesktopManager(deps: {
         } finally {
           // The hosted admission may commit even if the response is lost.
           wakeAfterRequest?.();
+          deps.relayWake();
         }
       });
     },

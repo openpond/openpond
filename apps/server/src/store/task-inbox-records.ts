@@ -7,6 +7,9 @@ import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { localManagedTargetRevision } from "../runtime/task-inbox/target-revision.js";
 import { LocalManagedMessageError } from "../runtime/task-inbox/local-managed-message-error.js";
 import { assertPonderDesktopInput } from "./ponder-desktop-input.js";
+import { assertRemoteAdmission } from "../remote-relay/admission.js";
+import type { RemoteDispatchCommand } from "@openpond/contracts";
+import { remoteExecutionSnapshot } from "../remote-relay/session-ownership.js";
 
 export type TaskInboxOwner = {
   session_id: string; turn_id: string; owner_id: string; generation: number;
@@ -70,6 +73,10 @@ export function admitTaskInput(db: OpenPondSqliteConnection, admission: TaskInpu
   const sessionRow = db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id = ?", [admission.sessionId]);
   const session: Session | null = sessionRow ? JSON.parse(sessionRow.payload) : null;
   if (!session || session.status === "closed" || session.archived) throw new Error("The recipient task is unavailable.");
+  if (admission.payload.remoteDevice !== undefined) {
+    if (admission.senderKind !== "user" || admission.senderSessionId !== null) throw new Error("remote_human_input_required");
+    assertRemoteAdmission(db, admission.payload.remoteDevice as RemoteDispatchCommand, session);
+  }
   if (admission.senderKind === "ponder" || admission.payload.ponderDesktop !== undefined) {
     const latest = db.get<{ id: string }>("SELECT id FROM turns WHERE session_id = ? ORDER BY sort_index DESC LIMIT 1", [admission.sessionId]);
     assertPonderDesktopInput(db, admission, session, latest?.id ?? null);
@@ -91,6 +98,7 @@ export function admitTaskInput(db: OpenPondSqliteConnection, admission: TaskInpu
   const timestamp = new Date().toISOString();
   const input = TaskInputSchema.parse({
     ...admission, sequence: 0, revision: 1, state: "pending", requestIds: [], error: null,
+    payload: { ...admission.payload, ...(admission.payload.remoteDevice ? { remoteDeviceExecution: remoteExecutionSnapshot(session) } : {}) },
     turnId: admission.kind !== "queued" && admission.kind !== "followup" && owner?.accepting && !owner.paused && owner.lease_until > Date.now()
       ? owner.turn_id : null,
     createdAt: timestamp, updatedAt: timestamp,

@@ -25,6 +25,7 @@ export type ReservedSessionCreation = {
   payloadHash: string;
   owner?: PonderLocalOwner;
   desktopOperation?: PonderDesktopOperation;
+  remoteStarterSourceSessionId?: string;
 };
 
 export function createSessionStore(deps: {
@@ -87,6 +88,7 @@ export function createSessionStore(deps: {
       metadata.ponderWorkspaceRevision = workspaceRevision;
     }
     if (owner) metadata.ponderLocalOwner = PonderLocalOwnerSchema.parse(owner);
+    if (reservation?.remoteStarterSourceSessionId) metadata.remoteStarterSourceSessionId = reservation.remoteStarterSourceSessionId;
     const creationHash = reservation ? createHash("sha256").update(ponderDesktopRequestContent("POST", "/local/session",
       JSON.parse(JSON.stringify({ ...input, metadata })))).digest("hex") : "";
     if (reservation) {

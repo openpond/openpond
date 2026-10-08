@@ -10,7 +10,6 @@ import {
   type OpenPondProfileRef,
 } from "@openpond/contracts";
 import { ponderOwnsLocalSession, type PonderLocalOwner } from "./ponder-local-scope.js";
-import { localManagedTargetRevision } from "../runtime/task-inbox/target-revision.js";
 
 function hash(value: unknown) {
   return createHash("sha256")
@@ -22,19 +21,8 @@ export function ponderDesktopProfileSelectionId(profile: OpenPondProfileRef | nu
   return profile ? hash(profile) : null;
 }
 
-export function ponderDesktopSessionRevision(session: Session, latestTurnId: string | null) {
-  return hash({
-    managedRevision: localManagedTargetRevision(session, latestTurnId),
-    modelRef: session.modelRef ?? null,
-    profile: session.currentProfile ?? null,
-    profileWorkflowBinding: session.profileWorkflowBinding ?? null,
-    profileComponentBinding: session.profileComponentBinding ?? null,
-    experience: session.experience,
-    owner: session.metadata?.ponderLocalOwner ?? null,
-    projectRevision: session.metadata?.ponderWorkspaceRevision ?? null,
-    commandAccessMode: session.openPondCommandAccessMode,
-  });
-}
+import { localSessionOwnershipRevision as ponderDesktopSessionRevision } from "../remote-relay/session-ownership.js";
+export { ponderDesktopSessionRevision };
 
 /** Queueing may outlive another turn; its selected configuration must remain the same. */
 export function ponderDesktopExecutionRevision(session: Session) {
