@@ -32,7 +32,11 @@ export const PROVIDER_IDS = [
   "custom-openai-compatible",
 ] as const;
 
-export const ProviderIdSchema = z.enum(PROVIDER_IDS);
+export const AcpProviderIdSchema = z.templateLiteral(["acp:", z.string().regex(/^[a-z0-9][a-z0-9-]{0,100}$/)]);
+export const ProviderIdSchema = z.union([z.enum(PROVIDER_IDS), AcpProviderIdSchema]);
+export function isRegisteredAcpProvider(value: string): value is `acp:${string}` {
+  return /^acp:[a-z0-9][a-z0-9-]{0,100}$/.test(value);
+}
 
 export type ProviderId = z.infer<typeof ProviderIdSchema>;
 

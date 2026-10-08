@@ -1,3 +1,5 @@
+import { AcpAgentBrowser } from "./AcpAgentBrowser";
+import { apiFetch } from "../../api/api-client";
 import { UrlModelConnections } from "./UrlModelConnections";
 import { api } from "../../api";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
@@ -23,7 +25,7 @@ import type {
   ProviderSettings,
   ProviderStatus,
 } from "@openpond/contracts";
-import { PROVIDER_IDS } from "@openpond/contracts";
+import { isRegisteredAcpProvider, PROVIDER_IDS } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
 import type { CheckNativeProvider } from "./native-provider-check";
 import { DESKTOP_AGENT_PROVIDERS, isAcpProvider, NativeAgentProviderDetails } from "./NativeAgentProviderDetails";
@@ -215,8 +217,10 @@ export function ProviderSettingsSection({
   startOpenAiSubscriptionAuth,
   validateProvider,
 }: ProviderSettingsSectionProps) {
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [removalError, setRemovalError] = useState<string | null>(null);
   const [detailsProviderId, setDetailsProviderId] = useState<ChatProvider | null>(null);
-  const providerRows = DESKTOP_AGENT_PROVIDERS.filter(id => providers?.statuses[id]);
+  const providerRows = [...DESKTOP_AGENT_PROVIDERS, ...(Object.keys(providers?.statuses ?? {}).filter(isRegisteredAcpProvider))].filter(id => providers?.statuses[id]);
   const detailsStatus = detailsProviderId ? providers?.statuses[detailsProviderId] ?? null : null;
   function openProviderDetails(providerId: ChatProvider, loadModels: boolean) {
     setDetailsProviderId(providerId);
@@ -270,6 +274,12 @@ export function ProviderSettingsSection({
                     >
                       Manage
                     </button>
+                    {isRegisteredAcpProvider(providerId) ? <button type="button" className="settings-secondary" disabled={removing !== null || !connection} onClick={async () => {
+                      if (!connection) return; setRemoving(providerId); setRemovalError(null);
+                      try { const result = await apiFetch<{ settings: ProviderSettings }>(connection, "/v1/providers/acp-registry", { method: "DELETE", body: JSON.stringify({ providerId }) }); onProvidersChanged(result.settings); if (detailsProviderId === providerId) setDetailsProviderId(null); }
+                      catch (error) { setRemovalError(error instanceof Error ? error.message : "Could not remove ACP agent."); }
+                      finally { setRemoving(null); }
+                    }}>{removing === providerId ? "Removing…" : "Remove connection"}</button> : null}
                   </div>
                 );
               })}
@@ -281,6 +291,9 @@ export function ProviderSettingsSection({
           )}
         </div>
       ) : null}
+
+      {removalError ? <p role="alert">{removalError}</p> : null}
+      <AcpAgentBrowser connection={connection} onChanged={onProvidersChanged} onAdded={id => setDetailsProviderId(id)} />
 
       <UrlModelConnections connection={connection} onChanged={async () => { if (connection) onProvidersChanged(await api.providerSettings(connection)); }} />
 
@@ -398,14 +411,14 @@ export function ProviderDetailsDialog({
         <div className="provider-dialog-header">
           <div>
             <h2>{status.displayName}</h2>
-            <span>{DESKTOP_AGENT_PROVIDERS.includes(providerId) ? "Installation and login" : "API and subscription settings"}</span>
+            <span>{(DESKTOP_AGENT_PROVIDERS.includes(providerId) || isRegisteredAcpProvider(providerId)) ? "Installation and login" : "API and subscription settings"}</span>
           </div>
           <div className={`provider-state-pill ${providerStateTone(status)}`}>
             {providerStateLabel(status)}
           </div>
         </div>
 
-        {DESKTOP_AGENT_PROVIDERS.includes(providerId) && config ? <label className="provider-chat-toggle"><span className="provider-toggle"><input type="checkbox" aria-label={`Enable ${status.displayName} for chat`} checked={config.enabled} disabled={providerBusy !== null} onChange={event => void onSaveConfig(providerId, { enabled: event.target.checked })} /><span aria-hidden="true" /></span><span>Use {status.displayName} for chats</span></label> : null}
+        {(DESKTOP_AGENT_PROVIDERS.includes(providerId) || isRegisteredAcpProvider(providerId)) && config ? <label className="provider-chat-toggle"><span className="provider-toggle"><input type="checkbox" aria-label={`Enable ${status.displayName} for chat`} checked={config.enabled} disabled={providerBusy !== null} onChange={event => void onSaveConfig(providerId, { enabled: event.target.checked })} /><span aria-hidden="true" /></span><span>Use {status.displayName} for chats</span></label> : null}
         {conversationPanel ? <div className="surface-tabs provider-agent-tabs" role="tablist" aria-label="Agent settings" onKeyDown={event => {
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
@@ -432,7 +445,7 @@ export function ProviderDetailsDialog({
           </div>
         ) : null}
 
-        {!DESKTOP_AGENT_PROVIDERS.includes(providerId) ? <dl className="provider-dialog-stats">
+        {!(DESKTOP_AGENT_PROVIDERS.includes(providerId) || isRegisteredAcpProvider(providerId)) ? <dl className="provider-dialog-stats">
           <div>
             <dt>Credential</dt>
             <dd title={credentialSummary(status)}>{credentialSummary(status)}</dd>
