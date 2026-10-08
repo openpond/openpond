@@ -178,7 +178,7 @@ export function publishTasksetDraft(input: {
     ...taskset,
     contentHash: computeTasksetHash(taskset),
   });
-  const report = validateTaskset(hashed);
+  const report = validateTaskset(hashed, { purpose: "publication" });
   const validationErrors = report.issues.filter((issue) => issue.severity === "error");
   if (validationErrors.length) {
     throw new TasksetDraftPublishError(validationErrors.map((issue) => ({
@@ -220,6 +220,7 @@ function generatedDraftSource(
 }
 
 function buildIntentForDraft(draft: TasksetDraft): DatasetBuildIntent {
+  if (draft.metadata.buildIntent === "discovery" || (!draft.graders.length && !draft.learningSignals.preferences.length && !draft.learningSignals.rewards.length && !draft.learningSignals.labels.length)) return "discovery";
   if (draft.learningSignals.preferences.length) return "preferences";
   if (draft.learningSignals.rewards.length) return "verifiable_reward";
   if (draft.learningSignals.labels.length) return "rubric";
