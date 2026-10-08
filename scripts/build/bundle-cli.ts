@@ -33,6 +33,22 @@ export async function bundleCli(surface: CliBundleSurface = "all"): Promise<void
     await mkdir(fromRoot("apps", "cli", "build"), { recursive: true });
     await writeFile(fromRoot("apps", "cli", "build", "runtime-outputs.json"), JSON.stringify(outputs, null, 2) + "\n");
   }
+  if (surface === "all" || surface === "cli") {
+    const graph = new Map(Object.entries(result.metafile!.outputs).map(([file, output]) => [path.resolve(file), output]));
+    const pending = [fromRoot("apps", "cli", "dist", "cli.js")];
+    const closure = new Set<string>();
+    while (pending.length) {
+      const file = pending.pop()!;
+      if (closure.has(file)) continue;
+      const output = graph.get(file);
+      if (!output) throw new Error(`CLI runtime output is missing from its build graph: ${file}`);
+      closure.add(file);
+      for (const dependency of output.imports) if (!dependency.external) pending.push(path.resolve(dependency.path));
+    }
+    const outputs = [...closure].map(file => path.relative(fromRoot("apps", "cli"), file).replaceAll("\\", "/")).sort();
+    await mkdir(fromRoot("apps", "cli", "build"), { recursive: true });
+    await writeFile(fromRoot("apps", "cli", "build", "cli-runtime-outputs.json"), JSON.stringify(outputs, null, 2) + "\n");
+  }
   if (surface === "all" || surface === "cli") await makeExecutable(fromRoot("apps", "cli", "dist", "cli.js"));
 }
 
