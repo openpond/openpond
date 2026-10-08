@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type {
+  BrowserHarnessBaseInput,
   BrowserHarnessClickInput,
   BrowserHarnessKeyInput,
   BrowserHarnessMoveCursorInput,
@@ -15,6 +16,7 @@ import type {
 } from "./browser-tool-registry.js";
 
 type BrowserControlOperation =
+  | "previewHtml"
   | "open"
   | "snapshot"
   | "moveCursor"
@@ -43,6 +45,7 @@ export type BrowserControlQueue = {
   registerDesktopExecutor(payload: unknown): { ok: true; registered: true; instanceId: string };
   claimNext(request: IncomingMessage): Promise<{ ok: true; request: BrowserControlRequest | null }>;
   completeRequest(request: IncomingMessage, requestId: string, payload: unknown): { ok: true };
+  isActive(request: IncomingMessage, requestId: string): boolean;
   status(): {
     connected: boolean;
     instanceId: string | null;
@@ -69,6 +72,7 @@ export function createBrowserControlQueue(input: {
   const waiters = new Set<() => void>();
   let desktop:
     | {
+        htmlPreview: boolean;
         executorToken: string;
         instanceId: string;
         lastSeenAtMs: number;
@@ -78,6 +82,8 @@ export function createBrowserControlQueue(input: {
 
   const executor: BrowserHarnessToolExecutor = {
     available: () => isDesktopConnected(),
+    visualAvailable: () => isDesktopConnected() && desktop?.htmlPreview === true,
+    previewHtml: (request) => enqueue("previewHtml", "html_preview", request),
     open: (request) => enqueue("open", "openpond_browser_open", request),
     snapshot: (request) => enqueue("snapshot", "openpond_browser_snapshot", request),
     moveCursor: (request) => enqueue("moveCursor", "openpond_browser_move_cursor", request),
@@ -93,6 +99,7 @@ export function createBrowserControlQueue(input: {
     const instanceId = optionalStringField(record, "instanceId") ?? `desktop_${randomUUID()}`;
     if (!executorToken) throw new Error("executorToken is required");
     desktop = {
+      htmlPreview: record?.htmlPreview === true,
       executorToken,
       instanceId,
       lastSeenAtMs: now(),
@@ -178,6 +185,7 @@ export function createBrowserControlQueue(input: {
     operation: BrowserControlOperation,
     toolName: BrowserHarnessToolName,
     input:
+      | (BrowserHarnessBaseInput & { html: string; width: number })
       | BrowserHarnessOpenInput
       | BrowserHarnessSnapshotInput
       | BrowserHarnessMoveCursorInput
@@ -186,6 +194,7 @@ export function createBrowserControlQueue(input: {
       | BrowserHarnessKeyInput
       | BrowserHarnessScrollInput,
   ): Promise<BrowserHarnessToolResult> {
+    if (input.signal.aborted) return Promise.resolve({ ok: false, action: toolName, output: "Browser request was interrupted." });
     if (closed) {
       return Promise.resolve({
         ok: false,
@@ -200,7 +209,7 @@ export function createBrowserControlQueue(input: {
         output: "Desktop browser executor is not connected.",
       });
     }
-    if (pending.length >= MAX_PENDING_BROWSER_REQUESTS) {
+    if (pending.length + inFlight.size >= MAX_PENDING_BROWSER_REQUESTS) {
       return Promise.resolve({
         ok: false,
         action: toolName,
@@ -274,6 +283,7 @@ export function createBrowserControlQueue(input: {
     claimNext,
     completeRequest,
     status,
+    isActive(request, requestId) { authenticateDesktop(request); return inFlight.has(requestId); },
     close,
   };
 }
