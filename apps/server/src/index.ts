@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { createModelUsagePersistence } from "./runtime/model-usage-persistence.js";
+import { createServerPonderActivity } from "./openpond/ponder-desktop-activity-service.js";
 import { readPonderLocalProjects } from "./openpond/ponder-project-snapshot.js";
 import {createAdvancedRefinerEvaluationSource} from "./training/advanced-refiner-evaluation-source.js";
 import {createAdvancedRefinerReviewQuality} from "./training/advanced-refiner-review-quality.js";
@@ -148,10 +150,9 @@ import {
 } from "./openpond/sandboxes.js";
 import { createHostedSavedWork } from "./openpond/saved-work.js";
 import { hostedSavedWorkRoutePayloads } from "./openpond/saved-work-route-payloads.js";
-import { createDesktopManagedAgentRoutes, createDesktopPonderActivityBridge } from "./runtime/task-inbox/desktop-agent-services.js";
+import { createDesktopManagedAgentRoutes } from "./runtime/task-inbox/desktop-agent-services.js";
 import { loadPonderInstallation } from "./openpond/ponder-installation.js";
 import { createPonderDesktopManager } from "./openpond/ponder-desktop-manager.js";
-import { PonderLocalOwnerSchema } from "./openpond/ponder-local-scope.js";
 import { createPonderUserSessionOwner } from "./openpond/ponder-user-session-owner.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
@@ -303,17 +304,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     store,
   });
   const ponderInstallation = await loadPonderInstallation(storeDir);
-  const ponderActivityBridge = createDesktopPonderActivityBridge({ storeDir, deviceId: ponderInstallation.installationId,
-    subscribe: subscribeRuntimeEvents,
-    loadAppPreferences: () => loadAppPreferences(),
-    sessionTitle: async id => (await store.getSession(id))?.title ?? "Local chat",
-    sessionOwner: async id => {
-      const owner = PonderLocalOwnerSchema.safeParse((await store.getSession(id))?.metadata?.ponderLocalOwner);
-      return owner.success ? owner.data : null;
-    },
-    workflows: async () => ({ workflows: await store.listChatWorkflows(), runs: await store.listChatWorkflowRuns(null, 500) }),
-    warn: message => logger.warn(message),
-  });
+  const ponderActivityBridge = createServerPonderActivity({ storeDir, installation: ponderInstallation, store,
+    subscribe: subscribeRuntimeEvents, loadAppPreferences, warn: message => logger.warn(message) });
   onStartupFailure(() => ponderActivityBridge.close());
   const workQueues = createServerWorkQueues(logger);
   const browserControlQueue = createBrowserControlQueue();
@@ -1297,33 +1289,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     );
   }
 
-  async function safeUpsertModelUsageRecord(
-    record: ModelUsageRecord
-  ): Promise<void> {
-    try {
-      await store.upsertModelUsageRecord(record);
-    } catch (error) {
-      await appendRuntimeEvent(
-        event({
-          sessionId: record.sessionId ?? undefined,
-          turnId: record.turnId ?? undefined,
-          name: "diagnostic",
-          source: "server",
-          status: "failed",
-          output:
-            error instanceof Error
-              ? error.message
-              : "Failed to persist model usage record.",
-          data: {
-            kind: "model_usage_record_failed",
-            requestId: record.requestId,
-            provider: record.provider,
-            model: record.model,
-          },
-        })
-      ).catch(() => undefined);
-    }
-  }
+  const safeUpsertModelUsageRecord = createModelUsagePersistence({ store, appendRuntimeEvent });
 
   const runRecordedManualHostedContextCompaction = createManualCompactionRecorder({ home: storeDir, safeUpsertModelUsageRecord, streamOpenPondHostedChatTurn: streamSelectedOpenPondChatTurn, localByokRuntimeState, providerSecretPaths });
   const desktopManagedAgentRoutes = createDesktopManagedAgentRoutes({
