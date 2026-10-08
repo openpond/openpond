@@ -1,3 +1,5 @@
+import { listenRemoteRelayEvents } from "./runtime-events.js";
+import { Hello, Keys, type RemoteRelayDependencies, type Selected } from "./manager-types.js";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import WebSocket from "ws";
@@ -13,22 +15,15 @@ import {
   type RemoteDispatchCommand,
   type Session,
 } from "@openpond/contracts";
-import type { SqliteStore } from "../store/store.js";
-import type { DeviceInstallation } from "./installation.js";
 import { deviceOwnerKey, loadRemoteAccessPreference } from "./preference.js";
-import type { DeviceLocalOwner } from "./local-scope.js";
-import { createRemoteDeviceClient } from "./client.js";
+import { createRemoteDeviceClient, createSelectedRemoteClient } from "./client.js";
 import {
   captureRemoteTaskCatalog,
   observeRemoteHistorySequence,
   remoteHistoryIncarnation,
-  remoteHistoryGeneration,
 } from "./catalog.js";
 import {
-  projectRemoteEvent,
-  projectRemoteEventChunks,
   readRemoteHistory,
-  normalizeRemoteEventTurn,
 } from "./history.js";
 import type { RemoteLocalAuthority } from "./admission.js";
 import {
@@ -45,57 +40,8 @@ import {
   type RemoteConnectionFailure,
 } from "./connection-state.js";
 
-type Selected = {
-  owner: DeviceLocalOwner;
-  credentialKey: string;
-  request: Parameters<typeof createRemoteDeviceClient>[0]["request"];
-};
-const Hello = z.object({
-  deviceId: z.string(),
-  epoch: z.string(),
-  fence: z.number().int().positive(),
-  grantRevision: z.number().int().positive(),
-  leaseExpiresAt: z.string().datetime(),
-});
-const Keys = z.object({
-  keys: z.array(z.object({ keyId: z.string(), publicKey: z.string() })).max(10),
-  artifactUploadOrigins: z.array(z.string().url()).max(10).default([]),
-});
-
 /** One process owns the connection. Viewer presence never owns task execution. */
-export function createRemoteRelayManager(deps: {
-  storeDir: string;
-  installation: DeviceInstallation;
-  store: SqliteStore;
-  current(): Promise<Selected | null>;
-  accountStatus(): Promise<RemoteAccessAccountStatus>;
-  inspect: Parameters<typeof captureRemoteTaskCatalog>[0]["inspect"];
-  execute(
-    command: RemoteDispatchCommand,
-  ): Promise<import("@openpond/contracts").RemoteCommandReceipt>;
-  listen(
-    listener: (event: import("@openpond/contracts").RuntimeEvent) => void,
-  ): () => void;
-  warn(message: string): void;
-  outputs(
-    session: Session,
-  ): Promise<import("@openpond/contracts").FileOutputRef[]>;
-  readOutput(
-    session: Session,
-    outputId: string,
-  ): Promise<{
-    outputRef: import("@openpond/contracts").FileOutputRef;
-    contentsBase64: string;
-  }>;
-  caller?: {
-    needsConnection(): boolean;
-    requestAuthority(
-      deviceId: string,
-      genericRuntimeId: string,
-    ): unknown | null;
-    receiveOffers(payload: unknown): void;
-  };
-}) {
+export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
   let preference: Awaited<ReturnType<typeof loadRemoteAccessPreference>>;
   let selected: Selected | null = null;
   let socket: WebSocket | null = null;
@@ -125,7 +71,6 @@ export function createRemoteRelayManager(deps: {
   let catalogDirty = true;
   let publishedHistoryIncarnation = remoteHistoryIncarnation();
   let incomingBytes = 0;
-  let eventBytes = 0;
   const callerRequests = new Map<
     string,
     {
@@ -143,19 +88,7 @@ export function createRemoteRelayManager(deps: {
     queue = value.catch(() => undefined);
     return value;
   };
-  function clientFor(current: Selected) {
-    return createRemoteDeviceClient({
-      installation: deps.installation,
-      scope: {
-        installationId: current.owner.installationId,
-        profileId: current.owner.profileId,
-        ownerUserId: current.owner.ownerUserId,
-        teamId: current.owner.teamId,
-      },
-      audience: current.owner.audience,
-      request: current.request,
-    });
-  }
+  const clientFor = (current: Selected) => createSelectedRemoteClient(deps.installation, current);
   const send = (frame: RemoteDeviceFrame) => {
     if (!socket || socket.readyState !== WebSocket.OPEN)
       throw new Error("remote_connection_unavailable");
@@ -839,71 +772,8 @@ export function createRemoteRelayManager(deps: {
     async start() {
       preference = await loadRemoteAccessPreference(deps.storeDir);
       await deps.store.initializeRemoteDeviceStore();
-      unlisten = deps.listen((event) => {
-        const semanticChange = [
-          "session.started",
-          "session.updated",
-          "session.title.updated",
-          "session.closed",
-          "turn.started",
-          "turn.completed",
-          "turn.failed",
-          "turn.interrupted",
-          "approval.requested",
-          "approval.resolved",
-        ].includes(event.name);
-        if (semanticChange) scheduleCatalog();
-        const sessionId = event.sessionId;
-        if (!authority || !sessionId || !subscriptions.has(sessionId)) return;
-        const item = projectRemoteEvent(event, event.sequence ?? 0);
-        if (!item) return;
-        const bytes = Buffer.byteLength(JSON.stringify(item));
-        if (eventBytes + bytes > REMOTE_DEVICE_LIMITS.socketQueueBytes) {
-          void disconnect({
-            state: "reconnecting",
-            reason: "relay_backpressure",
-          }).then(schedule);
-          return;
-        }
-        eventBytes += bytes;
-        void serial(async () => {
-          if (!selected || !authority || !subscriptions.has(sessionId)) return;
-          const session = await deps.store.getSession(sessionId);
-          if (!session) return;
-          const { deviceOwnsLocalSession } = await import("./local-scope.js");
-          if (!deviceOwnsLocalSession(session, selected.owner)) return;
-          if (semanticChange) await catalog();
-          if (event.name === "turn.completed")
-            item.artifactIds = (await deps.outputs(session))
-              .filter((output) => output.sourceTurnId === event.turnId)
-              .map((output) => output.id)
-              .slice(0, 100);
-          for (const part of projectRemoteEventChunks(
-            await normalizeRemoteEventTurn(deps.store, event),
-            event.sequence ?? 0,
-          )) {
-            if (item.artifactIds) part.artifactIds = item.artifactIds;
-            send({
-              protocolVersion: 1,
-              type: "events",
-              taskId: session.id,
-              payload: {
-                historyGeneration: remoteHistoryGeneration(session),
-                items: [part],
-              },
-            });
-          }
-        })
-          .catch(() => {
-            void disconnect({
-              state: "reconnecting",
-              reason: "connection_failed",
-            }).then(schedule);
-          })
-          .finally(() => {
-            eventBytes -= bytes;
-          });
-      });
+      unlisten = listenRemoteRelayEvents({ deps, current: () => ({ selected, authority }),
+        subscriptions, scheduleCatalog, catalog, send, serial, disconnect, schedule });
       await serial(connect).catch((error) =>
         deps.warn(
           `Remote relay startup: ${error instanceof Error ? error.name : "connection_failed"}`,
