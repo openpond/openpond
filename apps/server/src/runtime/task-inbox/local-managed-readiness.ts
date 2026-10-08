@@ -19,10 +19,18 @@ async function executableAvailable(command: string): Promise<boolean> {
 export function createLocalManagedReadiness(deps: {
   configProvider(provider: string): Promise<ProviderConfig | null>;
   codexStatus(): Promise<{ available: boolean; enabled: boolean; reason: string | null }>;
+  openPondStatus(session: Session): Promise<{ available: boolean; reason: string | null }>;
   nativeStatus?(session: Session): Promise<{ available: boolean; reason: string | null }>;
 }) {
   return async (session: Session): Promise<{ available: boolean; canSteer: boolean; reason: string | null }> => {
     const unavailable = (reason: string) => ({ available: false, canSteer: false, reason });
+    if (session.provider === "openpond") {
+      const config = await deps.configProvider("openpond");
+      if (!config?.enabled) return unavailable("Enable OpenPond in Providers before sending.");
+      const status = await deps.openPondStatus(session);
+      if (!status.available) return unavailable(status.reason ?? "The captured OpenPond account is unavailable.");
+      return { available: true, canSteer: true, reason: null };
+    }
     if (session.provider === "codex") {
       if (!session.codexThreadId || !session.cwd) return unavailable("This conversation has no original managed Codex thread and working directory.");
       const status = await deps.codexStatus();

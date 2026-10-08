@@ -239,7 +239,8 @@ export function createRemoteRelayManager(deps: {
           if (admitted) { send({ protocolVersion: 1, type: "receipt", payload: { ...admitted, state: "reconciling" } }); return; }
           send({ protocolVersion: 1, type: "receipt", payload: { id: command.id, deviceId: command.deviceId,
           payloadHash: command.payloadHash, action: command.action, targetId: command.targetId, state: "rejected", revision: 2,
-          error: error instanceof Error ? error.message : "remote_command_failed", createdAt: new Date().toISOString(), expiresAt: command.deadline } }); }
+          error: error instanceof z.ZodError ? "remote_command_configuration_invalid"
+            : error instanceof Error && /^remote_[a-z0-9_]+$/.test(error.message) ? error.message : "remote_command_failed", createdAt: new Date().toISOString(), expiresAt: command.deadline } }); }
       }
     }).catch(error => { deps.warn(`Remote relay frame: ${error instanceof Error ? error.name : "invalid_frame"}`); void disconnect(); })
         .finally(() => { incomingBytes -= bytes; }); });

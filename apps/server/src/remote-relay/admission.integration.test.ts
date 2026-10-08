@@ -104,3 +104,43 @@ it("maps provider approval identity to the active local turn and fences competin
     expect((await store.getApproval(approval.id))?.status).toBe("cancelled");
   } finally { await store.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+// Failure story: an advertised default-model starter rejects canonical creation,
+// duplicates the new task on retry, or loses its captured owner/configuration.
+it.each(["codex", "openpond"] as const)("starts one owned %s task from a canonical default-model starter", async provider => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "remote-start-"));
+  let store = new SqliteStore(directory);
+  const owner = { version: 1 as const, installationId: randomUUID(), profileId: "profile", ownerUserId: "owner", teamId: "team", audience: "https://fixture.invalid" };
+  const keys = generateKeyPairSync("ed25519");
+  const deviceId = randomUUID();
+  try {
+    await store.initializeRemoteDeviceStore();
+    const sessions = createSessionStore({ store, defaultSessionCwd: () => directory, appendRuntimeEvent: async event => { await store.appendRuntimeEvent(event); }, captureUserOwner: async () => owner });
+    const created = await sessions.createUserSession({ provider, experience: "work", localProjectId: "private-project", workspaceKind: "local_project", cwd: directory });
+    const source = (await store.updateSession(created.id, session => ({ ...session, modelRef: null })))!;
+    const { remoteStarterRevision, captureRemoteStarters } = await import("./starters.js");
+    const starter = captureRemoteStarters([source], owner).get(`starter:${source.id}`)!.target;
+    const id = randomUUID(); const unsigned = { id, idempotencyKey: id, action: "start" as const, targetId: starter.id,
+      expectedRevision: remoteStarterRevision(source), expectedTurnId: null,
+      payload: { text: "Controlled start", starterId: starter.id, starterRevision: starter.revision, projectId: starter.projectId },
+      deviceId, payloadHash: "a".repeat(64), scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: owner.teamId },
+      grantRevision: 1, fence: 1, deadline: new Date(Date.now() + 30000).toISOString(), actor: "remote-human" as const };
+    const expiresAt = new Date(Date.now() + 15000).toISOString();
+    const command = { ...unsigned, permit: { keyId: "fixture", expiresAt,
+      signature: sign(null, Buffer.from(remoteDevicePermitMessage(unsigned, expiresAt, "fixture")), keys.privateKey).toString("base64") } };
+    await store.setRemoteDeviceAuthority({ deviceId, owner, fence: 1, grantRevision: 1, leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
+      publicKeys: [{ keyId: "fixture", publicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString() }] });
+    const execute = createRemoteCommandExecutor({ store, resolveStarter: async () => source, createReserved: sessions.createReservedSession,
+      inspect: async () => { throw new Error("Start must use the approved starter."); }, admit: input => store.admitTaskInput(input), interrupt: async () => null });
+    const receipt = await execute(command);
+    const target = (await store.getSession(receipt.localSessionId!))!;
+    expect(target).toMatchObject({ provider, cwd: directory, localProjectId: source.localProjectId, metadata: { ponderLocalOwner: owner, remoteStarterSourceSessionId: source.id } });
+    expect(await store.sessionCount()).toBe(2);
+    await store.close(); store = new SqliteStore(directory); await store.initializeRemoteDeviceStore();
+    const recover = createRemoteCommandExecutor({ store, inspect: async () => { throw new Error("Must recover original receipt."); },
+      admit: async () => { throw new Error("Must not readmit start."); }, interrupt: async () => null });
+    expect((await recover(command)).localSessionId).toBe(target.id);
+    expect(await store.taskInputsForSession(target.id)).toHaveLength(1);
+    expect(await store.sessionCount()).toBe(2);
+  } finally { await store.close(); await rm(directory, { recursive: true, force: true }); }
+});

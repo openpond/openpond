@@ -13,6 +13,7 @@ import { createCapturedOpenPondPublicApiClient } from "../../openpond/sandboxes.
 import { requestConversationLearning } from "../../openpond/conversation-learning.js";
 import type { TurnRunner } from "../turns/ports.js";
 import { createLocalManagedMessaging } from "./local-managed-messaging.js";
+import { createOpenPondManagedReadiness } from "./openpond-managed-readiness.js";
 import { createLocalManagedReadiness } from "./local-managed-readiness.js";
 import type { TaskInboxRepository } from "./repository.js";
 
@@ -33,8 +34,13 @@ export function createDesktopManagedAgentRoutes(deps: {
     store: deps.store,
     getSession: async id => await deps.store.getSession(id) ? deps.getSession(id) : null,
     latestTurn: id => deps.store.latestTurnForSession(id),
-    approvalBlocked: async id => (await deps.store.pendingApprovals()).some(approval => approval.sessionId === id),
+    approvalBlocked: async id => {
+      const turn = await deps.store.latestTurnForSession(id);
+      return turn?.status === "in_progress" && (await deps.store.pendingApprovals()).some(approval => approval.sessionId === id
+        && !!approval.turnId && (approval.turnId === turn.id || approval.turnId === turn.providerTurnId));
+    },
     readiness: createLocalManagedReadiness({
+      openPondStatus: createOpenPondManagedReadiness(deps.loadAppPreferences),
       configProvider: async provider => (await deps.localByokRuntimeState()).settings.providers[provider as ChatProvider] ?? null,
       codexStatus: async () => {
         const status = await deps.refreshCodexStatus();
