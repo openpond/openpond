@@ -15,7 +15,7 @@ const staging = path.join(root, "node_modules", ".cache", `evals-dist-${randomUU
 await mkdir(staging, { recursive: true });
 try {
   await run(process.execPath, [
-    createRequire(import.meta.url).resolve("typescript/bin/tsc"),
+    path.resolve(root, "../../scripts/run-typescript.mjs"), "tsc",
     "--project",
     "tsconfig.build.json",
     "--outDir",

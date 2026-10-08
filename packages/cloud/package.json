@@ -91,7 +91,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "node ../../scripts/run-typescript.mjs tsc -b"
   },
   "dependencies": {
     "@openpond/connected-apps": "workspace:*",
