@@ -34,6 +34,8 @@ export type ChatAttachmentImagePayloadRequest = {
 };
 
 export type HttpRouteDeps = {
+  htmlVisuals?: import("../visuals/visual-service.js").HtmlVisualService;
+  browserControlActive?: (request: IncomingMessage, requestId: string) => boolean;
   enclavePayload?: ReturnType<typeof import("../enclave/connection.js").createEnclaveConnection>;
   conversationLearningRequestPayload?: (request: unknown) => Promise<unknown>;
   localManagedMessaging?: ReturnType<typeof import("../runtime/task-inbox/local-managed-messaging.js").createLocalManagedMessaging>;

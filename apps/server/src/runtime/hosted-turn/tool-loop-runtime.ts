@@ -104,6 +104,7 @@ export function createHostedToolLoopRuntime(deps: {
     connectedApps: ResolvedConnectedAppContext[],
     options?: {
       candidateAuthoring?: boolean;
+      visualToolsEnabled?: boolean;
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
@@ -198,6 +199,7 @@ export function createHostedToolLoopRuntime(deps: {
     turnPermissions: SubagentTurnPermissions;
     provider: ChatProvider;
     model: string;
+    visualToolsEnabled?: boolean;
     modelOutputLimit?: number | null;
     messages: HostedMessages;
     contextLimitTokens?: number | null;
@@ -257,6 +259,7 @@ export function createHostedToolLoopRuntime(deps: {
               params.connectedApps,
               {
                 candidateAuthoring,
+                visualToolsEnabled: params.visualToolsEnabled,
                 disableWorkflowDelegationTools: isTerminalOneShotTurn(
                   params.turn
                 ),
@@ -656,6 +659,11 @@ export function createHostedToolLoopRuntime(deps: {
         workspaceToolResultCount += nativeResults.length;
         for (const result of nativeResults) {
           messages.push(toolResultMessage(result));
+        }
+        // Image feedback follows the complete batch of tool results so tool-call
+        // ordering remains valid for providers that accept images on user turns.
+        for (const result of nativeResults) {
+          if (result.images?.length) messages.push({ role: "user", content: "Rendered preview from " + result.name + ". Inspect it before publishing.", images: result.images.map(image => ({ url: `data:${image.mimeType};base64,${image.data}` })) });
         }
         const blockingQuestion = nativeResults.find(
           (result) => result.turnControl === "await_user_input"

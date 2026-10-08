@@ -1,3 +1,4 @@
+import { visualTools } from "../../visuals/visual-tools.js";
 import {candidateFileToolDefinitions} from "../../harness/experiment-candidate-tool-catalog.js";
 import type {
   HarnessActionBinding,
@@ -36,6 +37,7 @@ export function createCapabilityCatalogRuntime(deps: {
   hostedToolFlags: HostedToolRolloutFlags;
   executeConnectedAppTool: TurnRunnerDependencies["executeConnectedAppTool"];
   browserToolExecutor: TurnRunnerDependencies["browserToolExecutor"];
+  htmlVisuals?: TurnRunnerDependencies["htmlVisuals"];
   executeOpenPondCommand: TurnRunnerDependencies["executeOpenPondCommand"];
   executeWorkspaceTool: TurnRunnerDependencies["executeWorkspaceTool"];
   executeWebSearch: TurnRunnerDependencies["executeWebSearch"];
@@ -55,6 +57,7 @@ export function createCapabilityCatalogRuntime(deps: {
     connectedApps: ResolvedConnectedAppContext[],
     options: {
       candidateAuthoring?: boolean;
+      visualToolsEnabled?: boolean;
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
@@ -139,6 +142,7 @@ export function createCapabilityCatalogRuntime(deps: {
       })
     );
     definitions.push(
+      ...(options.visualToolsEnabled ? visualTools(deps.htmlVisuals) : []),
       ...createBrowserModelToolDefinitions(deps.browserToolExecutor)
     );
     if (deps.executeOpenPondCommand) {

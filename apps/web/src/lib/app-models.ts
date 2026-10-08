@@ -1,3 +1,4 @@
+import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
 import type { DragEvent } from "react";
 import { modelDisplayLabel } from "./model-display";
 import type {
@@ -222,7 +223,8 @@ export type HarnessRefinerActivity = {
 
 export type ChatMessage = {
   id: string;
-  role: "user" | "assistant" | "activity_group" | "error" | "status_divider" | "task_message";
+  visual?: HtmlVisualReference;
+  role: "visual" | "user" | "assistant" | "activity_group" | "error" | "status_divider" | "task_message";
   content?: string;
   errorKind?: "opchat_quota_exceeded";
   attachments?: ChatAttachmentSummary[];

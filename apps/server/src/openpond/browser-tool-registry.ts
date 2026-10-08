@@ -6,6 +6,7 @@ import type {
 import type { NativeModelToolResult } from "./native-tool-calls.js";
 
 export type BrowserHarnessToolName =
+  | "html_preview"
   | "openpond_browser_open"
   | "openpond_browser_snapshot"
   | "openpond_browser_move_cursor"
@@ -98,6 +99,8 @@ export type BrowserHarnessToolResult = {
 };
 
 export type BrowserHarnessToolExecutor = {
+  visualAvailable?(): boolean;
+  previewHtml?(input: BrowserHarnessBaseInput & { html: string; width: number }): Promise<BrowserHarnessToolResult>;
   available(input: { sessionId: string; conversationId: string }): boolean;
   open(input: BrowserHarnessOpenInput): Promise<BrowserHarnessToolResult>;
   snapshot(input: BrowserHarnessSnapshotInput): Promise<BrowserHarnessToolResult>;

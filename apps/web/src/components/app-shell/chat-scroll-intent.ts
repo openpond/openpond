@@ -26,12 +26,14 @@ export function observeChatScrollIntent(element: HTMLElement, stopFollowing: () 
     const scrollbarStart = bounds.left + element.clientLeft + element.clientWidth;
     if (event.clientX >= scrollbarStart) stopFollowing();
   };
+  element.addEventListener("openpond-visual-interaction", stopFollowing);
   element.addEventListener("wheel", onWheel, { passive: true });
   element.addEventListener("touchstart", onTouchStart, { passive: true });
   element.addEventListener("touchmove", onTouchMove, { passive: true });
   element.addEventListener("keydown", onKeyDown);
   element.addEventListener("pointerdown", onPointerDown);
   return () => {
+    element.removeEventListener("openpond-visual-interaction", stopFollowing);
     element.removeEventListener("wheel", onWheel);
     element.removeEventListener("touchstart", onTouchStart);
     element.removeEventListener("touchmove", onTouchMove);
