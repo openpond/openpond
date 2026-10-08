@@ -1,7 +1,22 @@
 import { expect, it } from "vitest";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import { observeRemoteHistorySequence, remoteHistoryGeneration } from "./catalog.js";
-import { projectRemoteEventChunks } from "./history.js";
+import { projectRemoteEvent, projectRemoteEventChunks } from "./history.js";
+
+// Successfully processed lifecycle events must not turn interrupted/failed turns
+// into completed turns, while completed tool events retain their failed outcome.
+it("projects canonical turn outcomes without overwriting tool failures", () => {
+  const outcomes = [
+    ["turn.started", "in_progress"], ["turn.completed", "completed"],
+    ["turn.failed", "failed"], ["turn.interrupted", "interrupted"],
+  ] as const;
+  for (const [name, status] of outcomes) {
+    expect(projectRemoteEvent({ id: name, name, turnId: "turn", status: "completed" } as RuntimeEvent, 42))
+      .toMatchObject({ id: name, sequence: 42, type: "state", turnId: "turn", status });
+  }
+  expect(projectRemoteEvent({ id: "tool", name: "tool.completed", turnId: "turn", status: "failed", action: "command" } as RuntimeEvent, 43))
+    .toMatchObject({ id: "tool", sequence: 43, type: "tool", turnId: "turn", status: "failed" });
+});
 
 // A provider's large snapshot must remain exact after bounded history paging,
 // with replacement applied once and deterministic ordering across reconnects.
