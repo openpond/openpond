@@ -16,7 +16,7 @@ import { invalidateNativeAgent } from "./setup.js";
 import { createNativeAgentApprovals } from "./approvals.js";
 import { createTaskCoordinationMcp, type TaskCoordinationBridge } from "../task-inbox/codex-mcp.js";
 
-type RunningSession = { turn: Turn | null; startedAt: string; firstTokenMs: number | null; visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; additionalDirectories: string[]; turnId: string | null; replaying: boolean; session: Session; coordinated: boolean; close(): Promise<void> };
+type RunningSession = { turn: Turn | null; startedAt: string; firstTokenMs: number | null; visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; additionalDirectories: string[]; turnId: string | null; replaying: boolean; session: Session; coordinated: string; close(): Promise<void> };
 export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "store" | "storageHome" | "updateSession" | "appendRuntimeEvent" | "upsertApproval">) {
   const runtimes = new Map<string, RunningSession>();
   const approvals = createNativeAgentApprovals(deps);
@@ -36,7 +36,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
       ? [...new Set(project?.sourceFolders?.filter((folder) => folder !== cwd) ?? [])].sort()
       : [];
     const existing = runtimes.get(session.id);
-    if (existing && existing.instanceId === launch.instanceId && existing.cwd === cwd && JSON.stringify(existing.additionalDirectories) === JSON.stringify(additionalDirectories) && existing.coordinated === Boolean(coordination)) return existing;
+    if (existing && existing.instanceId === launch.instanceId && existing.cwd === cwd && JSON.stringify(existing.additionalDirectories) === JSON.stringify(additionalDirectories) && existing.coordinated === JSON.stringify(coordination?.tools.map(tool => tool.name) ?? [])) return existing;
     if (existing) { runtimes.delete(session.id); await existing.close(); }
     if (session.nativeAgent && (session.nativeAgent.provider !== session.provider || session.nativeAgent.instanceId !== launch.instanceId || session.nativeAgent.cwd !== cwd)) {
       throw new Error("Native session belongs to a different agent account/configuration or workspace. Restore its original configuration to continue.");
@@ -75,7 +75,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
         ? await client.loadSession(session.nativeAgent.sessionId, cwd, servers)
         : await client.createSession(cwd, servers);
       const updated = await deps.updateSession(session.id, { nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd }, metadata: { ...session.metadata, nativeHistoryProjection: false } });
-      runtime = { turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: Boolean(bridge), close: async () => { await client.stop(); await closeBridge(); } };
+      runtime = { turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: JSON.stringify(coordination?.tools.map(tool => tool.name) ?? []), close: async () => { await client.stop(); await closeBridge(); } };
       runtimes.set(session.id, runtime);
       await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "diagnostic", action: "native_configuration", source: "provider", data: { provider: session.provider, nativeSessionId: native.sessionId, capabilities: info.agentCapabilities, models: native.models, modes: native.modes, configOptions: native.configOptions } }));
       return runtime;
