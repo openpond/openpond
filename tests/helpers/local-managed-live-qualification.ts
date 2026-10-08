@@ -56,7 +56,8 @@ export async function qualifyLocalManagedMessaging(provider: "claude-code" | "op
   const messageService = () => createLocalManagedMessaging({ store: harness.dependencies.store,
     getSession: harness.dependencies.getSession, latestTurn: (id) => harness.dependencies.store.latestTurnForSession(id),
     readiness: createLocalManagedReadiness({ configProvider: async (id) => source.providers[id] ?? null,
-      codexStatus: async () => ({ enabled: true, available: true, reason: null }) }),
+      codexStatus: async () => ({ enabled: true, available: true, reason: null }),
+      openPondStatus: async () => ({ available: false, reason: "This qualification covers native agents only." }) }),
     approvalBlocked: async () => harness.state.approvals.some((approval) => approval.sessionId === sessionId && approval.status === "pending"),
     admit: (admission) => runner.admitUserLocalMessage(admission),
   });

@@ -24,6 +24,7 @@ it("authenticates its initial socket before publishing leased frames", async () 
   let helloValid = false;
   let disableTarget: unknown;
   let snapshotSeen = false;
+  let rejectionError: unknown;
   server.on("connection", connection => connection.on("message", raw => {
     const frame = JSON.parse(raw.toString());
     if (frame.type === "hello") {
@@ -33,6 +34,8 @@ it("authenticates its initial socket before publishing leased frames", async () 
       if (!parsed.success) { connection.close(1008, "invalid_frame"); return; }
       connection.send(JSON.stringify({ protocolVersion: 1, type: "hello", payload: { deviceId, epoch: "epoch", fence: 1,
         grantRevision: 1, leaseExpiresAt: new Date(Date.now() + 60_000).toISOString() } }));
+    } else if (frame.type === "receipt") {
+      rejectionError = frame.payload.error;
     } else if (frame.type === "snapshot") {
       snapshotSeen = frame.requestId === "read-request" && Array.isArray(frame.payload.items);
     } else if (frame.type === "catalog") {
@@ -47,7 +50,7 @@ it("authenticates its initial socket before publishing leased frames", async () 
       if (route.endsWith("connection-tickets")) return { ticket: "ticket", connectUrl: `ws://127.0.0.1:${address.port}` };
       if (route.endsWith("device-management")) { disableTarget = (body as { payload: { targetDeviceId?: string } }).payload.targetDeviceId; return { device: { id: deviceId, revision: 2 } }; }
       throw new Error("Unexpected device request");
-    } }), inspect: async () => { throw new Error("No tasks"); }, execute: async () => { throw new Error("No commands"); },
+    } }), inspect: async () => { throw new Error("No tasks"); }, execute: async () => { z.object({ modelRef: z.object({ id: z.string() }) }).parse({ modelRef: null }); throw new Error("No commands"); },
     outputs: async () => [], readOutput: async () => { throw new Error("No artifacts"); }, listen: () => () => {}, warn: () => {} });
   try {
     await manager.start();
@@ -61,6 +64,9 @@ it("authenticates its initial socket before publishing leased frames", async () 
     connection.send(JSON.stringify({ protocolVersion: 1, type: "subscribe", payload: { taskId: session.id, viewerId: "viewer" } }));
     connection.send(JSON.stringify({ protocolVersion: 1, type: "subscribe", requestId: "read-request", payload: { taskId: session.id, viewerId: "viewer" } }));
     await expect.poll(() => snapshotSeen, { timeout: 3000 }).toBe(true);
+    connection.send(JSON.stringify({ protocolVersion: 1, type: "command", payload: { id: randomUUID(), deviceId,
+      payloadHash: "a".repeat(64), action: "start", targetId: "starter", deadline: new Date(Date.now() + 60_000).toISOString() } }));
+    await expect.poll(() => rejectionError, { timeout: 3000 }).toBe("remote_command_configuration_invalid");
     await manager.setEnabled(false);
     expect(disableTarget).toBe(deviceId);
     expect(manager.status().state).toBe("off");

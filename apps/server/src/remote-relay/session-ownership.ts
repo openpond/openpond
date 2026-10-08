@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { ponderDesktopRequestContent, type Session } from "@openpond/contracts";
 import { localManagedTargetRevision } from "../runtime/task-inbox/target-revision.js";
+import { localManagedSessionId } from "../runtime/task-inbox/local-managed-identity.js";
 import { isCodexHistorySessionId } from "../codex-history.js";
 
 export function localSessionOwnershipRevision(session: Session, latestTurnId: string | null) {
@@ -32,7 +33,7 @@ export function remoteExecutionRevision(session: Session) {
     owner: session.metadata?.ponderLocalOwner, commandAccessMode: session.openPondCommandAccessMode })).digest("hex");
 }
 export function remoteExecutionSnapshot(session: Session) {
-  return { revision: remoteExecutionRevision(session), managedSessionId: session.provider === "codex" ? session.codexThreadId : session.nativeAgent?.sessionId ?? null };
+  return { revision: remoteExecutionRevision(session), managedSessionId: localManagedSessionId(session) };
 }
 export function assertRemoteExecution(input: Pick<import("@openpond/contracts").TaskInputAdmission, "payload">, session: Session) {
   if (!input.payload.remoteDevice) return;
