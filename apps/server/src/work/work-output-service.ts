@@ -1,3 +1,4 @@
+import { activeFileOutputRefs, fileOutputRefs } from "./output-references.js";
 import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -426,12 +427,16 @@ export function createWorkOutputService(input: {
     const events = await input.runtimeEventsForSession(request.session.id);
     const outputRef = findOutputRefById(events, outputId, request.revision);
     if (!outputRef) throw new Error("Work output not found.");
-    if (outputRef.location.kind !== "local") {
+    return localOutputTarget(request.session, outputRef);
+  }
+
+  function localOutputTarget(session: Session, outputRef: FileOutputRef) {
+    if (session.experience !== "work" || outputRef.sourceTaskId !== session.id || outputRef.location.kind !== "local") {
       throw new Error("This Work output is not stored on this device.");
     }
     const taskDirectory = path.resolve(
       outputRoot,
-      safePathSegment(request.session.id)
+      safePathSegment(session.id)
     );
     const target = path.resolve(outputRef.location.path);
     if (
@@ -467,7 +472,15 @@ export function createWorkOutputService(input: {
     outputRef: FileOutputRef;
     contentsBase64: string;
   }> {
-    const { outputRef, target } = await resolveLocalOutput(request);
+    const { outputRef } = await resolveLocalOutput(request);
+    return readQualifiedWorkOutput(request.session, outputRef);
+  }
+
+  /** Internal callers pass a canonical ref obtained from owner-scoped persisted events. */
+  async function readQualifiedWorkOutput(session: Session, outputRef: FileOutputRef) {
+    const { target } = localOutputTarget(session, outputRef);
+    const stat = await fs.stat(target);
+    if (stat.size > WORK_OUTPUT_MAX_BYTES || stat.size !== outputRef.sizeBytes) throw new Error("The saved Work output no longer matches its OutputRef.");
     const bytes = await fs.readFile(target);
     if (bytes.byteLength > WORK_OUTPUT_MAX_BYTES) {
       throw new Error(
@@ -492,6 +505,7 @@ export function createWorkOutputService(input: {
     deleteWorkOutput,
     listWorkOutputs,
     readWorkOutput,
+    readQualifiedWorkOutput,
     saveAllWorkOutputs,
     saveLocalWorkOutput,
     /** Internal trusted byte owner; no filesystem path or public route is accepted. */
@@ -602,32 +616,6 @@ function isPathInside(root: string, candidate: string): boolean {
   );
 }
 
-function activeFileOutputRefs(events: RuntimeEvent[]): FileOutputRef[] {
-  const outputs = new Map<string, FileOutputRef>();
-  const deleted = new Set<string>();
-  for (const event of events) {
-    const refs = fileOutputRefs(event.data);
-    if (event.action === "work_output_delete" && event.status === "completed") {
-      for (const output of refs) {
-        const key = fileOutputRevisionKey(output);
-        deleted.add(key);
-        outputs.delete(key);
-      }
-      continue;
-    }
-    if (event.action === "work_output_read") continue;
-    for (const output of refs) {
-      const key = fileOutputRevisionKey(output);
-      if (!deleted.has(key)) outputs.set(key, output);
-    }
-  }
-  return [...outputs.values()];
-}
-
-function fileOutputRevisionKey(output: FileOutputRef): string {
-  return `${output.sourceTaskId}:${output.id}:${output.revision}`;
-}
-
 function validateWorkOutput(input: {
   bytes: Buffer;
   contentType: string;
@@ -668,19 +656,6 @@ function validateWorkOutput(input: {
     }
   }
   return evidence;
-}
-
-function fileOutputRefs(value: unknown, depth = 0): FileOutputRef[] {
-  if (depth > 8 || value == null) return [];
-  const parsed = FileOutputRefSchema.safeParse(value);
-  if (parsed.success) return [parsed.data];
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => fileOutputRefs(item, depth + 1));
-  }
-  const record = asRecord(value);
-  return Object.values(record).flatMap((child) =>
-    fileOutputRefs(child, depth + 1)
-  );
 }
 
 function structuralValidation(input: {

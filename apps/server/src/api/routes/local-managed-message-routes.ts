@@ -1,3 +1,4 @@
+import { isDesktopLocalRequest } from "../local-human-authority.js";
 import { readJson, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
 import { ZodError } from "zod";
@@ -7,15 +8,7 @@ import { LocalManagedMessageError } from "../../runtime/task-inbox/local-managed
 export async function handleLocalManagedMessageRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   const match = /^\/v1\/sessions\/([^/]+)\/(local-message-target|local-messages)$/.exec(requestUrl.pathname);
   if (!match) return false;
-  const address = request.socket.remoteAddress;
-  const loopback = address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
-  const origin = request.headers.origin;
-  let localOrigin = !origin || origin === "null";
-  if (typeof origin === "string" && origin !== "null") {
-    try { localOrigin = ["127.0.0.1", "localhost", "[::1]"].includes(new URL(origin).hostname); }
-    catch { localOrigin = false; }
-  }
-  if (!loopback || !localOrigin || request.headers.forwarded || request.headers["x-forwarded-for"] || !deps.localManagedMessaging) {
+  if (!isDesktopLocalRequest(request) || !deps.localManagedMessaging) {
     sendJson(response, 403, { error: "Managed local messaging is available only in the desktop app on this device." });
     return true;
   }

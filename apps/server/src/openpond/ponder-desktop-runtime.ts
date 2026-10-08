@@ -17,12 +17,6 @@ import type { PonderLocalOwner } from "./ponder-local-scope.js";
 
 type Client = ReturnType<typeof createPonderDesktopClient>;
 type Receipt = NonNullable<PonderDesktopOperation["receipt"]>;
-const PageSchema = z.object({
-  operations: z.array(PonderDesktopOperationSchema),
-  hasObligations: z.boolean(),
-  nextCursor: z.object({ updatedAt: z.string().datetime(), id: z.string() }).nullable(),
-});
-
 /** Outbound only, independent of pane lifetime. One captured login owns each lease. */
 export function createPonderDesktopRuntime(deps: {
   client: Client;
@@ -53,6 +47,8 @@ export function createPonderDesktopRuntime(deps: {
   let running: Promise<void> | null = null;
   let pollingNeeded = true;
   let wakeGeneration = 0;
+  const operations = new Map<string, PonderDesktopOperation>();
+  let cloudObligations = false;
 
   async function saveAttachment(value: unknown) {
     const next = PonderDesktopAttachmentSchema.parse(value);
@@ -75,7 +71,7 @@ export function createPonderDesktopRuntime(deps: {
 
   async function acknowledge(operation: PonderDesktopOperation, receipt: Receipt) {
     if (!attachment || !operation.claimId) throw new Error("ponder_desktop_claim_required");
-    await deps.client.request(
+    const response = await deps.client.request(
       "admission",
       {
         operationId: operation.id,
@@ -85,6 +81,9 @@ export function createPonderDesktopRuntime(deps: {
       },
       attachment.epoch,
     );
+    const admitted = z.object({ operation: PonderDesktopOperationSchema }).parse(response).operation;
+    if (["completed", "failed", "cancelled", "expired"].includes(admitted.state)) operations.delete(admitted.id);
+    else operations.set(admitted.id, admitted);
   }
 
   async function processOperation(observed: PonderDesktopOperation) {
@@ -104,10 +103,11 @@ export function createPonderDesktopRuntime(deps: {
             receipt.inputId !== null || receipt.state !== "inspected")
           throw new Error("ponder_desktop_inspection_receipt_changed");
         await deps.client.request("inspection", inspection, attachment.epoch);
+        operations.delete(observed.id);
         return;
       }
       const result = await deps.result(observed);
-      if (result) await deps.client.request("result", result, attachment.epoch);
+      if (result) { await deps.client.request("result", result, attachment.epoch); operations.delete(observed.id); }
       return;
     }
     if (observed.state === "dispatching" || observed.state === "attention") {
@@ -202,7 +202,7 @@ export function createPonderDesktopRuntime(deps: {
         },
         null,
       );
-      await saveAttachment(result.attachment);
+      await saveAttachment(z.object({ attachment: z.unknown() }).parse(result).attachment);
     }
     const renewed = await publishPonderDesktopCatalog({
       catalog: await deps.catalog(),
@@ -210,37 +210,38 @@ export function createPonderDesktopRuntime(deps: {
       epoch: attachment!.epoch,
       stillOwned: async () => !stopped && (await deps.stillOwned()),
     });
-    await saveAttachment(renewed.attachment);
-    let hasObligations = false;
-    let cursor: z.infer<typeof PageSchema>["nextCursor"] = null;
-    do {
-      if (stopped) return;
-      const page = PageSchema.parse(
-        await deps.client.request("poll", { cursor }, attachment!.epoch),
-      );
-      hasObligations ||= page.hasObligations;
-      for (const operation of page.operations) {
-        try {
-          await processOperation(operation);
-        } catch (error) {
-          deps.warn(`Ponder desktop operation ${operation.id}: ${String(error)}`);
-        }
+    await saveAttachment(z.object({ attachment: z.unknown() }).parse(renewed).attachment);
+    const knownIds = [...operations.keys()];
+    for (let offset = 0; offset < knownIds.length; offset += 100) {
+      const reconciled = z.object({ operations: z.array(z.object({ id: z.string(), payloadHash: z.string(),
+        state: PonderDesktopOperationSchema.shape.state, error: z.string().optional(), updatedAt: z.string() })).max(100) })
+        .parse(await deps.client.request("reconcile", { operationIds: knownIds.slice(offset, offset + 100) }, attachment!.epoch));
+      for (const update of reconciled.operations) {
+        const prior = operations.get(update.id);
+        if (!prior || prior.payloadHash !== update.payloadHash) throw new Error("ponder_relay_operation_identity_changed");
+        if (["completed", "failed", "cancelled", "expired"].includes(update.state)) operations.delete(update.id);
+        else operations.set(update.id, PonderDesktopOperationSchema.parse({ ...prior, ...update }));
       }
-      cursor = page.nextCursor;
-    } while (cursor);
-    pollingNeeded = hasObligations || wakeGeneration !== startedGeneration;
+    }
+    for (const operation of [...operations.values()]) {
+      if (stopped) return;
+      try { await processOperation(operation); }
+      catch (error) { deps.warn(`Ponder desktop operation ${operation.id}: ${String(error)}`); }
+    }
+    pollingNeeded = cloudObligations || operations.size > 0 || wakeGeneration !== startedGeneration;
   }
 
-  function schedule() {
+  function schedule(delay = PONDER_DESKTOP_RENEW_MS) {
     if (stopped || !pollingNeeded) return;
     timer = setTimeout(() => {
+      timer = null;
       running = tick()
         .catch((error) => deps.warn(`Ponder desktop connection: ${String(error)}`))
         .finally(() => {
           running = null;
           schedule();
         });
-    }, PONDER_DESKTOP_RENEW_MS);
+    }, delay);
     timer.unref();
   }
 
@@ -256,6 +257,26 @@ export function createPonderDesktopRuntime(deps: {
   }
 
   return {
+    receiveOperations(payload: unknown, hasObligations: boolean) {
+      cloudObligations = hasObligations;
+      const received = z.array(PonderDesktopOperationSchema).max(100).parse(payload);
+      for (const operation of received) {
+        if (!Object.entries(deps.client.scope).every(([key, value]) => operation.origin.scope[key as keyof typeof operation.origin.scope] === value)) throw new Error("ponder_relay_operation_scope_changed");
+        if (!operations.has(operation.id) && operations.size >= 1000) throw new Error("ponder_relay_operation_limit");
+        const prior = operations.get(operation.id);
+        if (prior && prior.payloadHash !== operation.payloadHash) throw new Error("ponder_relay_operation_identity_changed");
+        if (["completed", "failed", "cancelled", "expired"].includes(operation.state)) operations.delete(operation.id);
+        else operations.set(operation.id, operation);
+      }
+      wakeGeneration++; pollingNeeded = hasObligations || operations.size > 0;
+      if (pollingNeeded && !running) { if (timer) clearTimeout(timer); timer = null; schedule(0); }
+    },
+    needsConnection: () => pollingNeeded || operations.size > 0,
+    relayAuthority(deviceId: string, genericRuntimeId: string) {
+      if (!attachment || stopped || Date.parse(attachment.leaseExpiresAt) <= Date.now()) return null;
+      const payload = { deviceId, genericRuntimeId };
+      return { proof: deps.client.proof("/ponder/desktop/relay-ticket", payload, attachment.epoch), payload };
+    },
     wake() {
       if (stopped) return;
       wakeGeneration++;

@@ -1,26 +1,14 @@
-import { SessionSchema, type Session } from "@openpond/contracts";
+import { SessionSchema } from "@openpond/contracts";
 import { ponderDesktopSessionRevision } from "../openpond/ponder-desktop-catalog.js";
 import {
   ponderOwnsLocalSession,
   PonderLocalOwnerSchema,
   type PonderLocalOwner,
 } from "../openpond/ponder-local-scope.js";
-import { isCodexHistorySessionId } from "../codex-history.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 
-export function ponderSessionMayAttach(session: Session) {
-  return (
-    session.metadata?.ponderLocalOwner === undefined &&
-    !session.archived &&
-    !session.systemKind &&
-    !session.hiddenFromDefaultSidebar &&
-    session.status !== "closed" &&
-    session.experience !== "development" &&
-    !session.metadata?.nativeHistoryProjection &&
-    !isCodexHistorySessionId(session.id) &&
-    !["sandbox", "sandbox_template", "sandbox_app"].includes(session.workspaceKind ?? "")
-  );
-}
+export { localSessionMayResolveOwnership as ponderSessionMayAttach } from "../remote-relay/session-ownership.js";
+import { localSessionMayResolveOwnership as ponderSessionMayAttach } from "../remote-relay/session-ownership.js";
 
 /** Explicit local human selection. Account inference and cloud/model requests never call this. */
 export function attachPonderSessionOwner(

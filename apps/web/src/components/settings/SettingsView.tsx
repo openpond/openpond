@@ -41,6 +41,7 @@ import { PersonalizationSettingsSection } from "./PersonalizationSettingsSection
 import { ProfileSettingsSection } from "./ProfileSettingsSection";
 import { ProviderSettingsSection } from "./ProviderSettingsSection";
 import { RemoteAccessSettingsSection } from "./RemoteAccessSettingsSection";
+import { AccountRemoteAccessSettings } from "./AccountRemoteAccessSettings";
 import { SettingsNavigation } from "./SettingsNavigation";
 import { SkillsSettingsSection } from "./SkillsSettingsSection";
 import { TrainingSettingsSection } from "./TrainingSettingsSection";
@@ -390,7 +391,8 @@ export function SettingsView({
         ) : section === "editor" ? (
           <EditorSettingsSection preferences={preferences} {...editorSettings} />
         ) : section === "remote" ? (
-          <RemoteAccessSettingsSection {...remoteAccessSettings} />
+          <><AccountRemoteAccessSettings connection={connection} onError={onError} />
+            <details><summary>Direct Tailscale access</summary><RemoteAccessSettingsSection {...remoteAccessSettings} /></details></>
         ) : section === "usage" ? (
           <Suspense fallback={<div className="usage-load-state">Loading activity…</div>}>
             <UsageSettingsSection

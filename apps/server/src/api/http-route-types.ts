@@ -291,6 +291,7 @@ export type HttpRouteDeps = {
   gitAvailabilityPayload: () => Promise<unknown>;
   startGitInstallPayload: () => Promise<unknown>;
   remoteAccessPayload: () => Promise<unknown>;
+  accountRemoteAccessPayload?: (action: "status" | "enable" | "disable" | "attach" | "rename" | "remove", payload?: unknown) => Promise<unknown>;
   enableRemoteAccessPayload: () => Promise<unknown>;
   disableRemoteAccessPayload: () => Promise<unknown>;
   voiceTranscriptionStatusPayload: () => Promise<unknown>;
