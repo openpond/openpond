@@ -11,9 +11,9 @@
     "sha256": "b493240cdd9c05d6be90f0caa4e72db5bc1b77a4902587441a3996e7fff21e03",
     "serverSha256": "bb7ecd93d1add36ab228b84283f2758fdcd2e66bf431cc5f06ba8635bbd2f6a8"
   },
-  "ownerUserId": "dzdaskv4w4",
-  "teamId": "a3v5vj0bxfyphbgihbgprm6f",
-  "deviceId": "71b0ab12-3426-4614-8eb6-1fe1adc7a132",
+  "ownerUserId": "qa-reference-001",
+  "teamId": "qa-reference-002",
+  "deviceId": "qa-reference-003",
   "genericRemoteAccess": {
     "before": "off",
     "after": "off",
@@ -22,25 +22,25 @@
     "callerUsesRequestOnlyAuthority": true
   },
   "genuineHumanOrigin": {
-    "bindingId": "vs0jf7txpj2laf92m6ag4i27",
+    "bindingId": "qa-reference-004",
     "bindingRevision": 1,
-    "conversationId": "q4o5e0557n",
-    "hostedTurnId": "g2fmf1pz7krqp5xgg3xaqw4b",
-    "idempotencyKey": "native-ponder-qa-e4c96062-d20e-4785-a3ea-2ec134f9400d",
+    "conversationId": "qa-reference-005",
+    "hostedTurnId": "qa-reference-006",
+    "idempotencyKey": "qa-reference-007",
     "submittedAt": "2026-10-08T12:04:24.448697+00:00",
-    "originChatTurnId": "g2fmf1pz7krqp5xgg3xaqw4b",
-    "originToolCallId": "call_85223b7de01a40039199226c",
+    "originChatTurnId": "qa-reference-006",
+    "originToolCallId": "qa-reference-008",
     "scope": {
-      "installationId": "f86218f5-7df3-478c-a77d-c9d27c84f2ff",
-      "profileId": "8370bb775cac8a4ba8f28040f2cf737dd6d4df99d512a675216939bfa6dc1655",
-      "ownerUserId": "dzdaskv4w4",
-      "teamId": "a3v5vj0bxfyphbgihbgprm6f",
-      "bindingId": "vs0jf7txpj2laf92m6ag4i27",
+      "installationId": "qa-reference-009",
+      "profileId": "qa-reference-010",
+      "ownerUserId": "qa-reference-001",
+      "teamId": "qa-reference-002",
+      "bindingId": "qa-reference-004",
       "bindingRevision": 1
     },
-    "epoch": "401ce7ce-1657-47b8-b7d5-ec4ac10e90d9",
+    "epoch": "qa-reference-011",
     "authorizationRevision": 6,
-    "nativeRuntimeId": "1bedc70f-e33a-4c92-98e9-0c2e62613d90",
+    "nativeRuntimeId": "qa-reference-012",
     "signatureProvidedByOperatorHelper": false,
     "signatureProducedByCanonicalPackagedManager": true,
     "syntheticHeldTurn": false,
@@ -65,15 +65,15 @@
     "fallbackUsed": false
   },
   "canonicalAdmission": {
-    "operationId": "ponder-desktop-op:3e3c67f9435375a50dd07d512cff259cd28252a95f2d9dac2fe9f960b6b9e9d1",
+    "operationId": "qa-reference-013",
     "action": "message",
-    "payloadHash": "f528f9f8014509f9ef97a1e2c208412f31b6d6e99dac4dc3b9b38601676fbb7e",
-    "claimId": "753b10d2-ca58-4b5d-b83f-9da5f05bfc76",
-    "claimedEpoch": "401ce7ce-1657-47b8-b7d5-ec4ac10e90d9",
-    "sessionId": "8cb37531-3da8-42eb-bdb9-e91d2c1cd7ae",
-    "inputId": "ponder-input:ponder-desktop-op:3e3c67f9435375a50dd07d512cff259cd28252a95f2d9dac2fe9f960b6b9e9d1",
+    "payloadHash": "qa-reference-014",
+    "claimId": "qa-reference-015",
+    "claimedEpoch": "qa-reference-011",
+    "sessionId": "qa-reference-016",
+    "inputId": "qa-reference-017",
     "senderKind": "ponder",
-    "turnId": "3653caf9-c734-445a-b55f-5ab3bd8edc21",
+    "turnId": "qa-reference-018",
     "state": "resolved",
     "turnCountBefore": 13,
     "turnCountAfter": 14,
@@ -85,36 +85,40 @@
     "primaryLocalTurnsAdded": 1
   },
   "committedResult": {
-    "operationId": "ponder-desktop-op:3e3c67f9435375a50dd07d512cff259cd28252a95f2d9dac2fe9f960b6b9e9d1",
-    "payloadHash": "f528f9f8014509f9ef97a1e2c208412f31b6d6e99dac4dc3b9b38601676fbb7e",
-    "sessionId": "8cb37531-3da8-42eb-bdb9-e91d2c1cd7ae",
-    "inputId": "ponder-input:ponder-desktop-op:3e3c67f9435375a50dd07d512cff259cd28252a95f2d9dac2fe9f960b6b9e9d1",
-    "turnId": "3653caf9-c734-445a-b55f-5ab3bd8edc21",
+    "operationId": "qa-reference-013",
+    "payloadHash": "qa-reference-014",
+    "sessionId": "qa-reference-016",
+    "inputId": "qa-reference-017",
+    "turnId": "qa-reference-018",
     "outcome": "completed",
-    "body": "PONDER NATIVE ORCHID-731No workspace tool call is warranted here. The only instructions in this thread were to recall and echo the marker MANAGED-ORCHID-731, with an explicit prohibition on using tools, reading or modifying files, or accessing the network. No file inspection or workspace change was requested, so there is nothing to verify or complete with workspace tools.\n\nAnswer: REMOTE MANAGED-ORCHID-731\n\nIf you do want me to inspect or change something in the workspace, tell me the target and I will call the appropriate tool and report the actual result.",
+    "bodySummary": {
+      "redacted": true,
+      "characters": 563,
+      "sha256": "15ff6620467d3646c4e38315753732de8106cb0bf0df311a1ae7dc021492317c"
+    },
     "completedAt": "2026-10-08T12:04:48.846Z",
-    "workspaceId": "local_4d8baf22e9c63cb3e283",
+    "workspaceId": "qa-reference-019",
     "outputs": [],
     "hostedReceipt": {
-      "sessionId": "8cb37531-3da8-42eb-bdb9-e91d2c1cd7ae",
+      "sessionId": "qa-reference-016",
       "sessionTitle": "Remote relay managed OpenPond QA",
-      "inputId": "ponder-input:ponder-desktop-op:3e3c67f9435375a50dd07d512cff259cd28252a95f2d9dac2fe9f960b6b9e9d1",
-      "turnId": "3653caf9-c734-445a-b55f-5ab3bd8edc21",
+      "inputId": "qa-reference-017",
+      "turnId": "qa-reference-018",
       "state": "resolved"
     },
     "hostedDeliveries": [
       {
-        "inputId": "ponder-desktop-input:ponder-desktop-result:d282d1f54d4d06556481991b73b7d605c594fcb86ec7a992201bf58c2e266327",
-        "inputMessageId": "mav4679ht3",
+        "inputId": "qa-reference-020",
+        "inputMessageId": "qa-reference-021",
         "status": "acknowledged",
         "admittedAt": "2026-10-08T12:04:49.666Z",
         "acknowledgedAt": "2026-10-08T12:05:13.393Z",
         "attentionAt": null,
         "attentionReason": null,
-        "ponderTurnId": "jas784z47t4wi2isa2a6yj2w",
+        "ponderTurnId": "qa-reference-022",
         "outputs": [],
         "outcome": "completed",
-        "localTurnId": "3653caf9-c734-445a-b55f-5ab3bd8edc21"
+        "localTurnId": "qa-reference-018"
       }
     ]
   },
@@ -130,8 +134,8 @@
     "hostedAutomaticResultDiscussionRounds": 1,
     "localPrimaryRequests": [
       {
-        "request_id": "3653caf9-c734-445a-b55f-5ab3bd8edc21:model:0",
-        "turn_id": "3653caf9-c734-445a-b55f-5ab3bd8edc21",
+        "request_id": "qa-reference-023",
+        "turn_id": "qa-reference-018",
         "provider": "openpond",
         "model": "accounts/fireworks/models/deepseek-v4p1-flash",
         "source": "provider_usage",
@@ -143,8 +147,8 @@
         "total_tokens": 11788
       },
       {
-        "request_id": "3653caf9-c734-445a-b55f-5ab3bd8edc21:model:1",
-        "turn_id": "3653caf9-c734-445a-b55f-5ab3bd8edc21",
+        "request_id": "qa-reference-024",
+        "turn_id": "qa-reference-018",
         "provider": "openpond",
         "model": "accounts/fireworks/models/deepseek-v4p1-flash",
         "source": "provider_usage",
@@ -158,8 +162,8 @@
     ],
     "localAutomaticRefinerRequests": [
       {
-        "request_id": "harness-refiner:refinement-trigger-5879069ea7ab05c55a58c330:0",
-        "turn_id": "3653caf9-c734-445a-b55f-5ab3bd8edc21",
+        "request_id": "qa-reference-025",
+        "turn_id": "qa-reference-018",
         "provider": "openpond",
         "model": "accounts/fireworks/models/deepseek-v4-flash",
         "source": "provider_usage",
@@ -171,8 +175,8 @@
         "total_tokens": 5820
       },
       {
-        "request_id": "harness-refiner:refinement-trigger-5879069ea7ab05c55a58c330:1",
-        "turn_id": "3653caf9-c734-445a-b55f-5ab3bd8edc21",
+        "request_id": "qa-reference-026",
+        "turn_id": "qa-reference-018",
         "provider": "openpond",
         "model": "accounts/fireworks/models/deepseek-v4-flash",
         "source": "provider_usage",
@@ -186,7 +190,7 @@
     ],
     "hostedUsage": [
       {
-        "messageId": "mauhosb8c4",
+        "messageId": "qa-reference-027",
         "rounds": 2,
         "usage": {
           "modelId": "accounts/fireworks/models/deepseek-v4p1-flash",
@@ -208,7 +212,7 @@
         }
       },
       {
-        "messageId": "lm5mctd14q",
+        "messageId": "qa-reference-028",
         "rounds": 1,
         "usage": {
           "modelId": "accounts/fireworks/models/deepseek-v4p1-flash",
@@ -248,5 +252,9 @@
     "actualOsSleep": false,
     "secondAccountSwitch": false,
     "inspectionOfIdleCompletedSessions": false
+  },
+  "publicEvidence": {
+    "identifiers": "Stable aliases across these summaries preserve equality only. Private operator originals retain exact identities.",
+    "providerText": "Long provider output omitted; hashes and qualification results retained."
   }
 }
