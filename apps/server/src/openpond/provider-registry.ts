@@ -1,3 +1,4 @@
+import { acpPreset, type ServerProviderPreset, type ProviderPresetModel } from "./provider-presets.js";
 import {
   PROVIDER_IDS,
   isRegisteredAcpProvider,
@@ -17,50 +18,20 @@ import {
   type CodexStatus,
   type ProviderCatalog,
   type ProviderCatalogProvider,
-  type ProviderCapabilities,
   type ProviderConfig,
-  type ProviderCredentialMode,
   type ProviderCredentialSource,
   type ProviderId,
-  type ProviderLifecycleStatus,
   type ProviderModel,
   type ProviderModelCache,
   type ProviderModelCapabilities,
-  type ProviderModelDiscovery,
   type ProviderModelsRefreshRequest,
   type ProviderModelsRequest,
-  type ProviderRouting,
   type ProviderSettings,
   type ProviderStatus,
   type ProviderValidationRequest,
 } from "@openpond/contracts";
 import type { ProvidersFile } from "../types.js";
 import type { ProviderSecretRecord, ProviderSecrets } from "./provider-secrets.js";
-
-type ProviderPresetModel = {
-  id: string;
-  displayName: string;
-  contextWindow?: number | null;
-  outputLimit?: number | null;
-  lifecycleStatus?: ProviderLifecycleStatus;
-  capabilities?: Partial<ProviderModelCapabilities>;
-};
-
-type ServerProviderPreset = {
-  id: ProviderId;
-  displayName: string;
-  lifecycleStatus?: ProviderLifecycleStatus;
-  credentialModes: ProviderCredentialMode[];
-  routing: Partial<ProviderRouting>;
-  capabilities: Partial<ProviderCapabilities> & {
-    modelDiscovery?: ProviderModelDiscovery;
-  };
-  defaultEnabled?: boolean;
-  defaultBaseUrl?: string | null;
-  defaultModel?: string | null;
-  modelCacheSource: ProviderModelCache["source"];
-  models: readonly ProviderPresetModel[];
-};
 
 const COMMON_OPENAI_COMPATIBLE_MODELS: Partial<ProviderModelCapabilities> = {
   streaming: true,
@@ -597,12 +568,6 @@ function normalizeOpenPondManagedPreset(
     defaultModel,
     models: [...models.values()],
   };
-}
-
-function acpPreset(id: ProviderId, displayName: string): ServerProviderPreset {
-  return { id, displayName, credentialModes: ["native-agent-login"], routing: { localRuntime: true },
-    capabilities: { chatCompletions: true, streaming: true, toolCalling: true, modelDiscovery: "provider" },
-    defaultEnabled: false, defaultModel: null, modelCacheSource: "provider", models: [] };
 }
 
 function providerPresetMap(catalog?: ProviderCatalog | null): Map<ProviderId, ServerProviderPreset> {
