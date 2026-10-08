@@ -534,10 +534,6 @@ function MessageSources({
 }) {
   return (
     <div className="assistant-sources" aria-label="Sources">
-      <span className="assistant-sources-label">
-        <Globe2 size={13} />
-        <span>Sources</span>
-      </span>
       <div className="assistant-source-stack">
         {sources.map((source) => (
           <SourcePill

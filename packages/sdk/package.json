@@ -173,7 +173,7 @@
   "scripts": {
     "prebuild": "pnpm --dir ../cloud run build && pnpm --dir ../harness run build && pnpm --dir ../evals run build",
     "build": "tsx scripts/build.ts",
-    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project sdk",
     "check": "pnpm run build && pnpm run typecheck && pnpm run test && tsx scripts/check-protocol-fixtures.ts && tsx scripts/check-published-consumer.ts --local-evals && npm pack --dry-run",
     "publish:check": "pnpm run build && tsx scripts/check-protocol-fixtures.ts && tsx scripts/check-published-consumer.ts && npm pack --dry-run"

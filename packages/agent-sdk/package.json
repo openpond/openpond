@@ -124,7 +124,7 @@
   ],
   "scripts": {
     "build": "tsx ./scripts/build.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit",
     "test": "pnpm run build && vitest run --root ../.. --config vitest.config.ts --project agent-sdk",
     "inspect": "node ./dist/cli.js inspect --json",
     "agent:build": "node ./dist/cli.js build",

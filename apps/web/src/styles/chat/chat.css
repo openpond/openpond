@@ -497,7 +497,6 @@ button.user-message-attachment {
   margin-top: -6px;
 }
 
-.assistant-sources-label,
 .assistant-source-pill {
   display: inline-flex;
   align-items: center;
@@ -512,10 +511,6 @@ button.user-message-attachment {
   font-size: 12px;
   font-weight: 650;
   line-height: 1;
-}
-
-.assistant-sources-label {
-  color: #b8c0ca;
 }
 
 .assistant-source-pill {
@@ -565,7 +560,6 @@ button.user-message-attachment {
   outline: 0;
 }
 
-.assistant-sources-label svg,
 .assistant-source-pill svg {
   flex: 0 0 auto;
 }

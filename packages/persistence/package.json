@@ -19,7 +19,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "node ../../scripts/run-typescript.mjs tsc -b"
   },
   "dependencies": {
     "toml-eslint-parser": "1.0.3",

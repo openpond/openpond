@@ -19,7 +19,6 @@ let packageRuntimeBuildReady = false;
 let serverWorkspaceBuildReady = false;
 const nodeBinary = process.env.NODE_BINARY || "node";
 const pnpmBinary = process.env.PNPM_BINARY || (process.platform === "win32" ? "pnpm.cmd" : "pnpm");
-const tscBinary = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "tsc.cmd" : "tsc");
 const vitestBinary = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "vitest.cmd" : "vitest");
 const nonDeterministicEnvKeys = [
   "OPENPOND_ACCOUNT",
@@ -167,7 +166,7 @@ async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void>
   // Node contract tests import apps/server/dist directly. Unit and system tests
   // only need the package runtime prepared above; complete server output belongs
   // to this contract boundary.
-  await runCommand(tscBinary, ["-b", "apps/server"], { env });
+  await runCommand(nodeBinary, [path.join(root, "scripts/run-typescript.mjs"), "tsc", "-b", "apps/server"], { env });
   serverWorkspaceBuildReady = true;
 }
 

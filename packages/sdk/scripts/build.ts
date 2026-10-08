@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -70,7 +69,7 @@ for (const entry of ["human-review", "index"]) {
   await writeFile(file, `${await readFile(file,"utf8")}\nexport * from "@openpond/evals/human-review";\n`);
 }
 
-await run(process.execPath, [createRequire(import.meta.url).resolve("typescript/bin/tsc"), "--build", "tsconfig.build.json", "--force"]);
+await run(process.execPath, [path.resolve(root, "../../scripts/run-typescript.mjs"), "tsc", "--build", "tsconfig.build.json", "--force"]);
 
 // The cloud implementation is bundled, not an installable runtime dependency.
 // Resolve its declarations within the emitted package so independent consumers
