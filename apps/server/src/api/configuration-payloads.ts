@@ -18,7 +18,7 @@ const requestSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("trust"), root: z.string(), accountId: z.string(), trusted: z.boolean() }),
   z.strictObject({ action: z.literal("client-state"), owner: z.string(), patch: ClientChoicesSchema, importOnly: z.boolean().optional() }),
 ]);
-export function createConfigurationPayloads(home: string) {
+export function createConfigurationPayloads(home: string, beforeAuthorityChange?: () => Promise<void>) {
   let lastValid: Awaited<ReturnType<typeof resolveEffectiveConfig>> | null = null;
   async function status(projectRoot?: string, accountId?: string) {
     const file = storagePaths(home).config;
@@ -39,6 +39,7 @@ export function createConfigurationPayloads(home: string) {
   async function mutate(payload: unknown) {
     const input = requestSchema.parse(payload);
     if (input.action === "validate") return { valid: true, document: validateConfigText(input.text, storagePaths(home).config) };
+    await beforeAuthorityChange?.();
     if (input.action === "patch") await patchConfig(home, input.expectedRevision, input.operations);
     if (input.action === "replace") await replaceConfigText(home, input.expectedRevision, input.text);
     if (input.action === "restore") await restoreConfigRevision(home, input.revision, input.expectedRevision);

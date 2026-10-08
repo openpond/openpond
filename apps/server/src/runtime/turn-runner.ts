@@ -1,4 +1,5 @@
 import { nativeImageContent } from "./native-agents/attachments.js";
+import { assertPonderDesktopExecution } from "../store/ponder-desktop-input.js";
 import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -318,7 +319,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const permissions = previous?.metadata.taskExecutionPermissions ?? {
           approvalPolicy: "on-request", sandbox: "read-only", codexPermissionMode: "default",
         };
-        return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>) }, turnId);
+        return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>) }, turnId,
+          sourceInput.senderKind === "ponder" ? { beforeExecute: async admitted => {
+            assertPonderDesktopExecution(sourceInput, admitted);
+          } } : undefined);
       }
       const context = await prepareSubagentContinuationTurn({ session, request,
         requestedTurnPermissions: turnPermissionsFromSendTurnInput(request) });
@@ -1894,6 +1898,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     readTaskInbox: (sessionId) => inboxStore.taskInboxSnapshot(sessionId),
     queueTaskInput: taskInbox.queue,
     admitUserLocalMessage: taskInbox.admitUserLocalMessage,
+    admitPonderLocalMessage: taskInbox.admitPonderLocalMessage,
     updateTaskInput: taskInbox.mutate,
     recoverTaskInbox: taskInbox.recover,
     isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),

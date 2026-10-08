@@ -83,6 +83,7 @@ export function RightChatPanelStack({
   onOpenFileInSidebar,
   onOpenProfileSettings,
   onOpenSession,
+  onOpenPonder,
   onProviderChange,
   onProviderSetupOpen,
   onPromptChange,
@@ -132,6 +133,7 @@ export function RightChatPanelStack({
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
   onOpenSession?: (sessionId: string) => void;
+  onOpenPonder?: () => void;
   onProviderChange: (panelId: string, provider: ChatProvider) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (panelId: string, prompt: string) => void;
@@ -413,6 +415,7 @@ export function RightChatPanelStack({
             onOpenFileInSidebar={onOpenFileInSidebar}
             onOpenProfileSettings={onOpenProfileSettings}
             onOpenSession={onOpenSession}
+            onOpenPonder={onOpenPonder}
             onProviderChange={(provider) => onProviderChange(activePanel.id, provider)}
             onProviderSetupOpen={onProviderSetupOpen}
             onPromptChange={(prompt) => onPromptChange(activePanel.id, prompt)}

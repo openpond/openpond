@@ -6,6 +6,7 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -15,8 +16,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
-    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "build": "node ../../scripts/run-typescript.mjs tsc -b",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project agent-runtime",
     "generate:protocol": "tsx scripts/generate-protocol-schema.ts",
     "check:protocol": "tsx scripts/generate-protocol-schema.ts --check",

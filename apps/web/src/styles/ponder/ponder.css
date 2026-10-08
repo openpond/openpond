@@ -20,3 +20,12 @@
 .ponder-recommendation-actions, .ponder-message-destination { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
 .ponder-recommendation-actions button, .ponder-message-destination button { padding: 6px 10px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
 .ponder-message-destination { padding: 8px 14px; margin: 0; font-size: 12px; color: var(--muted); }
+.ponder-transcript-message.task-handoff { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.task-handoff > .message-row { width: 100%; min-width: 0; }
+.task-handoff .ponder-message-destination { max-width: min(620px, 72%); justify-content: flex-end; padding: 0; }
+.task-handoff .ponder-message-destination button { border: 0; padding: 0; background: transparent; color: #64c7d6; border-radius: 0; }
+.task-handoff .ponder-message-destination button:focus-visible { outline: 2px solid #64c7d6; outline-offset: 2px; }
+
+.sidebar .sidebar-row.sidebar-ponder-entry:hover { background: rgb(100 199 214 / 18%); }
+
+.ponder-request-status { padding: 12px 0; color: var(--muted); overflow-wrap: anywhere; }

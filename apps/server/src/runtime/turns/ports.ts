@@ -507,6 +507,7 @@ export type TurnRunnerDependencies = {
 
 export type TurnRunner = TurnDispatcherPort & {
   admitUserLocalMessage(input: import("@openpond/contracts").TaskInputAdmission): Promise<TaskInput>;
+  admitPonderLocalMessage(input: import("@openpond/contracts").TaskInputAdmission): Promise<TaskInput>;
   steerSessionTurn(sessionId: string, payload: unknown): Promise<TaskInput>;
   readTaskInbox(sessionId: string): Promise<import("@openpond/contracts").TaskInboxSnapshot>;
   queueTaskInput(sessionId: string, payload: unknown, idempotencyKey: string): Promise<TaskInput>;
@@ -514,7 +515,7 @@ export type TurnRunner = TurnDispatcherPort & {
   recoverTaskInbox(): Promise<void>;
   isSessionTurnActive(sessionId: string): boolean;
   waitForSessionTurnSettlement(sessionId: string): Promise<void>;
-  interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
+  interruptSessionTurn(sessionId: string, reason?: string, expectedTurnId?: string): Promise<Turn>;
   interruptAll(reason?: string): Promise<Turn[]>;
   close(): Promise<void>;
   applyCreateImproveAction(

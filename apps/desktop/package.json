@@ -7,8 +7,8 @@
   "type": "module",
   "main": "./dist/main.js",
   "scripts": {
-    "dev": "pnpm --dir ../.. run bundle:server && tsc -b && electron .",
-    "build": "tsc -b"
+    "dev": "pnpm --dir ../.. run bundle:server && node ../../scripts/run-typescript.mjs tsc -b && electron .",
+    "build": "node ../../scripts/run-typescript.mjs tsc -b"
   },
   "dependencies": {
     "@openpond/logging": "workspace:*",

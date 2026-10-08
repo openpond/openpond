@@ -1,5 +1,4 @@
 import { newQuickJSWASMModuleFromVariant, Scope, type QuickJSContext, type QuickJSHandle } from "quickjs-emscripten-core";
-import variant from "@jitl/quickjs-singlefile-cjs-release-sync";
 import { assertBoundedTaskJson } from "./task-schema.js";
 
 export interface JavaScriptIsolateInput {
@@ -23,6 +22,8 @@ export async function executeJavaScriptIsolate(input: JavaScriptIsolateInput): P
   input.signal?.throwIfAborted();
   const error = (suffix: string) => new Error(`${input.errorPrefix}_${suffix}`);
   const deadline = Date.now() + input.timeoutMs;
+  const { default: variant } = await import("@jitl/quickjs-singlefile-cjs-release-sync");
+  input.signal?.throwIfAborted();
   const module = await newQuickJSWASMModuleFromVariant(variant);
   input.signal?.throwIfAborted();
   try { return Scope.withScope((scope) => {

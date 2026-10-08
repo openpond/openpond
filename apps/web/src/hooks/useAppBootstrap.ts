@@ -56,6 +56,8 @@ import {
   type AppStartupStageId,
 } from "../startup/app-startup";
 import { useRuntimeEvents } from "./useAppEffects";
+import { useAccountScopeRefresh } from "./useAccountScopeRefresh";
+import type { AccountScopeRefresh } from "../lib/account-scope-refresh";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -125,6 +127,7 @@ export function useAppBootstrap(params: {
   const startupStartedAtRef = useRef(Date.now());
   const startupCompleteTimerRef = useRef<number | null>(null);
   const profileRefreshCreatePipelineKeyRef = useRef<string | null>(null);
+  const accountScopeRefreshRef = useRef<AccountScopeRefresh | null>(null);
 
   useEffect(() => {
     signedResourceUrlCache.activateConnection(connection);
@@ -188,6 +191,7 @@ export function useAppBootstrap(params: {
 
   const applyBootstrapPayload = useCallback(
     (payload: BootstrapPayload) => {
+      accountScopeRefreshRef.current?.invalidate();
       const previousServerId = bootstrapServerIdRef.current;
       const sameServer = !previousServerId || previousServerId === payload.server.id;
       bootstrapServerIdRef.current = payload.server.id;
@@ -277,8 +281,11 @@ export function useAppBootstrap(params: {
   );
 
   const applyPreferencesPayload = useCallback((payload: PreferencesPayload) => {
+    accountScopeRefreshRef.current?.invalidate();
     setBootstrap((current) => (current ? { ...current, preferences: payload.preferences } : current));
   }, []);
+
+  useAccountScopeRefresh({ connection, events, refreshRef: accountScopeRefreshRef, setBootstrap, setError });
 
   useEffect(() => {
     if (selectedSessionId) return;
@@ -541,6 +548,7 @@ export function useAppBootstrap(params: {
   return {
     appPreferences,
     applyBootstrapPayload,
+    applyPreferencesPayload,
     approvals,
     bootstrap,
     codexHistorySessions,

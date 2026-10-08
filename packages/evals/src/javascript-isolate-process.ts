@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { javascriptIsolateProcessSource } from "./javascript-isolate-process-source.js";
 import { JavaScriptIsolateExecutionError, validateJavaScriptIsolateInput, type JavaScriptIsolateInput } from "./javascript-isolate.js";
 import { assertBoundedTaskJson } from "./task-schema.js";
 
@@ -7,6 +6,8 @@ import { assertBoundedTaskJson } from "./task-schema.js";
 export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolateInput & { stripTypeScript?: boolean }): Promise<unknown> {
   input.signal?.throwIfAborted();
   validateJavaScriptIsolateInput(input);
+  const { javascriptIsolateProcessSource } = await import("./javascript-isolate-process-source.js");
+  input.signal?.throwIfAborted();
   const { signal, stripTypeScript, ...data } = input;
   const error = (suffix: string) => new Error(`${input.errorPrefix}_${suffix}`);
   // The authored source remains JSON data passed to QuickJS, never host code.

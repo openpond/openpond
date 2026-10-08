@@ -255,6 +255,8 @@ export const api = {
   ...communityApi,
   bootstrap: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
+  accountScopeSnapshot: (connection: ClientConnection) =>
+    apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?ensureProfile=0"),
   localProjectActions: (connection: ClientConnection, projectId: string) =>
     apiFetch<{ projectId: string; actions: OpenPondActionCatalogEntry[] }>(
       connection,

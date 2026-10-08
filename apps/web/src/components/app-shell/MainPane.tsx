@@ -1354,6 +1354,7 @@ export function MainPane({
       onOpenFileInSidebar={handleOpenFileInSidebar}
       onOpenProfileSettings={onOpenProfileSettings}
       onOpenSession={onOpenSession}
+      onOpenPonder={() => onPonderModeChange?.("clean")}
       onProviderChange={onRightChatProviderChange}
       onProviderSetupOpen={onOpenProviderSettings}
       onPromptChange={onRightChatPromptChange}
@@ -1526,7 +1527,7 @@ export function MainPane({
           onCodexReasoningEffortChange: changeCodexReasoningEffort,
           onOpenPondCommandAccessModeChange: changeOpenPondCommandAccessMode,
           showToast,
-        }} accountBaseUrl={projectsAccountBaseUrl} onOpenBrowserLink={handleOpenBrowserLink} />
+        }} accountBaseUrl={projectsAccountBaseUrl} onOpenBrowserLink={handleOpenBrowserLink} onOpenLocalWork={onOpenSession} />
       ) : view === "apps" ? (
         <Suspense fallback={null}>
           <AppsView
@@ -1732,6 +1733,7 @@ export function MainPane({
                     throw new Error("The question response could not be sent.");
                 }}
                 onOpenSession={onOpenSession}
+                onOpenPonder={() => onPonderModeChange?.("clean")}
                 onScroll={(event) => handleChatScroll(event.currentTarget)}
                 rows={chatTimelineRows}
                 sessionId={browserConversationId}

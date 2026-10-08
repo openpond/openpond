@@ -15,8 +15,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
-    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "build": "node ../../scripts/run-typescript.mjs tsc -b",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project app-server"
   },
   "dependencies": {
