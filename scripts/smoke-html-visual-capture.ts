@@ -46,7 +46,10 @@ try {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(createRequire(import.meta.url)("electron") as string, [entry], { cwd: root, env, stdio: "inherit" });
+    // Match the existing desktop smoke launcher on restricted Linux CI runners.
+    // This process renders only the fixed pixel fixture, never user documents.
+    const args = process.env.CI ? ["--no-sandbox", entry] : [entry];
+    const child = spawn(createRequire(import.meta.url)("electron") as string, args, { cwd: root, env, stdio: "inherit" });
     const timeout = setTimeout(() => { child.kill("SIGKILL"); reject(new Error("HTML visual capture timed out")); }, 30_000);
     child.once("error", error => { clearTimeout(timeout); reject(error); });
     child.once("exit", code => { clearTimeout(timeout); code === 0 ? resolve() : reject(new Error(`HTML visual capture exited ${code}`)); });
