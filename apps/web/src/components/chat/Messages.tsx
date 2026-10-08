@@ -1,7 +1,5 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useState } from "react";
 import {
-  ChevronDown,
-  ChevronUp,
   CheckCircle2,
   CreditCard,
   ExternalLink,
@@ -23,6 +21,7 @@ import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
 import { userMessageDisplayContent } from "../../lib/chat-display-content";
 import { MessageFooter } from "./MessageFooter";
 import { TaskMessageRow } from "./TaskMessageRow";
+import { UserMessageContent } from "./UserMessageContent";
 import { MarkdownText } from "./MarkdownText";
 import { StreamingMarkdownText } from "./StreamingMarkdownText";
 import { ChatActivitySummary } from "./ChatActivitySummary";
@@ -47,6 +46,7 @@ type MessageRowProps = {
   billingOrganizationSlug?: string | null;
   billingTeamId?: string | null;
   connection?: ClientConnection | null;
+  conversationLinks?: readonly { conversationId: string; title: string }[];
   message: ChatMessage;
   kvCacheSummary?: UsageTurnCacheSummary | null;
   onOpenBrowserLink?: (
@@ -63,6 +63,7 @@ type MessageRowProps = {
     resolution: SessionUserQuestionResolution
   ) => Promise<void>;
   onOpenSession?: (sessionId: string) => void;
+  onOpenPonder?: () => void;
   showFooter?: boolean;
   userAttachmentDisplay?: "full" | "compact";
   workspaceRootPath?: string | null;
@@ -75,6 +76,7 @@ export const MessageRow = memo(function MessageRow({
   billingOrganizationSlug = null,
   billingTeamId = null,
   connection = null,
+  conversationLinks,
   message,
   kvCacheSummary = null,
   onOpenBrowserLink,
@@ -83,11 +85,13 @@ export const MessageRow = memo(function MessageRow({
   onOpenProfileSettings,
   onResolveUserQuestion,
   onOpenSession,
+  onOpenPonder,
   showFooter = true,
   userAttachmentDisplay = "full",
   workspaceRootPath = null,
 }: MessageRowProps) {
-  if (message.role === "task_message") return <TaskMessageRow message={message} onOpenSession={onOpenSession} />;
+  if (message.role === "task_message") return <TaskMessageRow message={message} onOpenSession={onOpenSession}
+    onOpenPonder={onOpenPonder} connection={connection} />;
   if (message.role === "status_divider") {
     return <StatusDivider message={message} />;
   }
@@ -184,6 +188,8 @@ export const MessageRow = memo(function MessageRow({
             animateInitialContent={animateInitialContent}
             connection={connection}
             content={message.content}
+            conversationLinks={conversationLinks}
+            onOpenConversation={onOpenSession}
             onOpenBrowserLink={onOpenBrowserLink}
             onOpenFileInSidebar={onOpenFileInSidebar}
             workspaceRootPath={workspaceRootPath}
@@ -324,39 +330,6 @@ function areReasoningSectionPropsEqual(
     previous.onOpenBrowserLink === next.onOpenBrowserLink &&
     previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
     previous.workspaceRootPath === next.workspaceRootPath
-  );
-}
-
-const USER_MESSAGE_COLLAPSE_LINE_LIMIT = 5;
-
-function UserMessageContent({ content }: { content: string }) {
-  const lines = useMemo(() => content.split(/\r?\n/), [content]);
-  const [expanded, setExpanded] = useState(false);
-  const shouldCollapse = lines.length > USER_MESSAGE_COLLAPSE_LINE_LIMIT;
-  const visibleContent =
-    shouldCollapse && !expanded
-      ? lines.slice(0, USER_MESSAGE_COLLAPSE_LINE_LIMIT).join("\n")
-      : content;
-
-  return (
-    <div
-      className={`user-message-content-wrap ${
-        shouldCollapse ? "collapsible" : ""
-      }`}
-    >
-      <div className="user-message-content">{visibleContent}</div>
-      {shouldCollapse ? (
-        <button
-          type="button"
-          className="user-message-show-more"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          <span>{expanded ? "Show less" : "Show more"}</span>
-        </button>
-      ) : null}
-    </div>
   );
 }
 
@@ -561,10 +534,6 @@ function MessageSources({
 }) {
   return (
     <div className="assistant-sources" aria-label="Sources">
-      <span className="assistant-sources-label">
-        <Globe2 size={13} />
-        <span>Sources</span>
-      </span>
       <div className="assistant-source-stack">
         {sources.map((source) => (
           <SourcePill

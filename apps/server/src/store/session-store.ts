@@ -1,11 +1,23 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { ponderDesktopRequestContent, type PonderDesktopOperation } from "@openpond/contracts/ponder-desktop";
 import { CreateSessionRequestSchema, PatchSessionRequestSchema, type PatchSessionRequest } from "@openpond/contracts/requests";
 import { DEFAULT_SESSION_EXPERIENCE } from "@openpond/contracts/experiences";
 import { DEFAULT_OPENPOND_COMMAND_ACCESS_MODE, OpenPondCommandAccessModeSchema, type AppPreferences } from "@openpond/contracts/settings";
 import { type RuntimeEvent } from "@openpond/contracts/runtime";
 import { type Session, type Turn } from "@openpond/contracts/sessions";
 import type { SqliteStore } from "./store.js";
+import { ponderDesktopSessionRevision, ponderDesktopExecutionRevision } from "../openpond/ponder-desktop-catalog.js";
 import { event, now } from "../utils.js";
+import { publicSessionMetadata, preservePonderSessionIdentity, PonderLocalOwnerSchema,
+  type PonderLocalOwner } from "../openpond/ponder-local-scope.js";
+
+export type ReservedSessionCreation = {
+  sessionId: string;
+  operationId: string;
+  payloadHash: string;
+  owner?: PonderLocalOwner;
+  desktopOperation?: PonderDesktopOperation;
+};
 
 export function createSessionStore(deps: {
   store: Pick<SqliteStore,
@@ -15,6 +27,7 @@ export function createSessionStore(deps: {
   loadAppPreferences?: () => Promise<AppPreferences>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   loadLastUsedProfile?: () => Promise<Session["currentProfile"]>;
+  captureUserOwner?: (payload: unknown) => Promise<PonderLocalOwner | null>;
 }) {
   const {
     store,
@@ -26,9 +39,54 @@ export function createSessionStore(deps: {
   } = deps;
 
   async function createSession(payload: unknown): Promise<Session> {
+    return createSessionInternal(payload);
+  }
+
+  async function createUserSession(payload: unknown): Promise<Session> {
     const input = CreateSessionRequestSchema.parse(payload);
+    return createSessionInternal(input, undefined, await deps.captureUserOwner?.(input) ?? null);
+  }
+
+  /** Only in-process dispatch owners may reserve identities; HTTP payloads cannot choose them. */
+  async function createReservedSession(payload: unknown, reservation: ReservedSessionCreation): Promise<Session> {
+    if (!/^[a-zA-Z0-9_-]{1,200}$/.test(reservation.sessionId)
+      || !reservation.operationId || !/^[a-f0-9]{64}$/.test(reservation.payloadHash)) {
+      throw new Error("reserved_session_identity_invalid");
+    }
+    return createSessionInternal(payload, reservation, reservation.owner ?? null);
+  }
+
+  async function recoverReservedSession(reservation: ReservedSessionCreation, creationHash: string): Promise<Session | null> {
+    const session = await store.getSession(reservation.sessionId);
+    if (!session) return null;
+    const identity = session.metadata?.ponderDesktopReservation;
+    if (!identity || typeof identity !== "object" || Array.isArray(identity)
+      || (identity as Record<string, unknown>).operationId !== reservation.operationId
+      || (identity as Record<string, unknown>).payloadHash !== reservation.payloadHash
+      || (identity as Record<string, unknown>).creationHash !== creationHash) {
+      throw new Error("reserved_session_identity_mismatch");
+    }
+    return normalizeSession(session);
+  }
+
+  async function createSessionInternal(payload: unknown, reservation?: ReservedSessionCreation, owner: PonderLocalOwner | null = null): Promise<Session> {
+    const input = CreateSessionRequestSchema.parse(payload);
+    const metadata = publicSessionMetadata(input.metadata);
+    const workspaceRevision = input.metadata?.ponderWorkspaceRevision;
+    if (reservation && workspaceRevision !== undefined) {
+      if (typeof workspaceRevision !== "string" || !/^[a-f0-9]{64}$/.test(workspaceRevision))
+        throw new Error("ponder_desktop_workspace_revision_invalid");
+      metadata.ponderWorkspaceRevision = workspaceRevision;
+    }
+    if (owner) metadata.ponderLocalOwner = PonderLocalOwnerSchema.parse(owner);
+    const creationHash = reservation ? createHash("sha256").update(ponderDesktopRequestContent("POST", "/local/session",
+      JSON.parse(JSON.stringify({ ...input, metadata })))).digest("hex") : "";
+    if (reservation) {
+      const existing = await recoverReservedSession(reservation, creationHash);
+      if (existing) return existing;
+    }
     const createdAt = now();
-    const sessionId = randomUUID();
+    const sessionId = reservation?.sessionId ?? randomUUID();
     const sessionCount = await store.sessionCount();
     const workspaceKind =
       input.workspaceKind ?? (input.appId ? "sandbox_app" : undefined);
@@ -95,7 +153,12 @@ export function createSessionStore(deps: {
       currentProfile,
       profileWorkflowBinding: input.profileWorkflowBinding ?? null,
       profileComponentBinding: input.profileComponentBinding ?? null,
-      ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...(Object.keys(metadata).length || reservation ? { metadata: {
+        ...metadata,
+        ...(reservation ? { ponderDesktopReservation: {
+          operationId: reservation.operationId, payloadHash: reservation.payloadHash, creationHash,
+        } } : {}),
+      } } : {}),
       cwd,
       codexThreadId: null,
       createdAt,
@@ -108,7 +171,22 @@ export function createSessionStore(deps: {
       archived: false,
       order: sessionCount,
     };
-    await store.insertSessionAtFront(session);
+    if (reservation) {
+      const identity = session.metadata!.ponderDesktopReservation as Record<string, unknown>;
+      identity.sessionRevision = ponderDesktopSessionRevision(session, null);
+      identity.executionRevision = ponderDesktopExecutionRevision(session);
+    }
+    try {
+      await store.insertSessionAtFront(session, reservation?.desktopOperation);
+    } catch (error) {
+      // SQLite's unique session key arbitrates concurrent owners. A lost local
+      // acknowledgement recovers this session instead of starting another one.
+      if (reservation) {
+        const existing = await recoverReservedSession(reservation, creationHash);
+        if (existing) return existing;
+      }
+      throw error;
+    }
     await appendRuntimeEvent(
       event({
         sessionId: session.id,
@@ -136,7 +214,8 @@ export function createSessionStore(deps: {
         {
           ...session,
           ...input,
-          ...(input.title !== undefined ? { metadata: { ...session.metadata, ...input.metadata, titleSource: "manual", autoTitle: null } } : {}),
+          ...(input.metadata !== undefined ? { metadata: preservePonderSessionIdentity(session.metadata, input.metadata) } : {}),
+          ...(input.title !== undefined ? { metadata: { ...session.metadata, ...preservePonderSessionIdentity(session.metadata, input.metadata), titleSource: "manual", autoTitle: null } } : {}),
           updatedAt: session.updatedAt,
         },
         input
@@ -160,6 +239,7 @@ export function createSessionStore(deps: {
       normalizeSession({
         ...session,
         ...patch,
+        ...(patch.metadata !== undefined ? { metadata: preservePonderSessionIdentity(session.metadata, patch.metadata) } : {}),
         updatedAt: now(),
       })
     );
@@ -247,6 +327,8 @@ export function createSessionStore(deps: {
 
   return {
     createSession,
+    createUserSession,
+    createReservedSession,
     patchSession,
     getSession,
     updateSession,

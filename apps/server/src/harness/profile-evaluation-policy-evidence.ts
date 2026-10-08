@@ -8,6 +8,7 @@ import {
   FileOutputRefSchema,
   type OpenPondProfileRef,
   type RuntimeEvent,
+  type Turn,
 } from "@openpond/contracts";
 import type { HarnessStateStore } from "../store/harness-state-store.js";
 
@@ -19,6 +20,7 @@ type EvidenceStore = Pick<
 export function profileEvaluationOutput(
   events: RuntimeEvent[],
   targetKind: string,
+  status: Turn["status"],
 ): string {
   if (targetKind === "agent_action") {
     const result = events.find(
@@ -32,6 +34,22 @@ export function profileEvaluationOutput(
       );
     return result;
   }
+  if (status === "completed") {
+    const terminal = [...events].reverse().find(event => event.name === "turn.completed");
+    const marker = terminal?.data as { providerResponse?: { requestId?: unknown; contentHash?: unknown } } | undefined;
+    const response = marker?.providerResponse;
+    if (typeof response?.requestId !== "string" || !response.requestId
+      || typeof response.contentHash !== "string")
+      throw new Error("Profile evaluation has no retained final provider response.");
+    const text = events.filter(event => event.name === "assistant.delta"
+      && (event.data as { providerRequestId?: unknown } | undefined)?.providerRequestId === response.requestId)
+      .map(event => event.output ?? "").join("");
+    if (contentHash(text) !== response.contentHash)
+      throw new Error("Profile evaluation final provider response differs from its retained trace.");
+    return text;
+  }
+  // Failed/interrupted turns retain partial text for inspection, never as a
+  // completed response. Progress and truncated rounds remain in the full trace.
   return events
     .filter(
       (event) =>
@@ -98,7 +116,7 @@ export async function readProfileEvaluationPolicyEvidence(input: {
       "Retained Profile policy trace differs from its immutable receipt.",
     );
   }
-  const text = profileEvaluationOutput(events, source.target.kind);
+  const text = profileEvaluationOutput(events, source.target.kind, turn.status);
   if (
     receipt.outputHash !== null &&
     contentHash({ text }) !== receipt.outputHash

@@ -12,7 +12,7 @@ export interface TaskInboxRepository {
   taskWorkAreas(sessionId: string): Promise<string[]>;
   admitTaskInput(input: TaskInputAdmission): Promise<TaskInput>;
   admitTaskInputs(inputs: TaskInputAdmission[]): Promise<TaskInput[]>;
-  rejectTaskInput(id: string, error: string): Promise<void>;
+  rejectTaskInput(id: string, error: string, executionTurnId?: string): Promise<void>;
   getTaskInput(id: string): Promise<TaskInput | null>;
   taskInputsForSession(sessionId: string, query?: { afterSequence?: number; pendingOnly?: boolean; limit?: number }): Promise<TaskInput[]>;
   mutateTaskInput(sessionId: string, inputId: string, change: TaskInputMutation): Promise<TaskInput>;

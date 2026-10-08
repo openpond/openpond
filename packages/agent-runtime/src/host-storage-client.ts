@@ -28,10 +28,11 @@ export class AgentHostStorageClient {
       throw new Error("Host storage request is too large.");
     }
     const response = new Promise<unknown>((resolve, reject) => {
-      // Cold hosted sandbox provisioning can exceed the normal storage budget.
-      // The sandbox adapter supplies its per-action limit; do not truncate it
-      // to the generic 60-second storage cap before the host can respond.
-      const capMs = params.operation === "sandbox/request" || experiment ? 300_000 : 60_000;
+      // Execution owners include provisioning/cleanup in their bounded RPC
+      // budget. Ordinary storage still has its shorter transport ceiling.
+      const capMs = params.operation === "profile-evaluations/grade" ? 420_000
+        : params.operation === "sandbox/request" || params.operation === "profile-evaluations/sandbox" || experiment
+          ? 300_000 : 60_000;
       const timer = setTimeout(() => {
         this.#pending.delete(id);
         reject(new Error("Host storage request timed out."));

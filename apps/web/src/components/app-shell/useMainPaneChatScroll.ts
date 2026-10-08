@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { observeChatScrollIntent } from "./chat-scroll-intent";
 import type { ChatMessage } from "../../lib/app-models";
 import { buildChatTimelineRows } from "../../lib/chat-timeline-rows";
 import {
@@ -486,12 +487,24 @@ export function useMainPaneChatScroll({
   );
   const handleChatContentMutation = useCallback(
     (element: HTMLElement) => {
-      if (!stickyChatScrollRef.current && !isNearChatBottom(element)) return;
-      stickyChatScrollRef.current = true;
+      if (!stickyChatScrollRef.current) return;
       followStreamingChatBottom(element);
     },
     [followStreamingChatBottom]
   );
+  useEffect(() => {
+    const element = chatThreadElement;
+    if (!element) return;
+    // Read user intent before the scroll event: streaming layout changes and
+    // our settling frames can otherwise hide an upward movement or undo it.
+    const stopFollowing = () => {
+      stickyChatScrollRef.current = false;
+      cancelScheduledChatBottomScroll();
+      cancelStreamFollow();
+      cancelSmoothChatScroll();
+    };
+    return observeChatScrollIntent(element, stopFollowing);
+  }, [chatThreadElement, cancelScheduledChatBottomScroll, cancelStreamFollow, cancelSmoothChatScroll]);
   useChatContentScrollScheduler({
     contentKey: chatScrollContentKey,
     enabled: view === "chat" && showChatThread,

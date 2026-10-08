@@ -13,6 +13,6 @@
     }
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "node ../../scripts/run-typescript.mjs tsc -b"
   }
 }

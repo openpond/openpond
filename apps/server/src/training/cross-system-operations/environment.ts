@@ -6,6 +6,7 @@ import {
 } from "@openpond/contracts";
 import { z } from "zod";
 import { PersistentPythonSandbox } from "./python-sandbox.js";
+import { PythonSandboxUnavailableError } from "./python-sandbox-runtime.js";
 import type { CrossSystemTask, CrossSystemToolEvidence, CrossSystemWorld } from "./types.js";
 
 const CursorSchema = z.string().trim().min(1).max(256).nullable();
@@ -114,6 +115,7 @@ export class CrossSystemEnvironment {
       this.record({ sequence, name, args, ok: true, rows, bytes: responseBytes, durationMs: elapsed(started), result: response, error: null });
       return response;
     } catch (error) {
+      if (error instanceof PythonSandboxUnavailableError) throw error;
       const normalized = normalizeToolError(error);
       this.record({ sequence, name, args, ok: false, rows, bytes: 0, durationMs: elapsed(started), result: null, error: normalized.message });
       throw normalized;
@@ -249,4 +251,9 @@ function normalizeToolError(error: unknown): CrossSystemToolError {
 
 function elapsed(started: number): number { return Math.max(0, Math.round(performance.now() - started)); }
 function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === "object" && !Array.isArray(value)); }
-function abortError(signal: AbortSignal): Error { const error = signal.reason instanceof Error ? signal.reason : new Error("Cross-system tool call cancelled."); error.name = "AbortError"; return error; }
+function abortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error && signal.reason.name === "AbortError") return signal.reason;
+  const error = new Error("Cross-system tool call cancelled.", { cause: signal.reason });
+  error.name = "AbortError";
+  return error;
+}

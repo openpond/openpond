@@ -1,5 +1,9 @@
 The app should be run with `pnpm dev` for local testing. If an app is already running, you do not need to start another one from the terminal.
 
+Typechecking is selective validation, not a default step after every edit or turn. Do not run a full-repository typecheck for documentation, copy, styling, or small implementation changes without a concrete type-related concern. Prefer existing diagnostics and the smallest relevant package/project check when changing shared types, public interfaces, module boundaries, TypeScript configuration, or investigating a type error. Batch related edits and run the needed check once; repeat only after relevant changes or to verify a fix for a reported failure. Leave routine full-repository checking to CI unless the user requests it or a broad cross-project change needs local validation. Do not run a build merely as a substitute for a skipped typecheck, and state accurately which checks were run or skipped.
+
+For TypeScript validation, use `pnpm run typecheck` or the package's typecheck/build script. For a custom compiler invocation, use `node scripts/run-typescript.mjs tsc <args>` from the repository root instead of invoking `tsc` directly. The runner lowers local priority and serializes Linux compiler runs across OpenPond and Sandbox. Reuse an already-running check rather than starting duplicates. CI runs unrestricted; `TYPECHECK_UNRESTRICTED=1` explicitly opts out locally.
+
 Keep files and folders organized for maintainability. Split large components, utilities, and modules into focused files before they become difficult to work with; avoid letting the codebase drift into oversized 2,000-line files that are hard to review, test, and change.
 
 This app is a heavy WIP, optimize for new features, do not worry about supporting legacy or fallback code branches unless explicitly asked

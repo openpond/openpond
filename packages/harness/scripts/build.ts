@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { createRequire } from "node:module";
 import { copyFile, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +12,7 @@ const staging = path.join(root, "node_modules", ".cache", `harness-dist-${random
 
 await mkdir(staging, { recursive: true });
 try {
-  await run(process.execPath, [createRequire(import.meta.url).resolve("typescript/bin/tsc"),
+  await run(process.execPath, [path.resolve(root, "../../scripts/run-typescript.mjs"), "tsc",
     "--project",
     "tsconfig.build.json",
     "--outDir",

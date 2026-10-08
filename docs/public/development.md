@@ -39,6 +39,14 @@ pnpm run test:live          # explicit external/live-provider checks
 
 `pnpm run verify:quick` runs typechecking plus the fast unit layer. The complete deterministic matrix runs in CI rather than behind a package-level push command. Coverage and per-file timing are collected by `pnpm run test:observe`; they run weekly in CI instead of adding instrumentation to every pull request.
 
+Local TypeScript scripts run at lower process priority. On Linux, they use `flock`
+(from util-linux) to share one compiler slot with Sandbox, including package builds
+and the development server's initial compilation. Checks retain their full scope
+and incremental caches. Other platforms use lower priority without the shared queue.
+Direct `tsc`/`tsgo` commands and editor language servers bypass this runner; use
+`node scripts/run-typescript.mjs tsc <args>` for custom checks. CI runs unrestricted.
+For a deliberate full-speed local run, use `TYPECHECK_UNRESTRICTED=1 pnpm run typecheck`.
+
 Pull requests use affected-test selection unless test infrastructure, shared contracts, production deletions, or broad cross-domain changes require the full matrix. Full CI runs static checks and artifact builds in parallel, shards unit and system coverage two ways, and starts integration/release consumers as soon as the verified build is available. CLI distribution installation proof runs for CLI, package, lockfile, and release changes.
 
 Every push to `master` runs the complete deterministic matrix regardless of changed-file scope, including image inspection and CLI distribution installation. Package release workflows only trigger for their version manifests, wait for the required `Checks` result, and then perform publication-specific build, clean-consumer, installation, or provenance proof without repeating source unit suites.

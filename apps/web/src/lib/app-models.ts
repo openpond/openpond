@@ -246,7 +246,8 @@ export type ChatMessage = {
   taskMessage?: {
     input: TaskInput;
     direction: "received" | "sent";
-    peer: { sessionId: string; title: string; provider: string };
+    peer: { sessionId: string; title: string; provider: string; kind?: "ponder"; bindingId?: string;
+      ponderScope?: { installationId: string; profileId: string; ownerUserId: string; teamId: string } };
   };
 };
 
