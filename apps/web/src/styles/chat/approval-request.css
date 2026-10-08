@@ -11,7 +11,11 @@
   right: 0;
   bottom: 0;
   left: 0;
-  width: min(736px, calc(100% - 80px));
+  box-sizing: border-box;
+  width: 100%;
+  padding-inline: max(40px, calc((100% - 736px) / 2));
+  /* Cover the transcript around the rounded composer and down to the pane edge. */
+  background: var(--bg);
   margin: 0 auto;
 }
 
@@ -84,7 +88,7 @@
 }
 
 .chat-column.has-approval .chat-thread {
-  padding-bottom: calc(var(--chat-composer-reserve, 132px) + 28px);
+  padding-bottom: calc(var(--chat-composer-reserve, 132px) + 28px + var(--chat-sent-message-space, 0px));
 }
 
 .approval-request-shell {

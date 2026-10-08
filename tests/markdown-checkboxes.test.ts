@@ -13,7 +13,7 @@ describe("markdown checkbox rendering", () => {
   // including nested formatting; that directory must not leak into later prose.
   test("resolves formatted deliverable links within the declared list only", () => {
     const markup = renderMarkdown([
-      "Everything is in `~/openpond-rl-deck/`:", "",
+      "Both files are in `~/openpond-rl-deck/`:", "",
       "- **`diagram-full-rl-pipeline.png`**",
       "- __`pitch.html`__ and **`openpond-rl-pitch.pdf`**",
       "- **`png-pitch/`**", "",
@@ -26,6 +26,13 @@ describe("markdown checkbox rendering", () => {
     expect(markup).toContain('title="pitch.html"');
     expect(markup).not.toContain("`pitch.html`");
     expect(markup).not.toContain('title=".5"');
+    const paragraph = renderMarkdown([
+      "The updated slide and deck are in `~/Desktop/openpond-diagrams/`: `slide.png` and [deck](deck.pdf).", "",
+      "Unrelated `deck.pdf` in this project.",
+    ].join("\n"), { onOpenFileInSidebar: () => {} });
+    expect(paragraph).toContain('title="~/Desktop/openpond-diagrams/slide.png"');
+    expect(paragraph).toContain('title="~/Desktop/openpond-diagrams/deck.pdf"');
+    expect(paragraph).toContain('title="deck.pdf"');
   });
 
   test("renders unchecked and checked task-list items as disabled checkboxes", () => {

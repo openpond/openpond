@@ -126,7 +126,6 @@ export function normalizeChatFilePath(
       options.fileBasePath && !/^(?:workspace|sandbox):file:/i.test(displayPath) && !/^(?:[~/\\]|[A-Za-z]:|(?:workspace|sandbox):file:)/.test(pathWithoutLine)
         ? `${options.fileBasePath.replace(/[\\/]+$/, "")}/${pathWithoutLine.replace(/^\.\//, "")}`
         : pathWithoutLine,
-      options.workspaceRootPath,
     ),
   };
 }
@@ -152,14 +151,10 @@ function normalizeFileUrlPath(path: string): string {
   }
 }
 
-function normalizeWorkspacePath(path: string, workspaceRootPath: string | null | undefined): string {
-  let normalized = path.replace(/\\/g, "/").replace(/^\.\/+/, "");
-  const root = workspaceRootPath?.trim().replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!root) return normalized;
-  if (normalized.startsWith(`${root}/`)) normalized = normalized.slice(root.length + 1);
-  const rootName = root.split("/").filter(Boolean).at(-1);
-  if (rootName && normalized.startsWith(`${rootName}/`)) normalized = normalized.slice(rootName.length + 1);
-  return normalized;
+function normalizeWorkspacePath(path: string): string {
+  // Keep explicit locations intact until the server resolves the link across
+  // all project folders; the sidebar can shorten the display path afterwards.
+  return path.replace(/\\/g, "/").replace(/^\.\/+/, "");
 }
 
 function isLikelyFilePath(path: string): boolean {
@@ -182,6 +177,6 @@ function trimTrailingPathPunctuation(value: string): string {
 
 /** Only an explicit file-list declaration supplies a base for the following list. */
 export function chatFileListDirectory(content: string): string | null {
-  const match = /^(?:#{1,6}\s*)?(?:\*\*)?(?:files|outputs|deliverables|everything)(?:\*\*)?\s*(?:(?:is|are)\s+)?(?:\(\s*)?(?:in|at|under|:)\s*`((?:~[\/]|[\/]|[A-Za-z]:[\/])[^`\n]+[\/])`/i.exec(content.trim());
+  const match = /^(?:#{1,6}\s*)?(?:\*\*)?(?:(?:the|both|all)\s+)?(?:updated\s+)?(?:files|outputs|deliverables|everything|slide\s+and\s+deck)(?:\*\*)?\s*(?:(?:is|are)\s+)?(?:\(\s*)?(?:in|at|under|:)\s*`((?:~[\/]|[\/]|[A-Za-z]:[\/])[^`\n]+[\/])`/i.exec(content.trim());
   return match?.[1] ?? null;
 }
