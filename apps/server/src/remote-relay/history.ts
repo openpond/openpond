@@ -14,6 +14,11 @@ export function projectRemoteEvent(event: RuntimeEvent, sequence: number): Remot
   if (!message && !tool && !state && !approval) return null;
   const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
   const content = !message ? "" : userMessage ? event.args!.prompt as string : event.output ?? (typeof data.text === "string" ? data.text : "");
+  const status = event.name === "approval.requested" ? "pending" : event.name === "approval.resolved"
+    ? typeof data.status === "string" ? data.status : data.decision === "accept" ? "accepted"
+      : data.decision === "acceptForSession" ? "accepted_for_session" : data.decision === "decline" ? "declined"
+        : data.decision === "cancel" ? "cancelled" : event.status
+    : event.status;
   return { id: event.id, sequence, type: message ? "message" : tool ? "tool" : approval ? "approval" : "state",
     ...(event.turnId ? { turnId: event.turnId } : {}),
     ...(message ? { messageId: userMessage ? `user:${event.turnId ?? event.id}` :
@@ -22,9 +27,16 @@ export function projectRemoteEvent(event: RuntimeEvent, sequence: number): Remot
     ...(message ? { role: userMessage ? "user" as const : "assistant" as const } : {}),
     ...(content ? { text: content } : {}),
     ...(tool && event.action ? { toolName: event.action.slice(0, 200) } : {}),
-    ...(event.status ? { status: event.status } : {}),
+    ...(status ? { status } : {}),
     ...(approval && typeof (data.approvalId ?? data.id) === "string" ? { approvalId: (data.approvalId ?? data.id) as string } : {}),
   };
+}
+
+/** Approval callbacks carry provider IDs; viewers address canonical local turns. */
+export async function normalizeRemoteEventTurn(store: Pick<SqliteStore, "turnByProviderTurnId">, event: RuntimeEvent): Promise<RuntimeEvent> {
+  if (!["approval.requested", "approval.resolved"].includes(event.name) || !event.turnId) return event;
+  const turn = await store.turnByProviderTurnId(event.turnId);
+  return turn && turn.sessionId === event.sessionId ? { ...event, turnId: turn.id } : event;
 }
 
 /** Stable fragments preserve one logical message without unbounded wire frames. */
@@ -39,7 +51,7 @@ export function* projectRemoteEventChunks(event: RuntimeEvent, sequence: number,
 }
 
 export async function readRemoteHistory(input: {
-  store: Pick<SqliteStore, "getSession" | "runtimeEventPageRows" | "latestEventSequence">;
+  store: Pick<SqliteStore, "getSession" | "runtimeEventPageRows" | "latestEventSequence" | "turnByProviderTurnId">;
   owner: DeviceLocalOwner; taskId: string; cursor: string | null;
   outputs?(session: import("@openpond/contracts").Session): Promise<import("@openpond/contracts").FileOutputRef[]>;
 }): Promise<RemoteHistoryPage> {
@@ -68,7 +80,7 @@ export async function readRemoteHistory(input: {
   let finished = page.entries.length < 100;
   outer: for (const entry of page.entries) {
     if (entry.sequence > watermark) { finished = true; break; }
-    const projected = projectRemoteEventChunks(entry.event, entry.sequence, nextFragment);
+    const projected = projectRemoteEventChunks(await normalizeRemoteEventTurn(input.store, entry.event), entry.sequence, nextFragment);
     for (const item of projected) {
       if (entry.event.name === "turn.completed") item.artifactIds = outputs.filter(output => output.sourceTurnId === entry.event.turnId).map(output => output.id).slice(0, 100);
       const size = Buffer.byteLength(JSON.stringify(item));

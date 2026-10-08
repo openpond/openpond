@@ -100,16 +100,20 @@ export class SqliteTaskInboxStore extends SqliteHumanReviewStore {
       if (!row) throw new Error("remote_task_unavailable");
       const session = SessionSchema.parse(JSON.parse(row.payload));
       assertRemoteAdmission(db, command, session);
+      const turnRow = db.get<{ id: string; payload: string }>("SELECT id,payload FROM turns WHERE session_id=? ORDER BY sort_index DESC LIMIT 1", [session.id]);
+      const turn = turnRow ? JSON.parse(turnRow.payload) as import("@openpond/contracts").Turn : null;
+      if (!turn || turn.id !== command.expectedTurnId || turn.status !== "in_progress")
+        throw new Error("remote_turn_changed");
       const approvalRow = db.get<{ payload: string }>("SELECT payload FROM approvals WHERE id=?", [command.expectedApprovalId]);
       const approval = approvalRow ? JSON.parse(approvalRow.payload) as import("@openpond/contracts").Approval : null;
-      if (!approval || approval.status !== "pending" || approval.sessionId !== session.id || approval.turnId !== command.expectedTurnId
+      if (!approval || approval.status !== "pending" || approval.sessionId !== session.id || !approval.turnId || (approval.turnId !== turn.id && approval.turnId !== turn.providerTurnId)
         || !remoteApprovalSupported(approval)) throw new Error("remote_approval_changed_or_unsupported");
       const claim = db.get<{ command_id: string }>("SELECT command_id FROM remote_device_approval_claims WHERE approval_id=?", [approval.id]);
       if (claim) throw new Error("remote_approval_already_claimed");
       db.run("INSERT INTO remote_device_approval_claims(approval_id,command_id) VALUES(?,?)", [approval.id, command.id]);
       const receipt: RemoteCommandReceipt = { id: command.id, deviceId: command.deviceId, payloadHash: command.payloadHash,
         action: command.action, targetId: command.targetId, localSessionId: session.id, approvalId: approval.id,
-        ...(approval.turnId ? { turnId: approval.turnId } : {}), state: "admitted", revision: 2,
+        turnId: turn.id, state: "admitted", revision: 2,
         createdAt: new Date().toISOString(), expiresAt: command.deadline };
       db.run("INSERT INTO remote_device_receipts(id,payload_hash,command,receipt) VALUES(?,?,?,?)", [command.id, command.payloadHash, JSON.stringify(command), JSON.stringify(receipt)]);
       return receipt;

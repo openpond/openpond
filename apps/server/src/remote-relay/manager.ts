@@ -9,7 +9,7 @@ import { deviceOwnerKey, loadRemoteAccessPreference } from "./preference.js";
 import type { DeviceLocalOwner } from "./local-scope.js";
 import { createRemoteDeviceClient } from "./client.js";
 import { captureRemoteTaskCatalog, observeRemoteHistorySequence, remoteHistoryIncarnation, remoteHistoryGeneration } from "./catalog.js";
-import { projectRemoteEvent, projectRemoteEventChunks, readRemoteHistory } from "./history.js";
+import { projectRemoteEvent, projectRemoteEventChunks, readRemoteHistory, normalizeRemoteEventTurn } from "./history.js";
 import type { RemoteLocalAuthority } from "./admission.js";
 import { localSessionMayResolveOwnership, localSessionOwnershipRevision } from "./session-ownership.js";
 import { captureRemoteStarters } from "./starters.js";
@@ -267,7 +267,7 @@ export function createRemoteRelayManager(deps: {
           if (!deviceOwnsLocalSession(session, selected.owner)) return;
           if (event.name === "turn.completed") item.artifactIds = (await deps.outputs(session))
             .filter(output => output.sourceTurnId === event.turnId).map(output => output.id).slice(0, 100);
-          for (const part of projectRemoteEventChunks(event, event.sequence ?? 0)) {
+          for (const part of projectRemoteEventChunks(await normalizeRemoteEventTurn(deps.store, event), event.sequence ?? 0)) {
           if (item.artifactIds) part.artifactIds = item.artifactIds;
           send({ protocolVersion: 1, type: "events", taskId: session.id, payload: { historyGeneration: remoteHistoryGeneration(session), items: [part] } });
           }
