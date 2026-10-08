@@ -7,6 +7,13 @@ export async function handleSettingsRoutes({
   requestUrl,
   response,
 }: HttpRouteContext): Promise<boolean> {
+  if (requestUrl.pathname === "/v1/providers/acp-registry" && deps.acpRegistryPayload) {
+    if (request.method === "GET") sendJson(response, 200, await deps.acpRegistryPayload("list", { query: requestUrl.searchParams.get("query") ?? undefined, refresh: requestUrl.searchParams.get("refresh") === "true" }));
+    else if (request.method === "POST") sendJson(response, 201, await deps.acpRegistryPayload("register", await readJson(request)));
+    else if (request.method === "DELETE") sendJson(response, 200, await deps.acpRegistryPayload("remove", await readJson(request)));
+    else sendJson(response, 405, { error: "Method not allowed" });
+    return true;
+  }
   const planUsage = /^\/v1\/providers\/(codex|claude-code)\/plan-usage$/.exec(requestUrl.pathname);
   if (planUsage && request.method === "GET" && deps.providerPlanUsagePayload) {
     response.setHeader("Cache-Control", "no-store");

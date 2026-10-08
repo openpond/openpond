@@ -1718,11 +1718,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const definitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         let nativeRequestId: string | null = null;
-        const providerTurnId = await nativeAgents.run({ content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
-          preparePrompt: async (prompt) => {
+        const providerTurnId = await nativeAgents.run({ content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
+          preparePrompt: async (prompt, capabilities) => {
             nativeRequestId = `native-start:${turn.id}`;
             const inputs = await taskInbox.include(sessionId, turn.id, nativeRequestId);
-            return [prompt, ...inputs.filter((input) => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n");
+            return [capabilities.taskTools ? codexPromptWithHarnessContext(prompt, TASK_COORDINATION_INSTRUCTIONS) : prompt, ...inputs.filter((input) => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n");
           },
           settlePrompt: async (outcome) => {
             if (nativeRequestId) await inboxStore.settleTaskInputRequest(nativeRequestId, outcome);

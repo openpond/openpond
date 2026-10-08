@@ -37,6 +37,7 @@ export type HttpRouteDeps = {
   enclavePayload?: ReturnType<typeof import("../enclave/connection.js").createEnclaveConnection>;
   conversationLearningRequestPayload?: (request: unknown) => Promise<unknown>;
   localManagedMessaging?: ReturnType<typeof import("../runtime/task-inbox/local-managed-messaging.js").createLocalManagedMessaging>;
+  acpRegistryPayload?: (action: string, payload: unknown) => Promise<unknown>;
   nativeAgentSetupPayload?: (provider: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>;
   nativeHistoryPayload?: (action: string, payload: unknown) => Promise<unknown>;
   configuration?: ReturnType<typeof import("./configuration-payloads.js").createConfigurationPayloads>;
