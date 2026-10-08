@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-10-08T07:00:35.955344+00:00",
+  "capturedAt": "2026-10-08T07:04:39.520281+00:00",
   "source": "10a5c7d27",
   "api": "https://staging-api.openpond.ai",
   "actualPackagedProcess": true,
@@ -22,8 +22,6 @@
     "hasNextCursor": false
   },
   "pending": [
-    "web New task/start via approved private starter",
-    "packaged Off logout lifecycle",
     "authenticated native desktop UI",
     "capacity qualification owned by parent",
     "native iOS owner verification deferred"
@@ -124,11 +122,13 @@
     "webDraftSurvivedReload": true
   },
   "latestRestart": {
-    "oldServerPid": 1439126,
-    "newServerPid": 1470302,
+    "oldServerPid": 1470302,
+    "newServerPid": 1590415,
     "sameDevice": true,
     "sameSession": true,
-    "sameCodexThread": true
+    "sameCodexThread": true,
+    "sameManagedOpenPondSession": true,
+    "gracefulOldShutdown": true
   },
   "webStart": {
     "receiptId": "b938152a-24f9-4290-a91b-5e12b7b1cf63",
@@ -158,7 +158,8 @@
     "unreachableHistoricalHashesExcluded": 118,
     "stageBoundaryTests": 6,
     "inventory": "passed",
-    "runningQaPrecedesCatalogFix": true
+    "runningQaPrecedesCatalogFix": false,
+    "actualFinalArtifactRunning": true
   },
   "latestWebStart": {
     "receiptId": "7472b606-65ee-4a22-a88e-38710298b6ae",
@@ -175,5 +176,187 @@
     "initialHistoryRequiredReload": true,
     "pending": "Client bounded wait for hosted catalog publication",
     "publicTaskId": "rt_2f7f702eb4d44e1b69a202b95948d27201c1ee9b"
+  },
+  "deviceName": "Relay staging QA",
+  "qaDirectoryDeviceCount": 1,
+  "protocolVersionMismatch": {
+    "capturedAt": "2026-10-08T07:12:08.844Z",
+    "deviceId": "71b0ab12-3426-4614-8eb6-1fe1adc7a132",
+    "ticketRole": "viewer",
+    "protocolVersion": 2,
+    "frames": [
+      {
+        "type": "error",
+        "error": "invalid_frame"
+      }
+    ],
+    "rejected": true,
+    "admitted": false,
+    "commandsSent": 0,
+    "providerInvocations": 0,
+    "authorization": "fresh owner-scoped viewer ticket for QA device",
+    "deviceTicketUsed": false,
+    "deviceConnectionTakenOver": false,
+    "ticketPersisted": false,
+    "source": "live relay WebSocket, protocolVersion 2 hello rejected before authentication/admission"
+  },
+  "finalWebSteer": {
+    "capturedAt": "2026-10-08T07:20:19.348134+00:00",
+    "sessionId": "a17fcdf0-8027-4ef0-9f20-49590d8344f9",
+    "turnId": "93381342-4dff-4d95-908e-da99995b946f",
+    "status": "completed",
+    "providerTurnId": "01a11a5e-2e72-7653-abb3-9e7cfe14e9a8",
+    "modelRef": null,
+    "inputs": [
+      {
+        "id": "remote-input:29281d4f-0fa9-4937-a23e-95cb55c98106",
+        "state": "included",
+        "turnId": "93381342-4dff-4d95-908e-da99995b946f",
+        "kind": "queued",
+        "count": 1
+      },
+      {
+        "id": "remote-input:8657cfd6-6848-4dab-b1ca-22e3adbbab13",
+        "state": "resolved",
+        "turnId": "93381342-4dff-4d95-908e-da99995b946f",
+        "kind": "steer",
+        "count": 1
+      }
+    ],
+    "tools": 0,
+    "steerOutputObserved": true,
+    "outputCharacters": 18074,
+    "lastOutput": " root that reached over the leather toward its neighbor. Mara moved the pots a little closer. Then she went up to light the sea.STEER FINAL ORCHID-731",
+    "retainedCodexThreadId": "01a119f5-2e72-7f91-8ba8-4a45d1dbf73b",
+    "semantics": "Provider acknowledged active turn/steer and consumed it at next model boundary after finishing the ongoing response."
+  },
+  "finalWebStop": {
+    "capturedAt": "2026-10-08T07:21:01.184804+00:00",
+    "sessionId": "a17fcdf0-8027-4ef0-9f20-49590d8344f9",
+    "turnId": "b9bb46d9-4c9c-4d87-90fc-bd851c9dda2b",
+    "providerTurnId": "01a11a62-a30e-7a00-ad25-6cf045dcc31d",
+    "retainedCodexThreadId": "01a119f5-2e72-7f91-8ba8-4a45d1dbf73b",
+    "turnStatus": "interrupted",
+    "commands": [
+      {
+        "id": "caaf00e8-e684-48e3-bebe-84c74a46cf2f",
+        "action": "stop",
+        "receiptState": "applied",
+        "sessionId": "a17fcdf0-8027-4ef0-9f20-49590d8344f9",
+        "expectedTurnId": "b9bb46d9-4c9c-4d87-90fc-bd851c9dda2b",
+        "inputId": null,
+        "receiptTurnId": "b9bb46d9-4c9c-4d87-90fc-bd851c9dda2b"
+      },
+      {
+        "id": "c6cabda6-a2a6-4750-b5c6-4424ca7cc678",
+        "action": "follow_up",
+        "receiptState": "admitted",
+        "sessionId": "a17fcdf0-8027-4ef0-9f20-49590d8344f9",
+        "expectedTurnId": null,
+        "inputId": "remote-input:c6cabda6-a2a6-4750-b5c6-4424ca7cc678",
+        "receiptTurnId": null
+      }
+    ],
+    "inputs": [
+      {
+        "id": "remote-input:c6cabda6-a2a6-4750-b5c6-4424ca7cc678",
+        "state": "included",
+        "turnId": "b9bb46d9-4c9c-4d87-90fc-bd851c9dda2b",
+        "kind": "queued"
+      }
+    ],
+    "tools": 0,
+    "outputCharacters": 0
+  },
+  "finalManagedWebStart": {
+    "capturedAt": "2026-10-08T08:03:23.718691+00:00",
+    "commandId": "2383e0e3-d626-41c7-b5b2-787cb97acc33",
+    "receiptState": "admitted",
+    "publicTaskId": "rt_f7ff2578c94929b35971b5919564aa01686d5b3e",
+    "sessionId": "remote-session-d2046a75fe6f9f21d4e3e1823ba0b4a6db6ba79002d32a6eb5be6fc88caa2fb1",
+    "providerSessionId": "remote-session-d2046a75fe6f9f21d4e3e1823ba0b4a6db6ba79002d32a6eb5be6fc88caa2fb1",
+    "providerTurnId": "openpond-9453d001-1830-4f1a-83ab-8a5b4706ff44",
+    "turnId": "9453d001-1830-4f1a-83ab-8a5b4706ff44",
+    "status": "completed",
+    "modelRef": {
+      "providerId": "openpond",
+      "modelId": "accounts/fireworks/models/deepseek-v4p1-flash"
+    },
+    "inputCount": 1,
+    "primaryTurnCount": 1,
+    "tools": 0,
+    "output": "FINAL START ORCHID-731No workspace tool is needed here, so I am not calling one.\n\nThe assignment was a single explicit instruction: reply with the exact text and do not use tools, read files, modify files, or access the network. That request requires no inspection or change of the active workspace, so there is nothing to verify with a tool and no file change to confirm. Calling a tool would directly violate the instruction.\n\nFINAL START ORCHID-731"
+  },
+  "canonicalLifecycle": {
+    "off-restart": {
+      "capturedAt": "2026-10-08T08:07:21.958658+00:00",
+      "state": "off",
+      "enabled": false,
+      "deviceId": "71b0ab12-3426-4614-8eb6-1fe1adc7a132",
+      "serverId": "43d33c5b-e078-4242-a988-ce85b52f7afc",
+      "historyRetained": true
+    },
+    "logout-login": {
+      "capturedAt": "2026-10-08T08:09:21.087741+00:00",
+      "state": "off",
+      "enabled": false,
+      "ownerUserId": "dzdaskv4w4",
+      "logoutDetachedAuthority": true,
+      "loginRequiredWorkspaceReselection": true,
+      "sameTeamReselected": "a3v5vj0bxfyphbgihbgprm6f",
+      "providerInvocations": 0
+    },
+    "suspension": {
+      "capturedAt": "2026-10-08T08:11:20.953134+00:00",
+      "serverPid": 1693094,
+      "suspensionSecondsAtLeast": 75,
+      "method": "SIGSTOP isolated QA canonical server; not OS sleep",
+      "hostedDevice": {
+        "id": "71b0ab12-3426-4614-8eb6-1fe1adc7a132",
+        "installationId": "f86218f5-7df3-478c-a77d-c9d27c84f2ff",
+        "profileId": "8370bb775cac8a4ba8f28040f2cf737dd6d4df99d512a675216939bfa6dc1655",
+        "enabled": true,
+        "status": "offline",
+        "lastSeenAt": "2026-10-08T08:09:33.590Z",
+        "taskCount": 7
+      },
+      "providerInvocations": 0,
+      "leaseExpiryObserved": true,
+      "resume": {
+        "capturedAt": "2026-10-08T08:12:04.479748+00:00",
+        "state": "connected",
+        "enabled": true,
+        "deviceId": "71b0ab12-3426-4614-8eb6-1fe1adc7a132",
+        "ownerUserId": "dzdaskv4w4"
+      }
+    },
+    "final": {
+      "capturedAt": "2026-10-08T08:12:31.116035+00:00",
+      "processesStopped": {
+        "1693031": true,
+        "1693094": true
+      },
+      "enrolled": true,
+      "enabled": false,
+      "status": "off",
+      "deviceId": "71b0ab12-3426-4614-8eb6-1fe1adc7a132",
+      "privateHistoryPreserved": true,
+      "originalSessionRetained": true,
+      "providerInvocations": 0
+    }
+  },
+  "finalWebQualification": {
+    "hostedSource": "1ff0e6102",
+    "backendImageSha256": "1f2ae7fd87968e7fbf658eac9cb48bead1a30107f45d492135ba7fdde3bc9717",
+    "observedByRootInBrowser": {
+      "completePaginatedHistory": true,
+      "automaticSteerStopCapabilityRefresh": true,
+      "managedStartNavigationAndTerminal": true,
+      "draftReloadPreserved": true,
+      "viewport390px": true,
+      "webOffRevokedHistoryAndDisabledFollowup": true,
+      "webUnlinkRemovedComputer": true
+    },
+    "nativeUiQualified": false
   }
 }
