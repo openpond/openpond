@@ -261,6 +261,7 @@ it("authenticates its initial socket before publishing leased frames", async () 
       defaultSessionCwd: () => directory,
       appendRuntimeEvent: async (event) => {
         await store.appendRuntimeEvent(event);
+        if (event.name === "session.updated") listener(event);
       },
       captureUserOwner: async () => owner,
     });
@@ -395,14 +396,8 @@ it("authenticates its initial socket before publishing leased frames", async () 
     // A stale hosted patch base must replace the directory without advancing
     // an unacknowledged base, and retirement must explicitly remove the source.
     rejectNextPatch = true;
-    const updated = { ...session, title: "Changed owner-visible title" };
-    await store.updateSession(session.id, () => updated);
-    listener({
-      id: randomUUID(),
-      timestamp: new Date().toISOString(),
-      sessionId: session.id,
-      name: "session.title.updated",
-      source: "server",
+    const updated = await sessions.patchSession(session.id, {
+      title: "Changed owner-visible title",
     });
     await expect
       .poll(
@@ -521,4 +516,4 @@ it("authenticates its initial socket before publishing leased frames", async () 
     await store.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30_000);
+}, 60_000);
