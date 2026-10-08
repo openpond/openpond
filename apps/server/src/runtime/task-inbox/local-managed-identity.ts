@@ -1,4 +1,4 @@
-import type { Session } from "@openpond/contracts";
+import { isRegisteredAcpProvider, type Session } from "@openpond/contracts";
 
 /** OpenPond's native tool loop retains its canonical local task and event history. */
 export function localManagedSessionId(session: Session): string | null {
@@ -8,5 +8,5 @@ export function localManagedSessionId(session: Session): string | null {
 }
 
 export function localManagedProviderSupported(provider: Session["provider"]): boolean {
-  return ["openpond", "codex", "claude-code", "opencode", "grok-build"].includes(provider);
+  return isRegisteredAcpProvider(provider) || ["openpond", "codex", "claude-code", "opencode", "grok-build"].includes(provider);
 }
