@@ -25,6 +25,7 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
   const [visible, setVisible] = useState(expanded);
   const [visited, setVisited] = useState(expanded);
   const [source, setSource] = useState(false);
+  const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(visual.heights[0]?.height ?? 320);
   const identity = `${visual.publicationId}:${expanded ? "expanded" : "inline"}:${retry}`;
   const path = `/v1/sessions/${encodeURIComponent(visual.sessionId)}/visuals/${visual.publicationId}`;
@@ -35,6 +36,7 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
       // Keep a focused document alive while interacting with its controls.
       const active = Boolean(entry?.isIntersecting) || document.activeElement === frame.current;
       setVisible(active);
+      if (!active) setReady(false);
       if (active) setVisited(true);
     }, { rootMargin: "160px" });
     observer.observe(element);
@@ -57,6 +59,7 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
   }, [connection, path, retry, visited]);
   const documentSource = useMemo(() => html === null ? undefined : htmlVisualDocument(html, identity, theme()), [html, identity]);
   useEffect(() => {
+    setReady(false);
     if (!documentSource || !(visible || expanded) || source) return;
     const timeout = setTimeout(() => setError("The visual did not finish loading."), 8000);
     const receive = (event: MessageEvent) => {
@@ -67,7 +70,7 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
         return;
       }
       if (data.type !== "openpond-visual-size" || !Number.isFinite(data.height)) return;
-      clearTimeout(timeout);
+      if (data.ready === true) { clearTimeout(timeout); setReady(true); }
       setHeight(Math.max(80, Math.min(HTML_VISUAL_MAX_HEIGHT, Math.ceil(data.height))));
     };
     const sendTheme = () => frame.current?.contentWindow?.postMessage({ type: "openpond-theme", identity, theme: theme() }, "*");
@@ -92,11 +95,16 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
       <button type="button" disabled={html === null} onClick={download}>Download</button>
       {!expanded && open ? <button type="button" onClick={() => open(visual)}>Expand</button> : null}
     </div>
-    {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error ? <p className="html-visual-status" role="status">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : source ? <pre className="html-visual-source" tabIndex={0}>{html}</pre> :
+    {source ? <pre className="html-visual-source" tabIndex={0}>{html}</pre> :
       <div className="html-visual-content" style={{ minHeight: height }}>
-        {documentSource && (visible || expanded) ? <iframe ref={frame} title={visual.output.title} sandbox="allow-scripts" referrerPolicy="no-referrer"
-          allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
-          srcDoc={documentSource} style={{ height }} /> : preview ? <button className="html-visual-preview" type="button" onClick={() => setVisible(true)} aria-label={`Activate ${visual.output.title}`}><img src={preview} alt={`Saved preview of ${visual.output.title}`} style={{ maxHeight: height }} /></button> : <p className="html-visual-status" role="status">Loading visual…</p>}
+        {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error ? <p className="html-visual-status" role="status">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : <>
+          {documentSource && (visible || expanded) ? <iframe ref={frame} title={visual.output.title} sandbox="allow-scripts" referrerPolicy="no-referrer"
+            allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
+            srcDoc={documentSource} style={{ height, opacity: ready ? 1 : 0 }} /> : null}
+          {!ready ? <div className="html-visual-placeholder">
+            {preview ? <button className="html-visual-preview" type="button" onClick={() => setVisible(true)} aria-label={`Activate ${visual.output.title}`}><img src={preview} alt={`Saved preview of ${visual.output.title}`} style={{ maxHeight: height }} /></button> : <p className="html-visual-status" role="status">Loading visual…</p>}
+          </div> : null}
+        </>}
       </div>}
     {height === HTML_VISUAL_MAX_HEIGHT && !source ? <p className="html-visual-status">This visual reaches the height limit. Scroll inside it to see more.</p> : null}
   </div>;

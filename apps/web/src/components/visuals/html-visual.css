@@ -5,6 +5,8 @@
 .html-visual-toolbar button:hover, .html-visual-status button:hover { color: var(--text); }
 .html-visual-toolbar button:focus-visible, .html-visual-preview:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .html-visual-toolbar button:disabled { opacity: .45; cursor: default; }
+.html-visual-content { position: relative; }
+.html-visual-placeholder { position: absolute; inset: 0; overflow: hidden; }
 .html-visual-content iframe { display: block; width: 100%; border: 0; background: transparent; }
 .html-visual-preview { display: block; width: 100%; border: 0; padding: 0; background: transparent; cursor: pointer; }
 .html-visual-preview img { display: block; width: 100%; object-fit: contain; object-position: top; }

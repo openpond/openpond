@@ -22,7 +22,9 @@ export function htmlVisualDocument(html: string, identity: string, initialTheme:
       requestAnimationFrame(()=>{interactionPending=false;send({type:'openpond-interaction'});});
     },{passive:true});
     let queued = false, previous = 0, loaded = false, reportedReady = false;
-    function measure() { if(queued)return; queued=true; requestAnimationFrame(() => { queued=false;
+    // Initial sizing must work when the frame top is clipped: Chromium may
+    // suspend animation frames there before its child has expanded.
+    function measure() { if(queued)return; queued=true; queueMicrotask(() => { queued=false;
       const body = document.body; if(!body)return;
       const height = Math.max(80, Math.ceil(Math.max(body.getBoundingClientRect().height, body.scrollHeight)));
       if(height!==previous || (loaded && !reportedReady)) { previous=height; reportedReady=loaded; send({type:'openpond-size',height,ready:loaded}); }
@@ -43,7 +45,6 @@ export function htmlVisualDocument(html: string, identity: string, initialTheme:
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${attr(POLICY)}"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:transparent}iframe{display:block;border:0;width:100%;height:80px;color-scheme:dark}</style></head><body><iframe title="Interactive visual" sandbox="allow-scripts" referrerpolicy="no-referrer" allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"></iframe><script>(()=>{
     const frame=document.querySelector('iframe'); const identity=${json(identity)};
     const state=window.__openpondVisual={height:80,console:[],ready:false};
-    let pending=false;
     addEventListener('message', e=>{
       const d=e.data;if(!d||typeof d!=='object')return;
       if(e.source===parent && parent!==window && d.type==='openpond-theme' && d.identity===identity){frame.contentWindow.postMessage({type:'openpond-theme',theme:d.theme},'*');return;}
@@ -52,7 +53,7 @@ export function htmlVisualDocument(html: string, identity: string, initialTheme:
       if(d.type==='openpond-console' && state.console.length<40 && ['log','warn','error'].includes(d.level) && typeof d.text==='string')state.console.push({level:d.level,text:d.text.slice(0,2000)});
       if(d.type==='openpond-size' && Number.isFinite(d.height)){
         const height=Math.max(80,Math.min(${HTML_VISUAL_MAX_HEIGHT},Math.ceil(d.height)));state.height=height;if(d.ready===true)state.ready=true;
-        if(!pending){pending=true;requestAnimationFrame(()=>{pending=false;frame.style.height=state.height+'px';if(parent!==window)parent.postMessage({type:'openpond-visual-size',identity,height:state.height},'*');});}
+        frame.style.height=state.height+'px';if(parent!==window)parent.postMessage({type:'openpond-visual-size',identity,height:state.height,ready:state.ready},'*');
       }
     });
     frame.srcdoc=${json(inner)};
