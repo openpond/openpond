@@ -235,6 +235,7 @@ export type HttpRouteDeps = {
   htmlContentPreviewPayload: (payload: unknown) => Promise<{ url: string }>;
   sandboxHtmlPreviewPayload: (sandboxId: string, filePath: string | null) => Promise<{ url: string }>;
   workspaceHtmlPreviewPayload: (appId: string, filePath: string | null) => Promise<{ url: string }>;
+  resolveWorkspaceFilePayload: (appId: string, filePath: string | null) => Promise<unknown>;
   workspaceFilePayload: (
     appId: string,
     filePath: string | null

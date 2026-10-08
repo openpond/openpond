@@ -98,25 +98,22 @@ export function ActivityGroup({
     activities.length > 0 &&
     activities.every((activity) => activity.subagentMessage);
 
-  if (childMessageSummary) {
-    return (
-      <>
-        <SubagentMessageActivityGroup activities={activities} />
-        <RefinerActivityRow activity={message.refinerActivity} />
-      </>
-    );
+  const hasDetails = presentation.toolCount > 0 || Boolean(message.refinerActivity);
+
+  if (childMessageSummary && !message.refinerActivity) {
+    return <SubagentMessageActivityGroup activities={activities} />;
   }
 
   return (
     <>
-      {activities.length > 0 || artifacts.length > 0 ? (
+      {activities.length > 0 || artifacts.length > 0 || message.refinerActivity ? (
         <article
           className={`activity-group work-trace ${running ? "running" : "settled"}`}
         >
-          {activities.length > 0 ? (
+          {activities.length > 0 || message.refinerActivity ? (
             <div className="activity-summary-row">
               <ChatActivitySummary
-                controls={presentation.toolCount > 0 ? toolListId : undefined}
+                controls={hasDetails ? toolListId : undefined}
                 danger={danger}
                 expanded={presentation.toolsExpanded}
                 icon={
@@ -131,13 +128,13 @@ export function ActivityGroup({
                   )
                 }
                 onToggle={
-                  presentation.toolCount > 0
+                  hasDetails
                     ? () => setToolsExpanded((current) => !current)
                     : undefined
                 }
                 running={running}
               >
-                {summaryText}
+                {summaryText || "Worked"}
               </ChatActivitySummary>
               {summaryOpenSessions.length > 0 && onOpenSession ? (
                 <SubagentAvatarGroup
@@ -155,7 +152,7 @@ export function ActivityGroup({
               onOpenFileInSidebar={onOpenFileInSidebar}
             />
           ) : null}
-          {presentation.visibleActivities.length > 0 ? (
+          {toolsExpanded && hasDetails ? (
             <div className="work-trace-flow" id={toolListId}>
               {presentation.visibleActivities.map((activity) => (
                 <ActivityToolRow
@@ -167,6 +164,7 @@ export function ActivityGroup({
                   onOpenSession={onOpenSession}
                 />
               ))}
+              <RefinerActivityRow activity={message.refinerActivity} />
             </div>
           ) : null}
           <ImageLightbox
@@ -177,7 +175,6 @@ export function ActivityGroup({
           />
         </article>
       ) : null}
-      <RefinerActivityRow activity={message.refinerActivity} />
     </>
   );
 }
