@@ -283,12 +283,12 @@ async function verifyDesktopNavigation(cdp: CdpClient): Promise<{
     DEFAULT_TIMEOUT_MS,
     "Apps did not render after keyboard navigation."
   );
-  await selectDesktopDestination(cdp, "Console");
+  await selectDesktopDestination(cdp, "Training");
   await waitFor(
     () => evaluateValue<boolean>(cdp,
       `Boolean(document.querySelector("[aria-label='Models']"))`),
     DEFAULT_TIMEOUT_MS,
-    "Console controls did not render after keyboard navigation."
+    "Training controls did not render after keyboard navigation."
   );
   await selectDesktopDestination(cdp, "Home");
   await selectTaskMode(cdp, "work", "Work");
@@ -324,8 +324,8 @@ async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<
       const button = document.querySelector(
         ${JSON.stringify(`nav[aria-label="Desktop destinations"] button[aria-label="${label}"]`)}
       );
-      return button?.getAttribute(${JSON.stringify(label === "Console" ? "aria-expanded" : "aria-current")}) ===
-        ${JSON.stringify(label === "Console" ? "true" : "page")};
+      return button?.getAttribute(${JSON.stringify(label === "Training" ? "aria-expanded" : "aria-current")}) ===
+        ${JSON.stringify(label === "Training" ? "true" : "page")};
     })()`),
     5_000,
     `${label} did not become the active destination.`
