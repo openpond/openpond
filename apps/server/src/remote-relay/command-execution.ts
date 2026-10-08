@@ -95,3 +95,68 @@ export async function executeRemoteCommand(input: {
     } });
   }
 }
+
+/** Receipt queries capture pending execution before asynchronous SQLite reads. */
+export async function readRemoteCommandReceiptQuery(options: {
+  request: { commandId: string; payloadHash: string };
+  requestId: RemoteDeviceFrame["requestId"];
+  store: RemoteRelayDependencies["store"];
+  pending(commandId: string, payloadHash: string): boolean;
+  current(): boolean;
+}): Promise<RemoteDeviceFrame | null> {
+  const { request, requestId, store, pending, current } = options;
+  // Capture before SQLite reads: an active job may commit and settle
+  // while those reads still return their earlier absent input/receipt.
+  const pendingExecution = pending(request.commandId, request.payloadHash);
+  const receipt = await store.getRemoteDeviceReceipt(
+    request.commandId,
+  );
+  if (!current()) return null;
+  const input = await store.getTaskInput(
+    `remote-input:${request.commandId}`,
+  );
+  if (!current()) return null;
+  const admitted = input?.payload.remoteDevice as
+    | RemoteDispatchCommand
+    | undefined;
+  const cancellation = await store.getRemoteDeviceCancellation(
+    request.commandId,
+  );
+  if (!current()) return null;
+  if (cancellation && cancellation.payload_hash !== request.payloadHash)
+    throw new Error("remote_command_identity_changed");
+  if (
+    (receipt && receipt.payloadHash !== request.payloadHash) ||
+    (admitted && admitted.payloadHash !== request.payloadHash)
+  )
+    throw new Error("remote_command_identity_changed");
+  return {
+    protocolVersion: 1,
+    type: "receipt_query_result",
+    requestId,
+    payload: {
+      commandId: request.commandId,
+      payloadHash: request.payloadHash,
+      receipt:
+        receipt ??
+        (input && admitted
+          ? {
+              id: admitted.id,
+              deviceId: admitted.deviceId,
+              state: "admitted",
+              revision: 2,
+              payloadHash: admitted.payloadHash,
+              action: admitted.action,
+              targetId: admitted.targetId,
+              localSessionId: input.sessionId,
+              inputId: input.id,
+              turnId: input.turnId,
+              createdAt: input.createdAt,
+              expiresAt: admitted.deadline,
+            }
+          : null),
+      notAdmitted: !receipt && !input && !pendingExecution,
+      cancelled: !!cancellation,
+    },
+  };
+}
