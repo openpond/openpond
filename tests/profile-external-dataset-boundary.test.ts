@@ -4,7 +4,7 @@ import os from "node:os";
 import {afterEach,expect,it,vi} from "vitest";
 import {contentHash,sha256} from "@openpond/harness";
 import {AgentHostStorageClient} from "@openpond/agent-runtime";
-import {createProfileExternalDatasetBinding,externalDatasetDefinitionId,createProfileEvaluationComparison,createVerifierSetRelease,type TasksetRunManifest} from "@openpond/evals";
+import {createProfileExternalDatasetBinding,externalDatasetDefinitionId,createProfileEvaluationComparison,createVerifierSetRelease,createTasksetRunManifest,type TasksetRunManifest} from "@openpond/evals";
 import {createTasksetPackage} from "openpond-sdk/taskset-packages";
 import {materializePortableTasksetRelease} from "../packages/taskset-sdk/src";
 import {tasksetFixture} from "./helpers/training-fixtures";
@@ -51,6 +51,14 @@ it("executes the selected ordered external population against two actual compile
   await writeFile(path.join(companionDir,externalDatasetPackage),JSON.stringify({packageValue:value,graders}));
   const cold=await prepareHostedProfileEvaluation({compile:{repoPath,profileId:"team",repositoryId:"owned-repository",sourceRevision:contentHash(`accepted-${kind}`),workspaceId:`companion-${kind}`,outputDir:companionDir},externalDatasetPackage,action:"prepare",request:{id:`cold-${kind}`,createdAt:"2026-10-01T00:00:00.000Z",definitionId:externalDatasetDefinitionId(binding),externalDatasetBinding:binding,modelRef:{providerId:"openpond",modelId:"fixture-unpaid"},hostModelConfigurationHash:configHash,maximumSpendUsd:0.02}}) as {manifest:TasksetRunManifest};
   expect(cold.manifest.population.map(row=>[row.taskId,row.seed])).toEqual([["task_b","seed-b"],["task_a","seed-a"]]);expect(cold.manifest.limits.maximumSpendUsd).toBe(0.02);expect(cold.manifest.packageHash).toBe(value.contentHash);
+  // Admission must seal lineage without changing the compiler-authorized
+  // population, source, grading or budget. Compare with actual cold preparation
+  // so a change in Native's manifest contract cannot silently drift at the API.
+  const hostExperiment={definition:{id:"rfq-comparison",revision:1,contentHash:contentHash("owned-definition")},configurationHash:contentHash("owned-experiment")};
+  const attributed=await prepareHostedProfileEvaluation({compile:{repoPath,profileId:"team",repositoryId:"owned-repository",sourceRevision:contentHash(`accepted-${kind}`),workspaceId:`companion-${kind}`,outputDir:companionDir},externalDatasetPackage,action:"prepare",request:{id:cold.manifest.id,createdAt:cold.manifest.createdAt,definitionId:externalDatasetDefinitionId(binding),externalDatasetBinding:binding,modelRef:{providerId:"openpond",modelId:"fixture-unpaid"},hostModelConfigurationHash:configHash,maximumSpendUsd:0.02,hostExperiment}}) as {manifest:TasksetRunManifest};
+  const {contentHash:_coldHash,...qualifiedManifest}=cold.manifest;
+  const sealed=createTasksetRunManifest({...qualifiedManifest,metadata:{...qualifiedManifest.metadata,experimentDefinition:hostExperiment.definition,experimentConfigurationHash:hostExperiment.configurationHash}});
+  expect(sealed.contentHash).toBe(attributed.manifest.contentHash);
   const server=await createOpenPondAppServer({...options,profileExternalDataset:{binding,packageValue:value,graders},profileExternalDatasetClient:host});close.push(server.close);
   const prepared=await server.runtime.profileEvaluationPrepare({id:kind,createdAt:"2026-10-01T00:00:00.000Z",definitionId:externalDatasetDefinitionId(binding),externalDatasetBinding:binding,modelRef:{providerId:"openpond",modelId:"fixture-unpaid"},hostModelConfigurationHash:configHash}) as {manifest:TasksetRunManifest};
   expect(prepared.manifest.population.map(row=>[row.taskId,row.seed])).toEqual([["task_b","seed-b"],["task_a","seed-a"]]);

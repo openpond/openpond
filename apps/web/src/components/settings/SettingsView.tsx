@@ -261,6 +261,15 @@ export function SettingsView({
   } as CSSProperties;
   const harnessSectionActive = HARNESS_SECTIONS.has(section);
   const harnessSidebarVisible = harnessSectionActive && harnessDiffOpen && harnessDiffSelection;
+  const remoteAccessScopeKey = JSON.stringify([
+    payload?.profile.activeProfile,
+    payload?.account.activeProfile,
+    payload?.account.baseUrl,
+    payload?.account.apiBaseUrl,
+    payload?.account.profile?.id,
+    payload?.account.state,
+    payload?.preferences.defaultTeamId ?? null,
+  ]);
 
   return (
     <div
@@ -392,7 +401,7 @@ export function SettingsView({
         ) : section === "editor" ? (
           <EditorSettingsSection preferences={preferences} {...editorSettings} />
         ) : section === "remote" ? (
-          <><AccountRemoteAccessSettings connection={connection} onError={onError} />
+          <><AccountRemoteAccessSettings key={remoteAccessScopeKey} connection={connection} onError={onError} />
             <details><summary>Direct Tailscale access</summary><RemoteAccessSettingsSection {...remoteAccessSettings} /></details></>
         ) : section === "usage" ? (
           <Suspense fallback={<div className="usage-load-state">Loading activity…</div>}>
