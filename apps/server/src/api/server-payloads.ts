@@ -1,3 +1,6 @@
+import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
+import { z } from "zod";
+import { createAcpRegistrationService } from "../runtime/native-agents/acp-registrations.js";
 import { withUrlModels } from "../enclave/provider.js";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
@@ -1820,6 +1823,7 @@ export function createServerPayloads(deps: {
     providerSettingsPayload,
     nativeHistoryPayload,
     providerPlanUsagePayload,
+    acpRegistryPayload: createAcpRegistrationService(providersFilePath, providerSettingsPayload),
     nativeAgentSetupPayload: async (provider: string, payload: unknown, signal?: AbortSignal) => {
       const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
       if (provider === "codex") {
@@ -1837,8 +1841,19 @@ export function createServerPayloads(deps: {
       const file = await loadProvidersFile();
       if (input.action === "login") {
         const launch = nativeAgentLaunch(provider, file.providers[provider]);
+        if (isRegisteredAcpProvider(provider)) throw new Error("Choose an advertised ACP authentication method to sign in.");
         const definition = NATIVE_AGENTS[provider];
         return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { [definition.homeVariable]: launch.sourceHome }) };
+      }
+      if (isRegisteredAcpProvider(provider) && input.action === "authenticate") {
+        const authMethodId = z.string().min(1).max(200).parse(input.authMethodId);
+        const result = await probeNativeAgent(provider, file.providers[provider], { signal, force: true, authMethodId });
+        if (result.status === "ready") await updateProvidersFile(providersFilePath, current => {
+          const config = current.providers[provider];
+          if (!config?.acp || nativeAgentLaunch(provider, config).instanceId !== result.instanceId) throw new Error("Provider changed during authentication.");
+          return mergeProviderConfigPatch({ value: current, providerId: provider, patch: { acp: { ...config.acp, authMethodId } }, updatedAt: now() });
+        });
+        return { ...result, settings: await providerSettingsPayload({ refreshCatalog: false }) };
       }
       const result = await probeNativeAgent(provider, file.providers[provider], { signal, force: input.action !== "capabilities", authMethodId: typeof input.authMethodId === "string" ? input.authMethodId : undefined });
       const settings = await providerSettingsPayload({ refreshCatalog: false });

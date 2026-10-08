@@ -264,3 +264,15 @@
 .url-model-connections h2 { font-size: 16px; margin: 0 0 6px; }
 .url-model-field .dropdown-trigger { width: 100%; justify-content: space-between; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
 .url-model-field .dropdown-menu { background: var(--panel); color: var(--text); }
+
+.acp-agent-browser { margin: 20px 0; }
+.acp-agent-browser h2 { font-size: 16px; margin: 0 0 10px; }
+.acp-browser-tabs, .acp-registry-search { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.acp-registry-search label { flex: 1; }
+.acp-registry-list { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; margin: 10px 0; }
+.acp-registry-entry { display: grid; gap: 5px; text-align: left; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: inherit; cursor: pointer; }
+.acp-registry-entry[aria-pressed="true"] { border-color: var(--accent); }
+.acp-registry-entry span, .acp-registry-entry small { font-size: 12px; color: var(--muted); }
+.acp-install-summary { display: grid; gap: 10px; padding: 12px 0; }
+.acp-install-summary code { overflow-wrap: anywhere; font-size: 12px; }
+.acp-agent-browser textarea { min-height: 60px; font-family: monospace; }

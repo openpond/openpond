@@ -1,10 +1,11 @@
+import { acpSessionCatalog } from "./session-controls.js";
 import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { AcpClient } from "@openpond/agent-runtime/acp/client";
 import { ClaudeCliClient } from "@openpond/agent-runtime/acp/claude-cli-client";
 import { type AcpSessionResult } from "@openpond/agent-runtime/acp/types";
-import { ProviderModelSchema, type ProviderSettings, type ProviderConfig } from "@openpond/contracts/providers";
+import { ProviderModelSchema, isRegisteredAcpProvider, type ProviderSettings, type ProviderConfig } from "@openpond/contracts/providers";
 import { isNativeAgentId, NATIVE_AGENTS, nativeAgentLaunch, type NativeAgentId } from "./config.js";
 import { createNativeCapabilityProbe } from "./capability-probes.js";
 
@@ -30,11 +31,11 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
   const active = probing.get(launch.instanceId);
   if (active && !options.signal) return active;
   const operation = (async () => {
-    const definition = NATIVE_AGENTS[provider];
+    const definition = isRegisteredAcpProvider(provider) ? { installUrl: config?.acp?.installUrl ?? "", login: [] } : NATIVE_AGENTS[provider];
     const result: NativeAgentSetupResult = { provider, status: "unavailable", instanceId: launch.instanceId, version: null, error: null, installUrl: definition.installUrl, loginCommand: definition.login, authMethods: [], capabilities: null, session: null };
     const Client = provider === "claude-code" ? ClaudeCliClient : AcpClient;
-    const client = new Client({ ...launch, cwd: homedir(), requestTimeoutMs: 15_000 });
-    const deadline = AbortSignal.timeout(40_000);
+    const client = new Client({ ...launch, cwd: homedir(), requestTimeoutMs: options.authMethodId ? 180_000 : 15_000 });
+    const deadline = AbortSignal.timeout(options.authMethodId ? 180_000 : 40_000);
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
     let stopping: Promise<void> | undefined;
     const stop = () => stopping ??= client.stop();
@@ -66,10 +67,11 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       result.version ??= info.agentInfo?.version ?? null;
       result.authMethods = info.authMethods ?? [];
       result.capabilities = info.agentCapabilities ?? null;
-      if (options.authMethodId) await client.authenticate(options.authMethodId);
+      const authMethodId = options.authMethodId ?? config?.acp?.authMethodId;
+      if (authMethodId) await client.authenticate(authMethodId);
       else if (provider === "grok-build" && info.authMethods?.some((method) => method.id === "cached_token")) await client.authenticate("cached_token");
       signal.throwIfAborted();
-      result.session = await createNativeCapabilityProbe(provider, launch.sourceHome, () => client.createSession(homedir()));
+      result.session = acpSessionCatalog(await createNativeCapabilityProbe(provider, launch.sourceHome, () => client.createSession(homedir())));
       signal.throwIfAborted();
       result.status = "ready";
     } catch (error) {
