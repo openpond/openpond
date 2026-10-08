@@ -4,7 +4,7 @@ import type {
   AppPreferences,
   RemoteAccessAccountStatus,
 } from "@openpond/contracts";
-import { createCapturedOpenPondPublicApiClient } from "../openpond/sandboxes.js";
+import { createCapturedOpenPondPublicApiClient } from "../openpond/account-public-api-client.js";
 import { deviceLocalOwner } from "./local-scope.js";
 
 export function remoteRelayAccount(
@@ -13,9 +13,9 @@ export function remoteRelayAccount(
 ) {
   return async () => {
     const context = await loadAuthenticatedOpenPondAccountContext();
-    const teamId = (await preferences()).defaultTeamId;
-    if (!teamId || context.accountState.state !== "signed_in") return null;
-    const client = createCapturedOpenPondPublicApiClient(context, teamId);
+    const teamId = (await preferences()).defaultTeamId?.trim() || null;
+    if (context.accountState.state !== "signed_in") return null;
+    const client = createCapturedOpenPondPublicApiClient(context, teamId ?? undefined);
     const owner = deviceLocalOwner(
       context,
       installationId,
@@ -39,7 +39,7 @@ export async function remoteRelayAccountStatus(
 ): Promise<RemoteAccessAccountStatus> {
   const context = await loadAuthenticatedOpenPondAccountContext();
   const account = context.accountState;
-  const teamId = (await preferences()).defaultTeamId;
+  const teamId = (await preferences()).defaultTeamId?.trim() || null;
   const signedIn = account.state === "signed_in" && !!account.profile?.id;
   const baseUrl = account.activeProfile?.baseUrl ?? account.baseUrl;
   let webBaseUrl: string | null = null;
@@ -54,7 +54,7 @@ export async function remoteRelayAccountStatus(
     webBaseUrl = registeredWebOrigins[url.origin] ?? null;
   }
   return {
-    state: !signedIn ? "signed_out" : !teamId ? "workspace_required" : "ready",
+    state: signedIn ? "ready" : "signed_out",
     account: signedIn
       ? { id: account.profile!.id!, label: account.label }
       : null,

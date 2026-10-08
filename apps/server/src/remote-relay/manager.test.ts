@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
@@ -10,10 +10,12 @@ import { SqliteStore } from "../store/store.js";
 import { createSessionStore } from "../store/session-store.js";
 import { loadDeviceInstallation } from "./installation.js";
 import { createRemoteRelayManager } from "./manager.js";
+import { deviceOwnerKey, loadRemoteAccessPreference } from "./preference.js";
+import { createAccountAuthorityChange } from "../runtime/account-authority-change.js";
 
 // A broker rejects null pre-authentication epoch/fence fields. The desktop must
 // finish its first authenticated hello and publish a catalog over the real socket.
-it("authenticates its initial socket before publishing leased frames", async () => {
+it.each([null, "team"])("authenticates its %s socket before publishing leased frames", async teamId => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "remote-manager-"));
   const store = new SqliteStore(directory);
   const installation = await loadDeviceInstallation(directory);
@@ -149,12 +151,12 @@ it("authenticates its initial socket before publishing leased frames", async () 
       }
     }),
   );
-  const owner = {
+  let owner = {
     version: 1 as const,
     installationId: installation.installationId,
     profileId: "profile",
     ownerUserId: "owner",
-    teamId: "team",
+    teamId,
     audience: "https://fixture.invalid",
   };
   const manager = createRemoteRelayManager({
@@ -164,7 +166,7 @@ it("authenticates its initial socket before publishing leased frames", async () 
     accountStatus: async () => ({
       state: signedIn ? "ready" : "signed_out",
       account: signedIn ? { id: "owner", label: "Fixture owner" } : null,
-      team: signedIn ? { id: "team" } : null,
+      team: signedIn && owner.teamId ? { id: owner.teamId } : null,
       webBaseUrl: "https://staging.openpond.ai",
     }),
     current: async () =>
@@ -173,6 +175,7 @@ it("authenticates its initial socket before publishing leased frames", async () 
             owner,
             credentialKey: "credential",
             request: async ({ path: route, body }) => {
+              if (body) expect((body as { proof: { scope: { teamId: string | null } } }).proof.scope.teamId).toBe(owner.teamId);
               if (route.endsWith("enroll")) return { device: enrolled };
               if (route.endsWith("service-keys"))
                 return {
@@ -270,6 +273,7 @@ it("authenticates its initial socket before publishing leased frames", async () 
       title: "Owned history",
       cwd: directory,
     });
+    const unowned = await sessions.createSession({ provider: "codex", title: "Unresolved ownership", cwd: directory });
     const connection = [...server.clients][0]!;
     connection.send(
       JSON.stringify({
@@ -505,6 +509,52 @@ it("authenticates its initial socket before publishing leased frames", async () 
     await expect(manager.settings("retry")).rejects.toThrow(
       "remote_access_off",
     );
+    // Account scope changes revoke the old socket before saving preferences.
+    // Reconnects wait for persistence. Off follows the account/profile across
+    // personal and workspace selection while task/device identities stay scoped.
+    const originalOwner = owner;
+    const changeAuthority = createAccountAuthorityChange({
+      before: manager.beforeAuthorityChange,
+      after: () => manager.afterAuthorityChange(),
+    });
+    const previousHellos = received.filter(frame => frame.type === "hello").length;
+    await changeAuthority(async () => {
+      manager.wake();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      await expect(manager.settings("status")).rejects.toThrow("remote_account_changing");
+      expect(received.filter(frame => frame.type === "hello")).toHaveLength(previousHellos);
+      owner = { ...owner, teamId: teamId === null ? "team" : null };
+    });
+    await expect.poll(() => manager.status().state, { timeout: 3000 }).toBe("off");
+    expect(received.filter(frame => frame.type === "hello")).toHaveLength(previousHellos);
+    expect(manager.status().owner?.teamId).toBe(owner.teamId);
+    const reopened = await loadRemoteAccessPreference(directory);
+    expect(reopened.enabled(originalOwner)).toBe(false);
+    expect(reopened.enabled(owner)).toBe(false);
+    expect(reopened.enabled({ ...owner, ownerUserId: "other-account" })).toBe(true);
+    expect(reopened.enabled({ ...owner, profileId: "other-profile" })).toBe(true);
+    // The existing active-scope Off entry is promoted once when captured, so an
+    // upgrade does not accidentally turn on personal access after a scope change.
+    const preferenceFile = path.join(directory, "remote-relay", "preference.json");
+    const previousPreference = JSON.parse(await readFile(preferenceFile, "utf8"));
+    await writeFile(preferenceFile, JSON.stringify({ ...previousPreference, disabled: [deviceOwnerKey(originalOwner)] }));
+    const upgraded = await loadRemoteAccessPreference(directory);
+    await upgraded.capture(originalOwner);
+    expect((await loadRemoteAccessPreference(directory)).enabled(owner)).toBe(false);
+    await manager.setEnabled(true);
+    await expect.poll(() => manager.status().state, { timeout: 3000 }).toBe("connected");
+    await expect.poll(() => {
+      const catalogs = received.filter(frame => frame.type === "catalog" && frame.payload.complete);
+      return catalogs[catalogs.length - 1]?.payload.tasks.length;
+    }, { timeout: 3000 }).toBe(0);
+    expect((await loadRemoteAccessPreference(directory)).enabled(originalOwner)).toBe(true);
+    expect((await store.getSession(session.id))?.metadata?.ponderLocalOwner).toEqual(originalOwner);
+    expect((await store.getSession(unowned.id))?.metadata?.ponderLocalOwner).toBeUndefined();
+    await expect(changeAuthority(async () => { throw new Error("Preference save failed"); })).rejects.toThrow("Preference save failed");
+    await expect.poll(() => manager.status().state, { timeout: 3000 }).toBe("connected");
+    await manager.setEnabled(false);
+    await changeAuthority(async () => { owner = originalOwner; });
+    await expect.poll(() => manager.status().state, { timeout: 3000 }).toBe("off");
     signedIn = false;
     expect(
       ((await manager.settings("status")) as { state: string }).state,

@@ -1,11 +1,16 @@
 import { createHash } from "node:crypto";
-import { ponderDesktopRequestContent, type Session } from "@openpond/contracts";
+import { canonicalRequestContent, type Session } from "@openpond/contracts";
 import { localManagedTargetRevision } from "../runtime/task-inbox/target-revision.js";
 import { localManagedSessionId } from "../runtime/task-inbox/local-managed-identity.js";
 import { isCodexHistorySessionId } from "../codex-history.js";
 
+/** The persisted identity domain stays stable for already-reserved local work. */
+function localSessionIdentityHash(value: unknown) {
+  return createHash("sha256").update(canonicalRequestContent("POST", "/ponder/desktop/catalog", value)).digest("hex");
+}
+
 export function localSessionOwnershipRevision(session: Session, latestTurnId: string | null) {
-  return createHash("sha256").update(ponderDesktopRequestContent("POST", "/ponder/desktop/catalog", {
+  return localSessionIdentityHash({
     managedRevision: localManagedTargetRevision(session, latestTurnId),
     modelRef: session.modelRef ?? null,
     profile: session.currentProfile ?? null,
@@ -15,7 +20,27 @@ export function localSessionOwnershipRevision(session: Session, latestTurnId: st
     owner: session.metadata?.ponderLocalOwner ?? null,
     projectRevision: session.metadata?.ponderWorkspaceRevision ?? null,
     commandAccessMode: session.openPondCommandAccessMode,
-  })).digest("hex");
+  });
+}
+
+/** Shared reserved-session configuration fence; independent of caller authority. */
+export function localSessionConfigurationRevision(session: Session) {
+  return localSessionIdentityHash({
+    provider: session.provider,
+    modelRef: session.modelRef ?? null,
+    experience: session.experience,
+    profile: session.currentProfile ?? null,
+    workflow: session.profileWorkflowBinding ?? null,
+    component: session.profileComponentBinding ?? null,
+    cwd: session.cwd,
+    workspaceKind: session.workspaceKind ?? null,
+    workspaceId: session.workspaceId ?? null,
+    localProjectId: session.localProjectId ?? null,
+    cloudProjectId: session.cloudProjectId ?? null,
+    owner: session.metadata?.ponderLocalOwner ?? null,
+    projectRevision: session.metadata?.ponderWorkspaceRevision ?? null,
+    commandAccessMode: session.openPondCommandAccessMode,
+  });
 }
 
 

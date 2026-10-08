@@ -984,7 +984,7 @@ it("serializes desktop authority with canonical local input admission and restar
       owner,
     };
     let attachmentOwnerCurrent = true;
-    const staleAttachment = store.attachPonderSessionOwner({
+    const staleAttachment = store.attachLocalSessionOwner({
       ...attachment,
       assertCurrent: () => {
         if (!attachmentOwnerCurrent) throw new Error("ponder_desktop_attach_session_owner_changed");
@@ -994,8 +994,8 @@ it("serializes desktop authority with canonical local input admission and restar
     await expect(staleAttachment).rejects.toThrow("ponder_desktop_attach_session_owner_changed");
     expect((await store.getSession(unknown.id))?.metadata?.ponderLocalOwner).toBeUndefined();
     const attached = await Promise.all([
-      store.attachPonderSessionOwner(attachment),
-      other.attachPonderSessionOwner(attachment),
+      store.attachLocalSessionOwner(attachment),
+      other.attachLocalSessionOwner(attachment),
     ]);
     expect(
       attached.every(
@@ -1005,7 +1005,7 @@ it("serializes desktop authority with canonical local input admission and restar
       ),
     ).toBe(true);
     await expect(
-      other.attachPonderSessionOwner({
+      other.attachLocalSessionOwner({
         ...attachment,
         owner: { ...owner, ownerUserId: "foreign-owner" },
       }),

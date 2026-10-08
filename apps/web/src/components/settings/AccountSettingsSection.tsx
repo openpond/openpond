@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
 import { ExternalLink, Plus, RefreshCw, Settings } from "../icons";
 import { api, type ClientConnection, type PreferencesPayload } from "../../api";
@@ -13,7 +13,6 @@ import type { SaveOpenPondAccountInput } from "./useAccountSettings";
 import type { DropdownOption } from "../../lib/app-models";
 import {
   normalizeOpenPondOrganization,
-  resolveDefaultOpenPondOrganization,
 } from "../../lib/cloud-project-utils";
 import {
   openPondOrganizationRoleLabel,
@@ -79,12 +78,11 @@ export function AccountSettingsSection({
   const [organizationsError, setOrganizationsError] = useState<string | null>(
     null
   );
-  const [savingDefaultTeamId, setSavingDefaultTeamId] = useState<string | null>(
-    null
-  );
+  const [savingDefaultTeam, setSavingDefaultTeam] = useState(false);
   const [pendingDefaultTeamId, setPendingDefaultTeamId] = useState<
-    string | null
-  >(null);
+    string | null | undefined
+  >(undefined);
+  const preferenceScope = useRef(0);
   const [endpointDialogAccount, setEndpointDialogAccount] =
     useState<AccountRow | null>(null);
   const [addAccountDialogOpen, setAddAccountDialogOpen] =
@@ -103,7 +101,7 @@ export function AccountSettingsSection({
   const activeCandidate =
     accounts.find((candidate) => candidate.isActive) ?? accounts[0] ?? null;
   const defaultTeamId = payload?.preferences.defaultTeamId?.trim() || null;
-  const visibleDefaultTeamId = pendingDefaultTeamId ?? defaultTeamId;
+  const visibleDefaultTeamId = pendingDefaultTeamId === undefined ? defaultTeamId : pendingDefaultTeamId;
   const organizationCacheKey = openPondOrganizationCacheKey(account);
   const accountRefreshKey = payload?.accountMeta.asOf ?? "";
   const activeEnvironment = firstPresentText(
@@ -139,39 +137,28 @@ export function AccountSettingsSection({
       organizations.filter((organization) => organization.status === "active"),
     [organizations]
   );
-  const persistedDefaultOrganization = useMemo(
-    () =>
-      visibleDefaultTeamId
-        ? activeOrganizations.find(
-            (organization) => organization.teamId === visibleDefaultTeamId
-          ) ?? null
-        : null,
-    [activeOrganizations, visibleDefaultTeamId]
-  );
-  const selectedDefaultOrganization =
-    persistedDefaultOrganization ??
-    resolveDefaultOpenPondOrganization(activeOrganizations);
-  const selectedDefaultTeamId = selectedDefaultOrganization?.teamId ?? "";
   const teamOptions = useMemo<DropdownOption[]>(() => {
-    return activeOrganizations.map((organization) => ({
-      value: organization.teamId,
-      label: firstPresentText(
-        organization.displayName,
-        organization.name,
-        organization.slug,
-        "Team"
-      ),
-      description: openPondOrganizationRoleLabel(organization.role),
-    }));
-  }, [activeOrganizations]);
-  const teamDropdownValue =
-    selectedDefaultTeamId || teamOptions[0]?.value || "";
-  const showTeamControl = teamOptions.length > 0;
+    const choices = [
+      { value: "", label: "Personal account", description: "Your personal tasks and computers" },
+      ...activeOrganizations.map((organization) => ({
+        value: organization.teamId,
+        label: firstPresentText(
+          organization.displayName,
+          organization.name,
+          organization.slug,
+          "Team"
+        ),
+        description: openPondOrganizationRoleLabel(organization.role),
+      })),
+    ];
+    if (visibleDefaultTeamId && !choices.some(choice => choice.value === visibleDefaultTeamId))
+      choices.push({ value: visibleDefaultTeamId, label: "Selected workspace", description: visibleDefaultTeamId });
+    return choices;
+  }, [activeOrganizations, visibleDefaultTeamId]);
+  const teamDropdownValue = visibleDefaultTeamId ?? "";
   const teamDropdownDisabled =
     !connection ||
-    Boolean(savingDefaultTeamId) ||
-    Boolean(organizationsError) ||
-    activeOrganizations.length === 0;
+    savingDefaultTeam;
   const endpointDialogKey = endpointDialogAccount
     ? accountListKey(endpointDialogAccount)
     : null;
@@ -267,30 +254,39 @@ export function AccountSettingsSection({
   }, [accountRefreshKey, connection, organizationCacheKey]);
 
   useEffect(() => {
-    if (pendingDefaultTeamId && defaultTeamId === pendingDefaultTeamId) {
-      setPendingDefaultTeamId(null);
+    ++preferenceScope.current;
+    setPendingDefaultTeamId(undefined);
+    setSavingDefaultTeam(false);
+    return () => { ++preferenceScope.current; };
+  }, [connection, organizationCacheKey]);
+
+  useEffect(() => {
+    if (pendingDefaultTeamId !== undefined && defaultTeamId === pendingDefaultTeamId) {
+      setPendingDefaultTeamId(undefined);
     }
   }, [defaultTeamId, pendingDefaultTeamId]);
 
   async function setDefaultTeamId(
-    teamId: string,
+    value: string,
     options: { notify: boolean } = { notify: true }
   ) {
+    const teamId = value || null;
     const organization =
       activeOrganizations.find((candidate) => candidate.teamId === teamId) ??
       null;
     if (
       !connection ||
-      !organization ||
-      savingDefaultTeamId ||
-      (pendingDefaultTeamId ?? defaultTeamId) === organization.teamId
+      (teamId !== null && !organization) ||
+      savingDefaultTeam ||
+      visibleDefaultTeamId === teamId
     )
       return;
-    setPendingDefaultTeamId(organization.teamId);
-    setSavingDefaultTeamId(organization.teamId);
+    setPendingDefaultTeamId(teamId);
+    setSavingDefaultTeam(true);
+    const scope = preferenceScope.current;
     onError(null);
-    void preloadSandboxAgents({
-      teamId: organization.teamId,
+    if (teamId) void preloadSandboxAgents({
+      teamId,
       accountKey: organizationCacheKey,
       force: true,
       fetchAgents: async (nextTeamId) => {
@@ -301,17 +297,16 @@ export function AccountSettingsSection({
       },
     }).catch(() => undefined);
     try {
-      onPreferences(
-        await api.savePreferences(connection, {
-          defaultTeamId: organization.teamId,
-        })
-      );
-      if (options.notify) onToast?.("Default team updated", "success");
+      const saved = await api.savePreferences(connection, { defaultTeamId: teamId });
+      if (scope !== preferenceScope.current) return;
+      onPreferences(saved);
+      if (options.notify) onToast?.(teamId ? "Workspace selected" : "Personal account selected", "success");
     } catch (caught) {
-      setPendingDefaultTeamId(null);
+      if (scope !== preferenceScope.current) return;
+      setPendingDefaultTeamId(undefined);
       onError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      setSavingDefaultTeamId(null);
+      if (scope === preferenceScope.current) setSavingDefaultTeam(false);
     }
   }
 
@@ -486,16 +481,19 @@ export function AccountSettingsSection({
               >
                 {activeMetaLabel}
               </small>
-              {signedIn && showTeamControl ? (
+              {signedIn ? (
                 <DropdownSelect
                   className="account-team-dropdown"
                   compact
                   disabled={teamDropdownDisabled}
-                  label="Default team"
+                  label="Workspace"
                   options={teamOptions}
                   value={teamDropdownValue}
                   onChange={(teamId) => void setDefaultTeamId(teamId)}
                 />
+              ) : null}
+              {signedIn && organizationsError ? (
+                <small role="status">Workspaces could not be loaded. Personal access remains available.</small>
               ) : null}
             </div>
           </div>

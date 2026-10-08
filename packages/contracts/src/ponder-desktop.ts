@@ -66,26 +66,7 @@ export function ponderDesktopProofMessage(proof: Omit<PonderDesktopProof, "signa
 }
 
 /** Method/path and recursively canonical JSON bind the proof to one API action. */
-export function ponderDesktopRequestContent(
-  method: "POST",
-  path: string,
-  payload: unknown,
-): string {
-  function canonical(value: unknown): unknown {
-    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (Array.isArray(value)) return value.map(canonical);
-    if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
-      return Object.fromEntries(
-        Object.keys(value)
-          .sort()
-          .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
-      );
-    }
-    throw new Error("ponder_desktop_payload_not_json");
-  }
-  return JSON.stringify([method, path, canonical(payload)]);
-}
+export { canonicalRequestContent as ponderDesktopRequestContent } from "./canonical-request-content.js";
 
 export const PonderDesktopTargetSchema = z
   .object({

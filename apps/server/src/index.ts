@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createModelUsagePersistence } from "./runtime/model-usage-persistence.js";
+import { createAccountAuthorityChange, type AccountAuthorityChange } from "./runtime/account-authority-change.js";
 import { createRemoteRelayManager } from "./remote-relay/manager.js";
 import { createRemoteCommandExecutor } from "./remote-relay/executor.js";
 import { remoteRelayAccount, remoteRelayAccountStatus } from "./remote-relay/account.js";
@@ -157,7 +158,7 @@ import { hostedSavedWorkRoutePayloads } from "./openpond/saved-work-route-payloa
 import { createDesktopManagedAgentRoutes } from "./runtime/task-inbox/desktop-agent-services.js";
 import { loadPonderInstallation } from "./openpond/ponder-installation.js";
 import { createPonderDesktopManager } from "./openpond/ponder-desktop-manager.js";
-import { createPonderUserSessionOwner } from "./openpond/ponder-user-session-owner.js";
+import { createDeviceUserSessionOwner } from "./remote-relay/session-owner.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
 import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
@@ -263,7 +264,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   await store.recentTurns(1);
   // A previous process's lease cannot authorize admission in this process.
   await store.clearPonderDesktopAuthority();
-  let beforePonderAuthorityChange = () => store.clearPonderDesktopAuthority();
+  let changeAccountAuthority: AccountAuthorityChange = async mutation => {
+    await store.clearPonderDesktopAuthority();
+    return mutation();
+  };
   // A native permission request belongs to the process that issued it. Restart never approves it.
   for (const approval of await store.pendingApprovals()) {
     if (typeof approval.providerRequestId === "string" && approval.providerRequestId.startsWith("native-agent:")) await store.upsertApproval({ ...approval, status: "cancelled" });
@@ -460,7 +464,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     refreshCodexStatus,
     appendRuntimeEvent,
     isClosing: () => closing,
-    beforePonderAuthorityChange: () => beforePonderAuthorityChange(),
+    changeAccountAuthority: mutation => changeAccountAuthority(mutation),
   });
   const projectActionRunPayload = createProjectActionRunPayload({
     appendRuntimeEvent,
@@ -487,7 +491,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       return workspacePath;
     },
     loadAppPreferences,
-    captureUserOwner: createPonderUserSessionOwner({ installationId: ponderInstallation.installationId,
+    captureUserOwner: createDeviceUserSessionOwner({ installationId: ponderInstallation.installationId,
       getSession: id => store.getSession(id), loadAppPreferences }),
     appendRuntimeEvent,
     loadLastUsedProfile: async () =>
@@ -1345,7 +1349,15 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
         ponderDesktopManager.receiveOperations(offer.operations, offer.hasObligations);
       } },
     listen: subscribeRuntimeEvents, warn: message => logger.warn(message) });
-  beforePonderAuthorityChange = async () => { await remoteRelayManager.beforeAuthorityChange(); await ponderDesktopManager.beforeAuthorityChange(); };
+  changeAccountAuthority = createAccountAuthorityChange({
+    before: async () => {
+      await Promise.all([remoteRelayManager.beforeAuthorityChange(), ponderDesktopManager.beforeAuthorityChange()]);
+    },
+    after: () => {
+      remoteRelayManager.afterAuthorityChange();
+      ponderDesktopManager.afterAuthorityChange();
+    },
+  });
   desktopManagedAgentRoutes.ponderRequestPayload = ponderDesktopManager.request;
   onStartupFailure(() => ponderDesktopManager.close());
   onStartupFailure(() => remoteRelayManager.close());
@@ -1746,7 +1758,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
 
   const { httpServer, terminalWebSockets } = createOpenPondHttpSurface({
     routeOptions: {
-      configuration: createConfigurationPayloads(storeDir, beforePonderAuthorityChange),
+      configuration: createConfigurationPayloads(storeDir, changeAccountAuthority),
       host,
       getActualPort: () => actualPort,
       token,
