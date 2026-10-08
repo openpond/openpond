@@ -7,7 +7,13 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { reserveSentMessageSpace, type SentMessageAnchor } from "./sent-message-scroll";
 import { observeChatScrollIntent } from "./chat-scroll-intent";
+import {
+  captureChatHistoryAnchor,
+  restoreChatHistoryAnchor,
+  type ChatHistoryScrollAnchor,
+} from "./chat-history-scroll-anchor";
 import type { ChatMessage } from "../../lib/app-models";
 import { buildChatTimelineRows } from "../../lib/chat-timeline-rows";
 import {
@@ -57,15 +63,19 @@ export function useMainPaneChatScroll({
   }, []);
   const composerStackRef = useRef<HTMLDivElement | null>(null);
   const stickyChatScrollRef = useRef(true);
+  const sentMessageAnchorRef = useRef<SentMessageAnchor | null>(null);
+  const observedSubmissionRef = useRef(0);
+  const previousUserRowRef = useRef<HTMLElement | null>(null);
   const lastChatScrollTopRef = useRef(0);
   const lastChatScrollHeightRef = useRef(0);
   const lastChatClientHeightRef = useRef(0);
   const previousConversationKeyRef = useRef<string | null>(null);
   const pendingChatScrollRestoreRef = useRef<{
-    scrollHeight: number;
-    scrollTop: number;
+    anchor: ChatHistoryScrollAnchor | null;
+    firstRowId: string | undefined;
+    settled: boolean;
   } | null>(null);
-  const remoteHistoryLoadPendingRef = useRef(false);
+  const remoteHistoryLoadPendingRef = useRef<object | null>(null);
   const initialChatScrollPendingRef = useRef(false);
   const autoChatScrollPendingRef = useRef(false);
   const autoChatScrollFrameRef = useRef<number | null>(null);
@@ -351,6 +361,8 @@ export function useMainPaneChatScroll({
     ]
   );
   const jumpToLatestChatMessage = useCallback(() => {
+    sentMessageAnchorRef.current = null;
+    chatThreadRef.current?.style.removeProperty("--chat-sent-message-space");
     const element = chatThreadRef.current;
     if (!element) return;
     cancelScheduledChatBottomScroll();
@@ -384,6 +396,7 @@ export function useMainPaneChatScroll({
 
       cancelScheduledChatBottomScroll();
       cancelStreamFollow();
+      if (sentMessageAnchorRef.current) sentMessageAnchorRef.current.following = false;
       const nextScrollTop = () =>
         target.isConnected
           ? Math.max(
@@ -406,16 +419,6 @@ export function useMainPaneChatScroll({
       updateChatScrollControls,
     ]
   );
-  const rememberChatScrollPosition = useCallback(() => {
-    const element = chatThreadRef.current;
-    if (!element) return;
-    pendingChatScrollRestoreRef.current = {
-      scrollHeight: element.scrollHeight,
-      scrollTop: element.scrollTop,
-    };
-    stickyChatScrollRef.current = false;
-    cancelStreamFollow();
-  }, [cancelStreamFollow]);
   const loadOlderChatMessages = useCallback(async () => {
     if (!canLoadOlderChatMessages) return;
     if (
@@ -424,36 +427,65 @@ export function useMainPaneChatScroll({
       remoteHistoryLoadPendingRef.current
     )
       return;
-    rememberChatScrollPosition();
-    remoteHistoryLoadPendingRef.current = true;
+    const element = chatThreadRef.current;
+    if (!element) return;
+    const restore = {
+      anchor: captureChatHistoryAnchor(element),
+      firstRowId: chatTimelineRows[0]?.id,
+      settled: false,
+    };
+    pendingChatScrollRestoreRef.current = restore;
+    stickyChatScrollRef.current = false;
+    cancelScheduledChatBottomScroll();
+    cancelStreamFollow();
+    cancelSmoothChatScroll();
+    remoteHistoryLoadPendingRef.current = restore;
     try {
-      await onLoadMoreChatHistory();
+      const loaded = await onLoadMoreChatHistory();
+      if (!loaded && pendingChatScrollRestoreRef.current === restore) {
+        pendingChatScrollRestoreRef.current = null;
+      }
     } finally {
-      remoteHistoryLoadPendingRef.current = false;
+      restore.settled = true;
+      // A request belonging to a previous conversation must not unlock this one.
+      if (remoteHistoryLoadPendingRef.current === restore) {
+        remoteHistoryLoadPendingRef.current = null;
+      }
     }
   }, [
     canLoadOlderChatMessages,
     chatHistoryLoading,
     onLoadMoreChatHistory,
-    rememberChatScrollPosition,
+    chatTimelineRows,
+    cancelScheduledChatBottomScroll,
+    cancelStreamFollow,
+    cancelSmoothChatScroll,
   ]);
   const handleChatScroll = useCallback(
     (element: HTMLElement) => {
-      if (autoChatScrollPendingRef.current) {
-        stickyChatScrollRef.current = true;
-        setChatAwayFromBottom(false);
-        setUserMessageNavigationState(EMPTY_USER_MESSAGE_NAVIGATION);
-        return;
-      }
+      const restore = pendingChatScrollRestoreRef.current;
+      if (restore) restore.anchor = captureChatHistoryAnchor(element);
       const nearBottom = isNearChatBottom(element);
       const layoutChanged =
         Math.abs(element.scrollHeight - lastChatScrollHeightRef.current) > 1 ||
         Math.abs(element.clientHeight - lastChatClientHeightRef.current) > 1;
       const movedUp = element.scrollTop < lastChatScrollTopRef.current - 1;
+      const movedDown = element.scrollTop > lastChatScrollTopRef.current + 1;
       lastChatScrollTopRef.current = element.scrollTop;
       lastChatScrollHeightRef.current = element.scrollHeight;
       lastChatClientHeightRef.current = element.clientHeight;
-      if (nearBottom) {
+      if (sentMessageAnchorRef.current) {
+        stickyChatScrollRef.current = false;
+        updateChatScrollControls(element);
+      } else if (autoChatScrollPendingRef.current) {
+        stickyChatScrollRef.current = true;
+        setChatAwayFromBottom(false);
+        setUserMessageNavigationState(EMPTY_USER_MESSAGE_NAVIGATION);
+        return;
+      } else if (
+        nearBottom &&
+        (stickyChatScrollRef.current || (movedDown && !layoutChanged))
+      ) {
         stickyChatScrollRef.current = true;
         updateChatScrollControls(element, { nearBottom: true });
       } else if (movedUp && !layoutChanged) {
@@ -464,7 +496,7 @@ export function useMainPaneChatScroll({
         setChatAwayFromBottom(false);
         setUserMessageNavigationState(userMessageNavigationState(element));
       } else {
-        updateChatScrollControls(element, { nearBottom: false });
+        updateChatScrollControls(element, { nearBottom });
       }
       if (
         !initialChatScrollPendingRef.current &&
@@ -487,10 +519,21 @@ export function useMainPaneChatScroll({
   );
   const handleChatContentMutation = useCallback(
     (element: HTMLElement) => {
-      if (!stickyChatScrollRef.current) return;
+      const anchor = sentMessageAnchorRef.current;
+      if (anchor) {
+        const target = reserveSentMessageSpace(element, anchor);
+        if (target !== null && anchor.following && smoothChatScrollFrameRef.current === null) element.scrollTop = target;
+        updateChatScrollControls(element);
+        return;
+      }
+      if (
+        !stickyChatScrollRef.current ||
+        smoothChatScrollFrameRef.current !== null ||
+        autoChatScrollPendingRef.current
+      ) return;
       followStreamingChatBottom(element);
     },
-    [followStreamingChatBottom]
+    [followStreamingChatBottom, updateChatScrollControls]
   );
   useEffect(() => {
     const element = chatThreadElement;
@@ -498,13 +541,42 @@ export function useMainPaneChatScroll({
     // Read user intent before the scroll event: streaming layout changes and
     // our settling frames can otherwise hide an upward movement or undo it.
     const stopFollowing = () => {
+      if (sentMessageAnchorRef.current) sentMessageAnchorRef.current.following = false;
       stickyChatScrollRef.current = false;
+      lastChatScrollTopRef.current = element.scrollTop;
+      lastChatScrollHeightRef.current = element.scrollHeight;
+      lastChatClientHeightRef.current = element.clientHeight;
       cancelScheduledChatBottomScroll();
       cancelStreamFollow();
       cancelSmoothChatScroll();
     };
-    return observeChatScrollIntent(element, stopFollowing);
+    const stopSentMessageFollowing = () => {
+      if (sentMessageAnchorRef.current) stopFollowing();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) stopSentMessageFollowing();
+    };
+    const dispose = observeChatScrollIntent(element, stopFollowing);
+    element.addEventListener("wheel", stopSentMessageFollowing, { passive: true });
+    element.addEventListener("touchmove", stopSentMessageFollowing, { passive: true });
+    element.addEventListener("pointerdown", stopSentMessageFollowing);
+    element.addEventListener("keydown", onKeyDown);
+    return () => {
+      dispose();
+      element.removeEventListener("wheel", stopSentMessageFollowing);
+      element.removeEventListener("touchmove", stopSentMessageFollowing);
+      element.removeEventListener("pointerdown", stopSentMessageFollowing);
+      element.removeEventListener("keydown", onKeyDown);
+    };
   }, [chatThreadElement, cancelScheduledChatBottomScroll, cancelStreamFollow, cancelSmoothChatScroll]);
+  useEffect(() => {
+    if (!chatThreadElement || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (sentMessageAnchorRef.current) handleChatContentMutation(chatThreadElement);
+    });
+    observer.observe(chatThreadElement);
+    return () => observer.disconnect();
+  }, [chatThreadElement, handleChatContentMutation]);
   useChatContentScrollScheduler({
     contentKey: chatScrollContentKey,
     enabled: view === "chat" && showChatThread,
@@ -556,30 +628,19 @@ export function useMainPaneChatScroll({
       initialChatScrollPendingRef.current
     )
       return;
-    if (!stickyChatScrollRef.current && !isNearChatBottom(element)) return;
-    stickyChatScrollRef.current = true;
-    scrollChatToBottom(element, { settle: true });
-  }, [chatComposerReservePx, scrollChatToBottom, showChatThread, view]);
-
-  useLayoutEffect(() => {
-    if (chatSubmissionVersion === 0 || view !== "chat" || !showChatThread)
+    if (sentMessageAnchorRef.current) {
+      handleChatContentMutation(element);
       return;
-    const element = chatThreadRef.current;
-    if (!element) return;
-    stickyChatScrollRef.current = true;
-    setChatAwayFromBottom(false);
+    }
+    if (!stickyChatScrollRef.current) return;
     scrollChatToBottom(element, { settle: true });
-  }, [
-    chatSubmissionVersion,
-    scrollChatToBottom,
-    setChatAwayFromBottom,
-    showChatThread,
-    view,
-  ]);
+  }, [chatComposerReservePx, handleChatContentMutation, scrollChatToBottom, showChatThread, view]);
 
   useLayoutEffect(() => {
+    sentMessageAnchorRef.current = null;
+    chatThreadRef.current?.style.removeProperty("--chat-sent-message-space");
     pendingChatScrollRestoreRef.current = null;
-    remoteHistoryLoadPendingRef.current = false;
+    remoteHistoryLoadPendingRef.current = null;
     initialChatScrollPendingRef.current = true;
     stickyChatScrollRef.current = true;
     lastChatScrollTopRef.current = 0;
@@ -599,6 +660,27 @@ export function useMainPaneChatScroll({
     setChatAwayFromBottom,
     setUserMessageNavigationState,
   ]);
+  useLayoutEffect(() => {
+    if (chatSubmissionVersion === 0 || chatSubmissionVersion === observedSubmissionRef.current || view !== "chat" || !showChatThread) return;
+    const element = chatThreadRef.current;
+    const row = Array.from(element?.querySelectorAll<HTMLElement>(".message-row.user") ?? []).filter((row) => row.parentElement === element).at(-1);
+    if (!element || !row || row === previousUserRowRef.current) return;
+    observedSubmissionRef.current = chatSubmissionVersion;
+    cancelScheduledChatBottomScroll();
+    cancelStreamFollow();
+    const anchor: SentMessageAnchor = { row, following: true };
+    sentMessageAnchorRef.current = anchor;
+    stickyChatScrollRef.current = false;
+    reserveSentMessageSpace(element, anchor);
+    smoothScrollChatTo(element, () => reserveSentMessageSpace(element, anchor) ?? element.scrollTop);
+    finishInitialChatScroll(conversationKey);
+  }, [chatSubmissionVersion, chatTimelineRows, chatThreadElement, conversationKey, view, showChatThread, cancelScheduledChatBottomScroll, cancelStreamFollow, smoothScrollChatTo, finishInitialChatScroll]);
+
+  useLayoutEffect(() => {
+    const element = chatThreadRef.current;
+    previousUserRowRef.current = Array.from(element?.querySelectorAll<HTMLElement>(".message-row.user") ?? []).filter((row) => row.parentElement === element).at(-1) ?? null;
+  });
+
   useEffect(() => {
     const element = chatThreadRef.current;
     if (
@@ -629,12 +711,18 @@ export function useMainPaneChatScroll({
     const restore = pendingChatScrollRestoreRef.current;
     const element = chatThreadRef.current;
     if (!restore || !element || initialChatScrollPendingRef.current) return;
+    // Appends/stream updates can arrive while the older page is in flight.
+    // Only consume the anchor once rows actually appear before the old first row.
+    if (chatTimelineRows[0]?.id === restore.firstRowId) {
+      if (restore.settled && !chatHistoryLoading) {
+        pendingChatScrollRestoreRef.current = null;
+      }
+      return;
+    }
     pendingChatScrollRestoreRef.current = null;
-    element.scrollTop =
-      restore.scrollTop +
-      Math.max(0, element.scrollHeight - restore.scrollHeight);
+    if (restore.anchor) restoreChatHistoryAnchor(element, restore.anchor);
     updateChatScrollControls(element);
-  }, [chatTimelineRows.length, updateChatScrollControls]);
+  }, [chatTimelineRows, chatHistoryLoading, updateChatScrollControls]);
   useLayoutEffect(() => {
     const element = chatThreadRef.current;
     if (view !== "chat" || !conversationKey || !element) {
@@ -648,6 +736,10 @@ export function useMainPaneChatScroll({
       previousConversationKeyRef.current !== conversationKey;
     previousConversationKeyRef.current = conversationKey;
 
+    if (sentMessageAnchorRef.current) {
+      finishInitialChatScroll(conversationKey);
+      return;
+    }
     if (conversationChanged || initialChatScrollPendingRef.current) {
       stickyChatScrollRef.current = true;
       scrollChatToBottom(element, {
@@ -659,7 +751,7 @@ export function useMainPaneChatScroll({
     }
 
     const nearBottom = isNearChatBottom(element);
-    if (stickyChatScrollRef.current || nearBottom) {
+    if (stickyChatScrollRef.current) {
       stickyChatScrollRef.current = true;
       setChatAwayFromBottom(false);
       setUserMessageNavigationState(userMessageNavigationState(element));

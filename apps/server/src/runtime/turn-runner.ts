@@ -1,5 +1,6 @@
 import { nativeImageContent } from "./native-agents/attachments.js";
 import { assertPonderDesktopExecution } from "../store/ponder-desktop-input.js";
+import { assertRemoteExecution } from "../remote-relay/session-ownership.js";
 import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -302,7 +303,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const session = await getSession(id);
       const request = SendTurnRequestSchema.parse(payload);
       if (!session.subagentRunId) {
-        if (sourceInput.senderKind === "user") return sendTurn(id, request, turnId);
+        if (sourceInput.senderKind === "user") return sendTurn(id, request, turnId,
+          sourceInput.payload.remoteDevice ? { beforeExecute: async admitted => { assertRemoteExecution(sourceInput, admitted); } } : undefined);
         const previous = await store.latestTurnForSession(id);
         const permissions = previous?.metadata.taskExecutionPermissions ?? {
           approvalPolicy: "on-request", sandbox: "read-only", codexPermissionMode: "default",
@@ -310,6 +312,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>) }, turnId,
           sourceInput.senderKind === "ponder" ? { beforeExecute: async admitted => {
             assertPonderDesktopExecution(sourceInput, admitted);
+            assertRemoteExecution(sourceInput, admitted);
           } } : undefined);
       }
       const context = await prepareSubagentContinuationTurn({ session, request,

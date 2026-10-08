@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export type WorkspaceFileResolution =
+  | { status: "resolved"; path: string; kind: "file" | "directory" }
+  | { status: "ambiguous" | "missing"; candidates: string[]; truncated: boolean };
+
 export const LOCAL_PATH_WORKSPACE_ID_PREFIX = "local_path:";
 
 export function localPathWorkspaceId(workspacePath: string): string {

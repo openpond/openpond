@@ -1517,6 +1517,11 @@ export const api = {
       `/v1/workspaces/${encodeURIComponent(appId)}/diff`,
       { signal: options.signal }
     ),
+  resolveWorkspaceFile: (connection: ClientConnection, appId: string, path: string) =>
+    apiFetch<import("@openpond/contracts").WorkspaceFileResolution>(
+      connection,
+      `/v1/workspaces/${encodeURIComponent(appId)}/resolve-file?path=${encodeURIComponent(path)}`,
+    ),
   workspaceFile: (connection: ClientConnection, appId: string, path: string) =>
     apiFetch<WorkspaceDiffFile>(
       connection,

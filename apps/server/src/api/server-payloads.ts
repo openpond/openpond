@@ -179,8 +179,9 @@ export function createServerPayloads(deps: {
   refreshCodexStatus?: () => Promise<CodexStatus>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   isClosing: () => boolean;
-  beforePonderAuthorityChange?: () => Promise<void>;
+  changeAccountAuthority?: import("../runtime/account-authority-change.js").AccountAuthorityChange;
 }) {
+  const changeAccountAuthority = deps.changeAccountAuthority ?? (async <T>(mutation: () => Promise<T>) => mutation());
   const {
     store,
     storeDir,
@@ -322,8 +323,10 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<{ preferences: AppPreferences; rawRevision: string }> {
     const { expectedRevision, ...input } = UpdateAppPreferencesRequestSchema.parse(payload);
-    if (input.defaultTeamId !== undefined) await deps.beforePonderAuthorityChange?.();
-    const saved = await updatePreferences(storeDir, input, expectedRevision);
+    const mutate = () => updatePreferences(storeDir, input, expectedRevision);
+    const saved = input.defaultTeamId !== undefined
+      ? await changeAccountAuthority(mutate)
+      : await mutate();
     await appendRuntimeEvent(event({
       name: "diagnostic",
       source: "server",
@@ -1686,8 +1689,7 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<BootstrapPayload> {
     const input = SwitchOpenPondAccountRequestSchema.parse(payload);
-    await deps.beforePonderAuthorityChange?.();
-    await switchOpenPondAccount(input);
+    await changeAccountAuthority(() => switchOpenPondAccount(input));
     await appendRuntimeEvent(
       event({
         name: "diagnostic",
@@ -1707,8 +1709,7 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<BootstrapPayload> {
     const input = SaveOpenPondAccountRequestSchema.parse(payload);
-    await deps.beforePonderAuthorityChange?.();
-    await saveOpenPondAccount({
+    await changeAccountAuthority(() => saveOpenPondAccount({
       handle: input.handle,
       apiKey: input.apiKey,
       baseUrl: input.baseUrl ?? undefined,
@@ -1716,7 +1717,7 @@ export function createServerPayloads(deps: {
       chatApiBaseUrl: input.chatApiBaseUrl ?? undefined,
       environment: input.environment ?? undefined,
       setActive: input.setActive,
-    });
+    }));
     await appendRuntimeEvent(
       event({
         name: "diagnostic",
@@ -1736,8 +1737,7 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<BootstrapPayload> {
     const input = RemoveOpenPondAccountRequestSchema.parse(payload);
-    await deps.beforePonderAuthorityChange?.();
-    await removeOpenPondAccount(input);
+    await changeAccountAuthority(() => removeOpenPondAccount(input));
     await appendRuntimeEvent(
       event({
         name: "diagnostic",
@@ -1754,8 +1754,7 @@ export function createServerPayloads(deps: {
   }
 
   async function signOutOpenPondAccountPayload(): Promise<BootstrapPayload> {
-    await deps.beforePonderAuthorityChange?.();
-    await signOutOpenPondAccount();
+    await changeAccountAuthority(signOutOpenPondAccount);
     await appendRuntimeEvent(
       event({
         name: "diagnostic",
@@ -1775,8 +1774,7 @@ export function createServerPayloads(deps: {
     payload: unknown
   ): Promise<BootstrapPayload> {
     const input = UpdateOpenPondAccountConfigRequestSchema.parse(payload);
-    await deps.beforePonderAuthorityChange?.();
-    await updateOpenPondAccountConfig({
+    await changeAccountAuthority(() => updateOpenPondAccountConfig({
       handle: input.handle,
       currentBaseUrl: input.currentBaseUrl ?? undefined,
       apiKey: input.apiKey,
@@ -1785,7 +1783,7 @@ export function createServerPayloads(deps: {
       chatApiBaseUrl: input.chatApiBaseUrl,
       environment: input.environment,
       setActive: input.setActive,
-    });
+    }));
     await appendRuntimeEvent(
       event({
         name: "diagnostic",

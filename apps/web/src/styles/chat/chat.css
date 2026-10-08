@@ -16,8 +16,8 @@
   gap: 22px;
   min-height: 0;
   overflow: auto;
-  overflow-anchor: none;
-  padding: 22px var(--chat-thread-inline-padding) calc(var(--chat-composer-reserve) + 28px);
+  overflow-anchor: auto;
+  padding: 22px var(--chat-thread-inline-padding) calc(var(--chat-composer-reserve) + 28px + var(--chat-sent-message-space, 0px));
   scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
   scrollbar-width: thin;
 }
@@ -49,8 +49,8 @@
 .message-row {
   display: flex;
   width: 100%;
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto 112px;
+  /* Transcript rows need real heights before scrolling or prepending history. */
+  flex-shrink: 0;
 }
 
 .message-row.user {
@@ -789,8 +789,6 @@ button.user-message-attachment {
   border-radius: 18px;
   background: #222222;
   color: #eeeeec;
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto 140px;
 }
 
 .markdown-code-header {

@@ -4,6 +4,7 @@ import { SendLocalManagedMessageSchema, type LocalManagedMessageTarget, type Ses
 import type { TaskInboxRepository } from "./repository.js";
 import { localManagedTargetRevision } from "./target-revision.js";
 import { isCodexHistorySessionId } from "../../codex-history.js";
+import { localManagedProviderSupported, localManagedSessionId } from "./local-managed-identity.js";
 import { LocalManagedMessageError } from "./local-managed-message-error.js";
 
 type ManagedReadiness = { available: boolean; reason: string | null; canSteer: boolean };
@@ -23,8 +24,8 @@ export function createLocalManagedMessaging(deps: {
     const [inbox, turn, ready, approvalBlocked] = await Promise.all([
       deps.store.taskInboxSnapshot(sessionId), deps.latestTurn(sessionId), deps.readiness(session), deps.approvalBlocked(sessionId),
     ]);
-    const managedSessionId = session.provider === "codex" ? session.codexThreadId : session.nativeAgent?.sessionId ?? null;
-    const supported = ["codex", "claude-code", "opencode", "grok-build"].includes(session.provider);
+    const managedSessionId = localManagedSessionId(session);
+    const supported = localManagedProviderSupported(session.provider);
     const qualifiedHistory = session.metadata?.nativeResumeAvailable === true && !session.metadata?.nativeBranch
       && session.nativeAgent?.provider === session.provider && session.nativeAgent.cwd === session.cwd;
     const unavailableReason = session.archived || session.status === "closed" ? "This task is closed or archived."

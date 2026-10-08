@@ -3,6 +3,7 @@ import { createHtmlPreviewService } from "./html-preview.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { loadLocalOutputFile, loadLocalOutputImage } from "./local-output-files.js";
+import { resolveChatFile } from "./resolve-chat-file.js";
 import {
   CreateLocalProjectRequestSchema,
   SaveWorkspaceFileRequestSchema,
@@ -331,6 +332,18 @@ export function createServerWorkspacePayloads(deps: {
   }
 
   const htmlPreviews = createHtmlPreviewService();
+  async function resolveWorkspaceFilePayload(appId: string, filePath: string | null) {
+    if (!filePath?.trim()) throw new Error("File path is required");
+    const localPath = await localPathWorkspaceForId(appId);
+    if (localPath) return resolveChatFile({ roots: [localPath.paths.repoPath], requestedPath: filePath, allowExternalPaths: true });
+    const project = await findLocalWorkspace(appId);
+    if (project) return resolveChatFile({
+      roots: project.sourceFolders?.length ? project.sourceFolders : [localProjectWorkspacePaths(project).repoPath],
+      requestedPath: filePath,
+      allowExternalPaths: true,
+    });
+    return resolveChatFile({ roots: [await workspaceRepoPathPayload(appId)], requestedPath: filePath, allowExternalPaths: false });
+  }
   async function htmlContentPreviewPayload(payload: unknown) {
     const input = payload as { name?: unknown; content?: unknown } | null;
     if (typeof input?.name !== "string" || typeof input.content !== "string") throw new Error("HTML name and content are required");
@@ -404,11 +417,15 @@ export function createServerWorkspacePayloads(deps: {
     if (!filePath?.trim()) throw new Error("Image path is required");
     const localPathWorkspace = await localPathWorkspaceForId(appId);
     if (localPathWorkspace) {
-      return loadLocalOutputImage(localPathWorkspace.paths.repoPath, filePath);
+      const resolved = await resolveWorkspaceFilePayload(appId, filePath);
+      if (resolved.status !== "resolved" || resolved.kind !== "file") throw new Error("Image not found or ambiguous. Open the link to choose a file.");
+      return loadLocalOutputImage(localPathWorkspace.paths.repoPath, resolved.path);
     }
     const localProject = await findLocalWorkspace(appId);
     if (localProject) {
-      return loadLocalOutputImage(localProjectWorkspacePaths(localProject).repoPath, filePath);
+      const resolved = await resolveWorkspaceFilePayload(appId, filePath);
+      if (resolved.status !== "resolved" || resolved.kind !== "file") throw new Error("Image not found or ambiguous. Open the link to choose a file.");
+      return loadLocalOutputImage(localProjectWorkspacePaths(localProject).repoPath, resolved.path);
     }
     const app = await findOpenPondApp(appId);
     return loadWorkspaceImageFile(storeDir, app, filePath);
@@ -521,6 +538,7 @@ export function createServerWorkspacePayloads(deps: {
     checkoutWorkspaceBranchPayload,
     workspaceDiffPayload,
     workspaceFilePayload,
+    resolveWorkspaceFilePayload,
     workspaceHtmlPreviewPayload,
     htmlContentPreviewPayload,
     sandboxHtmlPreviewPayload,

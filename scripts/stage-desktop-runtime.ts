@@ -50,8 +50,11 @@ export async function stageDesktopRuntime(
   );
   // The collector is supervised independently of Electron's UI/backend process.
   // Ship the same CLI entry and chunk closure used by command-line setup.
-  await copyRequired(path.join(options.root, "apps", "cli", "dist", "cli.js"), path.join(runtimeRoot, "cli", "cli.js"));
-  await copyTree(path.join(options.root, "apps", "cli", "dist", "chunks"), path.join(runtimeRoot, "cli", "chunks"), (file) => file.endsWith(".js"));
+  const cliOutputs: unknown = JSON.parse(await fs.readFile(path.join(options.root, "apps", "cli", "build", "cli-runtime-outputs.json"), "utf8"));
+  if (!Array.isArray(cliOutputs) || !cliOutputs.includes("dist/cli.js") || cliOutputs.some(file => typeof file !== "string" || !/^dist\/(?:cli\.js|chunks\/[A-Za-z0-9._-]+\.js)$/.test(file))) {
+    throw new Error("Invalid CLI runtime build graph. Run pnpm --dir apps/cli run build:cli.");
+  }
+  for (const file of new Set(cliOutputs as string[])) await copyRequired(path.join(options.root, "apps", "cli", file), path.join(runtimeRoot, "cli", file.slice("dist/".length)));
   await fs.writeFile(path.join(runtimeRoot, "cli", "package.json"), JSON.stringify({ type: "module", private: true }), { mode: 0o644 });
   await copyTree(
     path.join(

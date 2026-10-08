@@ -1,5 +1,6 @@
 import { readJson, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
+import { isDesktopLocalRequest } from "../local-human-authority.js";
 
 export async function handleCoreRoutes({
   deps,
@@ -202,6 +203,18 @@ export async function handleCoreRoutes({
   if (requestUrl.pathname === "/v1/remote-access") {
     if (request.method === "GET") {
       sendJson(response, 200, await remoteAccessPayload());
+      return true;
+    }
+  }
+  if (requestUrl.pathname.startsWith("/v1/account-remote-access") && deps.accountRemoteAccessPayload) {
+    if (!isDesktopLocalRequest(request)) { sendJson(response, 403, { error: "Change this computer's remote access from its local desktop app." }); return true; }
+    response.setHeader("Cache-Control", "no-store");
+    const action = requestUrl.pathname.slice("/v1/account-remote-access".length).replace(/^\//, "") || "status";
+    if (action === "status" && request.method === "GET") {
+      sendJson(response, 200, await deps.accountRemoteAccessPayload("status")); return true;
+    }
+    if (["enable", "disable", "retry", "attach", "rename", "remove", "disable-device"].includes(action) && request.method === "POST") {
+      sendJson(response, 200, await deps.accountRemoteAccessPayload(action as import("@openpond/contracts").RemoteAccessSettingsAction, await readJson(request)));
       return true;
     }
   }

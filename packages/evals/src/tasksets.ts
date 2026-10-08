@@ -105,7 +105,7 @@ export const TasksetReleaseContentSchema = z.object({
   tools: z.array(ToolDeclarationSchema).max(200),
   capabilities: z.array(CapabilityRequirementSchema).max(200),
   tasks: z.array(TaskRecordSchema).min(1).max(1_000_000),
-  graders: z.array(GraderSpecSchema).min(1).max(1_000),
+  graders: z.array(GraderSpecSchema).max(1_000),
   verifierSetRelease: z.object({ id: ReleaseIdSchema, contentHash: ReleaseHashSchema }).strict().optional(),
   metrics: TasksetMetricPolicySchema.optional(),
   metadata: MetadataSchema,

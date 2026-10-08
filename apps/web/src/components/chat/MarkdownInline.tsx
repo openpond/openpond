@@ -459,6 +459,10 @@ function MarkdownFileImageReference({
         className={`markdown-file-image-preview ${failed ? "error" : src ? "ready" : "loading"}`}
         onClick={() => {
           if (failed) {
+            if (context.onOpenFileInSidebar && image.kind !== "url") {
+              context.onOpenFileInSidebar(path);
+              return;
+            }
             setFailedSrc(null);
             if (image.kind !== "url") resource.retry();
             return;
@@ -616,7 +620,8 @@ function imageLinkForHref(
       return null;
     }
   }
-  const imagePath = localImagePathFromHref(cleanHref);
+  const linkedPath = normalizeChatFilePath(cleanHref, { fileBasePath: context.fileBasePath })?.path ?? cleanHref;
+  const imagePath = localImagePathFromHref(linkedPath);
   const publicUrl = publicAssetImageUrlFromPath(imagePath ?? cleanHref, context.workspaceRootPath);
   if (publicUrl) {
     return { kind: "url", src: publicUrl, title: workspaceFileName(imagePath ?? cleanHref) };
@@ -781,13 +786,15 @@ function openImageLink(image: ImageLink, context: MarkdownContext): void {
   }
   if (image.kind === "local") {
     if (image.src) context.onOpenImage({ src: image.src, title: image.title });
+    else context.onOpenFileInSidebar?.(image.path);
     return;
   }
   if (image.src) {
     context.onOpenImage({ src: image.src, title: image.title });
     return;
   }
-  context.onOpenWorkspaceImage({ appId: image.appId, path: image.path, title: image.title });
+  if (context.onOpenFileInSidebar) context.onOpenFileInSidebar(image.path);
+  else context.onOpenWorkspaceImage({ appId: image.appId, path: image.path, title: image.title });
 }
 
 function previewImageLink(image: ImageLink, context: MarkdownContext, element: HTMLElement): void {

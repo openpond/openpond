@@ -1,5 +1,9 @@
 import { TASK_INPUT_BATCH_MAX_CHARS, TaskInputMutationSchema, TaskWaitSchema, type TaskInboxSnapshot, type TaskInput, type TaskInputAdmission, type TaskInputMutation, type TaskWait } from "@openpond/contracts/task-inbox";
 import { SubagentRunSchema, type SubagentRun } from "@openpond/contracts/subagents";
+import { assertRemoteAdmission, REMOTE_LOCAL_SCHEMA, type RemoteLocalAuthority } from "../remote-relay/admission.js";
+import type { RemoteCommandReceipt, RemoteDispatchCommand } from "@openpond/contracts";
+import { assertRemoteExecution } from "../remote-relay/session-ownership.js";
+import { remoteApprovalSupported } from "../remote-relay/approvals.js";
 import { recoverTaskInboxOwners } from "./task-inbox-recovery.js";
 import { SqliteStoreDomain } from "./store-domain.js";
 import { setPonderProjectSharing, readPonderProjectSharing, type PonderProjectSharingInput } from "./ponder-project-sharing.js";
@@ -22,6 +26,96 @@ import {
 const LEASE_MS = 90_000;
 
 export class SqliteTaskInboxStore extends SqliteStoreDomain {
+  async initializeRemoteDeviceStore() {
+    return this.inboxWrite(db => { db.exec(REMOTE_LOCAL_SCHEMA); db.run("DELETE FROM remote_device_authority"); });
+  }
+  async setRemoteDeviceAuthority(authority: RemoteLocalAuthority | null) {
+    return this.inboxWrite(db => {
+      if (!authority) db.run("DELETE FROM remote_device_authority");
+      else db.run("INSERT INTO remote_device_authority(id,payload) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload", [JSON.stringify(authority)]);
+    });
+  }
+  async getRemoteDeviceReceipt(id: string) {
+    await this.ready; await this.writeQueue;
+    const row = this.database.get<{ receipt: string }>("SELECT receipt FROM remote_device_receipts WHERE id=?", [id]);
+    return row ? JSON.parse(row.receipt) as RemoteCommandReceipt : null;
+  }
+  async getRemoteDeviceCancellation(id: string) {
+    await this.ready; await this.writeQueue;
+    return this.database.get<{ payload_hash: string; device_id: string }>("SELECT payload_hash,device_id FROM remote_device_cancellations WHERE id=?", [id]);
+  }
+  async cancelRemoteDeviceCommand(id: string, payloadHash: string) {
+    return this.inboxWrite(db => {
+      const receipt = db.get<{ payload_hash: string; receipt: string }>("SELECT payload_hash,receipt FROM remote_device_receipts WHERE id=?", [id]);
+      if (receipt) { if (receipt.payload_hash !== payloadHash) throw new Error("remote_command_identity_changed"); return { receipt: JSON.parse(receipt.receipt) as RemoteCommandReceipt, cancelled: false }; }
+      const input = readTaskInput(db, `remote-input:${id}`);
+      if (input) { const command = input.payload.remoteDevice as RemoteDispatchCommand;
+        if (command.payloadHash !== payloadHash) throw new Error("remote_command_identity_changed");
+        return { receipt: { id, deviceId: command.deviceId, payloadHash, action: command.action, targetId: command.targetId,
+          localSessionId: input.sessionId, inputId: input.id, state: "admitted" as const, revision: 2,
+          createdAt: input.createdAt, expiresAt: command.deadline }, cancelled: false };
+      }
+      const authorityRow = db.get<{ payload: string }>("SELECT payload FROM remote_device_authority WHERE id=1");
+      if (!authorityRow) throw new Error("remote_authority_unavailable");
+      const authority = JSON.parse(authorityRow.payload) as RemoteLocalAuthority;
+      if (!(Date.parse(authority.leaseExpiresAt) > Date.now())) throw new Error("remote_authority_unavailable");
+      const previous = db.get<{ payload_hash: string }>("SELECT payload_hash FROM remote_device_cancellations WHERE id=?", [id]);
+      if (previous && previous.payload_hash !== payloadHash) throw new Error("remote_command_identity_changed");
+      db.run("INSERT INTO remote_device_cancellations(id,payload_hash,device_id) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING", [id,payloadHash,authority.deviceId]);
+      return { receipt: null, cancelled: true };
+    });
+  }
+  async saveRemoteDeviceReceipt(command: RemoteDispatchCommand, receipt: RemoteCommandReceipt) {
+    return this.inboxWrite(db => {
+      const previous = db.get<{ payload_hash: string }>("SELECT payload_hash FROM remote_device_receipts WHERE id=?", [command.id]);
+      if (previous && previous.payload_hash !== command.payloadHash) throw new Error("remote_command_identity_changed");
+      db.run("INSERT INTO remote_device_receipts(id,payload_hash,command,receipt) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET receipt=excluded.receipt", [command.id, command.payloadHash, JSON.stringify(command), JSON.stringify(receipt)]);
+    });
+  }
+  async admitRemoteDeviceStop(command: RemoteDispatchCommand) {
+    return this.inboxWrite(db => {
+      const previous = db.get<{ payload_hash: string; receipt: string }>("SELECT payload_hash,receipt FROM remote_device_receipts WHERE id=?", [command.id]);
+      if (previous) { if (previous.payload_hash !== command.payloadHash) throw new Error("remote_command_identity_changed"); return JSON.parse(previous.receipt) as RemoteCommandReceipt; }
+      const row = db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id=?", [command.localSessionId]);
+      if (!row) throw new Error("remote_task_unavailable");
+      const session = SessionSchema.parse(JSON.parse(row.payload));
+      assertRemoteAdmission(db, command, session);
+      const turn = db.get<{ id: string; status: string }>("SELECT id,status FROM turns WHERE session_id=? ORDER BY sort_index DESC LIMIT 1", [command.localSessionId]);
+      if (!command.expectedTurnId || turn?.id !== command.expectedTurnId || turn.status !== "in_progress") throw new Error("remote_turn_changed");
+      const receipt: RemoteCommandReceipt = { id: command.id, deviceId: command.deviceId, payloadHash: command.payloadHash,
+        action: command.action, targetId: command.targetId, localSessionId: session.id, turnId: turn.id,
+        state: "admitted", revision: 2, createdAt: new Date().toISOString(), expiresAt: command.deadline };
+      db.run("INSERT INTO remote_device_receipts(id,payload_hash,command,receipt) VALUES(?,?,?,?)", [command.id, command.payloadHash, JSON.stringify(command), JSON.stringify(receipt)]);
+      return receipt;
+    });
+  }
+  async admitRemoteDeviceApproval(command: RemoteDispatchCommand) {
+    return this.inboxWrite(db => {
+      const previous = db.get<{ payload_hash: string; receipt: string }>("SELECT payload_hash,receipt FROM remote_device_receipts WHERE id=?", [command.id]);
+      if (previous) { if (previous.payload_hash !== command.payloadHash) throw new Error("remote_command_identity_changed"); return JSON.parse(previous.receipt) as RemoteCommandReceipt; }
+      const row = db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id=?", [command.localSessionId]);
+      if (!row) throw new Error("remote_task_unavailable");
+      const session = SessionSchema.parse(JSON.parse(row.payload));
+      assertRemoteAdmission(db, command, session);
+      const turnRow = db.get<{ id: string; payload: string }>("SELECT id,payload FROM turns WHERE session_id=? ORDER BY sort_index DESC LIMIT 1", [session.id]);
+      const turn = turnRow ? JSON.parse(turnRow.payload) as import("@openpond/contracts").Turn : null;
+      if (!turn || turn.id !== command.expectedTurnId || turn.status !== "in_progress")
+        throw new Error("remote_turn_changed");
+      const approvalRow = db.get<{ payload: string }>("SELECT payload FROM approvals WHERE id=?", [command.expectedApprovalId]);
+      const approval = approvalRow ? JSON.parse(approvalRow.payload) as import("@openpond/contracts").Approval : null;
+      if (!approval || approval.status !== "pending" || approval.sessionId !== session.id || !approval.turnId || (approval.turnId !== turn.id && approval.turnId !== turn.providerTurnId)
+        || !remoteApprovalSupported(approval)) throw new Error("remote_approval_changed_or_unsupported");
+      const claim = db.get<{ command_id: string }>("SELECT command_id FROM remote_device_approval_claims WHERE approval_id=?", [approval.id]);
+      if (claim) throw new Error("remote_approval_already_claimed");
+      db.run("INSERT INTO remote_device_approval_claims(approval_id,command_id) VALUES(?,?)", [approval.id, command.id]);
+      const receipt: RemoteCommandReceipt = { id: command.id, deviceId: command.deviceId, payloadHash: command.payloadHash,
+        action: command.action, targetId: command.targetId, localSessionId: session.id, approvalId: approval.id,
+        turnId: turn.id, state: "admitted", revision: 2,
+        createdAt: new Date().toISOString(), expiresAt: command.deadline };
+      db.run("INSERT INTO remote_device_receipts(id,payload_hash,command,receipt) VALUES(?,?,?,?)", [command.id, command.payloadHash, JSON.stringify(command), JSON.stringify(receipt)]);
+      return receipt;
+    });
+  }
   async admitPonderDesktopInspection(operation: PonderDesktopOperation) {
     return this.inboxWrite(db => admitPonderDesktopInspection(db, operation));
   }
@@ -317,11 +411,12 @@ export class SqliteTaskInboxStore extends SqliteStoreDomain {
       let selected: TaskInput | null = null;
       for (const row of rows) {
         const input = inputFromRow(row);
-        if (input.senderKind === "ponder") {
+        if (input.senderKind === "ponder" || input.payload.remoteDevice !== undefined) {
           const sessionRow = db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id = ?", [sessionId]);
           try {
             if (!sessionRow) throw new Error("The original local task no longer exists.");
             assertPonderDesktopExecution(input, SessionSchema.parse(JSON.parse(sessionRow.payload)));
+            assertRemoteExecution(input, SessionSchema.parse(JSON.parse(sessionRow.payload)));
           } catch (error) {
             // Publish this canonical rejection before considering another input.
             return writeTaskInput(db, { ...input, state: "rejected", error: String(error), updatedAt: new Date().toISOString() });

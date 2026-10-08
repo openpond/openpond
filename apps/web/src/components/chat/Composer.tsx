@@ -60,7 +60,6 @@ import { requestVoiceInputSubmit } from "../../lib/voice-transcription-job";
 import { useTaskInbox } from "../../hooks/useTaskInbox";
 import { TaskInboxPanel } from "./TaskInboxPanel";
 import {
-  ComposerPinnedWorkspaceContext,
   ComposerProjectTargetControl,
   ComposerProfileTargetControl,
   WorkspaceActionControl,
@@ -1609,7 +1608,6 @@ export function Composer({
           ) : null}
         </div>
       )}
-      {!showProjectFooter && experience === "work" && <ComposerPinnedWorkspaceContext project={projectTarget} workspace={workspaceTarget} />}
       {createImproveRuntime ? (
         <Suspense fallback={null}>
           <ComposerCreateImproveStrip runtime={createImproveRuntime} />

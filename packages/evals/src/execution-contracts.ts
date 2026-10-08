@@ -97,7 +97,7 @@ export const VerifierSetReleaseContentSchema = z.object({
   schemaVersion: z.literal("openpond.verifierSetRelease.v1"),
   id: ReleaseIdSchema,
   revision: z.number().int().positive(),
-  graders: z.array(GraderSpecSchema).min(1).max(1_000),
+  graders: z.array(GraderSpecSchema).max(1_000),
   isolation: z.object({
     processBoundary: z.enum(["same_process", "isolated_process", "container"]),
     networkPolicy: z.literal("none"),

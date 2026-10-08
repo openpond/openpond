@@ -7,8 +7,9 @@ import {
 import { createPonderDesktopRuntime } from "./ponder-desktop-runtime.js";
 import type { createPonderDesktopClient } from "./ponder-desktop-client.js";
 
-// A lost wake during the last idle poll would strand an admitted human request until restart.
-it("suspends settled exchange, resumes obligations, and preserves a wake racing with an idle poll", async () => {
+// A pushed obligation racing with renewal must keep the shared request socket alive,
+// and an idle caller must not continue its retired polling exchange.
+it("suspends settled exchange and preserves pushed obligations racing with authority renewal", async () => {
   vi.useFakeTimers();
   const scope = {
     installationId: randomUUID(),
@@ -20,11 +21,10 @@ it("suspends settled exchange, resumes obligations, and preserves a wake racing 
   };
   const runtimeId = randomUUID();
   let epoch = randomUUID();
-  let obligations = false;
-  let polls = 0;
+  let renewals = 0;
   let attaches = 0;
-  let releasePoll: (() => void) | null = null;
-  let pauseNextPoll = false;
+  let releaseRenew: (() => void) | null = null;
+  let pauseNextRenew = false;
   const client: ReturnType<typeof createPonderDesktopClient> = {
     scope,
     runtimeId,
@@ -48,17 +48,13 @@ it("suspends settled exchange, resumes obligations, and preserves a wake racing 
         epoch = randomUUID();
         return { attachment: { ...attachment, epoch } };
       }
-      if (action === "renew") return { attachment };
-      if (action === "poll") {
-        polls++;
-        const observed = obligations;
-        if (pauseNextPoll) {
-          pauseNextPoll = false;
-          await new Promise<void>((resolve) => {
-            releasePoll = resolve;
-          });
+      if (action === "renew") {
+        renewals++;
+        if (pauseNextRenew) {
+          pauseNextRenew = false;
+          await new Promise<void>(resolve => { releaseRenew = resolve; });
         }
-        return { operations: [], nextCursor: null, hasObligations: observed };
+        return { attachment };
       }
       throw new Error(`Unexpected ${action}`);
     },
@@ -97,26 +93,24 @@ it("suspends settled exchange, resumes obligations, and preserves a wake racing 
     await runtime.start();
     expect(runtime.status().state).toBe("idle");
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(polls).toBe(1);
-    obligations = true;
-    runtime.wake();
-    await vi.advanceTimersByTimeAsync(PONDER_DESKTOP_RENEW_MS);
+    expect(renewals).toBe(1);
+    runtime.receiveOperations([], true);
+    await vi.advanceTimersByTimeAsync(0);
     expect(attaches).toBe(2);
     expect(runtime.status().state).toBe("online");
     await vi.advanceTimersByTimeAsync(PONDER_DESKTOP_RENEW_MS);
-    expect(polls).toBe(3);
-    obligations = false;
-    await vi.advanceTimersByTimeAsync(PONDER_DESKTOP_RENEW_MS);
+    expect(renewals).toBe(3);
+    runtime.receiveOperations([], false);
+    await vi.advanceTimersByTimeAsync(0);
     expect(runtime.status().state).toBe("idle");
-    pauseNextPoll = true;
+    pauseNextRenew = true;
     const refreshing = runtime.refresh();
-    await vi.waitFor(() => expect(releasePoll).not.toBeNull());
-    obligations = true;
-    runtime.wake();
-    releasePoll!();
+    await vi.waitFor(() => expect(releaseRenew).not.toBeNull());
+    runtime.receiveOperations([], true);
+    releaseRenew!();
     await refreshing;
     await vi.advanceTimersByTimeAsync(PONDER_DESKTOP_RENEW_MS);
-    expect(polls).toBe(6);
+    expect(renewals).toBe(5);
     expect(runtime.status().state).toBe("online");
   } finally {
     await runtime.close();
@@ -169,7 +163,7 @@ it("publishes running inspections separately and fences an owner change during c
       scope, runtimeId, proof: () => { throw new Error("unused"); },
       async request(action, payload, requestedEpoch) {
         if (action === "attach" || action === "renew") return { attachment };
-        if (action === "poll") return { operations: [operation], nextCursor: null, hasObligations: true };
+        if (action === "reconcile") return { operations: [{ id: operation.id, payloadHash: operation.payloadHash, state: operation.state, updatedAt: operation.updatedAt }] };
         if (action === "inspection") {
           expect(requestedEpoch).toBe(epoch);
           published.push(payload);
@@ -196,6 +190,8 @@ it("publishes running inspections separately and fences an owner change during c
     });
     try {
       await runtime.start();
+      runtime.receiveOperations([operation], true);
+      await runtime.refresh();
       expect(terminalReads).toBe(0);
       expect(published).toEqual(changeOwnerDuringRead ? [] : [inspection]);
     } finally {
