@@ -68,6 +68,9 @@ describe("desktop runtime staging", () => {
           "apps/cli/dist/chunks/collector.js",
           'console.log("collector");\n'
         ),
+        writeFixture(root, "apps/cli/build/cli-runtime-outputs.json", JSON.stringify(["dist/cli.js", "dist/chunks/collector.js"])),
+        // Retired transport code left by an earlier hash must never ship.
+        writeFixture(root, "apps/cli/dist/chunks/retired-poll-executor.js", 'throw new Error("obsolete transport");\n'),
         writeFixture(
           root,
           "apps/web/dist/index.html",
@@ -131,6 +134,7 @@ describe("desktop runtime staging", () => {
         .toBe('import "./chunks/collector.js";\n');
       expect(await readFile(path.join(result.stageRoot, "runtime/cli/chunks/collector.js"), "utf8"))
         .toBe('console.log("collector");\n');
+      expect(stagedPaths).not.toContain("cli/chunks/retired-poll-executor.js");
 
       expect(stagedPaths).toContain(
         "server/node_modules/node-pty/package.json"
