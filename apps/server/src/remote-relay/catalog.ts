@@ -40,6 +40,8 @@ export async function captureRemoteTaskCatalog(input: {
     const target = await input.inspect(session.id);
     const latest = await input.latestTurn?.(session.id);
     const approval = input.approvals?.find(approval => approval.sessionId === session.id && approval.status === "pending"
+      && latest?.status === "in_progress" && latest.id === target.activeTurnId
+      && !!approval.turnId && (approval.turnId === latest.id || approval.turnId === latest.providerTurnId)
       && remoteApprovalSupported(approval));
     tasks.push({ id: session.id, localSessionId: session.id, title: session.title,
       projectId: session.localProjectId ?? null, projectLabel: session.workspaceName ?? null,
@@ -47,7 +49,7 @@ export async function captureRemoteTaskCatalog(input: {
       createdAt: session.createdAt, updatedAt: session.updatedAt,
       lastEventSequence: 0, activeTurnId: target.activeTurnId, approvalId: approval?.id ?? null,
       archived: session.archived ?? false, deleted: false,
-      state: target.approvalBlocked ? "attention" : target.activeTurnId ? "running" : latest?.status === "failed" ? "failed" : latest?.status === "completed" ? "completed" : "idle",
+      state: approval ? "attention" : target.activeTurnId ? "running" : latest?.status === "failed" ? "failed" : latest?.status === "completed" ? "completed" : "idle",
       capabilities: { followUp: target.canSendFollowup, steer: target.canSteer,
         stop: target.activeTurnId !== null && target.managedSessionId !== null, approval: !!approval, artifacts: false },
     });

@@ -1,9 +1,8 @@
 {
-  "capturedAt": "2026-10-08T05:26:00Z",
-  "source": "efc76bc9a",
+  "capturedAt": "2026-10-08T05:44:21.523420+00:00",
+  "source": "e9022d1fc",
   "api": "https://staging-api.openpond.ai",
   "actualPackagedProcess": true,
-  "authenticatedUiQualified": false,
   "providerCredentialsCopied": false,
   "productionProfileModified": false,
   "ownerUserId": "dzdaskv4w4",
@@ -23,15 +22,86 @@
     "hasNextCursor": false
   },
   "pending": [
-    "web viewer transcript rendering",
-    "web submit path",
-    "steer stop approval stale targets",
-    "packaged restart Off logout lifecycle"
+    "web New task/start via approved private starter",
+    "packaged Off logout lifecycle",
+    "authenticated native desktop UI",
+    "capacity qualification owned by parent",
+    "native iOS owner verification deferred"
   ],
   "refreshedArtifactSha256": {
-    "AppImage": "bb4a13a29fc8129f2b2be726ec96beb6fe3c01bb63eafbf818231cba7905508b",
-    "deb": "117ce31205bff5bf6c3708d92ad8abbf8c058e47513295c645c4b6abfe84782e",
-    "server": "979e5aff61510145a747ff8c62d0f9fc76a8fbf1c6e51c3a91e0462c75364b10"
+    "AppImage": "b9efd7e8a57875034c1404f2aad03a741c21a7ee8c4758f7ccc6dd018b69406c",
+    "deb": "1cea44ca107079707e547fee06f000b8ffba277d10cff0de944ad903c6c792f8",
+    "server": "73ec2c374cf19fedb18536af1669691cab3ada35411c062875076f03f69a050f"
   },
-  "runningArtifactPrecedesOffFix": true
+  "runningArtifactPrecedesOffFix": false,
+  "webTurnId": "f9ff0e75-37be-4c03-9f91-8b44be687196",
+  "webOutput": "WEB ORCHID-731",
+  "webSubmissionProviderPassed": true,
+  "packagedRestart": {
+    "serverPidBefore": 1397865,
+    "serverPidAfter": 1414326,
+    "sameDevice": true,
+    "sameSession": true,
+    "sameCodexThread": true
+  },
+  "controlProof": {
+    "steer": {
+      "receiptId": "843d08b9-1ea1-44d7-a0b7-1a36996ffdac",
+      "turnId": "b862050d-0d52-45f1-bb00-59224e08dd3b",
+      "output": "STEER_OBSERVED",
+      "passed": true
+    },
+    "stop": {
+      "receiptId": "c7b062b8-34ed-4bc0-9922-202fe158ab78",
+      "turnId": "4557128d-5404-4f09-af4d-33a1de823d11",
+      "state": "applied",
+      "passed": true
+    },
+    "stalePreviousTurnStop": {
+      "httpStatus": 409,
+      "replacementHadPendingApproval": true,
+      "passed": true
+    },
+    "approval": {
+      "id": "7a214009-9e8e-42bf-bd30-96f513d6f04e",
+      "kind": "command",
+      "initialReceiptState": "rejected",
+      "initialError": "remote_approval_changed_or_unsupported",
+      "passed": true,
+      "repair": "map provider turn to retained canonical active local turn; cancel pending approvals on terminal turn; project local turn and actual decision status",
+      "finalApprovalId": "d51f3021-3383-4e48-9d5f-277aa0891a5c",
+      "finalReceiptId": "1e5f7872-68bc-42f5-a17d-e3fd40fba008",
+      "finalReceiptState": "applied",
+      "localTurnId": "080985c2-8f64-4b3d-a1e9-93b1fa4710eb",
+      "providerTurnId": "01a11a07-d8b8-7921-88ad-3b7d0b7f9b16",
+      "output": "APPROVAL_VERIFIED",
+      "duplicateReceiptSameId": true,
+      "staleCompetingRequest": {
+        "httpStatus": 409,
+        "error": "capability_unavailable"
+      }
+    }
+  },
+  "sourceGitBase": "e9022d1fc",
+  "sourceWorkingTreeChanges": [
+    "approval provider/local turn mapping",
+    "terminal approval cancellation and late callback fence",
+    "active catalog approval gate",
+    "local turn and actual decision history projection"
+  ],
+  "nativeDesktopUiQualified": false,
+  "webObservation": {
+    "observedBy": "root actual CUA at https://staging.openpond.ai",
+    "fullRetainedMessagesAfterRestart": true,
+    "unsentDraftPreservedAcrossDisconnectReconnect": true,
+    "approvalClickProviderCompleted": true
+  },
+  "selectiveValidation": {
+    "boundaryFiles": 2,
+    "testsPassed": 3,
+    "serverProjectTypecheck": "passed",
+    "fullRepositoryTypecheck": "not run",
+    "packageBuild": "passed",
+    "packageInventory": "passed"
+  }
 }

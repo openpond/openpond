@@ -7,6 +7,7 @@ import { remoteDevicePermitMessage, type RemoteDispatchCommand } from "@openpond
 import { SqliteStore } from "../store/store.js";
 import { createSessionStore } from "../store/session-store.js";
 import { localSessionOwnershipRevision } from "./session-ownership.js";
+import { normalizeRemoteEventTurn, projectRemoteEvent } from "./history.js";
 import { createRemoteCommandExecutor } from "./executor.js";
 
 // Losing the cloud acknowledgement cannot duplicate input after restart, while
@@ -48,5 +49,58 @@ it("fences remote authority at canonical SQLite admission and recovers the origi
     const receipt = await execute(original);
     expect(receipt.inputId).toBe(input.id);
     expect((await store.taskInputsForSession(session.id, { afterSequence: 0, limit: 10 })).length).toBe(1);
+  } finally { await store.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+// Providers identify approvals by their own turn ID. Remote controls use the
+// canonical local turn; the mapping must retain that exact turn and one claim.
+it("maps provider approval identity to the active local turn and fences competing controls", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "remote-approval-"));
+  const store = new SqliteStore(directory);
+  const owner = { version: 1 as const, installationId: randomUUID(), profileId: "profile", ownerUserId: "owner", teamId: "team", audience: "https://fixture.invalid" };
+  const keys = generateKeyPairSync("ed25519");
+  const authority = { deviceId: randomUUID(), owner, fence: 1, grantRevision: 1, leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
+    publicKeys: [{ keyId: "fixture", publicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString() }] };
+  try {
+    await store.initializeRemoteDeviceStore();
+    const sessions = createSessionStore({ store, defaultSessionCwd: () => directory, appendRuntimeEvent: async event => { await store.appendRuntimeEvent(event); }, captureUserOwner: async () => owner });
+    const session = await sessions.createUserSession({ provider: "codex", title: "Approval identity", cwd: directory });
+    const turn = { id: randomUUID(), sessionId: session.id, providerTurnId: randomUUID(), prompt: "Controlled approval", startedAt: new Date().toISOString(), completedAt: null,
+      status: "in_progress" as const, error: null, metadata: {}, createImproveRun: null };
+    await store.insertTurn(turn);
+    const approval = { id: randomUUID(), sessionId: session.id, turnId: turn.providerTurnId, providerRequestId: "request", kind: "command" as const,
+      title: "Controlled command", detail: "sleep 45; printf DONE", status: "pending" as const, createdAt: new Date().toISOString() };
+    await store.upsertApproval(approval); await store.setRemoteDeviceAuthority(authority);
+    const projected = projectRemoteEvent(await normalizeRemoteEventTurn(store, {
+      id: "approval-event", timestamp: new Date().toISOString(), sessionId: session.id, turnId: turn.providerTurnId,
+      name: "approval.requested", source: "provider", status: "pending", data: approval,
+    }), 1);
+    expect(projected?.turnId).toBe(turn.id); expect(projected?.approvalId).toBe(approval.id);
+    expect(projectRemoteEvent({ id: "resolved", timestamp: new Date().toISOString(), name: "approval.resolved",
+      source: "server", status: "completed", data: { decision: "accept", approvalId: approval.id } }, 2)?.status).toBe("accepted");
+    const command = (expectedTurnId: string = turn.id, expectedApprovalId: string = approval.id): RemoteDispatchCommand => {
+      const id = randomUUID(); const unsigned = { id, idempotencyKey: id, action: "approval" as const, targetId: "cloud-task", localSessionId: session.id,
+        expectedRevision: Number.parseInt(localSessionOwnershipRevision(session, turn.id).slice(0, 13), 16), expectedTurnId, expectedApprovalId,
+        payload: { response: "approve" as const }, deviceId: authority.deviceId, payloadHash: "a".repeat(64),
+        scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: owner.teamId },
+        grantRevision: 1, fence: 1, deadline: new Date(Date.now() + 30000).toISOString(), actor: "remote-human" as const };
+      const expiresAt = new Date(Date.now() + 15000).toISOString();
+      return { ...unsigned, permit: { keyId: "fixture", expiresAt,
+        signature: sign(null, Buffer.from(remoteDevicePermitMessage(unsigned, expiresAt, "fixture")), keys.privateKey).toString("base64") } };
+    };
+    await expect(store.admitRemoteDeviceApproval(command("old-local-turn"))).rejects.toThrow("remote_turn_changed");
+    await expect(store.admitRemoteDeviceApproval(command(turn.id, "old-approval"))).rejects.toThrow("remote_approval_changed_or_unsupported");
+    await store.upsertApproval({ ...approval, turnId: null });
+    await expect(store.admitRemoteDeviceApproval(command())).rejects.toThrow("remote_approval_changed_or_unsupported");
+    await store.upsertApproval(approval);
+    const admitted = await store.admitRemoteDeviceApproval(command());
+    expect(admitted.turnId).toBe(turn.id); expect(admitted.approvalId).toBe(approval.id);
+    await expect(store.admitRemoteDeviceApproval(command())).rejects.toThrow("remote_approval_already_claimed");
+    expect((await store.getApproval(approval.id))?.status).toBe("pending");
+    await store.updateTurn(turn.id, current => ({ ...current, status: "interrupted", completedAt: new Date().toISOString() }));
+    expect((await store.getApproval(approval.id))?.status).toBe("cancelled");
+    expect(await store.pendingApprovals()).toHaveLength(0);
+    await store.upsertApproval(approval);
+    expect((await store.getApproval(approval.id))?.status).toBe("cancelled");
   } finally { await store.close(); await rm(directory, { recursive: true, force: true }); }
 });
