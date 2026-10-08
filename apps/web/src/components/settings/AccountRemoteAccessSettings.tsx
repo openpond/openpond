@@ -50,27 +50,34 @@ export function AccountRemoteAccessSettings({
   const requestVersion = useRef(0);
   const latestStatus = useRef(status);
   const mutationPending = useRef(false);
+  const refreshRequest = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
+    if (refreshRequest.current) return;
     const version = ++requestVersion.current;
     if (!connection) {
       latestStatus.current = null;
       setStatus(null);
       return;
     }
+    const controller = new AbortController();
+    refreshRequest.current = controller;
     try {
       const value = await apiFetch<RemoteAccessSettingsStatus>(
         connection,
         "/v1/account-remote-access",
+        { signal: controller.signal },
       );
       if (requestVersion.current === version) {
         latestStatus.current = value;
         setStatus(value);
       }
     } catch (error) {
-      if (requestVersion.current === version)
+      if (!controller.signal.aborted && requestVersion.current === version)
         onError(
           settingsError(error, "Unable to load your computers."),
         );
+    } finally {
+      if (refreshRequest.current === controller) refreshRequest.current = null;
     }
   }, [connection, onError]);
   useEffect(() => {
@@ -90,6 +97,8 @@ export function AccountRemoteAccessSettings({
     }, 1_000);
     return () => {
       ++requestVersion.current;
+      refreshRequest.current?.abort();
+      refreshRequest.current = null;
       window.clearInterval(timer);
     };
   }, [refresh]);
@@ -119,6 +128,8 @@ export function AccountRemoteAccessSettings({
     body: Record<string, unknown> = {},
   ) {
     if (!connection || mutationPending.current) return;
+    refreshRequest.current?.abort();
+    refreshRequest.current = null;
     const version = ++requestVersion.current;
     mutationPending.current = true;
     setBusy(true);

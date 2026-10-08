@@ -13,7 +13,6 @@ import {
   type RemoteDevice,
   type RemoteDeviceFrame,
   type RemoteDispatchCommand,
-  type Session,
 } from "@openpond/contracts";
 import { deviceOwnerKey, loadRemoteAccessPreference } from "./preference.js";
 import { createRemoteDeviceClient, createSelectedRemoteClient } from "./client.js";
@@ -26,12 +25,9 @@ import {
   readRemoteHistory,
 } from "./history.js";
 import type { RemoteLocalAuthority } from "./admission.js";
-import {
-  localSessionMayResolveOwnership,
-  localSessionOwnershipRevision,
-} from "./session-ownership.js";
 import { captureRemoteStarters } from "./starters.js";
 import { uploadRemoteArtifact } from "./artifacts.js";
+import { attachQualifiedLocalOwner, unresolvedLocalOwnership } from "./ownership-settings.js";
 
 import { createCatalogPublication } from "./catalog-publication.js";
 import {
@@ -53,6 +49,8 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
   let epoch: string | null = null;
   let closed = false;
   let generation = 0;
+  // Account writes invalidate settings; routine transport reconnects do not.
+  let accountGeneration = 0;
   let authorityChanging = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let catalogTimer: ReturnType<typeof setTimeout> | null = null;
@@ -151,12 +149,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
         : (failure?.state ?? "offline");
   }
   async function sessions() {
-    const rows: Session[] = [];
-    for (const shell of await deps.store.sessionShells()) {
-      const session = await deps.store.getSession(shell.id);
-      if (session) rows.push(session);
-    }
-    return rows;
+    return deps.store.sessionShells();
   }
   async function catalog() {
     if (!selected || !authority || !preference.enabled(selected.owner)) return;
@@ -207,11 +200,11 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
   }
   async function connect(reenable = false) {
     if (closed || authorityChanging || failure?.state === "update_required") return;
-    const accountGeneration = generation;
+    const connectionGeneration = generation;
     const next = await deps.current();
     const presentation = await deps.accountStatus();
     if (next) await preference.capture(next.owner);
-    if (authorityChanging || accountGeneration !== generation || closed) return;
+    if (authorityChanging || connectionGeneration !== generation || closed) return;
     accountPresentation = presentation;
     if (
       selected &&
@@ -219,6 +212,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
         deviceOwnerKey(next.owner) !== deviceOwnerKey(selected.owner) ||
         next.credentialKey !== selected.credentialKey)
     ) {
+      accountGeneration++;
       await disconnect();
       device = null;
     }
@@ -790,6 +784,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
     },
     async beforeAuthorityChange() {
       authorityChanging = true;
+      accountGeneration++;
       failure = null;
       await disconnect();
       if (selected) await preference.capture(selected.owner);
@@ -858,11 +853,15 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
       payload?: unknown,
     ): Promise<unknown> {
       if (authorityChanging) throw new Error("remote_account_changing");
-      const accountGeneration = generation;
+      const capturedAccountGeneration = accountGeneration;
+      const assertCurrentAccount = () => {
+        if (closed || authorityChanging || capturedAccountGeneration !== accountGeneration)
+          throw new Error("remote_account_changing");
+      };
       const presentation = await deps.accountStatus();
       const current = await deps.current();
       if (current) await preference.capture(current.owner);
-      if (authorityChanging || accountGeneration !== generation) throw new Error("remote_account_changing");
+      if (authorityChanging || capturedAccountGeneration !== accountGeneration) throw new Error("remote_account_changing");
       accountPresentation = presentation;
       if (!current) {
         await disconnect();
@@ -898,14 +897,13 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           })
           .strict()
           .parse(payload);
-        const attempt = generation;
-        await deps.store.attachLocalSessionOwner({
+        const qualify = await deps.prepareOwnerAttachment(current.owner);
+        await attachQualifiedLocalOwner({
           ...input,
+          store: deps.store,
           owner: current.owner,
-          assertCurrent: () => {
-            if (attempt !== generation || closed)
-              throw new Error("remote_account_changed");
-          },
+          qualify,
+          assertCurrent: assertCurrentAccount,
         });
         catalogDirty = true;
         if (authority) await catalog();
@@ -952,34 +950,23 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           )) as { devices: RemoteDevice[] })
         : { devices: [] };
       device = devices.devices.find((value) => value.id === source) ?? device;
-      const unresolvedTasks = [];
-      for (const session of await sessions()) {
-        if (!localSessionMayResolveOwnership(session)) continue;
-        const target = await deps.inspect(session.id);
-        if (target.canSendFollowup)
-          unresolvedTasks.push({
-            id: session.id,
-            title: session.title,
-            revision: localSessionOwnershipRevision(
-              session,
-              target.latestTurnId,
-            ),
-          });
-      }
+      const qualify = await deps.prepareOwnerAttachment(current.owner);
+      const unresolvedTasks = await unresolvedLocalOwnership({ sessions: await sessions(), qualify,
+        latestTurn: id => deps.store.latestTurnForSession(id), assertCurrent: assertCurrentAccount });
       return { ...this.status(), devices: devices.devices, unresolvedTasks };
     },
     async setEnabled(enabled: boolean) {
       if (authorityChanging) throw new Error("remote_account_changing");
       failure = null;
       reconnectAttempt = 0;
-      const accountGeneration = generation;
+      const capturedAccountGeneration = accountGeneration;
       const current = await deps.current();
-      if (authorityChanging || accountGeneration !== generation) throw new Error("remote_account_changing");
+      if (authorityChanging || capturedAccountGeneration !== accountGeneration) throw new Error("remote_account_changing");
       if (!current) throw new Error("Sign in to your OpenPond account first.");
       await preference.set(current.owner, enabled);
-      if (authorityChanging || accountGeneration !== generation) throw new Error("remote_account_changing");
+      if (authorityChanging || capturedAccountGeneration !== accountGeneration) throw new Error("remote_account_changing");
       await disconnect();
-      if (authorityChanging || generation !== accountGeneration + 1) throw new Error("remote_account_changing");
+      if (authorityChanging || capturedAccountGeneration !== accountGeneration) throw new Error("remote_account_changing");
       selected = current;
       if (!enabled && device)
         await clientFor(current).signed(

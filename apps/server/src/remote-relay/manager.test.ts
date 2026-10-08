@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { z } from "zod";
-import type { RuntimeEvent } from "@openpond/contracts";
+import { ProviderSettingsSchema, type RuntimeEvent } from "@openpond/contracts";
 import { WebSocketServer } from "ws";
 import { SqliteStore } from "../store/store.js";
 import { createSessionStore } from "../store/session-store.js";
@@ -12,6 +12,7 @@ import { loadDeviceInstallation } from "./installation.js";
 import { createRemoteRelayManager } from "./manager.js";
 import { deviceOwnerKey, loadRemoteAccessPreference } from "./preference.js";
 import { createAccountAuthorityChange } from "../runtime/account-authority-change.js";
+import { createLocalOwnerAttachmentInspection } from "../runtime/task-inbox/local-owner-attachment.js";
 
 // A broker rejects null pre-authentication epoch/fence fields. The desktop must
 // finish its first authenticated hello and publish a catalog over the real socket.
@@ -33,10 +34,13 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
   let catalogRevision = 0;
   let rejectNextPatch = false;
   let signedIn = true;
+  let openPondEnabled = true;
+  let pauseAccountStatus: (() => Promise<void>) | null = null;
   let slowCatalogAcknowledgements = false;
   let catalogPagesInFlight = 0;
   let maximumCatalogPagesInFlight = 0;
   let bulkBytes = 0;
+  let seedingBulkCatalog = false;
   const enrolled = {
     id: deviceId,
     installationId: installation.installationId,
@@ -163,12 +167,17 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
     storeDir: directory,
     installation,
     store,
-    accountStatus: async () => ({
+    accountStatus: async () => {
+      const pause = pauseAccountStatus;
+      pauseAccountStatus = null;
+      await pause?.();
+      return ({
       state: signedIn ? "ready" : "signed_out",
       account: signedIn ? { id: "owner", label: "Fixture owner" } : null,
       team: signedIn && owner.teamId ? { id: owner.teamId } : null,
       webBaseUrl: "https://staging.openpond.ai",
-    }),
+      });
+    },
     current: async () =>
       signedIn
         ? {
@@ -206,6 +215,16 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
             },
           }
         : null,
+    prepareOwnerAttachment: async capturedOwner => createLocalOwnerAttachmentInspection({
+      owner: capturedOwner,
+      providers: ProviderSettingsSchema.parse({ providers: {
+        codex: { enabled: true }, openpond: { enabled: openPondEnabled },
+      } }),
+      codexStatus: async () => ({ available: true, binaryPath: null, version: null,
+        authHealth: "signed_in", account: null, appServer: { status: "ready", lastError: null } }),
+      loadProfile: async () => { throw new Error("This fixture has no Profile references"); },
+      loadHarness: async () => { throw new Error("This fixture has no released workflow bindings"); },
+    }),
     inspect: async (id) => {
       const session = (await store.getSession(id))!;
       const turn = await store.latestTurnForSession(id);
@@ -264,7 +283,7 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
       defaultSessionCwd: () => directory,
       appendRuntimeEvent: async (event) => {
         await store.appendRuntimeEvent(event);
-        if (event.name === "session.updated") listener(event);
+        if (event.name === "session.updated" && !seedingBulkCatalog) listener(event);
       },
       captureUserOwner: async () => owner,
     });
@@ -274,6 +293,18 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
       cwd: directory,
     });
     const unowned = await sessions.createSession({ provider: "codex", title: "Unresolved ownership", cwd: directory });
+    await store.updateSession(unowned.id, value => ({ ...value, codexThreadId: "fixture-unowned-thread" }));
+    // Older development tasks are ordinary local work. They become visible
+    // only after an explicit, revision-fenced local ownership choice.
+    const olderDevelopment = await sessions.createSession({ provider: "codex", experience: "development", title: "Older development task", cwd: directory });
+    await store.updateSession(olderDevelopment.id, value => ({ ...value, codexThreadId: "fixture-development-thread" }));
+    const settings = await manager.settings("status") as { unresolvedTasks: Array<{ id: string; revision: string }> };
+    const unresolvedDevelopment = settings.unresolvedTasks.find(task => task.id === olderDevelopment.id)!;
+    expect(unresolvedDevelopment).toBeDefined();
+    expect((await store.getSession(olderDevelopment.id))?.metadata?.ponderLocalOwner).toBeUndefined();
+    await manager.settings("attach", { sessionId: olderDevelopment.id, expectedRevision: unresolvedDevelopment.revision });
+    expect((await store.getSession(olderDevelopment.id))?.metadata?.ponderLocalOwner).toEqual(owner);
+    await expect.poll(() => received.filter(frame => frame.type === "catalog").some(frame => frame.payload.tasks.some((task: { id: string }) => task.id === olderDevelopment.id)), { timeout: 3000 }).toBe(true);
     const connection = [...server.clients][0]!;
     connection.send(
       JSON.stringify({
@@ -485,6 +516,9 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
     expect(disableTarget).not.toBe(deviceId);
     // This snapshot exceeds the socket's one-MiB queue. Delay every page ACK
     // so a burst publisher fails while one-page pacing keeps the queue bounded.
+    // Seed while notifications are paused; retry below publishes one complete
+    // durable snapshot rather than repeatedly rebuilding a growing directory.
+    seedingBulkCatalog = true;
     for (let index = 0; index < 650; index++) {
       await sessions.createUserSession({
         provider: "codex",
@@ -493,6 +527,7 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
         workspaceName: "w".repeat(990),
       });
     }
+    seedingBulkCatalog = false;
     slowCatalogAcknowledgements = true;
     maximumCatalogPagesInFlight = 0;
     bulkBytes = 0;
@@ -506,9 +541,57 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
     await manager.setEnabled(false);
     expect(disableTarget).toBe(deviceId);
     expect(manager.status().state).toBe("off");
+    // Discovery cannot claim old OpenPond work. Only a fresh, provider-qualified
+    // explicit choice persists the captured owner; another account's work stays private.
+    const olderOpenPond = await sessions.createSession({ provider: "openpond", experience: "development",
+      title: "Older OpenPond task", cwd: directory });
+    const foreignOpenPond = await sessions.createSession({ provider: "openpond", title: "Other account task", cwd: directory });
+    const foreignOwner = { ...owner, ownerUserId: "another-owner" };
+    await store.updateSession(foreignOpenPond.id, value => ({ ...value,
+      metadata: { ...value.metadata, ponderLocalOwner: foreignOwner } }));
+    const ownershipChoices = await manager.settings("status") as { unresolvedTasks: Array<{ id: string; revision: string }> };
+    const oldOpenPondChoice = ownershipChoices.unresolvedTasks.find(task => task.id === olderOpenPond.id)!;
+    expect(oldOpenPondChoice).toBeDefined();
+    expect(ownershipChoices.unresolvedTasks.some(task => task.id === foreignOpenPond.id)).toBe(false);
+    expect((await store.getSession(olderOpenPond.id))?.metadata?.ponderLocalOwner).toBeUndefined();
+    openPondEnabled = false;
+    await expect(manager.settings("attach", { sessionId: olderOpenPond.id,
+      expectedRevision: oldOpenPondChoice.revision })).rejects.toThrow("Enable OpenPond in Providers");
+    expect((await store.getSession(olderOpenPond.id))?.metadata?.ponderLocalOwner).toBeUndefined();
+    openPondEnabled = true;
+    await manager.settings("attach", { sessionId: olderOpenPond.id, expectedRevision: oldOpenPondChoice.revision });
+    expect((await store.getSession(olderOpenPond.id))?.metadata?.ponderLocalOwner).toEqual(owner);
+    await expect(manager.settings("attach", { sessionId: foreignOpenPond.id,
+      expectedRevision: oldOpenPondChoice.revision })).rejects.toThrow("remote_local_attachment_not_eligible");
+    expect((await store.getSession(foreignOpenPond.id))?.metadata?.ponderLocalOwner).toEqual(foreignOwner);
     await expect(manager.settings("retry")).rejects.toThrow(
       "remote_access_off",
     );
+    // A routine Off reconnect can finish during authentication without changing
+    // the account. A real authority write must still invalidate the same read.
+    const holdSettings = async () => {
+      let entered!: () => void;
+      let release!: () => void;
+      const started = new Promise<void>(resolve => { entered = resolve; });
+      const held = new Promise<void>(resolve => { release = resolve; });
+      pauseAccountStatus = async () => { entered(); await held; };
+      const result = manager.settings("status");
+      await started;
+      return { result, release };
+    };
+    const authorityWrites = vi.spyOn(store, "setRemoteDeviceAuthority");
+    const reconnectRead = await holdSettings();
+    manager.wake();
+    await expect.poll(() => authorityWrites.mock.calls.length).toBeGreaterThan(0);
+    reconnectRead.release();
+    await expect(reconnectRead.result).resolves.toMatchObject({ state: "off" });
+    authorityWrites.mockRestore();
+    const changingRead = await holdSettings();
+    const rejectedRead = expect(changingRead.result).rejects.toThrow("remote_account_changing");
+    await manager.beforeAuthorityChange();
+    changingRead.release();
+    await rejectedRead;
+    manager.afterAuthorityChange();
     // Account scope changes revoke the old socket before saving preferences.
     // Reconnects wait for persistence. Off follows the account/profile across
     // personal and workspace selection while task/device identities stay scoped.
@@ -541,12 +624,15 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
     const upgraded = await loadRemoteAccessPreference(directory);
     await upgraded.capture(originalOwner);
     expect((await loadRemoteAccessPreference(directory)).enabled(owner)).toBe(false);
+    const taskAfterSelection = await sessions.createUserSession({ provider: "codex", title: "Task in the newly selected scope", cwd: directory });
+    expect(taskAfterSelection.metadata?.ponderLocalOwner).toEqual(owner);
+    expect((await store.getSession(session.id))?.metadata?.ponderLocalOwner).toEqual(originalOwner);
     await manager.setEnabled(true);
     await expect.poll(() => manager.status().state, { timeout: 3000 }).toBe("connected");
     await expect.poll(() => {
       const catalogs = received.filter(frame => frame.type === "catalog" && frame.payload.complete);
       return catalogs[catalogs.length - 1]?.payload.tasks.length;
-    }, { timeout: 3000 }).toBe(0);
+    }, { timeout: 3000 }).toBe(1);
     expect((await loadRemoteAccessPreference(directory)).enabled(originalOwner)).toBe(true);
     expect((await store.getSession(session.id))?.metadata?.ponderLocalOwner).toEqual(originalOwner);
     expect((await store.getSession(unowned.id))?.metadata?.ponderLocalOwner).toBeUndefined();
