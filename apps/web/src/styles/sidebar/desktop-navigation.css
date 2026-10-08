@@ -52,3 +52,6 @@
   .app-shell.sidebar-open:has(> .desktop-navigation-rail) > .sidebar { position: relative; grid-column: 2; left: 0; width: min(var(--sidebar-width), 32vw); }
   .app-shell.sidebar-open:has(> .desktop-navigation-rail) > .sidebar-resize-handle { grid-column: 2 / 3; left: auto; }
 }
+.desktop-rail-button.desktop-training-entry,
+.desktop-rail-button.desktop-training-entry:hover,
+.desktop-rail-button.desktop-training-entry.active { color: #74d4df; }

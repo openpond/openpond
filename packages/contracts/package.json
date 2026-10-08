@@ -1,6 +1,6 @@
 {
   "name": "@openpond/contracts",
-  "version": "0.2.46",
+  "version": "0.2.47",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "private": true,
@@ -76,6 +76,10 @@
     "./learning-signals": {
       "types": "./dist/learning-signals.d.ts",
       "import": "./dist/learning-signals.js"
+    },
+    "./ponder-desktop": {
+      "types": "./dist/ponder-desktop.d.ts",
+      "import": "./dist/ponder-desktop.js"
     },
     "./profile": {
       "types": "./dist/profile.d.ts",
@@ -167,7 +171,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "node ../../scripts/run-typescript.mjs tsc -b"
   },
   "dependencies": {
     "@openpond/continual-support": "workspace:*",

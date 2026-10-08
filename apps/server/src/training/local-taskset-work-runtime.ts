@@ -294,8 +294,6 @@ function runCommand(command: string, cwd: string, timeoutMs: number): Promise<{
       "--ro-bind", "/bin", "/bin",
       "--ro-bind", "/lib", "/lib",
       "--ro-bind", "/lib64", "/lib64",
-      "--ro-bind", "/etc", "/etc",
-      "--ro-bind", "/var", "/var",
       "--ro-bind", nodeRuntimeRoot, nodeRuntimeRoot,
       ...(existsSync(localPythonRoot)
         ? ["--ro-bind", localPythonRoot, localPythonRoot]
@@ -306,7 +304,11 @@ function runCommand(command: string, cwd: string, timeoutMs: number): Promise<{
       "--bind", cwd, "/workspace",
       "--chdir", "/workspace/work",
       "--unshare-all",
-      "--share-net",
+      "--die-with-parent",
+      "--new-session",
+      "--cap-drop", "ALL",
+      "--clearenv",
+      "--setenv", "PATH", `${path.dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin`,
       "--setenv", "HOME", os.homedir(),
       "--setenv", "XDG_CACHE_HOME", "/tmp/cache",
       "--setenv", "MPLCONFIGDIR", "/tmp/matplotlib",
@@ -315,7 +317,7 @@ function runCommand(command: string, cwd: string, timeoutMs: number): Promise<{
     execFile(
       "/bin/bwrap",
       sandboxArgs,
-      { cwd, timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 },
+      { cwd, env: {}, timeout: timeoutMs, killSignal: "SIGKILL", maxBuffer: 4 * 1024 * 1024 },
       (error, stdout, stderr) => resolve({
         code: typeof (error as NodeJS.ErrnoException | null)?.code === "number"
           ? (error as unknown as { code: number }).code

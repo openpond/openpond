@@ -1,6 +1,6 @@
 {
   "name": "@openpond/terminal",
-  "version": "0.2.46",
+  "version": "0.2.47",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "private": true,
@@ -17,7 +17,7 @@
     "openpond-app": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "node ../../scripts/run-typescript.mjs tsc -b",
     "dev": "tsx src/index.ts chat"
   },
   "dependencies": {

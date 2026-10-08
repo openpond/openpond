@@ -44,6 +44,7 @@ export function MainChatThread({
   onOpenProfileSettings,
   onResolveUserQuestion,
   onOpenSession,
+  onOpenPonder,
   onScroll,
   rows,
   sessionId,
@@ -69,6 +70,7 @@ export function MainChatThread({
   onOpenProfileSettings: MessageRowProps["onOpenProfileSettings"];
   onResolveUserQuestion: MessageRowProps["onResolveUserQuestion"];
   onOpenSession: MessageRowProps["onOpenSession"];
+  onOpenPonder?: MessageRowProps["onOpenPonder"];
   onScroll: (event: UIEvent<HTMLElement>) => void;
   rows: ReturnType<typeof buildChatTimelineRows>;
   sessionId: string | null;
@@ -130,6 +132,7 @@ export function MainChatThread({
           onOpenProfileSettings={onOpenProfileSettings}
           onResolveUserQuestion={onResolveUserQuestion}
           onOpenSession={onOpenSession}
+          onOpenPonder={onOpenPonder}
           userAttachmentDisplay={userAttachmentDisplay}
           workspaceRootPath={workspaceRootPath}
           showFooter={row.showFooter}

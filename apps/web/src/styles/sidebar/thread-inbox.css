@@ -1,4 +1,11 @@
 .sidebar .sidebar-row.sidebar-task-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; min-width: 0; max-width: 100%; gap: 8px; border: 1px solid var(--border); margin: 4px 6px; width: calc(100% - 12px); border-radius: 8px; }
+.sidebar .sidebar-pinned-section,
+.sidebar .sidebar-projects-section,
+.sidebar .sidebar-ordinary-section { padding-inline: 6px; }
+.sidebar-pinned-section > .section-header,
+.sidebar-projects-section > .section-header,
+.sidebar-ordinary-section > .section-header { margin-inline: 8px; }
+.sidebar :is(.sidebar-pinned-section, .sidebar-projects-section, .sidebar-ordinary-section) .sidebar-task-row { width: 100%; margin-inline: 0; }
 .sidebar .sidebar-task-row .row-meta { position: static; display: flex; align-items: center; align-self: center; gap: 2px; min-width: 0; width: auto; height: auto; }
 .sidebar .sidebar-task-row .row-meta-status { flex: 0 0 auto; }
 .sidebar .sidebar-task-row .sidebar-task-menu-trigger { position: static; transform: none; flex: 0 0 auto; }

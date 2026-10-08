@@ -9,6 +9,7 @@ import type {
 } from "@openpond/contracts";
 import { createPonderActivityBridge } from "../../openpond/ponder-activity-bridge.js";
 import { requestHostedPonder } from "../../openpond/ponder-pal.js";
+import { createCapturedOpenPondPublicApiClient } from "../../openpond/sandboxes.js";
 import { requestConversationLearning } from "../../openpond/conversation-learning.js";
 import type { TurnRunner } from "../turns/ports.js";
 import { createLocalManagedMessaging } from "./local-managed-messaging.js";
@@ -65,6 +66,6 @@ export function createDesktopPonderActivityBridge(deps:
   return createPonderActivityBridge({
     ...bridge,
     teamId: async () => (await loadAppPreferences()).defaultTeamId,
-    request: async request => requestHostedPonder({ ...request, teamId: (await loadAppPreferences()).defaultTeamId ?? undefined }),
+    request: async (request, context, teamId) => createCapturedOpenPondPublicApiClient(context, teamId).request(request),
   });
 }

@@ -1,7 +1,9 @@
 import { nativeImageContent } from "./native-agents/attachments.js";
+import { assertPonderDesktopExecution } from "../store/ponder-desktop-input.js";
 import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
+import path from "node:path";
 import { AppPreferencesSchema, DEFAULT_OPENPOND_CHAT_MODEL, type ChatProvider } from "@openpond/contracts/settings";
 import { DEFAULT_SESSION_EXPERIENCE } from "@openpond/contracts/experiences";
 import { TASK_COORDINATION_INSTRUCTIONS, taskInputModelText } from "@openpond/contracts/task-inbox";
@@ -305,7 +307,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const permissions = previous?.metadata.taskExecutionPermissions ?? {
           approvalPolicy: "on-request", sandbox: "read-only", codexPermissionMode: "default",
         };
-        return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>) }, turnId);
+        return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>) }, turnId,
+          sourceInput.senderKind === "ponder" ? { beforeExecute: async admitted => {
+            assertPonderDesktopExecution(sourceInput, admitted);
+          } } : undefined);
       }
       const context = await prepareSubagentContinuationTurn({ session, request,
         requestedTurnPermissions: turnPermissionsFromSendTurnInput(request) });
@@ -1208,7 +1213,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               ...attachmentContexts,
             ]
           : undefined;
-      const attachmentContext = chatAttachmentContext(attachmentContexts);
+      // Case admission copies these inputs into the isolated policy namespace.
+      // Keep host paths for upload, but advertise the path the model can open.
+      const attachmentContext = chatAttachmentContext(isolatedProfileEvaluation
+        ? attachmentContexts.map(attachment => ({ ...attachment,
+            localPath: `/workspace/work/inputs/${path.basename(attachment.name)}` }))
+        : attachmentContexts);
       let providerPrompt = formatPromptWithAttachmentContext(
         promptWithSteeringContext(
           promptWithUserQuestionResolution(input.prompt, userQuestionResolution),
@@ -1441,7 +1451,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           providerPrompt,
           systemPrompt
         );
-        session = await runHostedToolLoop({
+        const hostedResult = await runHostedToolLoop({
           harness: selectedHarness?.release.harnessRelease,
           harnessDeclarations: [
             ...(selectedHarness?.release.agentSnapshot?.toolDeclarations ?? []),
@@ -1491,11 +1501,14 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
                 yield { toolCalls: delta.toolCalls, raw: delta.raw };
               if (delta.type === "usage")
                 yield { raw: delta.raw, usage: delta.usage };
+              if (delta.type === "continuation")
+                yield { continuation: delta.continuation, raw: delta.raw };
               if (delta.type === "finish")
                 yield { finishReason: delta.finishReason, raw: delta.raw };
             }
           },
         });
+        session = hostedResult.session;
         await finalizeAttachedWorkSandbox(turn.id, "completed");
         await appendRuntimeEvent(
           event({
@@ -1505,6 +1518,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             source: "provider",
             appId: session.appId,
             status: "completed",
+            data: { providerResponse: hostedResult.providerResponse },
           })
         );
         const completed = await completeTurn(sessionId, turn.id, providerTurnId);
@@ -1608,7 +1622,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           providerPrompt,
           systemPrompt
         );
-        session = await runHostedToolLoop({
+        const hostedResult = await runHostedToolLoop({
           harness: selectedHarness?.release.harnessRelease,
           harnessDeclarations: [
             ...(selectedHarness?.release.agentSnapshot?.toolDeclarations ?? []),
@@ -1668,6 +1682,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             }
           },
         });
+        session = hostedResult.session;
         await finalizeAttachedWorkSandbox(turn.id, "completed");
         await appendRuntimeEvent(
           event({
@@ -1680,6 +1695,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             data: {
               provider: session.provider,
               model: runtimeModel,
+              providerResponse: hostedResult.providerResponse,
             },
           })
         );
@@ -1898,6 +1914,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     readTaskInbox: (sessionId) => inboxStore.taskInboxSnapshot(sessionId),
     queueTaskInput: taskInbox.queue,
     admitUserLocalMessage: taskInbox.admitUserLocalMessage,
+    admitPonderLocalMessage: taskInbox.admitPonderLocalMessage,
     updateTaskInput: taskInbox.mutate,
     recoverTaskInbox: taskInbox.recover,
     isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),

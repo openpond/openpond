@@ -22,6 +22,13 @@ function retryKey(action: string, value: unknown): string {
   return `inbox:${action}:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
+function hostedInput(input: TaskInputAdmission) {
+  if (input.senderKind === "ponder" || input.payload.ponderDesktop !== undefined) {
+    throw new Error("A desktop Ponder operation must be admitted on its originating local installation.");
+  }
+  return { ...input, senderKind: input.senderKind };
+}
+
 /** Hosted transport for the same transactional domain port used by SQLite. */
 export class HostedTaskInboxStorage implements TaskInboxRepository {
   constructor(private readonly client: AgentHostStorageClient) {}
@@ -69,8 +76,8 @@ export class HostedTaskInboxStorage implements TaskInboxRepository {
     await this.call({ action: "declareTaskWork", sessionId, turnId, ownerId, areas }, ok);
   }
   async taskWorkAreas(sessionId: string) { return this.call({ action: "taskWorkAreas", sessionId }, stringArray); }
-  async admitTaskInput(input: TaskInputAdmission) { return this.call({ action: "admitTaskInput", input }, TaskInputSchema); }
-  async admitTaskInputs(input: TaskInputAdmission[]) { return this.call({ action: "admitTaskInputs", inputs: input }, inputs); }
+  async admitTaskInput(input: TaskInputAdmission) { return this.call({ action: "admitTaskInput", input: hostedInput(input) }, TaskInputSchema); }
+  async admitTaskInputs(input: TaskInputAdmission[]) { return this.call({ action: "admitTaskInputs", inputs: input.map(hostedInput) }, inputs); }
   async rejectTaskInput(id: string, error: string) { await this.call({ action: "rejectTaskInput", id, error }, ok); }
   async getTaskInput(id: string) { return this.call({ action: "getTaskInput", id }, TaskInputSchema.nullable()); }
   async taskInputsForSession(sessionId: string, query: { afterSequence?: number; pendingOnly?: boolean; limit?: number } = {}) {

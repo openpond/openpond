@@ -11,6 +11,7 @@ import type { ActiveTurn } from "../turns/ports.js";
 import { taskWorkspaceIdentity, workspaceRelationship } from "./workspace-identity.js";
 import { canCoordinateTasks } from "./scope.js";
 import { isNativeAgentId } from "../native-agents/config.js";
+import { PonderDesktopInputSchema } from "../../store/ponder-desktop-input.js";
 
 export function createTaskInboxRuntime(deps: {
   store: TaskInboxRepository;
@@ -49,11 +50,15 @@ export function createTaskInboxRuntime(deps: {
       const recipient = sender ? await deps.getSession(input.sessionId).catch(() => null) : null;
       const authorized = sender && recipient && await canCoordinateTasks(sender, recipient, deps.getSession);
       const peer = (session: Session) => ({ sessionId: session.id, title: authorized ? session.title : "Another task", provider: authorized ? session.provider : "" });
+      const ponderOrigin = input.senderKind === "ponder" ? PonderDesktopInputSchema.parse(input.payload.ponderDesktop).operation.origin : null;
       await deps.appendRuntimeEvent(event({
         sessionId: input.sessionId, turnId: input.turnId ?? undefined,
         name: "task.input", source: "server", status: input.state === "rejected" ? "failed" : input.state === "pending" ? "pending" : "completed",
         output: input.error ?? `${input.senderKind === "user" ? "Input" : "Peer message"} ${input.state}.`,
-        data: { input, ...(sender ? { delivery: { direction: "received", peer: peer(sender) } } : {}) },
+        data: { input, ...(ponderOrigin ? { delivery: { direction: "received", peer: {
+          kind: "ponder", bindingId: ponderOrigin.scope.bindingId, title: "Ponder Pal", provider: "openpond",
+          ponderScope: ponderOrigin.scope,
+        } } } : sender ? { delivery: { direction: "received", peer: peer(sender) } } : {}) },
       }));
       if (sender && recipient && sender.id !== recipient.id) {
         await deps.appendRuntimeEvent(event({
@@ -280,6 +285,7 @@ export function createTaskInboxRuntime(deps: {
         const turnId = randomUUID();
         const input = await deps.store.reserveTaskFollowup(sessionId, turnId, ownerId);
         if (!input) return;
+        if (input.state === "rejected") { await record(input); continue; }
         signals.notify(sessionId);
         try {
           if (input.senderSessionId) await authorize(input.senderSessionId, sessionId);
@@ -288,7 +294,7 @@ export function createTaskInboxRuntime(deps: {
           if (turn.status !== "completed") return;
         } catch (error) {
           await deps.store.closeTaskInboxTurn(sessionId, turnId, ownerId, "failed");
-          await deps.store.rejectTaskInput(input.id, `Follow-up could not start: ${String(error)}`);
+          await deps.store.rejectTaskInput(input.id, `Follow-up could not start: ${String(error)}`, input.senderKind === "ponder" ? turnId : undefined);
           await record((await deps.store.getTaskInput(input.id))!);
           return;
         }
@@ -365,6 +371,12 @@ export function createTaskInboxRuntime(deps: {
     async notifyAccepted(input: TaskInput) { await notify(TaskInputSchema.parse(input)); },
     admitUserLocalMessage(input: TaskInputAdmission) {
       if (input.senderKind !== "user" || input.senderSessionId !== null) throw new Error("Local message admission requires a user input.");
+      return admit(input);
+    },
+    admitPonderLocalMessage(input: TaskInputAdmission) {
+      if (input.senderKind !== "ponder" || input.senderSessionId !== null || !input.payload.ponderDesktop) {
+        throw new Error("Ponder local admission requires a qualified desktop operation.");
+      }
       return admit(input);
     },
   };

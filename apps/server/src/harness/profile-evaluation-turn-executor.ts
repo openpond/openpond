@@ -150,7 +150,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     if (runtimeEventRefs.length + artifactRefs.length > 10_000) {
       throw new Error("Profile evaluation produced more than 10,000 substantive evidence references.");
     }
-    const output = profileEvaluationOutput(events, source.target.kind);
+    const output = profileEvaluationOutput(events, source.target.kind, turn.status);
     const maxOutputBytes=Math.min(input.manifest.limits.maxOutputBytes,input.maximumOutputBytes??input.manifest.limits.maxOutputBytes);
     if (!Number.isSafeInteger(maxOutputBytes)||maxOutputBytes<1)throw new Error("Profile evaluation requires a positive bounded output limit.");
     const outputOverflow=Buffer.byteLength(output,"utf8")>maxOutputBytes;

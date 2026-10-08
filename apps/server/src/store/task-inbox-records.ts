@@ -4,6 +4,7 @@ import { type Session, type Turn } from "@openpond/contracts/sessions";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { localManagedTargetRevision } from "../runtime/task-inbox/target-revision.js";
 import { LocalManagedMessageError } from "../runtime/task-inbox/local-managed-message-error.js";
+import { assertPonderDesktopInput } from "./ponder-desktop-input.js";
 
 export type TaskInboxOwner = {
   session_id: string; turn_id: string; owner_id: string; generation: number;
@@ -67,6 +68,10 @@ export function admitTaskInput(db: OpenPondSqliteConnection, admission: TaskInpu
   const sessionRow = db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id = ?", [admission.sessionId]);
   const session: Session | null = sessionRow ? JSON.parse(sessionRow.payload) : null;
   if (!session || session.status === "closed" || session.archived) throw new Error("The recipient task is unavailable.");
+  if (admission.senderKind === "ponder" || admission.payload.ponderDesktop !== undefined) {
+    const latest = db.get<{ id: string }>("SELECT id FROM turns WHERE session_id = ? ORDER BY sort_index DESC LIMIT 1", [admission.sessionId]);
+    assertPonderDesktopInput(db, admission, session, latest?.id ?? null);
+  }
   const localMessage = admission.payload.localManagedMessage;
   if (localMessage && typeof localMessage === "object") {
     const expected = (localMessage as Record<string, unknown>).targetRevision;

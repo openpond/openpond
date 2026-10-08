@@ -145,4 +145,6 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   // Existing v65 stores need the Profile evaluation tables added to the
   // idempotent training schema after that version shipped.
   { version: 66, run: (store) => store.createTrainingTables() },
+  // Desktop authority and receipts were added after the task inbox shipped.
+  { version: 67, run: (store) => store.createTaskInboxTables() },
 ];

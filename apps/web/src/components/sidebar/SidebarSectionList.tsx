@@ -52,6 +52,7 @@ import {
   type SidebarTaskGroupKind,
 } from "./SidebarTaskProjectGroup";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
+import { isDesktopShell } from "../app-shell/WindowControls";
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
 const EMPTY_GOAL_RUNTIME_BY_SESSION_ID = new Map<string, GoalRuntimeStatus>();
@@ -59,6 +60,12 @@ const EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID = new Map<
   string,
   SubagentRuntimeStatus
 >();
+
+function readSidebarPresentation(): "inbox" | "grouped" {
+  const saved = clientChoiceStorage.getItem("openpond.sidebar.presentation.v1");
+  if (saved === "inbox" || saved === "grouped") return saved;
+  return isDesktopShell() ? "inbox" : "grouped";
+}
 
 export function nextSidebarChatVisibleCount(
   currentCount: number,
@@ -168,8 +175,8 @@ export function SidebarSectionList({
   clearSidebarDrag,
   dragItem,
 }: SidebarProps) {
-  const [presentation, setPresentation] = useState(() => clientChoiceStorage.getItem("openpond.sidebar.presentation.v1") === "inbox" ? "inbox" : "grouped");
-  useHydratedClientChoice(() => setPresentation(clientChoiceStorage.getItem("openpond.sidebar.presentation.v1") === "inbox" ? "inbox" : "grouped"));
+  const [presentation, setPresentation] = useState(readSidebarPresentation);
+  useHydratedClientChoice(() => setPresentation(readSidebarPresentation()));
   const inboxView = presentation === "inbox";
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
@@ -539,13 +546,14 @@ export function SidebarSectionList({
     options: {
       metadataPresentation?: "inline" | "hover-detail" | "flyout";
       projectLabel?: string | null;
+      pinnedRow?: { key: string; dragProps: ReturnType<typeof pinnedDragProps>; placeholder: boolean };
     } = {},
   ) {
     const archived = session.archived;
-    const isDragged = taskDragSessionId === session.id;
+    const isDragged = options.pinnedRow?.placeholder ?? taskDragSessionId === session.id;
     const childSessions = childSessionsFor(session);
     const groupClassName = "sidebar-session-group";
-    const dragProps =
+    const dragProps = options.pinnedRow?.dragProps ?? (
       !inboxView && taskSort === "manual"
         ? {
             onDragStart: (event: React.DragEvent<HTMLDivElement>) =>
@@ -563,11 +571,11 @@ export function SidebarSectionList({
               else commitTaskDrop(event, session.id);
             },
           }
-        : {};
+        : {});
 
     return (
       <div
-        key={session.id}
+        key={options.pinnedRow?.key ?? session.id}
         className={groupClassName}
         onPointerEnter={(event) => showTaskDetail(session, event.currentTarget)}
         onPointerLeave={() => setActiveTaskDetail(null)}
@@ -717,45 +725,12 @@ export function SidebarSectionList({
         />
       );
     }
-    const session = row.session;
-    return (
-      <div
-        key={row.key}
-        onPointerEnter={(event) => showTaskDetail(session, event.currentTarget)}
-        onPointerLeave={() => setActiveTaskDetail(null)}
-        onFocusCapture={(event) => showTaskDetail(session, event.currentTarget)}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setActiveTaskDetail(null);
-        }}
-      >
-        <SidebarSessionRow
-          ariaDescribedBy={
-            activeTaskDetail?.sessionId === session.id
-              ? activeTaskDetail.descriptionId
-              : undefined
-          }
-          session={session}
-          selected={view === "chat" && selectedSessionId === session.id}
-          placeholder={placeholder}
-          running={inProgressSessionIds.has(session.id)}
-          goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-          subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
-          terminalIndicator={terminalIndicatorForSession(session.id)}
-          projectLabel={projectLabelForSession(session)}
-          metadataPresentation="flyout"
-          onSelect={() => {
-            setActiveTaskDetail(null);
-            selectSession(session);
-          }}
-          onTogglePin={() => toggleSessionPinned(session)}
-          onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
-          onDockRight={() => dockSessionRight(session)}
-          onArchive={() => archiveSession(session)}
-          onRename={renameSession}
-          {...dragProps}
-        />
-      </div>
-    );
+    return renderTaskSession(row.session, {
+      projectLabel: inboxView && !sidebarProjectIdBySessionId[row.session.id]
+        ? null
+        : projectLabelForSession(row.session),
+      pinnedRow: { key: row.key, dragProps, placeholder },
+    });
   }
 
   function renderTaskGroup(group: SidebarTaskGroup) {
@@ -830,7 +805,7 @@ export function SidebarSectionList({
             tasksets={tasksetOptions}
           />;
   const inboxChildren = sidebarTaskRows({ activeSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => !session.archived), doneSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => session.archived), filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: "recent" });
-  const inboxRows = orderSidebarInbox([...filteredTaskRows, ...inboxChildren], activityTimes, inProgressSessionIds);
+  const inboxRows = orderSidebarInbox([...filteredTaskRows, ...inboxChildren].filter((session) => !isSidebarTaskPinned(session)), activityTimes, inProgressSessionIds);
 
   return (
     <div className="sidebar-sections">
@@ -846,13 +821,6 @@ export function SidebarSectionList({
           </button>
         </div>
       </div>
-      {inboxView ? <section className="sidebar-thread-inbox" aria-label="Thread inbox">
-        {sidebarInboxDateGroups(inboxRows, activityTimes, inProgressSessionIds).map((group) => <div key={group.key}>
-          {group.label ? <h3 className="sidebar-inbox-date">{group.label}</h3> : null}
-          {group.sessions.map((session) => renderTaskSession(session, { projectLabel: sidebarProjectIdBySessionId[session.id] ? projectLabelForSession(session) : null }))}
-        </div>)}
-        {inboxRows.length === 0 ? <div className="empty-row">{sidebarTaskEmptyLabel(taskFilter, taskNoun)}</div> : null}
-      </section> : <>
       {visiblePinnedRows.length > 0 ? (
         <SidebarSection
           label="Pinned"
@@ -863,6 +831,13 @@ export function SidebarSectionList({
           {visiblePinnedRows.map(renderPinnedRow)}
         </SidebarSection>
       ) : null}
+      {inboxView ? <section className="sidebar-thread-inbox" aria-label="Thread inbox">
+        {sidebarInboxDateGroups(inboxRows, activityTimes, inProgressSessionIds).map((group) => <div key={group.key}>
+          {group.label ? <h3 className="sidebar-inbox-date">{group.label}</h3> : null}
+          {group.sessions.map((session) => renderTaskSession(session, { projectLabel: sidebarProjectIdBySessionId[session.id] ? projectLabelForSession(session) : null }))}
+        </div>)}
+        {inboxRows.length === 0 && visiblePinnedRows.length === 0 ? <div className="empty-row">{sidebarTaskEmptyLabel(taskFilter, taskNoun)}</div> : null}
+      </section> : <>
       <SidebarSection
         label="Projects"
         className={`sidebar-projects-section${

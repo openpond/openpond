@@ -1,3 +1,7 @@
+import type { PonderDesktopOperation } from "@openpond/contracts/ponder-desktop";
+import { assertPonderDesktopRecipient } from "./ponder-desktop-input.js";
+import { ponderDesktopSessionRevision } from "../openpond/ponder-desktop-catalog.js";
+import { attachPonderSessionOwner } from "./ponder-session-attachment.js";
 import type {
   Approval,
   RuntimeEvent,
@@ -69,6 +73,24 @@ type RuntimeEventRecentWindow = {
 };
 
 export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistoryStorage {
+  async attachPonderSessionOwner(input: Parameters<typeof attachPonderSessionOwner>[1]) {
+    await this.ready;
+    const write = this.writeQueue.then(() => {
+      const db = this.database;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const session = attachPonderSessionOwner(db, input);
+        db.run("UPDATE projection_session_shells SET payload = ?, updated_at = ? WHERE id = ?",
+          [JSON.stringify(session), session.updatedAt, session.id]);
+        db.exec("COMMIT");
+        const index = this.data.sessions.findIndex(item => item.id === session.id);
+        if (index >= 0) this.data.sessions[index] = session;
+        return session;
+      } catch (error) { db.exec("ROLLBACK"); throw error; }
+    });
+    this.writeQueue = write.then(() => {}, () => {});
+    return write;
+  }
   readonly harnessStoragePlacement = "local" as const;
   async snapshot(): Promise<StoreData> {
     await this.ready;
@@ -532,22 +554,30 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     return row?.count ?? 0;
   }
 
-  async insertSessionAtFront(session: Session): Promise<void> {
+  async insertSessionAtFront(session: Session, desktopOperation?: PonderDesktopOperation): Promise<void> {
     await this.ready;
-    const write = this.writeQueue.then(async () => {
-      await this.exec("BEGIN IMMEDIATE");
+    const write = this.writeQueue.then(() => {
+      const db = this.database;
+      db.exec("BEGIN IMMEDIATE");
       try {
-        await this.run("UPDATE sessions SET sort_index = sort_index + 1", []);
-        await this.run("UPDATE projection_session_shells SET sort_index = sort_index + 1", []);
-        await this.run(
+        if (desktopOperation) assertPonderDesktopRecipient(db, desktopOperation,
+          session, null, ponderDesktopSessionRevision(session, null));
+        db.run("UPDATE sessions SET sort_index = sort_index + 1", []);
+        db.run("UPDATE projection_session_shells SET sort_index = sort_index + 1", []);
+        db.run(
           "INSERT INTO sessions (id, sort_index, payload, updated_at) VALUES (?, ?, ?, ?)",
           [session.id, 0, JSON.stringify(session), session.updatedAt],
         );
-        await this.upsertSessionShellProjection(session, 0);
-        await this.rebuildThreadDetailProjectionForSession(session.id);
-        await this.exec("COMMIT");
+        db.run("INSERT INTO projection_session_shells (id, sort_index, payload, updated_at) VALUES (?, 0, ?, ?)",
+          [session.id, JSON.stringify(session), session.updatedAt]);
+        const detail = { sessionId: session.id, eventCount: 0, latestEventSequence: 0, latestEventAt: null,
+          latestTurnId: null, latestTurnStatus: null, pendingApprovalCount: 0, updatedAt: session.updatedAt };
+        db.run(`INSERT INTO projection_thread_details (session_id, event_count, latest_event_sequence, latest_event_at,
+          latest_turn_id, latest_turn_status, pending_approval_count, payload, updated_at) VALUES (?, 0, 0, NULL, NULL, NULL, 0, ?, ?)`,
+          [session.id, JSON.stringify(detail), session.updatedAt]);
+        db.exec("COMMIT");
       } catch (error) {
-        await this.exec("ROLLBACK").catch(() => undefined);
+        db.exec("ROLLBACK");
         throw error;
       }
       this.data.sessions.unshift(session);

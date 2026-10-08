@@ -2,6 +2,16 @@ import { TASK_INPUT_BATCH_MAX_CHARS, TaskInputMutationSchema, TaskWaitSchema, ty
 import { SubagentRunSchema, type SubagentRun } from "@openpond/contracts/subagents";
 import { recoverTaskInboxOwners } from "./task-inbox-recovery.js";
 import { SqliteStoreDomain } from "./store-domain.js";
+import { setPonderProjectSharing, readPonderProjectSharing, type PonderProjectSharingInput } from "./ponder-project-sharing.js";
+import { readPonderDesktopReservationResume } from "./ponder-desktop-reservation.js";
+import type { PonderLocalOwner } from "../openpond/ponder-local-scope.js";
+import { admitPonderDesktopStop, readPonderDesktopStop, settlePonderDesktopStop } from "./ponder-desktop-stop.js";
+import { commitPonderDesktopResult, readPonderDesktopResult } from "./ponder-desktop-result.js";
+import { assertPonderDesktopExecution } from "./ponder-desktop-input.js";
+import { admitPonderDesktopObservation, readPonderDesktopObservation } from "./ponder-desktop-observation.js";
+import { admitPonderDesktopInspection, readPonderDesktopInspection } from "./ponder-desktop-inspection.js";
+import { PonderDesktopAttachmentSchema, type PonderDesktopAttachment, type PonderDesktopOperation } from "@openpond/contracts/ponder-desktop";
+import { SessionSchema } from "@openpond/contracts/sessions";
 import { subagentRunParams } from "./store-codecs.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import {
@@ -12,6 +22,37 @@ import {
 const LEASE_MS = 90_000;
 
 export class SqliteTaskInboxStore extends SqliteStoreDomain {
+  async admitPonderDesktopInspection(operation: PonderDesktopOperation) {
+    return this.inboxWrite(db => admitPonderDesktopInspection(db, operation));
+  }
+  async getPonderDesktopInspection(id: string) {
+    await this.ready; await this.writeQueue;
+    return readPonderDesktopInspection(this.database, id);
+  }
+  async setPonderProjectSharing(sharing: PonderProjectSharingInput) {
+    return this.inboxWrite(db => setPonderProjectSharing(db, sharing));
+  }
+  async readPonderProjectSharing(owner: PonderLocalOwner) {
+    await this.ready; await this.writeQueue;
+    return readPonderProjectSharing(this.database, owner);
+  }
+  async getPonderDesktopReservationResume(operation: PonderDesktopOperation, owner: PonderLocalOwner) {
+    return this.inboxWrite(db => readPonderDesktopReservationResume(db, operation, owner));
+  }
+  async admitPonderDesktopObservation(operation: PonderDesktopOperation) {
+    return this.inboxWrite(db => admitPonderDesktopObservation(db, operation));
+  }
+  async getPonderDesktopObservation(id: string) {
+    await this.ready; await this.writeQueue;
+    return readPonderDesktopObservation(this.database, id);
+  }
+  async getPonderDesktopResult(operationId: string, turnId: string) {
+    await this.ready; await this.writeQueue;
+    return readPonderDesktopResult(this.database, operationId, turnId);
+  }
+  async commitPonderDesktopResult(value: Parameters<typeof commitPonderDesktopResult>[1]) {
+    return this.inboxWrite(db => commitPonderDesktopResult(db, value));
+  }
   private async inboxWrite<T>(operation: (db: OpenPondSqliteConnection) => T): Promise<T> {
     await this.ready;
     const write = this.writeQueue.then(() => {
@@ -22,6 +63,38 @@ export class SqliteTaskInboxStore extends SqliteStoreDomain {
     });
     this.writeQueue = write.then(() => {}, () => {});
     return write;
+  }
+
+  /** Internal runtime lease. Clearing it serializes logout/unlink with input admission. */
+  async setPonderDesktopAuthority(value: PonderDesktopAttachment): Promise<void> {
+    const attachment = PonderDesktopAttachmentSchema.parse(value);
+    if (attachment.state !== "attached" || Date.parse(attachment.leaseExpiresAt) <= Date.now()) {
+      throw new Error("ponder_desktop_local_authority_invalid");
+    }
+    return this.inboxWrite(db => {
+      db.run("INSERT INTO ponder_desktop_authority (id, runtime_id, payload) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET runtime_id = excluded.runtime_id, payload = excluded.payload",
+        [attachment.runtimeId, JSON.stringify(attachment)]);
+    });
+  }
+
+  async clearPonderDesktopAuthority(runtimeId?: string): Promise<void> {
+    return this.inboxWrite(db => {
+      if (runtimeId) db.run("DELETE FROM ponder_desktop_authority WHERE runtime_id = ?", [runtimeId]);
+      else db.run("DELETE FROM ponder_desktop_authority");
+    });
+  }
+
+  async admitPonderDesktopStop(operation: PonderDesktopOperation) {
+    return this.inboxWrite(db => admitPonderDesktopStop(db, operation));
+  }
+
+  async getPonderDesktopStop(id: string) {
+    await this.ready; await this.writeQueue;
+    return readPonderDesktopStop(this.database, id);
+  }
+
+  async settlePonderDesktopStop(id: string, state: "interrupted" | "already_finished") {
+    return this.inboxWrite(db => settlePonderDesktopStop(db, id, state));
   }
 
   async recoverTaskInboxOwners(ownerId: string): Promise<Array<{ sessionId: string; turnId: string }>> {
@@ -67,10 +140,15 @@ export class SqliteTaskInboxStore extends SqliteStoreDomain {
     return this.inboxWrite((db) => inputs.map((input) => admitTaskInput(db, input)));
   }
 
-  async rejectTaskInput(id: string, error: string): Promise<void> {
+  async rejectTaskInput(id: string, error: string, executionTurnId?: string): Promise<void> {
     return this.inboxWrite((db) => {
       const input = readTaskInput(db, id);
-      if (input?.state === "pending") writeTaskInput(db, { ...input, state: "rejected", error, updatedAt: new Date().toISOString() });
+      if (input?.state === "pending") {
+        const turn = executionTurnId && input.senderKind === "ponder" ? db.get<{ id: string }>(
+          "SELECT id FROM turns WHERE id = ? AND session_id = ? AND json_extract(payload, '$.metadata.taskInputId') = ?",
+          [executionTurnId, input.sessionId, input.id]) : null;
+        writeTaskInput(db, { ...input, state: "rejected", error, ...(turn ? { turnId: turn.id } : {}), updatedAt: new Date().toISOString() });
+      }
     });
   }
 
@@ -234,14 +312,29 @@ export class SqliteTaskInboxStore extends SqliteStoreDomain {
     return this.inboxWrite((db) => {
       const owner = readInboxOwner(db, sessionId);
       if (owner?.paused || (owner && owner.lease_until > Date.now())) return null;
-      const row = db.get<{ sequence: number; payload: string }>(
-        "SELECT sequence, payload FROM task_inputs WHERE session_id = ? AND state = 'pending' AND turn_id IS NULL AND kind IN ('queued', 'followup') ORDER BY sequence LIMIT 1", [sessionId]);
-      if (!row) return null;
+      const rows = db.all<{ sequence: number; payload: string }>(
+        "SELECT sequence, payload FROM task_inputs WHERE session_id = ? AND state = 'pending' AND turn_id IS NULL AND kind IN ('queued', 'followup') ORDER BY sequence", [sessionId]);
+      let selected: TaskInput | null = null;
+      for (const row of rows) {
+        const input = inputFromRow(row);
+        if (input.senderKind === "ponder") {
+          const sessionRow = db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id = ?", [sessionId]);
+          try {
+            if (!sessionRow) throw new Error("The original local task no longer exists.");
+            assertPonderDesktopExecution(input, SessionSchema.parse(JSON.parse(sessionRow.payload)));
+          } catch (error) {
+            // Publish this canonical rejection before considering another input.
+            return writeTaskInput(db, { ...input, state: "rejected", error: String(error), updatedAt: new Date().toISOString() });
+          }
+        }
+        selected = input; break;
+      }
+      if (!selected) return null;
       db.run(`INSERT INTO task_inbox_turns (session_id, turn_id, owner_id, generation, accepting, paused, lease_until)
         VALUES (?, ?, ?, ?, 1, 0, ?) ON CONFLICT(session_id) DO UPDATE SET turn_id = excluded.turn_id,
         owner_id = excluded.owner_id, generation = excluded.generation, accepting = 1, paused = 0, lease_until = excluded.lease_until`,
       [sessionId, turnId, ownerId, (owner?.generation ?? 0) + 1, Date.now() + LEASE_MS]);
-      return writeTaskInput(db, { ...inputFromRow(row), turnId, updatedAt: new Date().toISOString() });
+      return writeTaskInput(db, { ...selected, turnId, updatedAt: new Date().toISOString() });
     });
   }
 

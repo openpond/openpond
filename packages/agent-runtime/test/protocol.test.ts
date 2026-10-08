@@ -349,22 +349,52 @@ describe("agent JSON-RPC protocol", () => {
     ]));
   });
 
-  test("does not cut off an explicitly budgeted hosted sandbox create at 60 seconds", async () => {
+  // Failure story: an admitted command/grader was still running in its VM,
+  // but the generic storage timer discarded its reply and caused paid retries.
+  test("preserves bounded execution deadlines without extending ordinary storage", async () => {
+    vi.useFakeTimers();
     const client = new AgentHostStorageClient();
-    client.bind(async () => {});
-    const timer = vi.spyOn(globalThis, "setTimeout");
+    const messages: { id: unknown }[] = [];
+    client.bind(async message => { messages.push(message); });
     try {
-      const pending = client.request({
+      const requests = [
+        { operation: "sandbox/request", params: { action: { type: "create", payload: {} } } },
+        { operation: "profile-evaluations/sandbox", params: {
+          sessionId: "case", turnId: "turn", action: "exec", command: "bounded-command", timeoutMs: 180_000,
+        } },
+        { operation: "profile-evaluations/grade", params: {
+          action: "execute", callId: "grader", sessionId: "case", turnId: "turn",
+          sha256: "1".repeat(64), sizeBytes: 1, timeoutMs: 300_000,
+        } },
+      ].map((request, index) => HostStorageRequestSchema.parse({
         contractVersion: HOST_STORAGE_CONTRACT_VERSION,
-        requestId: "cold-sandbox-create",
-        operation: "sandbox/request",
-        params: { action: { type: "create", payload: {} } },
-      }, 300_000).catch((error: unknown) => error);
-      expect(timer.mock.calls.at(-1)?.[1]).toBe(300_000);
-      client.close();
-      expect(await pending).toMatchObject({ message: "Host storage transport closed." });
+        requestId: `execution-${index}`, ...request,
+      }));
+      const outcomes: unknown[] = [];
+      const pending = requests.map((request, index) => client.request(request, index === 2 ? 420_000 : 300_000)
+        .then(result => { outcomes[index] = result; return result; }, error => { outcomes[index] = error; return error; }));
+      const ordinary = client.request({ contractVersion: HOST_STORAGE_CONTRACT_VERSION,
+        requestId: "ordinary-storage", operation: "events/page",
+        params: { sessionId: "case", afterSequence: 0, limit: 10 },
+      }, 300_000).catch(error => error);
+      await vi.advanceTimersByTimeAsync(75_000);
+      expect(await ordinary).toBeInstanceOf(Error);
+      expect(outcomes).toHaveLength(0);
+      for (let index = 0; index < 2; index++)
+        client.accept({ jsonrpc: "2.0", id: messages[index]!.id, result: { completed: index } });
+      expect(await pending[0]).toEqual({ completed: 0 });
+      expect(await pending[1]).toEqual({ completed: 1 });
+      await vi.advanceTimersByTimeAsync(250_000);
+      expect(outcomes[2]).toBeUndefined();
+      client.accept({ jsonrpc: "2.0", id: messages[2]!.id, result: { graded: true } });
+      expect(await pending[2]).toEqual({ graded: true });
+      const capped = client.request(requests[2]!, 1_000_000).catch(error => error);
+      await vi.advanceTimersByTimeAsync(420_000);
+      expect(await capped).toBeInstanceOf(Error);
+      expect(vi.getTimerCount()).toBe(0);
     } finally {
-      timer.mockRestore();
+      client.close();
+      vi.useRealTimers();
     }
   });
 
