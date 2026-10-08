@@ -2,7 +2,7 @@
 import { createModelUsagePersistence } from "./runtime/model-usage-persistence.js";
 import { createRemoteRelayManager } from "./remote-relay/manager.js";
 import { createRemoteCommandExecutor } from "./remote-relay/executor.js";
-import { remoteRelayAccount } from "./remote-relay/account.js";
+import { remoteRelayAccount, remoteRelayAccountStatus } from "./remote-relay/account.js";
 import { captureRemoteStarters } from "./remote-relay/starters.js";
 import { createRemoteOutputReader } from "./remote-relay/output-refs.js";
 import { createServerPonderActivity } from "./openpond/ponder-desktop-activity-service.js";
@@ -1316,6 +1316,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect, warn: message => logger.warn(message) });
   const remoteRelayManager = createRemoteRelayManager({ storeDir, installation: ponderInstallation, store,
     current: remoteRelayAccount(ponderInstallation.installationId, loadAppPreferences),
+    accountStatus: () => remoteRelayAccountStatus(loadAppPreferences),
     inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect,
     execute: createRemoteCommandExecutor({ store, inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect,
       admit: input => turnRunner.admitUserLocalMessage(input), interrupt: (...args) => turnRunner.interruptSessionTurn(...args),

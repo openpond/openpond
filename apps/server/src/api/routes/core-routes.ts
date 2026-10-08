@@ -213,8 +213,8 @@ export async function handleCoreRoutes({
     if (action === "status" && request.method === "GET") {
       sendJson(response, 200, await deps.accountRemoteAccessPayload("status")); return true;
     }
-    if (["enable", "disable", "attach", "rename", "remove"].includes(action) && request.method === "POST") {
-      sendJson(response, 200, await deps.accountRemoteAccessPayload(action as "enable" | "disable" | "attach" | "rename" | "remove", await readJson(request)));
+    if (["enable", "disable", "retry", "attach", "rename", "remove", "disable-device"].includes(action) && request.method === "POST") {
+      sendJson(response, 200, await deps.accountRemoteAccessPayload(action as import("@openpond/contracts").RemoteAccessSettingsAction, await readJson(request)));
       return true;
     }
   }

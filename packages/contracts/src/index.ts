@@ -24,6 +24,7 @@ export * from "./workspace-capabilities.js";
 export * from "./sandbox-template.js";
 export * from "./remote-access.js";
 export * from "./remote-device.js";
+export * from "./remote-access-settings.js";
 export * from "./profile.js";
 export * from "./profile-ref.js";
 export * from "./profile-publication.js";

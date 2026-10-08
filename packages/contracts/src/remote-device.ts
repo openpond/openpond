@@ -1,8 +1,19 @@
 // Generated from Sandbox shared/remote-device.ts. Do not edit.
-// Source SHA256: d3f24f0c33475473bc304ff2579681db24cd6d596093a6678b0dc88357ab587b
+// Source SHA256: cb737e06cc18db7f3df7921774c6177771f6d553e9571f2d262c1ce148e18163
 // Refresh: node scripts/sync-remote-device-contract.mjs
 import { z } from "zod";
 export const REMOTE_DEVICE_PROTOCOL_VERSION = 1 as const;
+/** Minimum supported desktop wire protocol; application versions are independent. */
+export const REMOTE_DEVICE_MINIMUM_SUPPORTED_PROTOCOL_VERSION = 1 as const;
+export const REMOTE_DEVICE_PROTOCOL_UNSUPPORTED_CLOSE_CODE = 4006 as const;
+export const RemoteProtocolUnsupportedSchema = z
+  .object({
+    error: z.literal("protocol_unsupported"),
+    minimumSupportedProtocolVersion: z.literal(1),
+    supportedProtocolVersion: z.literal(1),
+    upgradeRequired: z.literal(true),
+  })
+  .strict();
 export const REMOTE_DEVICE_LIMITS = {
   frameBytes: 262144,
   socketQueueBytes: 1048576,
@@ -287,3 +298,65 @@ export const RemoteStarterSchema = z
   })
   .strict();
 export type RemoteStarter = z.infer<typeof RemoteStarterSchema>;
+
+const catalogPage = {
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  snapshotId: z.string().uuid(),
+  pageIndex: z.number().int().min(0).max(99),
+  pageCount: z.number().int().min(1).max(100),
+  complete: z.boolean(),
+  tasks: z.array(RemoteTaskSchema).max(100),
+  starters: z.array(RemoteStarterSchema).max(100),
+  removedIds: z.array(id).max(100),
+  removedStarterIds: z.array(id).max(100),
+};
+/** A snapshot replaces the directory; a patch changes only its named entries.
+ * Neither publication is visible until all immutable pages commit together. */
+export const RemoteCatalogPublicationSchema = z
+  .discriminatedUnion("mode", [
+    z.object({ ...catalogPage, mode: z.literal("snapshot") }).strict(),
+    z
+      .object({
+        ...catalogPage,
+        mode: z.literal("patch"),
+        baseRevision: z
+          .number()
+          .int()
+          .nonnegative()
+          .max(Number.MAX_SAFE_INTEGER),
+      })
+      .strict(),
+  ])
+  .superRefine((page, context) => {
+    if (
+      page.pageIndex >= page.pageCount ||
+      page.complete !== (page.pageIndex === page.pageCount - 1)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "catalog_page_manifest_invalid",
+      });
+    if (page.mode === "patch" && page.revision <= page.baseRevision)
+      context.addIssue({
+        code: "custom",
+        message: "catalog_patch_revision_invalid",
+      });
+  });
+export type RemoteCatalogPublication = z.infer<
+  typeof RemoteCatalogPublicationSchema
+>;
+export const RemoteCatalogAckSchema = z
+  .object({
+    pageIndex: z.number().int().min(0).max(99),
+    mode: z.enum(["snapshot", "patch"]),
+    snapshotId: z.string().uuid(),
+    revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    committed: z.boolean(),
+    catalogRevision: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type RemoteCatalogAck = z.infer<typeof RemoteCatalogAckSchema>;
