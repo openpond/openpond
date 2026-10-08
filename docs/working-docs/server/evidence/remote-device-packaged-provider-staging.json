@@ -358,5 +358,59 @@
       "webUnlinkRemovedComputer": true
     },
     "nativeUiQualified": false
+  },
+  "finalTypedCatalogQualification": {
+    "capturedAt": "2026-10-08T10:39:04.118522+00:00",
+    "nativeSourceCommit": "5bb2f41d2",
+    "hostedSourceCommit": "c26ccbfecc1b29b0ca36d09937d55df3bc99e1c4",
+    "appImage": {
+      "path": "release/openpond-0.2.46-linux-x86_64.AppImage",
+      "bytes": 109251207,
+      "sha256": "b493240cdd9c05d6be90f0caa4e72db5bc1b77a4902587441a3996e7fff21e03"
+    },
+    "serverSha256": "bb7ecd93d1add36ab228b84283f2758fdcd2e66bf431cc5f06ba8635bbd2f6a8",
+    "packageInventory": {
+      "files": 375,
+      "bytes": 38138639,
+      "stagedMatchesPackaged": true
+    },
+    "initialState": "off",
+    "accountId": "dzdaskv4w4",
+    "teamId": "a3v5vj0bxfyphbgihbgprm6f",
+    "webBaseUrl": "https://staging.openpond.ai",
+    "deviceId": "71b0ab12-3426-4614-8eb6-1fe1adc7a132",
+    "connectedCatalogAt": "2026-10-08T10:36:14.616Z",
+    "taskCount": 7,
+    "canonicalTitlePatch": {
+      "taskId": "rt_7d37e184127c68e21b813f92cb33c5be2450c5c6",
+      "title": "Catalog ACK QA ORCHID-731",
+      "catalogRevision": 1791455775731,
+      "taskCount": 7
+    },
+    "canonicalTitleRestoration": {
+      "title": "Remote relay packaged continuity QA",
+      "catalogRevision": 1791455931691
+    },
+    "originalSessionRetained": true,
+    "managedSessionRetained": true,
+    "turnCountBefore": 13,
+    "turnCountAfter": 13,
+    "providerInvocations": 0,
+    "finalState": "off",
+    "qaEnrollmentRetained": true,
+    "exactQaProcessesExited": true,
+    "webObservation": "Parent observed connected 7-task directory, acknowledged patched title, original managed READY/REMOTE transcript and an unsent draft without blocking Send on a retained admitted receipt.",
+    "nativeDesktopUiQualified": false,
+    "actualOsSleepQualified": false,
+    "secondAccountSwitchQualified": false,
+    "sourceValidation": {
+      "selectiveServerWebCompiler": "passed after typed settings/catalog changes",
+      "retainedBoundaryTests": "7 passed across manager/history/admission integration; canonical patch-path manager boundary passed after final fix",
+      "contractSyncCheck": "passed",
+      "diffCheck": "passed",
+      "canonicalLinuxPackaging": "passed",
+      "packageInventoryCheck": "passed"
+    },
+    "receiptSemantics": "Follow-up/start/steer receipts remain admitted after durable canonical input admission; provider turn completion is separate history/inbox state. Stop/approval become applied."
   }
 }
