@@ -34,3 +34,15 @@ export function createRemoteOutputReader(store: Pick<SqliteStore, "runtimeEventP
     return outputs;
   };
 }
+
+export function createRemoteQualifiedOutputReader(
+  store: import("../store/store.js").SqliteStore,
+  read: (session: Session, output: FileOutputRef) => Promise<{ outputRef: FileOutputRef; contentsBase64: string }>,
+) {
+  const outputs = createRemoteOutputReader(store);
+  return async (session: Session, outputId: string) => {
+    const output = (await outputs(session)).find(value => value.id === outputId);
+    if (!output) throw new Error("remote_artifact_unavailable");
+    return read(session, output);
+  };
+}

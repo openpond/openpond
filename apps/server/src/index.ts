@@ -6,8 +6,8 @@ import { createAccountAuthorityChange, type AccountAuthorityChange } from "./run
 import { createRemoteRelayManager } from "./remote-relay/manager.js";
 import { createRemoteCommandExecutor } from "./remote-relay/executor.js";
 import { remoteRelayAccount, remoteRelayAccountStatus } from "./remote-relay/account.js";
-import { captureRemoteStarters } from "./remote-relay/starters.js";
-import { createRemoteOutputReader } from "./remote-relay/output-refs.js";
+import { createRemoteStarterResolver } from "./remote-relay/starters.js";
+import { createRemoteOutputReader, createRemoteQualifiedOutputReader } from "./remote-relay/output-refs.js";
 import { createServerPonderActivity } from "./openpond/ponder-desktop-activity-service.js";
 import { readPonderLocalProjects } from "./openpond/ponder-project-snapshot.js";
 import {createAdvancedRefinerEvaluationSource} from "./training/advanced-refiner-evaluation-source.js";
@@ -1282,22 +1282,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       admit: input => turnRunner.admitUserLocalMessage(input), interrupt: (...args) => turnRunner.interruptSessionTurn(...args),
       createReserved: createReservedSession,
       resolveApproval,
-      resolveStarter: async command => {
-        const current = await remoteRelayAccount(ponderInstallation.installationId, loadAppPreferences)();
-        if (!current) throw new Error("remote_account_unavailable");
-        const sessions = [];
-        for (const shell of await store.sessionShells()) { const session = await store.getSession(shell.id); if (session) sessions.push(session); }
-        const starter = captureRemoteStarters(sessions, current.owner).get(command.localStarterId!);
-        if (!starter || starter.target.revision !== command.expectedRevision || starter.target.projectId !== command.payload.projectId
-          || starter.target.revision !== command.payload.starterRevision) throw new Error("remote_starter_changed");
-        return starter.source;
-      } }),
+      resolveStarter: createRemoteStarterResolver({ store,
+        current: remoteRelayAccount(ponderInstallation.installationId, loadAppPreferences) }) }),
     outputs: createRemoteOutputReader(store),
-    readOutput: async (session, outputId) => {
-      const output = (await createRemoteOutputReader(store)(session)).find(output => output.id === outputId);
-      if (!output) throw new Error("remote_artifact_unavailable");
-      return workOutputService.readQualifiedWorkOutput(session, output);
-    },
+    readOutput: createRemoteQualifiedOutputReader(store, workOutputService.readQualifiedWorkOutput),
     caller: { needsConnection: ponderDesktopManager.needsRelay, requestAuthority: ponderDesktopManager.relayAuthority,
       receiveOffers: payload => {
         const offer = payload as { caller: string; operations: unknown; hasObligations: boolean };

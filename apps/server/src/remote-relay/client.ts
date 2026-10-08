@@ -19,3 +19,17 @@ export function createRemoteDeviceClient(input: {
     },
   };
 }
+
+export function createSelectedRemoteClient(installation: import("./installation.js").DeviceInstallation, current: import("./manager-types.js").Selected) {
+    return createRemoteDeviceClient({
+      installation: installation,
+      scope: {
+        installationId: current.owner.installationId,
+        profileId: current.owner.profileId,
+        ownerUserId: current.owner.ownerUserId,
+        teamId: current.owner.teamId,
+      },
+      audience: current.owner.audience,
+      request: current.request,
+    });
+  }

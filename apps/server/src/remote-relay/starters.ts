@@ -31,3 +31,23 @@ export function captureRemoteStarters(sessions: Session[], owner: DeviceLocalOwn
   }
   return starters;
 }
+
+export function createRemoteStarterResolver(input: {
+  store: import("../store/store.js").SqliteStore;
+  current(): Promise<{ owner: DeviceLocalOwner } | null>;
+}) {
+  return async (command: import("@openpond/contracts").RemoteDispatchCommand) => {
+    const current = await input.current();
+    if (!current) throw new Error("remote_account_unavailable");
+    const sessions: Session[] = [];
+    for (const shell of await input.store.sessionShells()) {
+      const session = await input.store.getSession(shell.id);
+      if (session) sessions.push(session);
+    }
+    const starter = captureRemoteStarters(sessions, current.owner).get(command.localStarterId!);
+    if (!starter || starter.target.revision !== command.expectedRevision
+      || starter.target.projectId !== command.payload.projectId
+      || starter.target.revision !== command.payload.starterRevision) throw new Error("remote_starter_changed");
+    return starter.source;
+  };
+}

@@ -102,7 +102,7 @@ describe("markdown checkbox rendering", () => {
       "- `apps/web/public/openpond-icon.png`\n- `apps/web/public/connected-apps/github.svg`",
       {
         onOpenFileInSidebar: () => {},
-        workspaceRootPath: "/home/glu/Projects/all/openpond",
+        workspaceRootPath: "/workspace/openpond",
       },
     );
     expect(markup).toContain(">apps/web/public/openpond-icon.png</a>");
@@ -113,7 +113,7 @@ describe("markdown checkbox rendering", () => {
 
   test("renders explicit public svg markdown images without showing the alt label", () => {
     const markup = renderMarkdown("![github](apps/web/public/connected-apps/github.svg)", {
-      workspaceRootPath: "/home/glu/Projects/all/openpond",
+      workspaceRootPath: "/workspace/openpond",
     });
     expect(markup).toContain('src="/connected-apps/github.svg"');
     expect(markup).not.toContain("!github");
@@ -122,7 +122,7 @@ describe("markdown checkbox rendering", () => {
   test("renders explicit absolute local markdown images without showing the alt label", () => {
     const markup = renderMarkdown("![screenshot](/tmp/image.png)", {
       connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
-      workspaceRootPath: "/home/glu/Projects/all/openpond",
+      workspaceRootPath: "/workspace/openpond",
     });
     expect(markup).not.toContain("!screenshot");
   });
@@ -131,7 +131,7 @@ describe("markdown checkbox rendering", () => {
     const markup = renderMarkdown("I created `/tmp/image.png` for the smoke test.", {
       connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
       onOpenFileInSidebar: () => {},
-      workspaceRootPath: "/home/glu/Projects/all/openpond",
+      workspaceRootPath: "/workspace/openpond",
     });
 
     expect(markup).toContain(">/tmp/image.png</a>");
@@ -140,7 +140,7 @@ describe("markdown checkbox rendering", () => {
   test("renders bare public image file paths as previews", () => {
     const markup = renderMarkdown("- apps/web/public/openpond-icon.png", {
       onOpenFileInSidebar: () => {},
-      workspaceRootPath: "/home/glu/Projects/all/openpond",
+      workspaceRootPath: "/workspace/openpond",
     });
     expect(markup).toContain('src="/openpond-icon.png"');
   });
