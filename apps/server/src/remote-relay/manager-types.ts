@@ -9,6 +9,7 @@ import type { DeviceInstallation } from "./installation.js";
 import type { DeviceLocalOwner } from "./local-scope.js";
 import type { createRemoteDeviceClient } from "./client.js";
 import type { captureRemoteTaskCatalog } from "./catalog.js";
+import type { PrepareOwnerAttachment } from "./ownership-settings.js";
 
 export type Selected = {
   owner: DeviceLocalOwner;
@@ -22,6 +23,7 @@ export type RemoteRelayDependencies = {
   current(): Promise<Selected | null>;
   accountStatus(): Promise<RemoteAccessAccountStatus>;
   inspect: Parameters<typeof captureRemoteTaskCatalog>[0]["inspect"];
+  prepareOwnerAttachment: PrepareOwnerAttachment;
   execute(
     command: RemoteDispatchCommand,
   ): Promise<import("@openpond/contracts").RemoteCommandReceipt>;

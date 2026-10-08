@@ -1263,6 +1263,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     localByokRuntimeState,
     refreshCodexStatus,
     loadAppPreferences,
+    loadProfile: loadOpenPondProfileStateForRef,
+    loadHarness: session => loadLocalHarnessRuntimeForSession(store, session),
   });
   const ponderDesktopManager = createPonderDesktopManager({ storeDir, installation: ponderInstallation, store,
     sessions: { createReservedSession }, runner: turnRunner, loadAppPreferences,
@@ -1278,6 +1280,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     current: remoteRelayAccount(ponderInstallation.installationId, loadAppPreferences),
     accountStatus: () => remoteRelayAccountStatus(loadAppPreferences),
     inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect,
+    prepareOwnerAttachment: desktopManagedAgentRoutes.prepareOwnerAttachment,
     execute: createRemoteCommandExecutor({ store, inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect,
       admit: input => turnRunner.admitUserLocalMessage(input), interrupt: (...args) => turnRunner.interruptSessionTurn(...args),
       createReserved: createReservedSession,
