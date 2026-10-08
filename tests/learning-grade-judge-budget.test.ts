@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createBudgetedJudgeExecutor, createTaskGradeJudgeBudgetStore, TaskGradeRunSchema } from "@openpond/evals/learning";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { withTempDirectory } from "./helpers/temp-directory";
 import { learningContext, learningFixture } from "./helpers/learning-fixtures";
 
@@ -8,7 +8,7 @@ import { learningContext, learningFixture } from "./helpers/learning-fixtures";
 // the result. A late provider reply survives cancellation; a new call does not.
 test("grade budget settles after cancellation and rejects further dispatch", async () => {
   await withTempDirectory("openpond-grade-judge-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const repository = store.learningRepository();
       const fixture = await learningFixture(repository);

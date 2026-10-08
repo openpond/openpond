@@ -1,6 +1,6 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/contracts";
+import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/contracts/tasksets";
 import { canonicalJson } from "./canonical-json.js";
 import { validateTaskset } from "./validation.js";
 

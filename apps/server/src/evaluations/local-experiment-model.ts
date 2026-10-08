@@ -6,9 +6,9 @@ import type { LocalExperimentDefinition } from "./local-experiment-contract.js";
 import { LocalExperimentError } from "./local-experiment-contract.js";
 import { hostedTokenPricingFromCatalog, hostedUsageCostUsd, type HostedTokenPricing } from "../training/hosted-token-pricing.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
-import type { SqliteLocalExperimentStore } from "../store/store-local-experiments.js";
+import type { LocalExperimentStorage } from "../store/store-local-experiments.js";
 
-export type LocalModelStreamScope={store:SqliteLocalExperimentStore;ownerId:string;teamId:string;executionId:string;caseId:string};
+export type LocalModelStreamScope={store:LocalExperimentStorage;ownerId:string;teamId:string;executionId:string;caseId:string};
 export type LocalModelAdmission={model:LocalExperimentDefinition["model"];pricing:HostedTokenPricing|null;maximumChargeUsd:number;stream?:typeof streamOpenPondHostedChatTurn;streamFactory?:(scope:LocalModelStreamScope)=>typeof streamOpenPondHostedChatTurn};
 export async function prepareLocalExperimentModel(policy:LocalExperimentDefinition["configuration"]["request"]["policy"],catalog=loadOpenPondHostedModels,nativeHarnessAdmitted=false):Promise<LocalModelAdmission> {
   if(policy.kind==="hosted_harness")return prepareLocalExperimentModel({kind:"hosted_chat",modelId:policy.modelId,maxOutputTokens:4096,temperature:0,topP:1},catalog);
@@ -32,7 +32,7 @@ export async function prepareLocalExperimentModel(policy:LocalExperimentDefiniti
 
 /** Preserve normal provider transport. This wrapper owns only durable admission
  * and measured-or-unknown accounting; it never retries a dispatch. */
-export function createLocalBudgetedModelStream(input:{store:SqliteLocalExperimentStore;ownerId:string;teamId:string;executionId:string;caseId:string;
+export function createLocalBudgetedModelStream(input:{store:LocalExperimentStorage;ownerId:string;teamId:string;executionId:string;caseId:string;
   admission:LocalModelAdmission;stream?:typeof streamOpenPondHostedChatTurn}):typeof streamOpenPondHostedChatTurn {
   const stream=input.admission.streamFactory?.(input)??input.admission.stream??input.stream??streamOpenPondHostedChatTurn;
   return async function* (request) {

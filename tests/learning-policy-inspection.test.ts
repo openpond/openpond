@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createLearningService, learningRef, taskFamilyReservations, LearningIterationSchema, type LearningRepository } from "@openpond/evals/learning";
 
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { learningContext, learningNow } from "./helpers/learning-fixtures";
 import { learningIterationFixture } from "./helpers/learning-iteration-fixtures";
 import { withTempDirectory } from "./helpers/temp-directory";
@@ -10,7 +10,7 @@ import { withTempDirectory } from "./helpers/temp-directory";
 // reservation that shared review, family-isolation or lifecycle rules reject.
 test("policy inspection stays read-only and follows current admission and chain state", async () => {
   await withTempDirectory("openpond-policy-inspection-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     const repository = store.learningRepository();
     const noWrites: LearningRepository = { transaction: (scope, callback) => repository.transaction(scope, tx => callback({
       ...tx,

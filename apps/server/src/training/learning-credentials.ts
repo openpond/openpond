@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { contentHash } from "@openpond/harness";
 import { LearningDomainError, learningRef, type LearningSource } from "@openpond/evals/learning";
 import { LearningSourceCredentialRequestSchema, LearningSourceConfigurationRequestSchema, LearningSourceConfigurationSchema, LearningSourceCredentialSecretSchema, assertLearningCredentialExpiry, type LearningSourceCredential } from "openpond-sdk/learning";
-import type { SqliteLearningStore } from "../store/store-learning.js";
+import type { LearningStorage } from "../store/store-learning.js";
 
 export class LearningCredentialAuthenticationError extends Error {
   readonly status = 401;
@@ -10,7 +10,7 @@ export class LearningCredentialAuthenticationError extends Error {
   constructor() { super("Source credential is invalid, revoked or expired."); this.name = "LearningCredentialAuthenticationError"; }
 }
 
-export function createLocalLearningCredentials(store: SqliteLearningStore, readSource: (scope: string, id: string) => Promise<LearningSource>) {
+export function createLocalLearningCredentials(store: LearningStorage, readSource: (scope: string, id: string) => Promise<LearningSource>) {
   async function sourceConfiguration(raw: unknown, credential?: LearningSourceCredential) {
     const input = LearningSourceConfigurationRequestSchema.parse(raw);
     if (credential && (credential.scope !== input.scope || credential.sourceId !== input.sourceId)) throw new LearningDomainError("learning_source_not_authorized", 403);

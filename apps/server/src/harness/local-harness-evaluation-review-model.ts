@@ -1,4 +1,4 @@
-import { DEFAULT_HARNESS_REFINER_MODEL } from "@openpond/contracts";
+import { DEFAULT_HARNESS_REFINER_MODEL } from "@openpond/contracts/settings";
 import {
   DEFAULT_EVALUATION_REVIEW_MAX_OUTPUT_TOKENS,
   type HarnessEvaluationReviewModelStream,

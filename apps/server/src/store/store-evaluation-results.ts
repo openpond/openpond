@@ -22,12 +22,12 @@ import {
 import { assertContentHash, contentHash } from "@openpond/harness";
 import { OpenPondProfileRefSchema, type OpenPondProfileRef } from "@openpond/contracts";
 
-import { SqliteDatasetStore } from "./store-datasets.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
 import { LocalProfileEvaluationRunSchema, type LocalProfileEvaluationRun } from "./profile-evaluation-record.js";
 export { LocalProfileEvaluationRunSchema, type LocalProfileEvaluationRun } from "./profile-evaluation-record.js";
 
-export class SqliteEvaluationResultStore extends SqliteDatasetStore {
+export class SqliteEvaluationResultStore extends SqliteStoreDomain {
   async saveProfileEvaluationGrade(gradeInput: TaskGrade) {
     const grade = TaskGradeSchema.parse(gradeInput);
     assertContentHash(grade, "Profile evaluation grade");

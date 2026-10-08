@@ -19,7 +19,7 @@ import { z } from "zod";
 import { ModelProjectSchema } from "openpond-sdk/model-projects";
 
 import type { PayloadRow } from "../types.js";
-import { SqlitePreferenceComparisonStore } from "./store-preference-comparison.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 import { materializeImmutableTasksetPackage } from "../training/model-starter-package-files.js";
 import { verifyPublishedTasksetAssets } from "../training/taskset-package-assets.js";
 import { prepareAuthoredTasksetFiles } from "../training/authored-taskset-files.js";
@@ -59,7 +59,7 @@ export type TasksetDraftWorkspace = {
 
 type TasksetDraftPointer = z.infer<typeof TasksetDraftPointerSchema>;
 
-export class SqliteTasksetDraftStore extends SqlitePreferenceComparisonStore {
+export class SqliteTasksetDraftStore extends SqliteStoreDomain {
   async initializeModelTasksetDraft(profileId: string, request: ModelTasksetDraftRequest, source?: TasksetPackage): Promise<TasksetDraft | null> {
     await this.ready;
     const operation = this.writeQueue.then(() => withTasksetDraftLock(this.home, async () => {

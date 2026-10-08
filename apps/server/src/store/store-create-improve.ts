@@ -4,9 +4,9 @@ import {
   type CreateImproveRunAction,
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
-import { SqliteTrainingStore } from "./store-training.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
-export class SqliteCreateImproveStore extends SqliteTrainingStore {
+export class SqliteCreateImproveStore extends SqliteStoreDomain {
   async getCreateImproveRun(runId: string): Promise<CreateImproveRun | null> {
     await this.ready;
     await this.writeQueue;

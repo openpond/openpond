@@ -1,4 +1,4 @@
-import { WorkspaceToolResultSchema, type WorkspaceToolResult } from "@openpond/contracts";
+import { WorkspaceToolResultSchema, type WorkspaceToolResult } from "@openpond/contracts/workspace-tools";
 import {
   deleteWorkspaceFile,
   editWorkspaceFile,

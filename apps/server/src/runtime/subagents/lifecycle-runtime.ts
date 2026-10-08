@@ -1,10 +1,6 @@
-import {
-  SubagentRunSchema,
-  type RuntimeEvent,
-  type Session,
-  type SubagentLifecycleActionResponse,
-  type SubagentRun,
-} from "@openpond/contracts";
+import { SubagentRunSchema, type SubagentLifecycleActionResponse, type SubagentRun } from "@openpond/contracts/subagents";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 import { now, textFromUnknown } from "../../utils.js";
 
 type AppendSubagentReceipt = (input: {

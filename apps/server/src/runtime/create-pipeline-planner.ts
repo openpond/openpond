@@ -1,17 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { HostedChatMessage } from "@openpond/cloud";
-import {
-  CreateImproveActionShapeSchema,
-  CreateImprovePlanSchema,
-  CreateImproveQuestionSchema,
-  CreateImproveRequirementSchema,
-  CreateImproveWorkflowCaptureSchema,
-  nextCreateImproveRunRevision,
-  type ChatModelRef,
-  type CreateImproveRun,
-  type CreateImproveTarget,
-} from "@openpond/contracts";
+import { CreateImproveActionShapeSchema, CreateImprovePlanSchema, CreateImproveQuestionSchema, CreateImproveRequirementSchema, CreateImproveWorkflowCaptureSchema, nextCreateImproveRunRevision, type CreateImproveRun, type CreateImproveTarget } from "@openpond/contracts/create-pipeline";
+import { type ChatModelRef } from "@openpond/contracts/providers";
 
 type PlannerStreamDelta = {
   text?: string;

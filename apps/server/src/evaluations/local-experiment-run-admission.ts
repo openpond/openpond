@@ -29,13 +29,13 @@ import {
   type LocalModelAdmission,
 } from "./local-experiment-model.js";
 import type { loadOpenPondHostedModels } from "@openpond/runtime";
-import type { SqliteLocalExperimentStore } from "../store/store-local-experiments.js";
+import type { LocalExperimentStorage } from "../store/store-local-experiments.js";
 type Configuration = z.infer<typeof LocalExperimentRunSchema>["configuration"];
 
 /** One immutable configuration and one operation receipt share the run's
  * atomic admission. All private source/model checks finish before that write. */
 export function createLocalExperimentRunAdmission(deps: {
-  store: SqliteLocalExperimentStore;
+  store: LocalExperimentStorage;
   ownerId: string;
   localInference?: {
     prepare(

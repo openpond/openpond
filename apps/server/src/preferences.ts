@@ -1,10 +1,5 @@
-import {
-  AppPreferencesSchema,
-  DEFAULT_CODEX_CHAT_MODEL,
-  DEFAULT_CODEX_REASONING_EFFORT,
-  type AppPreferences,
-  type SidebarAppPreference,
-} from "@openpond/contracts";
+import { AppPreferencesSchema, DEFAULT_CODEX_CHAT_MODEL, DEFAULT_CODEX_REASONING_EFFORT, type AppPreferences } from "@openpond/contracts/settings";
+import { type SidebarAppPreference } from "@openpond/contracts/workspaces";
 import { normalizeProjectDirectory } from "./workspace/project-directories.js";
 
 export function normalizeSidebarAppPreference(preference: SidebarAppPreference): SidebarAppPreference {

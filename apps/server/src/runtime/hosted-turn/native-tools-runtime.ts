@@ -1,18 +1,12 @@
-import {
-  type ChatProvider,
-  type ConnectedAppIntegrationSkill,
-  type OpenPondApp,
-  type OpenPondProfileSkill,
-  type RuntimeEvent,
-  SessionUserQuestionSchema,
-  type Session,
-  type Turn,
-  type WorkspaceDiffSummary,
-} from "@openpond/contracts";
-import {
-  executeProjectedAgentTool,
-  type AgentToolCatalogProjection,
-} from "@openpond/agent-runtime";
+import { type ChatProvider } from "@openpond/contracts/settings";
+import { type ConnectedAppIntegrationSkill } from "@openpond/contracts/connected-apps";
+import { type OpenPondApp } from "@openpond/contracts/apps";
+import { type OpenPondProfileSkill } from "@openpond/contracts/profile";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { SessionUserQuestionSchema } from "@openpond/contracts/user-questions";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
+import { type WorkspaceDiffSummary } from "@openpond/contracts/workspaces";
+import { executeProjectedAgentTool, type AgentToolCatalogProjection } from "@openpond/agent-runtime/tools";
 import {
   isConnectedAppProviderToolName,
   redactConnectedAppToolArguments,

@@ -22,10 +22,12 @@ packer.default = (...args) => {
   return result;
 };
 
+const heapMiB = Number(process.env.TVC_MAX_OLD_SPACE_MB ?? 512);
+if (!Number.isInteger(heapMiB) || heapMiB < 128 || heapMiB > 512) throw new Error("TVC heap limit must be 128..512 MiB");
 require(resolve(pkgRoot, metadata.main)).exec([
   "dist/turnkey-agent/app.cjs",
   "--targets", "node24.20.0-linuxstatic-x64",
   "--output", "dist/turnkey-agent/openpond-tvc",
   "--no-bytecode", "--public", "--public-packages", "*",
-  "--no-native-build", "--options", "max-old-space-size=512",
+  "--no-native-build", "--options", [`max-old-space-size=${heapMiB}`, ...(process.env.TVC_MAX_OLD_SPACE_MB ? ["max-semi-space-size=4"] : [])].join(","),
 ]).catch((error) => { console.error(error); process.exitCode = 1; });

@@ -11,7 +11,7 @@ import type {
   Turn,
   UsageRequestAttribution,
 } from "@openpond/contracts";
-import { UsageRequestAttributionSchema } from "@openpond/contracts";
+import { UsageRequestAttributionSchema } from "@openpond/contracts/usage";
 import { isOpenAiCompatibleProviderId } from "../openpond/openai-compatible-provider.js";
 import { now, textFromUnknown } from "../utils.js";
 import { normalizeModelUsageTokens } from "./model-usage-normalization.js";

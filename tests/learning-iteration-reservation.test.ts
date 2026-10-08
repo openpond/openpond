@@ -5,12 +5,12 @@ import {
   learningRef, type LearningRepository,
 } from "@openpond/evals/learning";
 
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { learningContext, learningNow } from "./helpers/learning-fixtures";
 import { withTempDirectory } from "./helpers/temp-directory";
 
-const withStore = (run: (store: SqliteLearningStore, home: string) => Promise<void>) => withTempDirectory("openpond-iteration-", async (home) => {
-  const store = new SqliteLearningStore(home);
+const withStore = (run: (store: SqliteStore, home: string) => Promise<void>) => withTempDirectory("openpond-iteration-", async (home) => {
+  const store = new SqliteStore(home);
   try { await run(store, home); } finally { await store.close(); }
 });
 
@@ -32,7 +32,7 @@ describe("durable learning iteration reservations", () => {
     await expect(f.reserve(enabled, "new-fire")).rejects.toThrow("learning_iteration_active");
     const originalTrigger = LearningIterationReservationSchema.parse((await f.service.get(learningContext, "reservation", iteration.id))).trigger;
     await store.close();
-    const reopened = new SqliteLearningStore(home);
+    const reopened = new SqliteStore(home);
     try {
       const service = createLearningService(reopened.learningRepository());
       const retry = await service.command({ ...learningContext, actor: { id: "another-reviewer", role: "reviewer" } }, {
