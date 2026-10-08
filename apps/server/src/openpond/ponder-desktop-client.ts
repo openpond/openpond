@@ -19,6 +19,7 @@ export function createPonderDesktopClient(input: {
   owner: PonderLocalOwner;
   client: CapturedClient;
   binding: { bindingId: string; bindingRevision: number; ownerUserId: string; teamId: string };
+  relayRequest?(payload: { caller: "ponder"; action: string; bindingId: string; body: { proof: PonderDesktopProof; payload: unknown } }): Promise<unknown>;
 }) {
   const { installation, owner, client, binding } = input;
   if (
@@ -68,7 +69,7 @@ export function createPonderDesktopClient(input: {
         | "renew"
         | "catalog-page"
         | "revoke"
-        | "poll"
+        | "reconcile"
         | "claim"
         | "admission"
         | "attention"
@@ -78,6 +79,11 @@ export function createPonderDesktopClient(input: {
       epoch: string | null,
     ) {
       const path = `/ponder/desktop/${action}`;
+      if (["reconcile", "claim", "admission", "attention", "result", "inspection"].includes(action)) {
+        if (!input.relayRequest) throw new Error("ponder_relay_transport_required");
+        return input.relayRequest({ caller: "ponder", action, bindingId: scope.bindingId,
+          body: { proof: proof(path, payload, epoch), payload } });
+      }
       return client.request({
         path,
         method: "POST",

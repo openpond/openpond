@@ -236,6 +236,7 @@ export type HttpRouteDeps = {
   htmlContentPreviewPayload: (payload: unknown) => Promise<{ url: string }>;
   sandboxHtmlPreviewPayload: (sandboxId: string, filePath: string | null) => Promise<{ url: string }>;
   workspaceHtmlPreviewPayload: (appId: string, filePath: string | null) => Promise<{ url: string }>;
+  resolveWorkspaceFilePayload: (appId: string, filePath: string | null) => Promise<unknown>;
   workspaceFilePayload: (
     appId: string,
     filePath: string | null
@@ -292,6 +293,7 @@ export type HttpRouteDeps = {
   gitAvailabilityPayload: () => Promise<unknown>;
   startGitInstallPayload: () => Promise<unknown>;
   remoteAccessPayload: () => Promise<unknown>;
+  accountRemoteAccessPayload?: (action: import("@openpond/contracts").RemoteAccessSettingsAction, payload?: unknown) => Promise<unknown>;
   enableRemoteAccessPayload: () => Promise<unknown>;
   disableRemoteAccessPayload: () => Promise<unknown>;
   voiceTranscriptionStatusPayload: () => Promise<unknown>;

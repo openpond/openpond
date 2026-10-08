@@ -1,7 +1,7 @@
 import type { PonderDesktopOperation } from "@openpond/contracts/ponder-desktop";
 import { assertPonderDesktopRecipient } from "./ponder-desktop-input.js";
-import { ponderDesktopSessionRevision } from "../openpond/ponder-desktop-catalog.js";
-import { attachPonderSessionOwner } from "./ponder-session-attachment.js";
+import { localSessionOwnershipRevision } from "../remote-relay/session-ownership.js";
+import { attachLocalSessionOwner } from "./local-session-ownership.js";
 import type {
   Approval,
   RuntimeEvent,
@@ -73,13 +73,13 @@ type RuntimeEventRecentWindow = {
 };
 
 export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistoryStorage {
-  async attachPonderSessionOwner(input: Parameters<typeof attachPonderSessionOwner>[1]) {
+  async attachLocalSessionOwner(input: Parameters<typeof attachLocalSessionOwner>[1]) {
     await this.ready;
     const write = this.writeQueue.then(() => {
       const db = this.database;
       db.exec("BEGIN IMMEDIATE");
       try {
-        const session = attachPonderSessionOwner(db, input);
+        const session = attachLocalSessionOwner(db, input);
         db.run("UPDATE projection_session_shells SET payload = ?, updated_at = ? WHERE id = ?",
           [JSON.stringify(session), session.updatedAt, session.id]);
         db.exec("COMMIT");
@@ -561,7 +561,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       db.exec("BEGIN IMMEDIATE");
       try {
         if (desktopOperation) assertPonderDesktopRecipient(db, desktopOperation,
-          session, null, ponderDesktopSessionRevision(session, null));
+          session, null, localSessionOwnershipRevision(session, null));
         db.run("UPDATE sessions SET sort_index = sort_index + 1", []);
         db.run("UPDATE projection_session_shells SET sort_index = sort_index + 1", []);
         db.run(
@@ -707,6 +707,18 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       // managed child can observe terminal completion without waiting for
       // unrelated provider cleanup or projection work.
       this.data.turns[index] = updated;
+      if (updated.status !== "in_progress") {
+        for (let approvalIndex = 0; approvalIndex < this.data.approvals.length; approvalIndex++) {
+          const approval = this.data.approvals[approvalIndex]!;
+          if (approval.status !== "pending" || approval.sessionId !== updated.sessionId || !approval.turnId
+            || (approval.turnId !== updated.id && approval.turnId !== updated.providerTurnId)) continue;
+          const cancelled: Approval = { ...approval, status: "cancelled" };
+          await this.run("UPDATE approvals SET status=?,payload=?,updated_at=? WHERE id=?",
+            [cancelled.status, JSON.stringify(cancelled), now(), cancelled.id]);
+          await this.upsertApprovalProjection(cancelled, approvalIndex);
+          this.data.approvals[approvalIndex] = cancelled;
+        }
+      }
       await this.rebuildLatestTurnProjectionForSession(previousSessionId);
       if (updated.sessionId !== previousSessionId) await this.rebuildLatestTurnProjectionForSession(updated.sessionId);
       await this.rebuildThreadDetailProjectionForSession(previousSessionId);
@@ -727,6 +739,11 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async upsertApproval(approval: Approval): Promise<void> {
     await this.ready;
     const write = this.writeQueue.then(async () => {
+      if (approval.status === "pending" && approval.turnId) {
+        const turn = this.data.turns.find(value => value.sessionId === approval.sessionId
+          && (value.id === approval.turnId || value.providerTurnId === approval.turnId));
+        if (turn && turn.status !== "in_progress") approval = { ...approval, status: "cancelled" };
+      }
       const index = this.data.approvals.findIndex((candidate) => candidate.id === approval.id);
       const previousSessionId = index === -1 ? null : this.data.approvals[index]!.sessionId;
       const sortIndex = index === -1 ? this.data.approvals.length : index;

@@ -13,7 +13,7 @@ describe("markdown checkbox rendering", () => {
   // including nested formatting; that directory must not leak into later prose.
   test("resolves formatted deliverable links within the declared list only", () => {
     const markup = renderMarkdown([
-      "Everything is in `~/openpond-rl-deck/`:", "",
+      "Both files are in `~/openpond-rl-deck/`:", "",
       "- **`diagram-full-rl-pipeline.png`**",
       "- __`pitch.html`__ and **`openpond-rl-pitch.pdf`**",
       "- **`png-pitch/`**", "",
@@ -26,6 +26,13 @@ describe("markdown checkbox rendering", () => {
     expect(markup).toContain('title="pitch.html"');
     expect(markup).not.toContain("`pitch.html`");
     expect(markup).not.toContain('title=".5"');
+    const paragraph = renderMarkdown([
+      "The updated slide and deck are in `~/Desktop/openpond-diagrams/`: `slide.png` and [deck](deck.pdf).", "",
+      "Unrelated `deck.pdf` in this project.",
+    ].join("\n"), { onOpenFileInSidebar: () => {} });
+    expect(paragraph).toContain('title="~/Desktop/openpond-diagrams/slide.png"');
+    expect(paragraph).toContain('title="~/Desktop/openpond-diagrams/deck.pdf"');
+    expect(paragraph).toContain('title="deck.pdf"');
   });
 
   test("renders unchecked and checked task-list items as disabled checkboxes", () => {
@@ -95,7 +102,7 @@ describe("markdown checkbox rendering", () => {
       "- `apps/web/public/openpond-icon.png`\n- `apps/web/public/connected-apps/github.svg`",
       {
         onOpenFileInSidebar: () => {},
-        workspaceRootPath: "/home/glu/Projects/all/openpond",
+        workspaceRootPath: "/workspace/openpond",
       },
     );
     expect(markup).toContain(">apps/web/public/openpond-icon.png</a>");
@@ -106,7 +113,7 @@ describe("markdown checkbox rendering", () => {
 
   test("renders explicit public svg markdown images without showing the alt label", () => {
     const markup = renderMarkdown("![github](apps/web/public/connected-apps/github.svg)", {
-      workspaceRootPath: "/home/glu/Projects/all/openpond",
+      workspaceRootPath: "/workspace/openpond",
     });
     expect(markup).toContain('src="/connected-apps/github.svg"');
     expect(markup).not.toContain("!github");
@@ -115,7 +122,7 @@ describe("markdown checkbox rendering", () => {
   test("renders explicit absolute local markdown images without showing the alt label", () => {
     const markup = renderMarkdown("![screenshot](/tmp/image.png)", {
       connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
-      workspaceRootPath: "/home/glu/Projects/all/openpond",
+      workspaceRootPath: "/workspace/openpond",
     });
     expect(markup).not.toContain("!screenshot");
   });
@@ -124,7 +131,7 @@ describe("markdown checkbox rendering", () => {
     const markup = renderMarkdown("I created `/tmp/image.png` for the smoke test.", {
       connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
       onOpenFileInSidebar: () => {},
-      workspaceRootPath: "/home/glu/Projects/all/openpond",
+      workspaceRootPath: "/workspace/openpond",
     });
 
     expect(markup).toContain(">/tmp/image.png</a>");
@@ -133,7 +140,7 @@ describe("markdown checkbox rendering", () => {
   test("renders bare public image file paths as previews", () => {
     const markup = renderMarkdown("- apps/web/public/openpond-icon.png", {
       onOpenFileInSidebar: () => {},
-      workspaceRootPath: "/home/glu/Projects/all/openpond",
+      workspaceRootPath: "/workspace/openpond",
     });
     expect(markup).toContain('src="/openpond-icon.png"');
   });

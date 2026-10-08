@@ -33,6 +33,7 @@ import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import { resolveChatWorkspaceRootPath } from "../../lib/chat-file-links";
+import { ChatFileResolutionDialog } from "../chat/ChatFileResolutionDialog";
 import { useChatFileOpen } from "../../hooks/useChatFileOpen";
 import { shouldShowThinkingIndicator } from "../../lib/chat-timeline-rows";
 import {
@@ -1096,7 +1097,8 @@ export function MainPane({
     workspaceRepoPath: workspaceState?.repoPath,
     workspaceTargetValue: workspaceTarget.value,
   });
-  const handleOpenFileInSidebar = useChatFileOpen({
+  const { handleOpenFileInSidebar, fileResolution, dismissFileResolution, selectFileResolution } = useChatFileOpen({
+    conversationKey: browserConversationId,
     connection,
     handleOpenBrowserLink,
     activeWorkspaceAppId,
@@ -1509,6 +1511,7 @@ export function MainPane({
         rightPanelExpanded ? "diff-expanded" : ""
       }`}
     >
+      {fileResolution ? <ChatFileResolutionDialog resolution={fileResolution} onClose={dismissFileResolution} onSelect={selectFileResolution} /> : null}
       {view === "team" || view === "community" ? (
         <Suspense fallback={null}>
           <CollaborationTabs onSelect={setView} view={view} />

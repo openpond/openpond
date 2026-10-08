@@ -62,7 +62,7 @@ function resolveOpChatApiBaseUrl(
   config: RuntimeLocalConfig,
   publicApiBaseUrl: string
 ): string {
-  const runtimeEnv = typeof process !== "undefined" ? process.env : {};
+  const runtimeEnv: Record<string, string | undefined> = typeof process !== "undefined" ? process.env : {};
   return (
     normalizeOpChatApiBaseUrl(runtimeEnv.OPENPOND_OPCHAT_API_URL) ??
     normalizeOpChatApiBaseUrl(account?.chatApiBaseUrl ?? config.chatApiBaseUrl) ??

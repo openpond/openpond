@@ -6,6 +6,7 @@ import {
   type PonderDesktopReservationResume,
 } from "@openpond/contracts";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
+import { readLocalSessionReservation } from "./local-session-reservation.js";
 import {
   assertPonderDesktopOperationIdentity,
   ponderDesktopReservedSessionId,
@@ -47,9 +48,7 @@ export function readPonderDesktopReservationResume(
   )
     return null;
   const session = SessionSchema.parse(JSON.parse(row.payload));
-  const identity = session.metadata?.ponderDesktopReservation as
-    | Record<string, unknown>
-    | undefined;
+  const identity = readLocalSessionReservation(session);
   const authorityRow = db.get<{ payload: string }>(
     "SELECT payload FROM ponder_desktop_authority WHERE id = 1",
   );

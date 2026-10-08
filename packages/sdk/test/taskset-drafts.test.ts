@@ -8,7 +8,7 @@ import { createTasksetDraftWorkspace, validateTasksetDraftWorkspace, readTaskset
 it("retains incomplete editor documents and distinguishes publication requirements", () => {
   const draft = createTasksetDraft({ profileId: "workspace", id: "draft", now: "2026-09-08T12:00:00.000Z" });
   expect(TasksetDraftSchema.parse(JSON.parse(JSON.stringify(draft)))).toEqual(draft);
-  expect(draftPublishIssues(draft).map(issue => issue.code)).toEqual(["name_missing", "objective_missing", "tasks_missing", "graders_missing", "grader_fixtures_missing"]);
+  expect(draftPublishIssues(draft).map(issue => issue.code)).toEqual(["name_missing", "objective_missing", "tasks_missing"]);
   expect(TasksetDraftSchema.safeParse({ ...draft, status: "published" }).success).toBe(false);
   expect(TasksetDraftSchema.safeParse({ ...draft, purpose: "benchmark" }).success).toBe(false);
   expect(TasksetDraftSchema.safeParse({ ...draft, output: { mode: "structured_json", jsonSchema: null, renderer: null } }).success).toBe(false);
@@ -110,5 +110,11 @@ it("publishes human-only review as pending without weakening automated reward ga
   const roundTrip = compile(TasksetDraftSchema.parse({ ...ready, graders: projected }));
   expect(roundTrip.taskset.graders).toEqual(compileBoundGraders(binding, [retained.reward]));
   const automated = { ...human, id: "automated", kind: "content", config: { match: "exact", expected: "answer" } };
-  expect(() => compile(TasksetDraftSchema.parse({ ...ready, graders: [human, automated] }))).toThrow(/grader fixtures/);
+  // Publication retains authored graders; scored execution enforces calibration.
+  const mixed = compile(TasksetDraftSchema.parse({ ...ready, graders: [human, automated] }));
+  const { validateTaskset } = await import("../src/taskset-authored-validation.js");
+  expect(mixed.taskset.graders).toHaveLength(2);
+  const { publishTasksetDraft } = await import("../src/taskset-draft-publication.js");
+  const authored = publishTasksetDraft({ draft: { ...ready, graders: [human, automated] }, now });
+  expect(validateTaskset(authored).issues.some(issue => issue.code === "grader_fixtures_required")).toBe(true);
 });

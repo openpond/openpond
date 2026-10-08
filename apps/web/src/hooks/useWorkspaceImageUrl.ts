@@ -9,6 +9,14 @@ export type WorkspaceImageUrlResolver = {
   loadUrl: (appId: string | null | undefined, path: string | null | undefined) => Promise<string | null>;
 };
 
+function signImageUrl(connection: ClientConnection, appId: string, path: string) {
+  // Resolved links can point into another source folder or an explicit output
+  // directory. The workspace signing endpoint only accepts relative paths.
+  return /^(?:[~/\\]|[A-Za-z]:|file:\/\/)/.test(path)
+    ? api.signLocalImageUrl(connection, { path })
+    : api.signWorkspaceImageUrl(connection, { appId, path });
+}
+
 export function useWorkspaceImageUrl(
   connection: ClientConnection | null,
   appId: string | null | undefined,
@@ -18,7 +26,7 @@ export function useWorkspaceImageUrl(
 }
 
 export function useWorkspaceImageResource(connection: ClientConnection | null, appId: string | null | undefined, path: string | null | undefined) {
-  const load = useCallback(() => api.signWorkspaceImageUrl(connection!, { appId: appId!, path: path! }), [connection, appId, path]);
+  const load = useCallback(() => signImageUrl(connection!, appId!, path!), [connection, appId, path]);
   return useSignedImageResource(connection,
     connection && appId && path ? signedResourceCacheKey(connection, "workspace-image", appId, path) : null, load);
 }
@@ -43,7 +51,7 @@ export function useWorkspaceImageUrlResolver(connection: ClientConnection | null
       signedResourceUrlCache.activateConnection(connection);
       const key = signedResourceCacheKey(connection, "workspace-image", appId, path);
       return signedResourceUrlCache
-        .load(key, () => api.signWorkspaceImageUrl(connection, { appId, path }))
+        .load(key, () => signImageUrl(connection, appId, path))
         .finally(() => setVersion((version) => version + 1));
     },
     [connection],

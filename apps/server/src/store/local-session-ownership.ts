@@ -1,52 +1,37 @@
-import { SessionSchema, type Session } from "@openpond/contracts";
-import { ponderDesktopSessionRevision } from "../openpond/ponder-desktop-catalog.js";
+import { SessionSchema } from "@openpond/contracts";
+import { localSessionMayResolveOwnership, localSessionOwnershipRevision } from "../remote-relay/session-ownership.js";
 import {
-  ponderOwnsLocalSession,
-  PonderLocalOwnerSchema,
-  type PonderLocalOwner,
-} from "../openpond/ponder-local-scope.js";
-import { isCodexHistorySessionId } from "../codex-history.js";
+  deviceOwnsLocalSession,
+  DeviceLocalOwnerSchema,
+  type DeviceLocalOwner,
+} from "../remote-relay/local-scope.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 
-export function ponderSessionMayAttach(session: Session) {
-  return (
-    session.metadata?.ponderLocalOwner === undefined &&
-    !session.archived &&
-    !session.systemKind &&
-    !session.hiddenFromDefaultSidebar &&
-    session.status !== "closed" &&
-    session.experience !== "development" &&
-    !session.metadata?.nativeHistoryProjection &&
-    !isCodexHistorySessionId(session.id) &&
-    !["sandbox", "sandbox_template", "sandbox_app"].includes(session.workspaceKind ?? "")
-  );
-}
-
 /** Explicit local human selection. Account inference and cloud/model requests never call this. */
-export function attachPonderSessionOwner(
+export function attachLocalSessionOwner(
   db: OpenPondSqliteConnection,
   input: {
     sessionId: string;
     expectedRevision: string;
-    owner: PonderLocalOwner;
+    owner: DeviceLocalOwner;
     assertCurrent?: () => void;
   },
 ) {
   input.assertCurrent?.();
-  const owner = PonderLocalOwnerSchema.parse(input.owner);
+  const owner = DeviceLocalOwnerSchema.parse(input.owner);
   const row = db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id = ?", [
     input.sessionId,
   ]);
   if (!row) throw new Error("ponder_desktop_attach_session_unavailable");
   const session = SessionSchema.parse(JSON.parse(row.payload));
-  if (ponderOwnsLocalSession(session, owner)) return session;
-  if (!ponderSessionMayAttach(session))
+  if (deviceOwnsLocalSession(session, owner)) return session;
+  if (!localSessionMayResolveOwnership(session))
     throw new Error("ponder_desktop_attach_session_not_eligible");
   const latest = db.get<{ id: string }>(
     "SELECT id FROM turns WHERE session_id = ? ORDER BY sort_index DESC LIMIT 1",
     [session.id],
   );
-  if (ponderDesktopSessionRevision(session, latest?.id ?? null) !== input.expectedRevision) {
+  if (localSessionOwnershipRevision(session, latest?.id ?? null) !== input.expectedRevision) {
     throw new Error("ponder_desktop_attach_session_changed");
   }
   const updated = {

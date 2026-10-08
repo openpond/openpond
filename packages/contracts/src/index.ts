@@ -1,4 +1,5 @@
 export * from "./runtime.js";
+export * from "./canonical-request-content.js";
 export * from "./user-questions.js";
 export * from "./terminal.js";
 export * from "./apps.js";
@@ -23,6 +24,8 @@ export * from "./work-formats.js";
 export * from "./workspace-capabilities.js";
 export * from "./sandbox-template.js";
 export * from "./remote-access.js";
+export * from "./remote-device.js";
+export * from "./remote-access-settings.js";
 export * from "./profile.js";
 export * from "./profile-ref.js";
 export * from "./profile-publication.js";

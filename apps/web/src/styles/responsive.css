@@ -27,7 +27,7 @@
   }
 
   .chat-thread {
-    padding: 68px 20px var(--chat-composer-reserve, 132px);
+    padding: 68px 20px calc(var(--chat-composer-reserve, 132px) + var(--chat-sent-message-space, 0px));
   }
 
   .main-pane.chat-active.diff-open {
@@ -53,10 +53,14 @@
   }
 
   .composer.dock,
-  .composer-stack.dock,
   .composer-stack.start {
     width: calc(100% - 28px);
     max-width: none;
+  }
+
+  .composer-stack.dock {
+    width: 100%;
+    padding-inline: 14px;
   }
 
   .approval-request-card {

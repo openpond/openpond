@@ -18,7 +18,7 @@ type UserAuthFooterProps = {
   onOpenSettings: () => void;
   onOpenWalkthroughs: () => void;
   walkthroughsActive: boolean;
-  onSelectTeam?: (teamId: string) => Promise<void>;
+  onSelectTeam?: (teamId: string | null) => Promise<void>;
   onLogOut?: () => Promise<void>;
   railTooltip?: string;
 };
@@ -84,10 +84,6 @@ export function UserAuthFooter({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const identity = useMemo(() => userAuthIdentity(account), [account]);
   const initial = identity.label.trim().slice(0, 1).toUpperCase();
-  const activeOrganization =
-    organizations.find((organization) => organization.teamId === selectedTeamId) ??
-    organizations[0] ??
-    null;
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: PointerEvent) {
@@ -143,32 +139,42 @@ export function UserAuthFooter({
             </span>
           </div>
           {organizations.length > 0 && onSelectTeam ? (
-            <label className="user-auth-team-picker">
-              <Shapes size={15} aria-hidden="true" />
-              <span className="user-auth-team-picker-label">Team</span>
-              <select
-                aria-label="Active team"
-                disabled={switchingTeamId !== null}
-                value={activeOrganization?.teamId ?? ""}
-                onChange={async (event) => {
-                  const teamId = event.currentTarget.value;
-                  setSwitchingTeamId(teamId);
-                  try {
-                    await onSelectTeam(teamId);
-                  } catch {
-                    // The app-level handler reports the failure without closing the menu.
-                  } finally {
-                    setSwitchingTeamId(null);
-                  }
-                }}
-              >
-                {organizations.map((organization) => (
-                  <option key={organization.teamId} value={organization.teamId}>
-                    {organization.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div>
+              <label className="user-auth-team-picker">
+                <Shapes size={15} aria-hidden="true" />
+                <span className="user-auth-team-picker-label">Team</span>
+                <select
+                  aria-label="Active team"
+                  aria-describedby="account-task-ownership-hint"
+                  disabled={switchingTeamId !== null}
+                  value={selectedTeamId ?? ""}
+                  onChange={async (event) => {
+                    const teamId = event.currentTarget.value;
+                    setSwitchingTeamId(teamId);
+                    try {
+                      await onSelectTeam(teamId || null);
+                    } catch {
+                      // The app-level handler reports the failure without closing the menu.
+                    } finally {
+                      setSwitchingTeamId(null);
+                    }
+                  }}
+                >
+                  <option value="">Personal account</option>
+                  {selectedTeamId && !organizations.some(organization => organization.teamId === selectedTeamId) ? (
+                    <option value={selectedTeamId} disabled>Selected workspace unavailable</option>
+                  ) : null}
+                  {organizations.map((organization) => (
+                    <option key={organization.teamId} value={organization.teamId}>
+                      {organization.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="user-auth-task-ownership-hint" id="account-task-ownership-hint">
+                New tasks use this selection. Existing tasks keep their owner.
+              </p>
+            </div>
           ) : null}
           <div className="user-auth-plan-usage">
             {(["claude-code", "codex"] as const).map(provider => <ProviderPlanUsage key={provider} connection={connection} provider={provider} compact onOpen={() => { onOpenChange(false); onOpenProviders(); }} />)}

@@ -10,7 +10,6 @@ import {
   type OpenPondProfileRef,
 } from "@openpond/contracts";
 import { ponderOwnsLocalSession, type PonderLocalOwner } from "./ponder-local-scope.js";
-import { localManagedTargetRevision } from "../runtime/task-inbox/target-revision.js";
 
 function hash(value: unknown) {
   return createHash("sha256")
@@ -22,39 +21,10 @@ export function ponderDesktopProfileSelectionId(profile: OpenPondProfileRef | nu
   return profile ? hash(profile) : null;
 }
 
-export function ponderDesktopSessionRevision(session: Session, latestTurnId: string | null) {
-  return hash({
-    managedRevision: localManagedTargetRevision(session, latestTurnId),
-    modelRef: session.modelRef ?? null,
-    profile: session.currentProfile ?? null,
-    profileWorkflowBinding: session.profileWorkflowBinding ?? null,
-    profileComponentBinding: session.profileComponentBinding ?? null,
-    experience: session.experience,
-    owner: session.metadata?.ponderLocalOwner ?? null,
-    projectRevision: session.metadata?.ponderWorkspaceRevision ?? null,
-    commandAccessMode: session.openPondCommandAccessMode,
-  });
-}
+import { localSessionOwnershipRevision as ponderDesktopSessionRevision } from "../remote-relay/session-ownership.js";
+export { ponderDesktopSessionRevision };
 
-/** Queueing may outlive another turn; its selected configuration must remain the same. */
-export function ponderDesktopExecutionRevision(session: Session) {
-  return hash({
-    provider: session.provider,
-    modelRef: session.modelRef ?? null,
-    experience: session.experience,
-    profile: session.currentProfile ?? null,
-    workflow: session.profileWorkflowBinding ?? null,
-    component: session.profileComponentBinding ?? null,
-    cwd: session.cwd,
-    workspaceKind: session.workspaceKind ?? null,
-    workspaceId: session.workspaceId ?? null,
-    localProjectId: session.localProjectId ?? null,
-    cloudProjectId: session.cloudProjectId ?? null,
-    owner: session.metadata?.ponderLocalOwner ?? null,
-    projectRevision: session.metadata?.ponderWorkspaceRevision ?? null,
-    commandAccessMode: session.openPondCommandAccessMode,
-  });
-}
+export { localSessionConfigurationRevision as ponderDesktopExecutionRevision } from "../remote-relay/session-ownership.js";
 
 /** Includes only sessions with protected, exact login ownership. Unknown/imported history stays local. */
 export async function capturePonderDesktopCatalog(input: {

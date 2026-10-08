@@ -399,10 +399,16 @@ async function runAgentServer(
   const hostStorageClient = new AgentHostStorageClient();
   if (runtimeStorage === "hosted_postgres") {
     if (storeDir || profileSource) throw new Error("Hosted Postgres app-server cannot use local storage sources.");
+    const externalDataset = profileExternalDatasetPackage
+      ? await (hostedCacheHome && admittedProfileRelease?.hostExecution && !experimentOwner
+          ? readHostProfileExternalDataset(profileExternalDatasetPackage, hostedCacheHome)
+          : Promise.reject(new Error("External Dataset requires its private hosted evaluation owner.")))
+      : undefined;
     await runAppServerJsonl({
       appServer: () => createOpenPondAppServer({
         ...(hostedCacheHome ? { storeDir: hostedCacheHome } : {}),
         hostStorageClient,
+        ...(externalDataset ? { profileExternalDataset: externalDataset } : {}),
         runtimeStorage: {
           kind: "hosted_postgres", client: hostStorageClient,
           core: createHostedRuntimeCoreStorage(hostStorageClient),

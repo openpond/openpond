@@ -69,7 +69,7 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
       <UserAuthFooter account={sidebar.account} open={accountOpen} onOpenChange={setAccountOpen}
         connection={sidebar.connection} onOpenProviders={() => void navigateDesktopRoute({ kind: "settings", section: "providers" })}
         railTooltip={accountOpen ? undefined : "Account"}
-        organizations={sidebar.organizations} selectedTeamId={sidebar.teamChatOrganization?.teamId ?? null}
+        organizations={sidebar.organizations} selectedTeamId={sidebar.selectedTeamId}
         onSelectTeam={sidebar.onSelectTeam} onLogOut={sidebar.onLogOut}
         walkthroughsActive={sidebar.view === "get-started"}
         onOpenWalkthroughs={() => void selectWalkthroughs()}

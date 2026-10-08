@@ -16,7 +16,7 @@ import {
   capturePonderDesktopCatalog,
   ponderDesktopSessionRevision,
 } from "./ponder-desktop-catalog.js";
-import { ponderSessionMayAttach } from "../store/ponder-session-attachment.js";
+import { localSessionMayResolveOwnership } from "../remote-relay/session-ownership.js";
 import { capturePonderDesktopStarters } from "./ponder-desktop-starters.js";
 import { createPonderDesktopClient } from "./ponder-desktop-client.js";
 import { createPonderDesktopExecutor } from "./ponder-desktop-executor.js";
@@ -56,6 +56,8 @@ export function createPonderDesktopManager(deps: {
   outputs(sessionId: string, turnId: string): Promise<FileOutputRef[]>;
   readOutput: ReturnType<typeof createWorkOutputService>["readWorkOutput"];
   warn(message: string): void;
+  relayRequest: NonNullable<Parameters<typeof createPonderDesktopClient>[0]["relayRequest"]>;
+  relayWake(): void;
 }) {
   let active: {
     key: string;
@@ -68,6 +70,7 @@ export function createPonderDesktopManager(deps: {
   } | null = null;
   let closed = false;
   let authorityGeneration = 0;
+  let authorityChanging = false;
   let disabled = new Set<string>();
   let reauthorizations: Record<string, number> = {};
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -78,7 +81,7 @@ export function createPonderDesktopManager(deps: {
     queue = result.catch(() => undefined);
     return result;
   }
-  async function current() {
+  async function captureAccount() {
     const context = await loadAuthenticatedOpenPondAccountContext();
     const teamId = (await deps.loadAppPreferences()).defaultTeamId;
     if (!teamId || context.accountState.state !== "signed_in") return null;
@@ -93,6 +96,11 @@ export function createPonderDesktopManager(deps: {
       .update(JSON.stringify([context.token, context.apiBaseUrl]))
       .digest("hex");
     return owner ? { owner, key: ownerKey(owner), credentialRevision, client } : null;
+  }
+  async function current() {
+    if (authorityChanging) return null;
+    const captured = await captureAccount();
+    return authorityChanging ? null : captured;
   }
   const projectService = createPonderDesktopProjectService({
     store: deps.store,
@@ -141,8 +149,10 @@ export function createPonderDesktopManager(deps: {
     } else await deps.store.clearPonderDesktopAuthority();
   }
   async function reconcile() {
-    if (closed) return;
+    if (closed || authorityChanging) return;
+    const generation = authorityGeneration;
     const selected = await current();
+    if (closed || authorityChanging || generation !== authorityGeneration) return;
     if (active && (!selected || active.key !== selected.key)) {
       active.valid = false;
       reauthorizations[active.key] = (reauthorizations[active.key] ?? 0) + 1;
@@ -163,11 +173,13 @@ export function createPonderDesktopManager(deps: {
     const binding = BindingSchema.parse(
       await selected.client.request({ path: "/ponder", method: "POST" }),
     );
+    if (closed || authorityChanging || generation !== authorityGeneration) return;
     const client = createPonderDesktopClient({
       installation: deps.installation,
       owner: selected.owner,
       client: selected.client,
       binding,
+      relayRequest: deps.relayRequest,
     });
     const capture = async () => {
       // Authoritative session records contain ownership; sidebar projections do not grant authority.
@@ -267,6 +279,14 @@ export function createPonderDesktopManager(deps: {
     timer.unref();
   }
   return {
+    relayAuthority(deviceId: string, genericRuntimeId: string) {
+      return active?.valid ? active.runtime.relayAuthority(deviceId, genericRuntimeId) : null;
+    },
+    needsRelay: () => !!active?.valid && active.runtime.needsConnection(),
+    receiveOperations(payload: unknown, hasObligations: boolean) {
+      if (!active?.valid) throw new Error("ponder_relay_authority_unavailable");
+      active.runtime.receiveOperations(payload, hasObligations);
+    },
     async start() {
       await deps.store.clearPonderDesktopAuthority();
       try {
@@ -298,11 +318,12 @@ export function createPonderDesktopManager(deps: {
       await serial(disconnect);
     },
     async beforeAuthorityChange() {
+      authorityChanging = true;
       authorityGeneration++;
       if (active) active.valid = false;
       // Fence immediately, before the account/team mutation, even while a cloud request is in flight.
       await deps.store.clearPonderDesktopAuthority();
-      const key = active?.key ?? (await current())?.key;
+      const key = active?.key ?? (await captureAccount())?.key;
       await serial(async () => {
         if (key) {
           reauthorizations[key] = (reauthorizations[key] ?? 0) + 1;
@@ -310,6 +331,10 @@ export function createPonderDesktopManager(deps: {
         }
         await disconnect(true);
       });
+    },
+    afterAuthorityChange() {
+      authorityChanging = false;
+      void serial(reconcile).catch(error => deps.warn(`Ponder desktop: ${String(error)}`));
     },
     async connection(action: "status" | "link" | "unlink") {
       return serial(async () => {
@@ -329,7 +354,7 @@ export function createPonderDesktopManager(deps: {
         if (selected) {
           for (const shell of await deps.store.sessionShells()) {
             const session = await deps.store.getSession(shell.id);
-            if (!session || !ponderSessionMayAttach(session)) continue;
+            if (!session || !localSessionMayResolveOwnership(session)) continue;
             const managed = await deps.inspect(session.id);
             if (!managed.canSendFollowup) continue;
             candidates.push({
@@ -393,7 +418,7 @@ export function createPonderDesktopManager(deps: {
           latest.credentialRevision !== selected.credentialRevision
         )
           throw new Error("ponder_desktop_attach_session_owner_changed");
-        const session = await deps.store.attachPonderSessionOwner({
+        const session = await deps.store.attachLocalSessionOwner({
           ...input,
           owner: selected.owner,
           assertCurrent: () => {
@@ -477,6 +502,7 @@ export function createPonderDesktopManager(deps: {
         } finally {
           // The hosted admission may commit even if the response is lost.
           wakeAfterRequest?.();
+          deps.relayWake();
         }
       });
     },
