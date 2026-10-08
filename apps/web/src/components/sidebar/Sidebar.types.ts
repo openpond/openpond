@@ -47,6 +47,7 @@ export type SidebarProps = {
   selectedTeamThreadId: string | null;
   teamChatEnabled: boolean;
   organizations: OpenPondOrganization[];
+  selectedTeamId: string | null;
   teamChatOrganization: OpenPondOrganization | null;
   teamChatLoading?: boolean;
   currentUserId: string | null;
@@ -103,7 +104,7 @@ export type SidebarProps = {
   setSearchOpen: Dispatch<SetStateAction<boolean>>;
   setSectionMenuOpen: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
   setSettingsSection: Dispatch<SetStateAction<SettingsSection>>;
-  onSelectTeam: (teamId: string) => Promise<void>;
+  onSelectTeam: (teamId: string | null) => Promise<void>;
   onLogOut: () => Promise<void>;
   onTogglePinnedCollapsed: () => void;
   onToggleCloudProjectsCollapsed: () => void;

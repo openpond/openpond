@@ -393,7 +393,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     ],
   );
   const selectSidebarTeam = useCallback(
-    async (teamId: string) => {
+    async (teamId: string | null) => {
       if (!connection || !bootstrap) return;
       try {
         const preferencesPayload = await api.savePreferences(connection, {
@@ -422,7 +422,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       throw caught;
     }
   }, [applyBootstrapPayload, connection, setError, showToast]);
-  const projectsTeamId = teamChatTeamId ?? appDefaults.defaultTeamId ?? null;
+  const projectsTeamId = appDefaults.defaultTeamId ?? null;
   const projectsForActiveTeam = useMemo(
     () =>
       projectRows.filter(
@@ -1020,6 +1020,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           selectedTeamThreadId: teamChat.selectedThreadId,
           teamChatEnabled: teamChatTeamId !== null,
           organizations,
+          selectedTeamId: appDefaults.defaultTeamId ?? null,
           teamChatOrganization,
           teamChatLoading: teamChat.loading,
           currentUserId: teamChat.currentUserId,
