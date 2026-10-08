@@ -6,7 +6,7 @@ import "./html-visual.css";
 
 import { OpenHtmlVisualContext } from "./html-visual-context";
 function theme(): HtmlVisualTheme {
-  const styles = getComputedStyle(document.documentElement);
+  const styles = getComputedStyle(document.querySelector(".app-shell") ?? document.documentElement);
   return Object.fromEntries(Object.entries(HTML_VISUAL_THEME).map(([key, fallback]) => [key, styles.getPropertyValue(key).trim() || fallback])) as HtmlVisualTheme;
 }
 
@@ -73,7 +73,8 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
     const sendTheme = () => frame.current?.contentWindow?.postMessage({ type: "openpond-theme", identity, theme: theme() }, "*");
     window.addEventListener("message", receive);
     const observer = new MutationObserver(sendTheme);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    const themeRoots = [document.documentElement, document.querySelector(".app-shell")].filter((element): element is Element => element !== null);
+    for (const element of themeRoots) observer.observe(element, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
     const appearance = matchMedia("(prefers-color-scheme: dark)");
     appearance.addEventListener("change", sendTheme);
     return () => { clearTimeout(timeout); observer.disconnect(); window.removeEventListener("message", receive); appearance.removeEventListener("change", sendTheme); };
