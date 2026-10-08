@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { OpenPondAppServerOptions } from "../../apps/server/src/app-server-runtime.js";
-import type { ChatInput, Config } from "./config.js";
+import type { ExternalChatInput } from "./config.js";
 import { ExampleError } from "./config.js";
 import { readResponseJson } from "./http-json.js";
 
@@ -19,7 +19,9 @@ const completionSchema = z.object({
 });
 
 /** A complete response is fed into the existing agent loop; there is no second loop here. */
-export function createModelStream(config: Config, credentials: ChatInput["credentials"], signal: AbortSignal):
+export function createModelStream(config: {
+  modelEndpoint: string; model: string; maxOutputTokens?: number; systemPrompt?: string; temperature?: number;
+}, credentials: Pick<ExternalChatInput["credentials"], "modelApiKey">, signal: AbortSignal):
 NonNullable<OpenPondAppServerOptions["streamOpenPondHostedChatTurn"]> {
   let calls = 0;
   return async function* (request) {
@@ -29,8 +31,15 @@ NonNullable<OpenPondAppServerOptions["streamOpenPondHostedChatTurn"]> {
       signal: AbortSignal.any([signal, request.signal ?? new AbortController().signal]),
       headers: { authorization: `Bearer ${credentials.modelApiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
-        model: config.model, messages: request.messages, tools: request.tools,
-        tool_choice: request.toolChoice, max_tokens: Math.min(request.maxTokens ?? 2048, 2048), stream: false,
+        model: config.model,
+        // The small no-tool deployment uses its fixed harness instruction instead
+        // of advertising the desktop-wide authoring, skill and coordination catalog.
+        messages: config.systemPrompt === undefined ? request.messages : [
+          { role: "system", content: config.systemPrompt },
+          ...request.messages.filter(message => message.role !== "system"),
+        ],
+        temperature: config.temperature, tools: request.tools,
+        tool_choice: request.toolChoice, max_tokens: Math.min(request.maxTokens ?? 2048, config.maxOutputTokens ?? 2048), stream: false,
       }),
     });
     const completion = completionSchema.parse(await readResponseJson(response));

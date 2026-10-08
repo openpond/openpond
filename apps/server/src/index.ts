@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { withUrlModels } from "./enclave/provider.js";
+import { createLocalByokChatStream } from "./openpond/local-byok-chat-stream.js";
 import { createModelUsagePersistence } from "./runtime/model-usage-persistence.js";
 import { createAccountAuthorityChange, type AccountAuthorityChange } from "./runtime/account-authority-change.js";
 import { createRemoteRelayManager } from "./remote-relay/manager.js";
@@ -113,9 +115,7 @@ import { buildProviderSettings } from "./openpond/provider-registry.js";
 import { cachedProviderCatalog } from "./openpond/provider-catalog.js";
 import {
   readProviderSecrets,
-  writeProviderChatGptSubscriptionCredential,
 } from "./openpond/provider-secrets.js";
-import { streamOpenAiCompatibleChatCompletion } from "./openpond/openai-compatible-provider.js";
 import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import {
   createWebFetchModelToolDefinition,
@@ -357,6 +357,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     upsertScaffoldApp,
     loadAppPreferences,
     updateAppPreferencesPayload,
+    enclavePayload,
     providerSettingsPayload,
     providerPlanUsagePayload,
     nativeAgentSetupPayload,
@@ -589,7 +590,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     ]);
     return {
       secrets,
-      settings: withManagedAdapterProviderModels(
+      settings: await withUrlModels(store.home, withManagedAdapterProviderModels(
         buildProviderSettings({
           file,
           secrets,
@@ -597,7 +598,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
           catalog: cachedProviderCatalog(file),
         }),
         managedAdapterModels
-      ),
+      )),
     };
   }
   const { trainingModelText, trainingModelStream } =
@@ -879,6 +880,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   });
   onStartupFailure(() => chatWorkflows.stop());
   const turnRunner = createTurnRunner({
+    isRemoteAgentModel: async (providerId, modelId) => providerId === "custom-openai-compatible" && modelId.startsWith("url:") &&
+      (await (await import("./enclave/connection.js")).resolveUrlModel(storeDir, modelId)).protocol === "tvc",
+    enclaveChat: async (modelId, prompt, signal) => (await import("@openpond/contracts/enclave")).EnclaveReplySchema.parse(await enclavePayload("chat", { id: modelId, prompt }, signal)),
     ...turnTools,
     isolatedProfileEvaluationForTurn:session=>localProfileOwner.isolatedProfileEvaluationForTurn(session),
     resolveModelTools:async context=>await localProfileOwner.resolveModelTools(context)??context.tools,
@@ -1120,58 +1124,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     hostedSystemPrompt,
     appendAssistantText,
     appendHostedContextUsage,
-    streamLocalByokChatTurn: async function* (input) {
-      if (input.providerId === "openpond" && await managedAdapterChatRuntime.appliesTo(input.modelId)) {
-        yield* managedAdapterChatRuntime.stream({
-          modelId: input.modelId,
-          messages: input.messages,
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-          requestId: input.requestId,
-          signal: input.signal,
-        });
-        return;
-      }
-      const state = await localByokRuntimeState();
-      for await (const delta of streamOpenAiCompatibleChatCompletion({
-        providerId: input.providerId,
-        settings: state.settings,
-        secrets: state.secrets,
-        modelId: input.modelId,
-        messages: input.messages,
-        tools: input.tools,
-        toolChoice: input.toolChoice,
-        maxOutputTokens: input.maxOutputTokens,
-        requestId: input.requestId,
-        promptCacheKey: input.promptCacheKey,
-        signal: input.signal,
-        saveChatGptSubscriptionCredential: async (providerId, credential) => {
-          await writeProviderChatGptSubscriptionCredential({
-            paths: providerSecretPaths,
-            providerId,
-            credential,
-            expected: state.secrets.providers[providerId] ?? {},
-            timestamp: now(),
-          });
-        },
-      })) {
-        if (delta.type === "text_delta") {
-          yield { text: delta.text, raw: delta.raw };
-        }
-        if (delta.type === "reasoning_delta") {
-          yield { reasoningText: delta.text, raw: delta.raw };
-        }
-        if (delta.type === "continuation") {
-          yield { continuation: delta.continuation, raw: delta.raw };
-        }
-        if (delta.type === "tool_call_delta")
-          yield { toolCalls: delta.toolCalls, raw: delta.raw };
-        if (delta.type === "usage")
-          yield { raw: delta.raw, usage: delta.usage };
-        if (delta.type === "finish")
-          yield { finishReason: delta.finishReason, raw: delta.raw };
-      }
-    },
+    streamLocalByokChatTurn: createLocalByokChatStream({
+      home: store.home, managedAdapterChatRuntime, localByokRuntimeState, providerSecretPaths, now,
+    }),
     streamOpenPondHostedChatTurn: streamSelectedOpenPondChatTurn,
     resolveSessionModelStream:experimentSessionStreamResolver(async(session,turn)=>
       await improvements.resolveSessionModelStream(session,turn)??await localNativeOwner.resolveSessionModelStream(session,turn)??await localProfileOwner.resolveSessionModelStream(session,turn)??await options.resolveSessionModelStream?.(session,turn)??null),
@@ -1835,6 +1790,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       profilePushPayload,
       profileRunPayload,
       updateAppPreferencesPayload,
+      enclavePayload,
       providerSettingsPayload,
       providerPlanUsagePayload,
       nativeAgentSetupPayload,

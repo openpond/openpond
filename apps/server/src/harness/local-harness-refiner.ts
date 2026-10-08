@@ -3,18 +3,8 @@ import { promises as fs } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 
-import {
-  HarnessImprovementProposalSchema,
-  HarnessRunOverlaySchema,
-  HarnessTargetedValidationReceiptSchema,
-  classifyHarnessAutoAdvanceAuthority,
-  createHarnessTargetedValidationReceipt,
-  type HarnessAdvanceReceipt,
-  type HarnessImprovementProposal,
-  type HarnessRunOverlay,
-  type HarnessTargetedValidationReceipt,
-  type HarnessWorkspace,
-} from "@openpond/contracts";
+import { HarnessImprovementProposalSchema, HarnessRunOverlaySchema, HarnessTargetedValidationReceiptSchema, createHarnessTargetedValidationReceipt, type HarnessAdvanceReceipt, type HarnessImprovementProposal, type HarnessRunOverlay, type HarnessTargetedValidationReceipt, type HarnessWorkspace } from "@openpond/contracts/harness-workspaces";
+import { classifyHarnessAutoAdvanceAuthority } from "@openpond/contracts/harness-workspace-transitions";
 import { parseProfileSkillMarkdown } from "@openpond/cloud";
 import { contentHash } from "@openpond/harness";
 

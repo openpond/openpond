@@ -8,7 +8,7 @@ import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import { streamOpenPondHostedChatTurn, type loadOpenPondHostedModels } from "@openpond/runtime";
-import type { SqliteLocalExperimentStore } from "../store/store-local-experiments.js";
+import type { LocalExperimentStorage } from "../store/store-local-experiments.js";
 import { createExperimentCaseService } from "./experiment-case-service.js";
 import { createLocalExperimentPolicy } from "./local-experiment-policy.js";
 import { createLocalBudgetedModelStream, type LocalModelAdmission } from "./local-experiment-model.js";
@@ -26,7 +26,7 @@ import { LocalExperimentSaveFromReleaseSchema, LocalExperimentReadSchema, LocalE
   LocalExperimentError,
   type LocalExperimentDefinition, type LocalExperimentExecution, type LocalExperimentAdmission } from "./local-experiment-contract.js";
 
-export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:string)=>Promise<import("@openpond/contracts").RuntimeEvent[]>;storeDir?:string;store:SqliteLocalExperimentStore;teamId:()=>Promise<string>;actorId:()=>Promise<string>;
+export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:string)=>Promise<import("@openpond/contracts").RuntimeEvent[]>;storeDir?:string;store:LocalExperimentStorage;teamId:()=>Promise<string>;actorId:()=>Promise<string>;
   stream?:typeof streamOpenPondHostedChatTurn;catalog?:typeof loadOpenPondHostedModels;ownerId?:string;
   nativeHarness?:QualifiedLocalNativeHarness;
   resolveSelectedRewards?:import("./local-reward-grading.js").LocalRewardGradingResolver;sourceChoices?:()=>Promise<LocalExperimentSourceChoices>;

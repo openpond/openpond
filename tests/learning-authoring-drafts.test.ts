@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { AuthoringDraftSchema, assertLearningContentHash, learningRef, sealLearningContent } from "@openpond/evals/learning";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { withTempDirectory } from "./helpers/temp-directory";
 import { learningContext, learningFixture } from "./helpers/learning-fixtures";
 
@@ -8,7 +8,7 @@ import { learningContext, learningFixture } from "./helpers/learning-fixtures";
 // stale concurrent publication must roll back both the release and draft receipt.
 test("durable authoring preserves unfinished input and atomically finalizes only the exact saved revision", async () => {
   await withTempDirectory("openpond-authoring-drafts-", async (home) => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const fixture = await learningFixture(store.learningRepository());
       const input = { id: "draft-reward", targetKind: "reward", targetId: "new-reward", baseRelease: null, editorVersion: "openpond.modelsEditor.v1", fields: { name: "Unfinished", description: "", kind: "custom_verifier", fields: "", outputField: "", expectedField: "", expectedValue: "", schema: "{unfinished", reference: "", events: "", code: "export function", exportName: "verify", timeout: "", rubric: "", providerId: "", modelId: "", modelRevision: "", temperature: "", reviewerRole: "", learnedId: "", learnedHash: "", inputContract: "", minimum: "", maximum: "" } };
@@ -19,7 +19,7 @@ test("durable authoring preserves unfinished input and atomically finalizes only
       assertLearningContentHash(initial);
       expect((await fixture.service.list(learningContext, "draft", { parentId: "reward", status: "draft" })).items).toHaveLength(1);
       await expect(fixture.service.get(learningContext, "reward", input.targetId)).rejects.toThrow("learning_resource_not_found");
-      const reopened = new SqliteLearningStore(home);
+      const reopened = new SqliteStore(home);
       try { expect(await reopened.learningRepository().transaction(learningContext.scope, tx => tx.get("draft", input.id))).toEqual(initial); } finally { await reopened.close(); }
       const updates = await Promise.allSettled(["A", "B"].map(name => fixture.command({ action: "save_draft", expectedRevision: 1, draft: { ...input, fields: { ...input.fields, name } } })));
       expect(updates.filter(value => value.status === "fulfilled")).toHaveLength(1);

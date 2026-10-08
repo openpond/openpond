@@ -3,17 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { HostedOutputIdentity, HostedSandboxOutputIdentity } from "@openpond/agent-runtime";
-import {
-  FileOutputRefSchema,
-  WorkOutputsResponseSchema,
-  WORK_OUTPUT_CONTENT_TYPES,
-  WORK_OUTPUT_MAX_BYTES,
-  workFormatCapabilityForContentType,
-  type FileOutputRef,
-  type OutputValidationEvidence,
-  type RuntimeEvent,
-  type Session,
-} from "@openpond/contracts";
+import { FileOutputRefSchema, WorkOutputsResponseSchema, WORK_OUTPUT_MAX_BYTES, type FileOutputRef, type OutputValidationEvidence } from "@openpond/contracts/work-outputs";
+import { WORK_OUTPUT_CONTENT_TYPES, workFormatCapabilityForContentType } from "@openpond/contracts/work-formats";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 import { sandboxRequestPayload } from "../openpond/sandboxes.js";
 import { isManagedLocalWorkSession } from "./managed-local-work.js";
 

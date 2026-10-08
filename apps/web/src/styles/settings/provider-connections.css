@@ -253,3 +253,14 @@
   .provider-details-dialog .provider-dialog-body { padding: 18px; }
   .provider-details-dialog .surface-tabs { padding: 0 18px; }
 }
+
+.url-model-endpoint { overflow-wrap: anywhere; }
+.url-model-connection-form { display: grid; gap: 16px; padding: 20px; }
+.url-model-connection-form label, .url-model-field { display: grid; gap: 8px; }
+.url-model-connection-form input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+.url-model-connection-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.url-model-connections { display: grid; gap: 16px; }
+.url-model-connections h2 { font-size: 16px; margin: 0 0 6px; }
+.url-model-field .dropdown-trigger { width: 100%; justify-content: space-between; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+.url-model-field .dropdown-menu { background: var(--panel); color: var(--text); }

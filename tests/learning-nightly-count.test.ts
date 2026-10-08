@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { coalesceNightlyOccurrences, createLearningScheduleWorker, learningScheduleId, nextNightlyOccurrence, NightlyScheduleSchema } from "@openpond/evals/learning";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { learningContext, learningNow } from "./helpers/learning-fixtures";
 import { learningIterationFixture } from "./helpers/learning-iteration-fixtures";
 import { withTempDirectory } from "./helpers/temp-directory";
@@ -24,7 +24,7 @@ describe("nightly and task-count learning", () => {
   // Persisted timers must use the calendar after each fire and recompute a
   // changed local time rather than retaining an old interval-based due date.
   test("persists nightly cadence and calendar edits across actual timer fires", async () => withTempDirectory("learning-nightly-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       let time = Date.parse("2026-03-07T23:00:00Z");
       const clock = { now: () => new Date(time).toISOString() };
@@ -45,7 +45,7 @@ describe("nightly and task-count learning", () => {
   // count once, held-out/pending evidence stays excluded, and duplicate workers
   // reserve a completed threshold exactly once.
   test("counts only eligible unused attempts and reserves one threshold batch", async () => withTempDirectory("learning-count-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       let time = Date.parse(learningNow);
       const clock = { now: () => new Date(time).toISOString() };

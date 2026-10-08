@@ -14,7 +14,8 @@ import type {
   WorkspaceDiffSummary,
   WorkspaceToolResult,
 } from "@openpond/contracts";
-import { connectedAppIntegrationSkillByProvider, CROSS_SYSTEM_TOOL_DEFINITIONS, CROSS_SYSTEM_TOOL_NAMES } from "@openpond/contracts";
+import { connectedAppIntegrationSkillByProvider } from "@openpond/contracts/connected-apps";
+import { CROSS_SYSTEM_TOOL_DEFINITIONS, CROSS_SYSTEM_TOOL_NAMES } from "@openpond/contracts/cross-system-operations";
 import {
   commandResultForModel,
   type OpenPondCommandExecutionInput,

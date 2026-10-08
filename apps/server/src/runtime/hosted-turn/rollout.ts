@@ -1,4 +1,4 @@
-import { ChatProviderSchema, type ChatProvider } from "@openpond/contracts";
+import { ChatProviderSchema, type ChatProvider } from "@openpond/contracts/settings";
 import type { HostedToolInstructionMode } from "../../openpond/hosted-tool-protocol.js";
 
 export type HostedToolMode = "auto" | "native" | "text_fallback" | "disabled";

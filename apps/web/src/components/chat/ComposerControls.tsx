@@ -504,7 +504,8 @@ export function ComposerModelMenu({
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"root" | "provider" | "model" | "effort">("root");
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const selectedGroup = modelGroups.find((group) => group.provider === provider);
+  const selectedGroup = modelGroups.find((group) => group.provider === provider && group.options.some((option) => option.value === model))
+    ?? modelGroups.find((group) => group.provider === provider);
   const selectedModel = selectedGroup?.options.find((option) => option.value === model);
   const reasoningOptions = reasoningEffortOptionsForModel(provider, model, providerSettings);
   const effectiveReasoningEffort = effectiveReasoningEffortForModel(
@@ -615,10 +616,10 @@ export function ComposerModelMenu({
               <div className="codex-model-menu-divider" />
               <div className="codex-model-menu-options">
                 {modelGroups.map((group) => {
-                  const selected = group.provider === provider;
+                  const selected = group.key === selectedGroup?.key;
                   return (
                     <button
-                      key={group.provider}
+                      key={group.key}
                       type="button"
                       role="menuitemradio"
                       aria-checked={selected}

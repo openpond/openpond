@@ -1,19 +1,16 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { isManagedLocalWorkSession } from "../work/managed-local-work.js";
-import {
-  DEFAULT_SESSION_EXPERIENCE,
-  OPENPOND_MANIFEST_FILE_NAME,
-  type ChatProvider,
-  type OpenPondApp,
-  type OpenPondActionCatalogEntry,
-  type OpenPondProfileSkill,
-  type LocalProject,
-  type RuntimeEvent,
-  type Session,
-} from "@openpond/contracts";
+import { DEFAULT_SESSION_EXPERIENCE } from "@openpond/contracts/experiences";
+import { OPENPOND_MANIFEST_FILE_NAME } from "@openpond/contracts/sandbox-template";
+import { type ChatProvider } from "@openpond/contracts/settings";
+import { type OpenPondApp, type LocalProject } from "@openpond/contracts/apps";
+import { type OpenPondActionCatalogEntry } from "@openpond/contracts/action-catalog";
+import { type OpenPondProfileSkill } from "@openpond/contracts/profile";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 import type { HostedChatMessage } from "@openpond/cloud";
-import { materializeAgentPrompt } from "@openpond/agent-runtime";
+import { materializeAgentPrompt } from "@openpond/agent-runtime/snapshots";
 import { createContextUsageSnapshot } from "./context-usage.js";
 import {
   hostedToolProtocolForInstructionMode,

@@ -1,12 +1,12 @@
 import { LearningSourceCredentialSchema, type LearningSourceCredential } from "openpond-sdk/learning";
-import { SqliteStoreCore } from "./store-core.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { LearningDomainError } from "@openpond/evals/learning";
 
 type CredentialRow = { payload: string };
 
 /** Credential secrets are never persisted. All access uses the owning scope. */
-export class SqliteLearningCredentialStore extends SqliteStoreCore {
+export class SqliteLearningCredentialStore extends SqliteStoreDomain {
   private async credentialTransaction<T>(callback: (database: OpenPondSqliteConnection) => T): Promise<T> {
     await this.ready;
     const operation = this.writeQueue.then(() => {

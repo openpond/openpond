@@ -1,9 +1,5 @@
-import {
-  SubagentRunSchema,
-  type RuntimeEvent,
-  type SubagentRef,
-  type SubagentRun,
-} from "@openpond/contracts";
+import { SubagentRunSchema, type SubagentRef, type SubagentRun } from "@openpond/contracts/subagents";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
 import { formatPromptWithAttachmentContext } from "../../chat-attachments.js";
 import { textFromUnknown } from "../../utils.js";
 import { compactionAtomicGroupId } from "./atomic-groups.js";

@@ -1,7 +1,6 @@
-import {
-  SubagentMessageDeliverySchema, SubagentMessageSchema,
-  type RuntimeEvent, type Session, type SubagentMessage, type SubagentRef, type SubagentRun,
-} from "@openpond/contracts";
+import { SubagentMessageDeliverySchema, SubagentMessageSchema, type SubagentMessage, type SubagentRef, type SubagentRun } from "@openpond/contracts/subagents";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 import { event, now } from "../../utils.js";
 import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
 import type { TaskInboxRepository } from "../task-inbox/repository.js";

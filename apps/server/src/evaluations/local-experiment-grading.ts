@@ -8,13 +8,13 @@ import { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-ve
 import { mapExperimentGradingFields, ExperimentAttemptGradeSchema } from "openpond-sdk/experiments";
 import { decodeTasksetPackageFile, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import type { TaskRecord } from "@openpond/evals/tasksets";
-import type { SqliteLocalExperimentStore } from "../store/store-local-experiments.js";
+import type { LocalExperimentStorage } from "../store/store-local-experiments.js";
 import { LocalExperimentError, type LocalExperimentDefinition } from "./local-experiment-contract.js";
 import { createLearningHostedJudgeProvider } from "../training/learning-hosted-judge-provider.js";
 
 /** Evals owns grading semantics; the local owner supplies private bytes and its
  * existing durable judge budget. No policy/target executor is reachable here. */
-export async function gradeLocalExperimentCase(input:{store:SqliteLocalExperimentStore;ownerId:string;teamId:string;executionId:string;caseId:string;
+export async function gradeLocalExperimentCase(input:{store:LocalExperimentStorage;ownerId:string;teamId:string;executionId:string;caseId:string;
   package?:TasksetPackage;selectedRewards?:SelectedRewardClosure;beforeDispatch?:()=>Promise<void>;task:TaskRecord;evidence:AttemptEvidence;evaluatorContext:Record<string,unknown>|null;
   graders:LocalExperimentDefinition["graders"];signal:AbortSignal;judgeProvider?:BoundJudgeProvider}) {
   const provider=input.judgeProvider??createLearningHostedJudgeProvider();

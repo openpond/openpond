@@ -7,7 +7,7 @@ import type {
   ConnectedAppStatusRow,
   MentionedConnectedAppRef,
 } from "@openpond/contracts";
-import { buildConnectedAppStatusRows } from "@openpond/contracts";
+import { buildConnectedAppStatusRows } from "@openpond/contracts/connected-apps";
 
 export type ResolvedConnectedAppContext = {
   provider: ConnectedAppProviderFamilyId;

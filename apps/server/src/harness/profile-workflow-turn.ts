@@ -1,4 +1,4 @@
-import { canonicalHash } from "@openpond/agent-runtime";
+import { canonicalHash } from "@openpond/agent-runtime/canonical";
 import { validateTaskValue } from "@openpond/evals/task-schema";
 import type { ProfileWorkflow } from "@openpond/harness";
 

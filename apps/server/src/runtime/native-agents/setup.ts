@@ -1,8 +1,10 @@
 import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { AcpClient, ClaudeCliClient, type AcpSessionResult } from "@openpond/agent-runtime";
-import { ProviderModelSchema, type ProviderSettings, type ProviderConfig } from "@openpond/contracts";
+import { AcpClient } from "@openpond/agent-runtime/acp/client";
+import { ClaudeCliClient } from "@openpond/agent-runtime/acp/claude-cli-client";
+import { type AcpSessionResult } from "@openpond/agent-runtime/acp/types";
+import { ProviderModelSchema, type ProviderSettings, type ProviderConfig } from "@openpond/contracts/providers";
 import { isNativeAgentId, NATIVE_AGENTS, nativeAgentLaunch, type NativeAgentId } from "./config.js";
 import { createNativeCapabilityProbe } from "./capability-probes.js";
 

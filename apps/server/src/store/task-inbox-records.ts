@@ -1,8 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
-import {
-  TaskInputSchema, TASK_INBOX_MAX_PENDING, type TaskInput, type TaskInputAdmission,
-  type Session, type Turn,
-} from "@openpond/contracts";
+import { TaskInputSchema, TASK_INBOX_MAX_PENDING, type TaskInput, type TaskInputAdmission } from "@openpond/contracts/task-inbox";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { localManagedTargetRevision } from "../runtime/task-inbox/target-revision.js";
 import { LocalManagedMessageError } from "../runtime/task-inbox/local-managed-message-error.js";

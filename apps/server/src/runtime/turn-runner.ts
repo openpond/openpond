@@ -5,33 +5,22 @@ import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admis
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
-import {
-  AppPreferencesSchema,
-  DEFAULT_OPENPOND_CHAT_MODEL,
-  DEFAULT_SESSION_EXPERIENCE,
-  TASK_COORDINATION_INSTRUCTIONS,
-  taskInputModelText,
-  SendTurnRequestSchema,
-  SessionUserQuestionResolutionSchema,
-  type ChatModelRef,
-  type ChatProvider,
-  type OpenPondActionCatalogEntry,
-  type RuntimeEvent,
-  type SessionUserQuestionResolution,
-  type Session,
-  type SubagentRoleSettings,
-  type SubagentRun,
-  type Turn,
-} from "@openpond/contracts";
+import { AppPreferencesSchema, DEFAULT_OPENPOND_CHAT_MODEL, type ChatProvider } from "@openpond/contracts/settings";
+import { DEFAULT_SESSION_EXPERIENCE } from "@openpond/contracts/experiences";
+import { TASK_COORDINATION_INSTRUCTIONS, taskInputModelText } from "@openpond/contracts/task-inbox";
+import { SendTurnRequestSchema } from "@openpond/contracts/requests";
+import { SessionUserQuestionResolutionSchema, type SessionUserQuestionResolution } from "@openpond/contracts/user-questions";
+import { type ChatModelRef } from "@openpond/contracts/providers";
+import { type OpenPondActionCatalogEntry } from "@openpond/contracts/action-catalog";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
+import { type SubagentRoleSettings, type SubagentRun } from "@openpond/contracts/subagents";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
 import { prepareProfileWorkflowTurn } from "../harness/profile-workflow-turn.js";
 import { executeReleasedProfileWorkflowAction } from "../harness/released-profile-workflow-action.js";
-import {
-  AGENT_PROTOCOL_VERSION,
-  AgentCheckpointSchema,
-  canonicalHash,
-  checkpointHash,
-} from "@openpond/agent-runtime";
+import { AGENT_PROTOCOL_VERSION } from "@openpond/agent-runtime/protocol";
+import { AgentCheckpointSchema, checkpointHash } from "@openpond/agent-runtime/snapshots";
+import { canonicalHash } from "@openpond/agent-runtime/canonical";
 import { HOSTED_CHAT_SYSTEM_PROMPT } from "../constants.js";
 import {
   chatAttachmentContext,
@@ -64,8 +53,7 @@ import { createTaskInboxRuntime } from "./task-inbox/runtime.js";
 import { taskCoordinationTools } from "../openpond/task-coordination-tools.js";
 import { createProfileSkillCatalogRuntime } from "./hosted-turn/profile-skill-catalog-runtime.js";
 import { createCapabilityCatalogRuntime } from "./hosted-turn/capability-catalog.js";
-import { createCreateImproveRuntime } from "./create-pipeline/runtime.js";
-import { createCreateImproveTurnHandler } from "./create-pipeline/send-turn.js";
+import { lazyRuntimeService } from "./lazy-runtime-service.js";
 import { ActiveTurnRegistry } from "./turns/active-turn-registry.js";
 import { createNativeAgentRuntime } from "./native-agents/runtime.js";
 import { isNativeAgentId } from "./native-agents/config.js";
@@ -479,43 +467,49 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const appendSubagentReceipt = subagentRepositoryRuntime.appendReceipt;
 
   const nativeAgents = createNativeAgentRuntime(deps);
-  const createImproveRuntime = createCreateImproveRuntime({
-    getSession,
-    getTurn: getStoredTurn,
-    updateTurn: updateStoredTurn,
-    getCreateImproveRun: (runId) => store.getCreateImproveRun(runId),
-    listCreateImproveRuns: (query) => store.listCreateImproveRuns(query),
-    upsertCreateImproveRun: (run) => store.upsertCreateImproveRun(run),
-    mutateCreateImproveRun: (action, updater) =>
-      store.mutateCreateImproveRun(action, updater),
-    getApproval: (approvalId) => store.getApproval(approvalId),
-    upsertApproval,
-    appendRuntimeEvent,
-    ensureCodexRuntime,
-    runLocalCreatePipelineChecks,
-    planCreateImprove,
-    turnFollowUpQueue,
-    streamLocalByokChatTurn,
-    streamOpenPondHostedChatTurn,
-    upsertModelUsageRecord: safeUpsertModelUsageRecord,
-    resolveTaskset: resolveCreateImproveTaskset,
-    gradeTaskAttempt: gradeCreateImproveTaskAttempt,
+  const createImproveServices = lazyRuntimeService(async () => {
+    const [{ createCreateImproveRuntime }, { createCreateImproveTurnHandler }] = await Promise.all([
+      import("./create-pipeline/runtime.js"), import("./create-pipeline/send-turn.js"),
+    ]);
+    const runtime = createCreateImproveRuntime({
+      getSession,
+      getTurn: getStoredTurn,
+      updateTurn: updateStoredTurn,
+      getCreateImproveRun: (runId) => store.getCreateImproveRun(runId),
+      listCreateImproveRuns: (query) => store.listCreateImproveRuns(query),
+      upsertCreateImproveRun: (run) => store.upsertCreateImproveRun(run),
+      mutateCreateImproveRun: (action, updater) =>
+        store.mutateCreateImproveRun(action, updater),
+      getApproval: (approvalId) => store.getApproval(approvalId),
+      upsertApproval,
+      appendRuntimeEvent,
+      ensureCodexRuntime,
+      runLocalCreatePipelineChecks,
+      planCreateImprove,
+      turnFollowUpQueue,
+      streamLocalByokChatTurn,
+      streamOpenPondHostedChatTurn,
+      upsertModelUsageRecord: safeUpsertModelUsageRecord,
+      resolveTaskset: resolveCreateImproveTaskset,
+      gradeTaskAttempt: gradeCreateImproveTaskAttempt,
+    });
+    return {
+      ...runtime,
+      handleCreateImproveTurn: createCreateImproveTurnHandler({
+        appendRuntimeEvent, completeTurn,
+        planCreateImproveForTurn: runtime.planCreateImproveForTurn,
+        persistCreateImproveRun: runtime.persistCreateImproveRun,
+      }),
+      async close() {},
+    };
   });
   const {
-    applyCreateImproveActionPayload,
-    getCreateImproveRun,
-    listCreateImproveRuns,
-    persistCreateImprovePlanningFailure,
-    persistCreateImproveRun,
-    planCreateImproveForTurn,
-    resolveCreateImproveApproval,
-  } = createImproveRuntime;
-  const handleCreateImproveTurn = createCreateImproveTurnHandler({
-    appendRuntimeEvent,
-    planCreateImproveForTurn,
-    persistCreateImproveRun,
-    completeTurn,
-  });
+    applyCreateImproveActionPayload, getCreateImproveRun, listCreateImproveRuns,
+    persistCreateImprovePlanningFailure, resolveCreateImproveApproval, handleCreateImproveTurn,
+  } = createImproveServices.methods([
+    "applyCreateImproveActionPayload", "getCreateImproveRun", "listCreateImproveRuns",
+    "persistCreateImprovePlanningFailure", "resolveCreateImproveApproval", "handleCreateImproveTurn",
+  ]);
   const handleProfileSkillCommand = createProfileSkillCommandRuntime({
     appendRuntimeEvent,
     completeTurn,
@@ -896,6 +890,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    const remoteEnclave = await deps.isRemoteAgentModel?.(
+      input.modelRef?.providerId ?? session.modelRef?.providerId ?? session.provider,
+      input.modelRef?.modelId ?? input.model ?? session.modelRef?.modelId ?? "",
+    ) ?? false;
+    if (remoteEnclave && (input.attachments?.length || input.mentionedConnectedApps?.length || input.mentionedAppIds?.length || input.createImproveRun || session.profileWorkflowBinding || session.profileComponentBinding || input.workflowInput !== undefined)) {
+      throw new Error("This model accepts text messages only; attachments, connected apps, and local workflows are unavailable.");
+    }
     const candidateSession=session.metadata?.source==="experiment-improvement"||session.metadata?.refinementCandidate!==undefined;
     if(candidateSession&&(!admission||session.experience!=="work"||session.profileWorkflowBinding||session.profileComponentBinding||input.createImproveRun||input.mentionedAppIds?.length||input.mentionedConnectedApps?.length||input.openPondActionCatalog?.length||input.attachments?.length||input.cwd))throw new Error("Candidate Work requires its private owner admission and isolated source context.");
     const explicitModelChoice = Boolean(input.modelRef || input.model);
@@ -952,7 +953,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     // Session creation already resolves an omitted Profile to its admitted
     // default. A stored null is an explicit choice and must not acquire a
     // mutable personal Profile when an independent Harness case starts.
-    const selectedProfileRef = session.currentProfile ?? null;
+    const selectedProfileRef = remoteEnclave ? null : session.currentProfile ?? null;
     const selectedProfile = candidateSession || !selectedProfileRef || session.profileWorkflowBinding || session.profileComponentBinding ? null : loadOpenPondProfileStateForRef
       ? await loadOpenPondProfileStateForRef(selectedProfileRef)
       : loadOpenPondProfileState
@@ -961,7 +962,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     // Resolve the movable current channel exactly once at turn admission. All
     // later Skill reads use this immutable bundle even if another Work advances
     // the channel while this turn is running.
-    const selectedHarness = !candidateSession && loadSelectedHarnessRuntime
+    const selectedHarness = !remoteEnclave && !candidateSession && loadSelectedHarnessRuntime
       ? await loadSelectedHarnessRuntime(session)
       : null;
     let profileWorkflowInputHash: string | null = null;
@@ -1032,6 +1033,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ? null
       : input.createImproveRun;
     const profileSkillCommand =
+      !remoteEnclave &&
       !admission &&
       !authoringRoute &&
       experienceAllowsProfileSkills(session.experience) &&
@@ -1257,6 +1259,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           status: "started",
         })
       );
+      if (remoteEnclave) {
+        if (!deps.enclaveChat) throw new Error("This model connection is unavailable on this server.");
+        const reply = await deps.enclaveChat(turnModelRef?.modelId ?? input.model ?? "", input.prompt, controller.signal);
+        throwIfInterrupted(controller.signal);
+        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "assistant.delta", source: "provider", output: reply.answer,
+          data: { delta: reply.answer, provider: session.provider, remoteRequestId: reply.requestId, remoteThreadId: reply.threadId, remoteTurnId: reply.turnId, persistentHistory: false } }));
+        const completed = await completeTurn(sessionId, turn.id, reply.turnId);
+        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", status: "completed", data: { provider: session.provider } }));
+        return completed;
+      }
       if (selectedHarness?.workflowAction) {
         const bundlePath = selectedHarness.release.bundlePath;
         if (!bundlePath) throw new Error("Bound Profile action lacks its released source bundle.");
@@ -1889,8 +1901,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   let closePromise: Promise<void> | null = null;
   const close = () => closePromise ??= (async () => {
     taskInbox.stopScheduling();
+    const optionalClosed = createImproveServices.close();
     await nativeAgents.close();
     await turnRunnerLifecycle.close();
+    await optionalClosed;
+    // An admitted approval may enqueue its apply job while shutdown is starting.
+    await turnFollowUpQueue.drain();
     await closeCompletionDelivery();
     await taskInbox.close();
   })();

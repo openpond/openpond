@@ -71,7 +71,7 @@ test("local retained evidence export and authenticated Human CLI preserve exact 
   // Failure story: explicit accepted Human evidence may resolve a separate
   // comparison view, but must not rewrite the original pending automatic pass,
   // accept stale selected decisions or outlive current owner/source authority.
-  const {expectedRevision:_candidateDraftRevision,...originalConfiguration}=store.humanReviewLocalEvidence("team",execution.id).released.definition.configuration;void _candidateDraftRevision;
+  const {expectedRevision:_candidateDraftRevision,...originalConfiguration}=(await store.humanReviewLocalEvidence("team",execution.id)).released.definition.configuration;void _candidateDraftRevision;
   const candidateExecution=await experiments.run({package:value,configuration:{...originalConfiguration,operationId:"run-candidate",request:{...originalConfiguration.request,operationId:"run-candidate",population:[{receiptId:"case-candidate",taskId:"task",seed:"0",fixtureId:null}]}}});await experiments.wait(candidateExecution.id);
   const candidateSnapshot=await sdk.snapshot({projectId:"project",graderId:"human",selections:[{executionId:candidateExecution.id,receiptId:"case-candidate"}]});
   const candidateReview=await sdk.command({action:"create",id:"candidate-review",operationId:"create-candidate-review",expectedRevision:0,projectId:"project",kind:"grade",title:"Review candidate output",...candidateSnapshot,assigneeId:null,policy:{approval:"none",minimumRaters:1,managerIds:[],reviewerIds:[],queueClaim:false,teamVisible:false}});
@@ -107,7 +107,7 @@ test("local retained evidence export and authenticated Human CLI preserve exact 
   await expect(foreignResultClient.results(execution.id,[selectedReview])).rejects.toMatchObject({status:502,code:"human_result_identity_mismatch"});
   const tasks=await sdk.taskSnapshot({projectId:"project",dataset:{id:taskset.id,revision:taskset.revision,contentHash:taskset.contentHash},graderId:"human",taskIds:["task"]});
   const assignment=await sdk.command({action:"create",id:"cancel-recovery",operationId:"cancel-create",expectedRevision:0,projectId:"project",kind:"execute",title:"Recover existing admission",...tasks,assigneeId:null,policy:{approval:"none",minimumRaters:1,managerIds:[],reviewerIds:[],queueClaim:false,teamVisible:false}});
-  const {expectedRevision:_unusedRevision,...retainedConfiguration}=store.humanReviewLocalEvidence("team",execution.id).released.definition.configuration;void _unusedRevision;
+  const {expectedRevision:_unusedRevision,...retainedConfiguration}=(await store.humanReviewLocalEvidence("team",execution.id)).released.definition.configuration;void _unusedRevision;
   const reserved=await sdk.command({action:"reserve_execution",id:assignment.id,operationId:"reserve-existing",expectedRevision:assignment.revision,generation:assignment.generation,runOperationId:"run",configurationHash:contentHash(retainedConfiguration)});
   const cancellation={action:"cancel" as const,id:assignment.id,operationId:"sdk-cancel",expectedRevision:reserved.revision,note:"Recover the original run and close assignment"};
   const cancelled=await sdk.command(cancellation);

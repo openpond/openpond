@@ -34,7 +34,7 @@ import {
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
-import { SqliteTrainingJobsStore } from "./store-training-jobs.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 import { saveTasksetRevision } from "./store-taskset-revisions.js";
 import {
   appendTrainingChatSearchText,
@@ -64,7 +64,7 @@ type TrainingChatSearchEvidenceRow = {
   payload: string;
 };
 
-export class SqliteTrainingStore extends SqliteTrainingJobsStore {
+export class SqliteTrainingStore extends SqliteStoreDomain {
   async trainingChatSearchSignatures(
     source: TrainingChatSearchDocument["source"],
   ): Promise<Map<string, string>> {

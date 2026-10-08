@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AppServerToolBinding } from "../../apps/server/src/app-server-runtime.js";
-import { type ChatInput, type Config, ExampleError } from "./config.js";
+import { type ExternalChatInput, type ExternalConfig, ExampleError } from "./config.js";
 import { readResponseJson } from "./http-json.js";
 
 export const hashInput = z.object({ text: z.string().max(4096) }).strict();
@@ -12,7 +12,7 @@ export const hashTool = {
 export type ToolEvidence = { sandboxId: string; commandId: string; sha256: string };
 const sandboxSchema = z.object({ id: z.string(), teamId: z.string() });
 
-export function createHashTool(config: Config, credentials: ChatInput["credentials"],
+export function createHashTool(config: ExternalConfig, credentials: ExternalChatInput["credentials"],
   requestSignal: AbortSignal, evidence: ToolEvidence[]): AppServerToolBinding {
   let invoked = false;
   return {

@@ -1,16 +1,10 @@
-import {
-  CreateImproveRunSchema,
-  nextCreateImproveRunRevision,
-  type Approval,
-  type CreateImproveRun,
-  type CreateImproveRunAction,
-  type OpenPondApp,
-  type RuntimeEvent,
-  type SendTurnRequest,
-  type Session,
-  type Turn,
-  type WorkspaceToolRequest,
-} from "@openpond/contracts";
+import { CreateImproveRunSchema, nextCreateImproveRunRevision, type CreateImproveRun, type CreateImproveRunAction } from "@openpond/contracts/create-pipeline";
+import { type Approval } from "@openpond/contracts/approvals";
+import { type OpenPondApp } from "@openpond/contracts/apps";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type SendTurnRequest } from "@openpond/contracts/requests";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
+import { type WorkspaceToolRequest } from "@openpond/contracts/workspace-tools";
 import { now } from "../../utils.js";
 import { resolveWorkspaceExecutionTarget } from "../../workspace/workspace-execution-target.js";
 

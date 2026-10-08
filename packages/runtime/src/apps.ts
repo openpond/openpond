@@ -4,7 +4,7 @@ import {
   listApps,
 } from "@openpond/cloud";
 import type { CreateRepoRequest, CreateRepoResponse, OpenPondAccountResponse } from "@openpond/cloud";
-import { SandboxAppActionRegistrySchema, type OpenPondApp } from "@openpond/contracts";
+import { SandboxAppActionRegistrySchema, type OpenPondApp } from "@openpond/contracts/apps";
 import type {
   AccountLoadResult,
   AppsLoadResult,

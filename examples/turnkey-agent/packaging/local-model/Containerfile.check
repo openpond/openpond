@@ -1,0 +1,5 @@
+# Test-only shell stages the whole pivot in charged tmpfs, as QOS does.
+FROM alpine:3.22.2
+COPY openpond-tvc /pivot
+RUN rm /etc/passwd /etc/group
+ENTRYPOINT ["/bin/sh", "-c", "cp /pivot /ram/pivot && exec env -i HOME=/tmp TMPDIR=/tmp /ram/pivot --config-json \"$1\"", "--"]

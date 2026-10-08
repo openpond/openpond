@@ -1,9 +1,4 @@
-import {
-  WorkspaceToolRequestSchema,
-  type WorkspaceToolName,
-  type WorkspaceToolRequest,
-  type WorkspaceToolResult,
-} from "@openpond/contracts";
+import { WorkspaceToolRequestSchema, type WorkspaceToolName, type WorkspaceToolRequest, type WorkspaceToolResult } from "@openpond/contracts/workspace-tools";
 import { toolOutputSpillForModel } from "./tool-output-spill.js";
 
 const MAX_TOOL_RESULT_CHARS = 20000;

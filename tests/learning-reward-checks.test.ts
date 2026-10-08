@@ -3,7 +3,7 @@ import {
   AuthoringDraftSchema, RewardCheckRunSchema, createLearningService, createRewardCheckWorker,
   compileRewardAuthoring, learningRef, rewardAuthoringFields, type RewardFixtureAuthoringFields,
 } from "@openpond/evals/learning";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { createLocalRewardCheckExecutor } from "../apps/server/src/training/learning-reward-check-executor";
 import { withTempDirectory } from "./helpers/temp-directory";
 import { learningContext } from "./helpers/learning-fixtures";
@@ -17,7 +17,7 @@ const fixture = (id: string, output: string, score: string): RewardFixtureAuthor
 // restart/retry must preserve the exact results without publishing test-only resources.
 test("Reward fixtures execute exact private draft inputs and retain independent results across restart and publication", async () => {
   await withTempDirectory("openpond-reward-checks-", async home => {
-    let store = new SqliteLearningStore(home);
+    let store = new SqliteStore(home);
     try {
       let service = createLearningService(store.learningRepository());
       let serial = 0;
@@ -38,7 +38,7 @@ test("Reward fixtures execute exact private draft inputs and retain independent 
       await expect(service.get({ ...learningContext, scope: "another-scope" }, "reward_check", queued.id)).rejects.toThrow("learning_resource_not_found");
 
       await store.close();
-      store = new SqliteLearningStore(home);
+      store = new SqliteStore(home);
       service = createLearningService(store.learningRepository());
       const execution = createLocalRewardCheckExecutor(store.learningRepository());
       let executions = 0;
@@ -94,7 +94,7 @@ test("Reward fixtures execute exact private draft inputs and retain independent 
 // terminal cancellation, while incomplete fixture JSON remains saveable but uncheckable.
 test("Reward check cancellation terminates isolated work and malformed fixture drafts remain editable", async () => {
   await withTempDirectory("openpond-reward-cancel-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const service = createLearningService(store.learningRepository());
       let serial = 0;

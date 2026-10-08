@@ -2,14 +2,11 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { parse as parseShellCommand } from "shell-quote";
-import {
-  DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
-  ResolveApprovalRequestSchema,
-  type Approval,
-  type ResolveApprovalRequest,
-  type RuntimeEvent,
-  type Session,
-} from "@openpond/contracts";
+import { DEFAULT_OPENPOND_COMMAND_ACCESS_MODE } from "@openpond/contracts/settings";
+import { ResolveApprovalRequestSchema, type ResolveApprovalRequest } from "@openpond/contracts/requests";
+import { type Approval } from "@openpond/contracts/approvals";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 import { event, now } from "../utils.js";
 import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
