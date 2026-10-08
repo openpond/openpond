@@ -1,0 +1,37 @@
+{
+  "capturedAt": "2026-10-08T05:26:00Z",
+  "source": "efc76bc9a",
+  "api": "https://staging-api.openpond.ai",
+  "actualPackagedProcess": true,
+  "authenticatedUiQualified": false,
+  "providerCredentialsCopied": false,
+  "productionProfileModified": false,
+  "ownerUserId": "dzdaskv4w4",
+  "teamId": "a3v5vj0bxfyphbgihbgprm6f",
+  "deviceId": "71b0ab12-3426-4614-8eb6-1fe1adc7a132",
+  "localSessionId": "a17fcdf0-8027-4ef0-9f20-49590d8344f9",
+  "codexThreadIdBefore": "01a119f5-2e72-7f91-8ba8-4a45d1dbf73b",
+  "codexThreadIdAfter": "01a119f5-2e72-7f91-8ba8-4a45d1dbf73b",
+  "initialTurnId": "548f6dc9-46f0-4b0d-a552-fbdd9d54e092",
+  "remoteTurnId": "b01a6463-18c5-4715-95d9-44176ecb171a",
+  "initialOutput": "READY ORCHID-731",
+  "remoteOutput": "REMOTE ORCHID-731",
+  "remoteFollowupContinuityPassed": true,
+  "httpHistory": {
+    "itemCount": 16,
+    "textItemCount": 14,
+    "hasNextCursor": false
+  },
+  "pending": [
+    "web viewer transcript rendering",
+    "web submit path",
+    "steer stop approval stale targets",
+    "packaged restart Off logout lifecycle"
+  ],
+  "refreshedArtifactSha256": {
+    "AppImage": "bb4a13a29fc8129f2b2be726ec96beb6fe3c01bb63eafbf818231cba7905508b",
+    "deb": "117ce31205bff5bf6c3708d92ad8abbf8c058e47513295c645c4b6abfe84782e",
+    "server": "979e5aff61510145a747ff8c62d0f9fc76a8fbf1c6e51c3a91e0462c75364b10"
+  },
+  "runningArtifactPrecedesOffFix": true
+}

@@ -6,6 +6,7 @@ import { expect, it } from "vitest";
 import { z } from "zod";
 import { WebSocketServer } from "ws";
 import { SqliteStore } from "../store/store.js";
+import { createSessionStore } from "../store/session-store.js";
 import { loadDeviceInstallation } from "./installation.js";
 import { createRemoteRelayManager } from "./manager.js";
 
@@ -22,6 +23,7 @@ it("authenticates its initial socket before publishing leased frames", async () 
   let catalogSeen = false;
   let helloValid = false;
   let disableTarget: unknown;
+  let snapshotSeen = false;
   server.on("connection", connection => connection.on("message", raw => {
     const frame = JSON.parse(raw.toString());
     if (frame.type === "hello") {
@@ -31,6 +33,8 @@ it("authenticates its initial socket before publishing leased frames", async () 
       if (!parsed.success) { connection.close(1008, "invalid_frame"); return; }
       connection.send(JSON.stringify({ protocolVersion: 1, type: "hello", payload: { deviceId, epoch: "epoch", fence: 1,
         grantRevision: 1, leaseExpiresAt: new Date(Date.now() + 60_000).toISOString() } }));
+    } else if (frame.type === "snapshot") {
+      snapshotSeen = frame.requestId === "read-request" && Array.isArray(frame.payload.items);
     } else if (frame.type === "catalog") {
       catalogSeen = frame.epoch === "epoch" && frame.fence === 1 && frame.payload.complete === true;
     }
@@ -50,6 +54,13 @@ it("authenticates its initial socket before publishing leased frames", async () 
     await expect.poll(() => manager.status().state, { timeout: 3000 }).toBe("connected");
     await expect.poll(() => catalogSeen, { timeout: 3000 }).toBe(true);
     expect(helloValid).toBe(true);
+    const sessions = createSessionStore({ store, defaultSessionCwd: () => directory,
+      appendRuntimeEvent: async event => { await store.appendRuntimeEvent(event); }, captureUserOwner: async () => owner });
+    const session = await sessions.createUserSession({ provider: "codex", title: "Owned history", cwd: directory });
+    const connection = [...server.clients][0]!;
+    connection.send(JSON.stringify({ protocolVersion: 1, type: "subscribe", payload: { taskId: session.id, viewerId: "viewer" } }));
+    connection.send(JSON.stringify({ protocolVersion: 1, type: "subscribe", requestId: "read-request", payload: { taskId: session.id, viewerId: "viewer" } }));
+    await expect.poll(() => snapshotSeen, { timeout: 3000 }).toBe(true);
     await manager.setEnabled(false);
     expect(disableTarget).toBe(deviceId);
     expect(manager.status().state).toBe("off");
