@@ -205,7 +205,7 @@ export const TasksetSchema = z.object({
   capabilities: TasksetCapabilityManifestSchema,
   metrics: TasksetMetricPolicySchema.optional(),
   tasks: z.array(TaskDataRecordSchema).max(1_000_000),
-  graders: z.array(GraderSpecSchema).min(1).max(1_000),
+  graders: z.array(GraderSpecSchema).max(1_000),
   // Imported releases are inspectable before local calibration. Admission
   // requires real fixtures separately in validateTaskset.
   graderFixtures: z.array(GraderFixtureSchema).max(100_000),

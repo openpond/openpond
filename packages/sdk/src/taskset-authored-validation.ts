@@ -21,7 +21,7 @@ export type TasksetValidationReport = {
   issues: TasksetValidationIssue[];
 };
 
-export function validateTaskset(input: unknown, options: { allowUnscoredOnlineRewardBatch?: boolean } = {}): TasksetValidationReport {
+export function validateTaskset(input: unknown, options: { allowUnscoredOnlineRewardBatch?: boolean; purpose?: "publication" | "execution" } = {}): TasksetValidationReport {
   const parsed = TasksetSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -44,7 +44,10 @@ export function validateTaskset(input: unknown, options: { allowUnscoredOnlineRe
   validateSplitIsolation(taskset, issues);
   validatePolicyBoundary(taskset, issues);
   validateGraders(taskset, issues);
-  validateGraderFixtures(taskset, issues, options);
+  if (options.purpose !== "publication") {
+    if (!taskset.graders.length) issues.push({ code: "graders_required", severity: "error", message: "Scored execution requires at least one grader.", path: "graders" });
+    validateGraderFixtures(taskset, issues, options);
+  }
   validateLearningSignals(taskset, issues);
   validateCapabilities(taskset.capabilities, issues, taskset);
   validateWorkExecution(taskset, issues);

@@ -77,8 +77,6 @@ describe("Taskset draft authoring", () => {
           "name_missing",
           "objective_missing",
           "tasks_missing",
-          "graders_missing",
-          "grader_fixtures_missing",
         ]));
     }
   });
