@@ -31,8 +31,8 @@ export function RemoteAccessDeviceRow({
     ? `${webBaseUrl}/?remoteDevice=${encodeURIComponent(device.id)}&${scopeQuery}`
     : null;
   return (
-    <div className="account-summary">
-      <div>
+    <div className="account-summary remote-access-summary">
+      <div className="remote-access-device-details">
         <strong>
           {device.name}
           {self ? " · This computer" : ""}
@@ -51,8 +51,8 @@ export function RemoteAccessDeviceRow({
             ? new Date(device.lastCatalogSyncAt).toLocaleString()
             : "never"}
         </small>
-        <label>
-          Computer name{" "}
+        <label className="settings-select-field">
+          <span>Computer name</span>
           <input
             value={name}
             maxLength={200}
@@ -63,11 +63,12 @@ export function RemoteAccessDeviceRow({
       </div>
       <div className="account-summary-actions">
         {tasksUrl && (
-          <a href={tasksUrl} target="_blank" rel="noreferrer">
+          <a className="settings-secondary" href={tasksUrl} target="_blank" rel="noreferrer">
             Open tasks
           </a>
         )}
         <button
+          className="settings-secondary"
           type="button"
           disabled={busy || !name.trim() || name.trim() === device.name}
           onClick={() =>
@@ -81,6 +82,7 @@ export function RemoteAccessDeviceRow({
           Save name
         </button>
         <button
+          className="settings-secondary"
           type="button"
           disabled={busy || !device.enabled}
           onClick={() =>
@@ -93,6 +95,7 @@ export function RemoteAccessDeviceRow({
           Turn off
         </button>
         <button
+          className="settings-secondary"
           type="button"
           disabled={busy}
           onClick={() =>

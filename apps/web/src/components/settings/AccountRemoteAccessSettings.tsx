@@ -47,6 +47,7 @@ export function AccountRemoteAccessSettings({
   const [status, setStatus] = useState<RemoteAccessSettingsStatus | null>(null);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const requestVersion = useRef(0);
   const latestStatus = useRef(status);
   const mutationPending = useRef(false);
@@ -61,28 +62,31 @@ export function AccountRemoteAccessSettings({
     }
     const controller = new AbortController();
     refreshRequest.current = controller;
+    setLoadError(null);
     try {
       const value = await apiFetch<RemoteAccessSettingsStatus>(
         connection,
         "/v1/account-remote-access",
-        { signal: controller.signal },
+        { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) },
       );
       if (requestVersion.current === version) {
         latestStatus.current = value;
         setStatus(value);
       }
     } catch (error) {
-      if (!controller.signal.aborted && requestVersion.current === version)
-        onError(
-          settingsError(error, "Unable to load your computers."),
-        );
+      if (!controller.signal.aborted && requestVersion.current === version) {
+        setLoadError(error instanceof Error && error.name === "TimeoutError"
+          ? "Loading your computers timed out. Retry to load their current status."
+          : settingsError(error, "Unable to load your computers."));
+      }
     } finally {
       if (refreshRequest.current === controller) refreshRequest.current = null;
     }
-  }, [connection, onError]);
+  }, [connection]);
   useEffect(() => {
     latestStatus.current = null;
     setStatus(null);
+    setLoadError(null);
     void refresh();
     let lastRefresh = Date.now();
     const timer = window.setInterval(() => {
@@ -171,7 +175,7 @@ export function AccountRemoteAccessSettings({
             : "Personal account"}
         </p>
       )}
-      <div className="account-summary">
+      <div className="account-summary remote-access-summary">
         <div className="account-summary-main">
           <div>
             <strong>
@@ -179,7 +183,7 @@ export function AccountRemoteAccessSettings({
               {status?.device?.name ? ` · ${status.device.name}` : ""}
             </strong>
             <small role="status">
-              {status ? labels[status.state] : "Checking connection…"}
+              {status ? labels[status.state] : loadError ? "Unable to load" : "Checking connection…"}
             </small>
             {status?.device && (
               <small>
@@ -193,6 +197,7 @@ export function AccountRemoteAccessSettings({
         </div>
         <div className="account-summary-actions">
           <button
+            className="settings-secondary"
             type="button"
             disabled={busy || !availableAccount}
             onClick={() => void act(status?.enabled ? "disable" : "enable")}
@@ -200,14 +205,16 @@ export function AccountRemoteAccessSettings({
             {busy ? "Updating…" : status?.enabled ? "Turn off" : "Turn on"}
           </button>
           <button
+            className="settings-secondary"
             type="button"
-            disabled={busy || !availableAccount || !status?.enabled}
-            onClick={() => void act("retry")}
+            disabled={busy || (status ? !availableAccount || !status.enabled : !connection || !loadError)}
+            onClick={() => status ? void act("retry") : void refresh()}
           >
-            Retry connection
+            {status ? "Retry connection" : "Retry loading"}
           </button>
         </div>
       </div>
+      {loadError && <p role="alert">{loadError}</p>}
       {status?.state === "signed_out" && (
         <p>Sign in from Settings → Account to connect this computer.</p>
       )}
@@ -270,8 +277,9 @@ export function AccountRemoteAccessSettings({
           </p>
           {status.unresolvedTasks.map((task) => (
             <div className="account-summary" key={task.id}>
-              <strong>{task.title}</strong>
+              <strong className="remote-access-task-title">{task.title}</strong>
               <button
+                className="settings-secondary"
                 type="button"
                 disabled={busy}
                 onClick={() =>
