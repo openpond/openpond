@@ -185,7 +185,7 @@ export function createRemoteRelayManager(deps: {
           const renewed = viewers.has(request.viewerId);
           if (viewers.size >= 100 && !renewed) throw new Error("remote_viewer_limit");
           viewers.set(request.viewerId, Date.now() + 75_000); subscriptions.set(request.taskId, viewers);
-          if (renewed && request.cursor === undefined) return;
+          if (!frame.requestId && request.cursor === undefined) return;
         }
         let cursor = typeof request.cursor === "string" ? request.cursor : null;
         if (request.cursor && typeof request.cursor === "object") {
