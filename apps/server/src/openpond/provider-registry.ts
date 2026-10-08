@@ -1,5 +1,6 @@
 import {
   PROVIDER_IDS,
+  isRegisteredAcpProvider,
   ProviderCapabilitiesSchema,
   ProviderCatalogProviderSchema,
   ProviderConfigSchema,
@@ -598,6 +599,12 @@ function normalizeOpenPondManagedPreset(
   };
 }
 
+function acpPreset(id: ProviderId, displayName: string): ServerProviderPreset {
+  return { id, displayName, credentialModes: ["native-agent-login"], routing: { localRuntime: true },
+    capabilities: { chatCompletions: true, streaming: true, toolCalling: true, modelDiscovery: "provider" },
+    defaultEnabled: false, defaultModel: null, modelCacheSource: "provider", models: [] };
+}
+
 function providerPresetMap(catalog?: ProviderCatalog | null): Map<ProviderId, ServerProviderPreset> {
   const presets = new Map(FALLBACK_PRESETS_BY_ID);
   for (const provider of catalog?.providers ?? []) {
@@ -627,7 +634,7 @@ export function getProviderPreset(
   providerId: ProviderId,
   catalog?: ProviderCatalog | null,
 ): ServerProviderPreset {
-  const preset = providerPresetMap(catalog).get(providerId);
+  const preset = providerPresetMap(catalog).get(providerId) ?? (isRegisteredAcpProvider(providerId) ? acpPreset(providerId, providerId) : undefined);
   if (!preset) throw new Error(`Unknown provider: ${providerId}`);
   return preset;
 }
@@ -664,6 +671,7 @@ function providerConfigForPreset(
         ? preset.defaultModel
       : stored?.defaultModel;
   return ProviderConfigSchema.parse({
+    acp: stored?.acp ?? null,
     nativeMode: stored?.nativeMode ?? null,
     nativeOptions: stored?.nativeOptions ?? {},
     binaryPath: stored?.binaryPath ?? null,
@@ -948,7 +956,8 @@ export function buildProviderSettings(input: {
   const modelCaches: Record<string, ProviderModelCache> = { ...(input.file.modelCaches ?? {}) };
   const statuses: Record<string, ProviderStatus> = {};
 
-  for (const preset of listProviderPresets(input.catalog)) {
+  const registered = Object.entries(input.file.providers).flatMap(([id, config]) => isRegisteredAcpProvider(id) && config.acp ? [acpPreset(id, config.acp.displayName)] : []);
+  for (const preset of [...listProviderPresets(input.catalog).filter(preset => !isRegisteredAcpProvider(preset.id)), ...registered]) {
     const providerId = preset.id;
     const config = providerConfigForPreset(preset, providers[providerId]);
     const cache = modelCacheForSettings(preset, config, modelCaches[providerId], Boolean(input.catalog));

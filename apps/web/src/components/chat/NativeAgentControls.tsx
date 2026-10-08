@@ -1,3 +1,4 @@
+import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import "./native-agent-controls.css";
 import { useEffect, useState } from "react";
 import type { ProviderConfigPatch, ProviderSettings } from "@openpond/contracts";
@@ -15,7 +16,7 @@ export function NativeAgentControls({ connection, provider, providerSettings, di
   const setup = loaded?.connection === connection && loaded.provider === provider && loaded.instance === instance ? loaded.value : retained;
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const supported = ["opencode", "grok-build", "claude-code"].includes(provider);
+  const supported = (isRegisteredAcpProvider(provider) || ["opencode", "grok-build", "claude-code"].includes(provider));
   useEffect(() => {
     setError(null);
     if (!connection || !supported) return;

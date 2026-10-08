@@ -1,3 +1,4 @@
+import { AcpProviderIdSchema } from "@openpond/persistence/schemas/providers";
 import { z } from "zod";
 import { CreateImproveRunSchema } from "./create-pipeline.js";
 import {
@@ -52,7 +53,7 @@ export const SessionSchema = z.object({
   cwd: z.string().nullable(),
   codexThreadId: z.string().nullable(),
   nativeAgent: z.object({
-    provider: z.enum(["claude-code", "grok-build", "opencode"]),
+    provider: z.union([z.enum(["claude-code", "grok-build", "opencode"]), AcpProviderIdSchema]),
     instanceId: z.string().min(1),
     sessionId: z.string().min(1),
     cwd: z.string().min(1),

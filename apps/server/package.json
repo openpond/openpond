@@ -13,20 +13,23 @@
     "@openpond/evals": "workspace:*",
     "@openpond/harness": "workspace:*",
     "@openpond/logging": "workspace:*",
+    "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*",
     "@openpond/training-sdk": "workspace:*",
     "cron-parser": "^5.6.1",
     "eval-protocol": "0.1.13",
+    "fflate": "^0.8.3",
     "node-pty": "^1.1.0",
     "openai": "4.104.0",
     "openpond-sdk": "workspace:*",
     "pngjs": "^7.0.0",
     "shell-quote": "^1.9.0",
+    "tar": "^7.5.22",
+    "unbzip2-stream": "^1.4.3",
     "ws": "^8.20.1",
     "yaml": "^2.9.0",
-    "zod": "^4.1.13",
-    "@openpond/persistence": "workspace:*"
+    "zod": "^4.1.13"
   },
   "exports": {
     ".": {
@@ -72,6 +75,7 @@
   "types": "./dist/index.d.ts",
   "devDependencies": {
     "@types/pngjs": "^6.0.5",
+    "@types/unbzip2-stream": "^1.4.3",
     "@types/ws": "^8.18.1"
   }
 }
