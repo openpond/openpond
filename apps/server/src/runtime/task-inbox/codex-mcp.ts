@@ -1,9 +1,10 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 
+export type TaskToolResult = { content: Array<{ type: "text"; text: string } | { type: "image"; mimeType: string; data: string }>; isError?: boolean };
 export type TaskCoordinationBridge = {
   tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>;
-  execute(name: string, args: Record<string, unknown>, callId: string, signal: AbortSignal): Promise<string>;
+  execute(name: string, args: Record<string, unknown>, callId: string, signal: AbortSignal): Promise<string | TaskToolResult>;
 };
 
 /** Session-bound MCP transport also works when Codex resumes an existing native thread. */
@@ -21,12 +22,15 @@ export async function createTaskCoordinationMcp(bridge: TaskCoordinationBridge) 
     if (request.method !== "POST") { response.writeHead(405, { Allow: "POST" }).end(); return; }
     let id: string | number | null = null;
     try {
-      let body = "";
+      const chunks: Buffer[] = [];
+      let bodyBytes = 0;
       for await (const chunk of request) {
-        body += String(chunk);
-        if (Buffer.byteLength(body) > 128_000) { response.writeHead(413).end(); return; }
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        bodyBytes += bytes.length;
+        if (bodyBytes > 512_000) { response.writeHead(413).end(); return; }
+        chunks.push(bytes);
       }
-      const message = JSON.parse(body) as { jsonrpc?: string; id?: string | number; method?: string; params?: Record<string, unknown> };
+      const message = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { jsonrpc?: string; id?: string | number; method?: string; params?: Record<string, unknown> };
       if (message.jsonrpc !== "2.0" || typeof message.method !== "string") throw new Error("Invalid JSON-RPC request.");
       id = message.id ?? null;
       const params = message.params ?? {};
@@ -49,7 +53,7 @@ export async function createTaskCoordinationMcp(bridge: TaskCoordinationBridge) 
         pending.set(String(id), controller);
         try {
           const text = await bridge.execute(name, args as Record<string, unknown>, `mcp:${identity}:${id}`, controller.signal);
-          result = { content: [{ type: "text", text }] };
+          result = typeof text === "string" ? { content: [{ type: "text", text }] } : text;
         } catch (error) {
           result = { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], isError: true };
         } finally { pending.delete(String(id)); }

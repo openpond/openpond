@@ -30,4 +30,3 @@ export function acpPreset(id: ProviderId, displayName: string): ServerProviderPr
     capabilities: { chatCompletions: true, streaming: true, toolCalling: true, modelDiscovery: "provider" },
     defaultEnabled: false, defaultModel: null, modelCacheSource: "provider", models: [] };
 }
-
