@@ -4,6 +4,7 @@ import type { OpenPondSqliteConnection } from "../store/sqlite/sqlite-driver.js"
 import { DeviceLocalOwnerSchema, deviceOwnsLocalSession } from "./local-scope.js";
 import { localSessionOwnershipRevision } from "./session-ownership.js";
 import { remoteStarterRevision } from "./starters.js";
+import { readLocalSessionReservation } from "../store/local-session-reservation.js";
 
 export type RemoteLocalAuthority = { deviceId: string; owner: import("./local-scope.js").DeviceLocalOwner;
   fence: number; grantRevision: number; leaseExpiresAt: string; publicKeys: RemoteDeviceServicePublicKey[] };
@@ -36,7 +37,7 @@ export function assertRemoteAdmission(db: OpenPondSqliteConnection, command: Rem
     const sourceId = session.metadata?.remoteStarterSourceSessionId;
     const sourceRow = typeof sourceId === "string" ? db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id=?", [sourceId]) : null;
     const source = sourceRow ? JSON.parse(sourceRow.payload) as Session : null;
-    const reservation = session.metadata?.ponderDesktopReservation as { operationId?: string; payloadHash?: string } | undefined;
+    const reservation = readLocalSessionReservation(session);
     if (!source || !deviceOwnsLocalSession(source, owner) || source.archived || source.status === "closed"
       || command.payload.projectId !== source.localProjectId || command.payload.starterRevision !== remoteStarterRevision(source)
       || command.expectedRevision !== remoteStarterRevision(source) || reservation?.operationId !== command.id

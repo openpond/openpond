@@ -1,4 +1,5 @@
 export * from "./runtime.js";
+export * from "./canonical-request-content.js";
 export * from "./user-questions.js";
 export * from "./terminal.js";
 export * from "./apps.js";

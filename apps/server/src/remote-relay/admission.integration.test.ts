@@ -12,10 +12,10 @@ import { createRemoteCommandExecutor } from "./executor.js";
 
 // Losing the cloud acknowledgement cannot duplicate input after restart, while
 // changed owners, forged permits and revoked authority cannot admit new input.
-it("fences remote authority at canonical SQLite admission and recovers the original input after restart", async () => {
+it.each([null, "team"])("fences %s scope at canonical SQLite admission and recovers the original input after restart", async teamId => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "remote-admission-"));
   let store = new SqliteStore(directory);
-  const owner = { version: 1 as const, installationId: randomUUID(), profileId: "profile", ownerUserId: "owner", teamId: "team", audience: "https://fixture.invalid" };
+  const owner = { version: 1 as const, installationId: randomUUID(), profileId: "profile", ownerUserId: "owner", teamId, audience: "https://fixture.invalid" };
   const keys = generateKeyPairSync("ed25519");
   const authority = { deviceId: randomUUID(), owner, fence: 1, grantRevision: 1,
     leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
@@ -25,11 +25,11 @@ it("fences remote authority at canonical SQLite admission and recovers the origi
     const sessions = createSessionStore({ store, defaultSessionCwd: () => directory, appendRuntimeEvent: async event => { await store.appendRuntimeEvent(event); }, captureUserOwner: async () => owner });
     const session = await sessions.createUserSession({ provider: "codex", title: "Owned task", cwd: directory });
     await store.setRemoteDeviceAuthority(authority);
-    const command = (id = randomUUID()): RemoteDispatchCommand => {
+    const command = (id = randomUUID(), scopeTeamId: string | null = teamId): RemoteDispatchCommand => {
       const unsigned = { id, idempotencyKey: id, action: "follow_up" as const, targetId: "cloud-task", localSessionId: session.id,
         expectedRevision: Number.parseInt(localSessionOwnershipRevision(session, null).slice(0, 13), 16),
         payload: { text: "Continue the original task" }, deviceId: authority.deviceId, payloadHash: "a".repeat(64),
-        scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: owner.teamId },
+        scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: scopeTeamId },
         grantRevision: 1, fence: 1, deadline: new Date(Date.now() + 30000).toISOString(), actor: "remote-human" as const };
       const expiresAt = new Date(Date.now() + 15000).toISOString();
       return { ...unsigned, permit: { keyId: "fixture", expiresAt,
@@ -40,6 +40,12 @@ it("fences remote authority at canonical SQLite admission and recovers the origi
       idempotencyKey: `remote:${value.id}`, expectedTurnId: null, replyTo: null });
     const original = command();
     const input = await admit(original);
+    // A valid service signature cannot widen personal ownership to a workspace,
+    // or make a workspace command act on the account's personal tasks.
+    await expect(admit(command(randomUUID(), teamId === null ? "team" : null))).rejects.toThrow("remote_task_not_owned");
+    await store.setRemoteDeviceAuthority({ ...authority, owner: { ...owner, teamId: teamId === null ? "team" : null } });
+    await expect(admit(command())).rejects.toThrow("remote_task_not_owned");
+    await store.setRemoteDeviceAuthority(authority);
     await expect(admit({ ...command(), permit: { ...original.permit, signature: "forged" } })).rejects.toThrow("remote_permit_invalid");
     await store.setRemoteDeviceAuthority(null);
     await expect(admit(command())).rejects.toThrow("remote_authority_unavailable");

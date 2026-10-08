@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   CreateSessionRequestSchema,
   DEFAULT_SESSION_EXPERIENCE,
@@ -11,19 +11,19 @@ import {
   type Session,
   type Turn,
   type PonderDesktopOperation,
-  ponderDesktopRequestContent,
 } from "@openpond/contracts";
 import type { SqliteStore } from "./store.js";
-import { ponderDesktopSessionRevision, ponderDesktopExecutionRevision } from "../openpond/ponder-desktop-catalog.js";
+import { localSessionOwnershipRevision, localSessionConfigurationRevision } from "../remote-relay/session-ownership.js";
+import { localSessionCreationHash, localSessionReservationMetadata, readLocalSessionReservation } from "./local-session-reservation.js";
 import { event, now } from "../utils.js";
-import { publicSessionMetadata, preservePonderSessionIdentity, PonderLocalOwnerSchema,
-  type PonderLocalOwner } from "../openpond/ponder-local-scope.js";
+import { publicSessionMetadata, preserveDeviceSessionIdentity, DeviceLocalOwnerSchema,
+  type DeviceLocalOwner } from "../remote-relay/local-scope.js";
 
 export type ReservedSessionCreation = {
   sessionId: string;
   operationId: string;
   payloadHash: string;
-  owner?: PonderLocalOwner;
+  owner?: DeviceLocalOwner;
   desktopOperation?: PonderDesktopOperation;
   remoteStarterSourceSessionId?: string;
 };
@@ -36,7 +36,7 @@ export function createSessionStore(deps: {
   loadAppPreferences?: () => Promise<AppPreferences>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   loadLastUsedProfile?: () => Promise<Session["currentProfile"]>;
-  captureUserOwner?: (payload: unknown) => Promise<PonderLocalOwner | null>;
+  captureUserOwner?: (payload: unknown) => Promise<DeviceLocalOwner | null>;
 }) {
   const {
     store,
@@ -68,17 +68,16 @@ export function createSessionStore(deps: {
   async function recoverReservedSession(reservation: ReservedSessionCreation, creationHash: string): Promise<Session | null> {
     const session = await store.getSession(reservation.sessionId);
     if (!session) return null;
-    const identity = session.metadata?.ponderDesktopReservation;
-    if (!identity || typeof identity !== "object" || Array.isArray(identity)
-      || (identity as Record<string, unknown>).operationId !== reservation.operationId
-      || (identity as Record<string, unknown>).payloadHash !== reservation.payloadHash
-      || (identity as Record<string, unknown>).creationHash !== creationHash) {
+    const identity = readLocalSessionReservation(session);
+    if (!identity || identity.operationId !== reservation.operationId
+      || identity.payloadHash !== reservation.payloadHash
+      || identity.creationHash !== creationHash) {
       throw new Error("reserved_session_identity_mismatch");
     }
     return normalizeSession(session);
   }
 
-  async function createSessionInternal(payload: unknown, reservation?: ReservedSessionCreation, owner: PonderLocalOwner | null = null): Promise<Session> {
+  async function createSessionInternal(payload: unknown, reservation?: ReservedSessionCreation, owner: DeviceLocalOwner | null = null): Promise<Session> {
     const input = CreateSessionRequestSchema.parse(payload);
     const metadata = publicSessionMetadata(input.metadata);
     const workspaceRevision = input.metadata?.ponderWorkspaceRevision;
@@ -87,10 +86,9 @@ export function createSessionStore(deps: {
         throw new Error("ponder_desktop_workspace_revision_invalid");
       metadata.ponderWorkspaceRevision = workspaceRevision;
     }
-    if (owner) metadata.ponderLocalOwner = PonderLocalOwnerSchema.parse(owner);
+    if (owner) metadata.ponderLocalOwner = DeviceLocalOwnerSchema.parse(owner);
     if (reservation?.remoteStarterSourceSessionId) metadata.remoteStarterSourceSessionId = reservation.remoteStarterSourceSessionId;
-    const creationHash = reservation ? createHash("sha256").update(ponderDesktopRequestContent("POST", "/local/session",
-      JSON.parse(JSON.stringify({ ...input, metadata })))).digest("hex") : "";
+    const creationHash = reservation ? localSessionCreationHash(JSON.parse(JSON.stringify({ ...input, metadata }))) : "";
     if (reservation) {
       const existing = await recoverReservedSession(reservation, creationHash);
       if (existing) return existing;
@@ -165,9 +163,9 @@ export function createSessionStore(deps: {
       profileComponentBinding: input.profileComponentBinding ?? null,
       ...(Object.keys(metadata).length || reservation ? { metadata: {
         ...metadata,
-        ...(reservation ? { ponderDesktopReservation: {
+        ...(reservation ? localSessionReservationMetadata({
           operationId: reservation.operationId, payloadHash: reservation.payloadHash, creationHash,
-        } } : {}),
+        }) : {}),
       } } : {}),
       cwd,
       codexThreadId: null,
@@ -182,9 +180,9 @@ export function createSessionStore(deps: {
       order: sessionCount,
     };
     if (reservation) {
-      const identity = session.metadata!.ponderDesktopReservation as Record<string, unknown>;
-      identity.sessionRevision = ponderDesktopSessionRevision(session, null);
-      identity.executionRevision = ponderDesktopExecutionRevision(session);
+      const identity = readLocalSessionReservation(session)!;
+      identity.sessionRevision = localSessionOwnershipRevision(session, null);
+      identity.executionRevision = localSessionConfigurationRevision(session);
     }
     try {
       await store.insertSessionAtFront(session, reservation?.desktopOperation);
@@ -224,8 +222,8 @@ export function createSessionStore(deps: {
         {
           ...session,
           ...input,
-          ...(input.metadata !== undefined ? { metadata: preservePonderSessionIdentity(session.metadata, input.metadata) } : {}),
-          ...(input.title !== undefined ? { metadata: { ...session.metadata, ...preservePonderSessionIdentity(session.metadata, input.metadata), titleSource: "manual", autoTitle: null } } : {}),
+          ...(input.metadata !== undefined ? { metadata: preserveDeviceSessionIdentity(session.metadata, input.metadata) } : {}),
+          ...(input.title !== undefined ? { metadata: { ...session.metadata, ...preserveDeviceSessionIdentity(session.metadata, input.metadata), titleSource: "manual", autoTitle: null } } : {}),
           updatedAt: session.updatedAt,
         },
         input
@@ -255,7 +253,7 @@ export function createSessionStore(deps: {
       normalizeSession({
         ...session,
         ...patch,
-        ...(patch.metadata !== undefined ? { metadata: preservePonderSessionIdentity(session.metadata, patch.metadata) } : {}),
+        ...(patch.metadata !== undefined ? { metadata: preserveDeviceSessionIdentity(session.metadata, patch.metadata) } : {}),
         updatedAt: now(),
       })
     );

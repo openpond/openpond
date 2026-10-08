@@ -24,25 +24,7 @@ export function ponderDesktopProfileSelectionId(profile: OpenPondProfileRef | nu
 import { localSessionOwnershipRevision as ponderDesktopSessionRevision } from "../remote-relay/session-ownership.js";
 export { ponderDesktopSessionRevision };
 
-/** Queueing may outlive another turn; its selected configuration must remain the same. */
-export function ponderDesktopExecutionRevision(session: Session) {
-  return hash({
-    provider: session.provider,
-    modelRef: session.modelRef ?? null,
-    experience: session.experience,
-    profile: session.currentProfile ?? null,
-    workflow: session.profileWorkflowBinding ?? null,
-    component: session.profileComponentBinding ?? null,
-    cwd: session.cwd,
-    workspaceKind: session.workspaceKind ?? null,
-    workspaceId: session.workspaceId ?? null,
-    localProjectId: session.localProjectId ?? null,
-    cloudProjectId: session.cloudProjectId ?? null,
-    owner: session.metadata?.ponderLocalOwner ?? null,
-    projectRevision: session.metadata?.ponderWorkspaceRevision ?? null,
-    commandAccessMode: session.openPondCommandAccessMode,
-  });
-}
+export { localSessionConfigurationRevision as ponderDesktopExecutionRevision } from "../remote-relay/session-ownership.js";
 
 /** Includes only sessions with protected, exact login ownership. Unknown/imported history stays local. */
 export async function capturePonderDesktopCatalog(input: {

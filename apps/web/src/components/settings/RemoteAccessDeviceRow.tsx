@@ -9,12 +9,14 @@ export function RemoteAccessDeviceRow({
   self,
   busy,
   webBaseUrl,
+  teamId,
   act,
 }: {
   device: RemoteDevice;
   self: boolean;
   busy: boolean;
   webBaseUrl: string | null;
+  teamId: string | null;
   act(
     action: RemoteAccessSettingsAction,
     body?: Record<string, unknown>,
@@ -22,8 +24,11 @@ export function RemoteAccessDeviceRow({
 }) {
   const [name, setName] = useState(device.name);
   useEffect(() => setName(device.name), [device.name]);
+  const scopeQuery = teamId === null
+    ? "remoteScope=personal"
+    : `remoteTeam=${encodeURIComponent(teamId)}`;
   const tasksUrl = webBaseUrl
-    ? `${webBaseUrl}/?remoteDevice=${encodeURIComponent(device.id)}`
+    ? `${webBaseUrl}/?remoteDevice=${encodeURIComponent(device.id)}&${scopeQuery}`
     : null;
   return (
     <div className="account-summary">

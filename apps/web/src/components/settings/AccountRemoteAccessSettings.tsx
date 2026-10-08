@@ -10,7 +10,6 @@ import { RemoteAccessDeviceRow } from "./RemoteAccessDeviceRow";
 
 const labels: Record<RemoteAccessSettingsStatus["state"], string> = {
   signed_out: "Sign in required",
-  workspace_required: "Select a workspace",
   connecting: "Connecting",
   connected: "Connected",
   reconnecting: "Reconnecting",
@@ -30,6 +29,13 @@ const reasons: Record<string, string> = {
   connection_failed:
     "Unable to reach the relay. Check your network connection and retry.",
 };
+
+function settingsError(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  return error.message === "remote_account_changing"
+    ? "Your account settings are being updated. Try again shortly."
+    : error.message;
+}
 
 export function AccountRemoteAccessSettings({
   connection,
@@ -63,9 +69,7 @@ export function AccountRemoteAccessSettings({
     } catch (error) {
       if (requestVersion.current === version)
         onError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load your computers.",
+          settingsError(error, "Unable to load your computers."),
         );
     }
   }, [connection, onError]);
@@ -132,9 +136,7 @@ export function AccountRemoteAccessSettings({
     } catch (error) {
       if (requestVersion.current === version) {
         onError(
-          error instanceof Error
-            ? error.message
-            : "Unable to update remote access.",
+          settingsError(error, "Unable to update remote access."),
         );
         await refresh();
       }
@@ -143,7 +145,7 @@ export function AccountRemoteAccessSettings({
       setBusy(false);
     }
   }
-  const availableAccount = !!status?.account && !!status.team;
+  const availableAccount = !!status?.account;
   return (
     <section className="account-settings remote-access-settings">
       <h1>Remote access</h1>
@@ -153,10 +155,9 @@ export function AccountRemoteAccessSettings({
       </p>
       {status?.account && (
         <p>
-          Account: {status.account.label} · Workspace:{" "}
-          {teamName ??
-            status.team?.id ??
-            "Select a workspace in account settings"}
+          Account: {status.account.label} · {status.team
+            ? `Workspace: ${teamName ?? status.team.id}`
+            : "Personal account"}
         </p>
       )}
       <div className="account-summary">
@@ -199,10 +200,16 @@ export function AccountRemoteAccessSettings({
       {status?.state === "signed_out" && (
         <p>Sign in from Settings → Account to connect this computer.</p>
       )}
-      {status?.state === "workspace_required" && (
+      {status?.account && !status.team && (
         <p>
-          Select your workspace in Settings → Account before connecting this
-          computer.
+          Personal access includes tasks owned by your OpenPond account.
+          To use workspace tasks, select that workspace in Settings → Account.
+        </p>
+      )}
+      {status?.team && (
+        <p>
+          This connection includes tasks owned by the selected workspace.
+          Choose Personal account in Settings → Account to use your personal tasks.
         </p>
       )}
       {status?.reason && reasons[status.reason] && (
@@ -221,8 +228,9 @@ export function AccountRemoteAccessSettings({
         </p>
       )}
       <p>
-        Remote access stays off after restart and sign-in until you turn it on
-        here. Sleeping or closing the app makes this computer unavailable.
+        Turning off remote access applies to your personal account and its
+        workspaces on this computer. It stays off after restart and sign-in until
+        you turn it on here. Sleeping or closing the app makes this computer unavailable.
       </p>
       <p>
         History fetched through OpenPond may be cached for 24 hours. Turning off
@@ -238,6 +246,7 @@ export function AccountRemoteAccessSettings({
           self={device.id === status.device?.id}
           busy={busy}
           webBaseUrl={status.webBaseUrl}
+          teamId={status.team?.id ?? null}
           act={act}
         />
       ))}

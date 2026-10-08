@@ -2,7 +2,6 @@ import type { RemoteDevice } from "./remote-device.js";
 
 export type RemoteAccessConnectionState =
   | "signed_out"
-  | "workspace_required"
   | "connecting"
   | "connected"
   | "reconnecting"
@@ -10,7 +9,7 @@ export type RemoteAccessConnectionState =
   | "off"
   | "update_required";
 export type RemoteAccessAccountStatus = {
-  state: "signed_out" | "workspace_required" | "ready";
+  state: "signed_out" | "ready";
   account: { id: string; label: string } | null;
   team: { id: string } | null;
   webBaseUrl: string | null;

@@ -50,7 +50,7 @@ export function deviceLocalOwner(
 
 export function deviceOwnsLocalSession(session: Session, owner: DeviceLocalOwner): boolean {
   const stored = DeviceLocalOwnerSchema.safeParse(session.metadata?.ponderLocalOwner);
-  if (!stored.success || !owner.teamId) return false;
+  if (!stored.success) return false;
   return (
     stored.data.installationId === owner.installationId &&
     stored.data.profileId === owner.profileId &&

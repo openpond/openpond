@@ -1,5 +1,5 @@
 // Generated from Sandbox shared/remote-device.ts. Do not edit.
-// Source SHA256: cb737e06cc18db7f3df7921774c6177771f6d553e9571f2d262c1ce148e18163
+// Source SHA256: 0065cfe0a56c9326564d3ebb34719a3fc1cd5b10c26dbd8f07540efa2ce3bda8
 // Refresh: node scripts/sync-remote-device-contract.mjs
 import { z } from "zod";
 export const REMOTE_DEVICE_PROTOCOL_VERSION = 1 as const;
@@ -33,7 +33,7 @@ export const RemoteDeviceScopeSchema = z
     installationId: z.string().uuid(),
     profileId: id,
     ownerUserId: id,
-    teamId: id,
+    teamId: id.nullable(),
   })
   .strict();
 export type RemoteDeviceScope = z.infer<typeof RemoteDeviceScopeSchema>;

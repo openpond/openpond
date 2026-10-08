@@ -52,8 +52,8 @@ import {
 } from "./store-codecs.js";
 import { SqliteTaskInboxStore } from "./store-task-inbox.js";
 import { assertPonderDesktopRecipient } from "./ponder-desktop-input.js";
-import { ponderDesktopSessionRevision } from "../openpond/ponder-desktop-catalog.js";
-import { attachPonderSessionOwner } from "./ponder-session-attachment.js";
+import { localSessionOwnershipRevision } from "../remote-relay/session-ownership.js";
+import { attachLocalSessionOwner } from "./local-session-ownership.js";
 import type { RuntimeHistoryStorage } from "./runtime-history-storage.js";
 import {
   sessionRuntimeSummaries,
@@ -184,13 +184,13 @@ type RuntimeEventRecentWindow = {
 };
 
 export class SqliteStore extends SqliteTaskInboxStore implements RuntimeHistoryStorage {
-  async attachPonderSessionOwner(input: Parameters<typeof attachPonderSessionOwner>[1]) {
+  async attachLocalSessionOwner(input: Parameters<typeof attachLocalSessionOwner>[1]) {
     await this.ready;
     const write = this.writeQueue.then(() => {
       const db = this.database;
       db.exec("BEGIN IMMEDIATE");
       try {
-        const session = attachPonderSessionOwner(db, input);
+        const session = attachLocalSessionOwner(db, input);
         db.run("UPDATE projection_session_shells SET payload = ?, updated_at = ? WHERE id = ?",
           [JSON.stringify(session), session.updatedAt, session.id]);
         db.exec("COMMIT");
@@ -1366,7 +1366,7 @@ export class SqliteStore extends SqliteTaskInboxStore implements RuntimeHistoryS
       db.exec("BEGIN IMMEDIATE");
       try {
         if (desktopOperation) assertPonderDesktopRecipient(db, desktopOperation,
-          session, null, ponderDesktopSessionRevision(session, null));
+          session, null, localSessionOwnershipRevision(session, null));
         db.run("UPDATE sessions SET sort_index = sort_index + 1", []);
         db.run("UPDATE projection_session_shells SET sort_index = sort_index + 1", []);
         db.run(

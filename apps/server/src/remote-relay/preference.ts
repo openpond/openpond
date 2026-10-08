@@ -9,6 +9,11 @@ export function deviceOwnerKey(owner: DeviceOwner) {
   return createHash("sha256").update(JSON.stringify([owner.installationId, owner.profileId, owner.ownerUserId, owner.teamId, owner.audience])).digest("hex");
 }
 
+/** Remote access is one human choice for this installation/account/profile. */
+function accountPreferenceKey(owner: DeviceOwner) {
+  return createHash("sha256").update(JSON.stringify([owner.installationId, owner.profileId, owner.ownerUserId, owner.audience])).digest("hex");
+}
+
 /** Off and remote unlink persist independently of credentials and connection health. */
 export async function loadRemoteAccessPreference(storeDir: string) {
   const directory = path.join(storeDir, "remote-relay");
@@ -20,15 +25,22 @@ export async function loadRemoteAccessPreference(storeDir: string) {
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   let queue: Promise<unknown> = Promise.resolve();
   return {
-    enabled(owner: DeviceOwner) { return !disabled.has(deviceOwnerKey(owner)); },
+    enabled(owner: DeviceOwner) { return !disabled.has(accountPreferenceKey(owner)) && !disabled.has(deviceOwnerKey(owner)); },
+    async capture(owner: DeviceOwner) {
+      // Preserve a previously saved Off for the active scope before it changes.
+      // No task or inactive account is inferred or reassigned during this upgrade.
+      if (disabled.has(deviceOwnerKey(owner))) await this.set(owner, false);
+    },
     deviceId(owner: DeviceOwner) { return devices[deviceOwnerKey(owner)] ?? null; },
     setDeviceId(owner: DeviceOwner, deviceId: string) { return this.set(owner, this.enabled(owner), deviceId); },
     set(owner: DeviceOwner, enabled: boolean, deviceId?: string) {
       const operation = queue.then(async () => {
         const next = new Set(disabled);
-        const key = deviceOwnerKey(owner);
+        const key = accountPreferenceKey(owner);
+        const scopeKey = deviceOwnerKey(owner);
+        next.delete(scopeKey);
         if (enabled) next.delete(key); else next.add(key);
-        const nextDevices = { ...devices, ...(deviceId ? { [key]: deviceId } : {}) };
+        const nextDevices = { ...devices, ...(deviceId ? { [scopeKey]: deviceId } : {}) };
         const temporary = path.join(directory, `${randomUUID()}.tmp`);
         try {
           const handle = await open(temporary, "wx", 0o600);

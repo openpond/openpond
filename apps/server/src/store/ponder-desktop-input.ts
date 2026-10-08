@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readLocalSessionReservation } from "./local-session-reservation.js";
 import {
   PonderDesktopAttachmentSchema,
   PonderDesktopOperationSchema,
@@ -97,7 +98,7 @@ export function assertPonderDesktopRecipient(
   if (intent.action === "create") {
     if (session.id !== ponderDesktopReservedSessionId(operation.id))
       throw new Error("ponder_desktop_input_reservation_invalid");
-    const reservation = session.metadata?.ponderDesktopReservation;
+    const reservation = readLocalSessionReservation(session);
     if (
       !reservation ||
       typeof reservation !== "object" ||
