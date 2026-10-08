@@ -23,7 +23,6 @@ import {
   normalizeSidebarFilePath,
   type Approval,
   type ChatProvider,
-  type ModelUsageRecord,
   type RuntimeEvent,
   type ServerStatus,
 } from "@openpond/contracts";
@@ -303,9 +302,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     logger,
     store,
   });
+  const safeUpsertModelUsageRecord = createModelUsagePersistence({ store, appendRuntimeEvent });
   const ponderInstallation = await loadPonderInstallation(storeDir);
   const ponderActivityBridge = createServerPonderActivity({ storeDir, installation: ponderInstallation, store,
-    subscribe: subscribeRuntimeEvents, loadAppPreferences, warn: message => logger.warn(message) });
+    subscribe: subscribeRuntimeEvents, loadAppPreferences: () => loadAppPreferences(), warn: message => logger.warn(message) });
   onStartupFailure(() => ponderActivityBridge.close());
   const workQueues = createServerWorkQueues(logger);
   const browserControlQueue = createBrowserControlQueue();
@@ -1289,7 +1289,6 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     );
   }
 
-  const safeUpsertModelUsageRecord = createModelUsagePersistence({ store, appendRuntimeEvent });
 
   const runRecordedManualHostedContextCompaction = createManualCompactionRecorder({ home: storeDir, safeUpsertModelUsageRecord, streamOpenPondHostedChatTurn: streamSelectedOpenPondChatTurn, localByokRuntimeState, providerSecretPaths });
   const desktopManagedAgentRoutes = createDesktopManagedAgentRoutes({
