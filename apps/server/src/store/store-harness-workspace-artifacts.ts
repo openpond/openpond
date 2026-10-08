@@ -1,32 +1,6 @@
-import {
-  HarnessImprovementProposalSchema,
-  HarnessEvaluationReviewReceiptSchema,
-  HarnessCrossRunRefinementRequestSchema,
-  HarnessRefinementCandidateLifecycleReceiptSchema,
-  HarnessRefinementCandidateSchema,
-  HarnessOverlayMergeReceiptSchema,
-  HarnessRefinerOutcomeSchema,
-  HarnessRunOverlaySchema,
-  HarnessTargetedValidationReceiptSchema,
-  ImprovementApplyReceiptSchema,
-  ImprovementObservationSchema,
-  ImprovementRouteDecisionSchema,
-  RefinementTriggerDecisionSchema,
-  type HarnessImprovementProposal,
-  type HarnessEvaluationReviewReceipt,
-  type HarnessCrossRunRefinementRequest,
-  type HarnessRefinementCandidate,
-  type HarnessRefinementCandidateLifecycleReceipt,
-  type HarnessOverlayMergeReceipt,
-  type HarnessRefinerOutcome,
-  type HarnessRunOverlay,
-  type HarnessTargetedValidationReceipt,
-  type HarnessWorkspace,
-  type ImprovementApplyReceipt,
-  type ImprovementObservation,
-  type ImprovementRouteDecision,
-  type RefinementTriggerDecision,
-} from "@openpond/contracts";
+import { HarnessImprovementProposalSchema, HarnessOverlayMergeReceiptSchema, HarnessRunOverlaySchema, HarnessTargetedValidationReceiptSchema, type HarnessImprovementProposal, type HarnessOverlayMergeReceipt, type HarnessRunOverlay, type HarnessTargetedValidationReceipt, type HarnessWorkspace } from "@openpond/contracts/harness-workspaces";
+import { HarnessEvaluationReviewReceiptSchema, HarnessCrossRunRefinementRequestSchema, HarnessRefinementCandidateLifecycleReceiptSchema, HarnessRefinementCandidateSchema, type HarnessEvaluationReviewReceipt, type HarnessCrossRunRefinementRequest, type HarnessRefinementCandidate, type HarnessRefinementCandidateLifecycleReceipt } from "@openpond/harness";
+import { HarnessRefinerOutcomeSchema, ImprovementApplyReceiptSchema, ImprovementObservationSchema, ImprovementRouteDecisionSchema, RefinementTriggerDecisionSchema, type HarnessRefinerOutcome, type ImprovementApplyReceipt, type ImprovementObservation, type ImprovementRouteDecision, type RefinementTriggerDecision } from "@openpond/contracts/harness-improvements";
 import {
   ModelImprovementQualificationReceiptSchema,
   type ModelImprovementQualificationReceipt,

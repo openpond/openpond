@@ -1,17 +1,10 @@
 import path from "node:path";
 
-import {
-  WorkspaceToolRequestSchema,
-  WorkspaceToolResultSchema,
-  localPathWorkspaceId,
-  type LocalProject,
-  type OpenPondApp,
-  type RuntimeEvent,
-  type Session,
-  type WorkspaceDiffSummary,
-  type WorkspaceState,
-  type WorkspaceToolResult,
-} from "@openpond/contracts";
+import { WorkspaceToolRequestSchema, WorkspaceToolResultSchema, type WorkspaceToolResult } from "@openpond/contracts/workspace-tools";
+import { localPathWorkspaceId, type WorkspaceDiffSummary, type WorkspaceState } from "@openpond/contracts/workspaces";
+import { type LocalProject, type OpenPondApp } from "@openpond/contracts/apps";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session } from "@openpond/contracts/sessions";
 
 import { event, textFromUnknown } from "../utils.js";
 import { loadWorkspaceDiffAtPath } from "../workspace/workspace-diff.js";

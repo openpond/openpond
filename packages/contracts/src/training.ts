@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { deferredObject } from "./deferred-object.js";
 import {
   EvaluationResultSchema,
   type BenchmarkComparison,
@@ -101,7 +102,7 @@ export const TrainingDestinationIdSchema = z.enum([
   "openpond_managed",
 ]);
 
-export const SftRecipeSchema = z.object({
+export const SftRecipeSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.sftRecipe.v1"),
   method: z.literal("sft"),
   parameterization: z.literal("lora"),
@@ -141,30 +142,30 @@ export const SftRecipeSchema = z.object({
     memoryBytes: z.number().int().positive(),
     wallTimeMs: z.number().int().positive(),
   }),
-});
+}));
 
-export const SftTrainingRecordSchema = z.object({
+export const SftTrainingRecordSchema = deferredObject(() => ({
   id: IdSchema,
   input: z.record(z.string(), z.unknown()),
   expectedOutput: z.record(z.string(), z.unknown()),
   tags: z.array(IdSchema).max(100).default([]),
-});
+}));
 
-export const DpoTrainingRecordSchema = z.object({
+export const DpoTrainingRecordSchema = deferredObject(() => ({
   id: IdSchema,
   prompt: z.string().min(1).max(500_000),
   chosen: z.string().min(1).max(500_000),
   rejected: z.string().min(1).max(500_000),
   sourceRefs: z.array(IdSchema).min(1).max(10_000),
-});
+}));
 
-export const PolicyTrainingRecordSchema = z.object({
+export const PolicyTrainingRecordSchema = deferredObject(() => ({
   id: IdSchema,
   input: z.record(z.string(), z.unknown()),
   tags: z.array(IdSchema).max(100).default([]),
-});
+}));
 
-export const RewardModelRecipeSchema = z.object({
+export const RewardModelRecipeSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.rewardModelRecipe.v1"),
   method: z.literal("reward_model"),
   parameterization: z.literal("lora_with_scalar_head"),
@@ -222,7 +223,7 @@ export const RewardModelRecipeSchema = z.object({
     maxImagePixels: z.number().int().positive().max(100_000_000).optional(),
     maximumSpendUsd: z.number().nonnegative().max(100_000),
   }).strict(),
-}).superRefine((recipe, context) => {
+})).superRefine((recipe, context) => {
   if (
     recipe.runScope === "synthetic_smoke"
     && (recipe.optimizer.maxSteps > 100 || recipe.resourceLimits.maximumSpendUsd > 10)
@@ -235,7 +236,7 @@ export const RewardModelRecipeSchema = z.object({
   }
 });
 
-export const RftRecipeSchema = z.object({
+export const RftRecipeSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.rftRecipe.v1"),
   method: z.literal("grpo"),
   parameterization: z.literal("lora"),
@@ -321,9 +322,9 @@ export const RftRecipeSchema = z.object({
     })
     .strict()
     .optional(),
-});
+}));
 
-export const DpoRecipeSchema = z.object({
+export const DpoRecipeSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.dpoRecipe.v1"),
   method: z.literal("dpo"),
   parameterization: z.literal("lora"),
@@ -367,9 +368,9 @@ export const DpoRecipeSchema = z.object({
     memoryBytes: z.number().int().positive(),
     wallTimeMs: z.number().int().positive(),
   }),
-});
+}));
 
-export const PpoRecipeSchema = z.object({
+export const PpoRecipeSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.ppoRecipe.v1"),
   method: z.literal("ppo"),
   parameterization: z.literal("lora"),
@@ -400,14 +401,14 @@ export const PpoRecipeSchema = z.object({
     memoryBytes: z.number().int().positive(),
     wallTimeMs: z.number().int().positive(),
   }),
-});
+}));
 
-export const UnsupportedTrainingRecipeSchema = z.object({
+export const UnsupportedTrainingRecipeSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.unsupportedRecipe.v1"),
   method: TrainingMethodSchema.exclude(["sft", "dpo", "grpo", "ppo"]),
   parameterization: TrainingParameterizationSchema,
   unsupportedReason: z.string().trim().min(1).max(5_000),
-});
+}));
 export const TrainingRecipeSchema = z.union([
   SftRecipeSchema,
   DpoRecipeSchema,
@@ -416,7 +417,7 @@ export const TrainingRecipeSchema = z.union([
   UnsupportedTrainingRecipeSchema,
 ]);
 
-export const TrainingDestinationCapabilitiesSchema = z.object({
+export const TrainingDestinationCapabilitiesSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingDestinationCapabilities.v1"),
   destinationId: TrainingDestinationIdSchema,
   available: z.boolean(),
@@ -430,18 +431,18 @@ export const TrainingDestinationCapabilitiesSchema = z.object({
   nonProduction: z.boolean(),
   unavailableReason: z.string().trim().min(1).max(5_000).nullable(),
   checkedAt: TimestampSchema,
-});
+}));
 
-export const BaseModelExecutionOptionSchema = z.object({
+export const BaseModelExecutionOptionSchema = deferredObject(() => ({
   destinationId: TrainingDestinationIdSchema,
   available: z.boolean(),
   methods: z.array(TrainingMethodSchema),
   parameterizations: z.array(TrainingParameterizationSchema),
   nonProduction: z.boolean(),
   unavailableReason: z.string().trim().min(1).max(5_000).nullable(),
-});
+}));
 
-export const BaseModelCandidateSchema = z.object({
+export const BaseModelCandidateSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.baseModelCandidate.v1"),
   selectionKey: IdSchema,
   label: z.string().trim().min(1).max(500),
@@ -452,15 +453,15 @@ export const BaseModelCandidateSchema = z.object({
   unavailableReason: z.string().trim().min(1).max(5_000).nullable(),
   methods: z.array(TrainingMethodSchema),
   executionOptions: z.array(BaseModelExecutionOptionSchema).min(1),
-});
+}));
 
-export const TrainingCompatibilityIssueSchema = z.object({
+export const TrainingCompatibilityIssueSchema = deferredObject(() => ({
   code: IdSchema,
   severity: z.enum(["warning", "error"]),
   path: z.string().trim().max(2_000).nullable(),
   message: z.string().trim().min(1).max(5_000),
-});
-export const TrainingCompatibilityReportSchema = z.object({
+}));
+export const TrainingCompatibilityReportSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingCompatibility.v1"),
   compatible: z.boolean(),
   destinationId: TrainingDestinationIdSchema,
@@ -468,7 +469,7 @@ export const TrainingCompatibilityReportSchema = z.object({
   recipeMethod: TrainingMethodSchema,
   issues: z.array(TrainingCompatibilityIssueSchema),
   checkedAt: TimestampSchema,
-});
+}));
 
 export const TrainingMethodAvailabilityReasonCodeSchema = z.union([
   TrainingMethodReadinessReasonCodeSchema,
@@ -481,7 +482,7 @@ export const TrainingMethodAvailabilityReasonCodeSchema = z.union([
   ]),
 ]);
 
-export const TrainingMethodAvailabilitySchema = z.object({
+export const TrainingMethodAvailabilitySchema = deferredObject(() => ({
   method: TrainingMethodSchema,
   state: z.enum([
     "recommended",
@@ -493,7 +494,7 @@ export const TrainingMethodAvailabilitySchema = z.object({
   reasonCodes: z.array(TrainingMethodAvailabilityReasonCodeSchema).default([]),
   reasons: z.array(z.string().trim().min(1).max(5_000)).default([]),
   destinationId: TrainingDestinationIdSchema.nullable().default(null),
-});
+}));
 
 export const ModelRunPresetSchema = z.enum([
   "small",
@@ -506,7 +507,7 @@ export const ModelProjectTrainingSetupSchema =
   PublicModelProjectTrainingSetupSchema;
 export const ModelProjectSchema = PublicModelProjectSchema;
 
-export const TrainingPlanSchema = z.object({
+export const TrainingPlanSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingPlan.v1"),
   id: IdSchema,
   modelId: IdSchema,
@@ -535,9 +536,9 @@ export const TrainingPlanSchema = z.object({
   estimatedCostUsd: z.number().nonnegative().nullable(),
   createdAt: TimestampSchema,
   contentHash: HashSchema,
-});
+}));
 
-export const TrainingBundleFileSchema = z.object({
+export const TrainingBundleFileSchema = deferredObject(() => ({
   path: z.string().trim().min(1).max(2_000),
   sha256: HashSchema,
   sizeBytes: z.number().int().nonnegative(),
@@ -550,8 +551,8 @@ export const TrainingBundleFileSchema = z.object({
     "policy",
     "provenance",
   ]),
-});
-export const TrainingBundleManifestSchema = z.object({
+}));
+export const TrainingBundleManifestSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingBundle.v1"),
   id: IdSchema,
   planId: IdSchema,
@@ -567,9 +568,9 @@ export const TrainingBundleManifestSchema = z.object({
   containsHiddenGraderAssets: z.literal(false),
   createdAt: TimestampSchema,
   contentHash: HashSchema,
-});
+}));
 
-export const TrainingBundleExportSchema = z.object({
+export const TrainingBundleExportSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingBundleExport.v1"),
   manifest: TrainingBundleManifestSchema,
   files: z
@@ -584,17 +585,17 @@ export const TrainingBundleExportSchema = z.object({
     )
     .min(1),
   contentHash: HashSchema,
-});
+}));
 
-export const TrainingPreparedStartSchema = z.object({
+export const TrainingPreparedStartSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingPreparedStart.v1"),
   plan: TrainingPlanSchema,
   bundle: TrainingBundleManifestSchema,
   approvalActor: IdSchema.nullable(),
   preparedAt: TimestampSchema,
-});
+}));
 
-export const TrainingApprovalSchema = z.object({
+export const TrainingApprovalSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingApproval.v1"),
   evaluationTasksetRef: VersionedReleaseRefSchema.nullable().optional(),
   id: IdSchema,
@@ -609,14 +610,14 @@ export const TrainingApprovalSchema = z.object({
   maximumCostUsd: z.number().nonnegative().nullable(),
   approvedBy: IdSchema,
   approvedAt: TimestampSchema,
-});
+}));
 
 /**
  * Immutable product lineage copied onto a Training Job when a Model Project
  * setup is submitted. Runtime reconciliation must read this snapshot instead
  * of mutable Project authoring state.
  */
-export const TrainingJobSourceSnapshotSchema = z.object({
+export const TrainingJobSourceSnapshotSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingJobSourceSnapshot.v1"),
   evaluationTasksetRef: VersionedReleaseRefSchema.nullable().optional(),
   modelProjectId: IdSchema,
@@ -631,7 +632,7 @@ export const TrainingJobSourceSnapshotSchema = z.object({
   harnessRelease: ImmutableReleaseRefSchema,
   baseModel: BaseModelPreferenceSchema,
   method: TrainingMethodSchema,
-}).strict();
+})).strict();
 
 export const TrainingJobStatusSchema = z.enum([
   "queued",
@@ -643,7 +644,7 @@ export const TrainingJobStatusSchema = z.enum([
   "failed",
   "reconciling",
 ]);
-export const TrainingJobSchema = z.object({
+export const TrainingJobSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingJob.v1"),
   id: IdSchema,
   planId: IdSchema,
@@ -659,9 +660,9 @@ export const TrainingJobSchema = z.object({
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
   metadata: MetadataSchema,
-});
+}));
 
-export const TrainingJobEventSchema = z.object({
+export const TrainingJobEventSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingJobEvent.v1"),
   id: IdSchema,
   jobId: IdSchema,
@@ -679,9 +680,9 @@ export const TrainingJobEventSchema = z.object({
   ]),
   timestamp: TimestampSchema,
   payload: MetadataSchema,
-});
+}));
 
-export const SftStepMetricSchema = z.object({
+export const SftStepMetricSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.sftStepMetric.v1"),
   step: z.number().int().nonnegative(),
   maxSteps: z.number().int().positive(),
@@ -704,9 +705,9 @@ export const SftStepMetricSchema = z.object({
   inputTokensSeen: z.number().int().nonnegative().nullable(),
   memoryBytes: z.number().int().nonnegative().nullable(),
   elapsedSeconds: z.number().nonnegative().nullable(),
-});
+}));
 
-export const PolicyOptimizationMetricSchema = z.object({
+export const PolicyOptimizationMetricSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.policyOptimizationMetric.v1"),
   method: z.enum(["grpo", "ppo"]),
   step: z.number().int().nonnegative(),
@@ -735,9 +736,9 @@ export const PolicyOptimizationMetricSchema = z.object({
   environmentExecutions: z.number().int().nonnegative(),
   trajectoryCount: z.number().int().nonnegative().nullable().default(null),
   costUsd: z.number().nonnegative().nullable(),
-});
+}));
 
-export const ManagedTrainingRunEvidenceSchema = z.object({
+export const ManagedTrainingRunEvidenceSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.managedTrainingRunEvidence.v2"),
   provider: IdSchema,
   providerRunId: IdSchema,
@@ -801,17 +802,17 @@ export const ManagedTrainingRunEvidenceSchema = z.object({
     artifactId: IdSchema.nullable(),
   }),
   syncedAt: TimestampSchema,
-});
+}));
 
-export const TrainingEvaluationAggregateSchema = z.object({
+export const TrainingEvaluationAggregateSchema = deferredObject(() => ({
   count: z.number().int().nonnegative(),
   scoredCount: z.number().int().nonnegative(),
   meanScore: z.number().min(0).max(1).nullable(),
   passedCount: z.number().int().nonnegative(),
   passRate: z.number().min(0).max(1).nullable(),
-});
+}));
 
-export const TrainingEvaluationGradeSchema = z.object({
+export const TrainingEvaluationGradeSchema = deferredObject(() => ({
   status: z.enum(["scored", "unavailable"]),
   score: z.number().min(0).max(1).nullable(),
   passed: z.boolean(),
@@ -837,18 +838,18 @@ export const TrainingEvaluationGradeSchema = z.object({
       })
     )
     .max(1_000),
-});
+}));
 
-export const TrainingEvaluationExampleSchema = z.object({
+export const TrainingEvaluationExampleSchema = deferredObject(() => ({
   taskId: IdSchema,
   input: z.record(z.string(), z.unknown()),
   baseOutput: z.record(z.string(), z.unknown()).nullable(),
   trainedOutput: z.record(z.string(), z.unknown()).nullable(),
   baseGrade: TrainingEvaluationGradeSchema.nullable(),
   trainedGrade: TrainingEvaluationGradeSchema.nullable(),
-});
+}));
 
-export const TrainingEvaluationSummarySchema = z.object({
+export const TrainingEvaluationSummarySchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingEvaluationSummary.v1"),
   jobId: IdSchema,
   tasksetId: IdSchema,
@@ -856,9 +857,9 @@ export const TrainingEvaluationSummarySchema = z.object({
   trained: TrainingEvaluationAggregateSchema,
   meanScoreDelta: z.number().min(-1).max(1).nullable(),
   examples: z.array(TrainingEvaluationExampleSchema).max(1_000_000),
-});
+}));
 
-export const TrainingRunDetailSchema = z.object({
+export const TrainingRunDetailSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingRunDetail.v1"),
   job: TrainingJobSchema,
   events: z.array(TrainingJobEventSchema),
@@ -867,9 +868,9 @@ export const TrainingRunDetailSchema = z.object({
   managedEvidence: ManagedTrainingRunEvidenceSchema.nullable().default(null),
   evaluation: TrainingEvaluationSummarySchema.nullable(),
   generatedAt: TimestampSchema,
-});
+}));
 
-export const TrainingArtifactSchema = z.object({
+export const TrainingArtifactSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingArtifact.v1"),
   id: IdSchema,
   jobId: IdSchema,
@@ -891,9 +892,9 @@ export const TrainingArtifactSchema = z.object({
   nonProduction: z.boolean(),
   createdAt: TimestampSchema,
   metadata: MetadataSchema,
-});
+}));
 
-export const ModelArtifactLineageSchema = z.object({
+export const ModelArtifactLineageSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.modelArtifactLineage.v1"),
   id: IdSchema,
   modelId: IdSchema,
@@ -919,7 +920,7 @@ export const ModelArtifactLineageSchema = z.object({
   ),
   managedServing:
     ManagedAdapterServingProjectionSchema.nullable().default(null),
-});
+}));
 
 export const ModelBindingRoleSchema = z.enum([
   "chat_manual",
@@ -928,7 +929,7 @@ export const ModelBindingRoleSchema = z.enum([
   "authoring_optimizer",
 ]);
 
-export const ModelBindingSchema = z.object({
+export const ModelBindingSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.modelBinding.v1"),
   id: IdSchema,
   profileId: IdSchema,
@@ -944,9 +945,9 @@ export const ModelBindingSchema = z.object({
   promotedAt: TimestampSchema,
   rolledBackAt: TimestampSchema.nullable(),
   metadata: MetadataSchema,
-});
+}));
 
-export const TrainingActivityResponseSchema = z.object({
+export const TrainingActivityResponseSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingActivity.v1"),
   profileId: IdSchema,
   active: z.boolean(),
@@ -958,9 +959,9 @@ export const TrainingActivityResponseSchema = z.object({
   }),
   revision: HashSchema,
   generatedAt: TimestampSchema,
-});
+}));
 
-export const TasksetOperationalStateSchema = z.object({
+export const TasksetOperationalStateSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.tasksetOperationalState.v1"),
   tasksetId: IdSchema,
   attempts: z.array(TaskAttemptResultSchema),
@@ -968,9 +969,9 @@ export const TasksetOperationalStateSchema = z.object({
   grades: z.array(GradeResultSchema),
   evaluationResults: z.array(EvaluationResultSchema).default([]),
   generatedAt: TimestampSchema,
-});
+}));
 
-export const TrainingStateResponseSchema = z.object({
+export const TrainingStateResponseSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingState.v1"),
   profileId: IdSchema,
   sources: z.array(TrainingSourceRefSchema),
@@ -1008,7 +1009,7 @@ export const TrainingStateResponseSchema = z.object({
   baseModelCandidates: z.array(BaseModelCandidateSchema).default([]),
   activityRevision: HashSchema.optional(),
   generatedAt: TimestampSchema,
-});
+}));
 
 export type TrainingMethod = z.infer<typeof TrainingMethodSchema>;
 export type TrainingDestinationId = z.infer<typeof TrainingDestinationIdSchema>;

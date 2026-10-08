@@ -2,10 +2,8 @@ import { access, readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  BUILT_IN_OPENPOND_PROFILE_SKILLS,
-  type OpenPondProfileSkill,
-} from "@openpond/contracts";
+import { BUILT_IN_OPENPOND_PROFILE_SKILLS } from "@openpond/contracts/extensions";
+import { type OpenPondProfileSkill } from "@openpond/contracts/profile";
 import type { ProfileSkillReadResult } from "../openpond/model-tool-registry.js";
 
 const SKILL_DIRECTORY = "openpond-taskset-authoring";

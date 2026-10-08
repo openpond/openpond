@@ -5,7 +5,7 @@ import {
   AuthoringDraftSchema, compileRewardAuthoring, createRewardCheckWorker, createTaskGradeWorker, learningRef, rewardAuthoringFields,
   RewardCheckRunSchema, TaskGradeRunSchema, type BoundJudgeProvider,
 } from "@openpond/evals/learning";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { createLocalRewardCheckExecutor } from "../apps/server/src/training/learning-reward-check-executor";
 import { createLocalTaskGradeExecutor } from "../apps/server/src/training/learning-grade-executor";
 import { learningContext, learningFixture } from "./helpers/learning-fixtures";
@@ -15,7 +15,7 @@ import { withTempDirectory } from "./helpers/temp-directory";
 // resulting immutable release must then grade through the same budgeted runner.
 test("checked judges publish exact calibration evidence and grade bound examples", async () => {
   await withTempDirectory("openpond-calibrated-reward-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const repository = store.learningRepository();
       const setup = await learningFixture(repository);
@@ -85,7 +85,7 @@ test("checked judges publish exact calibration evidence and grade bound examples
 // another verifier's retained check or requiring a model-provider receipt.
 test("deterministic calibration publishes and exports only its checked verifier and fixtures", async () => {
   await withTempDirectory("openpond-deterministic-calibration-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const repository = store.learningRepository();
       const setup = await learningFixture(repository);

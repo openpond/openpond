@@ -1,10 +1,9 @@
 import {promises as fs} from "node:fs";
 import path from "node:path";
-import {HarnessSourceManifestSchema,type HarnessSourceManifest,type OpenPondProfileState} from "@openpond/contracts";
+import { HarnessSourceManifestSchema, type HarnessSourceManifest } from "@openpond/contracts/harness-sources";
+import { type OpenPondProfileState } from "@openpond/contracts/profile";
 import {canonicalJson,contentHash,compileProfileWorkflowPackages,validateProfileWorkflowCatalog} from "@openpond/harness";
 import {validateTaskSchema} from "@openpond/evals/task-schema";
-import {ProfileEvaluationDefinitionSchema,ProfileEvaluationSuiteSchema,validateProfileEvaluationCatalog} from "@openpond/evals";
-import {validateTasksetPackage} from "openpond-sdk/taskset-packages";
 import {createProfileSourceBindings,isProfilePrivateEvaluationPath} from "./profile-source-bindings.js";
 import {listRegularFiles,mediaTypeForPath,resolveContainedRegularFile,safeSegment,selectAgentPrimaryFile,sourceFilesForImport} from "./local-harness-workspace-files.js";
 import {inspectReleasedProfileActionDependencies} from "./released-profile-action-dependencies.js";
@@ -193,6 +192,9 @@ export async function writeImportedProfileSource(
     throw new Error("Authored evaluation definitions and legacy evals/catalog.json cannot coexist; migrate the catalog first.");
   }
   if (evaluationCatalogStat || evaluationSourcePaths.length) {
+    const [{ ProfileEvaluationDefinitionSchema, ProfileEvaluationSuiteSchema, validateProfileEvaluationCatalog }, { validateTasksetPackage }] = await Promise.all([
+      import("@openpond/evals"), import("openpond-sdk/taskset-packages"),
+    ]);
     if (evaluationCatalogStat && (!evaluationCatalogStat.isFile() || evaluationCatalogStat.isSymbolicLink())) {
       throw new Error("Profile evaluation catalog must be a regular file.");
     }

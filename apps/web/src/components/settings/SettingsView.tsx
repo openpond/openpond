@@ -351,6 +351,7 @@ export function SettingsView({
           />
         ) : section === "providers" ? (
           <ProviderSettingsSection
+            onProvidersChanged={applyProviderSettings}
             connection={connection}
             account={payload?.account ?? null}
             codex={codex}

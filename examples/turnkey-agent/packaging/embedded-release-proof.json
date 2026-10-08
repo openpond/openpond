@@ -1,0 +1,132 @@
+{
+  "verifiedAt": "2026-10-07",
+  "appId": "4e211a06-9d1b-4615-8daa-10623d542c46",
+  "deploymentId": "258cf25b-31fd-45c4-84cf-f3f6fe4dc780",
+  "image": "us-east4-docker.pkg.dev/openpond/openpond-release-images/openpond-tvc@sha256:c9ce670a7108679d5023465bb79ea03692fb9d6f83294049922914e372385f80",
+  "qosVersion": "0.12.1",
+  "debugMode": false,
+  "egressEnabled": false,
+  "isLive": true,
+  "replicas": {
+    "ready": 3,
+    "desired": 3
+  },
+  "artifact": {
+    "pivotBytes": 131562716,
+    "pivotSha256": "8535a63c0c96661c46a7862e53f57463b6299387dc2f3a6eca9def94a1deb7fd",
+    "runtimeBytes": 200604849,
+    "runtimeSha256": "18ffa6a84218c4562267ab028c7b6e3dad63bf43d386cb92c9daee4e8e4e9794",
+    "launcherSha256": "25a51eb1381bbf3782c8823f692e2157c2a325568a64db3a8356dc7ea5f34d2c",
+    "compression": "xz",
+    "compressedOffset": 901776,
+    "compressedBytes": 130660900
+  },
+  "local": {
+    "passed": true,
+    "memoryMaxBytes": 1073741824,
+    "swapMaxBytes": 0,
+    "network": "none",
+    "health": {
+      "status": "healthy",
+      "runtime": "openpond-app-server",
+      "inference": "embedded",
+      "model": "smollm2-135m-instruct",
+      "contextTokens": 4096,
+      "persistentHistory": false
+    },
+    "turns": [
+      {
+        "prompt": "What is 7 plus 5? Answer briefly.",
+        "response": {
+          "requestId": "f4d68a55-6716-4359-9c86-82ec7d7b215f",
+          "answer": "To add 7 and 5, you simply add the two numbers together: 7 + 5 = 12.",
+          "threadId": "6560d2e2-f111-41e6-87e7-f617d463c8b3",
+          "turnId": "90849f0c-08c4-4bdc-bace-f3105f78e7b7",
+          "tools": []
+        },
+        "seconds": 0.82,
+        "memory": {
+          "memory.current": "566747136",
+          "memory.peak": "580182016",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0"
+        }
+      },
+      {
+        "prompt": "What is the capital of France?",
+        "response": {
+          "requestId": "18921f9c-dfcf-4f81-826d-3132eca68e31",
+          "answer": "The capital of France is Paris.",
+          "threadId": "d7cfe6a1-a669-4d43-8247-5a06ddd0d652",
+          "turnId": "170e1bff-4de6-4787-819a-7a154e2b9b5e",
+          "tools": []
+        },
+        "seconds": 0.35,
+        "memory": {
+          "memory.current": "568082432",
+          "memory.peak": "580182016",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0"
+        }
+      }
+    ],
+    "cancellationRecovery": {
+      "requestId": "56b00d18-6596-4cc6-8cbd-6b4a3a07e614",
+      "answer": "To add 7 and 5, you simply add the two numbers together: 7 + 5 = 12.",
+      "threadId": "d8a7729f-4619-4923-ad02-2ef9c7c86b37",
+      "turnId": "07ffa5f7-365a-4fd6-a7e5-dd3a33ac6738",
+      "tools": []
+    },
+    "finalMemory": {
+      "memory.current": "570142720",
+      "memory.peak": "580182016",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0"
+    }
+  },
+  "remote": {
+    "endpoint": "https://app-4e211a06-9d1b-4615-8daa-10623d542c46.app.turnkey.cloud",
+    "health": {
+      "status": "healthy",
+      "runtime": "openpond-app-server",
+      "inference": "embedded",
+      "model": "smollm2-135m-instruct",
+      "contextTokens": 4096,
+      "persistentHistory": false
+    },
+    "unauthenticatedChatStatus": 401,
+    "invalidInputStatus": 400,
+    "oversizedPromptStatus": 400,
+    "turns": [
+      {
+        "prompt": "What is 7 plus 5? Answer briefly.",
+        "status": 200,
+        "seconds": 0.79,
+        "response": {
+          "requestId": "0bd6c261-4582-4607-b936-e5a5b7542888",
+          "answer": "To add 7 and 5, you simply add the two numbers together: 7 + 5 = 12.",
+          "threadId": "ab9a3525-185d-483d-9252-2dbc06eaf264",
+          "turnId": "ebf31bc8-7f62-47a5-9d98-8acd90316293",
+          "tools": []
+        }
+      },
+      {
+        "prompt": "What is the capital of France?",
+        "status": 200,
+        "seconds": 0.57,
+        "response": {
+          "requestId": "2a572f76-77e4-41db-9ee9-1ad3419dfa1d",
+          "answer": "The capital of France is Paris.",
+          "threadId": "17499f40-4732-4ff5-9791-631477dac598",
+          "turnId": "7628d2f0-29b0-4f21-9412-84504ea5dda1",
+          "tools": []
+        }
+      }
+    ],
+    "passed": true
+  },
+  "diagnosticAppDeleted": true,
+  "limitations": [
+    "Local cgroup measurement does not measure total enclave VM memory.",
+    "HTTPS ingress; no client attestation verification or encrypted client-to-enclave protocol.",
+    "Bootstrap quorum key; example is not a production confidentiality claim.",
+    "One-shot text endpoint: no tools, remote conversation history or streaming."
+  ]
+}

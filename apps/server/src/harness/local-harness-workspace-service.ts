@@ -3,13 +3,9 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import {
-  HarnessSourceManifestSchema,
-  HarnessWorkspaceSchema,
-  type OpenPondProfileState,
-  type HarnessSourceManifest,
-  type HarnessWorkspace,
-} from "@openpond/contracts";
+import { HarnessSourceManifestSchema, type HarnessSourceManifest } from "@openpond/contracts/harness-sources";
+import { HarnessWorkspaceSchema, type HarnessWorkspace } from "@openpond/contracts/harness-workspaces";
+import { type OpenPondProfileState } from "@openpond/contracts/profile";
 import {
   AgentSnapshotSchema,
   HarnessReleaseSchema,

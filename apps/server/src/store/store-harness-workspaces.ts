@@ -1,24 +1,10 @@
-import {
-  advanceHarnessWorkspace,
-  advanceReviewedHarnessWorkspace,
-  createHarnessRunOverlay,
-  HarnessAdvanceReceiptSchema,
-  HarnessImprovementProposalSchema,
-  HarnessRunOverlaySchema,
-  HarnessWorkspaceSchema,
-  RefinementTriggerDecisionSchema,
-  rollbackHarnessWorkspace,
-  type HarnessAdvanceReceipt,
-  type HarnessImprovementProposal,
-  type HarnessRunOverlay,
-  type HarnessTargetedValidationReceipt,
-  type HarnessWorkspace,
-  type RefinementTriggerDecision,
-} from "@openpond/contracts";
+import { advanceHarnessWorkspace, advanceReviewedHarnessWorkspace, rollbackHarnessWorkspace } from "@openpond/contracts/harness-workspace-transitions";
+import { createHarnessRunOverlay, HarnessAdvanceReceiptSchema, HarnessImprovementProposalSchema, HarnessRunOverlaySchema, HarnessWorkspaceSchema, type HarnessAdvanceReceipt, type HarnessImprovementProposal, type HarnessRunOverlay, type HarnessTargetedValidationReceipt, type HarnessWorkspace } from "@openpond/contracts/harness-workspaces";
+import { RefinementTriggerDecisionSchema, type RefinementTriggerDecision } from "@openpond/contracts/harness-improvements";
 import { type ImmutableReleaseRef } from "@openpond/harness";
 
 import type { PayloadRow } from "../types.js";
-import { SqliteHarnessRefinementCandidateStore } from "./store-harness-refinement-candidates.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 import { LocalHarnessReleaseRecordSchema, type LocalHarnessReleaseRecord } from "./store-harness-release-record.js";
 import {
   HARNESS_IMPROVEMENT_ARTIFACT_SCHEMAS,
@@ -37,7 +23,7 @@ export type {
   HarnessEvaluationReviewSettings,
 } from "./store-harness-evaluation-review-settings.js";
 
-export class SqliteHarnessWorkspaceStore extends SqliteHarnessRefinementCandidateStore {
+export class SqliteHarnessWorkspaceStore extends SqliteStoreDomain {
   async createHarnessWorkspace(input: HarnessWorkspace): Promise<HarnessWorkspace> {
     const workspace = HarnessWorkspaceSchema.parse(input);
     await this.ready;

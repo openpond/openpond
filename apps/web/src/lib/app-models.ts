@@ -614,7 +614,7 @@ export function providerOptionsFromSettings(
   const enabledOnly = options.enabledOnly ?? false;
   const rows: Array<DropdownOption & { value: ChatProvider }> = [];
   for (const providerId of PROVIDER_IDS) {
-    if (!["openpond", "codex", "openai", "claude-code", "grok-build", "opencode"].includes(providerId)) continue;
+    if (!["openpond", "codex", "openai", "claude-code", "grok-build", "opencode", "custom-openai-compatible"].includes(providerId)) continue;
     if (!RUNNABLE_CHAT_PROVIDER_ID_SET.has(providerId)) continue;
     if (options.localOnly && providerId === "openpond") continue;
     const status = providerStatus(settings, providerId);

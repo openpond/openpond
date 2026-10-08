@@ -1,16 +1,8 @@
-import {
-  HarnessCrossRunRefinementRequestSchema,
-  HarnessRefinementCandidateLifecycleReceiptSchema,
-  HarnessRefinementCandidateSchema,
-  HarnessWorkspaceSchema,
-  type HarnessCrossRunRefinementRequest,
-  type HarnessRefinementCandidate,
-  type HarnessRefinementCandidateLifecycleReceipt,
-  type HarnessWorkspace,
-} from "@openpond/contracts";
+import { HarnessCrossRunRefinementRequestSchema, HarnessRefinementCandidateLifecycleReceiptSchema, HarnessRefinementCandidateSchema, type HarnessCrossRunRefinementRequest, type HarnessRefinementCandidate, type HarnessRefinementCandidateLifecycleReceipt } from "@openpond/harness";
+import { HarnessWorkspaceSchema, type HarnessWorkspace } from "@openpond/contracts/harness-workspaces";
 
 import type { PayloadRow } from "../types.js";
-import { SqliteHarnessEvaluationReviewSettingsStore } from "./store-harness-evaluation-review-settings.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
 type CandidateArtifact =
   | HarnessRefinementCandidate
@@ -22,7 +14,7 @@ type CandidateArtifactKind =
   | "cross_run_refinement_request";
 
 export class SqliteHarnessRefinementCandidateStore
-  extends SqliteHarnessEvaluationReviewSettingsStore {
+  extends SqliteStoreDomain {
   async listHarnessRefinementCandidates(
     workspaceId: string,
     status?: HarnessRefinementCandidate["status"],

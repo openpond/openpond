@@ -23,12 +23,8 @@ import type {
   SandboxSnapshotUpdateInput,
   SandboxEnvVarInput,
 } from "@openpond/cloud";
-import {
-  connectedAppBundleByProvider,
-  normalizeConnectedAppProviderFamilyId,
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MAX,
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MIN,
-} from "@openpond/contracts";
+import { connectedAppBundleByProvider, normalizeConnectedAppProviderFamilyId } from "@openpond/contracts/connected-apps";
+import { SANDBOX_TEMPLATE_PREVIEW_PORT_MAX, SANDBOX_TEMPLATE_PREVIEW_PORT_MIN } from "@openpond/contracts/sandbox-template";
 import { pipefailSandboxShellCommand } from "./shell-command.js";
 
 type SandboxRuntimeIntegrationLease = NonNullable<SandboxCreateInput["integrationLeases"]>[number];

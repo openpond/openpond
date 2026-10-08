@@ -9,9 +9,9 @@ import {
   type PreferenceComparisonReleaseRecord,
   type PreferenceComparisonSubmissionRecord,
 } from "../training/preference-comparison-records.js";
-import { SqliteEvaluationResultStore } from "./store-evaluation-results.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
-export class SqlitePreferenceComparisonStore extends SqliteEvaluationResultStore {
+export class SqlitePreferenceComparisonStore extends SqliteStoreDomain {
   async savePreferenceComparisonRelease(recordInput: PreferenceComparisonReleaseRecord): Promise<PreferenceComparisonReleaseRecord> {
     const record = PreferenceComparisonReleaseRecordSchema.parse(recordInput);
     if (record.id !== record.release.id) throw new Error("Preference comparison release record ID must match its portable release ID.");

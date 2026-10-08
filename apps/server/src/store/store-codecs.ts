@@ -8,11 +8,8 @@ import type {
   SubagentRun,
   Turn,
 } from "@openpond/contracts";
-import {
-  ModelUsageRecordSchema,
-  SubagentMessageSchema,
-  SubagentRunSchema,
-} from "@openpond/contracts";
+import { ModelUsageRecordSchema } from "@openpond/contracts/usage";
+import { SubagentMessageSchema, SubagentRunSchema } from "@openpond/contracts/subagents";
 import type { PayloadRow } from "../types.js";
 import { sanitizeRuntimeEvent } from "../runtime/runtime-event-sanitizer.js";
 

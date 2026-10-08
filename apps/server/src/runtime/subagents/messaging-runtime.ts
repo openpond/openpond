@@ -1,7 +1,7 @@
-import {
-  SubagentMessageDeliverySchema, SubagentMessageSchema,
-  type RuntimeEvent, type SubagentRun, type Turn, type TaskInput,
-} from "@openpond/contracts";
+import { SubagentMessageDeliverySchema, SubagentMessageSchema, type SubagentRun } from "@openpond/contracts/subagents";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Turn } from "@openpond/contracts/sessions";
+import { type TaskInput } from "@openpond/contracts/task-inbox";
 import type { OpenPondSubagentMessageToolInput, OpenPondSubagentMessageToolResult } from "../../openpond/capability-tool-registry.js";
 import type { ModelToolExecutionContext } from "../../openpond/model-tool-registry.js";
 import { event, now } from "../../utils.js";

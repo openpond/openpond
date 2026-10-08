@@ -34,6 +34,7 @@ export type ChatAttachmentImagePayloadRequest = {
 };
 
 export type HttpRouteDeps = {
+  enclavePayload?: ReturnType<typeof import("../enclave/connection.js").createEnclaveConnection>;
   conversationLearningRequestPayload?: (request: unknown) => Promise<unknown>;
   localManagedMessaging?: ReturnType<typeof import("../runtime/task-inbox/local-managed-messaging.js").createLocalManagedMessaging>;
   nativeAgentSetupPayload?: (provider: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>;

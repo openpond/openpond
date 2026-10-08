@@ -9,7 +9,7 @@ import type {
   SubagentToolPolicy,
   SidebarFileBookmark,
 } from "@openpond/contracts";
-import { SUBAGENT_ROLE_PRESETS } from "@openpond/contracts";
+import { SUBAGENT_ROLE_PRESETS } from "@openpond/contracts/subagents";
 import type {
   ModelToolDefinition,
   ModelToolExecutionContext,

@@ -1,11 +1,5 @@
-import {
-  SubagentProgressSchema,
-  type RuntimeEvent,
-  type SubagentProgress,
-  type SubagentProgressPhase,
-  type SubagentRun,
-  type SubagentValidationAttempt,
-} from "@openpond/contracts";
+import { SubagentProgressSchema, type SubagentProgress, type SubagentProgressPhase, type SubagentRun, type SubagentValidationAttempt } from "@openpond/contracts/subagents";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
 import {
   booleanFromRecord,
   numberFromRecord,

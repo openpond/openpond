@@ -58,6 +58,7 @@ import { LEARNING_TABLES_SQL } from "./store-learning-schema.js";
 import { MODEL_PROJECT_AUTHORING_TABLES_SQL } from "./store-model-project-authoring-schema.js";
 import { pruneMigrationBackups } from "./store-backup-retention.js";
 import { TASK_INBOX_SCHEMA_SQL } from "./store-task-inbox-schema.js";
+import type { SqliteDomainContext } from "./store-domain.js";
 
 type UserVersionRow = { user_version: number };
 type QuickCheckRow = { quick_check: string };
@@ -94,6 +95,20 @@ export class SqliteStoreCore {
     this.storePath = path.join(this.home, "state", "state.sqlite");
     this.logger = options.logger;
     this.ready = this.load(storeDir);
+  }
+
+  protected domainContext(): SqliteDomainContext {
+    const owner = this;
+    return {
+      get home() { return owner.home; },
+      get storePath() { return owner.storePath; },
+      get logger() { return owner.logger; },
+      get ready() { return owner.ready; },
+      get db() { return owner.db; },
+      get database() { return owner.database; },
+      get writeQueue() { return owner.writeQueue; },
+      set writeQueue(value) { owner.writeQueue = value; },
+    };
   }
 
   async recentTurns(limit = 2_000): Promise<Turn[]> {

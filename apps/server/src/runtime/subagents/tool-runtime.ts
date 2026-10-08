@@ -1,18 +1,10 @@
 import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
 import { randomUUID } from "node:crypto";
-import {
-  SubagentLifecycleActionRequestSchema,
-  SubagentProgressSchema,
-  SubagentRunSchema,
-  type AppPreferences,
-  type RuntimeEvent,
-  type Session,
-  type SubagentLifecycleActionResponse,
-  type SubagentRoleSettings,
-  type SubagentRun,
-  type Turn,
-  type TaskInput,
-} from "@openpond/contracts";
+import { SubagentLifecycleActionRequestSchema, SubagentProgressSchema, SubagentRunSchema, type SubagentLifecycleActionResponse, type SubagentRoleSettings, type SubagentRun } from "@openpond/contracts/subagents";
+import { type AppPreferences } from "@openpond/contracts/settings";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
+import { type TaskInput } from "@openpond/contracts/task-inbox";
 import type {
   OpenPondSubagentCancelToolInput,
   OpenPondSubagentJoinToolInput,

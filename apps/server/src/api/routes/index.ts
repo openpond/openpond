@@ -1,3 +1,4 @@
+import { handleEnclaveRoutes } from "./enclave-routes.js";
 import type { HttpRouteModule } from "../http-route-types.js";
 import { handleCoreRoutes } from "./core-routes.js";
 import { handleCreateImproveRoutes } from "./create-improve-routes.js";
@@ -30,6 +31,7 @@ import { handleWorkOutputRoutes } from "./work-output-routes.js";
 import { handleWorkEvidenceRoutes } from "./work-evidence-routes.js";
 
 export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
+  { id: "enclave", handle: handleEnclaveRoutes },
   { id: "events", handle: handleEventRoutes },
   { id: "work-outputs", handle: handleWorkOutputRoutes },
   { id: "work-evidence", handle: handleWorkEvidenceRoutes },

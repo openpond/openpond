@@ -1,3 +1,5 @@
+import { UrlModelConnections } from "./UrlModelConnections";
+import { api } from "../../api";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import { useAgentDialogFocus } from "../apps/useAgentDialogFocus";
 import "../../styles/settings/provider-connections.css";
@@ -34,6 +36,7 @@ import {
 } from "../../lib/app-models";
 
 type ProviderSettingsSectionProps = {
+  onProvidersChanged: (providers: ProviderSettings) => void;
   checkNativeProvider: CheckNativeProvider;
   connection: ClientConnection | null;
   account: BootstrapPayload["account"] | null;
@@ -196,6 +199,7 @@ export function visibleProviderModelOptions(
 }
 
 export function ProviderSettingsSection({
+  onProvidersChanged,
   checkNativeProvider,
   connection,
   account,
@@ -277,6 +281,8 @@ export function ProviderSettingsSection({
           )}
         </div>
       ) : null}
+
+      <UrlModelConnections connection={connection} onChanged={async () => { if (connection) onProvidersChanged(await api.providerSettings(connection)); }} />
 
       {validationMessage ? (
         <div className="settings-footnote provider-validation-message">

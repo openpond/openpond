@@ -2,13 +2,13 @@ import { expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
 import { AuthoringDraftSchema, createBudgetedJudgeExecutor, createBudgetedRewardFixtureExecutor, createLearningService, createRewardCheckJudgeBudgetStore, createRewardCheckWorker, learningRef, rewardAuthoringFields, RewardCheckRunSchema } from "@openpond/evals/learning";
 import { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-verifier/node";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { withTempDirectory } from "./helpers/temp-directory";
 import { learningContext } from "./helpers/learning-fixtures";
 
 test("queued draft judge fixtures retain scores and budget receipts while zero budget prevents dispatch", async () => {
   await withTempDirectory("openpond-budgeted-fixtures-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const repository = store.learningRepository();
       const service = createLearningService(repository);
@@ -44,7 +44,7 @@ test("queued draft judge fixtures retain scores and budget receipts while zero b
 // cancellation without allowing any new provider dispatch.
 test("judge reservations survive SQLite reopen and settle after cancellation", async () => {
   await withTempDirectory("openpond-judge-budget-", async home => {
-    let store = new SqliteLearningStore(home);
+    let store = new SqliteStore(home);
     const scope = "judge-budget-workspace";
     const run = RewardCheckRunSchema.parse({ schemaVersion: "openpond.rewardCheckRun.v1", id: "check", revision: 1,
       draft: { id: "draft", revision: 1, contentHash: contentHash("draft") }, reward: { id: "reward", revision: 1, contentHash: contentHash("reward") }, snapshotHash: contentHash("snapshot"),
@@ -59,7 +59,7 @@ test("judge reservations survive SQLite reopen and settle after cancellation", a
       const lost = createBudgetedJudgeExecutor({ store: budget(), maximumCharge: () => 0.01, dispatch: async () => { calls++; throw new Error("Provider connection lost"); } });
       await expect(lost("first", request)).rejects.toThrow("Provider connection lost");
       await store.close();
-      store = new SqliteLearningStore(home);
+      store = new SqliteStore(home);
       const restarted = createBudgetedJudgeExecutor({ store: budget(), maximumCharge: () => 0.01, dispatch: async () => { calls++; throw new Error("Must not dispatch"); } });
       await expect(restarted("first", request)).rejects.toThrow("charge_unresolved");
       expect(calls).toBe(1);

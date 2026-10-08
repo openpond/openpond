@@ -1,10 +1,6 @@
-import {
-  sidebarFileBookmarkId,
-  type PatchSidebarFileBookmarkRequest,
-  type SidebarFileBookmark,
-} from "@openpond/contracts";
+import { sidebarFileBookmarkId, type PatchSidebarFileBookmarkRequest, type SidebarFileBookmark } from "@openpond/contracts/sidebar-files";
 import { now } from "../utils.js";
-import { SqliteCreateImproveStore } from "./store-create-improve.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
 type SidebarFileBookmarkRow = {
   workspace_kind: string;
@@ -18,7 +14,7 @@ type SidebarFileBookmarkRow = {
   updated_at: string;
 };
 
-export class SqliteSidebarFileBookmarkStore extends SqliteCreateImproveStore {
+export class SqliteSidebarFileBookmarkStore extends SqliteStoreDomain {
   async listSidebarFileBookmarks(scope: string): Promise<SidebarFileBookmark[]> {
     await this.ready;
     await this.writeQueue;

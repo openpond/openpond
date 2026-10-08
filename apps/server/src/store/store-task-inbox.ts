@@ -1,24 +1,21 @@
-import { setPonderProjectSharing, readPonderProjectSharing, type PonderProjectSharingInput } from "./ponder-project-sharing.js";
+import { TASK_INPUT_BATCH_MAX_CHARS, TaskInputMutationSchema, TaskWaitSchema, type TaskInboxSnapshot, type TaskInput, type TaskInputAdmission, type TaskInputMutation, type TaskWait } from "@openpond/contracts/task-inbox";
+import { SubagentRunSchema, type SubagentRun } from "@openpond/contracts/subagents";
 import { assertRemoteAdmission, REMOTE_LOCAL_SCHEMA, type RemoteLocalAuthority } from "../remote-relay/admission.js";
 import type { RemoteCommandReceipt, RemoteDispatchCommand } from "@openpond/contracts";
 import { assertRemoteExecution } from "../remote-relay/session-ownership.js";
 import { remoteApprovalSupported } from "../remote-relay/approvals.js";
-import {
-  TASK_INPUT_BATCH_MAX_CHARS, TaskInputMutationSchema, TaskWaitSchema,
-  SubagentRunSchema, type SubagentRun,
-  PonderDesktopAttachmentSchema, type PonderDesktopAttachment, type PonderDesktopOperation,
-  SessionSchema,
-  type TaskInboxSnapshot, type TaskInput, type TaskInputAdmission, type TaskInputMutation, type TaskWait,
-} from "@openpond/contracts";
 import { recoverTaskInboxOwners } from "./task-inbox-recovery.js";
+import { SqliteStoreDomain } from "./store-domain.js";
+import { setPonderProjectSharing, readPonderProjectSharing, type PonderProjectSharingInput } from "./ponder-project-sharing.js";
 import { readPonderDesktopReservationResume } from "./ponder-desktop-reservation.js";
 import type { PonderLocalOwner } from "../openpond/ponder-local-scope.js";
 import { admitPonderDesktopStop, readPonderDesktopStop, settlePonderDesktopStop } from "./ponder-desktop-stop.js";
-import { SqliteHumanReviewStore } from "./store-human-review.js";
 import { commitPonderDesktopResult, readPonderDesktopResult } from "./ponder-desktop-result.js";
 import { assertPonderDesktopExecution } from "./ponder-desktop-input.js";
 import { admitPonderDesktopObservation, readPonderDesktopObservation } from "./ponder-desktop-observation.js";
 import { admitPonderDesktopInspection, readPonderDesktopInspection } from "./ponder-desktop-inspection.js";
+import { PonderDesktopAttachmentSchema, type PonderDesktopAttachment, type PonderDesktopOperation } from "@openpond/contracts/ponder-desktop";
+import { SessionSchema } from "@openpond/contracts/sessions";
 import { subagentRunParams } from "./store-codecs.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import {
@@ -28,7 +25,7 @@ import {
 
 const LEASE_MS = 90_000;
 
-export class SqliteTaskInboxStore extends SqliteHumanReviewStore {
+export class SqliteTaskInboxStore extends SqliteStoreDomain {
   async initializeRemoteDeviceStore() {
     return this.inboxWrite(db => { db.exec(REMOTE_LOCAL_SCHEMA); db.run("DELETE FROM remote_device_authority"); });
   }
@@ -150,7 +147,7 @@ export class SqliteTaskInboxStore extends SqliteHumanReviewStore {
   async commitPonderDesktopResult(value: Parameters<typeof commitPonderDesktopResult>[1]) {
     return this.inboxWrite(db => commitPonderDesktopResult(db, value));
   }
-  protected async inboxWrite<T>(operation: (db: OpenPondSqliteConnection) => T): Promise<T> {
+  private async inboxWrite<T>(operation: (db: OpenPondSqliteConnection) => T): Promise<T> {
     await this.ready;
     const write = this.writeQueue.then(() => {
       const db = this.database;

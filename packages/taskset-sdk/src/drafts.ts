@@ -5,10 +5,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  TasksetDraftSchema,
-  type TasksetDraft,
-} from "@openpond/contracts";
+import { TasksetDraftSchema, type TasksetDraft } from "@openpond/contracts/taskset-drafts";
 
 import { configuredTasksetDraftFiles, renderTasksetDraftManifests } from "openpond-sdk/taskset-drafts";
 
