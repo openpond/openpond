@@ -35,6 +35,8 @@ export function MarkdownText({
   mutableContent,
   onOpenBrowserLink,
   onOpenFileInSidebar,
+  conversationLinks,
+  onOpenConversation,
   workspaceRootPath = null,
 }: {
   activeWorkspaceAppId?: string | null;
@@ -44,6 +46,8 @@ export function MarkdownText({
   mutableContent?: string;
   onOpenBrowserLink?: OpenBrowserLink;
   onOpenFileInSidebar?: OpenFileLink;
+  conversationLinks?: readonly { conversationId: string; title: string }[];
+  onOpenConversation?: (conversationId: string) => void;
   workspaceRootPath?: string | null;
 }) {
   const segmented = finalizedContent !== undefined || mutableContent !== undefined;
@@ -56,11 +60,22 @@ export function MarkdownText({
     () => segmented && mutableContent ? parseBlocks(mutableContent) : [],
     [mutableContent, segmented],
   );
+  // Parsing can split stable and growing text, but reconciliation must keep a
+  // single block list. Moving between separate lists remounts code and images
+  // every time the renderer catches up with (or receives) a provider delta.
+  const renderedBlocks = useMemo(
+    () => segmented ? [...finalizedBlocks, ...mutableBlocks] : blocks,
+    [segmented, finalizedBlocks, mutableBlocks, blocks],
+  );
   const [openImage, setOpenImage] = useState<{ src: string; title: string } | null>(null);
   const [hoverImage, setHoverImage] = useState<ImageLinkPreview | null>(null);
   const [linkMenu, setLinkMenu] = useState<LinkContextMenu | null>(null);
   const localImageUrls = useLocalImageUrlResolver(connection);
   const workspaceImageUrls = useWorkspaceImageUrlResolver(connection);
+  const conversationLinkMap = useMemo(() => new Map(conversationLinks?.flatMap(item => [
+    [item.conversationId, item] as const,
+    [`/tasks/${encodeURIComponent(item.conversationId)}`, item] as const,
+  ]) ?? []), [conversationLinks]);
   const handleOpenWorkspaceImage = useCallback(
     (image: { appId: string; path: string; title: string }) => {
       void workspaceImageUrls.loadUrl(image.appId, image.path).then((src) => {
@@ -71,6 +86,8 @@ export function MarkdownText({
   );
   const context = useMemo<MarkdownContext>(
     () => ({
+      conversationLinks: conversationLinkMap,
+      onOpenConversation,
       activeWorkspaceAppId,
       connection,
       onOpenBrowserLink,
@@ -84,6 +101,8 @@ export function MarkdownText({
       workspaceRootPath,
     }),
     [
+      conversationLinkMap,
+      onOpenConversation,
       activeWorkspaceAppId,
       connection,
       handleOpenWorkspaceImage,
@@ -113,29 +132,12 @@ export function MarkdownText({
 
   return (
     <div className="markdown-message">
-      {segmented ? (
-        <>
-          <MarkdownBlockList
-            blocks={finalizedBlocks}
-            context={context}
-            keyPrefix="finalized"
-            workspaceRootPath={workspaceRootPath}
-          />
-          <MarkdownBlockList
-            blocks={mutableBlocks}
-            context={{ ...context, fileBasePath: finalizedBlocks.reduce(nextFileListBase, null as string | null) }}
-            keyPrefix="mutable"
-            workspaceRootPath={workspaceRootPath}
-          />
-        </>
-      ) : (
-        <MarkdownBlockList
-          blocks={blocks}
-          context={context}
-          keyPrefix="block"
-          workspaceRootPath={workspaceRootPath}
-        />
-      )}
+      <MarkdownBlockList
+        blocks={renderedBlocks}
+        context={context}
+        keyPrefix="block"
+        workspaceRootPath={workspaceRootPath}
+      />
       {hoverImage && (
         <MarkdownImageHoverPreview preview={hoverImage} />
       )}

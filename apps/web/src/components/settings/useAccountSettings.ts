@@ -34,13 +34,7 @@ export function useAccountSettings({
         handle: handleValue,
         baseUrl: baseUrlValue ?? null,
       });
-      const preferencesPayload = await api.savePreferences(connection, {
-        defaultTeamId: null,
-      });
-      onPayload({
-        ...switchedPayload,
-        preferences: preferencesPayload.preferences,
-      });
+      onPayload(switchedPayload);
     } catch (switchError) {
       onError(
         switchError instanceof Error ? switchError.message : String(switchError)
@@ -52,8 +46,7 @@ export function useAccountSettings({
 
   async function removeAccount(
     handleValue: string,
-    baseUrlValue?: string | null,
-    wasActive = false
+    baseUrlValue?: string | null
   ): Promise<boolean> {
     if (!connection) return false;
     setSaving(true);
@@ -64,16 +57,6 @@ export function useAccountSettings({
         baseUrl: baseUrlValue ?? null,
       });
       onPayload(removedPayload);
-      if (wasActive) {
-        try {
-          const preferencesPayload = await api.savePreferences(connection, {
-            defaultTeamId: null,
-          });
-          onPayload({ ...removedPayload, preferences: preferencesPayload.preferences });
-        } catch (preferenceError) {
-          onError(preferenceError instanceof Error ? preferenceError.message : String(preferenceError));
-        }
-      }
       return true;
     } catch (removeError) {
       onError(
@@ -100,13 +83,7 @@ export function useAccountSettings({
         environment: environment || "custom",
         setActive: true,
       });
-      const preferencesPayload = await api.savePreferences(connection, {
-        defaultTeamId: null,
-      });
-      onPayload({
-        ...savedPayload,
-        preferences: preferencesPayload.preferences,
-      });
+      onPayload(savedPayload);
     } catch (saveError) {
       onError(
         saveError instanceof Error ? saveError.message : String(saveError)

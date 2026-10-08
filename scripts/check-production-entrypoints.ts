@@ -25,6 +25,7 @@ for (const relativePath of [
   "apps/terminal/src/index.ts",
   "apps/web/src/main.tsx",
   "apps/web/src/test-pages/document-download-browser-proof.tsx",
+  "apps/web/src/test-pages/streaming-markdown-browser-proof.tsx",
   "apps/web/src/test-pages/models-browser-proof.tsx",
   "apps/web/src/test-pages/usage-browser-proof.tsx",
   "apps/cli/src/index.ts",

@@ -4,6 +4,7 @@
   "description": "Portable immutable Harness releases, workspaces, improvements, traces, tools, and model identities for OpenPond",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/types/index.d.ts",
   "files": [
@@ -86,7 +87,7 @@
   },
   "scripts": {
     "build": "tsx scripts/build.ts",
-    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project harness",
     "check:api": "tsx scripts/check-public-package.ts",
     "check:consumer": "tsx scripts/verify-packed-consumer.ts",

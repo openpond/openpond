@@ -25,8 +25,8 @@
     "vitest": "4.1.10"
   },
   "scripts": {
-    "build": "tsc -b",
-    "typecheck": "tsc --noEmit",
+    "build": "node ../../scripts/run-typescript.mjs tsc -b",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit",
     "test": "vitest run --root ../.. --config vitest.config.ts --project actions",
     "check": "pnpm run typecheck && pnpm run test"
   }

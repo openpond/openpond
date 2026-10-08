@@ -1,4 +1,38 @@
 export const TASK_INBOX_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS ponder_desktop_inspections (
+    operation_id TEXT PRIMARY KEY,
+    payload_hash TEXT NOT NULL,
+    snapshot_hash TEXT NOT NULL,
+    payload TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ponder_project_sharing (
+    owner_key TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY(owner_key, project_id)
+  );
+  CREATE TABLE IF NOT EXISTS ponder_desktop_observations (
+    operation_id TEXT PRIMARY KEY,
+    payload_hash TEXT NOT NULL,
+    payload TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ponder_desktop_results (
+    operation_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY(operation_id, turn_id)
+  );
+  CREATE TABLE IF NOT EXISTS ponder_desktop_authority (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    runtime_id TEXT NOT NULL,
+    payload TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ponder_desktop_stops (
+    operation_id TEXT PRIMARY KEY,
+    payload_hash TEXT NOT NULL,
+    payload TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS task_inputs (
     sequence INTEGER PRIMARY KEY AUTOINCREMENT,
     id TEXT NOT NULL UNIQUE,

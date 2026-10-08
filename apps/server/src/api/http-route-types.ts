@@ -94,6 +94,10 @@ export type HttpRouteDeps = {
   rollbackRefinerReleasePayload: (payload: unknown) => Promise<unknown>;
   listHostedSavedWorkPayload: () => Promise<unknown>;
   ponderRequestPayload: (input: { path: string; method?: "GET" | "POST"; body?: Record<string, unknown>; idempotencyKey?: string }) => Promise<Record<string, unknown>>;
+  ponderDesktopConnectionPayload: (action: "status" | "link" | "unlink") => Promise<unknown>;
+  ponderDesktopAttachSessionPayload: (payload: unknown) => Promise<unknown>;
+  ponderDesktopProjectsPayload: (after: string | null) => Promise<unknown>;
+  ponderDesktopShareProjectPayload: (payload: unknown) => Promise<unknown>;
   createHostedSavedWorkPayload: (payload: unknown) => Promise<unknown>;
   updateHostedSavedWorkPayload: (
     scheduleId: string,

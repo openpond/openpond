@@ -1421,6 +1421,23 @@ export async function requestOpenPondPublicApi(params: {
   });
 }
 
+/** Pins the signed-in account credential for one scoped outbound exchange.
+ * This account path does not use the separate service sandbox credential.
+ */
+export function createCapturedOpenPondPublicApiClient(context: RuntimeAccountContext, teamId?: string) {
+  const apiKey = context.token?.trim();
+  if (!apiKey || context.accountState.state !== "signed_in" || !context.accountState.activeProfile) {
+    throw new Error("A signed-in OpenPond account is required for Ponder.");
+  }
+  const sandboxApiUrl = normalizeSandboxApiUrl(context.apiBaseUrl);
+  const audience = new URL(sandboxPublicApiRootUrl(sandboxApiUrl)).origin;
+  return {
+    audience,
+    request: (params: Omit<Parameters<typeof requestOpenPondPublicApi>[0], "teamId">) =>
+      requestSandboxPublicApiRoot({ ...params, apiKey, sandboxApiUrl, teamId }),
+  };
+}
+
 function sandboxAccountSummary(
   context: RuntimeAccountContext | null,
   sandboxApiUrl: string

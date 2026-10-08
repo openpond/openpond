@@ -1,4 +1,5 @@
-import { requestOpenPondPublicApi } from "./sandboxes.js";
+import { createCapturedOpenPondPublicApiClient } from "./sandboxes.js";
+import { loadOpenPondAccountContext } from "@openpond/runtime";
 
 /** The local desktop server keeps the account credential out of the renderer. */
 export async function requestHostedPonder(input: {
@@ -8,5 +9,7 @@ export async function requestHostedPonder(input: {
   body?: Record<string, unknown>;
   idempotencyKey?: string;
 }): Promise<Record<string, unknown>> {
-  return requestOpenPondPublicApi(input);
+  const { teamId, ...request } = input;
+  const context = await loadOpenPondAccountContext();
+  return createCapturedOpenPondPublicApiClient(context, teamId).request(request);
 }

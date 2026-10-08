@@ -46,11 +46,12 @@ export function createInterruptionRuntime(deps: {
     return deps.latestTurnForSession(sessionId, "in_progress");
   }
 
-  async function interruptSessionTurn(sessionId: string, reason = "Stopped by user"): Promise<Turn> {
+  async function interruptSessionTurn(sessionId: string, reason = "Stopped by user", expectedTurnId?: string): Promise<Turn> {
     const active = deps.activeTurns.get(sessionId);
     const session = active?.session ?? await deps.getSession(sessionId);
     const inProgressTurn = active?.turn ?? await findInProgressTurn(sessionId);
     if (!inProgressTurn) throw new Error("No active turn to stop.");
+    if (expectedTurnId && inProgressTurn.id !== expectedTurnId) throw new Error("The expected turn is no longer active. Another turn was not stopped.");
     return active
       ? interruptActiveTurn(active, reason)
       : deps.interruptTurn(session, inProgressTurn.id, reason);

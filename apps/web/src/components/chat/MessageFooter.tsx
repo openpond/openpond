@@ -6,16 +6,16 @@ import { copyToClipboard } from "../../lib/clipboard";
 export function MessageFooter({ content, timestamp, kvCacheSummary }: {
   content?: string;
   timestamp: string;
-  kvCacheSummary?: UsageTurnCacheSummary | null;
+  kvCacheSummary?: Pick<UsageTurnCacheSummary, "cacheHitRate"> | null;
 }) {
   const time = formatMessageTimestamp(timestamp);
   const rate = kvCacheSummary?.cacheHitRate;
-  const cache = typeof rate === "number" && Number.isFinite(rate)
-    ? `${Math.round(Math.max(0, Math.min(1, rate)) * 100)}%` : "unavailable";
+  const cache = typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1
+    ? `${Math.round(rate * 100)}%` : null;
   return <div className="assistant-message-footer">
     {time ? <time className="message-timestamp" dateTime={timestamp}
       title={formatMessageTimestampTitle(timestamp)}>{time}</time> : null}
-    {kvCacheSummary ? <span className="message-kv-cache-metric" aria-label={`KV cache reuse ${cache}`}>
+    {cache ? <span className="message-kv-cache-metric" aria-label={`KV cache reuse ${cache}`}>
       KV {cache}
     </span> : null}
     <button type="button" className="message-copy-button" title="Copy message"

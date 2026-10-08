@@ -17,8 +17,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc -b",
-    "typecheck": "tsc --noEmit",
+    "build": "node ../../scripts/run-typescript.mjs tsc -b",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {

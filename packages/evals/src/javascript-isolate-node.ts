@@ -1,5 +1,4 @@
 import { Worker } from "node:worker_threads";
-import { javascriptVerifierWorkerSource } from "./javascript-verifier-worker-source.js";
 import { validateJavaScriptIsolateInput, type JavaScriptIsolateInput } from "./javascript-isolate.js";
 import { assertBoundedTaskJson } from "./task-schema.js";
 
@@ -7,6 +6,8 @@ import { assertBoundedTaskJson } from "./task-schema.js";
 export async function executeJavaScriptIsolateInWorker(input: JavaScriptIsolateInput): Promise<unknown> {
   input.signal?.throwIfAborted();
   validateJavaScriptIsolateInput(input);
+  const { javascriptVerifierWorkerSource } = await import("./javascript-verifier-worker-source.js");
+  input.signal?.throwIfAborted();
   const signal = input.signal;
   const workerData = { source: input.source, exportName: input.exportName, value: input.value, timeoutMs: input.timeoutMs, maxResultBytes: input.maxResultBytes, deterministic: input.deterministic === true, errorPrefix: input.errorPrefix };
   const error = (suffix: string) => new Error(`${input.errorPrefix}_${suffix}`);

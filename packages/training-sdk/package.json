@@ -13,9 +13,9 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "node ../../scripts/run-typescript.mjs tsc -b",
     "bundle": "tsx src/cli.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {

@@ -40,8 +40,8 @@
   },
   "scripts": {
     "clean": "node -e \"const fs=require('node:fs'); for (const target of ['dist','tsconfig.tsbuildinfo']) fs.rmSync(target,{ recursive: true, force: true })\"",
-    "build": "pnpm run clean && tsc -b",
-    "typecheck": "tsc --noEmit",
+    "build": "pnpm run clean && node ../../scripts/run-typescript.mjs tsc -b",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc --noEmit",
     "test": "vitest run --root ../.. tests/continual-support-package.test.ts",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build && npm pack --dry-run"
   },

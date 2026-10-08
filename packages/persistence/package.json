@@ -5,6 +5,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -18,7 +19,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "node ../../scripts/run-typescript.mjs tsc -b"
   },
   "dependencies": {
     "toml-eslint-parser": "1.0.3",
