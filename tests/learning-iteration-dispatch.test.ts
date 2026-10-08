@@ -5,13 +5,13 @@ import {
   reconcileLearningCandidateDecision,
   type LearningIterationExecutor, type LearningIterationExecutionContext, type LearningIterationObservation,
 } from "@openpond/evals/learning";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { learningContext, learningNow } from "./helpers/learning-fixtures";
 import { learningIterationFixture } from "./helpers/learning-iteration-fixtures";
 import { withTempDirectory } from "./helpers/temp-directory";
 
 const ref = (id: string) => ({ id, contentHash: contentHash(id) });
-async function fixture(store: SqliteLearningStore) {
+async function fixture(store: SqliteStore) {
   const f = await learningIterationFixture(store.learningRepository());
   const policy = await f.publishPolicy();
   await f.approve(await f.submit());
@@ -60,7 +60,7 @@ describe("durable iteration dispatch", () => {
   // Reviews can arrive twice or out of order after another iteration starts.
   // Reconciliation must retain exact evidence and never release that newer chain.
   test("pins accepted parents, rolls back future selection and preserves newer reservations across later reviews", async () => withTempDirectory("iteration-review-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const f = await fixture(store); const p = provider();
       const repository = store.learningRepository();
@@ -127,7 +127,7 @@ describe("durable iteration dispatch", () => {
   // A provider can commit a Job before its reply is lost. Restart must recover
   // that Job and its exact request without rebuilding inputs or consuming again.
   test("recovers an ambiguous submission after reopening and settles only the terminal receipt", async () => withTempDirectory("iteration-dispatch-", async home => {
-    let store = new SqliteLearningStore(home);
+    let store = new SqliteStore(home);
     try {
       const f = await fixture(store);
       const p = provider(); p.loseReply();
@@ -136,7 +136,7 @@ describe("durable iteration dispatch", () => {
       const before = await f.service.get(learningContext, "dispatch", f.iteration.dispatchId);
       expect(before.submissionStartedAt).not.toBeNull();
       expect((await f.service.get(learningContext, "reservation", f.iteration.id)).budget.reservedSpendUsd).toBe(2);
-      await store.close(); store = new SqliteLearningStore(home); f.advance();
+      await store.close(); store = new SqliteStore(home); f.advance();
       expect(await worker().run(learningContext.scope, f.iteration.id)).toMatchObject({ trainingJob: ref("provider-job"), status: "training" });
       expect(p.counts()).toEqual({ prepared: 1, submitted: 1, cancelled: 0 });
       const service = createLearningService(store.learningRepository());
@@ -154,7 +154,7 @@ describe("durable iteration dispatch", () => {
   // Cancellation during an uncertain submit cannot release reserved spend on
   // a browser request, transient failure, or nonterminal provider response.
   test("retains budget and execution ownership until cancellation is confirmed", async () => withTempDirectory("iteration-cancel-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const f = await fixture(store); const p = provider(); p.loseReply();
       const worker = createLearningIterationWorker(store.learningRepository(), p.executor, { workerId: "worker", executionOwner: "hosted", now: f.now });
@@ -175,7 +175,7 @@ describe("durable iteration dispatch", () => {
   // An expired worker may return after a replacement has already submitted.
   // Its late preparation must not overwrite the request or create another Job.
   test("fences an expired preparation lease across concurrent workers", async () => withTempDirectory("iteration-lease-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const f = await fixture(store); const p = provider();
       let release!: () => void; let entered!: () => void;
@@ -198,7 +198,7 @@ describe("durable iteration dispatch", () => {
   // A preparation failure must be recoverable/cancellable without accidentally
   // launching work.
   test("pauses new launches, bounds preparation retries and cancels before submission", async () => withTempDirectory("iteration-preparation-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const f = await fixture(store); const p = provider();
       const paused = await f.publishPolicy(f.policy, { enabled: false });
@@ -224,7 +224,7 @@ describe("durable iteration dispatch", () => {
   // Cross-scope responses cannot settle another iteration's spend, and a
   // successful Job without an adapter must not become an invented candidate.
   test("rejects substituted observations and retains a no-candidate completion", async () => withTempDirectory("iteration-observation-", async home => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     try {
       const f = await fixture(store); const p = provider();
       const worker = (executor = p.executor) => createLearningIterationWorker(store.learningRepository(), executor, { workerId: "worker", executionOwner: "hosted", now: f.now });

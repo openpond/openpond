@@ -1,14 +1,5 @@
-import {
-  CreateImproveEvidenceSnapshotSchema,
-  CreateImproveTasksetRefSchema,
-  type CreateImproveEvidenceSnapshot,
-  type CreateImproveTasksetRef,
-  type CreateImproveTargetKind,
-  type CreateImproveRun,
-  type TaskDesignProposal,
-  type Taskset,
-  type TrainingSourceRef,
-} from "@openpond/contracts";
+import { CreateImproveEvidenceSnapshotSchema, CreateImproveTasksetRefSchema, type CreateImproveEvidenceSnapshot, type CreateImproveTasksetRef, type CreateImproveTargetKind, type CreateImproveRun } from "@openpond/contracts/create-pipeline";
+import { type TaskDesignProposal, type Taskset, type TrainingSourceRef } from "@openpond/contracts/tasksets";
 import { contentHash } from "@openpond/taskset-sdk";
 
 export function createEvidenceSnapshot(input: {

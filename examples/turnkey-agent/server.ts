@@ -1,7 +1,8 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { chatSchema, type Config, ExampleError } from "./config.js";
+import { chatSchema, embeddedChatSchema, type Config, ExampleError } from "./config.js";
 import { runChat } from "./runtime.js";
+import type { EmbeddedModel } from "./local-model/runtime.js";
 
 function send(response: ServerResponse, status: number, body: unknown): void {
   if (response.destroyed || response.writableEnded) return;
@@ -9,7 +10,7 @@ function send(response: ServerResponse, status: number, body: unknown): void {
   response.end(JSON.stringify(body));
 }
 
-async function readChat(request: IncomingMessage) {
+async function readChat(request: IncomingMessage, config: Config) {
   if (request.headers["content-type"]?.split(";")[0]?.trim() !== "application/json")
     throw new ExampleError("json_required", 415);
   const maxBytes = 64 * 1024;
@@ -21,12 +22,12 @@ async function readChat(request: IncomingMessage) {
     if (size > maxBytes) throw new ExampleError("request_too_large", 413);
     chunks.push(Buffer.from(chunk));
   }
-  try { return chatSchema.parse(JSON.parse(Buffer.concat(chunks).toString("utf8"))); }
+  try { return (config.mode === "embedded" ? embeddedChatSchema : chatSchema).parse(JSON.parse(Buffer.concat(chunks).toString("utf8"))); }
   catch { throw new ExampleError("invalid_request", 400); }
 }
 
 /** No request logging: prompts, credentials and upstream errors are never printed. */
-export function createExampleServer(config: Config) {
+export function createExampleServer(config: Config, model?: EmbeddedModel) {
   const expectedHash = Buffer.from(config.authTokenSha256, "hex");
   const active = new Set<AbortController>();
   let closing = false;
@@ -39,7 +40,9 @@ export function createExampleServer(config: Config) {
 
   async function handle(request: IncomingMessage, response: ServerResponse) {
     if (request.method === "GET" && request.url === "/health") {
-      send(response, closing ? 503 : 200, { status: closing ? "stopping" : "healthy", runtime: "openpond-app-server" });
+      const ready = !closing && (config.mode !== "embedded" || model?.ready());
+      send(response, ready ? 200 : 503, { status: ready ? "healthy" : "unavailable", runtime: "openpond-app-server",
+        ...(config.mode === "embedded" ? { inference: "embedded", model: config.model, contextTokens: config.contextTokens, persistentHistory: false } : {}) });
       return;
     }
     if (request.method !== "POST" || request.url !== "/chat") { send(response, 404, { error: "not_found" }); return; }
@@ -50,7 +53,7 @@ export function createExampleServer(config: Config) {
       send(response, 401, { error: "unauthorized" });
       return;
     }
-    if (closing || active.size >= config.maxConcurrentRequests) {
+    if (closing || (config.mode === "embedded" && !model?.ready()) || active.size >= config.maxConcurrentRequests) {
       response.setHeader("connection", "close");
       send(response, 503, { error: "busy", retryable: false });
       return;
@@ -66,9 +69,9 @@ export function createExampleServer(config: Config) {
     response.once("close", disconnect);
     request.once("aborted", disconnect);
     try {
-      const input = await readChat(request);
+      const input = await readChat(request, config);
       controller.signal.throwIfAborted();
-      const result = await runChat(config, input, controller.signal);
+      const result = await runChat(config, input, controller.signal, model);
       send(response, 200, { requestId, ...result });
     } catch (error) {
       const known = error instanceof ExampleError;

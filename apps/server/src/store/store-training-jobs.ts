@@ -20,9 +20,9 @@ import {
   TrainingPlanSchema,
   ManagedAdapterServingProjectionSchema,
 } from "@openpond/contracts";
-import { SqliteModelConfigurationStore } from "./store-model-configuration.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 const ACTIVE_TRAINING_DESTINATIONS_SQL = "('openpond_managed')";
-export class SqliteTrainingJobsStore extends SqliteModelConfigurationStore {
+export class SqliteTrainingJobsStore extends SqliteStoreDomain {
   async saveModelProject(projectInput: ModelProject): Promise<ModelProject> {
     const project = ModelProjectSchema.parse(projectInput);
     await this.upsertPayload(

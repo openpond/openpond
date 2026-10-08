@@ -5,9 +5,9 @@ import {
   type ContinualLearningDailyBatch,
 } from "@openpond/contracts";
 
-import { SqliteTrainingModelStore } from "./store-training-models.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
-export class SqliteContinualBenchReviewStore extends SqliteTrainingModelStore {
+export class SqliteContinualBenchReviewStore extends SqliteStoreDomain {
   async saveContinualLearningDailyBatch(batchInput: ContinualLearningDailyBatch): Promise<ContinualLearningDailyBatch> {
     const batch = ContinualLearningDailyBatchSchema.parse(batchInput);
     const existing = await this.getContinualLearningDailyBatch(batch.id);

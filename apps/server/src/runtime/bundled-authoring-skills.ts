@@ -2,10 +2,8 @@ import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  BUILT_IN_OPENPOND_PROFILE_SKILLS,
-  type OpenPondProfileSkill,
-} from "@openpond/contracts";
+import { BUILT_IN_OPENPOND_PROFILE_SKILLS } from "@openpond/contracts/extensions";
+import { type OpenPondProfileSkill } from "@openpond/contracts/profile";
 import type { ProfileSkillReadResult } from "../openpond/model-tool-registry.js";
 
 export const BUNDLED_AUTHORING_SKILL_NAMES = [

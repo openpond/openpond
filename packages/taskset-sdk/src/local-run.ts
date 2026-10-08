@@ -1,4 +1,4 @@
-import { TaskAttemptResultSchema, type TaskAttemptResult, type TaskDataRecord, type Taskset } from "@openpond/contracts";
+import { TaskAttemptResultSchema, type TaskAttemptResult, type TaskDataRecord, type Taskset } from "@openpond/contracts/tasksets";
 import { contentHash } from "./hashing.js";
 
 export {

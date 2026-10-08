@@ -12,6 +12,162 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./action-catalog": {
+      "types": "./dist/action-catalog.d.ts",
+      "import": "./dist/action-catalog.js"
+    },
+    "./approvals": {
+      "types": "./dist/approvals.d.ts",
+      "import": "./dist/approvals.js"
+    },
+    "./apps": {
+      "types": "./dist/apps.d.ts",
+      "import": "./dist/apps.js"
+    },
+    "./chat-attachments": {
+      "types": "./dist/chat-attachments.d.ts",
+      "import": "./dist/chat-attachments.js"
+    },
+    "./connected-apps": {
+      "types": "./dist/connected-apps.d.ts",
+      "import": "./dist/connected-apps.js"
+    },
+    "./create-pipeline": {
+      "types": "./dist/create-pipeline.d.ts",
+      "import": "./dist/create-pipeline.js"
+    },
+    "./cross-system-operations": {
+      "types": "./dist/cross-system-operations.d.ts",
+      "import": "./dist/cross-system-operations.js"
+    },
+    "./experiences": {
+      "types": "./dist/experiences.d.ts",
+      "import": "./dist/experiences.js"
+    },
+    "./extensions": {
+      "types": "./dist/extensions.d.ts",
+      "import": "./dist/extensions.js"
+    },
+    "./harness-actions": {
+      "types": "./dist/harness-actions.d.ts",
+      "import": "./dist/harness-actions.js"
+    },
+    "./harness-improvements": {
+      "types": "./dist/harness-improvements.d.ts",
+      "import": "./dist/harness-improvements.js"
+    },
+    "./harness-releases": {
+      "types": "./dist/harness-releases.d.ts",
+      "import": "./dist/harness-releases.js"
+    },
+    "./harness-sources": {
+      "types": "./dist/harness-sources.d.ts",
+      "import": "./dist/harness-sources.js"
+    },
+    "./harness-workspace-transitions": {
+      "types": "./dist/harness-workspace-transitions.d.ts",
+      "import": "./dist/harness-workspace-transitions.js"
+    },
+    "./harness-workspaces": {
+      "types": "./dist/harness-workspaces.d.ts",
+      "import": "./dist/harness-workspaces.js"
+    },
+    "./learning-signals": {
+      "types": "./dist/learning-signals.d.ts",
+      "import": "./dist/learning-signals.js"
+    },
+    "./ponder-desktop": {
+      "types": "./dist/ponder-desktop.d.ts",
+      "import": "./dist/ponder-desktop.js"
+    },
+    "./profile": {
+      "types": "./dist/profile.d.ts",
+      "import": "./dist/profile.js"
+    },
+    "./providers": {
+      "types": "./dist/providers.d.ts",
+      "import": "./dist/providers.js"
+    },
+    "./requests": {
+      "types": "./dist/requests.d.ts",
+      "import": "./dist/requests.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./sandbox-template": {
+      "types": "./dist/sandbox-template.d.ts",
+      "import": "./dist/sandbox-template.js"
+    },
+    "./saved-work": {
+      "types": "./dist/saved-work.d.ts",
+      "import": "./dist/saved-work.js"
+    },
+    "./sessions": {
+      "types": "./dist/sessions.d.ts",
+      "import": "./dist/sessions.js"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "import": "./dist/settings.js"
+    },
+    "./subagents": {
+      "types": "./dist/subagents.d.ts",
+      "import": "./dist/subagents.js"
+    },
+    "./task-inbox": {
+      "types": "./dist/task-inbox.d.ts",
+      "import": "./dist/task-inbox.js"
+    },
+    "./taskset-drafts": {
+      "types": "./dist/taskset-drafts.d.ts",
+      "import": "./dist/taskset-drafts.js"
+    },
+    "./tasksets": {
+      "types": "./dist/tasksets.d.ts",
+      "import": "./dist/tasksets.js"
+    },
+    "./usage": {
+      "types": "./dist/usage.d.ts",
+      "import": "./dist/usage.js"
+    },
+    "./user-questions": {
+      "types": "./dist/user-questions.d.ts",
+      "import": "./dist/user-questions.js"
+    },
+    "./work-formats": {
+      "types": "./dist/work-formats.d.ts",
+      "import": "./dist/work-formats.js"
+    },
+    "./work-outputs": {
+      "types": "./dist/work-outputs.d.ts",
+      "import": "./dist/work-outputs.js"
+    },
+    "./workspace-tools": {
+      "types": "./dist/workspace-tools.d.ts",
+      "import": "./dist/workspace-tools.js"
+    },
+    "./workspaces": {
+      "types": "./dist/workspaces.d.ts",
+      "import": "./dist/workspaces.js"
+    },
+    "./harness-memory": {
+      "types": "./dist/harness-memory.d.ts",
+      "import": "./dist/harness-memory.js"
+    },
+    "./sidebar-files": {
+      "types": "./dist/sidebar-files.d.ts",
+      "import": "./dist/sidebar-files.js"
+    },
+    "./training": {
+      "types": "./dist/training.d.ts",
+      "import": "./dist/training.js"
+    },
+    "./enclave": {
+      "types": "./dist/enclave.d.ts",
+      "import": "./dist/enclave.js"
     }
   },
   "scripts": {

@@ -1,17 +1,5 @@
-import {
-  HarnessGraderEvidenceSchema,
-  HarnessRunTraceSchema,
-  LearningSignalEnvelopeSchema,
-  ModelActionSchema,
-  ToolObservationSchema,
-  type HarnessGraderEvidence,
-  type HarnessRunManifest,
-  type HarnessRunTrace,
-  type LearningSignalEnvelope,
-  type LearningSignalLineage,
-  type ModelAction,
-  type ToolObservation,
-} from "@openpond/contracts";
+import { HarnessGraderEvidenceSchema, HarnessRunTraceSchema, ModelActionSchema, ToolObservationSchema, type HarnessGraderEvidence, type HarnessRunManifest, type HarnessRunTrace, type ModelAction, type ToolObservation } from "@openpond/contracts/harness-releases";
+import { LearningSignalEnvelopeSchema, type LearningSignalEnvelope, type LearningSignalLineage } from "@openpond/contracts/learning-signals";
 
 import { contentHash } from "./hashing.js";
 

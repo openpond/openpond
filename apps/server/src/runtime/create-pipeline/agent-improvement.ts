@@ -23,7 +23,7 @@ import {
   prepareAgentImprovementWorkspace,
   restoreAgentImprovementWorkspace,
 } from "./agent-improvement-git.js";
-import { nextCreateImproveRunRevision } from "@openpond/contracts";
+import { nextCreateImproveRunRevision } from "@openpond/contracts/create-pipeline";
 import {
   readAgentPackageOrigin,
   type AgentPackageOrigin,

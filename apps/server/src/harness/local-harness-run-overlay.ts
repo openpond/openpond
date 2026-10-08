@@ -1,8 +1,4 @@
-import {
-  createHarnessRunOverlay,
-  type HarnessRunOverlay,
-  type HarnessWorkspace,
-} from "@openpond/contracts";
+import { createHarnessRunOverlay, type HarnessRunOverlay, type HarnessWorkspace } from "@openpond/contracts/harness-workspaces";
 import { contentHash, type ImmutableReleaseRef } from "@openpond/harness";
 
 import type { HarnessStateStore } from "../store/harness-state-store.js";

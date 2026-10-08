@@ -1,4 +1,4 @@
-import { TaskWaitSchema } from "@openpond/contracts";
+import { TaskWaitSchema } from "@openpond/contracts/task-inbox";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { inputFromRow, writeTaskInput } from "./task-inbox-records.js";
 

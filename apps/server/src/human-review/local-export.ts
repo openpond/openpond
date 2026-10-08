@@ -16,7 +16,7 @@ export async function exportLocalHumanEvidence(deps:{store:SqliteStore;actorId()
  for(const selection of request.selections){
   // Drain the store's existing writer queue before reading its retained receipt.
   await deps.store.localExperimentTrace({teamId:request.scope,id:selection.executionId,caseId:selection.receiptId,limit:1});
-  const retained=deps.store.humanReviewLocalEvidence(request.scope,selection.executionId),definition=retained.released.definition;
+  const retained=await deps.store.humanReviewLocalEvidence(request.scope,selection.executionId),definition=retained.released.definition;
   if(retained.execution.ownerActorId!==actorId||definition.ownerActorId!==actorId||retained.execution.kind!=="target"||!retained.execution.completedAt||!retained.execution.cleanupComplete||definition.configuration.request.project?.id!==request.projectId)fail("human_local_publication_source_denied");
   const member=retained.cases.find(row=>row.receiptId===selection.receiptId);if(!member?.result)fail("human_local_publication_receipt_missing");
   const value=validateTasksetPackage(retained.released.package),task=value.taskset.tasks.find(task=>task.id===member.admission.taskId),grader=value.taskset.graders.find(grader=>grader.id===request.graderId);

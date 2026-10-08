@@ -1,6 +1,6 @@
 import type { ChatWorkflow, ChatWorkflowRun } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
-import { SqliteWorkEvidenceStore } from "./store-work-evidence.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
 type ChatWorkflowRow = PayloadRow & {
   id: string;
@@ -22,7 +22,7 @@ type ChatWorkflowRunRow = PayloadRow & {
   updated_at: string;
 };
 
-export class SqliteChatWorkflowStore extends SqliteWorkEvidenceStore {
+export class SqliteChatWorkflowStore extends SqliteStoreDomain {
   async listChatWorkflows(query: { sessionId?: string | null } = {}): Promise<ChatWorkflow[]> {
     await this.ready;
     await this.writeQueue;

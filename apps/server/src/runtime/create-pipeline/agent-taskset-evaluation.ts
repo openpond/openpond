@@ -1,10 +1,5 @@
-import {
-  TaskAttemptResultSchema,
-  type CreateImproveRun,
-  type GradeResult,
-  type TaskAttemptResult,
-  type Taskset,
-} from "@openpond/contracts";
+import { TaskAttemptResultSchema, type GradeResult, type TaskAttemptResult, type Taskset } from "@openpond/contracts/tasksets";
+import { type CreateImproveRun } from "@openpond/contracts/create-pipeline";
 import { runAgentSdkProjectCommand } from "@openpond/cloud";
 import { contentHash } from "@openpond/taskset-sdk";
 

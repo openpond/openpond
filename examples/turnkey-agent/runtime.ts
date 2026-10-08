@@ -4,34 +4,43 @@ import path from "node:path";
 import { z } from "zod";
 import { createOpenPondAppServer, type OpenPondAppServerInstance } from "../../apps/server/src/app-server-runtime.js";
 import { type ChatInput, type Config, ExampleError } from "./config.js";
-import { writeExampleHarness } from "./harness.js";
+import { EMBEDDED_INSTRUCTIONS, writeExampleHarness } from "./harness.js";
 import { createModelStream } from "./model.js";
 import { createHashTool, hashTool, type ToolEvidence } from "./sandbox.js";
+import type { EmbeddedModel } from "./local-model/runtime.js";
 
 export type ChatResult = { answer: string; threadId: string; turnId: string; tools: ToolEvidence[] };
 
 async function withRuntime<T>(config: Config, input: ChatInput, signal: AbortSignal,
-  use: (server: OpenPondAppServerInstance, evidence: ToolEvidence[]) => Promise<T>): Promise<T> {
+  use: (server: OpenPondAppServerInstance, evidence: ToolEvidence[]) => Promise<T>, model?: EmbeddedModel): Promise<T> {
   const root = await mkdtemp(path.join(os.tmpdir(), "openpond-tvc-request-"));
   let server: OpenPondAppServerInstance | undefined;
   const evidence: ToolEvidence[] = [];
   try {
     signal.throwIfAborted();
     const harnessDir = path.join(root, "harness");
-    await writeExampleHarness(harnessDir);
-    const tool = createHashTool(config, input.credentials, signal, evidence);
+    const embedded = config.mode === "embedded";
+    if (embedded && !model?.ready()) throw new ExampleError("model_unavailable", 503);
+    if (!embedded && !("credentials" in input)) throw new ExampleError("credentials_required", 400);
+    await writeExampleHarness(harnessDir, embedded);
+    const tool = config.mode === "external" && "credentials" in input
+      ? createHashTool(config, input.credentials, signal, evidence) : undefined;
+    const stream = embedded
+      ? createModelStream({ modelEndpoint: model!.endpoint, model: config.model, maxOutputTokens: 256,
+        systemPrompt: EMBEDDED_INSTRUCTIONS, temperature: 0 }, { modelApiKey: "local" }, signal)
+      : createModelStream(config, (input as import("./config.js").ExternalChatInput).credentials, signal);
     server = await createOpenPondAppServer({
       storeDir: path.join(root, "state"), workspaceDir: path.join(root, "work"),
       harness: { sourceDirectory: harnessDir, workspaceId: "tvc-example", name: "Turnkey example" },
       maxHostedWorkspaceToolRounds: 3,
-      streamOpenPondHostedChatTurn: createModelStream(config, input.credentials, signal),
+      streamOpenPondHostedChatTurn: stream,
       embedding: {
-        allowedTools: [hashTool.name], maxToolOutputBytes: 8192,
+        allowedTools: tool ? [hashTool.name] : [], maxToolOutputBytes: 8192,
         authorizeTool: async ({ name }) => {
           signal.throwIfAborted();
-          if (name !== hashTool.name) throw new ExampleError("tool_not_allowed", 403);
+          if (!tool || name !== hashTool.name) throw new ExampleError("tool_not_allowed", 403);
         },
-        resolveTools: async () => [tool],
+        resolveTools: async () => tool ? [tool] : [],
       },
       services: { webSearch: false, scheduling: false, connectedApps: false, tasksets: false,
         projectActions: false, profileActions: false, backgroundReview: false },
@@ -45,14 +54,14 @@ async function withRuntime<T>(config: Config, input: ChatInput, signal: AbortSig
 }
 
 /** Health readiness proves real SQLite + harness initialization, without an external call. */
-export async function probeRuntime(config: Config): Promise<void> {
-  await withRuntime(config, { prompt: "startup", credentials: { modelApiKey: "unused", sandboxApiKey: "unused" } },
+export async function probeRuntime(config: Config, model?: EmbeddedModel): Promise<void> {
+  await withRuntime(config, config.mode === "embedded" ? { prompt: "startup" } : { prompt: "startup", credentials: { modelApiKey: "unused", sandboxApiKey: "unused" } },
     AbortSignal.timeout(30_000), async server => {
       await server.runtime.capabilities({});
-    });
+    }, model);
 }
 
-export async function runChat(config: Config, input: ChatInput, signal: AbortSignal): Promise<ChatResult> {
+export async function runChat(config: Config, input: ChatInput, signal: AbortSignal, model?: EmbeddedModel): Promise<ChatResult> {
   return withRuntime(config, input, signal, async (server, tools) => {
     const started = z.object({ thread: z.object({ id: z.string() }) }).parse(await server.runtime.threadStart({
       session: { provider: "openpond", modelRef: { providerId: "openpond", modelId: config.model },
@@ -77,5 +86,5 @@ export async function runChat(config: Config, input: ChatInput, signal: AbortSig
     } finally {
       signal.removeEventListener("abort", interrupt);
     }
-  });
+  }, model);
 }

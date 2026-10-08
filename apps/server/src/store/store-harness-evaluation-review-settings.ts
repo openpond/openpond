@@ -1,6 +1,6 @@
 import type { HarnessEvaluationReviewReceipt } from "@openpond/contracts";
 
-import { SqliteHarnessMemoryStore } from "./store-harness-memory.js";
+import { SqliteStoreDomain } from "./store-domain.js";
 
 export type HarnessEvaluationReviewCadence = "manual" | "daily" | "weekly";
 export type HarnessBackgroundReviewSettings = { enabled: boolean; updatedAt: string | null };
@@ -35,7 +35,7 @@ const DEFAULT_SETTINGS: HarnessEvaluationReviewSettings = {
   updatedAt: null,
 };
 
-export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteHarnessMemoryStore {
+export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteStoreDomain {
   async getHarnessBackgroundReviewSettings(
     workspaceId: string,
   ): Promise<HarnessBackgroundReviewSettings> {

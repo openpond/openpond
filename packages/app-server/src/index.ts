@@ -1,10 +1,7 @@
-import {
-  createAgentRuntimeService,
-  runAgentJsonlServer,
-  type AgentRuntimeHost,
-  type AgentRuntimeServicePorts,
-  type AgentHostStorageClient,
-} from "@openpond/agent-runtime";
+import { createAgentRuntimeService, type AgentRuntimeServicePorts } from "@openpond/agent-runtime/service";
+import { runAgentJsonlServer } from "@openpond/agent-runtime/jsonl";
+import { type AgentRuntimeHost } from "@openpond/agent-runtime/protocol";
+import { type AgentHostStorageClient } from "@openpond/agent-runtime/host-storage-client";
 import type { Readable, Writable } from "node:stream";
 
 export type AppServerInstance = {

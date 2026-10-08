@@ -3,17 +3,8 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import {
-  CreateLocalProjectRequestSchema,
-  LocalProjectSchema,
-  OPENPOND_MANIFEST_FILE_NAME,
-  UpdateLocalProjectAgentSetupRequestSchema,
-  validateSandboxTemplateYaml,
-  type CreateLocalProjectRequest,
-  type LocalProject,
-  type LocalProjectSandboxTemplate,
-  type OpenPondApp,
-} from "@openpond/contracts";
+import { CreateLocalProjectRequestSchema, LocalProjectSchema, UpdateLocalProjectAgentSetupRequestSchema, type CreateLocalProjectRequest, type LocalProject, type LocalProjectSandboxTemplate, type OpenPondApp } from "@openpond/contracts/apps";
+import { OPENPOND_MANIFEST_FILE_NAME, validateSandboxTemplateYaml } from "@openpond/contracts/sandbox-template";
 import type { SqliteStore } from "../store/store.js";
 import { now } from "../utils.js";
 import { normalizeProjectDirectory } from "./project-directories.js";

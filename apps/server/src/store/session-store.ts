@@ -1,18 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  CreateSessionRequestSchema,
-  DEFAULT_SESSION_EXPERIENCE,
-  DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
-  OpenPondCommandAccessModeSchema,
-  PatchSessionRequestSchema,
-  type AppPreferences,
-  type PatchSessionRequest,
-  type RuntimeEvent,
-  type Session,
-  type Turn,
-  type PonderDesktopOperation,
-  ponderDesktopRequestContent,
-} from "@openpond/contracts";
+import { ponderDesktopRequestContent, type PonderDesktopOperation } from "@openpond/contracts/ponder-desktop";
+import { CreateSessionRequestSchema, PatchSessionRequestSchema, type PatchSessionRequest } from "@openpond/contracts/requests";
+import { DEFAULT_SESSION_EXPERIENCE } from "@openpond/contracts/experiences";
+import { DEFAULT_OPENPOND_COMMAND_ACCESS_MODE, OpenPondCommandAccessModeSchema, type AppPreferences } from "@openpond/contracts/settings";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
 import type { SqliteStore } from "./store.js";
 import { ponderDesktopSessionRevision, ponderDesktopExecutionRevision } from "../openpond/ponder-desktop-catalog.js";
 import { event, now } from "../utils.js";

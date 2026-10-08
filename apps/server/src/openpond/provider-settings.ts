@@ -1,10 +1,5 @@
 import path from "node:path";
-import {
-  ProviderCatalogSchema,
-  ProviderConfigSchema,
-  ProviderSettingsSchema,
-  type ProviderConfigPatch,
-} from "@openpond/contracts";
+import { ProviderCatalogSchema, ProviderConfigSchema, ProviderSettingsSchema, type ProviderConfigPatch } from "@openpond/contracts/providers";
 import type { ProvidersFile } from "../types.js";
 
 const ProviderCatalogCacheSchema = ProviderCatalogSchema.transform((catalog) => catalog);

@@ -1,24 +1,14 @@
 import { bindHomeCallbacks, resolveOpenPondHome } from "@openpond/persistence";
-import {
-  AGENT_PROTOCOL_VERSION,
-  AGENT_RPC_METHODS,
-  CanonicalAgentEventSchema,
-  canonicalHash,
-  canonicalEventHash,
-  type CanonicalAgentEvent,
-  type AgentProtocolCapabilities,
-  type AgentRuntimeServicePorts,
-  type JsonRpcNotification,
-} from "@openpond/agent-runtime";
-import {
-  CONNECTED_APP_PROVIDER_ORDER,
-  type Approval,
-  type RuntimeEvent,
-  type Session,
-  type Turn,
-} from "@openpond/contracts";
+import { AGENT_PROTOCOL_VERSION, AGENT_RPC_METHODS, type AgentProtocolCapabilities, type JsonRpcNotification } from "@openpond/agent-runtime/protocol";
+import { CanonicalAgentEventSchema, canonicalEventHash, type CanonicalAgentEvent } from "@openpond/agent-runtime/events";
+import { canonicalHash } from "@openpond/agent-runtime/canonical";
+import { type AgentRuntimeServicePorts } from "@openpond/agent-runtime/service";
+import { CONNECTED_APP_PROVIDER_ORDER } from "@openpond/contracts/connected-apps";
+import { type Approval } from "@openpond/contracts/approvals";
+import { type RuntimeEvent } from "@openpond/contracts/runtime";
+import { type Session, type Turn } from "@openpond/contracts/sessions";
 import { z } from "zod";
-import { TaskInputMutationSchema } from "@openpond/contracts";
+import { TaskInputMutationSchema } from "@openpond/contracts/task-inbox";
 import type { TurnRunner } from "./turns/ports.js";
 
 export function createAgentRuntimePorts(deps: {

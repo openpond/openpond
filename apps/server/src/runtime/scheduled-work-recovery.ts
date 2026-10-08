@@ -1,4 +1,4 @@
-import { ChatWorkflowSchema } from "@openpond/contracts";
+import { ChatWorkflowSchema } from "@openpond/contracts/saved-work";
 import { nextOccurrence } from "../workflows/chat-workflow-scheduler.js";
 import { withLocalDatabase } from "@openpond/persistence";
 

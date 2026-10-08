@@ -7,7 +7,7 @@ import { createLearningTextAsset, LearningSourceSchema, learningRef, TaskDefinit
 import { createRewardRelease, createRewardBinding, RewardBindingSchema } from "@openpond/evals/rewards";
 import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src/api/http-routes";
 import { createLocalLearningRuntime } from "../apps/server/src/training/learning-runtime";
-import { SqliteLearningStore } from "../apps/server/src/store/store-learning";
+import { SqliteStore } from "../apps/server/src/store/store";
 import { withTempDirectory } from "./helpers/temp-directory";
 import { learningContext } from "./helpers/learning-fixtures";
 import { learningIterationFixture } from "./helpers/learning-iteration-fixtures";
@@ -15,7 +15,7 @@ import { learningIterationFixture } from "./helpers/learning-iteration-fixtures"
 // Regression: a portable SDK request must reach authenticated Desktop storage and durable jobs unchanged.
 test("public learning SDK crosses the authenticated HTTP boundary with retries, validation, conflicts and real grading", async () => {
   await withTempDirectory("openpond-learning-api-", async (home) => {
-    const store = new SqliteLearningStore(home);
+    const store = new SqliteStore(home);
     const runtime = createLocalLearningRuntime(store);
     const fixture = await learningIterationFixture(store.learningRepository());
     const server = createServer(createHttpRequestHandler({
@@ -78,7 +78,7 @@ test("public learning SDK crosses the authenticated HTTP boundary with retries, 
       await expect(producer.listSourceCredentials(fixture.source.id)).rejects.toMatchObject({ status: 401 });
       await expect(producer.command({ operationId: "producer-cannot-grade", action: "queue_grade", evidence: learningRef(evidence), target: "observed", proposedTarget: null, timeoutMs: 30_000, maximumSpendUsd: 0 })).rejects.toMatchObject({ status: 403 });
       expect((await fetch(`${baseUrl}/v1/state`, { headers: { Authorization: `Bearer ${issued.apiKey}` } })).status).toBe(401);
-      const reopenedStore = new SqliteLearningStore(home);
+      const reopenedStore = new SqliteStore(home);
       const reopenedRuntime = createLocalLearningRuntime(reopenedStore);
       try { expect(await reopenedRuntime.producerRequest("source-config", issued.apiKey, { scope: learningContext.scope, sourceId: fixture.source.id })).toMatchObject({ source: learningRef(fixture.source) }); }
       finally { await reopenedRuntime.close(); await reopenedStore.close(); }

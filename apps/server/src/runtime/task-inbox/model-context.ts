@@ -1,4 +1,4 @@
-import { taskInputModelText, type TaskInput } from "@openpond/contracts";
+import { taskInputModelText, type TaskInput } from "@openpond/contracts/task-inbox";
 import type { HostedMessages } from "../turns/ports.js";
 
 const ASSIGNMENT_PREFIX = "OpenPond active assignment revisions (oldest first; newer user corrections supersede conflicts):\n";
