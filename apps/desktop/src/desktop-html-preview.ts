@@ -15,7 +15,9 @@ export async function captureHtmlVisual(raw: unknown, appWindow: BrowserWindow, 
   isolated.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   isolated.setPermissionCheckHandler(() => false);
   isolated.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('data:') && !details.url.startsWith('about:') }));
-  const window = new BrowserWindow({ show: false, width: request.input.width, height: 100, webPreferences: { session: isolated, sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+  // Hidden native windows can retain only their initial viewport pixels after
+  // resize. Offscreen rendering paints the entire measured preview surface.
+  const window = new BrowserWindow({ show: false, width: request.input.width, height: 100, webPreferences: { session: isolated, sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, offscreen: true } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   const stop = () => { if (!window.isDestroyed())
