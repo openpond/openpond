@@ -66,7 +66,7 @@ try {
   let droppedCommand: RemoteDispatchCommand | null = null;
   const createManager = () => {
     const execute = createRemoteCommandExecutor({ store, inspect, admit: input => store.admitTaskInput(input), interrupt: async () => null });
-    return createRemoteRelayManager({ storeDir: directory, installation, store, current: async () => selected, inspect,
+    return createRemoteRelayManager({ storeDir: directory, installation, store, current: async () => selected, accountStatus: async () => ({ state: selected ? "ready" as const : "signed_out" as const, account: selected ? { id: owner.ownerUserId, label: owner.ownerUserId } : null, team: selected?.owner.teamId ? { id: selected.owner.teamId } : null, webBaseUrl: "https://staging.openpond.ai" }), inspect,
       execute: async command => { commands.set(command.id, command); const receipt = await execute(command);
         if (dropNextReceipt) { dropNextReceipt = false; droppedCommand = command; await manager!.beforeAuthorityChange(); }
         return receipt; },
