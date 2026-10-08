@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
-import { ProviderSettingsSchema, type RuntimeEvent } from "@openpond/contracts";
+import { ProviderSettingsSchema, remoteDevicePermitMessage, type LocalManagedMessageTarget, type RemoteCommandReceipt, type RemoteDispatchCommand, type RuntimeEvent } from "@openpond/contracts";
 import { WebSocketServer } from "ws";
 import { SqliteStore } from "../store/store.js";
 import { createSessionStore } from "../store/session-store.js";
@@ -13,6 +13,8 @@ import { createRemoteRelayManager } from "./manager.js";
 import { deviceOwnerKey, loadRemoteAccessPreference } from "./preference.js";
 import { createAccountAuthorityChange } from "../runtime/account-authority-change.js";
 import { createLocalOwnerAttachmentInspection } from "../runtime/task-inbox/local-owner-attachment.js";
+import { createRemoteCommandExecutor } from "./executor.js";
+import { localSessionOwnershipRevision } from "./session-ownership.js";
 
 // A broker rejects null pre-authentication epoch/fence fields. The desktop must
 // finish its first authenticated hello and publish a catalog over the real socket.
@@ -41,6 +43,12 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
   let maximumCatalogPagesInFlight = 0;
   let bulkBytes = 0;
   let seedingBulkCatalog = false;
+  const releaseCommands: Array<() => void> = [];
+  const invalidCommand = async (_command: RemoteDispatchCommand) => {
+    z.object({ modelRef: z.object({ id: z.string() }) }).parse({ modelRef: null });
+    throw new Error("No commands");
+  };
+  let executeCommand: (command: RemoteDispatchCommand) => Promise<RemoteCommandReceipt> = invalidCommand;
   const enrolled = {
     id: deviceId,
     installationId: installation.installationId,
@@ -163,6 +171,17 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
     teamId,
     audience: "https://fixture.invalid",
   };
+  const inspect = async (id: string): Promise<LocalManagedMessageTarget> => {
+    const session = (await store.getSession(id))!;
+    const turn = await store.latestTurnForSession(id);
+    const activeTurnId = turn?.status === "in_progress" ? turn.id : null;
+    return { sessionId: id, provider: session.provider, title: session.title,
+      targetRevision: "fixture", managedSessionId: "original-thread", latestTurnId: turn?.id ?? null,
+      activeTurnId, paused: false, approvalBlocked: false, canSendFollowup: true,
+      canSteer: !!activeTurnId, unavailableReason: null,
+      inbox: { sessionId: id, activeTurnId, acceptingInput: !!activeTurnId,
+        paused: false, inputs: [], waits: [] } };
+  };
   const manager = createRemoteRelayManager({
     storeDir: directory,
     installation,
@@ -225,39 +244,8 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
       loadProfile: async () => { throw new Error("This fixture has no Profile references"); },
       loadHarness: async () => { throw new Error("This fixture has no released workflow bindings"); },
     }),
-    inspect: async (id) => {
-      const session = (await store.getSession(id))!;
-      const turn = await store.latestTurnForSession(id);
-      const activeTurnId = turn?.status === "in_progress" ? turn.id : null;
-      return {
-        sessionId: id,
-        provider: session.provider,
-        title: session.title,
-        targetRevision: "fixture",
-        managedSessionId: "original-thread",
-        latestTurnId: turn?.id ?? null,
-        activeTurnId,
-        paused: false,
-        approvalBlocked: false,
-        canSendFollowup: true,
-        canSteer: !!activeTurnId,
-        unavailableReason: null,
-        inbox: {
-          sessionId: id,
-          activeTurnId,
-          acceptingInput: !!activeTurnId,
-          paused: false,
-          inputs: [],
-          waits: [],
-        },
-      };
-    },
-    execute: async () => {
-      z.object({ modelRef: z.object({ id: z.string() }) }).parse({
-        modelRef: null,
-      });
-      throw new Error("No commands");
-    },
+    inspect,
+    execute: command => executeCommand(command),
     outputs: async () => [],
     readOutput: async () => {
       throw new Error("No artifacts");
@@ -306,6 +294,31 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
     expect((await store.getSession(olderDevelopment.id))?.metadata?.ponderLocalOwner).toEqual(owner);
     await expect.poll(() => received.filter(frame => frame.type === "catalog").some(frame => frame.payload.tasks.some((task: { id: string }) => task.id === olderDevelopment.id)), { timeout: 3000 }).toBe(true);
     const connection = [...server.clients][0]!;
+    const command = async (sessionId: string): Promise<RemoteDispatchCommand> => {
+      const target = (await store.getSession(sessionId))!;
+      const latest = await store.latestTurnForSession(sessionId);
+      const id = randomUUID();
+      const unsigned = { id, idempotencyKey: id, action: "follow_up" as const, targetId: "fixture-task", localSessionId: sessionId,
+        expectedRevision: Number.parseInt(localSessionOwnershipRevision(target, latest?.id ?? null).slice(0, 13), 16),
+        expectedTurnId: null, payload: { text: `Original input ${id}` }, deviceId,
+        payloadHash: createHash("sha256").update(id).digest("hex"),
+        scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: owner.teamId },
+        grantRevision: 1, fence: 1, deadline: new Date(Date.now() + 30_000).toISOString(), actor: "remote-human" as const };
+      const expiresAt = new Date(Date.now() + 15_000).toISOString();
+      return { ...unsigned, permit: { keyId: "fixture", expiresAt,
+        signature: installation.sign(remoteDevicePermitMessage(unsigned, expiresAt, "fixture")) } };
+    };
+    const gate = () => {
+      let entered = false;
+      let release!: () => void;
+      const held = new Promise<void>(resolve => { release = resolve; });
+      releaseCommands.push(release);
+      return { get entered() { return entered; }, release,
+        async wait() { entered = true; await held; } };
+    };
+    const sendFrame = (type: string, payload: unknown, requestId?: string) => connection.send(JSON.stringify({
+      protocolVersion: 1, deviceId, epoch: "epoch", fence: 1, type, payload, ...(requestId ? { requestId } : {}),
+    }));
     connection.send(
       JSON.stringify({
         protocolVersion: 1,
@@ -428,6 +441,93 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
     await expect
       .poll(() => rejectionError, { timeout: 3000 })
       .toBe("remote_command_configuration_invalid");
+    // Cancellation must reach the real SQLite arbiter while an earlier command
+    // is awaiting admission. Commands themselves still enter that lane in order.
+    const cancellationWinner = await command(session.id);
+    const admissionWinner = await command(session.id);
+    const beforeAdmission = gate();
+    const afterAdmission = gate();
+    const executionOrder: string[] = [];
+    const admissionAttempts = new Map<string, number>();
+    const execute = createRemoteCommandExecutor({ store, inspect, interrupt: async () => null,
+      admit: async input => {
+        const id = (input.payload.remoteDevice as RemoteDispatchCommand).id;
+        admissionAttempts.set(id, (admissionAttempts.get(id) ?? 0) + 1);
+        if (id === cancellationWinner.id) await beforeAdmission.wait();
+        const admitted = await store.admitTaskInput(input);
+        if (id === admissionWinner.id) await afterAdmission.wait();
+        return admitted;
+      } });
+    executeCommand = async value => { executionOrder.push(value.id); return execute(value); };
+    sendFrame("command", cancellationWinner);
+    await expect.poll(() => beforeAdmission.entered, { timeout: 3000 }).toBe(true);
+    sendFrame("command", admissionWinner);
+    sendFrame("receipt_query", { commandId: cancellationWinner.id, payloadHash: cancellationWinner.payloadHash }, "held-before-sql");
+    sendFrame("receipt_query", { commandId: admissionWinner.id, payloadHash: admissionWinner.payloadHash }, "queued-before-sql");
+    for (const requestId of ["held-before-sql", "queued-before-sql"]) {
+      await expect.poll(() => received.find(frame => frame.requestId === requestId), { timeout: 3000 })
+        .toMatchObject({ type: "receipt_query_result", payload: { notAdmitted: false, receipt: null, cancelled: false } });
+    }
+    sendFrame("command_cancel", { commandId: cancellationWinner.id, payloadHash: cancellationWinner.payloadHash }, "cancel-before-sql");
+    await expect.poll(() => received.find(frame => frame.requestId === "cancel-before-sql"), { timeout: 3000 })
+      .toMatchObject({ type: "command_cancel_result", payload: { cancelled: true, receipt: null } });
+    expect(await store.getRemoteDeviceCancellation(cancellationWinner.id)).toMatchObject({ payload_hash: cancellationWinner.payloadHash });
+    expect(await store.getTaskInput(`remote-input:${cancellationWinner.id}`)).toBeNull();
+    expect(await store.getTaskInput(`remote-input:${admissionWinner.id}`)).toBeNull();
+    expect(executionOrder).toEqual([cancellationWinner.id]);
+    beforeAdmission.release();
+    await expect.poll(() => afterAdmission.entered, { timeout: 3000 }).toBe(true);
+    expect(executionOrder).toEqual([cancellationWinner.id, admissionWinner.id]);
+    await expect.poll(() => received.find(frame => frame.type === "receipt" && frame.payload.id === cancellationWinner.id), { timeout: 3000 })
+      .toMatchObject({ payload: { state: "rejected", error: "remote_command_cancelled" } });
+    sendFrame("receipt_query", { commandId: cancellationWinner.id, payloadHash: cancellationWinner.payloadHash }, "cancelled-after-sql-denial");
+    await expect.poll(() => received.find(frame => frame.requestId === "cancelled-after-sql-denial"), { timeout: 3000 })
+      .toMatchObject({ type: "receipt_query_result", payload: { cancelled: true, notAdmitted: true, receipt: null } });
+    expect(await store.getRemoteDeviceReceipt(admissionWinner.id)).toBeNull();
+    const originalInput = (await store.getTaskInput(`remote-input:${admissionWinner.id}`))!;
+    expect(originalInput.body).toBe(admissionWinner.payload.text);
+    sendFrame("command_cancel", { commandId: admissionWinner.id, payloadHash: admissionWinner.payloadHash }, "cancel-after-sql");
+    await expect.poll(() => received.find(frame => frame.requestId === "cancel-after-sql"), { timeout: 3000 })
+      .toMatchObject({ type: "command_cancel_result", payload: { cancelled: false,
+        receipt: { state: "admitted", inputId: originalInput.id, localSessionId: session.id } } });
+    expect(await store.getRemoteDeviceCancellation(admissionWinner.id)).toBeNull();
+    afterAdmission.release();
+    await expect.poll(() => received.find(frame => frame.type === "receipt" && frame.payload.id === admissionWinner.id), { timeout: 3000 })
+      .toMatchObject({ payload: { state: "admitted", inputId: originalInput.id } });
+    sendFrame("command", admissionWinner);
+    await expect.poll(() => received.filter(frame => frame.type === "receipt" && frame.payload.id === admissionWinner.id).length, { timeout: 3000 }).toBe(2);
+    expect(admissionAttempts.get(admissionWinner.id)).toBe(1);
+    expect(await store.getTaskInput(originalInput.id)).toEqual(originalInput);
+    expect((await store.taskInputsForSession(session.id, { limit: 10 })).map(input => input.id)).toEqual([originalInput.id]);
+    expect((await store.getSession(session.id))?.metadata?.ponderLocalOwner).toEqual(owner);
+    // The query's real SQLite reads can capture absence, then execution commits
+    // and leaves the lane before those reads return. Its initial pending state
+    // must still prevent a false "not admitted" reconciliation response.
+    const settlingDuringQuery = await command(session.id);
+    const beforeQueryAdmission = gate();
+    const afterQueryRead = gate();
+    const settlingExecutor = createRemoteCommandExecutor({ store, inspect, interrupt: async () => null,
+      admit: async input => { await beforeQueryAdmission.wait(); return store.admitTaskInput(input); } });
+    executeCommand = settlingExecutor;
+    sendFrame("command", settlingDuringQuery);
+    await expect.poll(() => beforeQueryAdmission.entered, { timeout: 3000 }).toBe(true);
+    const getInput = store.getTaskInput.bind(store);
+    const delayedInputRead = vi.spyOn(store, "getTaskInput").mockImplementation(async id => {
+      const captured = await getInput(id);
+      if (id === `remote-input:${settlingDuringQuery.id}`) await afterQueryRead.wait();
+      return captured;
+    });
+    sendFrame("receipt_query", { commandId: settlingDuringQuery.id, payloadHash: settlingDuringQuery.payloadHash }, "settled-during-query");
+    await expect.poll(() => afterQueryRead.entered, { timeout: 3000 }).toBe(true);
+    beforeQueryAdmission.release();
+    await expect.poll(() => received.find(frame => frame.type === "receipt" && frame.payload.id === settlingDuringQuery.id), { timeout: 3000 })
+      .toMatchObject({ payload: { state: "admitted", inputId: `remote-input:${settlingDuringQuery.id}` } });
+    afterQueryRead.release();
+    await expect.poll(() => received.find(frame => frame.requestId === "settled-during-query"), { timeout: 3000 })
+      .toMatchObject({ type: "receipt_query_result", payload: { notAdmitted: false, receipt: null, cancelled: false } });
+    delayedInputRead.mockRestore();
+    expect(await store.getTaskInput(`remote-input:${settlingDuringQuery.id}`)).toMatchObject({ body: settlingDuringQuery.payload.text });
+    executeCommand = invalidCommand;
     // A stale hosted patch base must replace the directory without advancing
     // an unacknowledged base, and retirement must explicitly remove the source.
     rejectNextPatch = true;
@@ -645,7 +745,51 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
     expect(
       ((await manager.settings("status")) as { state: string }).state,
     ).toBe("signed_out");
+    // Shutdown discards a waiting command but lets already-admitted work finish
+    // its durable receipt. Neither result may be sent on a later connection.
+    signedIn = true;
+    await manager.setEnabled(true);
+    await expect.poll(() => manager.status().state, { timeout: 3000 }).toBe("connected");
+    const shutdownSession = await sessions.createUserSession({ provider: "codex", title: "Shutdown admission boundary", cwd: directory });
+    const admittedAtShutdown = await command(shutdownSession.id);
+    const queuedAtShutdown = await command(shutdownSession.id);
+    const shutdownAdmission = gate();
+    const shutdownOrder: string[] = [];
+    const shutdownExecutor = createRemoteCommandExecutor({ store, inspect, interrupt: async () => null,
+      admit: async input => {
+        const accepted = await store.admitTaskInput(input);
+        if ((input.payload.remoteDevice as RemoteDispatchCommand).id === admittedAtShutdown.id) await shutdownAdmission.wait();
+        return accepted;
+      } });
+    executeCommand = async value => { shutdownOrder.push(value.id); return shutdownExecutor(value); };
+    const shutdownConnection = [...server.clients].at(-1)!;
+    const shutdownSend = (type: string, payload: unknown, requestId?: string) => shutdownConnection.send(JSON.stringify({
+      protocolVersion: 1, deviceId, epoch: "epoch", fence: 1, type, payload, ...(requestId ? { requestId } : {}),
+    }));
+    shutdownSend("command", admittedAtShutdown);
+    await expect.poll(() => shutdownAdmission.entered, { timeout: 3000 }).toBe(true);
+    shutdownSend("command", queuedAtShutdown);
+    shutdownSend("receipt_query", { commandId: queuedAtShutdown.id, payloadHash: queuedAtShutdown.payloadHash }, "queued-before-close");
+    await expect.poll(() => received.find(frame => frame.requestId === "queued-before-close"), { timeout: 3000 })
+      .toMatchObject({ type: "receipt_query_result", payload: { notAdmitted: false, receipt: null } });
+    let closeFinished = false;
+    const closing = manager.close().then(() => { closeFinished = true; });
+    const shutdownInput = (await store.getTaskInput(`remote-input:${admittedAtShutdown.id}`))!;
+    expect(closeFinished).toBe(false);
+    expect(shutdownOrder).toEqual([admittedAtShutdown.id]);
+    expect(await store.getTaskInput(`remote-input:${queuedAtShutdown.id}`)).toBeNull();
+    shutdownAdmission.release();
+    await closing;
+    expect(await store.getRemoteDeviceReceipt(admittedAtShutdown.id)).toMatchObject({ state: "admitted", inputId: shutdownInput.id });
+    expect(shutdownOrder).toEqual([admittedAtShutdown.id]);
+    expect(received.some(frame => frame.type === "receipt" && frame.payload.id === admittedAtShutdown.id)).toBe(false);
+    const recovery = createRemoteCommandExecutor({ store, inspect: async () => { throw new Error("Shutdown recovery must not inspect"); },
+      admit: async () => { throw new Error("Shutdown recovery must not readmit"); }, interrupt: async () => null });
+    expect((await recovery(admittedAtShutdown)).inputId).toBe(shutdownInput.id);
+    expect(await store.getTaskInput(shutdownInput.id)).toEqual(shutdownInput);
+    expect((await store.taskInputsForSession(shutdownSession.id, { limit: 10 })).map(input => input.id)).toEqual([shutdownInput.id]);
   } finally {
+    for (const release of releaseCommands) release();
     await manager.close();
     for (const connection of server.clients) connection.terminate();
     await new Promise<void>((resolve) => server.close(() => resolve()));
