@@ -11,6 +11,7 @@ import {
 import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
 import type { TasksetWorkModelStream } from "../taskset-work-attempt-runner.js";
 import { CrossSystemEnvironment, CrossSystemToolError } from "./environment.js";
+import { PythonSandboxUnavailableError } from "./python-sandbox-runtime.js";
 import type { CrossSystemTask, CrossSystemWorld } from "./types.js";
 
 export type CrossSystemModelStream = TasksetWorkModelStream;
@@ -82,6 +83,7 @@ export async function runCrossSystemRollout(input: {
           steps.push({ kind: "tool_result", turn, callId, name, ok: true, result, rows: evidence.rows, bytes: evidence.bytes, durationMs: evidence.durationMs, error: null });
           messages.push({ role: "tool", tool_call_id: callId, name, content: JSON.stringify(result) });
         } catch (error) {
+          if (error instanceof PythonSandboxUnavailableError) throw error;
           const evidence = environment.evidence[before];
           const message = error instanceof Error ? error.message : String(error);
           steps.push({ kind: "tool_result", turn, callId, name, ok: false, result: null, rows: evidence?.rows ?? 0, bytes: evidence?.bytes ?? 0, durationMs: evidence?.durationMs ?? 0, error: message });
