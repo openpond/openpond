@@ -1,0 +1,61 @@
+{
+  "capturedAt": "2026-10-08T05:19:38.797Z",
+  "api": "https://staging-api.openpond.ai",
+  "nativeCanonicalAdmission": true,
+  "installedDesktopQualified": false,
+  "providerInvocations": 0,
+  "isolatedStore": true,
+  "sources": {
+    "native": "a4891ac51da737dc5ccbe11867bd64ed46c33d25",
+    "sandbox": "e1502fd628ed1b57da9480028ee5fcc88442c523"
+  },
+  "checks": [
+    {
+      "name": "real_staging_enrollment_and_catalog",
+      "deviceId": "bc0d7142-32e5-48aa-abce-dea2f39992a0",
+      "taskId": "rt_18ded96672c187ef00aed4da6afc026b6e301790",
+      "passed": true
+    },
+    {
+      "name": "real_signed_dispatch_native_sqlite_admission_duplicate",
+      "commandId": "2543bd7f-88e2-4c3d-96f2-bb4fd0ece7bd",
+      "inputId": "remote-input:2543bd7f-88e2-4c3d-96f2-bb4fd0ece7bd",
+      "localSessionId": "b97d5029-156b-4810-b9e1-db3b375f0251",
+      "permitKeyId": "relay-staging-1",
+      "fence": 1,
+      "uniqueTaskInputs": 1,
+      "elapsedMs": 401,
+      "passed": true
+    },
+    {
+      "name": "lost_receipt_restart_exact_input_recovery",
+      "commandId": "36b2d90c-4285-4af5-9d00-3527d442b99e",
+      "inputId": "remote-input:36b2d90c-4285-4af5-9d00-3527d442b99e",
+      "uniqueTaskInputs": 2,
+      "originalFence": 1,
+      "newFence": 1,
+      "hostedState": "admitted",
+      "passed": true
+    },
+    {
+      "name": "persistent_off_restart_hosted_admission_denial",
+      "uniqueTaskInputs": 2,
+      "passed": true
+    }
+  ],
+  "scope": {
+    "ownerUserId": "dzdaskv4w4",
+    "teamId": "a3v5vj0bxfyphbgihbgprm6f",
+    "installationId": "826efdf8-392a-4d94-b70b-7a1d753e7b28",
+    "profileId": "8370bb775cac8a4ba8f28040f2cf737dd6d4df99d512a675216939bfa6dc1655"
+  },
+  "localSessionId": "b97d5029-156b-4810-b9e1-db3b375f0251",
+  "completed": true,
+  "cleanup": {
+    "deviceRemoved": true
+  },
+  "humanHelperFailure": {
+    "code": null,
+    "category": "helper_startup_failed"
+  }
+}

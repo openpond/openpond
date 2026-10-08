@@ -68,7 +68,8 @@ export function createRemoteRelayManager(deps: {
   }
   const send = (frame: RemoteDeviceFrame) => {
     if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error("remote_connection_unavailable");
-    const encoded = JSON.stringify({ deviceId: device?.id, epoch, fence: transportLease?.fence, ...frame });
+    const encoded = JSON.stringify({ ...(device ? { deviceId: device.id } : {}), ...(epoch ? { epoch } : {}),
+      ...(transportLease ? { fence: transportLease.fence } : {}), ...frame });
     if (Buffer.byteLength(encoded) > REMOTE_DEVICE_LIMITS.frameBytes || socket.bufferedAmount + Buffer.byteLength(encoded) > REMOTE_DEVICE_LIMITS.socketQueueBytes)
       throw new Error("remote_connection_backpressure");
     socket.send(encoded);
@@ -324,7 +325,7 @@ export function createRemoteRelayManager(deps: {
     },
     async setEnabled(enabled: boolean) { const current = await deps.current(); if (!current) throw new Error("Sign in and select a workspace first.");
       await preference.set(current.owner, enabled); await disconnect(); selected = current;
-      if (!enabled && device) await clientFor(current).signed("/v1/remote-devices/device-management", { deviceId: device.id, action: "disable", revision: device.revision });
+      if (!enabled && device) await clientFor(current).signed("/v1/remote-devices/device-management", { deviceId: device.id, targetDeviceId: device.id, action: "disable", revision: device.revision });
       if (enabled) await serial(() => connect(true)); return this.status(); },
   };
 }
