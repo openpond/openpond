@@ -1,73 +1,13 @@
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { tmpdir } from "node:os";
-import readline from "node:readline";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { Readable } from "node:stream";
+import { PYTHON_SANDBOX_WORKER_SOURCE } from "./python-sandbox-worker.js";
+import { PythonSandboxUnavailableError, pythonSandboxLaunch } from "./python-sandbox-runtime.js";
 import { randomUUID } from "node:crypto";
-import { promisify } from "node:util";
+import { readFile } from "node:fs/promises";
 
-const execFileAsync = promisify(execFile);
 const DEFAULT_MAX_MEMORY_BYTES = 256 * 1024 * 1024;
 const DEFAULT_MEMORY_POLL_INTERVAL_MS = 100;
 const MAX_STDERR_BYTES = 4_096;
-
-const WORKER_SOURCE = String.raw`
-import contextlib, io, json, math, statistics, decimal, datetime, collections, itertools, functools, sys
-
-try:
-    import resource
-except ImportError:
-    resource = None
-
-def apply_resource_limit(kind, value):
-    if resource is None:
-        return
-    try:
-        _, current_hard = resource.getrlimit(kind)
-        hard = value if current_hard == resource.RLIM_INFINITY else min(value, current_hard)
-        resource.setrlimit(kind, (min(value, hard), hard))
-    except (OSError, ValueError):
-        # Some platforms expose a limit without accepting finite values. The
-        # parent process independently enforces the memory ceiling.
-        pass
-
-if resource is not None:
-    apply_resource_limit(resource.RLIMIT_CPU, 5)
-    apply_resource_limit(resource.RLIMIT_AS, 268435456)
-ALLOWED_MODULES = {"math", "statistics", "decimal", "datetime", "collections", "itertools", "functools", "json"}
-real_import = __import__
-def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
-    root = name.split(".", 1)[0]
-    if root not in ALLOWED_MODULES:
-        raise ImportError("module is not available in the standard-library-only sandbox")
-    return real_import(name, globals, locals, fromlist, level)
-
-safe_builtins = {
-    "abs": abs, "all": all, "any": any, "bool": bool, "dict": dict, "enumerate": enumerate,
-    "filter": filter, "float": float, "int": int, "len": len, "list": list, "map": map,
-    "max": max, "min": min, "next": next, "print": print, "range": range, "repr": repr,
-    "reversed": reversed, "round": round, "set": set, "sorted": sorted, "str": str,
-    "sum": sum, "tuple": tuple, "zip": zip, "Exception": Exception, "ValueError": ValueError,
-    "TypeError": TypeError, "__import__": safe_import,
-}
-state = {"__builtins__": safe_builtins}
-for line in sys.stdin:
-    request_id = ""
-    try:
-        request = json.loads(line)
-        request_id = str(request.get("id") or "")
-        code = request.get("code")
-        if not request_id or not isinstance(code, str) or not code.strip():
-            raise ValueError("id and non-empty code are required")
-        output = io.StringIO()
-        state.pop("_result", None)
-        with contextlib.redirect_stdout(output):
-            exec(compile(code, "<openpond-run-python>", "exec"), state, state)
-        rendered = output.getvalue()
-        result = state.get("_result")
-        json.dumps(result)
-        print(json.dumps({"id": request_id, "ok": True, "stdout": rendered, "result": result}), flush=True)
-    except BaseException as exc:
-        print(json.dumps({"id": request_id, "ok": False, "error": str(exc)}), flush=True)
-`;
 
 export type PythonSandboxResult = {
   ok: boolean;
@@ -83,6 +23,8 @@ export type PersistentPythonSandboxOptions = {
   memoryPollIntervalMs?: number;
   memoryUsage?: (pid: number) => Promise<number | null>;
   pythonBin?: string;
+  /** Trusted runtime configuration; never supplied by a model tool call. */
+  bwrapPath?: string;
 };
 
 export class PersistentPythonSandbox {
@@ -96,35 +38,73 @@ export class PersistentPythonSandbox {
   private terminationError: Error | null = null;
   private stderr = "";
   private closed = false;
+  private exited = false;
+  private started = false;
+  private sandboxPid: number | null = null;
+  private response = "";
+  private readonly ready: Promise<void>;
+  private resolveReady!: () => void;
+  private rejectReady!: (error: Error) => void;
+  private readonly startupTimer: ReturnType<typeof setTimeout>;
 
   constructor(private readonly options: PersistentPythonSandboxOptions = {}) {
     this.maxMemoryBytes = Math.max(1, Math.trunc(options.maxMemoryBytes ?? DEFAULT_MAX_MEMORY_BYTES));
     this.memoryPollIntervalMs = Math.max(10, Math.trunc(options.memoryPollIntervalMs ?? DEFAULT_MEMORY_POLL_INTERVAL_MS));
     this.memoryUsage = options.memoryUsage ?? readResidentMemoryBytes;
-    this.child = spawn(options.pythonBin ?? process.env.OPENPOND_PYTHON_BIN ?? "python3", ["-I", "-S", "-u", "-c", WORKER_SOURCE], {
-      cwd: tmpdir(),
-      env: { PATH: process.env.PATH ?? "/usr/bin:/bin", PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" },
-      stdio: ["pipe", "pipe", "pipe"],
+    const launch = pythonSandboxLaunch({
+      pythonBin: options.pythonBin,
+      maxMemoryBytes: this.maxMemoryBytes,
+      maxOutputBytes: options.maxOutputBytes ?? 16_384,
+      source: PYTHON_SANDBOX_WORKER_SOURCE,
     });
-    readline.createInterface({ input: this.child.stdout }).on("line", (line) => this.handleLine(line));
+    this.ready = new Promise<void>((resolve, reject) => { this.resolveReady = resolve; this.rejectReady = reject; });
+    // Startup may fail before the caller asks to run code.
+    void this.ready.catch(() => undefined);
+    this.child = spawn(options.bwrapPath ?? "/usr/bin/bwrap", launch, {
+      cwd: "/", env: {}, stdio: ["pipe", "pipe", "pipe", "pipe"],
+    }) as ChildProcessWithoutNullStreams;
+    this.startupTimer = setTimeout(() => this.terminate(new PythonSandboxUnavailableError("Isolated Python startup timed out.")), 5_000);
+    this.startupTimer.unref?.();
+    let info = "";
+    const infoStream = this.child.stdio[3] as Readable | null;
+    infoStream?.on("data", (chunk: Buffer) => {
+      info += chunk.toString("utf8");
+      if (info.length > 4_096) this.terminate(new PythonSandboxUnavailableError("Invalid sandbox process identity."));
+    });
+    infoStream?.once("end", () => {
+      try {
+        const pid: unknown = JSON.parse(info)["child-pid"];
+        if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0) throw new Error();
+        this.sandboxPid = pid;
+      } catch { this.terminate(new PythonSandboxUnavailableError("Sandbox process identity is unavailable.")); }
+    });
+    this.child.stdout.setEncoding("utf8");
+    this.child.stdout.on("data", (chunk: string) => this.handleOutput(chunk));
     this.child.stderr.setEncoding("utf8");
     this.child.stderr.on("data", (chunk: string) => {
       this.stderr = `${this.stderr}${chunk}`.slice(-MAX_STDERR_BYTES);
     });
-    this.child.once("error", (error) => this.failAll(error));
-    this.child.once("exit", (code, signal) => {
+    this.child.stdin.on("error", () => this.terminate(this.processError("Python sandbox input closed.")));
+    this.child.once("error", (error) => this.terminate(new PythonSandboxUnavailableError(error.message)));
+    this.child.once("close", (code, signal) => {
+      this.exited = true;
+      clearTimeout(this.startupTimer);
       this.stopMemoryMonitor();
       if (!this.closed) {
-        const stderr = this.stderr.trim();
-        const detail = stderr ? `: ${stderr}` : ".";
-        this.failAll(this.terminationError ?? new Error(`Python sandbox exited with ${code ?? signal}${detail}`));
+        const detail = this.stderr.trim();
+        this.terminate(this.processError(`Isolated Python exited with ${code ?? signal}${detail ? `: ${detail}` : "."}`));
       }
     });
   }
 
   async run(code: string, signal?: AbortSignal): Promise<PythonSandboxResult> {
+    if (this.terminationError) throw this.terminationError;
     if (this.closed) throw new Error("Python sandbox is closed.");
     if (Buffer.byteLength(code, "utf8") > 10_000) throw new Error("Python code exceeds the 10,000-byte limit.");
+    if (signal?.aborted) throw abortError(signal);
+    await this.ready;
+    if (this.terminationError) throw this.terminationError;
+    if (this.closed) throw new Error("Python sandbox is closed.");
     if (signal?.aborted) throw abortError(signal);
     const id = `python_${randomUUID()}`;
     const result = new Promise<PythonSandboxResult>((resolve, reject) => {
@@ -157,17 +137,57 @@ export class PersistentPythonSandbox {
   }
 
   async close(): Promise<void> {
-    if (this.closed) return;
     this.closed = true;
-    this.stopMemoryMonitor();
+    clearTimeout(this.startupTimer);
+    this.rejectReady(new PythonSandboxUnavailableError("Python sandbox closed during startup."));
     this.failAll(new Error("Python sandbox closed."));
-    if (this.child.exitCode !== null || this.child.signalCode !== null) return;
-    this.child.stdin.end();
-    const exited = new Promise<void>((resolve) => this.child.once("exit", () => resolve()));
-    const timer = setTimeout(() => this.child.kill("SIGKILL"), 500);
-    timer.unref?.();
+    if (this.exited) return;
+    const exited = new Promise<void>((resolve) => this.child.once("close", () => resolve()));
+    this.killProcesses();
     await exited;
-    clearTimeout(timer);
+  }
+
+  private terminate(error: Error): void {
+    this.terminationError ??= error;
+    clearTimeout(this.startupTimer);
+    this.rejectReady(this.terminationError);
+    this.failAll(this.terminationError);
+    this.killProcesses();
+  }
+
+  private killProcesses(): void {
+    if (this.exited) return;
+    // Kill namespace PID 1 directly using bwrap's host-side identity. Model
+    // code can clear its parent-death signal or change process groups; neither
+    // must let it outlive the attempt. Kernel PID-namespace teardown kills its
+    // descendants when PID 1 dies.
+    if (this.sandboxPid) {
+      try { process.kill(this.sandboxPid, "SIGKILL"); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+    }
+    this.child.kill("SIGKILL");
+  }
+
+  private processError(detail: string): Error {
+    // A model that crashes its own interpreter must not turn a policy failure
+    // into an unavailable-runtime exemption from reward accounting.
+    return this.started ? new Error(detail) : new PythonSandboxUnavailableError(detail);
+  }
+
+  private handleOutput(chunk: string): void {
+    this.response += chunk;
+    // Bound the protocol frame before parsing, including output that bypasses
+    // redirect_stdout. JSON escaping can expand the allowed output sixfold.
+    const limit = (this.options.maxOutputBytes ?? 16_384) * 6 + 4_096;
+    const lines = this.response.split("\n");
+    this.response = lines.pop()!;
+    for (const line of [...lines, this.response]) {
+      if (Buffer.byteLength(line) > limit) {
+        this.terminate(new Error("Python sandbox output exceeded the byte limit."));
+        return;
+      }
+    }
+    for (const line of lines) this.handleLine(line);
   }
 
   private handleLine(line: string): void {
@@ -175,6 +195,13 @@ export class PersistentPythonSandbox {
     try {
       value = JSON.parse(line) as Record<string, unknown>;
     } catch {
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (value.ready === true && !this.terminationError) {
+      this.started = true;
+      clearTimeout(this.startupTimer);
+      this.resolveReady();
       return;
     }
     const id = typeof value.id === "string" ? value.id : "";
@@ -216,18 +243,16 @@ export class PersistentPythonSandbox {
   }
 
   private async probeMemory(): Promise<void> {
-    const pid = this.child.pid;
+    const pid = this.sandboxPid;
     if (!pid || this.memoryProbeInFlight || this.terminationError || this.pending.size === 0) return;
     this.memoryProbeInFlight = true;
     try {
       const residentBytes = await this.memoryUsage(pid);
       if (residentBytes !== null && residentBytes > this.maxMemoryBytes && !this.terminationError) {
-        this.terminationError = new Error(
-          `Python sandbox exceeded the ${this.maxMemoryBytes}-byte memory limit.`,
-        );
-        this.stopMemoryMonitor();
-        this.child.kill("SIGKILL");
+        this.terminate(new Error(`Python sandbox exceeded the ${this.maxMemoryBytes}-byte memory limit.`));
       }
+    } catch {
+      this.terminate(new Error("Python sandbox memory monitoring failed."));
     } finally {
       this.memoryProbeInFlight = false;
     }
@@ -237,34 +262,17 @@ export class PersistentPythonSandbox {
 export async function readResidentMemoryBytes(pid: number): Promise<number | null> {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
-    if (process.platform === "win32") {
-      const { stdout } = await execFileAsync(
-        "powershell.exe",
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-Command",
-          `(Get-Process -Id ${pid} -ErrorAction Stop).WorkingSet64`,
-        ],
-        { encoding: "utf8", timeout: 1_000, windowsHide: true },
-      );
-      const bytes = Number(String(stdout).trim());
-      return Number.isFinite(bytes) && bytes >= 0 ? bytes : null;
-    }
-    const { stdout } = await execFileAsync(
-      "ps",
-      ["-o", "rss=", "-p", String(pid)],
-      { encoding: "utf8", timeout: 1_000, windowsHide: true },
-    );
-    const kibibytes = Number(String(stdout).trim());
-    return Number.isFinite(kibibytes) && kibibytes >= 0 ? kibibytes * 1024 : null;
+    const status = await readFile(`/proc/${pid}/status`, "utf8");
+    const kibibytes = /^VmRSS:\s+(\d+)\s+kB$/m.exec(status)?.[1];
+    return kibibytes === undefined ? null : Number(kibibytes) * 1024;
   } catch {
     return null;
   }
 }
 
 function abortError(signal: AbortSignal | undefined): Error {
-  const error = signal?.reason instanceof Error ? signal.reason : new Error("Python sandbox execution was cancelled.");
+  if (signal?.reason instanceof Error && signal.reason.name === "AbortError") return signal.reason;
+  const error = new Error("Python sandbox execution was cancelled.", { cause: signal?.reason });
   error.name = "AbortError";
   return error;
 }

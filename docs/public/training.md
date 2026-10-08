@@ -32,6 +32,40 @@ Before training, run baselines across the relevant models, seeds, and attempts. 
 
 A Taskset is ready only after its validation, grader audit, evaluation coverage, leakage checks, and other readiness requirements pass. Training plans reject Tasksets that still have readiness blockers.
 
+### Local execution isolation
+
+Local cross-system `run_python` calls require Linux, system Python 3, bubblewrap
+at `/usr/bin/bwrap`, and enabled unprivileged user namespaces. Each attempt gets
+a private network, process namespace, and temporary filesystem. Only the Python
+runtime and system libraries are mounted read-only; the host home, repository,
+credentials, and grader files are not mounted. Python state persists between tool
+calls within an attempt and is discarded when that attempt closes. The Python
+import allowlist describes supported modules; OS isolation enforces security.
+
+If isolation cannot start, the rollout reports an infrastructure failure and is
+not eligible for a policy reward. It never retries outside the sandbox. Hosts
+without this Linux runtime must use a qualified isolated execution host.
+
+Local Taskset Work commands also run offline with a cleared environment. Stage
+dependencies and task inputs before execution; package downloads and host-local
+services are unavailable during a rollout. Model requests remain outside the
+command sandbox. Hosted rollout endpoints have separate network policies.
+
+Qualify a Linux execution host with
+`pnpm exec vitest run --project root-qualification tests/python-sandbox.test.ts tests/local-taskset-network-isolation.test.ts`.
+These checks execute real network and filesystem boundary probes and fail when
+the isolation runtime is unavailable.
+
+For a remote smoke test, run
+`pnpm exec tsx scripts/testing/python-sandbox-staging-smoke.ts --bootstrap`
+with a saved staging CLI account. It uploads the exact executor bundle to a
+disposable staging Work guest, installs bubblewrap there if needed, verifies
+the bundle hash and isolation checks, then deletes the guest. The guest has a
+$0.10 spend cap. Results are written to `tmp/python-isolation-staging/report.json`.
+This qualifies the executor in that guest; it does not publish a desktop release
+or change the hosted service's runtime image. A permanent execution host still
+needs bubblewrap and Python provisioned before accepting these rollouts.
+
 ## Plan, Approve, and Run
 
 Once the Taskset is ready:
