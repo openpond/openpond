@@ -232,6 +232,12 @@ export function createSessionStore(deps: {
       )
     );
     if (!updated) throw new Error("Session not found");
+    await appendRuntimeEvent(event({
+      sessionId,
+      name: "session.updated",
+      source: "server",
+      data: { session: updated },
+    }));
     return updated;
   }
 
