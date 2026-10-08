@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-08T05:44:21.523420+00:00",
-  "source": "e9022d1fc",
+  "capturedAt": "2026-10-08T06:00:33.987551+00:00",
+  "source": "54cd7c256",
   "api": "https://staging-api.openpond.ai",
   "actualPackagedProcess": true,
   "providerCredentialsCopied": false,
@@ -22,6 +22,7 @@
     "hasNextCursor": false
   },
   "pending": [
+    "managed OpenPond actual provider continuity",
     "web New task/start via approved private starter",
     "packaged Off logout lifecycle",
     "authenticated native desktop UI",
@@ -29,9 +30,9 @@
     "native iOS owner verification deferred"
   ],
   "refreshedArtifactSha256": {
-    "AppImage": "b9efd7e8a57875034c1404f2aad03a741c21a7ee8c4758f7ccc6dd018b69406c",
-    "deb": "1cea44ca107079707e547fee06f000b8ffba277d10cff0de944ad903c6c792f8",
-    "server": "73ec2c374cf19fedb18536af1669691cab3ada35411c062875076f03f69a050f"
+    "AppImage": "c9458419e4fa315e3d78e85c17aca440023585001db9ffc4a22a09fc532d2cba",
+    "deb": "edff75db2a833e22a2dc55726dfe58c9f41dcfa6521e61d59b7ccda509247046",
+    "server": "8f0b80ac2d8b291d70256a0fc88ca22b451cbb8931ea55928b159cc4d3bb1e76"
   },
   "runningArtifactPrecedesOffFix": false,
   "webTurnId": "f9ff0e75-37be-4c03-9f91-8b44be687196",
@@ -82,13 +83,8 @@
       }
     }
   },
-  "sourceGitBase": "e9022d1fc",
-  "sourceWorkingTreeChanges": [
-    "approval provider/local turn mapping",
-    "terminal approval cancellation and late callback fence",
-    "active catalog approval gate",
-    "local turn and actual decision history projection"
-  ],
+  "sourceGitBase": "54cd7c256",
+  "sourceWorkingTreeChanges": [],
   "nativeDesktopUiQualified": false,
   "webObservation": {
     "observedBy": "root actual CUA at https://staging.openpond.ai",
@@ -97,11 +93,43 @@
     "approvalClickProviderCompleted": true
   },
   "selectiveValidation": {
-    "boundaryFiles": 2,
-    "testsPassed": 3,
+    "boundaryFiles": 4,
+    "testsPassed": 18,
     "serverProjectTypecheck": "passed",
     "fullRepositoryTypecheck": "not run",
     "packageBuild": "passed",
     "packageInventory": "passed"
+  },
+  "managedOpenPond": {
+    "localSessionId": "8cb37531-3da8-42eb-bdb9-e91d2c1cd7ae",
+    "canonicalIdentity": true,
+    "canSendFollowup": true,
+    "providerContinuityQualified": false,
+    "initialTurnId": "c8771e1a-6955-4311-887f-dc43cc0f3266",
+    "initialOutput": "READY MANAGED-ORCHID-731",
+    "initialCompleted": true,
+    "initialToolEvents": 0,
+    "auth": "Canonical pre-existing ponder-staging-qa account in isolated encrypted profile; verified sam-demo owner via packaged account API",
+    "model": "accounts/fireworks/models/deepseek-v4p1-flash",
+    "modelProvenance": "Canonical packaged /v1/providers/openpond/models allowed list"
+  },
+  "latestRestart": {
+    "oldServerPid": 1439126,
+    "newServerPid": 1470302,
+    "sameDevice": true,
+    "sameSession": true,
+    "sameCodexThread": true
+  },
+  "webStart": {
+    "receiptId": "b938152a-24f9-4290-a91b-5e12b7b1cf63",
+    "localSessionId": "remote-session-ef7b3805633655d25f9fca4446b23a68b5baec26e07d8e1483df4e9d5d13b0f5",
+    "turnId": "3cfc2824-72d1-4441-817d-e5ce9b951895",
+    "output": "START ORCHID-731",
+    "canonicalInputCount": 1,
+    "providerTurnCount": 1,
+    "hostedTaskId": "rt_05db2c2aca536674d8e015f4b40f4c81367d3918",
+    "providerExecutionPassed": true,
+    "webNavigationPassed": false,
+    "pending": "Hosted stable task pointer before terminal receipt delivery; no Native wire change"
   }
 }
