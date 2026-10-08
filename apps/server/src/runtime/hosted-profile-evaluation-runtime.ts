@@ -1,4 +1,5 @@
 import {createHostedProfileVerifier} from "../evaluations/profile-sandbox-verifier.js";
+import { createHostProfileExternalDataset, type HostProfileExternalDataset } from "../harness/host-profile-external-dataset.js";
 import type { AgentHostStorageClient } from "@openpond/agent-runtime";
 import {
   CreateSessionRequestSchema,
@@ -33,10 +34,11 @@ import {
 } from "../harness/profile-private-grading.js";
 
 /** Use the same evaluator and immutable assets as Desktop, with host-owned stores. */
-export function createHostedProfileEvaluationRuntime(input: {
+export async function createHostedProfileEvaluationRuntime(input: {
   client: AgentHostStorageClient;
   core: AppServerRuntimeCoreStorage;
   release: AdmittedHostedProfileRelease;
+  externalDataset?: HostProfileExternalDataset;
   storeDir: string;
   readManagedArtifact: Parameters<
     typeof createProfileEvaluationCaseService
@@ -95,6 +97,14 @@ export function createHostedProfileEvaluationRuntime(input: {
       runtime: await loadRuntime(request.harnessRelease),
     });
   };
+  const externalDataset = input.externalDataset
+    ? await createHostProfileExternalDataset({
+        value: input.externalDataset,
+        release: (await loadRuntime(release.harnessRelease)).release,
+        sourceRevision: release.sourceRevision,
+        client: input.client,
+      })
+    : null;
   const loadTasksetPackage: Parameters<
     typeof createProfileEvaluationCaseService
   >[0]["loadTasksetPackage"] = async (
@@ -118,6 +128,7 @@ export function createHostedProfileEvaluationRuntime(input: {
     return packageValue;
   };
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
+    resolveExternalDataset: externalDataset?.resolveExternalDataset,
     store: {
       runtimeEventsForTurn: (turnId) => input.core.runtimeEventsForTurn(turnId),
     },
@@ -146,6 +157,8 @@ export function createHostedProfileEvaluationRuntime(input: {
   });
   const prepareProfileEvaluationRun =
     createProfileEvaluationRunPreparationService({
+      resolveExternalDataset: externalDataset?.resolveExternalDataset,
+      sourceCandidate: externalDataset?.sourceCandidate,
       privateGradingPreflight: (value) =>
         preflightProfilePrivateGrading(value, false),
       loadCatalog,
@@ -166,6 +179,7 @@ export function createHostedProfileEvaluationRuntime(input: {
       },
     });
   const executeProfileEvaluationRun = createProfileEvaluationRunService({
+    resolveExternalDataset: externalDataset?.resolveExternalDataset,
     store: records,
     loadCatalog,
     loadTasksetPackage,
@@ -185,12 +199,19 @@ export function createHostedProfileEvaluationRuntime(input: {
             source.sourceRevision !== release.sourceRevision
           )
             throw new Error("The hosted private grading source changed.");
+          if (source.externalDatasetBinding) {
+            if (!externalDataset) throw new Error("The frozen Dataset owner is unavailable.");
+            await externalDataset.authorize({
+              bindingHash: source.externalDatasetBinding.contentHash,
+              manifestHash: manifest.contentHash,
+            });
+          }
           const catalog = await loadCatalog({
             ref,
             sourceRevision: release.sourceRevision,
             harnessRelease: source.harnessRelease,
           });
-          if (catalog.catalogHash !== source.catalogHash)
+          if (!source.externalDatasetBinding && catalog.catalogHash !== source.catalogHash)
             throw new Error("The hosted private grading catalog changed.");
         },
       }),

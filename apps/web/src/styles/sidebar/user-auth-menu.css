@@ -133,6 +133,13 @@
   font-size: 12px;
 }
 
+.user-auth-task-ownership-hint {
+  margin: 2px 8px 6px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .user-auth-team-picker select {
   min-width: 0;
   width: 100%;

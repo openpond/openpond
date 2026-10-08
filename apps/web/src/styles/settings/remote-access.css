@@ -1,3 +1,61 @@
+.remote-access-settings {
+  gap: 18px;
+}
+
+.remote-access-settings h1,
+.remote-access-settings p {
+  margin: 0;
+}
+
+.remote-access-settings p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.remote-access-settings h2 {
+  margin: 8px 0 0;
+  font-size: 15px;
+  font-weight: 550;
+}
+
+.remote-access-settings .account-summary {
+  flex-wrap: wrap;
+}
+
+.remote-access-settings .account-summary-main {
+  flex: 1 1 240px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.remote-access-settings .account-summary-main strong,
+.remote-access-settings .account-summary-main small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.remote-access-device-details {
+  display: grid;
+  flex: 1 1 280px;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.remote-access-device-details .settings-select-field {
+  max-width: 360px;
+}
+
+.remote-access-task-title {
+  flex: 1 1 250px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.remote-access-settings .account-summary-actions a {
+  text-decoration: none;
+}
+
 .remote-access-summary {
   align-items: flex-start;
 }

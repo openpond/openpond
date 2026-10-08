@@ -13,7 +13,6 @@ import {
   type RemoteDevice,
   type RemoteDeviceFrame,
   type RemoteDispatchCommand,
-  type Session,
 } from "@openpond/contracts";
 import { deviceOwnerKey, loadRemoteAccessPreference } from "./preference.js";
 import { createRemoteDeviceClient, createSelectedRemoteClient } from "./client.js";
@@ -26,12 +25,10 @@ import {
   readRemoteHistory,
 } from "./history.js";
 import type { RemoteLocalAuthority } from "./admission.js";
-import {
-  localSessionMayResolveOwnership,
-  localSessionOwnershipRevision,
-} from "./session-ownership.js";
 import { captureRemoteStarters } from "./starters.js";
 import { uploadRemoteArtifact } from "./artifacts.js";
+import { attachQualifiedLocalOwner, unresolvedLocalOwnership } from "./ownership-settings.js";
+import { createRemoteCommandExecution, executeRemoteCommand, readRemoteCommandReceiptQuery } from "./command-execution.js";
 
 import { createCatalogPublication } from "./catalog-publication.js";
 import {
@@ -53,6 +50,8 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
   let epoch: string | null = null;
   let closed = false;
   let generation = 0;
+  // Account writes invalidate settings; routine transport reconnects do not.
+  let accountGeneration = 0;
   let authorityChanging = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let catalogTimer: ReturnType<typeof setTimeout> | null = null;
@@ -71,6 +70,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
   let catalogDirty = true;
   let publishedHistoryIncarnation = remoteHistoryIncarnation();
   let incomingBytes = 0;
+  const commands = createRemoteCommandExecution();
   const callerRequests = new Map<
     string,
     {
@@ -125,6 +125,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
     if (catalogTimer) clearTimeout(catalogTimer);
     catalogTimer = null;
     generation++;
+    commands.invalidate();
     catalogDirty = true;
     publication.reset();
     authority = null;
@@ -151,16 +152,18 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
         : (failure?.state ?? "offline");
   }
   async function sessions() {
-    const rows: Session[] = [];
-    for (const shell of await deps.store.sessionShells()) {
-      const session = await deps.store.getSession(shell.id);
-      if (session) rows.push(session);
-    }
-    return rows;
+    return deps.store.sessionShells();
   }
   async function catalog() {
     if (!selected || !authority || !preference.enabled(selected.owner)) return;
-    if (observeRemoteHistorySequence(await deps.store.latestEventSequence())) {
+    const catalogOwner = selected;
+    const catalogAuthority = authority;
+    const catalogGeneration = generation;
+    const catalogCurrent = () => !closed && selected === catalogOwner && authority === catalogAuthority
+      && generation === catalogGeneration;
+    const sequence = await deps.store.latestEventSequence();
+    if (!catalogCurrent()) return;
+    if (observeRemoteHistorySequence(sequence)) {
       catalogDirty = true;
     }
     if (publishedHistoryIncarnation !== remoteHistoryIncarnation()) {
@@ -169,14 +172,17 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
     if (!catalogDirty) return;
     catalogDirty = false;
     const allSessions = await sessions();
+    const approvals = await deps.store.pendingApprovals();
+    if (!catalogCurrent()) return;
     const tasks = await captureRemoteTaskCatalog({
-      owner: selected.owner,
+      owner: catalogOwner.owner,
       sessions: allSessions,
       inspect: deps.inspect,
-      approvals: await deps.store.pendingApprovals(),
+      approvals,
       latestTurn: (id) => deps.store.latestTurnForSession(id),
     });
     for (const task of tasks) {
+      if (!catalogCurrent()) return;
       const session = allSessions.find(
         (session) => session.id === task.localSessionId,
       )!;
@@ -190,8 +196,9 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
       task.lastEventSequence = last.entries[0]?.sequence ?? 0;
     }
     const starters = [
-      ...captureRemoteStarters(allSessions, selected.owner).values(),
+      ...captureRemoteStarters(allSessions, catalogOwner.owner).values(),
     ].map((starter) => starter.target);
+    if (!catalogCurrent()) return;
     try {
       await publication.publish(tasks, starters);
     } catch (error) {
@@ -203,15 +210,15 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
         await publication.publish(tasks, starters);
       } else throw error;
     }
-    publishedHistoryIncarnation = remoteHistoryIncarnation();
+    if (catalogCurrent()) publishedHistoryIncarnation = remoteHistoryIncarnation();
   }
   async function connect(reenable = false) {
     if (closed || authorityChanging || failure?.state === "update_required") return;
-    const accountGeneration = generation;
+    const connectionGeneration = generation;
     const next = await deps.current();
     const presentation = await deps.accountStatus();
     if (next) await preference.capture(next.owner);
-    if (authorityChanging || accountGeneration !== generation || closed) return;
+    if (authorityChanging || connectionGeneration !== generation || closed) return;
     accountPresentation = presentation;
     if (
       selected &&
@@ -219,7 +226,10 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
         deviceOwnerKey(next.owner) !== deviceOwnerKey(selected.owner) ||
         next.credentialKey !== selected.credentialKey)
     ) {
+      accountGeneration++;
+      const revokedGeneration = generation + 1;
       await disconnect();
+      if (generation !== revokedGeneration || closed || authorityChanging) return;
       device = null;
     }
     selected = next;
@@ -235,25 +245,32 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
     }
     if (socket) {
       if (transportLease && activeClient && device) {
-        serviceTrust = Keys.parse(
-          await activeClient.request({ path: "/remote-devices/service-keys" }),
-        );
+        const renewingSocket = socket;
+        const renewingClient = activeClient;
+        const renewingDevice = device;
+        const renewalGeneration = generation;
+        const renewalCurrent = () => !closed && !authorityChanging
+          && socket === renewingSocket && generation === renewalGeneration;
+        const keys = Keys.parse(await renewingClient.request({ path: "/remote-devices/service-keys" }));
+        if (!renewalCurrent()) return;
+        serviceTrust = keys;
         const ticket = z.object({ ticket: z.string() }).parse(
-          await activeClient.signed("/v1/remote-devices/connection-tickets", {
+          await renewingClient.signed("/v1/remote-devices/connection-tickets", {
             role: "device",
-            deviceId: device.id,
+            deviceId: renewingDevice.id,
             client: "desktop",
             mode: requestOnly ? "request" : "remote",
-            ...(deps.caller?.requestAuthority(device.id, activeClient.runtimeId)
+            ...(deps.caller?.requestAuthority(renewingDevice.id, renewingClient.runtimeId)
               ? {
                   requestAuthority: deps.caller.requestAuthority(
-                    device.id,
-                    activeClient.runtimeId,
+                    renewingDevice.id,
+                    renewingClient.runtimeId,
                   ),
                 }
               : {}),
           }),
         );
+        if (!renewalCurrent()) return;
         send({
           protocolVersion: 1,
           type: "renew",
@@ -278,8 +295,10 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
         ...(reenable ? { reenable: true } : {}),
       })) as { device: RemoteDevice };
     } catch (error) {
+      if (attempt !== generation || closed || authorityChanging) return;
       if (String(error).includes("deliberate_local_reenable_required")) {
         await preference.set(next.owner, false);
+        if (attempt !== generation || closed || authorityChanging) return;
         state = "off";
         return;
       }
@@ -288,6 +307,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
     const trusted = Keys.parse(
       await client.request({ path: "/remote-devices/service-keys" }),
     );
+    if (attempt !== generation || closed || authorityChanging) return;
     serviceTrust = trusted;
     const ticket = z
       .object({ ticket: z.string(), connectUrl: z.string().url() })
@@ -313,6 +333,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
     if (attempt !== generation || closed) return;
     device = enrollment.device;
     await preference.setDeviceId(next.owner, device.id);
+    if (attempt !== generation || closed || authorityChanging) return;
     activeClient = client;
     const connection = new WebSocket(ticket.connectUrl, {
       maxPayload: REMOTE_DEVICE_LIMITS.frameBytes,
@@ -339,7 +360,10 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           payload: { ticket: ticket.ticket },
         });
     });
+    const connectionCurrent = () => !closed && socket === connection && attempt === generation;
+    const sendCurrent = (frame: RemoteDeviceFrame) => { if (connectionCurrent()) send(frame); };
     connection.on("message", (raw) => {
+      if (!connectionCurrent()) return;
       // Publication waits inside the serial queue. Lease-bound ACKs must resolve
       // that wait directly; placing them on the same queue would deadlock it.
       try {
@@ -373,6 +397,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           return;
         }
       } catch (error) {
+        if (!connectionCurrent()) return;
         deps.warn(
           `Remote relay acknowledgement: ${error instanceof Error ? error.name : "invalid_frame"}`,
         );
@@ -391,6 +416,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
         return;
       }
       incomingBytes += bytes;
+      let commandOwnsBytes = false;
       void serial(async () => {
         if (socket !== connection || attempt !== generation) return;
         const frame = JSON.parse(raw.toString()) as RemoteDeviceFrame;
@@ -443,6 +469,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
                 publicKeys: serviceTrust?.keys ?? [],
               };
           await deps.store.setRemoteDeviceAuthority(authority);
+          if (!connectionCurrent()) return;
           if (handshakeTimer) clearTimeout(handshakeTimer);
           handshakeTimer = null;
           failure = null;
@@ -450,6 +477,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           resolveReady?.();
           resolveReady = null;
           if (frame.type === "hello") await catalog();
+          if (!connectionCurrent()) return;
           state = requestOnly ? "off" : "connected";
         } else if (frame.type === "error") {
           const problem = z
@@ -472,6 +500,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           } else throw new Error("remote_relay_rejected_frame");
         } else if (frame.type === "revoked") {
           await preference.set(next.owner, false);
+          if (!connectionCurrent()) return;
           await disconnect();
         } else if (frame.type === "drain") {
           await disconnect({
@@ -527,6 +556,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
               }),
             ).toString("base64url");
           }
+          if (!connectionCurrent()) return;
           const page = await readRemoteHistory({
             store: deps.store,
             owner: next.owner,
@@ -534,7 +564,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
             cursor,
             outputs: deps.outputs,
           });
-          send({
+          sendCurrent({
             protocolVersion: 1,
             type: "snapshot",
             taskId: request.taskId,
@@ -552,54 +582,11 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           const request = z
             .object({ commandId: z.string(), payloadHash: z.string() })
             .parse(frame.payload);
-          const receipt = await deps.store.getRemoteDeviceReceipt(
-            request.commandId,
-          );
-          const input = await deps.store.getTaskInput(
-            `remote-input:${request.commandId}`,
-          );
-          const admitted = input?.payload.remoteDevice as
-            | RemoteDispatchCommand
-            | undefined;
-          const cancellation = await deps.store.getRemoteDeviceCancellation(
-            request.commandId,
-          );
-          if (cancellation && cancellation.payload_hash !== request.payloadHash)
-            throw new Error("remote_command_identity_changed");
-          if (
-            (receipt && receipt.payloadHash !== request.payloadHash) ||
-            (admitted && admitted.payloadHash !== request.payloadHash)
-          )
-            throw new Error("remote_command_identity_changed");
-          send({
-            protocolVersion: 1,
-            type: "receipt_query_result",
-            requestId: frame.requestId,
-            payload: {
-              commandId: request.commandId,
-              payloadHash: request.payloadHash,
-              receipt:
-                receipt ??
-                (input && admitted
-                  ? {
-                      id: admitted.id,
-                      deviceId: admitted.deviceId,
-                      state: "admitted",
-                      revision: 2,
-                      payloadHash: admitted.payloadHash,
-                      action: admitted.action,
-                      targetId: admitted.targetId,
-                      localSessionId: input.sessionId,
-                      inputId: input.id,
-                      turnId: input.turnId,
-                      createdAt: input.createdAt,
-                      expiresAt: admitted.deadline,
-                    }
-                  : null),
-              notAdmitted: !receipt && !input,
-              cancelled: !!cancellation,
-            },
+          const response = await readRemoteCommandReceiptQuery({
+            request, requestId: frame.requestId, store: deps.store,
+            pending: commands.contains, current: connectionCurrent,
           });
+          if (response) sendCurrent(response);
         } else if (frame.type === "command_cancel") {
           const request = z
             .object({ commandId: z.string(), payloadHash: z.string() })
@@ -608,7 +595,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
             request.commandId,
             request.payloadHash,
           );
-          send({
+          sendCurrent({
             protocolVersion: 1,
             type: "command_cancel_result",
             requestId: frame.requestId,
@@ -643,14 +630,14 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
               stillCurrent: () =>
                 socket === connection && generation === attempt && !!authority,
             });
-            send({
+            sendCurrent({
               protocolVersion: 1,
               type: "artifact_result",
               requestId: frame.requestId,
               payload: result,
             });
           } catch (error) {
-            send({
+            sendCurrent({
               protocolVersion: 1,
               type: "artifact_result",
               requestId: frame.requestId,
@@ -666,47 +653,23 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           }
         } else if (frame.type === "command") {
           const command = frame.payload as RemoteDispatchCommand;
-          try {
-            const receipt = await deps.execute(command);
-            send({ protocolVersion: 1, type: "receipt", payload: receipt });
-          } catch (error) {
-            const admitted = await deps.store.getRemoteDeviceReceipt(
-              command.id,
-            );
-            if (admitted) {
-              send({
-                protocolVersion: 1,
-                type: "receipt",
-                payload: { ...admitted, state: "reconciling" },
-              });
-              return;
-            }
-            send({
-              protocolVersion: 1,
-              type: "receipt",
-              payload: {
-                id: command.id,
-                deviceId: command.deviceId,
-                payloadHash: command.payloadHash,
-                action: command.action,
-                targetId: command.targetId,
-                state: "rejected",
-                revision: 2,
-                error:
-                  error instanceof z.ZodError
-                    ? "remote_command_configuration_invalid"
-                    : error instanceof Error &&
-                        /^remote_[a-z0-9_]+$/.test(error.message)
-                      ? error.message
-                      : "remote_command_failed",
-                createdAt: new Date().toISOString(),
-                expiresAt: command.deadline,
-              },
-            });
-          }
+          const current = () => !closed && !authorityChanging && !!authority
+            && socket === connection && generation === attempt;
+          commandOwnsBytes = true;
+          commands.enqueue({ commandId: command.id, payloadHash: command.payloadHash, current,
+            run: () => executeRemoteCommand({ command, deps,
+              send: frame => { if (current()) send(frame); } }),
+            failed: error => {
+              if (!current()) return;
+              deps.warn(`Remote relay command: ${error instanceof Error ? error.name : "command_failed"}`);
+              void disconnect({ state: "reconnecting", reason: "connection_failed" }).then(schedule);
+            },
+            release: () => { incomingBytes -= bytes; },
+          });
         }
       })
         .catch((error) => {
+          if (socket !== connection || attempt !== generation || closed) return;
           deps.warn(
             `Remote relay frame: ${error instanceof Error ? error.name : "invalid_frame"}`,
           );
@@ -716,7 +679,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           }).then(schedule);
         })
         .finally(() => {
-          incomingBytes -= bytes;
+          if (!commandOwnsBytes) incomingBytes -= bytes;
         });
     });
     connection.on("close", (code, reason) => {
@@ -787,9 +750,11 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
       unlisten?.();
       await disconnect();
       await queue;
+      await commands.close();
     },
     async beforeAuthorityChange() {
       authorityChanging = true;
+      accountGeneration++;
       failure = null;
       await disconnect();
       if (selected) await preference.capture(selected.owner);
@@ -858,11 +823,15 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
       payload?: unknown,
     ): Promise<unknown> {
       if (authorityChanging) throw new Error("remote_account_changing");
-      const accountGeneration = generation;
+      const capturedAccountGeneration = accountGeneration;
+      const assertCurrentAccount = () => {
+        if (closed || authorityChanging || capturedAccountGeneration !== accountGeneration)
+          throw new Error("remote_account_changing");
+      };
       const presentation = await deps.accountStatus();
       const current = await deps.current();
       if (current) await preference.capture(current.owner);
-      if (authorityChanging || accountGeneration !== generation) throw new Error("remote_account_changing");
+      if (authorityChanging || capturedAccountGeneration !== accountGeneration) throw new Error("remote_account_changing");
       accountPresentation = presentation;
       if (!current) {
         await disconnect();
@@ -898,14 +867,13 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           })
           .strict()
           .parse(payload);
-        const attempt = generation;
-        await deps.store.attachLocalSessionOwner({
+        const qualify = await deps.prepareOwnerAttachment(current.owner);
+        await attachQualifiedLocalOwner({
           ...input,
+          store: deps.store,
           owner: current.owner,
-          assertCurrent: () => {
-            if (attempt !== generation || closed)
-              throw new Error("remote_account_changed");
-          },
+          qualify,
+          assertCurrent: assertCurrentAccount,
         });
         catalogDirty = true;
         if (authority) await catalog();
@@ -952,34 +920,23 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           )) as { devices: RemoteDevice[] })
         : { devices: [] };
       device = devices.devices.find((value) => value.id === source) ?? device;
-      const unresolvedTasks = [];
-      for (const session of await sessions()) {
-        if (!localSessionMayResolveOwnership(session)) continue;
-        const target = await deps.inspect(session.id);
-        if (target.canSendFollowup)
-          unresolvedTasks.push({
-            id: session.id,
-            title: session.title,
-            revision: localSessionOwnershipRevision(
-              session,
-              target.latestTurnId,
-            ),
-          });
-      }
+      const qualify = await deps.prepareOwnerAttachment(current.owner);
+      const unresolvedTasks = await unresolvedLocalOwnership({ sessions: await sessions(), qualify,
+        latestTurn: id => deps.store.latestTurnForSession(id), assertCurrent: assertCurrentAccount });
       return { ...this.status(), devices: devices.devices, unresolvedTasks };
     },
     async setEnabled(enabled: boolean) {
       if (authorityChanging) throw new Error("remote_account_changing");
       failure = null;
       reconnectAttempt = 0;
-      const accountGeneration = generation;
+      const capturedAccountGeneration = accountGeneration;
       const current = await deps.current();
-      if (authorityChanging || accountGeneration !== generation) throw new Error("remote_account_changing");
+      if (authorityChanging || capturedAccountGeneration !== accountGeneration) throw new Error("remote_account_changing");
       if (!current) throw new Error("Sign in to your OpenPond account first.");
       await preference.set(current.owner, enabled);
-      if (authorityChanging || accountGeneration !== generation) throw new Error("remote_account_changing");
+      if (authorityChanging || capturedAccountGeneration !== accountGeneration) throw new Error("remote_account_changing");
       await disconnect();
-      if (authorityChanging || generation !== accountGeneration + 1) throw new Error("remote_account_changing");
+      if (authorityChanging || capturedAccountGeneration !== accountGeneration) throw new Error("remote_account_changing");
       selected = current;
       if (!enabled && device)
         await clientFor(current).signed(
