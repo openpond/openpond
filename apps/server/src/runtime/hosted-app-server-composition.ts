@@ -234,8 +234,11 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
     }
     return turnRunner.sendTurn(sessionId, payload);
   };
-  const evaluations = storage.admittedProfileRelease?.hostExecution ? createHostedProfileEvaluationRuntime({
+  if (options.profileExternalDataset && !storage.admittedProfileRelease?.hostExecution)
+    throw new Error("External Dataset requires its admitted hosted evaluation.");
+  const evaluations = storage.admittedProfileRelease?.hostExecution ? await createHostedProfileEvaluationRuntime({
     client, core, release: storage.admittedProfileRelease, storeDir,
+    ...(options.profileExternalDataset ? { externalDataset: options.profileExternalDataset } : {}),
     readManagedArtifact: artifactOwner.read, admitSession: isolatedTools!.admitSession, settleSession: isolatedTools!.settleSession,
     createSession, sendTurn, interruptSessionTurn: turnRunner.interruptSessionTurn,
   }) : null;
