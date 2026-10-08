@@ -3,11 +3,7 @@ import { withUrlModels } from "./enclave/provider.js";
 import { createLocalByokChatStream } from "./openpond/local-byok-chat-stream.js";
 import { createModelUsagePersistence } from "./runtime/model-usage-persistence.js";
 import { createAccountAuthorityChange, type AccountAuthorityChange } from "./runtime/account-authority-change.js";
-import { createRemoteRelayManager } from "./remote-relay/manager.js";
-import { createRemoteCommandExecutor } from "./remote-relay/executor.js";
-import { remoteRelayAccount, remoteRelayAccountStatus } from "./remote-relay/account.js";
-import { createRemoteStarterResolver } from "./remote-relay/starters.js";
-import { createRemoteOutputReader, createRemoteQualifiedOutputReader } from "./remote-relay/output-refs.js";
+import { createAccountRemoteRelayManager } from "./remote-relay/account-services.js";
 import { createServerPonderActivity } from "./openpond/ponder-desktop-activity-service.js";
 import { readPonderLocalProjects } from "./openpond/ponder-project-snapshot.js";
 import {createAdvancedRefinerEvaluationSource} from "./training/advanced-refiner-evaluation-source.js";
@@ -1276,19 +1272,15 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       .filter(output => output.sourceTurnId === turnId),
     relayRequest: payload => remoteRelayManager.callerRequest(payload), relayWake: () => remoteRelayManager.wake(),
     inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect, warn: message => logger.warn(message) });
-  const remoteRelayManager = createRemoteRelayManager({ storeDir, installation: ponderInstallation, store,
-    current: remoteRelayAccount(ponderInstallation.installationId, loadAppPreferences),
-    accountStatus: () => remoteRelayAccountStatus(loadAppPreferences),
+  const remoteRelayManager = createAccountRemoteRelayManager({ storeDir, installation: ponderInstallation, store,
+    loadAppPreferences,
     inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect,
     prepareOwnerAttachment: desktopManagedAgentRoutes.prepareOwnerAttachment,
-    execute: createRemoteCommandExecutor({ store, inspect: desktopManagedAgentRoutes.localManagedMessaging.inspect,
+    commands: {
       admit: input => turnRunner.admitUserLocalMessage(input), interrupt: (...args) => turnRunner.interruptSessionTurn(...args),
       createReserved: createReservedSession,
-      resolveApproval,
-      resolveStarter: createRemoteStarterResolver({ store,
-        current: remoteRelayAccount(ponderInstallation.installationId, loadAppPreferences) }) }),
-    outputs: createRemoteOutputReader(store),
-    readOutput: createRemoteQualifiedOutputReader(store, workOutputService.readQualifiedWorkOutput),
+      resolveApproval },
+    readQualifiedOutput: workOutputService.readQualifiedWorkOutput,
     caller: { needsConnection: ponderDesktopManager.needsRelay, requestAuthority: ponderDesktopManager.relayAuthority,
       receiveOffers: payload => {
         const offer = payload as { caller: string; operations: unknown; hasObligations: boolean };
