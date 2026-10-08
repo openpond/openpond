@@ -34,6 +34,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/browser-control-queue.test.ts",
   "tests/byok-turn-runner-profile-tools.test.ts",
   "tests/chat-attachments.test.ts",
+  "tests/chat-file-resolution.test.ts",
   "tests/cloud-api-core.test.ts",
   "tests/cloud-private-persistence.test.ts",
   "tests/codex-bridge-usage.test.ts",
