@@ -45,3 +45,7 @@
 .human-review-inbox-control { position: relative; display: inline-grid; place-items: center; flex: 0 0 32px; min-width: 32px; overflow: visible; }
 .human-review-inbox-control svg { flex-shrink: 0; }
 .human-review-inbox-count { position: absolute; top: -3px; right: -6px; min-width: 15px; padding: 1px 3px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: 9px; line-height: 12px; text-align: center; }
+
+.desktop-rail-button.desktop-training-entry,
+.desktop-rail-button.desktop-training-entry:hover,
+.desktop-rail-button.desktop-training-entry.active { color: #74d4df; }

@@ -16,7 +16,7 @@ import {
   initializeHome, readConfig, patchConfig, updatePreferences, readPreferences, clearCache,
   writeCredential, readCredential, storagePaths, getLocalRecord, resolveEffectiveConfig, setProjectTrust,
   assertConfigRunCurrent, deleteCredential, exportRecoveryBackup, restoreRecoveryBackup, exportSettings,
-  readCache, writeCache, readAccountConfiguration, recoverMigration, readMigrationJournal,
+  readCache, writeCache, readAccountConfiguration, updateAccountConfiguration, recoverMigration, readMigrationJournal,
   publishManagedArtifact, withManagedArtifact, releaseArtifactReference, collectArtifactOrphans,
   resolveStoredPath,
 } from "../packages/persistence/src/index";
@@ -31,6 +31,28 @@ describe("persistence data and concurrency boundaries", () => {
   let home: string;
   beforeEach(async () => { home = await mkdtemp(path.join(tmpdir(), "openpond-storage-boundary-")); });
   afterEach(async () => { await rm(home, { recursive: true, force: true }); });
+
+  // Account mutations must never expose another account's workspace, including CLI changes.
+  test("resets workspace selection with account authority changes and preserves same-account preferences", async () => {
+    await initializeHome(home);
+    const first = { handle: "first", baseUrl: "https://openpond.ai", apiKey: "first-key" };
+    const second = { handle: "second", baseUrl: "https://openpond.ai", apiKey: "second-key" };
+    await updateAccountConfiguration(home, () => ({ accounts: [first, second], activeProfile: first }));
+    await updatePreferences(home, { defaultTeamId: "first-team" });
+    await updateAccountConfiguration(home, (value) => ({ ...value, accounts: [first, { ...second, apiKey: "inactive-key" }] }));
+    expect((await readPreferences(home)).preferences.defaultTeamId).toBe("first-team");
+    await updateAccountConfiguration(home, (value) => ({ ...value, activeProfile: second }));
+    expect((await readPreferences(home)).preferences.defaultTeamId).toBeNull();
+    expect((await readAccountConfiguration(home)).activeProfile?.handle).toBe("second");
+    await updatePreferences(home, { defaultTeamId: "second-team" });
+    await updateAccountConfiguration(home, (value) => value);
+    expect((await readPreferences(home)).preferences.defaultTeamId).toBe("second-team");
+    await updateAccountConfiguration(home, (value) => ({ ...value, accounts: value.accounts?.map((entry) => entry.handle === "second" ? { ...entry, apiKey: "replacement-key" } : entry) }));
+    expect((await readPreferences(home)).preferences.defaultTeamId).toBeNull();
+    await updatePreferences(home, { defaultTeamId: "replacement-team" });
+    await updateAccountConfiguration(home, (value) => ({ ...value, activeProfile: undefined, accounts: [first] }));
+    expect((await readPreferences(home)).preferences.defaultTeamId).toBeNull();
+  });
 
   // Vault custody must not inherit access granted to unrelated machine users.
   test("restricts credential custody to the current OS user", async () => {

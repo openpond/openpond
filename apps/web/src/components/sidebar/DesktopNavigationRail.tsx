@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Home } from "lucide-react";
-import { CalendarClock, FileOutput, FolderGit2, Globe2, MessageSquare, Shapes, Shield } from "../icons";
+import { Home, PanelsTopLeft } from "lucide-react";
+import { CalendarClock, FileOutput, FolderGit2, Globe2, MessageSquare, Shapes } from "../icons";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
@@ -12,8 +12,8 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
   const destinations = [
     { view: "chat", label: "Home", Icon: Home },
     { view: "scheduled", label: "Workflows", Icon: CalendarClock },
-    { view: "apps", label: "Apps", Icon: Shapes },
     { view: "outputs", label: "Outputs", Icon: FileOutput },
+    { view: "apps", label: "Apps", Icon: Shapes },
     { view: "projects", label: "Projects", Icon: FolderGit2 },
   ] as const;
 
@@ -42,6 +42,12 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
 
   return <nav className="desktop-navigation-rail" aria-label="Desktop destinations">
     <div className="desktop-rail-destinations">
+      <button type="button" data-rail-tooltip="Training" aria-label="Training"
+        className={`desktop-rail-button desktop-training-entry${sidebar.productArea === "console" ? " active" : ""}`}
+        aria-expanded={sidebar.productArea === "console" && open} onClick={() => {
+          if (sidebar.productArea === "console") sidebar.setSidebarOpen(!open);
+          else { sidebar.onProductAreaChange("console"); sidebar.setSidebarOpen(true); }
+        }}><PanelsTopLeft size={19} /></button>
       {destinations.map(({ view, label, Icon }) => {
         const active = sidebar.productArea === "chat" && sidebar.view === view;
         return <button key={view} type="button" data-rail-tooltip={label} aria-label={label}
@@ -49,12 +55,6 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
           className={`desktop-rail-button${active ? " active" : ""}`}
           onClick={() => void select(view)}><Icon size={19} /></button>;
       })}
-      <button type="button" data-rail-tooltip="Console" aria-label="Console"
-        className={`desktop-rail-button${sidebar.productArea === "console" ? " active" : ""}`}
-        aria-expanded={sidebar.productArea === "console" && open} onClick={() => {
-          if (sidebar.productArea === "console") sidebar.setSidebarOpen(!open);
-          else { sidebar.onProductAreaChange("console"); sidebar.setSidebarOpen(true); }
-        }}><Shield size={19} /></button>
       {([{ view: "team", label: "Team chat", Icon: MessageSquare, onOpen: sidebar.onOpenTeamChat },
         { view: "community", label: "Discover communities", Icon: Globe2, onOpen: sidebar.discoverCommunities }] as const).map(({ view, label, Icon, onOpen }) =>
         <button key={view} type="button" data-rail-tooltip={label} aria-label={label}

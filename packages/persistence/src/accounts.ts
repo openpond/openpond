@@ -26,6 +26,16 @@ export function accountId(handle: string, baseUrl?: string): string {
   return `account-${createHash("sha256").update(JSON.stringify([handle.trim().toLowerCase(), baseUrl?.trim().replace(/\/$/, "") ?? ""])).digest("hex").slice(0, 24)}`;
 }
 
+function activeAccountAuthority(configuration: PersistedAccountConfiguration): unknown {
+  const selected = configuration.activeProfile;
+  const account = (selected && configuration.accounts?.find((entry) =>
+    entry.handle.trim().toLowerCase() === selected.handle.trim().toLowerCase()
+    && (!selected.baseUrl || accountId(entry.handle, entry.baseUrl) === accountId(selected.handle, selected.baseUrl))
+  )) || configuration.accounts?.[0];
+  if (!account) return null;
+  return [accountId(account.handle, account.baseUrl), account.apiBaseUrl, account.chatApiBaseUrl, account.apiKey, account.session?.token];
+}
+
 export async function readAccountConfiguration(home: string): Promise<PersistedAccountConfiguration> {
   return withFileLock(`${storagePaths(home).runtime}/accounts`, () => readUnlocked(home));
 }
@@ -66,6 +76,7 @@ export async function updateAccountConfiguration(home: string, change: (value: P
     const before = snapshot.document;
     const current = await readUnlocked(home, snapshot);
     const next = await change(structuredClone(current));
+    const authorityChanged = JSON.stringify(activeAccountAuthority(current)) !== JSON.stringify(activeAccountAuthority(next));
     const sessions = new Map<string, AccountSession>();
     const definitions: NonNullable<typeof before.accounts> = Object.fromEntries(Object.entries(before.accounts ?? {}).filter(([, value]) => value.enabled === false));
     const seen = new Set<string>();
@@ -90,7 +101,12 @@ export async function updateAccountConfiguration(home: string, change: (value: P
       if (account.session) sessions.set(id, { appId: account.session.appId ?? null, conversationId: account.session.conversationId ?? null });
     }
     await updateConfig(home, (document) => ({ ...document, accounts: definitions,
-      ...(document.defaults?.account_id && !definitions[document.defaults.account_id] ? { defaults: { ...document.defaults, account_id: undefined } } : {}),
+      // Reset the previous account's workspace before exposing the new selection.
+      ...(authorityChanged || (document.defaults?.account_id && !definitions[document.defaults.account_id]) ? { defaults: {
+        ...document.defaults,
+        ...(authorityChanged ? { team_id: undefined } : {}),
+        ...(document.defaults?.account_id && !definitions[document.defaults.account_id] ? { account_id: undefined } : {}),
+      } } : {}),
       ...(next.lspEnabled === undefined ? {} : { editor: { ...document.editor, language_servers: next.lspEnabled ? "auto" : "off" } }),
       ...(next.executionMode || next.mode ? { runtime: { ...document.runtime, ...(next.executionMode ? { execution_mode: next.executionMode } : {}), ...(next.mode ? { mode: next.mode } : {}) } } : {}) }), snapshot.rawRevision);
     withLocalDatabase(home, (db) => {

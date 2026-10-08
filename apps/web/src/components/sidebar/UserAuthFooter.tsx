@@ -135,6 +135,11 @@ export function UserAuthFooter({
             </span>
             <span className="user-auth-menu-identity">
               <strong>{identity.label}</strong>
+              {account?.state === "signed_in" && account.environment ? (
+                <small title={account.baseUrl ?? undefined}>
+                  {account.environment === "production" ? "Production" : account.environment === "staging" ? "Staging" : account.environment}
+                </small>
+              ) : null}
             </span>
           </div>
           {organizations.length > 0 && onSelectTeam ? (

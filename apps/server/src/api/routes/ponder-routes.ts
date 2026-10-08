@@ -3,6 +3,37 @@ import type { HttpRouteContext } from "../http-route-types.js";
 
 export async function handlePonderRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   const path = requestUrl.pathname;
+  if (path === "/v1/ponder/desktop/projects" && request.method === "GET") {
+    sendJson(response, 200, await deps.ponderDesktopProjectsPayload(requestUrl.searchParams.get("after")));
+    return true;
+  }
+  if (path === "/v1/ponder/desktop/share-project" && request.method === "POST") {
+    sendJson(response, 200, await deps.ponderDesktopShareProjectPayload(await readJson(request)));
+    return true;
+  }
+  const handoffEditContext = /^\/v1\/ponder\/handoffs\/([a-zA-Z0-9%:_-]+)\/edit$/.exec(path);
+  if (handoffEditContext && request.method === "GET") {
+    sendJson(response, 200, await deps.ponderRequestPayload({
+      path: `/ponder/handoffs/${encodeURIComponent(decodeURIComponent(handoffEditContext[1]!))}/edit${requestUrl.search}`, method: "GET" }));
+    return true;
+  }
+  if (path === "/v1/ponder/desktop/outputs" && request.method === "POST") {
+    sendJson(response, 200, await deps.ponderRequestPayload({ path: "/ponder/desktop/outputs", method: "POST",
+      body: await readJson(request) as Record<string, unknown> }));
+    return true;
+  }
+  if (path === "/v1/ponder/desktop/attach-session" && request.method === "POST") {
+    sendJson(response, 200, await deps.ponderDesktopAttachSessionPayload(await readJson(request)));
+    return true;
+  }
+  if (path === "/v1/ponder/desktop" && request.method === "GET") {
+    sendJson(response, 200, await deps.ponderDesktopConnectionPayload("status"));
+    return true;
+  }
+  if ((path === "/v1/ponder/desktop/link" || path === "/v1/ponder/desktop/unlink") && request.method === "POST") {
+    sendJson(response, 200, await deps.ponderDesktopConnectionPayload(path.endsWith("/unlink") ? "unlink" : "link"));
+    return true;
+  }
   if (["/v1/ponder/settings", "/v1/ponder/activity"].includes(path) && ["GET", "POST"].includes(request.method ?? "")) {
     sendJson(response, 200, await deps.ponderRequestPayload({ path: path.slice(3) + requestUrl.search,
       method: request.method as "GET" | "POST", ...(request.method === "POST" ? { body: await readJson(request) as Record<string, unknown> } : {}) }));
@@ -24,6 +55,17 @@ export async function handlePonderRoutes({ deps, request, requestUrl, response }
   }
   if (path === "/v1/ponder/work" && request.method === "GET") {
     sendJson(response, 200, await deps.ponderRequestPayload({ path: "/ponder/work" }));
+    return true;
+  }
+  if (["/v1/ponder/handoffs/cancel", "/v1/ponder/handoffs/edit"].includes(path) && request.method === "POST") {
+    const key = request.headers["idempotency-key"];
+    sendJson(response, 200, await deps.ponderRequestPayload({ path: path.slice(3), method: "POST",
+      body: await readJson(request) as Record<string, unknown>, idempotencyKey: typeof key === "string" ? key : undefined }));
+    return true;
+  }
+  if (path === "/v1/ponder/results/retry" && request.method === "POST") {
+    sendJson(response, 200, await deps.ponderRequestPayload({ path: "/ponder/results/retry",
+      method: "POST", body: await readJson(request) as Record<string, unknown> }));
     return true;
   }
   if (path === "/v1/ponder/introduction/seen" && request.method === "POST") {

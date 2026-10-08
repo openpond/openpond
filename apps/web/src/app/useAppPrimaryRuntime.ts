@@ -229,6 +229,7 @@ export function useAppPrimaryRuntime() {
   const {
     appPreferences,
     applyBootstrapPayload,
+    applyPreferencesPayload,
     bootstrap,
     codexHistorySessions,
     connection,
@@ -698,6 +699,7 @@ export function useAppPrimaryRuntime() {
   } = useSidebarData({
     localProjects: bootstrap?.localProjects ?? [],
     cloudProjects: bootstrap?.cloudProjects ?? [],
+    teamId: appDefaults.defaultTeamId,
     sessions: experienceSidebarSessions,
     runtimeIndexes: selectedRuntimeIndexes,
     appPreferences,
@@ -1136,6 +1138,7 @@ export function useAppPrimaryRuntime() {
     showToast,
     appPreferences,
     applyBootstrapPayload,
+    applyPreferencesPayload,
     approvals,
     bootstrap,
     connection,

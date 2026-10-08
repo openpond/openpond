@@ -109,8 +109,8 @@
 }
 
 .sidebar-task-project-group-content {
-  width: calc(100% - 14px);
-  margin-left: 14px;
+  width: 100%;
+  min-width: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

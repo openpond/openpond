@@ -1,22 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatAttachment } from "@openpond/contracts";
+import { PonderDesktopHandoffPresentationSchema, type PonderDesktopHandoffPresentation, type ChatAttachment } from "@openpond/contracts";
 import { ApiRequestError, apiFetch, type ClientConnection } from "../../api/api-client";
 import type { ChatMessage } from "../../lib/app-models";
 import { Composer, type ComposerProps } from "../chat/Composer";
-import { MessageRow, ThinkingIndicator } from "../chat/Messages";
+import { MessageRow } from "../chat/Messages";
 import { PonderRecommendations } from "./PonderRecommendations";
 import { usePonderRecommendations } from "./usePonderRecommendations";
 import { hostedRecommendationSendBlocked, type PonderRecommendation } from "./ponder-recommendations";
+import { PonderResultAttention, type PonderLinkedWork } from "./PonderResultAttention";
+import { PonderTranscriptMessage, type PonderConversationMessage } from "./PonderTranscriptMessage";
+import { assertOriginalPonderDesktop, type PonderLinkedLocalWork } from "./ponder-local-work";
+import { PonderHandoffActivity } from "./PonderHandoffActivity";
+import { downloadPonderLocalOutput, type PonderLocalOutputSource } from "./ponder-local-output";
 
 type Binding = { bindingId: string; conversationId: string; introductionSeenVersion: number };
-type Message = { id: string; role: string; text: string; createdAt: string; source: string | null };
-type Turn = { id: string; status: string; lastSequence: number; wait?: { id: string; kind: string; title: string; options: string[] } | null;
+type Turn = { id: string; status: string; errorCode?: string | null; errorText?: string | null; lastSequence: number; wait?: { id: string; kind: string; title: string; options: string[] } | null;
   outputs?: Array<{ id: string; name: string; downloadURL?: string | null }> };
-type Conversation = { id: string; messages: Message[]; activeTurn: Turn | null };
+type Conversation = { id: string; messages: PonderConversationMessage[]; activeTurn: Turn | null };
 type TurnEvent = { id: string; sequence: number; type: string; text: string | null };
 type InputRef = { id: string; name: string; contentType: string; sizeBytes: number };
 type Upload = { input: InputRef; upload: { url: string; method: string; headers: Record<string, string> } };
-type LinkedWork = { conversationId: string; title: string; status: string };
+type LinkedWork = PonderLinkedWork;
 
 type SharedComposerProps = Pick<ComposerProps,
   "contextWindowStatus" | "providerSettings" | "provider" | "model" | "projectTarget" |
@@ -35,17 +39,12 @@ function displayError(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-function conversationMessages(conversation: Conversation | null): ChatMessage[] {
-  return (conversation?.messages ?? []).filter((message) => (message.role === "user" || message.role === "assistant") && message.source !== "ponder-recommendation")
-    .map((message) => ({ id: message.id, role: message.role as "user" | "assistant",
-      content: message.text, timestamp: message.createdAt }));
-}
-
-export function PonderDesktopPanel({ connection, presentation, composer, onOpenWork }: {
+export function PonderDesktopPanel({ connection, presentation, composer, onOpenWork, onOpenLocalWork }: {
   connection: ClientConnection;
   presentation: "clean" | "activity";
   composer: SharedComposerProps;
   onOpenWork: (conversationId: string) => void;
+  onOpenLocalWork: (sessionId: string) => void;
 }) {
   const [binding, setBinding] = useState<Binding | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -55,6 +54,10 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<TurnEvent[]>([]);
   const [linkedWork, setLinkedWork] = useState<LinkedWork[]>([]);
+  const [localWork, setLocalWork] = useState<PonderLinkedLocalWork[]>([]);
+  const [localHandoffs, setLocalHandoffs] = useState<PonderDesktopHandoffPresentation[]>([]);
+  const [cancellingHandoff, setCancellingHandoff] = useState<string | null>(null);
+  const handoffControlKeys = useRef(new Map<string, string>());
   const activityCursor = useRef<string | null>(null);
   const recommendations = usePonderRecommendations(connection, binding?.bindingId ?? null);
   const [editingRecommendation, setEditingRecommendation] = useState<PonderRecommendation | null>(null);
@@ -92,6 +95,10 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
     setConversation(null);
     setEvents([]);
     setLinkedWork([]);
+    setLocalWork([]);
+    setLocalHandoffs([]);
+    setCancellingHandoff(null);
+    handoffControlKeys.current.clear();
     activityCursor.current = null;
     setError(null);
     setDraft("");
@@ -124,8 +131,9 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
     let active = true;
     const refresh = async () => {
       try {
-        const value = await apiFetch<{ items: LinkedWork[] }>(connection, "/v1/ponder/work");
-        if (active) setLinkedWork(value.items);
+        const value = await apiFetch<{ items: LinkedWork[]; localItems: PonderLinkedLocalWork[]; localHandoffs: unknown }>(connection, "/v1/ponder/work");
+        const handoffs = PonderDesktopHandoffPresentationSchema.array().parse(value.localHandoffs);
+        if (active) { setLinkedWork(value.items); setLocalWork(value.localItems); setLocalHandoffs(handoffs); }
       } catch (cause) { if (active) setError(displayError(cause)); }
     };
     void refresh();
@@ -202,11 +210,12 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
       }
       const inputs = await Promise.all(attachments.map(uploadAttachment));
       if (!stillCurrent()) return false;
-      await apiFetch(connection, `/v1/ponder/conversations/${encodeURIComponent(binding.conversationId)}/turns`, {
+      const admitted = await apiFetch<Turn>(connection, `/v1/ponder/conversations/${encodeURIComponent(binding.conversationId)}/turns`, {
         method: "POST", headers: { "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ prompt, attachments: inputs }),
       });
       if (!stillCurrent()) return false;
+      setConversation(current => current ? { ...current, activeTurn: admitted } : { id: binding.conversationId, messages: [], activeTurn: admitted });
       if (activeContext.current.draft === context.draft) setDraft("");
       setError(null);
       return true;
@@ -246,8 +255,45 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
     }
   }
 
+  async function openLocalWork(source: Pick<PonderLinkedLocalWork, "sessionId" | "installationId" | "profileId" | "ownerUserId" | "teamId">) {
+    if (!source.sessionId) return;
+    const context = activeContext.current;
+    const current = () => mounted.current && activeContext.current.connection === context.connection
+      && activeContext.current.bindingId === context.bindingId;
+    try {
+      await assertOriginalPonderDesktop(connection, source);
+      if (!current()) return;
+      onOpenLocalWork(source.sessionId);
+    } catch (cause) { if (current()) setError(displayError(cause)); }
+  }
+
+  async function openLocalOutput(source: PonderLocalOutputSource, outputId: string) {
+    const context = activeContext.current;
+    const current = () => mounted.current && activeContext.current.connection === context.connection
+      && activeContext.current.bindingId === context.bindingId;
+    try { await downloadPonderLocalOutput(connection, source, outputId, current); }
+    catch (cause) { if (current()) setError(displayError(cause)); }
+  }
+
+  async function cancelHandoff(item: PonderDesktopHandoffPresentation) {
+    if (cancellingHandoff) return;
+    const context = activeContext.current;
+    const current = () => mounted.current && activeContext.current.connection === context.connection && activeContext.current.bindingId === context.bindingId;
+    const key = `${item.id}:${item.revision}`;
+    if (!handoffControlKeys.current.has(key)) handoffControlKeys.current.set(key, crypto.randomUUID());
+    setCancellingHandoff(item.id);
+    try {
+      await apiFetch(connection, "/v1/ponder/handoffs/cancel", { method: "POST", headers: { "Idempotency-Key": handoffControlKeys.current.get(key)! },
+        body: JSON.stringify({ handoffId: item.id, expectedRevision: item.revision }) });
+      const value = await apiFetch<{ localHandoffs: unknown }>(connection, "/v1/ponder/work");
+      const handoffs = PonderDesktopHandoffPresentationSchema.array().parse(value.localHandoffs);
+      if (current()) { setLocalHandoffs(handoffs); setError(null); }
+    } catch (cause) { if (current()) setError(displayError(cause)); }
+    finally { if (current()) setCancellingHandoff(null); }
+  }
+
   const running = Boolean(conversation?.activeTurn && ["queued", "running", "retry_scheduled"].includes(conversation.activeTurn.status));
-  const messages = conversationMessages(conversation);
+  const discussionActive = Boolean(conversation?.activeTurn && ["queued", "running", "retry_scheduled", "waiting_approval", "waiting_input"].includes(conversation.activeTurn.status));
   const activity: ChatMessage | null = presentation === "activity" && events.length > 0
     ? { id: "ponder-activity", role: "activity_group", timestamp: new Date().toISOString(),
       activities: events.map((event) => ({ id: event.id, label: event.type,
@@ -256,13 +302,20 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
 
   return <div className="chat-column" aria-label="Ponder Pal">
     <section className="chat-thread" aria-label="Conversation">
-      {linkedWork.length > 0 && <section className="ponder-linked-work" aria-label="Ponder Pal Work tasks">
-        {linkedWork.map((item) => <button key={item.conversationId} type="button"
-          onClick={() => onOpenWork(item.conversationId)}>
-          <span>{item.title}</span><small>{item.status.replaceAll("_", " ")}</small>
-        </button>)}
-      </section>}
-      {messages.map((message) => <MessageRow key={message.id} message={message} connection={connection} />)}
+      <PonderHandoffActivity connection={connection} items={localHandoffs} onEdited={async () => {
+        const context = activeContext.current;
+        const value = await apiFetch<{ localHandoffs: unknown }>(connection, "/v1/ponder/work");
+        if (mounted.current && activeContext.current.connection === context.connection && activeContext.current.bindingId === context.bindingId)
+          setLocalHandoffs(PonderDesktopHandoffPresentationSchema.array().parse(value.localHandoffs));
+      }} onOpenTask={(item, sessionId) => void openLocalWork({ ...item.scope, sessionId })}
+        onCancel={item => void cancelHandoff(item)} cancelling={cancellingHandoff} />
+      <PonderResultAttention connection={connection} work={linkedWork} localWork={localWork} onOpenWork={onOpenWork}
+        onOpenLocalWork={source => void openLocalWork(source)}
+        onOpenLocalOutput={(source, outputId) => void openLocalOutput(source, outputId)} onOpenOutput={outputId => void openOutput(outputId)}
+        busy={sending || discussionActive} />
+      {conversation?.messages.map(message => <PonderTranscriptMessage key={message.id} message={message}
+        connection={connection} work={linkedWork} onOpenWork={onOpenWork} onOpenOutput={fileId => void openOutput(fileId)}
+        onOpenLocalWork={source => void openLocalWork(source)} onOpenLocalOutput={(source, outputId) => void openLocalOutput(source, outputId)} />)}
       <PonderRecommendations items={recommendations.items} busy={recommendations.busy} editingId={editingRecommendation?.id ?? null}
         onEdit={editRecommendation}
         onSend={item => { void recommendationAction(item, "send"); }}
@@ -270,7 +323,12 @@ export function PonderDesktopPanel({ connection, presentation, composer, onOpenW
         onOpen={onOpenWork} />
       {recommendations.error ? <p role="alert">{recommendations.error}</p> : null}
       {activity && <MessageRow message={activity} connection={connection} />}
-      {running && <ThinkingIndicator />}
+      {running && <p className="ponder-request-status" role="status" aria-live="polite">
+        Request received. Ponder is working on it…
+      </p>}
+      {conversation?.activeTurn?.status === "failed" && <p className="ponder-request-status" role="alert">
+        Ponder couldn’t complete this request. {conversation.activeTurn.errorText ?? "Please try again."}
+      </p>}
       {conversation?.activeTurn?.wait && <section className="ponder-desktop-attention">
         <strong>{conversation.activeTurn.wait.title}</strong>
         {conversation.activeTurn.wait.kind === "approval"

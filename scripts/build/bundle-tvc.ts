@@ -2,10 +2,12 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import path from "node:path";
+import { parseArgs } from "node:util";
 import { build } from "esbuild";
 import { fromRoot } from "./shared-esbuild.js";
 
-const out = fromRoot("dist", "turnkey-agent");
+const { values } = parseArgs({ options: { profile: { type: "boolean", default: false } } });
+const out = fromRoot("dist", values.profile ? "turnkey-agent-profile" : "turnkey-agent");
 const skillsRoot = fromRoot("apps", "cli", "skills");
 const assets: Record<string, string> = {};
 async function collect(directory: string): Promise<void> {
@@ -43,7 +45,7 @@ process.once("exit", () => __tvcFs.rmSync(__tvcAssetRoot, { recursive: true, for
 const result = await build({
   entryPoints: [fromRoot("examples", "turnkey-agent", "main.ts")],
   outfile: path.join(out, "app.cjs"), bundle: true, platform: "node", format: "cjs", target: "node24.18",
-  splitting: false, minify: true, keepNames: true, sourcemap: false, legalComments: "none", metafile: true,
+  splitting: false, minify: true, keepNames: true, sourcemap: values.profile ? "external" : false, legalComments: "none", metafile: true,
   define: { "import.meta.url": "__tvcModuleUrl", "import.meta.resolve": "__tvcResolve", __OPENPOND_COMPILED_CLI__: "false" },
   banner: { js: bootstrap },
   plugins: [{
@@ -60,6 +62,7 @@ const result = await build({
     },
   }],
 });
+if (values.profile) await writeFile(path.join(out, "metafile.json"), JSON.stringify(result.metafile));
 const external = [...new Set(Object.values(result.metafile!.outputs).flatMap(output =>
   output.imports.filter(item => item.external && !isBuiltin(item.path)).map(item => item.path)))];
 if (external.length) throw new Error(`TVC bundle still requires external packages: ${external.join(", ")}`);

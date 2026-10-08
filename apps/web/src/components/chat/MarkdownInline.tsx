@@ -36,6 +36,8 @@ export type MarkdownContext = {
   workspaceImageUrls: WorkspaceImageUrlResolver;
   workspaceRootPath: string | null;
   fileBasePath?: string | null;
+  conversationLinks?: ReadonlyMap<string, { conversationId: string; title: string }>;
+  onOpenConversation?: (conversationId: string) => void;
 };
 
 type ImageLink =
@@ -259,6 +261,11 @@ function matchBareLinkAt(content: string, start: number): { href: string; end: n
 }
 
 function renderLink(label: string, href: string, context: MarkdownContext, key: number): ReactNode {
+  const conversation = context.conversationLinks?.get(href);
+  if (conversation) return <a key={key} href={`/tasks/${encodeURIComponent(conversation.conversationId)}`}
+    onClick={event => { if (context.onOpenConversation) { event.preventDefault(); context.onOpenConversation(conversation.conversationId); } }}>
+    {label === href ? conversation.title : renderInline(label, context)}
+  </a>;
   const cleanHref = cleanLinkHref(href);
   const image = imageLinkForHref(cleanHref, context);
   const external = /^https?:\/\//i.test(cleanHref);

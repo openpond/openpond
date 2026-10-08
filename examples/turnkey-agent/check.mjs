@@ -10,9 +10,12 @@ import { once } from "node:events";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { parseArgs } from "node:util";
 
-const executable = process.argv[2] ? path.resolve(process.argv[2]) : null;
-const bundle = path.resolve("dist/turnkey-agent/app.cjs");
+const { values, positionals } = parseArgs({ options: { bundle: { type: "string" } }, allowPositionals: true });
+if (positionals.length > 1 || (positionals.length && values.bundle)) throw new Error("Choose one executable or --bundle path.");
+const executable = positionals[0] ? path.resolve(positionals[0]) : null;
+const bundle = path.resolve(values.bundle ?? "dist/turnkey-agent/app.cjs");
 const token = "fixture-caller-token";
 const text = "Turnkey fixture ' $()\nUTF-8: café";
 const digest = createHash("sha256").update(text).digest("hex");
