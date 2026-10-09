@@ -351,9 +351,8 @@ describe("chat message projection", () => {
       createElement(MessageRow, { message: messages[1]! })
     );
     expect(assistantHtml).toContain("Hello z.ai");
-    expect(assistantHtml).toContain("Thinking");
-    // Reasoning section is collapsed by default, so the text is not in the DOM
-    expect(assistantHtml).not.toContain("The user is greeting Z.ai.");
+    // The complete streamed reasoning must be visible without expanding a disclosure.
+    expect(assistantHtml).toContain("The user is greeting Z.ai. It should answer briefly.");
   });
 
   test("merges reasoning into an assistant message that already has content (out-of-order events)", () => {

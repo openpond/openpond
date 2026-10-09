@@ -7,7 +7,6 @@ import {
   Globe2,
   HelpCircle,
   ImageIcon,
-  Lightbulb,
 } from "../icons";
 import type {
   ChatAttachmentSummary,
@@ -173,15 +172,19 @@ export const MessageRow = memo(function MessageRow({
   return (
     <article className="message-row assistant">
       {message.reasoningContent ? (
-        <ReasoningSection
-          activeWorkspaceAppId={activeWorkspaceAppId}
-          animateInitialContent={animateInitialContent}
-          connection={connection}
-          reasoningContent={message.reasoningContent}
-          onOpenBrowserLink={onOpenBrowserLink}
-          onOpenFileInSidebar={onOpenFileInSidebar}
-          workspaceRootPath={workspaceRootPath}
-        />
+        <div className="assistant-message">
+          <StreamingMarkdownText
+            activeWorkspaceAppId={activeWorkspaceAppId}
+            animateInitialContent={animateInitialContent}
+            connection={connection}
+            content={message.reasoningContent}
+            conversationLinks={conversationLinks}
+            onOpenConversation={onOpenSession}
+            onOpenBrowserLink={onOpenBrowserLink}
+            onOpenFileInSidebar={onOpenFileInSidebar}
+            workspaceRootPath={workspaceRootPath}
+          />
+        </div>
       ) : null}
       {message.content ? (
         <div className="assistant-message">
@@ -264,77 +267,6 @@ export const MessageRow = memo(function MessageRow({
   );
 },
 areMessageRowPropsEqual);
-
-const ReasoningSection = memo(function ReasoningSection({
-  activeWorkspaceAppId,
-  animateInitialContent,
-  connection,
-  reasoningContent,
-  onOpenBrowserLink,
-  onOpenFileInSidebar,
-  workspaceRootPath,
-}: {
-  activeWorkspaceAppId?: string | null;
-  animateInitialContent?: boolean;
-  connection?: ClientConnection | null;
-  reasoningContent: string;
-  onOpenBrowserLink?: (
-    href: string,
-    options?: { explicitFile?: boolean; newTab?: boolean }
-  ) => void;
-  onOpenFileInSidebar?: (path: string) => void;
-  workspaceRootPath?: string | null;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="activity-group assistant-reasoning">
-      <ChatActivitySummary
-        expanded={expanded}
-        icon={<Lightbulb aria-hidden className="activity-summary-kind-icon" size={13} />}
-        onToggle={() => setExpanded((value) => !value)}
-      >
-        Thinking
-      </ChatActivitySummary>
-      {expanded ? (
-        <div className="assistant-reasoning-content">
-          <StreamingMarkdownText
-            activeWorkspaceAppId={activeWorkspaceAppId}
-            animateInitialContent={animateInitialContent}
-            connection={connection}
-            content={reasoningContent}
-            onOpenBrowserLink={onOpenBrowserLink}
-            onOpenFileInSidebar={onOpenFileInSidebar}
-            workspaceRootPath={workspaceRootPath}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-},
-areReasoningSectionPropsEqual);
-
-function areReasoningSectionPropsEqual(
-  previous: {
-    activeWorkspaceAppId?: string | null;
-    animateInitialContent?: boolean;
-    connection?: ClientConnection | null;
-    reasoningContent: string;
-    onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
-    onOpenFileInSidebar?: (path: string) => void;
-    workspaceRootPath?: string | null;
-  },
-  next: typeof previous
-): boolean {
-  return (
-    previous.activeWorkspaceAppId === next.activeWorkspaceAppId &&
-    previous.animateInitialContent === next.animateInitialContent &&
-    previous.connection === next.connection &&
-    previous.reasoningContent === next.reasoningContent &&
-    previous.onOpenBrowserLink === next.onOpenBrowserLink &&
-    previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
-    previous.workspaceRootPath === next.workspaceRootPath
-  );
-}
 
 function areMessageRowPropsEqual(
   previous: MessageRowProps,
