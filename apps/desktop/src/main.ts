@@ -42,6 +42,7 @@ import {
 } from "./desktop-diagnostics.js";
 import { recoverDesktopHomeRuntime } from "./desktop-home-runtime.js";
 import { singleFlightDesktopStartup } from "./desktop-server-startup.js";
+import { DesktopWindowRecovery } from "./desktop-window-recovery.js";
 import { showLoadError } from "./desktop-startup-page.js";
 import { minimizeWindow } from "./desktop-window-controls.js";
 import { DesktopBrowserControlWorker } from "./desktop-browser-control-worker.js";
@@ -472,31 +473,33 @@ async function ensureRenderer(): Promise<string> {
   return rendererUrlForDesktop(rendererUrl);
 }
 
-async function loadMainWindow(window: BrowserWindow): Promise<void> {
-  try {
-    if (browserHomeError) throw browserHomeError;
-    const server = await ensureServer();
-    startupPageUrl = null;
-    if ((await health(server.serverUrl))?.recovery) {
-      const recoveryUrl = new URL(server.serverUrl);
-      if (!app.isPackaged) recoveryUrl.hash = new URLSearchParams({ returnTo: await ensureRenderer() }).toString();
-      trustedRendererUrl = recoveryUrl.toString();
-      await window.loadURL(trustedRendererUrl);
-      return;
-    }
-    if (!app.isPackaged) {
-      trustedRendererUrl = await ensureRenderer();
-      await window.loadURL(trustedRendererUrl);
-    } else {
-      trustedRendererUrl = rendererUrlForDesktop(server.serverUrl);
-      await window.loadURL(trustedRendererUrl);
-    }
-    desktopLogger().info("main window loaded", { packaged: app.isPackaged });
-    ensureBrowserControlWorker(server);
-  } catch (error) {
-    desktopLogger().error("main window load failed", { error });
-    await showLoadError(window, error, (url) => { startupPageUrl = url; });
+const windowRecoveries = new WeakMap<BrowserWindow, DesktopWindowRecovery>();
+
+function loadMainWindow(window: BrowserWindow): Promise<void> {
+  return windowRecoveries.get(window)!.retry();
+}
+
+async function loadWindowContent(window: BrowserWindow): Promise<void> {
+  if (window.isDestroyed() || desktopShutdownStarted) return;
+  if (browserHomeError) throw browserHomeError;
+  const server = await ensureServer();
+  startupPageUrl = null;
+  if ((await health(server.serverUrl))?.recovery) {
+    const recoveryUrl = new URL(server.serverUrl);
+    if (!app.isPackaged) recoveryUrl.hash = new URLSearchParams({ returnTo: await ensureRenderer() }).toString();
+    trustedRendererUrl = recoveryUrl.toString();
+    await window.loadURL(trustedRendererUrl);
+    return;
   }
+  if (!app.isPackaged) {
+    trustedRendererUrl = await ensureRenderer();
+    await window.loadURL(trustedRendererUrl);
+  } else {
+    trustedRendererUrl = rendererUrlForDesktop(server.serverUrl);
+    await window.loadURL(trustedRendererUrl);
+  }
+  desktopLogger().info("main window loaded", { packaged: app.isPackaged });
+  ensureBrowserControlWorker(server);
 }
 
 function ensureBrowserControlWorker(server: ServerConnection): void {
@@ -559,8 +562,12 @@ function registerIpcHandlers(): void {
       return { ok: false, error: "No app window is available." };
     }
     setTimeout(() => {
-      if (!window.isDestroyed()) window.webContents.reloadIgnoringCache();
+      if (!window.isDestroyed()) void loadMainWindow(window);
     }, 50);
+    return { ok: true };
+  });
+  handleTrackedIpc("openpond:desktop:restart", () => {
+    void restartDesktopApp();
     return { ok: true };
   });
   handleTrackedIpc("openpond:startup:retry", async (event) => {
@@ -831,12 +838,66 @@ async function createWindow(): Promise<void> {
   installMediaPermissionHandlers(mainWindow);
 
   installNavigationHandlers(mainWindow);
-  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+  const window = mainWindow;
+  const recovery = new DesktopWindowRecovery(
+    () => loadWindowContent(window),
+    async (error) => {
+      if (window.isDestroyed() || desktopShutdownStarted) return;
+      desktopLogger().error("main window recovery failed", { error });
+      await showLoadError(window, error, (url) => { startupPageUrl = url; });
+    },
+  );
+  windowRecoveries.set(window, recovery);
+  const failed = (error: Error) => {
+    if (desktopShutdownStarted || window.isDestroyed()) return;
+    void recovery.failed(error).catch((error) => desktopLogger().error("recovery page failed", { error }));
+  };
+  window.webContents.on("render-process-gone", (_event, details) => {
     desktopLogger().error("renderer process gone", { details });
+    if (details.reason !== "clean-exit") failed(new Error(`App renderer stopped: ${details.reason}`));
+  });
+  window.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    if (isMainFrame && code !== -3 && !url.startsWith("data:")) failed(new Error(`App failed to load: ${description}`));
+  });
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || input.isAutoRepeat) return;
+    if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === "r") {
+      event.preventDefault();
+      void loadMainWindow(window);
+    } else if (process.platform !== "darwin" && input.key === "Alt") {
+      event.preventDefault();
+      Menu.buildFromTemplate(recoveryMenuItems()).popup({ window });
+    }
   });
   installEditContextMenu(mainWindow);
 
   await loadMainWindow(mainWindow);
+}
+
+let restartingDesktop = false;
+async function restartDesktopApp(): Promise<void> {
+  if (restartingDesktop || desktopShutdownStarted) return;
+  restartingDesktop = true;
+  try {
+    await shutdownDesktop();
+    if (process.env.OPENPOND_DESKTOP_DEV_SUPERVISED === "1") app.exit(75);
+    else {
+      app.relaunch(process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : {});
+      app.quit();
+    }
+  } catch (error) {
+    desktopLogger().error("desktop restart failed", { error });
+    app.exit(1);
+  }
+}
+
+function recoveryMenuItems(): MenuItemConstructorOptions[] {
+  return [
+    { label: "Retry App", accelerator: "CommandOrControl+Shift+R", click: () => { if (mainWindow) void loadMainWindow(mainWindow); } },
+    { label: "Restart App", click: () => { void restartDesktopApp(); } },
+    { label: "Open Logs", click: () => { void openLogsFolder(); } },
+    { role: "toggleDevTools" },
+  ];
 }
 
 function configureApplicationMenu(): void {
@@ -874,8 +935,7 @@ function configureApplicationMenu(): void {
       {
         label: "View",
         submenu: [
-          { role: "reload" },
-          { role: "toggleDevTools" },
+          ...recoveryMenuItems(),
           { type: "separator" },
           { role: "resetZoom" },
           { role: "zoomIn" },
