@@ -38,6 +38,12 @@ export function RunDiagnosticsView({
           .get("diagnostic-task")
           ?.slice(0, 500) ?? "",
     ),
+    [attempt, setAttempt] = useState(
+      () =>
+        new URLSearchParams(typeof window === "undefined" ? "" : window.location.hash.slice(1)).get(
+          "diagnostic-attempt",
+        ) ?? "",
+    ),
     [reviewing, setReviewing] = useState(false),
     [notice, setNotice] = useState<string | null>(null);
   const evidenceDetails = useRef<HTMLDetailsElement>(null);
@@ -48,7 +54,23 @@ export function RunDiagnosticsView({
   const calls = [
     ...new Map(pages.flatMap((page) => page.calls).map((call) => [call.id, call])).values(),
   ];
-  const spans = diagnosticSpans(events.filter((event) => !task || event.taskId === task));
+  const selectedEvents = events.filter(
+    (event) => (!task || event.taskId === task) && (!attempt || String(event.attempt) === attempt),
+  );
+  const eventById = new Map(events.map((event) => [event.id, event]));
+  const spans = diagnosticSpans(selectedEvents);
+  function selectEvidence(nextTask: string, nextAttempt: string) {
+    setTask(nextTask);
+    setAttempt(nextAttempt);
+    const selection = new URLSearchParams();
+    if (nextTask) selection.set("diagnostic-task", nextTask);
+    if (nextAttempt) selection.set("diagnostic-attempt", nextAttempt);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}${selection.size ? `#${selection}` : ""}`,
+    );
+  }
   async function copy() {
     try {
       await navigator.clipboard.writeText(diagnosticAnalysisPrompt(value!, events, calls));
@@ -136,16 +158,7 @@ export function RunDiagnosticsView({
               Task{" "}
               <select
                 value={task}
-                onChange={(event) => {
-                  setTask(event.target.value);
-                  const selection = new URLSearchParams();
-                  if (event.target.value) selection.set("diagnostic-task", event.target.value);
-                  window.history.replaceState(
-                    window.history.state,
-                    "",
-                    `${window.location.pathname}${window.location.search}${selection.size ? `#${selection}` : ""}`,
-                  );
-                }}
+                onChange={(event) => selectEvidence(event.target.value, attempt)}
               >
                 <option value="">All retained events</option>
                 {[...new Set(events.flatMap((event) => (event.taskId ? [event.taskId] : [])))].map(
@@ -153,6 +166,26 @@ export function RunDiagnosticsView({
                     <option key={id}>{id}</option>
                   ),
                 )}
+              </select>
+            </label>
+            <label>
+              Attempt{" "}
+              <select
+                value={attempt}
+                onChange={(event) => selectEvidence(task, event.target.value)}
+              >
+                <option value="">All retained attempts</option>
+                {[
+                  ...new Set(
+                    events.flatMap((event) => (event.attempt === null ? [] : [event.attempt])),
+                  ),
+                ]
+                  .sort((a, b) => a - b)
+                  .map((value) => (
+                    <option key={value} value={String(value)}>
+                      {value}
+                    </option>
+                  ))}
               </select>
             </label>
           </div>
@@ -165,6 +198,7 @@ export function RunDiagnosticsView({
               <thead>
                 <tr>
                   <th>Phase / tool</th>
+                  <th>Attempt</th>
                   <th>State</th>
                   <th>Started</th>
                   <th>Duration</th>
@@ -175,6 +209,7 @@ export function RunDiagnosticsView({
                 {spans.map((span) => (
                   <tr key={span.id}>
                     <td>{span.label.replaceAll("_", " ")}</td>
+                    <td>{eventById.get(span.id)?.attempt ?? "—"}</td>
                     <td>{span.status}</td>
                     <td>{clock(span.startedAt)}</td>
                     <td>{duration(span.durationMs)}</td>
@@ -182,7 +217,7 @@ export function RunDiagnosticsView({
                       {span.evidenceIds.map((id) => (
                         <a
                           key={id}
-                          href={`#${new URLSearchParams({ "diagnostic-task": task, event: id })}`}
+                          href={`#${new URLSearchParams({ "diagnostic-task": task, "diagnostic-attempt": attempt, event: id })}`}
                           title={id}
                           onClick={() => {
                             if (evidenceDetails.current) evidenceDetails.current.open = true;
@@ -255,25 +290,24 @@ export function RunDiagnosticsView({
                   </tr>
                 </thead>
                 <tbody>
-                  {events
-                    .filter((event) => !task || event.taskId === task)
-                    .map((event) => (
-                      <tr
-                        key={event.id}
-                        id={new URLSearchParams({
-                          "diagnostic-task": task,
-                          event: event.id,
-                        }).toString()}
-                      >
-                        <td>
-                          {event.sequence}
-                          <small title={event.id}>{event.id}</small>
-                        </td>
-                        <td>{clock(event.at)}</td>
-                        <td>{event.type}</td>
-                        <td>{event.action ?? event.errorCode ?? "—"}</td>
-                      </tr>
-                    ))}
+                  {selectedEvents.map((event) => (
+                    <tr
+                      key={event.id}
+                      id={new URLSearchParams({
+                        "diagnostic-task": task,
+                        "diagnostic-attempt": attempt,
+                        event: event.id,
+                      }).toString()}
+                    >
+                      <td>
+                        {event.sequence}
+                        <small title={event.id}>{event.id}</small>
+                      </td>
+                      <td>{clock(event.at)}</td>
+                      <td>{event.type}</td>
+                      <td>{event.action ?? event.errorCode ?? "—"}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
