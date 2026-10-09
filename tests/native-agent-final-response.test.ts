@@ -18,7 +18,7 @@ it.skipIf(process.platform === "win32")("promotes Claude's authoritative result 
   await writeFile(executable, `#!${process.execPath}\n` + String.raw`
 const send = value => process.stdout.write(JSON.stringify(value) + '\n');
 const stream = event => send({type:'stream_event',event});
-let session;
+let session, previousResult;
 require('node:readline').createInterface({input:process.stdin}).on('line', line => {
  const input = JSON.parse(line);
  if(input.type === 'control_request') {
@@ -28,6 +28,9 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
  }
  if(input.type !== 'user') return;
  session = input.session_id;
+ // Replay the prior completion only after the next prompt has been admitted.
+ // This makes the cross-turn stdout race deterministic instead of chunk-dependent.
+ if(previousResult) send(previousResult);
  const mode = input.message.content[0].text;
  send({type:'system',subtype:'status',status:'compacting'});
  if(mode !== 'cancel' && mode !== 'error') send({type:'system',subtype:'compact_boundary',compact_metadata:{trigger:'auto',pre_tokens:180000}});
@@ -53,8 +56,9 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   stream({type:'content_block_delta',delta:{type:'text_delta',text:'answer'}});
   send({type:'assistant',message:{id:'answer',content:[{type:'text',text:'Provisional answer'}]}});
  }
- send({type:'result',session_id:session,is_error:false,result:'Final for ' + mode,usage:{input_tokens:300,cache_read_input_tokens:2400,cache_creation_input_tokens:50,output_tokens:100},modelUsage:{'claude-fixture':{inputTokens:9999999,contextWindow:200000}},total_cost_usd:999});
- send({type:'result',session_id:session,is_error:false,result:'Duplicate result must not appear'});
+ previousResult = {type:'result',uuid:require('node:crypto').randomUUID(),session_id:session,is_error:false,result:'Final for ' + mode,usage:{input_tokens:300,cache_read_input_tokens:2400,cache_creation_input_tokens:50,output_tokens:100},modelUsage:{'claude-fixture':{inputTokens:9999999,contextWindow:200000}},total_cost_usd:999};
+ send(previousResult);
+ send(previousResult);
 });`, { mode: 0o700 });
 
   const session = SessionSchema.parse({
