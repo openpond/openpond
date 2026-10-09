@@ -42,6 +42,7 @@ import {
 } from "./desktop-diagnostics.js";
 import { recoverDesktopHomeRuntime } from "./desktop-home-runtime.js";
 import { singleFlightDesktopStartup } from "./desktop-server-startup.js";
+import { configureApplicationMenu, installDesktopRecoveryShortcuts } from "./desktop-application-menu.js";
 import { DesktopWindowRecovery } from "./desktop-window-recovery.js";
 import { showLoadError } from "./desktop-startup-page.js";
 import { minimizeWindow } from "./desktop-window-controls.js";
@@ -859,20 +860,17 @@ async function createWindow(): Promise<void> {
   window.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     if (isMainFrame && code !== -3 && !url.startsWith("data:")) failed(new Error(`App failed to load: ${description}`));
   });
-  window.webContents.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown" || input.isAutoRepeat) return;
-    if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === "r") {
-      event.preventDefault();
-      void loadMainWindow(window);
-    } else if (process.platform !== "darwin" && input.key === "Alt") {
-      event.preventDefault();
-      Menu.buildFromTemplate(recoveryMenuItems()).popup({ window });
-    }
-  });
+  installDesktopRecoveryShortcuts(window, desktopRecoveryActions);
   installEditContextMenu(mainWindow);
 
   await loadMainWindow(mainWindow);
 }
+
+const desktopRecoveryActions = {
+  retry: () => { if (mainWindow) void loadMainWindow(mainWindow); },
+  restart: () => { void restartDesktopApp(); },
+  openLogs: () => { void openLogsFolder(); },
+};
 
 let restartingDesktop = false;
 async function restartDesktopApp(): Promise<void> {
@@ -891,66 +889,6 @@ async function restartDesktopApp(): Promise<void> {
   }
 }
 
-function recoveryMenuItems(): MenuItemConstructorOptions[] {
-  return [
-    { label: "Retry App", accelerator: "CommandOrControl+Shift+R", click: () => { if (mainWindow) void loadMainWindow(mainWindow); } },
-    { label: "Restart App", click: () => { void restartDesktopApp(); } },
-    { label: "Open Logs", click: () => { void openLogsFolder(); } },
-    { role: "toggleDevTools" },
-  ];
-}
-
-function configureApplicationMenu(): void {
-  if (process.platform !== "darwin") {
-    Menu.setApplicationMenu(null);
-    return;
-  }
-
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
-        label: appDisplayName(),
-        submenu: [
-          { role: "about" },
-          { type: "separator" },
-          { role: "hide" },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          { role: "quit" },
-        ],
-      },
-      {
-        label: "Edit",
-        submenu: [
-          { role: "undo" },
-          { role: "redo" },
-          { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "selectAll" },
-        ],
-      },
-      {
-        label: "View",
-        submenu: [
-          ...recoveryMenuItems(),
-          { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
-          { type: "separator" },
-          { role: "togglefullscreen" },
-        ],
-      },
-      {
-        label: "Window",
-        submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }],
-      },
-    ])
-  );
-}
 
 const explicitBrowserUserData = process.env.OPENPOND_DESKTOP_USER_DATA_DIR?.trim() || app.commandLine.getSwitchValue("user-data-dir").trim();
 const previousBrowserUserData = explicitBrowserUserData
@@ -974,7 +912,7 @@ app.on("second-instance", () => showMainWindow());
 app.whenReady().then(async () => {
   if (!ownsSingleInstanceLock) return;
   await initializeDesktopExecutablePath(desktopLogger());
-  configureApplicationMenu();
+  configureApplicationMenu(desktopRecoveryActions);
   app.dock?.setIcon(appIconPath());
   desktopLogger().info("desktop app ready", { packaged: app.isPackaged });
   desktopUpdater = await createDesktopUpdater({
