@@ -53,6 +53,8 @@ jobs:
         env:
           # The Mac runner's default 2 GiB heap cannot compile the server graph.
           NODE_OPTIONS: --max-old-space-size=4096
+      - name: Desktop home runtime recovery
+        run: pnpm exec vitest run --project root-system tests/desktop-home-runtime.test.ts
       - if: runner.os == 'Linux' || github.event_name == 'workflow_dispatch'
         run: pnpm exec vitest run --project root-system tests/persistence-boundaries.test.ts --testTimeout 60000 --hookTimeout 30000
         env:

@@ -40,6 +40,7 @@ import {
   openLogsFolder,
   readRecentLogs,
 } from "./desktop-diagnostics.js";
+import { recoverDesktopHomeRuntime } from "./desktop-home-runtime.js";
 import { singleFlightDesktopStartup } from "./desktop-server-startup.js";
 import { showLoadError } from "./desktop-startup-page.js";
 import { minimizeWindow } from "./desktop-window-controls.js";
@@ -249,6 +250,14 @@ async function startServer(): Promise<ServerConnection> {
   const existingUrl = process.env.OPENPOND_SERVER_URL || `http://127.0.0.1:${serverPort}`;
   const explicitServerUrl = Boolean(process.env.OPENPOND_SERVER_URL);
   const existingToken = await readToken();
+  if (app.isPackaged && !explicitServerUrl) {
+    const existing = await recoverDesktopHomeRuntime({ home: appHomePath(), desktopVersion, token: existingToken,
+      log: (message, context) => desktopLogger().info(message, context) });
+    if (existing) {
+      backendManager.useReusedServer();
+      return connection = { ...existing, platform: process.platform, arch: process.arch };
+    }
+  }
   let existingHealth = app.isPackaged && !explicitServerUrl ? null : await health(existingUrl);
   if (explicitServerUrl && process.env.OPENPOND_REUSE_SERVER === "1" && !existingHealth?.ok) {
     existingHealth = await waitForServerHealth(existingUrl);
