@@ -71,3 +71,7 @@
 .evaluation-history-table td:nth-child(4), .evaluation-history-table td:nth-child(5) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 .evaluation-history-table .evaluation-identity button { padding:0!important; white-space:nowrap; flex-shrink:0; font-size:12px; }
+
+/* A long provider ID must not cover the adjacent task or grader values. */
+.evaluation-history-table .evaluation-model { display:inline-block; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; }
+.evaluation-workspace table thead th { padding:8px!important; font-size:12px; line-height:1.3; }
