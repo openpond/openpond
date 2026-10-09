@@ -33,6 +33,15 @@ describe("desktop update distribution boundary", () => {
     expect(() => validateDesktopUpdateManifest({ version: "0.3.1", files: [
       { url: "openpond-0.3.1-linux-arm64.AppImage", sha512: hash("wrong architecture") },
     ] }, target, "appimage", "0.3.1")).toThrow("unexpected artifact");
+    const linuxFiles = [
+      { url: "openpond-0.3.1-linux-x86_64.AppImage", sha512: hash("appimage") },
+      { url: "openpond-0.3.1-linux-amd64.deb", sha512: hash("deb") },
+    ];
+    expect(validateDesktopUpdateManifest({ version: "0.3.1", files: linuxFiles }, target, "appimage", "0.3.1")).toEqual(linuxFiles[0]);
+    expect(validateDesktopUpdateManifest({ version: "0.3.1", files: linuxFiles }, target, "deb", "0.3.1")).toEqual(linuxFiles[1]);
+    expect(() => validateDesktopUpdateManifest({ version: "0.3.1", files: [
+      { url: "openpond-0.3.1-linux-amd64.AppImage", sha512: hash("wrong format architecture") },
+    ] }, target, "appimage", "0.3.1")).toThrow("unexpected artifact");
   });
 
   // Release jobs previously merged same-named Mac manifests. Prove all four
@@ -45,7 +54,9 @@ describe("desktop update distribution boundary", () => {
           const extensions = platform === "darwin" ? ["zip"] : ["AppImage", "deb"];
           const files = [];
           for (const extension of extensions) {
-            const name = `openpond-0.3.0-${platform === "darwin" ? "mac" : "linux"}-${arch}.${extension}`;
+            const packageArch = platform === "linux" && arch === "x64"
+              ? extension === "deb" ? "amd64" : "x86_64" : arch;
+            const name = `openpond-0.3.0-${platform === "darwin" ? "mac" : "linux"}-${packageArch}.${extension}`;
             await fs.writeFile(path.join(directory, name), name);
             files.push({ url: name, sha512: hash(name) });
           }
