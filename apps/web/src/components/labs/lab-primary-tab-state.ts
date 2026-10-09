@@ -13,7 +13,7 @@ type NavigationMode = "push" | "replace";
 type NavigationGuard = (destination: string) => boolean | Promise<boolean>;
 const guards = new Set<NavigationGuard>();
 const listeners = new Set<() => void>();
-const settingsSections = new Set<SettingsSection>(["account", "notifications", "harness", "harness-refiner", "harness-continuous-review", "harness-contents", "harness-releases", "profile", "skills", "configuration", "context", "training", "subagents", "editor", "providers", "dataset-storage", "remote", "usage", "personalization", "diagnostics"]);
+const settingsSections = new Set<SettingsSection>(["account", "notifications", "harness", "harness-refiner", "harness-continuous-review", "harness-contents", "harness-releases", "profile", "skills", "configuration", "context", "training", "subagents", "editor", "providers", "conversation-imports", "dataset-storage", "remote", "usage", "personalization", "diagnostics"]);
 const viewPaths = { apps: "/apps", outputs: "/outputs", projects: "/projects", scheduled: "/workflows", "get-started": "/get-started", team: "/team", community: "/community" } as const;
 let listening = false;
 let cacheKey = "";

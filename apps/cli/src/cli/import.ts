@@ -1,5 +1,7 @@
 import { createInterface } from "node:readline/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { resolveOpenPondHome, withOpenPondHome } from "@openpond/persistence";
 import { contentHash } from "@openpond/harness";
 import {
   collectorDirectory,
@@ -7,13 +9,9 @@ import {
   discoverSources,
   listSessions,
   CollectorStore,
-  collectorStatus,
-  controlCollector,
   configureCollector,
-  installCollectorService,
-  startCollectorService,
-  uninstallCollectorService,
-  runCollector,
+  setCollectorSchedule,
+  scheduleDescription,
   NATIVE_SOURCE_NAMES,
   type ExternalAgentSource,
   type CollectorConnection,
@@ -21,8 +19,10 @@ import {
 import { ConnectedSyncClient } from "openpond-sdk/connected-evidence";
 import { optionString, promptConfirm, parseBooleanOption } from "./common";
 import { authorizeImporter } from "../importer/device-auth";
-import { collectorTransport, collectorClients } from "../importer/transport";
-import { monitorImport } from "../importer/monitor";
+import { collectorClients } from "../importer/transport";
+import { importSchedule } from "../importer/schedule";
+import { runImportJob } from "../importer/run";
+import { collectorSetup, runImporterControl } from "../importer/commands";
 import { retainedReconnect, assertReconnectSource, assertReconnectUnchanged } from "../importer/reconnect";
 import { runImporterBranchCommand } from "../importer/branches";
 
@@ -36,67 +36,16 @@ export async function runImportCommand(
     );
   const json = parseBooleanOption(options.json),
     print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
+  const schedule = importSchedule(options);
+  if (schedule && !["connect", "reconnect", "schedule"].includes(action))
+    throw new Error("Use --continual with import connect, reconnect, or schedule.");
+  if (parseBooleanOption(options.off) && action !== "schedule")
+    throw new Error("Use import schedule <connection-id> --off to disable recurring imports.");
   if (action === "branches" || action === "branch") {
     await runImporterBranchCommand(directory, action, id, options);
     return;
   }
-  if (action === "service") {
-    if (id === "status") {
-      print(await collectorStatus(directory));
-      return;
-    }
-    if (id === "stop") {
-      print(await controlCollector(directory, "stop"));
-      return;
-    }
-    if (id === "uninstall") {
-      print(await uninstallCollectorService(directory));
-      return;
-    }
-    if (id === "install") {
-      print(
-        await installCollectorService({
-          directory,
-          executable: process.execPath,
-          args: [process.argv[1]!],
-          environment: collectorEnvironment(),
-        }),
-      );
-      return;
-    }
-    if (id === "start") {
-      print(await startCollectorService(directory));
-      return;
-    }
-    if (id === "run") {
-      const controller = new AbortController(),
-        stop = () => controller.abort();
-      process.once("SIGTERM", stop);
-      process.once("SIGINT", stop);
-      try {
-        await runCollector({
-          directory,
-          transport: collectorTransport,
-          signal: controller.signal,
-        });
-      } finally {
-        process.off("SIGTERM", stop);
-        process.off("SIGINT", stop);
-      }
-      return;
-    }
-    throw new Error(
-      "usage: openpond import service <install|start|stop|status|run|uninstall>",
-    );
-  }
-  if (action === "status") {
-    print(await collectorStatus(directory));
-    return;
-  }
-  if (action === "sync") {
-    print(await controlCollector(directory, "sync"));
-    return;
-  }
+  if (await runImporterControl(directory, action, id, options)) return;
   if (["pause", "resume", "disconnect"].includes(action)) {
     const store = await CollectorStore.open(directory);
     let connection: CollectorConnection | undefined;
@@ -131,7 +80,6 @@ export async function runImportCommand(
     team: reconnect.teamId,
     apiBaseUrl: reconnect.apiBaseUrl,
     baseUrl: reconnect.accountBaseUrl!,
-    once: !reconnect.keepSyncing,
   };
   const sourceName = optionString(options, "source") as ExternalAgentSource;
   if (sourceName && !(sourceName in NATIVE_SOURCE_NAMES))
@@ -153,7 +101,7 @@ export async function runImportCommand(
   }
   if (action !== "connect" && action !== "reconnect")
     throw new Error(
-      "usage: openpond import <connect|reconnect|discover|status|sync|pause|resume|disconnect|branches|branch|service>",
+      "usage: openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service>",
     );
   // An unavailable selected/default profile is still an authority choice.
   // Filtering it out could silently connect the sole remaining sibling.
@@ -195,7 +143,7 @@ export async function runImportCommand(
     });
     try {
       range =
-        (await prompt.question("History: day, week, or all [week]: ")).trim() ||
+        (await prompt.question("Initial history: day, week, or all [default: week]: ")).trim() ||
         "week";
     } finally {
       prompt.close();
@@ -209,26 +157,30 @@ export async function runImportCommand(
       : new Date(
           Date.now() - (range === "day" ? 1 : 7) * 86400000,
         ).toISOString();
+  const historyLabel = reconnect ? since ? `since ${since}` : "all" : range === "week" ? `last week${options.range ? "" : " (default)"}` : range === "day" ? "last day" : "all";
   const preview = await listSessions(source, {
     since: since ?? undefined,
     limit: 100,
   });
   if (!json)
     console.log(
-      `Found ${preview.items.length}${preview.nextCursor ? "+" : ""} sessions in ${source.root}. History: ${reconnect ? since ? `since ${since}` : "all" : range}.`,
+      `Found ${preview.items.length}${preview.nextCursor ? "+" : ""} sessions in ${source.root}. Initial history: ${historyLabel}.`,
     );
-  const keepSyncing = !parseBooleanOption(options.once),
-    projectId = optionString(options, "project");
+  if (!json) console.log(schedule
+    ? `Continual imports: ${scheduleDescription(schedule)} local time. Continual learning is unchanged.`
+    : "One-time import. Continual imports default to off; existing schedules are unchanged.");
+  const projectId = optionString(options, "project");
   if (
     !parseBooleanOption(options.yes) &&
     (!interactive ||
       !(await promptConfirm(
-        `Sync this source to ${projectId || "your personal Imported conversations Project"} and ${keepSyncing ? "keep syncing" : "import once"}?`,
+        `Sync this source to ${projectId || "your personal Imported conversations Project"} and ${schedule ? `enable continual imports ${scheduleDescription(schedule)} local time` : "import once (no new schedule)"}?`,
         true,
       )))
   )
     throw new Error("Connection was not approved. No history was uploaded.");
-  const access = await authorizeImporter(source, options),
+  const credentialHome = reconnect ? reconnect.credentialHome ?? join(homedir(), ".openpond") : resolveOpenPondHome();
+  const access = await withOpenPondHome(credentialHome, () => authorizeImporter(source, options)),
     sync = new ConnectedSyncClient(access),
     connectionId =
       optionString(options, "connection") ||
@@ -248,7 +200,7 @@ export async function runImportCommand(
       ? { kind: "existing", projectId }
       : { kind: "new", name: "Imported conversations" },
     since,
-    keepSyncing,
+    keepSyncing: false,
     expectedRevision: prior?.revision ?? 0,
   });
   await configureCollector(directory, {
@@ -257,62 +209,16 @@ export async function runImportCommand(
     apiBaseUrl: access.baseUrl,
     account: access.account,
     accountBaseUrl: access.accountBaseUrl,
+    credentialHome,
     source,
     projectId: retained.projectId,
     revision: retained.revision,
     requestedSyncRevision: retained.requestedSyncRevision,
     completedSyncRevision: retained.completedSyncRevision,
     since,
-    keepSyncing,
+    keepSyncing: false,
     state: retained.state,
   });
-  await installCollectorService({
-    directory,
-    executable: process.execPath,
-    args: [process.argv[1]!],
-    environment: collectorEnvironment(),
-  });
-  await startCollectorService(directory);
-  print({ connection: retained, service: await collectorStatus(directory) });
-  if (interactive && !parseBooleanOption(options.detach)) {
-    await monitorImport({
-      directory,
-      connectionId,
-      keepSyncing,
-      async pause() {
-        const store = await CollectorStore.open(directory);
-        let current: CollectorConnection | undefined;
-        try {
-          current = store
-            .connections()
-            .find((item) => item.id === connectionId);
-        } finally {
-          store.close();
-        }
-        if (!current) throw new Error("The connection is unavailable.");
-        const { sync: client } = await collectorClients(current);
-        const remote = await client.control({
-          id: current.id,
-          expectedRevision: current.revision,
-          action: "pause",
-        });
-        await configureCollector(directory, {
-          ...current,
-          revision: remote.revision,
-          state: remote.state,
-        });
-      },
-    });
-  }
-}
-
-function collectorEnvironment() {
-  return {
-    ...(process.env.OPENPOND_HOME
-      ? { OPENPOND_HOME: process.env.OPENPOND_HOME }
-      : {}),
-    ...(process.env.ELECTRON_RUN_AS_NODE === "1"
-      ? { ELECTRON_RUN_AS_NODE: "1" }
-      : {}),
-  };
+  if (schedule) await setCollectorSchedule(collectorSetup(directory), retained.id, schedule);
+  await runImportJob({ directory, connectionId: retained.id, json });
 }

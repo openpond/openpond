@@ -33,7 +33,6 @@ it("skips empty OpenCode history and admits the same identity once it has a comp
       await runCollector({ directory: stateDirectory, signal: controller.signal, transport: {
         heartbeat: async current => ({ revision: current.revision, state: current.state }),
         admit: async (_, entry) => { admissions++; expect(JSON.parse(entry.files[0]!.text).info.id).toBe("original"); },
-        pause: async current => { controller.abort(); return { revision: current.revision + 1, state: "paused" }; },
       } });
     } finally { clearTimeout(deadline); controller.abort(); }
   }
@@ -89,12 +88,10 @@ it("reprojects an unchanged Codex file after a source-policy upgrade", async () 
     store.scanned(connection.id, scanKey, native.storageRevision!);
     store.progress.select(connection.id, scanKey); store.progress.read(connection.id, scanKey, true); store.progress.discovered(connection.id);
     let revisions = 0;
-    let resume: ReturnType<typeof setTimeout> | undefined;
     await runCollector({ directory: stateDirectory, signal: controller.signal, transport: {
       heartbeat: async current => {
-        // Emulate an explicit control arriving after the paused startup scan.
-        resume ??= setTimeout(() => store.put({ ...connection, revision: 3, state: "active" }), 50);
-        return { revision: current.revision, state: current.state };
+        // An explicit remote resume is observed at this job's first probe.
+        return { revision: Math.max(3, current.revision), state: "active" };
       },
       admit: async (_, entry) => {
         revisions++;
@@ -103,11 +100,9 @@ it("reprojects an unchanged Codex file after a source-policy upgrade", async () 
         expect(entry.boundaryIds).toEqual([boundary.id]);
         expect(entry.files).toEqual(files);
       },
-      pause: async () => { controller.abort(); return { revision: 4, state: "paused" }; },
     } });
-    clearTimeout(resume);
     expect(revisions).toBe(1);
-    expect(store.status().connections[0]).toMatchObject({ state: "paused", admitted: 1, queued: 0 });
+    expect(store.status().connections[0]).toMatchObject({ state: "active", admitted: 1, queued: 0, run: { state: "completed" } });
     expect((await listSessions(connection.source, {})).items[0]?.storageRevision).toBe(native.storageRevision);
   } finally { clearTimeout(deadline); controller.abort(); store.close(); await rm(directory, { recursive: true, force: true }); }
 });
@@ -201,23 +196,15 @@ it("preserves local source identity and receipts across remote controls", async 
         admit: async () => {
           admissions++;
         },
-        pause: async () => {
-          controller.abort();
-          return {
-            revision: 3,
-            state: "paused",
-            source: "pi",
-            projectId: "untrusted-extra",
-          };
-        },
+
       },
     });
     expect(admissions).toBe(1);
     expect(store.connections()[0]).toEqual({
       ...connection,
       destinations: destination,
-      revision: 3,
-      state: "paused",
+      revision: 2,
+      state: "active",
       requestedSyncRevision: 0,
       completedSyncRevision: 0,
     });
@@ -296,7 +283,6 @@ it("acknowledges requested sync only after acquisition and admission, across con
             store.put({ ...current, revision: 3, requestedSyncRevision: 3 });
           }
         },
-        pause: async () => { throw new Error("Auto-pause preceded confirmed completion"); },
       } });
     } finally { clearTimeout(deadline); first.abort(); }
     expect(acknowledged).toBe(3);
@@ -306,17 +292,16 @@ it("acknowledges requested sync only after acquisition and admission, across con
     expect(store.connections()[0]!.completedSyncRevision).toBe(3);
     const restart = new AbortController(), restartDeadline = setTimeout(() => restart.abort(), 5000);
     try {
-      await runCollector({ directory: state, signal: restart.signal, transport: {
+      await runCollector({ directory: state, trigger: "manual", signal: restart.signal, transport: {
         heartbeat: async (current, report) => {
           expect(report.completedSyncRevision).toBe(3);
           expect(report.error).toBeNull();
           return { revision: current.revision, state: "active", requestedSyncRevision: 3, completedSyncRevision: acknowledged };
         },
         admit: async () => { throw new Error("Restart duplicated an acknowledged admission"); },
-        pause: async () => { restart.abort(); return { revision: 4, state: "paused", requestedSyncRevision: 3, completedSyncRevision: 3 }; },
       } });
     } finally { clearTimeout(restartDeadline); restart.abort(); }
-    expect(store.status().connections[0]).toMatchObject({ state: "paused", admitted: 2, queued: 0, completedSyncRevision: 3, acknowledgedSyncRevision: 3, error: null });
+    expect(store.status().connections[0]).toMatchObject({ state: "active", admitted: 2, queued: 0, completedSyncRevision: 3, acknowledgedSyncRevision: 3, error: null, run: { state: "completed" } });
   } finally { store.close(); await rm(directory, { recursive: true, force: true }); }
 }, 15000);
 
@@ -359,6 +344,7 @@ it.each([401, 403])(
         try {
           await runCollector({
             directory,
+            trigger: "manual",
             signal: controller.signal,
             transport: {
               heartbeat: async (current) => {
@@ -374,7 +360,6 @@ it.each([401, 403])(
                     status,
                   });
                 }
-                controller.abort();
                 return { revision: current.revision, state: current.state };
               },
               admit: async () => {
@@ -443,14 +428,13 @@ it("clears recovered heartbeat failures while retaining source failures", async 
     for (let restart = 0; restart < 2; restart++) {
       const controller = new AbortController();
       const deadline = setTimeout(() => controller.abort(), 5000);
-      let calls = 0;
       try {
         await runCollector({
           directory,
+          trigger: "manual",
           signal: controller.signal,
           transport: {
             heartbeat: async (current, status) => {
-              if (++calls === 2) controller.abort();
               if (restart === 0)
                 throw Object.assign(new Error("Sync request failed (502)."), {
                   status: 502,

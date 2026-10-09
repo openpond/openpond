@@ -8,22 +8,29 @@ Parsing, aliases, command help, and this reference use the same authoritative re
 
 ```text
 Usage:
-  openpond import <connect|reconnect|discover|status|sync|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--once] [--yes] [--detach]
+  openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]
 
 Options:
+  --at <string>
   --collector-dir <string>
   --connection <string>
-  --detach
+  --continual
+  --cron <string>
+  --daily
+  --hourly
   --json
   --leaf <string>
-  --once
+  --off
+  --on <string>
   --project <string>
   --range <string>
   --revision <string>
+  --scheduled
   --session <string>
   --source <string>
   --source-path <string>
   --team <string>
+  --weekly
   --yes
 ```
 ## datasets

@@ -65,6 +65,7 @@ export type SettingsSection =
   | "subagents"
   | "editor"
   | "providers"
+  | "conversation-imports"
   | "dataset-storage"
   | "remote"
   | "usage"

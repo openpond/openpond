@@ -7,8 +7,7 @@ import {
   collectorStatus,
   controlCollector,
   discoverSources,
-  installCollectorService,
-  startCollectorService,
+  setCollectorSchedule,
   type NativeSource,
 } from "@openpond/evals/native-conversations";
 import { readProvidersFile } from "../../openpond/provider-settings.js";
@@ -27,7 +26,6 @@ const Setup = z
     accountBaseUrl: z.string().url(),
     apiBaseUrl: z.string().url(),
     range: z.enum(["day", "week", "all"]),
-    keepSyncing: z.boolean(),
   })
   .strict();
 const Request = z
@@ -35,10 +33,9 @@ const Request = z
     command: z.enum([
       "inventory",
       "status",
-      "start",
       "stop",
       "sync",
-      "install",
+      "schedule",
       "connect",
       "reconnect",
       "pause",
@@ -47,6 +44,12 @@ const Request = z
     ]),
     connectionId: Line.optional(),
     setup: Setup.optional(),
+    schedule: z.discriminatedUnion("frequency", [
+      z.object({ frequency: z.literal("hourly") }).strict(),
+      z.object({ frequency: z.literal("cron"), expression: z.string().min(1).max(512) }).strict(),
+      z.object({ frequency: z.literal("daily"), time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u) }).strict(),
+      z.object({ frequency: z.literal("weekly"), time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u), day: z.number().int().min(0).max(6) }).strict(),
+    ]).nullable().optional(),
   })
   .strict();
 
@@ -71,7 +74,7 @@ async function discover(storeDir: string, directory: string) {
 
 /** Shared CLI state and quoted setup commands; reading inventory never starts collection. */
 export async function handleNativeImporter(payload: unknown, storeDir: string) {
-  const { command, connectionId, setup } = Request.parse(payload);
+  const { command, connectionId, setup, schedule } = Request.parse(payload);
   const directory = collectorDirectory();
   if (command === "inventory") {
     const [sources, collector] = await Promise.all([
@@ -96,7 +99,8 @@ export async function handleNativeImporter(payload: unknown, storeDir: string) {
   if (command === "status") return collectorStatus(directory);
   if (
     [
-      "install",
+      "sync",
+      "schedule",
       "connect",
       "reconnect",
       "pause",
@@ -117,13 +121,16 @@ export async function handleNativeImporter(payload: unknown, storeDir: string) {
         ? { OPENPOND_HOME: process.env.OPENPOND_HOME }
         : {}),
     };
-    if (command === "install")
-      return installCollectorService({
-        directory,
-        executable,
-        args: [cli],
-        environment,
-      });
+    if (command === "schedule") {
+      if (!connectionId || schedule === undefined) throw new Error("Select a source and its continual import setting.");
+      return setCollectorSchedule({ directory, executable, args: [cli], environment }, connectionId, schedule);
+    }
+    if (command === "sync") {
+      const status = await collectorStatus(directory);
+      if (!status.connections.some(item => item.state === "active" && (!connectionId || item.id === connectionId)))
+        throw new Error("Connect or resume a source before importing.");
+      return { command: nativeTerminalCommand(executable, [cli, "import", "sync", ...(connectionId ? [connectionId] : []), "--collector-dir", directory], environment) };
+    }
     if (command !== "connect") {
       const retained = (await collectorStatus(directory)).connections.find(
         (item) => item.id === connectionId,
@@ -141,7 +148,6 @@ export async function handleNativeImporter(payload: unknown, storeDir: string) {
             retained.id,
             "--collector-dir",
             directory,
-            ...(command === "reconnect" ? ["--detach"] : []),
           ],
           environment,
         ),
@@ -171,12 +177,9 @@ export async function handleNativeImporter(payload: unknown, storeDir: string) {
         setup.apiBaseUrl,
         "--range",
         setup.range,
-        "--detach",
       );
-      if (!setup.keepSyncing) args.push("--once");
     }
     return { command: nativeTerminalCommand(executable, args, environment) };
   }
-  if (command === "start") return startCollectorService(directory);
-  return controlCollector(directory, command as "stop" | "sync");
+  return controlCollector(directory, "stop");
 }

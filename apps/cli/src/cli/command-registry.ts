@@ -71,8 +71,8 @@ const PROFILE_SDK_OPTION_SCHEMA = {
 } as const satisfies Record<string, CliCommandOptionKind>;
 
 export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
-  { name: "import", usage: "openpond import <connect|reconnect|discover|status|sync|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--once] [--yes] [--detach]",
-    optionSchema: { source: "string", sourcePath: "string", range: "string", team: "string", project: "string", session: "string", leaf: "string", revision: "string", once: "boolean", yes: "boolean", detach: "boolean", connection: "string", collectorDir: "string", json: "boolean" },
+  { name: "import", usage: "openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]",
+    optionSchema: { source: "string", sourcePath: "string", range: "string", team: "string", project: "string", session: "string", leaf: "string", revision: "string", continual: "boolean", daily: "boolean", weekly: "boolean", hourly: "boolean", cron: "string", at: "string", on: "string", off: "boolean", scheduled: "boolean", yes: "boolean", connection: "string", collectorDir: "string", json: "boolean" },
     handler: async ({options,rest}) => (await import("./import")).runImportCommand(options,rest) },
   {
     name: "datasets",

@@ -5,15 +5,21 @@ import type {
   CollectorAdmission,
   CollectorConnection,
   CollectorStatus,
+  CollectorRun,
+  CollectorSchedule,
 } from "./collector-contracts.js";
 import { COLLECTOR_DEFAULTS } from "./collector-contracts.js";
 import { collectorDestinationLinks } from "./collector-destinations.js";
 import { CollectorProgress } from "./collector-progress.js";
+import { CollectorSnapshots, CollectorQueueFullError } from "./collector-snapshots.js";
+import { nextScheduledSync, validateCollectorSchedule } from "./collector-schedule.js";
 
 export class CollectorStore {
   readonly progress: CollectorProgress;
+  readonly snapshots: CollectorSnapshots;
   private constructor(readonly database: DatabaseSync) {
     this.progress = new CollectorProgress(database);
+    this.snapshots = new CollectorSnapshots(database);
   }
   static async open(directory: string) {
     await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -85,6 +91,7 @@ export class CollectorStore {
           this.database
             .prepare(`DELETE FROM ${table} WHERE connection_id=?`)
             .run(connection.id);
+        this.snapshots.collect();
         if (identityChanged) {
           this.database
             .prepare("DELETE FROM admitted_boundaries WHERE connection_id=?")
@@ -166,11 +173,17 @@ export class CollectorStore {
     entry: CollectorAdmission,
     revisions: { id: string; revision: string }[],
     progressSessionKey?: string,
+    snapshot = this.snapshots.prepare(entry.files),
   ) {
-    const payload = JSON.stringify(entry),
+    const { files: _files, ...metadata } = entry;
+    const payload = JSON.stringify(metadata),
       bytes = Buffer.byteLength(payload);
     this.database.exec("BEGIN IMMEDIATE");
     try {
+      if (this.database.prepare("SELECT 1 FROM pending WHERE id=?").get(entry.operationId)) {
+        this.database.exec("COMMIT");
+        return;
+      }
       const usage = this.database
         .prepare(
           "SELECT COUNT(*) AS count,COALESCE(SUM(bytes),0) AS bytes FROM pending",
@@ -178,11 +191,10 @@ export class CollectorStore {
         .get()!;
       if (
         Number(usage.count) >= COLLECTOR_DEFAULTS.maxPending ||
-        Number(usage.bytes) + bytes > COLLECTOR_DEFAULTS.maxBytes
+        Number(usage.bytes) + this.snapshots.bytes() + bytes + (this.snapshots.exists(snapshot.hash) ? 0 : snapshot.bytes) > COLLECTOR_DEFAULTS.maxBytes
       )
-        throw new Error(
-          "Buffer full. Restore connectivity before acquiring more history.",
-        );
+        throw new CollectorQueueFullError();
+      this.snapshots.retain(entry.operationId, snapshot);
       this.database
         .prepare(
           "INSERT OR IGNORE INTO pending(id,connection_id,payload,bytes,created_at) VALUES(?,?,?,?,?)",
@@ -213,12 +225,12 @@ export class CollectorStore {
   next(connectionId: string) {
     const row = this.database
       .prepare(
-        "SELECT payload,attempts FROM pending WHERE connection_id=? AND retry_at <= ? ORDER BY created_at,id LIMIT 1",
+        "SELECT id,payload,attempts FROM pending WHERE connection_id=? ORDER BY created_at,id LIMIT 1",
       )
-      .get(connectionId, Date.now());
+      .get(connectionId);
     return row
       ? {
-          entry: JSON.parse(String(row.payload)) as CollectorAdmission,
+          entry: { ...JSON.parse(String(row.payload)), files: this.snapshots.files(String(row.id)) } as CollectorAdmission,
           attempts: Number(row.attempts),
         }
       : null;
@@ -230,6 +242,7 @@ export class CollectorStore {
         .prepare("DELETE FROM pending WHERE id=?")
         .run(entry.operationId);
       if (Number(removed.changes) > 0) {
+        this.snapshots.collect();
         this.progress.acknowledge(entry.operationId);
         this.set(
           `lastAdmission:${entry.connectionId}`,
@@ -261,6 +274,10 @@ export class CollectorStore {
         id,
       );
   }
+  schedule(id: string): CollectorSchedule | null {
+    const stored = this.setting(`schedule:${id}`);
+    return stored ? validateCollectorSchedule(JSON.parse(stored)) : null;
+  }
   status(): CollectorStatus {
     const heartbeatAt = this.setting("heartbeatAt"),
       pid = Number(this.setting("pid")) || null;
@@ -281,11 +298,19 @@ export class CollectorStore {
         this.setting("desiredState") === "running" ? "running" : "stopped",
       pid,
       heartbeatAt,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       connections: this.database
         .prepare("SELECT id,config,admitted,error FROM connections ORDER BY id")
         .all()
         .map((row) => {
           const config = JSON.parse(String(row.config)) as CollectorConnection;
+          const schedule = this.schedule(String(row.id));
+          const retainedRun = this.setting(`run:${row.id}`);
+          const run = retainedRun ? JSON.parse(retainedRun) as CollectorRun : null;
+          if (run?.state === "running" && !alive) {
+            run.state = "failed";
+            run.error = "The import was interrupted before completion. Run Sync now to resume.";
+          }
           return {
             id: String(row.id),
             state: config.state,
@@ -299,7 +324,7 @@ export class CollectorStore {
             admitted: Number(row.admitted),
             error: typeof row.error === "string" ? row.error : null,
             backfill: this.progress.status(String(row.id)),
-            pendingBytes: Number(
+            pendingBytes: this.snapshots.bytes(String(row.id)) + Number(
               this.database
                 .prepare(
                   "SELECT COALESCE(SUM(bytes),0) AS bytes FROM pending WHERE connection_id=?",
@@ -307,6 +332,11 @@ export class CollectorStore {
                 .get(String(row.id))?.bytes ?? 0,
             ),
             lastAdmissionAt: this.setting(`lastAdmission:${row.id}`),
+            since: config.since,
+            schedule,
+            nextRunAt: schedule && config.state === "active" ? nextScheduledSync(schedule) : null,
+            lastSuccessfulSyncAt: this.setting(`lastSuccess:${row.id}`),
+            run,
             requestedSyncRevision: config.requestedSyncRevision ?? 0,
             completedSyncRevision: config.completedSyncRevision ?? 0,
             acknowledgedSyncRevision: Number(this.setting(`syncAcknowledged:${row.id}`)) || 0,

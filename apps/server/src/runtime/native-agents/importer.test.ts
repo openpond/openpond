@@ -22,12 +22,14 @@ test("preserves exact source and destination, quotes setup, and reads safe retai
   const home = await mkdtemp(join(tmpdir(), "agent-card-import-"));
   const values = [
     "OPENPOND_HOME",
+    "OPENPOND_COLLECTOR_DIR",
     "OPENPOND_COLLECTOR_CLI",
     "OPENPOND_COLLECTOR_EXECUTABLE",
   ] as const;
   const prior = values.map((key) => process.env[key]);
   try {
     process.env.OPENPOND_HOME = home;
+    process.env.OPENPOND_COLLECTOR_DIR = join(home, "conversation-importer");
     process.env.OPENPOND_COLLECTOR_CLI = join(home, "cli fixture.mjs");
     process.env.OPENPOND_COLLECTOR_EXECUTABLE = "/bin/echo";
     await writeFile(process.env.OPENPOND_COLLECTOR_CLI, "");
@@ -88,7 +90,6 @@ test("preserves exact source and destination, quotes setup, and reads safe retai
       accountBaseUrl: "https://example.test",
       apiBaseUrl: "https://api.example.test",
       range: "all",
-      keepSyncing: false,
     };
     const result = (await handleNativeImporter(
       { command: "connect", setup },
@@ -102,7 +103,9 @@ test("preserves exact source and destination, quotes setup, and reads safe retai
       `--source claude_code --source-path ${source.root}`,
     );
     expect(stdout).toContain("--team selected-team --project selected-project");
-    expect(stdout).toContain("--range all --detach --once");
+    expect(stdout).toContain("--range all");
+    expect(stdout).not.toContain("--continual");
+    expect(stdout).not.toContain("--detach");
     await expect(access(marker)).rejects.toThrow();
     await expect(
       handleNativeImporter(

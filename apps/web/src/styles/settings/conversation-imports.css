@@ -1,0 +1,22 @@
+.conversation-imports { display: flex; flex-direction: column; gap: 18px; }
+.conversation-imports p { margin: 0; color: var(--muted, #9b9b9b); line-height: 1.5; }
+.conversation-imports-toolbar, .conversation-import-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.conversation-import-card { border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.conversation-import-card h3 { margin: 0; }
+.conversation-import-card-heading > span { color: var(--muted, #9b9b9b); font-size: 12px; }
+.conversation-import-details { margin: 0; display: grid; gap: 10px; }
+.conversation-import-details > div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 14px; }
+.conversation-import-details dt { color: var(--muted, #9b9b9b); font-size: 12px; }
+.conversation-import-details dd { margin: 0; overflow-wrap: anywhere; font-size: 13px; }
+.conversation-import-schedule { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+.conversation-import-schedule label { display: flex; align-items: center; gap: 8px; }
+.conversation-import-schedule small { flex-basis: 100%; color: var(--muted, #9b9b9b); line-height: 1.5; }
+.conversation-import-progress { display: flex; flex-direction: column; gap: 8px; }
+.conversation-import-progress progress { width: 100%; }
+.conversation-imports details { font-size: 12px; overflow-wrap: anywhere; }
+.conversation-imports [role="alert"] { color: var(--danger, #db6464); }
+@media (max-width: 640px) { .conversation-import-details > div { grid-template-columns: 1fr; gap: 4px; } .conversation-import-card-heading { align-items: flex-start; } }
+
+.conversation-imports-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.conversation-imports-heading h1 { margin: 0 0 12px; }
+.conversation-import-schedule input[type="time"], .conversation-import-schedule input[type="text"], .conversation-import-schedule select { border: 1px solid var(--border); background: #202020; color: inherit; border-radius: 8px; padding: 8px; color-scheme: dark; }
