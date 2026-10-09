@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
+import type { Logger } from "@openpond/logging";
+import { userBunBinPath } from "./desktop-executable-path-bun-compat.js";
 
 const pathMarker = "__OPENPOND_EXECUTABLE_PATH__";
 
@@ -33,7 +35,7 @@ async function shellPath(env: NodeJS.ProcessEnv, timeout: number): Promise<strin
 function installationPaths(home: string, env: NodeJS.ProcessEnv): string[] {
   const directories = [
     path.join(home, ".local", "bin"), path.join(home, "bin"),
-    path.join(env.BUN_INSTALL || path.join(home, ".bun"), "bin"),
+    userBunBinPath(home, env),
     path.join(home, ".npm-global", "bin"), path.join(home, ".npm", "bin"),
     path.join(home, ".grok", "bin"), path.join(home, ".opencode", "bin"),
     env.PNPM_HOME || path.join(home, ".local", "share", "pnpm"),
@@ -69,4 +71,14 @@ export async function resolveDesktopExecutablePath(options: {
     .flatMap((entry) => entry.split(path.delimiter))
     .filter((entry) => path.isAbsolute(entry));
   return [...new Set(entries)].join(path.delimiter);
+}
+
+let executablePathReady: Promise<void> | null = null;
+
+export async function initializeDesktopExecutablePath(logger: Logger): Promise<void> {
+  if (process.platform !== "darwin") return;
+  await (executablePathReady ??= resolveDesktopExecutablePath().then((searchPath) => {
+    process.env.PATH = searchPath;
+    logger.info("desktop executable search path", { path: searchPath });
+  }));
 }

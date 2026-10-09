@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { saveImageDownload } from "./desktop-image-download.js";
 import { prepareDesktopBrowserHome } from "./desktop-browser-home.js";
-import { resolveDesktopExecutablePath } from "./desktop-executable-path.js";
+import { initializeDesktopExecutablePath } from "./desktop-executable-path.js";
 import { app, BrowserWindow, Menu, Notification, dialog, ipcMain, shell, systemPreferences, type MenuItemConstructorOptions } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -80,15 +80,6 @@ const localRequestTracker = new DesktopRequestTracker();
 const serverProcessSampler = new DesktopProcessTreeSampler();
 const backendManager = new DesktopBackendManager();
 let desktopUpdater: DesktopUpdateController | null = null;
-let executablePathReady: Promise<void> | null = null;
-
-async function initializeDesktopExecutablePath(): Promise<void> {
-  if (process.platform !== "darwin") return;
-  await (executablePathReady ??= resolveDesktopExecutablePath().then((searchPath) => {
-    process.env.PATH = searchPath;
-    desktopLogger().info("desktop executable search path", { path: searchPath });
-  }));
-}
 
 async function requestMicrophoneAccess(): Promise<boolean> {
   if (process.platform !== "darwin") return true;
@@ -233,7 +224,7 @@ async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: 
 }
 
 async function ensureServer(): Promise<ServerConnection> {
-  await initializeDesktopExecutablePath();
+  await initializeDesktopExecutablePath(desktopLogger());
   const desktopVersion = app.getVersion();
   if (connection) {
     const connectionCompatible = isCompatibleDesktopServer(await health(connection.serverUrl), desktopVersion);
@@ -923,7 +914,7 @@ app.on("second-instance", () => showMainWindow());
 
 app.whenReady().then(async () => {
   if (!ownsSingleInstanceLock) return;
-  await initializeDesktopExecutablePath();
+  await initializeDesktopExecutablePath(desktopLogger());
   configureApplicationMenu();
   app.dock?.setIcon(appIconPath());
   desktopLogger().info("desktop app ready", { packaged: app.isPackaged });
