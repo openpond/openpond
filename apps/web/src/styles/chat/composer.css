@@ -844,6 +844,18 @@
   background: transparent;
 }
 
+.composer-attachment-preview {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  cursor: zoom-in;
+}
+
+.composer-attachment-preview:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .composer-attachment-thumb img {
   width: 100%;
   height: 100%;
