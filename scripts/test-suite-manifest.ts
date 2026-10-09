@@ -47,6 +47,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/codex-personal-skills.test.ts",
   "tests/command-artifacts.test.ts",
   "tests/desktop-backend-manager.test.ts",
+  "tests/desktop-home-runtime.test.ts",
   "tests/desktop-executable-path.test.ts",
   "tests/desktop-dev-smoke-script.test.ts",
   "tests/desktop-diagnostics-collector.test.ts",
