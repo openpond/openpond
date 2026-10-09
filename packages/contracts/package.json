@@ -9,6 +9,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./desktop-updates": {
+      "types": "./dist/desktop-updates.d.ts",
+      "import": "./dist/desktop-updates.js"
+    },
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"

@@ -257,6 +257,7 @@ interface Window {
     token?: string;
   };
   openpond?: {
+    updates?: import("@openpond/contracts").DesktopUpdatesBridge;
     notify?: (input: { id: string; title: string; body: string; ponder?: boolean }) => Promise<boolean>;
     onPonderNotification?: (callback: (payload: { id: string }) => void) => () => void;
     getConnection: () => Promise<OpenPondConnection>;

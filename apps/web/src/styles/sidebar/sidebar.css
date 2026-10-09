@@ -12,6 +12,7 @@
   height: 19px;
   max-height: 19px;
   object-fit: contain;
+  max-width: 100%;
 }
 
 .sidebar-brand {
@@ -79,6 +80,12 @@
   opacity: 0.42;
 }
 
+.sidebar-update-control {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .sidebar-update-pill {
   display: inline-flex;
   align-items: center;
@@ -105,6 +112,45 @@
 
 .sidebar-update-pill svg {
   flex: 0 0 auto;
+}
+
+.sidebar-update-pill:disabled {
+  cursor: wait;
+}
+
+.sidebar-update-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.sidebar-update-spinner {
+  animation: sidebar-update-spin 1s linear infinite;
+}
+
+.sidebar-update-error {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 100;
+  width: min(260px, calc(var(--sidebar-width, 320px) - 28px));
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 4px 16px #0004;
+}
+
+@keyframes sidebar-update-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-update-spinner { animation: none; }
 }
 
 .sidebar-fixed-actions {
