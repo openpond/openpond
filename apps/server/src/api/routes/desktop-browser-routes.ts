@@ -15,6 +15,11 @@ export async function handleDesktopBrowserRoutes({
     sendJson(response, 200, await deps.browserControlNext(request));
     return true;
   }
+  const activeMatch = /^\/v1\/desktop\/browser-control\/requests\/([^/]+)\/active$/.exec(requestUrl.pathname);
+  if (request.method === "GET" && activeMatch) {
+    sendJson(response, 200, { active: deps.browserControlActive?.(request, decodeURIComponent(activeMatch[1]!)) === true });
+    return true;
+  }
   const resultMatch = /^\/v1\/desktop\/browser-control\/requests\/([^/]+)\/result$/.exec(
     requestUrl.pathname,
   );

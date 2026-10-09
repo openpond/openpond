@@ -14,12 +14,16 @@ export function projectRemoteEvent(event: RuntimeEvent, sequence: number): Remot
   if (!message && !tool && !state && !approval) return null;
   const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
   const content = !message ? "" : userMessage ? event.args!.prompt as string : event.output ?? (typeof data.text === "string" ? data.text : "");
-  const status = event.name === "approval.requested" ? "pending" : event.name === "approval.resolved"
+  // Runtime event status records processing; turn names carry the lifecycle outcome.
+  const turnStatus = event.name === "turn.started" ? "in_progress" : event.name === "turn.completed" ? "completed"
+    : event.name === "turn.failed" ? "failed" : event.name === "turn.interrupted" ? "interrupted" : undefined;
+  const status = turnStatus ?? (event.name === "approval.requested" ? "pending" : event.name === "approval.resolved"
     ? typeof data.status === "string" ? data.status : data.decision === "accept" ? "accepted"
       : data.decision === "acceptForSession" ? "accepted_for_session" : data.decision === "decline" ? "declined"
         : data.decision === "cancel" ? "cancelled" : event.status
-    : event.status;
+    : event.status);
   return { id: event.id, sequence, type: message ? "message" : tool ? "tool" : approval ? "approval" : "state",
+    timestamp: event.timestamp,
     ...(event.turnId ? { turnId: event.turnId } : {}),
     ...(message ? { messageId: userMessage ? `user:${event.turnId ?? event.id}` :
       `assistant:${typeof data.nativeMessageId === "string" ? data.nativeMessageId : typeof data.itemId === "string" ? data.itemId : event.turnId ?? event.id}`,
