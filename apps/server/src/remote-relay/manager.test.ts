@@ -14,7 +14,7 @@ import { deviceOwnerKey, loadRemoteAccessPreference } from "./preference.js";
 import { createAccountAuthorityChange } from "../runtime/account-authority-change.js";
 import { createLocalOwnerAttachmentInspection } from "../runtime/task-inbox/local-owner-attachment.js";
 import { createRemoteCommandExecutor } from "./executor.js";
-import { localSessionOwnershipRevision } from "./session-ownership.js";
+import { remoteCommandTargetRevision } from "./command-target.js";
 
 // A broker rejects null pre-authentication epoch/fence fields. The desktop must
 // finish its first authenticated hello and publish a catalog over the real socket.
@@ -299,7 +299,7 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
       const latest = await store.latestTurnForSession(sessionId);
       const id = randomUUID();
       const unsigned = { id, idempotencyKey: id, action: "follow_up" as const, targetId: "fixture-task", localSessionId: sessionId,
-        expectedRevision: Number.parseInt(localSessionOwnershipRevision(target, latest?.id ?? null).slice(0, 13), 16),
+        expectedRevision: remoteCommandTargetRevision(target, latest?.id ?? null, await store.taskInboxSnapshot(sessionId)),
         expectedTurnId: null, payload: { text: `Original input ${id}` }, deviceId,
         payloadHash: createHash("sha256").update(id).digest("hex"),
         scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: owner.teamId },
