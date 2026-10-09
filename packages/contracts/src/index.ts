@@ -41,6 +41,7 @@ export * from "./community.js";
 export * from "./tasksets.js";
 export * from "./taskset-drafts.js";
 export * from "./ponder-desktop.js";
+export * from "./desktop-updates.js";
 export * from "./ponder-desktop-handoff-presentation.js";
 export * from "./dataset-sources.js";
 export * from "./dataset-artifacts.js";

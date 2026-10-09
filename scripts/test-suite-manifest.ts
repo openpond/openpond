@@ -50,6 +50,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/desktop-diagnostics-collector.test.ts",
   "tests/desktop-harness-runner.test.ts",
   "tests/desktop-runtime-stage.test.ts",
+  "tests/desktop-update-distribution.test.ts",
   "tests/desktop-server-token.test.ts",
   "tests/dev-runner.test.ts",
   "tests/development-system-context.test.ts",

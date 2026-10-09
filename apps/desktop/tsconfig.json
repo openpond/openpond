@@ -15,6 +15,9 @@
   },
   "references": [
     {
+      "path": "../../packages/contracts"
+    },
+    {
       "path": "../../packages/logging"
     },
     {
