@@ -449,8 +449,8 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     const activeTab = scopedTabs.find((tab) => tab.id === activeTabId);
     if (!activeTab || activeTab.status !== "running") return;
     queuedCommandIdRef.current = queuedCommand.id;
-    sendInput(activeTab.id, `${queuedCommand.command}\n`);
-  }, [activeTabId, open, queuedCommand, scope, scopedTabs, sendInput]);
+    sendMessage({ type: "input", terminalId: activeTab.id, data: `${queuedCommand.command}\n`, waitForPrompt: true });
+  }, [activeTabId, open, queuedCommand, scope, scopedTabs, sendMessage]);
 
   return (
     <div className={`guake-terminal-overlay ${open ? "open" : ""}`} aria-hidden={!open} inert={open ? undefined : true}>
