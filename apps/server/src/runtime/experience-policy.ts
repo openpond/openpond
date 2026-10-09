@@ -6,6 +6,8 @@ import type {
 import type { ModelToolDefinition } from "../openpond/model-tool-registry.js";
 
 const CHAT_MODEL_TOOLS = new Set([
+  "html_preview",
+  "html_render",
   "schedule_work",
   "view_image",
   "web_fetch",
@@ -13,6 +15,8 @@ const CHAT_MODEL_TOOLS = new Set([
 ]);
 
 const WORK_MODEL_TOOLS = new Set([
+  "html_preview",
+  "html_render",
   "openpond_declare_task_work",
   "openpond_list_tasks",
   "openpond_send_task_message",

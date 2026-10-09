@@ -13,6 +13,7 @@ export type NativeModelToolResult = {
   ok: boolean;
   contentText: string;
   data?: unknown;
+  images?: Array<{ mimeType: string; data: string }>;
   turnControl?: "continue" | "await_user_input";
 };
 
@@ -239,4 +240,11 @@ function boundLongStrings(value: unknown, maxStringCharacters: number): unknown 
     );
   }
   return value;
+}
+
+export function nativeToolMcpResult(result: NativeModelToolResult) {
+  return { content: [
+    { type: "text" as const, text: result.contentText },
+    ...(result.images ?? []).map(image => ({ type: "image" as const, mimeType: image.mimeType, data: image.data })),
+  ], ...(result.ok ? {} : { isError: true }) };
 }

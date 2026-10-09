@@ -1,3 +1,4 @@
+import { HtmlVisualReferenceSchema } from "@openpond/contracts/html-visuals";
 import {
   ChatAttachmentSummarySchema,
   TaskInputSchema,
@@ -52,6 +53,14 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
   for (const original of items) {
     const item = projectNativeHistoryTool(original, nativeToolNames);
+    if (item.name === "visual.published") {
+      const parsed = HtmlVisualReferenceSchema.safeParse(asRecord(item.data)?.visual);
+      if (parsed.success && parsed.data.sessionId === item.sessionId && !messages.some(message => message.id === parsed.data.publicationId)) {
+        settleRunningActivityGroups(messages, item);
+        messages.push({ id: parsed.data.publicationId, role: "visual", visual: parsed.data, timestamp: item.timestamp, turnId: item.turnId });
+      }
+      continue;
+    }
     if (item.name === "task.input") {
       const peer = taskMessageFromEvent(item);
       if (peer) {

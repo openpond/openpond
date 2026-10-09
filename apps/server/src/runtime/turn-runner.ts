@@ -1,4 +1,7 @@
 import { runSteeredNativeTurn } from "./native-agents/steered-turn.js";
+import { HTML_VISUAL_INSTRUCTIONS } from "@openpond/contracts/html-visuals";
+import { visualTools } from "../visuals/visual-tools.js";
+import { nativeToolMcpResult } from "../openpond/native-tool-calls.js";
 import { nativeImageContent } from "./native-agents/attachments.js";
 import { assertPonderDesktopExecution } from "../store/ponder-desktop-input.js";
 import { assertRemoteExecution } from "../remote-relay/session-ownership.js";
@@ -266,6 +269,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeWebSearch,
     createScheduledWork,
     executeConnectedAppTool,
+    htmlVisuals,
     browserToolExecutor,
     manageSidebarFile,
     listIntegrationConnections,
@@ -804,6 +808,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     subagentToolsAvailable,
     hostedToolFlags,
     executeConnectedAppTool,
+    htmlVisuals,
     browserToolExecutor,
     executeOpenPondCommand,
     executeWorkspaceTool,
@@ -1394,6 +1399,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           })
         : [];
       const extraSystemContext = [
+        !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.provider === "codex" && htmlVisuals?.available() ? HTML_VISUAL_INSTRUCTIONS : "",
         selectedHarness?.instructionContext ?? null,
         subagentSystemContextForSession(session, subagentDelegation),
       ].filter(Boolean).join("\n\n");
@@ -1404,6 +1410,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const providerSettings = loadProviderSettings
           ? await loadProviderSettings()
           : null;
+        const visualToolsEnabled = !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
+          && htmlVisuals?.available() === true
+          && providerSettings?.modelCaches[session.provider]?.models.find(candidate => candidate.id === model)?.capabilities.vision === true;
         const contextLimitTokens = trustedProviderContextLimit({
           provider: "openpond",
           model,
@@ -1444,7 +1453,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             browserControlAvailable:
               !candidateAuthoring && !isolatedProfileEvaluation && sessionUsesRepositoryWork(session) &&
               browserControlAvailable(session),
-            extraSystemContext,
+            extraSystemContext: [extraSystemContext, visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
             userInstructionContext: admittedConfiguration?.instructions.userContext,
             repositoryInstructionSnapshot: admittedConfiguration?.instructions.repository,
           }
@@ -1456,6 +1465,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           systemPrompt
         );
         const hostedResult = await runHostedToolLoop({
+          visualToolsEnabled,
           harness: selectedHarness?.release.harnessRelease,
           harnessDeclarations: [
             ...(selectedHarness?.release.agentSnapshot?.toolDeclarations ?? []),
@@ -1547,6 +1557,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             (candidate) => candidate.id.trim()
           )?.id ??
           null;
+        const visualToolsEnabled = !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
+          && htmlVisuals?.available() === true
+          && providerSettings?.modelCaches[session.provider]?.models.find(candidate => candidate.id === runtimeModel)?.capabilities.vision === true;
         const contextLimitTokens = trustedProviderContextLimit({
           provider: session.provider,
           model: runtimeModel,
@@ -1588,7 +1601,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             browserControlAvailable:
               !candidateAuthoring && !isolatedProfileEvaluation && sessionUsesRepositoryWork(session) &&
               browserControlAvailable(session),
-            extraSystemContext,
+            extraSystemContext: [extraSystemContext, visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
             userInstructionContext: admittedConfiguration?.instructions.userContext,
             repositoryInstructionSnapshot: admittedConfiguration?.instructions.repository,
           }
@@ -1627,6 +1640,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           systemPrompt
         );
         const hostedResult = await runHostedToolLoop({
+          visualToolsEnabled,
           harness: selectedHarness?.release.harnessRelease,
           harnessDeclarations: [
             ...(selectedHarness?.release.agentSnapshot?.toolDeclarations ?? []),
@@ -1716,23 +1730,25 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const cwd = input.cwd ?? (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: session.workspaceKind !== "local_project" })) ?? session.cwd;
         if (!cwd) throw new Error("Choose a local working directory for this native agent.");
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
-        const definitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
+        const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
+        const visualToolsEnabled = !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
+        const definitions = [...coordinationDefinitions, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : [])];
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         const providerTurnId = await runSteeredNativeTurn({ runtime: nativeAgents, inbox: taskInbox, store: inboxStore, getSession,
-          taskToolInstructions: TASK_COORDINATION_INSTRUCTIONS,
+          taskToolInstructions: [coordinationDefinitions.length ? TASK_COORDINATION_INSTRUCTIONS : "", visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
           input: { content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
           coordination: definitions.length ? {
             tools: definitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
             execute: async (name, args, callId, signal) => {
               const active = activeTurns.get(sessionId);
-              if (!active || active.controller.signal.aborted || active.session.experience === "chat" || active.session.systemKind) throw new Error("This task has no active coordination execution.");
+              if (!active || active.controller.signal.aborted || active.session.systemKind) throw new Error("This task has no active tool execution.");
               const definition = definitions.find((tool) => tool.name === name);
               if (!definition) throw new Error("Unknown task coordination tool.");
               const result = await definition.execute({ session: active.session, turnId: active.turn.id,
                 turnPermissions: turnPermissionsFromSendTurnInput(SendTurnRequestSchema.parse({ prompt: active.turn.prompt })), provider: active.session.provider, model: active.turn.modelRef?.modelId ?? "native",
                 callId, args, signal: AbortSignal.any([signal, active.controller.signal]), workspaceDiffBaseline: null,
                 mentionedApps: [], userPrompt: active.turn.prompt, turnMetadata: active.turn.metadata });
-              return result.contentText;
+              return nativeToolMcpResult(result);
             },
           } : undefined,
         } });
@@ -1755,21 +1771,21 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (turnCwd && turnCwd !== session.cwd)
         session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
-      const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
+      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox)), ...(!session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
       const runtime = await ensureCodexRuntime(session, {
         ...input,
         coordination: coordinationDefinitions.length ? {
           tools: coordinationDefinitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
           execute: async (name, args, callId, signal) => {
             const active = activeTurns.get(sessionId);
-            if (!active || active.controller.signal.aborted || active.session.experience === "chat" || active.session.systemKind) throw new Error("This task has no active coordination execution.");
+            if (!active || active.controller.signal.aborted || active.session.systemKind) throw new Error("This task has no active tool execution.");
             const definition = coordinationDefinitions.find((tool) => tool.name === name);
             if (!definition) throw new Error("Unknown task coordination tool.");
             const result = await definition.execute({ session: active.session, turnId: active.turn.id,
               turnPermissions: turnPermissionsFromSendTurnInput(SendTurnRequestSchema.parse({ prompt: active.turn.prompt })), provider: "codex", model: active.turn.modelRef?.modelId ?? "codex",
               callId, args, signal: AbortSignal.any([signal, active.controller.signal]), workspaceDiffBaseline: null,
               mentionedApps: [], userPrompt: active.turn.prompt, turnMetadata: active.turn.metadata });
-            return result.contentText;
+            return nativeToolMcpResult(result);
           },
         } : undefined,
         model: codexModel,

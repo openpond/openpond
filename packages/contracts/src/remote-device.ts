@@ -83,6 +83,7 @@ export function remoteDeviceCanonicalContent(value: unknown): string {
 export const RemoteTaskCapabilitiesSchema = z
   .object({
     followUp: z.boolean(),
+    resume: z.boolean().optional(),
     steer: z.boolean(),
     stop: z.boolean(),
     approval: z.boolean(),
@@ -103,6 +104,8 @@ export const RemoteTaskSchema = z
     provider: z.string().max(100),
     capabilities: RemoteTaskCapabilitiesSchema,
     state: z.enum(["idle", "running", "completed", "failed", "attention"]),
+    paused: z.boolean().optional(),
+    latestTurnId: id.nullable().optional(),
     revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     historyGeneration: id,
     lastEventSequence: z
@@ -135,6 +138,7 @@ export const RemoteCommandInputSchema = z
     payload: z
       .object({
         text: z.string().max(100000).optional(),
+        resume: z.boolean().optional(),
         response: z.enum(["approve", "reject"]).optional(),
         projectId: id.optional(),
         starterId: id.optional(),
@@ -147,7 +151,12 @@ export const RemoteCommandInputSchema = z
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((command, context) => {
+    if (command.payload.resume === true && (command.action !== "follow_up" || !command.expectedTurnId)) {
+      context.addIssue({ code: "custom", path: ["payload", "resume"], message: "Explicit resume requires a follow-up targeting the observed paused turn." });
+    }
+  });
 export type RemoteCommandInput = z.infer<typeof RemoteCommandInputSchema>;
 export type RemoteCommandState =
   | "accepted"
@@ -197,6 +206,7 @@ export type RemoteDevice = {
 };
 export type RemoteHistoryItem = {
   id: string;
+  timestamp?: string;
   sequence: number;
   messageId?: string;
   turnId?: string;
@@ -215,6 +225,7 @@ export type RemoteHistoryItem = {
 export const RemoteHistoryItemSchema = z
   .object({
     id,
+    timestamp: z.string().optional(),
     sequence: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     messageId: id.optional(),
     turnId: id.optional(),
