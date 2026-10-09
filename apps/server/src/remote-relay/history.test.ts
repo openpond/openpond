@@ -4,15 +4,16 @@ import { observeRemoteHistorySequence, remoteHistoryGeneration } from "./catalog
 import { projectRemoteEvent, projectRemoteEventChunks } from "./history.js";
 
 // Successfully processed lifecycle events must not turn interrupted/failed turns
-// into completed turns, while completed tool events retain their failed outcome.
-it("projects canonical turn outcomes without overwriting tool failures", () => {
+// into completed turns, while records retain their actual event times and tool outcomes.
+it("projects canonical lifecycle outcomes, event times and tool failures", () => {
   const outcomes = [
     ["turn.started", "in_progress"], ["turn.completed", "completed"],
     ["turn.failed", "failed"], ["turn.interrupted", "interrupted"],
   ] as const;
+  const timestamp = "2026-10-09T01:17:58.000Z";
   for (const [name, status] of outcomes) {
-    expect(projectRemoteEvent({ id: name, name, turnId: "turn", status: "completed" } as RuntimeEvent, 42))
-      .toMatchObject({ id: name, sequence: 42, type: "state", turnId: "turn", status });
+    expect(projectRemoteEvent({ id: name, name, turnId: "turn", status: "completed", timestamp } as RuntimeEvent, 42))
+      .toMatchObject({ id: name, sequence: 42, type: "state", turnId: "turn", status, timestamp });
   }
   expect(projectRemoteEvent({ id: "tool", name: "tool.completed", turnId: "turn", status: "failed", action: "command" } as RuntimeEvent, 43))
     .toMatchObject({ id: "tool", sequence: 43, type: "tool", turnId: "turn", status: "failed" });
