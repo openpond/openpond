@@ -167,12 +167,16 @@ export function LocalExperimentCollection({
               <td
                 title={
                   item.configuration.request.policy.kind === "hosted_harness"
-                    ? item.configuration.request.policy.source.definitionId
+                    ? item.configuration.request.policy.source.target?.kind === "workflow"
+                      ? item.configuration.request.policy.source.target.workflowId
+                      : item.configuration.request.policy.source.definitionId
                     : "Model"
                 }
               >
                 {item.configuration.request.policy.kind === "hosted_harness"
-                  ? item.configuration.request.policy.source.definitionId
+                  ? item.configuration.request.policy.source.target?.kind === "workflow"
+                    ? item.configuration.request.policy.source.target.workflowId
+                    : item.configuration.request.policy.source.definitionId
                   : "Model"}
               </td>
               <td title={item.configuration.request.taskset.id}>

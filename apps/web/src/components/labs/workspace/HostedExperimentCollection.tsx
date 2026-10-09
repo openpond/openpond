@@ -123,12 +123,16 @@ export function HostedExperimentCollection({
               <td
                 title={
                   item.request.policy.kind === "hosted_harness"
-                    ? item.request.policy.source.definitionId
+                    ? item.request.policy.source.target?.kind === "workflow"
+                      ? item.request.policy.source.target.workflowId
+                      : item.request.policy.source.definitionId
                     : "Model"
                 }
               >
                 {item.request.policy.kind === "hosted_harness"
-                  ? item.request.policy.source.definitionId
+                  ? item.request.policy.source.target?.kind === "workflow"
+                    ? item.request.policy.source.target.workflowId
+                    : item.request.policy.source.definitionId
                   : "Model"}
               </td>
               <td title={item.request.taskset.id}>
