@@ -5,6 +5,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/html-visual-publication.test.ts",
   "tests/html-visual-isolation.test.ts",
   "tests/acp-agent-support.test.ts",
+  "tests/acp-agent.test.ts",
   "tests/acp-registry-install.test.ts",
   "tests/package-release-scope.test.ts",
   "tests/hosted-evaluation-operation.test.ts",

@@ -17,6 +17,7 @@ export type Command =
   | "health"
   | "serve"
   | "app-server"
+  | "acp"
   | "ui"
   | "tui"
   | "interactive"

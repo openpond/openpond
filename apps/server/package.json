@@ -5,6 +5,8 @@
   "license": "MIT",
   "main": "./dist/index.js",
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.7.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@openpond/agent-runtime": "workspace:*",
     "@openpond/app-server": "workspace:*",
     "@openpond/cloud": "workspace:*",
@@ -32,6 +34,10 @@
     "zod": "^4.1.13"
   },
   "exports": {
+    "./acp-agent": {
+      "import": "./dist/acp-agent.js",
+      "types": "./dist/acp-agent.d.ts"
+    },
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"

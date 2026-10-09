@@ -168,7 +168,10 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
       return true;
     } : undefined,
     executeProfileEvaluationAction: isolatedTools?.executeAction,
-    resolveModelTools: context => isolatedTools?.ownsSession(context.session.id) ? isolatedTools.resolveTools(context) : embeddingTools(context),
+    resolveModelTools: async context => {
+      const tools = isolatedTools?.ownsSession(context.session.id) ? await isolatedTools.resolveTools(context) : await embeddingTools(context);
+      return options.resolveModelTools ? options.resolveModelTools({ ...context, tools }) : tools;
+    },
     hostedToolFlags: { toolMode: "native", nativeToolTransport: true,
       nativeToolProviderDenylist: [], textToolFallback: false },
     store: core, inboxStore: storage.inbox,
@@ -317,7 +320,14 @@ export async function createHostedOwnedAppServer(options: OpenPondAppServerOptio
       await logger.flush();
     },
   });
-  return { ...instance, storePath: "hosted-postgres", workspaceDir,
+  return { ...instance, updateSession, storePath: "hosted-postgres", workspaceDir,
+    pinSessionHarness: async id => {
+      const runtime = await loadHostedHarnessRuntimeForSession(client, await getSession(id));
+      if (!runtime) return null;
+      const reference = { id: runtime.release.harnessRelease.id, contentHash: runtime.release.harnessRelease.contentHash };
+      await overlay.ensureHarnessRunOverlay({ runId: id, workspace: runtime.workspace, harnessRelease: reference, admittedAt: new Date().toISOString() });
+      return reference;
+    },
     composition: ["runtime_event_bus", "session_store", "hosted_provider", "workspace_tools",
       "command_approvals", "harness", "agent_runtime", "jsonl_transport"] };
 }

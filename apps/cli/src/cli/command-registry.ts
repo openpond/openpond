@@ -251,6 +251,12 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({ options }) => (await import("./core-commands")).runHealth(options),
   },
   {
+    name: "acp",
+    usage: "openpond acp [--home DIR] [--model ID] [--login]",
+    optionSchema: { home: "string", model: "string", login: "boolean", apiKey: "string" },
+    handler: async ({ options, rest }) => (await import("./acp")).runAcpCommand(options, rest),
+  },
+  {
     name: "app-server",
     usage: "openpond app-server [--home DIR]",
     optionSchema: {
