@@ -4,6 +4,13 @@
   gap: 8px;
   height: 43px;
   padding: 8px 14px 5px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.sidebar-toolbar :is(button, button *, .sidebar-update-error) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .sidebar-wordmark {
@@ -28,7 +35,11 @@
 }
 
 .platform-macos .sidebar-toolbar {
-  padding: 0 14px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0 14px 0 76px;
 }
 
 /* Reserve the native titlebar row, independent of the navigation rail. */
@@ -42,12 +53,8 @@
 }
 
 .platform-macos .sidebar-brand {
-  position: absolute;
-  top: 8px;
-  left: 76px;
-  right: 14px;
-  height: 28px;
-  justify-content: center;
+  padding: 0;
+  justify-content: flex-start;
 }
 
 .sidebar-model-project-picker {
