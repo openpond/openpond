@@ -3,6 +3,7 @@ import { ChartColumnStacked, Power, Settings, Shapes, UserRound } from "../icons
 import type { AccountState } from "@openpond/contracts";
 import type { OpenPondOrganization } from "../../lib/organization-types";
 import { AccountHelpSubmenu } from "./AccountHelpSubmenu";
+import { DesktopUpdateMenu } from "./DesktopUpdateMenu";
 import type { ClientConnection } from "../../api/api-client";
 import { ProviderPlanUsage } from "../settings/ProviderPlanUsage";
 
@@ -21,6 +22,7 @@ type UserAuthFooterProps = {
   onSelectTeam?: (teamId: string | null) => Promise<void>;
   onLogOut?: () => Promise<void>;
   railTooltip?: string;
+  hasRunningWork: boolean;
 };
 
 type UserAuthIdentity = {
@@ -78,6 +80,7 @@ export function UserAuthFooter({
   onSelectTeam,
   onLogOut,
   railTooltip,
+  hasRunningWork,
 }: UserAuthFooterProps) {
   const [switchingTeamId, setSwitchingTeamId] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -206,6 +209,7 @@ export function UserAuthFooter({
             <Settings size={15} />
             <span>Settings</span>
           </button>
+          <DesktopUpdateMenu hasRunningWork={hasRunningWork} />
           <AccountHelpSubmenu onOpenWalkthroughs={onOpenWalkthroughs} walkthroughsActive={walkthroughsActive}
             onCloseAccount={() => onOpenChange(false)} />
           {account?.state === "signed_in" && onLogOut ? (

@@ -25,7 +25,41 @@ function fixture(overrides: Partial<DesktopUpdateDriver> = {}) {
 }
 
 describe("desktop update lifecycle boundary", () => {
-  // A double click or hourly check must not start a second download/install,
+  // An initial network failure must recover on the next scheduled check;
+  // repeated starts/manual clicks must share that check and stop must cancel it.
+  test("checks on startup and every thirty minutes without overlap or checks after shutdown", async () => {
+    vi.useFakeTimers();
+    const retry = deferred<string | null>();
+    const check = vi.fn().mockRejectedValueOnce(new Error("Offline")).mockImplementation(() => retry.promise);
+    const { controller, driver } = fixture({ check });
+    try {
+      controller.start();
+      await controller.check();
+      expect(controller.getState()).toMatchObject({ status: "error", retry: "check" });
+      controller.start();
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000 - 1);
+      expect(check).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(check).toHaveBeenCalledTimes(2);
+      const manualCheck = controller.check();
+      expect(controller.check()).toBe(manualCheck);
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+      expect(check).toHaveBeenCalledTimes(2);
+      retry.resolve("0.3.0");
+      await manualCheck;
+      expect(controller.getState()).toMatchObject({ status: "available", version: "0.3.0" });
+      controller.stop();
+      controller.start();
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(check).toHaveBeenCalledTimes(2);
+      expect(driver.dispose).toHaveBeenCalledOnce();
+    } finally {
+      controller.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  // A double click or periodic check must not start a second download/install,
   // and 100% network progress must not grant restart before verification.
   test("serializes operations and drains the backend before one installation", async () => {
     const downloaded = deferred<void>();
