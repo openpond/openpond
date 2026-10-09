@@ -19,11 +19,19 @@ export async function runAgentJsonlServer(input: {
 }): Promise<void> {
   let dispatcher: AgentJsonRpcDispatcher | null = null;
   let writeChain = Promise.resolve();
+  let transportError: unknown;
+  const observeFailure = (error: unknown) => {
+    transportError ??= error;
+    input.hostStorageClient?.close();
+    lines.close();
+  };
   const pendingNotifications: JsonRpcNotification[] = [];
   const write = (message: JsonRpcResponse | JsonRpcNotification | JsonRpcRequest) => {
     writeChain = writeChain.then(async () => {
       if (!input.writable.write(`${JSON.stringify(message)}\n`)) await once(input.writable, "drain");
     });
+    // Notifications have no awaiting caller; retain failure for server shutdown.
+    void writeChain.catch(observeFailure);
     return writeChain;
   };
   input.hostStorageClient?.bind((message) => write(message));
@@ -53,7 +61,10 @@ export async function runAgentJsonlServer(input: {
       return;
     }
     inFlight.add(operation);
-    void operation.finally(() => inFlight.delete(operation));
+    void operation.then(
+      () => { inFlight.delete(operation); },
+      (error: unknown) => { inFlight.delete(operation); observeFailure(error); },
+    );
   };
   const startup = (async () => {
     const host = typeof input.host === "function" ? await input.host() : input.host;
@@ -102,10 +113,13 @@ export async function runAgentJsonlServer(input: {
         } else buffered.push(parsed);
       } else await dispatch(parsed);
     }
+    // EOF means no further correlated host responses can arrive.
+    input.hostStorageClient?.close();
     await startup;
     if (startupError) throw startupError;
     await Promise.all(inFlight);
     await writeChain;
+    if (transportError) throw transportError;
   } finally {
     input.hostStorageClient?.close();
     unsubscribe?.();
