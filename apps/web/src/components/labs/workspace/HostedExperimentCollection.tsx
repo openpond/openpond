@@ -81,9 +81,8 @@ export function HostedExperimentCollection({
             <th>Model</th>
             <th>Tasks</th>
             {scoreColumns.map((grader) => (
-              <th key={graderColumnKey(grader)}>
+              <th key={graderColumnKey(grader)} title="Mean score for this run">
                 {grader.name ?? "Grader"}
-                <small>Mean score / this run</small>
               </th>
             ))}
             <th>Errors</th>
