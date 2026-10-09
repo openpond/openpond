@@ -23,6 +23,7 @@ export function projectRemoteEvent(event: RuntimeEvent, sequence: number): Remot
         : data.decision === "cancel" ? "cancelled" : event.status
     : event.status);
   return { id: event.id, sequence, type: message ? "message" : tool ? "tool" : approval ? "approval" : "state",
+    timestamp: event.timestamp,
     ...(event.turnId ? { turnId: event.turnId } : {}),
     ...(message ? { messageId: userMessage ? `user:${event.turnId ?? event.id}` :
       `assistant:${typeof data.nativeMessageId === "string" ? data.nativeMessageId : typeof data.itemId === "string" ? data.itemId : event.turnId ?? event.id}`,

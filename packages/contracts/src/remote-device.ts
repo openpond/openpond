@@ -206,6 +206,7 @@ export type RemoteDevice = {
 };
 export type RemoteHistoryItem = {
   id: string;
+  timestamp?: string;
   sequence: number;
   messageId?: string;
   turnId?: string;
@@ -224,6 +225,7 @@ export type RemoteHistoryItem = {
 export const RemoteHistoryItemSchema = z
   .object({
     id,
+    timestamp: z.string().optional(),
     sequence: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     messageId: id.optional(),
     turnId: id.optional(),
