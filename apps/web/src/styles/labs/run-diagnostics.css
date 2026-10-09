@@ -1,0 +1,94 @@
+.run-diagnostics {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  font-size: 13px;
+}
+.run-diagnostics h2,
+.run-diagnostics h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.run-diagnostics .diagnostic-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.run-diagnostics button {
+  border: 1px solid var(--border-color, #343434);
+  border-radius: 5px;
+  padding: 5px 9px;
+}
+.run-diagnostics button:disabled {
+  opacity: 0.5;
+}
+.run-diagnostics .diagnostic-facts {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) minmax(0, 1fr);
+  gap: 6px 18px;
+  margin: 0;
+}
+.run-diagnostics dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.run-diagnostics dt,
+.run-diagnostics .diagnostic-note,
+.run-diagnostics small {
+  opacity: 0.65;
+}
+.run-diagnostics small {
+  display: block;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.run-diagnostics .diagnostic-scroll {
+  overflow: auto;
+  max-height: 420px;
+}
+.run-diagnostics table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: left;
+}
+.run-diagnostics th,
+.run-diagnostics td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color, #343434);
+  vertical-align: middle;
+  font-weight: normal;
+}
+.run-diagnostics th {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.run-diagnostics pre {
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.run-diagnostics summary {
+  cursor: pointer;
+}
+.run-diagnostics .diagnostic-error {
+  overflow-wrap: anywhere;
+  color: var(--danger-color, #e66);
+}
+.run-diagnostics .diagnostic-review {
+  padding: 16px;
+  border: 1px solid var(--border-color, #343434);
+  display: grid;
+  gap: 12px;
+}
+.run-diagnostics tr:target {
+  outline: 1px solid currentColor;
+}
+@media (max-width: 600px) {
+  .run-diagnostics .diagnostic-facts {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

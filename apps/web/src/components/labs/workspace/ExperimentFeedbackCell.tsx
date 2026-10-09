@@ -51,8 +51,8 @@ export function ExperimentFeedbackCell({
       return data;
     },
   });
-  if (!selected) return <span>Not selected</span>;
-  if (!available) return <span>Result unavailable</span>;
+  if (!selected) return <span>—</span>;
+  if (!available) return <span>—</span>;
   if (summary.isPending)
     return (
       <span
@@ -85,7 +85,7 @@ export function ExperimentFeedbackCell({
     <span
       title={`${score?.count ?? 0} eligible values. Incomplete or categorical feedback has no complete numeric result.`}
     >
-      Unavailable
+      —
     </span>
   );
 }

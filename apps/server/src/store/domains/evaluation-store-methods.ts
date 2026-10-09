@@ -52,6 +52,7 @@ export function evaluationStoreMethods(context: SqliteDomainContext, lifecycle: 
       "readLocalExecutionCharges",
       "appendLocalExperimentEvent",
       "localExperimentTrace",
+      "localExperimentDiagnosticTrace",
       "startLocalScoringPass",
       "readLocalScoringSelection",
       "localJudgeBudgetTransaction",

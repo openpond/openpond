@@ -2,7 +2,7 @@ import {useMemo} from "react";
 import type {ClientConnection} from "../../api";
 import {LabHostedTrainingRunDetail} from "./LabHostedTrainingRunDetail";
 import {createWorkspaceApi} from "./workspace/workspace-api";
-export function HostedTrainingRunRoute({connection,teamId,actorId,projectId,jobId,onOpenExperiment}:{connection:ClientConnection;teamId:string;actorId:string;projectId:string|null;jobId:string;onOpenExperiment(id:string):void}) {
+export function HostedTrainingRunRoute({connection,teamId,actorId,projectId,jobId,onOpenExperiment,diagnostics,onDiagnostics}:{connection:ClientConnection;teamId:string;actorId:string;projectId:string|null;jobId:string;onOpenExperiment(id:string):void;diagnostics?:boolean;onDiagnostics?:(value:boolean)=>void}) {
   const api=useMemo(()=>createWorkspaceApi(connection,{teamId,actorId,projectId,accountKey:actorId}),[connection,teamId,actorId,projectId]);
-  return <LabHostedTrainingRunDetail connection={connection} teamId={teamId} actorId={actorId} jobId={jobId} retainOperation={api.operation} onOpenExperiment={onOpenExperiment}/>;
+  return <LabHostedTrainingRunDetail connection={connection} teamId={teamId} actorId={actorId} jobId={jobId} retainOperation={api.operation} onOpenExperiment={onOpenExperiment} diagnostics={diagnostics} onDiagnostics={onDiagnostics}/>;
 }

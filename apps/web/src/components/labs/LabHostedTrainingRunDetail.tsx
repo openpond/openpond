@@ -1,3 +1,4 @@
+import { TrainingRunDiagnostics } from "./workspace/TrainingRunDiagnostics";
 import { contentHash } from "@openpond/harness";
 import { PostTrainingControlSchema } from "openpond-sdk/post-training";
 import { useEffect, useRef, useState } from "react";
@@ -28,7 +29,11 @@ export function LabHostedTrainingRunDetail({
   retainOperation,
   jobId,
   onOpenExperiment,
+  diagnostics=false,
+  onDiagnostics,
 }: {
+  diagnostics?:boolean;
+  onDiagnostics?:(value:boolean)=>void;
   connection: ClientConnection;
   teamId: string;
   actorId: string;
@@ -39,6 +44,7 @@ export function LabHostedTrainingRunDetail({
   jobId: string;
   onOpenExperiment: (id: string) => void;
 }) {
+  const [refreshVersion,setRefreshVersion]=useState(0);
   const scope = JSON.stringify([connection.serverUrl, connection.token, teamId, actorId, jobId]);
   const [retained, setRetained] = useState<{ scope: string; value: Value } | null>(null),
     [error, setError] = useState<string | null>(null),
@@ -107,7 +113,7 @@ export function LabHostedTrainingRunDetail({
       stopped = true;
       clearTimeout(timer);
     };
-  }, [connection.serverUrl, connection.token, path, scope, teamId, actorId, jobId]);
+  }, [connection.serverUrl, connection.token, path, scope, teamId, actorId, jobId,refreshVersion]);
   async function control(action: "start" | "retry" | "cancel") {
     if (!value?.evals || busy) return;
     const callScope = scope,
@@ -176,15 +182,17 @@ export function LabHostedTrainingRunDetail({
   return (
     <div className="labs-flat-body labs-resource-page">
       <ModelProjectPageHeader title="Training run" description={jobId} />
+      <nav className="evaluation-workspace-tabs" aria-label="Training sections"><button aria-selected={!diagnostics} onClick={()=>onDiagnostics?.(false)}>Overview</button><button aria-selected={diagnostics} onClick={()=>onDiagnostics?.(true)}>Diagnostics</button></nav>
       {error ? <p role="alert">{error}</p> : null}
       {pending.current ? (
         <button type="button" disabled={busy} onClick={() => void control(pending.current!.action)}>
           Retry retained {pending.current.action} action
         </button>
       ) : null}
+      {value && diagnostics ? <TrainingRunDiagnostics job={value.job} events={value.events} onRefresh={()=>setRefreshVersion(version=>version+1)}/> : null}
       {!value ? (
         <p role="status">Loading training run…</p>
-      ) : (
+      ) : !diagnostics ? (
         <>
           <dl>
             <dt>Status</dt>
@@ -274,7 +282,7 @@ export function LabHostedTrainingRunDetail({
             )}
           </section>
         </>
-      )}
+      ) : null}
     </div>
   );
 }
