@@ -12,6 +12,7 @@ import {
   type PackagedProcessCapture,
 } from "./packaged-smoke-diagnostics";
 import { isolatedOpenPondEnvironment } from "./isolated-openpond-environment";
+import { packagedTerminalSmokeExpression } from "./packaged-terminal-smoke";
 
 type DevtoolsTarget = {
   type?: string;
@@ -166,6 +167,7 @@ async function main(): Promise<void> {
       throw new Error(`Packaged server health failed: ${JSON.stringify(health)}`);
     }
     const eventStream = await measureEventStreamHandshake(cdp, connection, 5_000);
+    const terminal = await evaluateValue(cdp, packagedTerminalSmokeExpression);
     const firstChatInput = await measureFirstChatInputLatency(cdp);
 
     const conversationId = `packaged-smoke-${Date.now()}`;
@@ -236,6 +238,7 @@ async function main(): Promise<void> {
         health: health.server,
         eventStream,
       },
+      terminal,
       browser: {
         activeTabId: browserState.activeTabId,
         tabCount: browserState.tabs.length,

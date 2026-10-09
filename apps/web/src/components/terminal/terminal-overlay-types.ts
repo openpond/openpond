@@ -37,6 +37,7 @@ export type TerminalClientMessage =
       type: "input";
       terminalId: string;
       data: string;
+      waitForPrompt?: boolean;
     }
   | {
       type: "resize";

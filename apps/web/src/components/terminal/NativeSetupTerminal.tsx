@@ -13,10 +13,10 @@ export function NativeSetupTerminal({ connection, command, onClose, onComplete }
   const completed = useRef(false);
   const [queued] = useState(() => ({ id: Date.now(), scope, command }));
   useEffect(() => {
-    if (!completed.current && tabs.some((tab) => tab.lastExitCode !== null && (tab.commandStatus === "success" || tab.commandStatus === "failed"))) {
+    if (!completed.current && tabs.some((tab) => tab.lastCommand === command && tab.lastExitCode === 0 && tab.commandStatus === "success")) {
       completed.current = true;
       onComplete?.();
     }
-  }, [tabs, onComplete]);
+  }, [tabs, command, onComplete]);
   return createPortal(<div className="native-setup-terminal"><Suspense fallback={<p role="status">Opening setup terminal…</p>}><TerminalOverlay open disposeOnUnmount connection={connection} scope={scope} tabs={tabs} onTabsChange={setTabs} cwd={null} appId={null} workspaceName="Agent setup" queuedCommand={queued} onClose={onClose} /></Suspense></div>, document.body);
 }
