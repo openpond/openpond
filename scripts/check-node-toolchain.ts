@@ -10,6 +10,7 @@ const skippedDirectories = new Set([
   ".stage",
   "coverage",
   "dist",
+  "dist-types",
   "node_modules",
   "output",
   "release",
