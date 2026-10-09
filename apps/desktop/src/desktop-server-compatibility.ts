@@ -92,6 +92,7 @@ export function bundledServerLaunchPort(
 export async function stopStaleLocalDesktopServer(
   url: string,
   options: {
+    expectedPid?: number;
     platform?: NodeJS.Platform;
     currentPid?: number;
     timeoutMs?: number;
@@ -108,7 +109,7 @@ export async function stopStaleLocalDesktopServer(
   const findProcessIds = options.findProcessIds ?? listeningProcessIds;
   const terminateProcess = options.terminateProcess ?? terminateProcessTree;
   const isProcessAlive = options.isProcessAlive ?? processIsAlive;
-  const processIds = (await findProcessIds(port, platform)).filter((pid) => pid !== currentPid);
+  const processIds = (await findProcessIds(port, platform)).filter((pid) => pid !== currentPid && (options.expectedPid === undefined || pid === options.expectedPid));
   if (processIds.length === 0) return { stopped: false, processIds: [] };
 
   await Promise.all(processIds.map((pid) => terminateProcess(pid, platform, options.timeoutMs)));
@@ -134,7 +135,7 @@ async function listeningProcessIds(port: number, platform: NodeJS.Platform): Pro
       return parseListeningProcessIds(stdout);
     }
     const { stdout } = await execFileAsync(
-      "lsof",
+      platform === "darwin" ? "/usr/sbin/lsof" : "lsof",
       ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"],
       { encoding: "utf8", timeout: 3_000, windowsHide: true },
     );
