@@ -1,3 +1,4 @@
+import { captureHtmlVisual } from "./desktop-html-preview.js";
 import type { BrowserWindow } from "electron";
 import { browserSidebarManagerForWindow } from "./desktop-browser-ipc.js";
 import { parseBrowserHarnessRequest } from "./desktop-browser-harness-validation.js";
@@ -81,6 +82,20 @@ export class DesktopBrowserControlWorker {
     const requestId = requestIdFromUnknown(rawRequest);
     let request: ParsedBrowserHarnessRequest | null = null;
     try {
+      if (rawRequest && typeof rawRequest === "object" && "operation" in rawRequest && rawRequest.operation === "previewHtml") {
+        const window = this.options.getWindow();
+        if (!window || window.isDestroyed() || !requestId) throw new Error("No desktop window is available.");
+        const controller = new AbortController();
+        const check = setInterval(() => {
+          void this.fetchJson<{ active: boolean }>(`/v1/desktop/browser-control/requests/${encodeURIComponent(requestId)}/active`, { method: "GET", signal, desktopExecutor: true })
+            .then(result => { if (!result.active) controller.abort(); }).catch(() => controller.abort());
+        }, 400);
+        try {
+          const data = await captureHtmlVisual(rawRequest, window, AbortSignal.any([signal, controller.signal]));
+          await this.complete(requestId, { ok: true, output: "HTML preview captured.", data }, signal);
+        } finally { clearInterval(check); controller.abort(); }
+        return;
+      }
       request = parseBrowserHarnessRequest(rawRequest);
       const result = await this.executeRequest(request);
       await this.complete(request.id, result, signal);
@@ -135,6 +150,7 @@ export class DesktopBrowserControlWorker {
       method: "POST",
       signal,
       body: {
+        htmlPreview: true,
         executorToken: this.options.executorToken,
         instanceId: this.options.instanceId,
       },
