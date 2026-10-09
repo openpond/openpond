@@ -77,11 +77,6 @@
   line-height: 1.55;
 }
 
-.user-message.has-image-attachments {
-  max-width: min(560px, 82%);
-  padding: 8px;
-}
-
 .user-message-content-wrap {
   display: grid;
   gap: 6px;
@@ -211,55 +206,37 @@ button.user-message-attachment {
 
 .user-message-image-attachment {
   display: grid;
-  flex: 1 1 min(320px, 100%);
-  min-width: min(240px, 100%);
-  max-width: min(360px, 100%);
-  overflow: hidden;
-  margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.055);
-}
-
-.user-message-image-frame {
-  display: grid;
   place-items: center;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  max-height: 360px;
+  flex: 0 0 74px;
+  width: 74px;
+  height: 74px;
   overflow: hidden;
-  background: #151515;
+  border: 0;
+  border-radius: 8px;
+  background: #191919;
   color: #b6d8ff;
+  padding: 0;
+  cursor: zoom-in;
 }
 
-.user-message-image-frame img {
+.user-message-image-attachment:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.user-message-image-attachment:disabled {
+  cursor: default;
+}
+
+.user-message-image-attachment[aria-busy="true"] {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.user-message-image-attachment img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-}
-
-.user-message-image-attachment figcaption {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 7px 9px;
-  color: #eeeeee;
-  font-size: 12px;
-  line-height: 1.2;
-}
-
-.user-message-image-attachment figcaption span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-message-image-attachment figcaption small {
-  flex: 0 0 auto;
-  color: #a4a4a4;
-  font-size: 11px;
+  object-fit: cover;
 }
 
 .assistant-message {
