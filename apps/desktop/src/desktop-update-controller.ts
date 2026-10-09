@@ -44,7 +44,7 @@ export class DesktopUpdateController {
   start(): void {
     if (!this.options.driver || this.#timer || this.#stopped) return;
     void this.check();
-    this.#timer = setInterval(() => { void this.check(); }, 60 * 60 * 1000);
+    this.#timer = setInterval(() => { void this.check(); }, 30 * 60 * 1000);
     this.#timer.unref();
   }
 
