@@ -23,14 +23,31 @@
   padding: 4px 6px;
 }
 
-.platform-macos.sidebar-open .sidebar-toolbar {
-  padding: 0 14px 0 78px;
+.platform-macos > .sidebar {
+  padding-top: 43px;
 }
 
-.platform-macos.sidebar-open .sidebar-toolbar .sidebar-icon {
+.platform-macos .sidebar-toolbar {
+  padding: 0 14px;
+}
+
+/* Reserve the native titlebar row, independent of the navigation rail. */
+.platform-macos .sidebar-toolbar > .sidebar-icon {
+  position: absolute;
+  top: 7px;
+  left: 36px;
   width: 28px;
   height: 28px;
   border-radius: 14px;
+}
+
+.platform-macos .sidebar-brand {
+  position: absolute;
+  top: 8px;
+  left: 76px;
+  right: 14px;
+  height: 28px;
+  justify-content: center;
 }
 
 .sidebar-model-project-picker {

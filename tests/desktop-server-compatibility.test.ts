@@ -112,3 +112,16 @@ describe("desktop server compatibility", () => {
     expect(terminated).toEqual([10]);
   });
 });
+
+// A listener query can contain unrelated PIDs; home recovery owns only its registered PID.
+test("retirement targets only the verified home owner", async () => {
+  const terminated: number[] = [];
+  const result = await stopStaleLocalDesktopServer("http://127.0.0.1:17874", {
+    expectedPid: 10, currentPid: 20,
+    findProcessIds: async () => [10, 11, 20],
+    terminateProcess: async (pid) => { terminated.push(pid); },
+    isProcessAlive: () => false,
+  });
+  expect(result).toEqual({ stopped: true, processIds: [10] });
+  expect(terminated).toEqual([10]);
+});
