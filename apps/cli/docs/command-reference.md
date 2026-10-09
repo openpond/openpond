@@ -413,6 +413,18 @@ Usage:
 Options:
   --json
 ```
+## acp
+
+```text
+Usage:
+  openpond acp [--home DIR] [--model ID] [--login]
+
+Options:
+  --api-key <string>
+  --home <string>
+  --login
+  --model <string>
+```
 ## app-server
 
 ```text

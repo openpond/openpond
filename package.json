@@ -182,16 +182,19 @@
     "tvc:package": "bash examples/turnkey-agent/packaging/package.sh"
   },
   "devDependencies": {
+    "@agentclientprotocol/sdk": "1.7.0",
     "@electron/asar": "^3.4.1",
-    "@openpond/continual-support": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@openpond/agent-runtime": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@openpond/codex-provider": "workspace:*",
     "@openpond/connected-apps": "workspace:*",
+    "@openpond/continual-support": "workspace:*",
     "@openpond/contracts": "workspace:*",
     "@openpond/evals": "workspace:*",
     "@openpond/harness": "workspace:*",
     "@openpond/logging": "workspace:*",
+    "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*",
     "@openpond/training-sdk": "workspace:*",
@@ -212,9 +215,8 @@
     "tsx": "4.23.1",
     "typescript": "^5.9.3",
     "vitest": "4.1.10",
-    "zod": "^4.1.13",
-    "@openpond/persistence": "workspace:*",
-    "yaml": "2.9.0"
+    "yaml": "2.9.0",
+    "zod": "^4.1.13"
   },
   "description": "<div align=\"center\">   <h1>OpenPond</h1>   <p><strong>Frontier-grade agent orchestration for any model, provider, or subscription.</strong></p>   <p>     <a href=\"https://github.com/openpond/openpond/actions/workflows/ci.yml\"><img alt=\"CI\" src=\"https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg\" /></a>     <a href=\"apps/cli\"><img alt=\"npm package status\" src=\"https://img.shields.io/badge/npm-unpublished-lightgrey?logo=npm&logoColor=white\" /></a>     <img alt=\"Runtime: Node 24\" src=\"https://img.shields.io/badge/runtime-Node_24-339933?logo=nodedotjs&logoColor=white\" />     <img alt=\"Package manager: pnpm\" src=\"https://img.shields.io/badge/package_manager-pnpm-F69220?logo=pnpm&logoColor=white\" />     <img alt=\"Language: TypeScript\" src=\"https://img.shields.io/badge/language-TypeScript-3178c6?logo=typescript&logoColor=white\" />   </p> </div>",
   "repository": {

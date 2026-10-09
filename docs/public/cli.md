@@ -24,6 +24,8 @@ The npm package and compiled archive both contain the local server, terminal com
 
 Local app commands:
 
+ACP applications can launch OpenPond's harness with `openpond acp`. See [ACP agent setup and capabilities](acp-agent.md) for dedicated-home login, manual editor configuration, permissions and session continuation.
+
 ```bash
 openpond
 openpond serve --port 0
