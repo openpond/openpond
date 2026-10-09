@@ -21,7 +21,7 @@ export function nativeAgentEvent(session: Session, turnId: string, update: AcpOb
     ? { nativeMessageId: `native-message:${turnId}:${update.messageId}:${update.sessionUpdate === "agent_thought_chunk" ? "thinking" : "text"}` }
     : {};
   switch (update.sessionUpdate) {
-    case "agent_message_chunk": return event({ ...base, name: update.phase === "commentary" ? "assistant.reasoning.delta" : "assistant.delta", output: text, data: { ...update, ...nativeMessage, delta: text } });
+    case "agent_message_chunk": return event({ ...base, name: "assistant.delta", output: text, data: { ...update, ...nativeMessage, delta: text } });
     case "agent_message_final": return event({ ...base, name: "assistant.delta", output: text, data: { ...nativeMessage, phase: "final_answer", nativeMessageSnapshot: true } });
     case "agent_thought_chunk": return event({ ...base, name: "assistant.reasoning.delta", output: text, data: { ...update, ...nativeMessage, delta: text } });
     case "tool_call":

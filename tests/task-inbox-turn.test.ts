@@ -143,7 +143,10 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
 });
 `, { mode: 0o700 });
     const queued = await harness.runner.queueTaskInput(sessionId, { prompt: "Original queued assignment" }, "queued-native-assignment");
-    await vi.waitFor(async () => expect(await readFile(ready, "utf8")).toBe("ready"));
+    await vi.waitFor(async () => {
+      if (harness.state.turns[0]?.status === "failed") throw new Error(harness.state.turns[0].error ?? "Native turn failed");
+      expect(await readFile(ready, "utf8")).toBe("ready");
+    }, { timeout: 10_000 });
     const pending = await harness.dependencies.store.admitTaskInput({ id: "peer-before-dispatch", sessionId, senderSessionId: "peer", senderKind: "task", kind: "message",
       body: "Preserve this pending peer instruction", payload: {}, idempotencyKey: "peer-before", replyTo: null, expectedTurnId: null });
     expect(await harness.dependencies.store.getTaskInput(queued.id)).toMatchObject({ state: "pending" });
@@ -168,5 +171,114 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
       expect(inputs.every((input) => input.error?.includes("failed"))).toBe(true);
       expect(await harness.dependencies.store.taskInboxPaused(sessionId)).toBe(true);
     }
+  } finally { await harness.runner.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+// Failure story: Steer only changes a receipt/label, starts a different native
+// conversation, loses a second correction, or resumes work after an explicit Stop.
+// Exercise the real CLI/ACP cancellation and prompt protocol through the runner.
+test.skipIf(process.platform === "win32").each([
+  ["claude-code", false], ["claude-code", true], ["opencode", false], ["grok-build", false],
+] as const)("native %s steering retains the conversation and obeys stop=%s", async (provider, stop) => {
+  const directory = await mkdtemp(join(tmpdir(), "native-steering-"));
+  const binaryPath = join(directory, "fixture-agent"), trace = join(directory, "requests.jsonl"), release = join(directory, "release");
+  const sessionId = "steer-native";
+  const harness = createTurnRunnerTestHarness({ sessions: [
+    turnRunnerTestSession({ id: sessionId, experience: "chat", provider, modelRef: null, cwd: directory }),
+  ], dependencies: { storageHome: directory, defaultSessionCwd: () => directory } });
+  try {
+    await writeProvidersFile(join(directory, "providers.json"), normalizeProvidersFile({ providers: { [provider]: { enabled: true, binaryPath, sourceHome: directory } } }));
+    await writeFile(binaryPath, `#!${process.execPath}\n` + `
+const fs = require('node:fs');
+const claude = ${JSON.stringify(provider === "claude-code")};
+const send = value => process.stdout.write(JSON.stringify(value)+'\\n');
+let active, session, count = 0, timer;
+const finish = cancelled => {
+ if (!active) return;
+ clearInterval(timer);
+ if (claude) send({type:'result', session_id:session, is_error:false, result:cancelled ? 'Cancelled answer must not appear' : 'Finished with corrections'});
+ else {
+  if (!cancelled) send({jsonrpc:'2.0',method:'session/update',params:{sessionId:session,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Finished with corrections'}}}});
+  send({jsonrpc:'2.0',id:active.id,result:{stopReason:cancelled?'cancelled':'end_turn'}});
+ }
+ active = null;
+};
+require('node:readline').createInterface({input:process.stdin}).on('line', line => {
+ const request = JSON.parse(line);
+ if (claude && request.type === 'control_request') {
+  send({type:'control_response',response:{subtype:'success',request_id:request.request_id,response:{}}});
+  if(request.request.subtype==='interrupt') finish(true);
+  return;
+ }
+ if (!claude) {
+  if (request.method==='initialize') { send({jsonrpc:'2.0',id:request.id,result:{protocolVersion:1,agentCapabilities:{loadSession:true},authMethods:[]}}); return; }
+  if (request.method==='session/new' || request.method==='session/load') {
+   session = request.params.sessionId || 'exact-native-session';
+   send({jsonrpc:'2.0',id:request.id,result:{sessionId:session}}); return;
+  }
+  if (request.method==='session/cancel') { finish(true); return; }
+  if (request.method!=='session/prompt') { send({jsonrpc:'2.0',id:request.id,result:{}}); return; }
+ }
+ if (claude && request.type!=='user') return;
+ active = request; count++;
+ session = claude ? request.session_id : request.params.sessionId;
+ fs.appendFileSync(${JSON.stringify(trace)}, JSON.stringify({session, prompt:claude?request.message.content[0].text:request.params.prompt[0].text})+'\\n');
+ if(claude) {
+  send({type:'stream_event',session_id:session,event:{type:'message_start',message:{id:'reply-'+count}}});
+  send({type:'stream_event',session_id:session,event:{type:'content_block_delta',delta:{type:'text_delta',text:'Working on request '+count}}});
+ }
+ timer = setInterval(() => { if(fs.existsSync(${JSON.stringify(release)})) finish(false); }, 10);
+});
+`, { mode: 0o700 });
+    const readRequests = async (): Promise<Array<{ session: string; prompt: string }>> => (await readFile(trace, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    const pending = harness.runner.sendTurn(sessionId, { prompt: "Implement the original feature and preserve completed work." });
+    await vi.waitFor(async () => {
+      if (harness.state.turns[0]?.status === "failed") throw new Error(harness.state.turns[0].error ?? "Native turn failed");
+      expect(await readRequests()).toHaveLength(1);
+    }, { timeout: 10_000 });
+    const turnId = harness.state.turns[0]!.id;
+    const queued = await harness.runner.queueTaskInput(sessionId, { prompt: "Use the cyan branding." }, "queued-steer");
+    expect(await readRequests()).toHaveLength(1);
+    expect(queued).toMatchObject({ kind: "queued", state: "pending", turnId: null });
+    await harness.runner.updateTaskInput(sessionId, queued.id, { action: "steer", expectedRevision: queued.revision, expectedTurnId: turnId });
+    await vi.waitFor(async () => expect(await readRequests()).toHaveLength(2), { timeout: 10_000 });
+    const correction = { prompt: "Keep the existing layout.", expectedTurnId: turnId, idempotencyKey: "second-steer" };
+    const second = await harness.runner.steerSessionTurn(sessionId, correction);
+    await vi.waitFor(async () => expect(await readRequests()).toHaveLength(3), { timeout: 10_000 });
+    expect((await readRequests())[2]!.prompt).toContain(queued.body);
+    expect((await readRequests())[2]!.prompt).toContain(correction.prompt);
+    expect((await harness.runner.steerSessionTurn(sessionId, correction)).id).toBe(second.id);
+    await expect(harness.runner.steerSessionTurn(sessionId, { ...correction, expectedTurnId: "stale-turn", idempotencyKey: "stale" })).rejects.toThrow();
+    expect(await readRequests()).toHaveLength(3);
+    if (stop) {
+      await harness.runner.interruptSessionTurn(sessionId);
+    } else {
+      const seal = harness.dependencies.store.sealTaskInboxTurn.bind(harness.dependencies.store);
+      let raced = false;
+      vi.spyOn(harness.dependencies.store, "sealTaskInboxTurn").mockImplementation(async (...args) => {
+        if (!raced) {
+          raced = true;
+          await harness.runner.steerSessionTurn(sessionId, { prompt: "Also retain the keyboard shortcuts.", expectedTurnId: turnId, idempotencyKey: "at-completion" });
+        }
+        return seal(...args);
+      });
+      await writeFile(release, "complete");
+    }
+    expect(await pending).toMatchObject({ id: turnId, status: stop ? "interrupted" : "completed" });
+    expect(harness.state.turns).toHaveLength(1);
+    const requests = await readRequests();
+    expect(requests).toHaveLength(stop ? 3 : 4);
+    expect(new Set(requests.map((request) => request.session)).size).toBe(1);
+    expect(requests.slice(1).every((request) => request.prompt.includes("Implement the original feature"))).toBe(true);
+    if (!stop) {
+      expect(requests[3]!.prompt).toContain("Also retain the keyboard shortcuts.");
+      expect((await harness.runner.readTaskInbox(sessionId)).inputs.every((input) => input.state === "resolved")).toBe(true);
+      expect(await harness.dependencies.store.taskInboxPaused(sessionId)).toBe(false);
+    } else {
+      expect(await harness.dependencies.store.taskInboxPaused(sessionId)).toBe(true);
+      expect(harness.state.events.some((event) => event.name === "turn.completed")).toBe(false);
+    }
+    expect(harness.state.turns[0]!.metadata?.nativePromptHashes).toEqual(requests.map((request) => createHash("sha256").update(request.prompt).digest("hex")));
+    expect(harness.state.events.some((event) => event.output?.includes("Cancelled answer must not appear"))).toBe(false);
   } finally { await harness.runner.close(); await rm(directory, { recursive: true, force: true }); }
 });

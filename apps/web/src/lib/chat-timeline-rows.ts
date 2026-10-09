@@ -22,7 +22,7 @@ export function buildChatTimelineRows(
     id: `message:${message.id}`,
     type: "message",
     message,
-    showFooter: message.role === "assistant",
+    showFooter: message.role === "assistant" && message.finalAnswer === true,
   }));
   if (options.showThinkingIndicator) {
     rows.push({
@@ -39,28 +39,6 @@ export function latestAssistantMessageId(messages: ChatMessage[]): string | null
     if (message.role === "assistant") return message.id;
   }
   return null;
-}
-
-export function latestAssistantMessageIdsByTurn(
-  messages: ChatMessage[],
-): ReadonlyMap<string, string> {
-  const messageIds = new Map<string, string>();
-  for (const message of messages) {
-    if (message.role === "assistant" && message.turnId) {
-      messageIds.set(message.turnId, message.id);
-    }
-  }
-  return messageIds;
-}
-
-export function isLatestAssistantMessageForTurn(
-  message: ChatMessage,
-  latestAssistantByTurn: ReadonlyMap<string, string>,
-): boolean {
-  const turnId = message.turnId;
-  return message.role === "assistant" &&
-    turnId !== undefined &&
-    latestAssistantByTurn.get(turnId) === message.id;
 }
 
 export function shouldShowThinkingIndicator(messages: ChatMessage[]): boolean {

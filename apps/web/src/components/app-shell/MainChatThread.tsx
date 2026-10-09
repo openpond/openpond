@@ -12,8 +12,6 @@ import { useNewMessageIds } from "../../hooks/useNewMessageIds";
 import { useSessionTurnCache } from "../../hooks/useSessionTurnCache";
 import {
   buildChatTimelineRows,
-  isLatestAssistantMessageForTurn,
-  latestAssistantMessageIdsByTurn,
 } from "../../lib/chat-timeline-rows";
 import { ConversationFormalReview } from "../human-review/ConversationFormalReview";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
@@ -88,10 +86,6 @@ export function MainChatThread({
   );
   const newMessageIds = useNewMessageIds(messages, conversationKey);
   const latestTurnId = latestMessageTurnId(messages);
-  const latestAssistantByTurn = useMemo(
-    () => latestAssistantMessageIdsByTurn(messages),
-    [messages],
-  );
   const turnCache = useSessionTurnCache({
     connection,
     latestTurnId,
@@ -121,7 +115,7 @@ export function MainChatThread({
           }
           key={row.id}
           kvCacheSummary={
-            isLatestAssistantMessageForTurn(row.message, latestAssistantByTurn) && row.message.turnId
+            row.showFooter && row.message.turnId
               ? turnCache.get(row.message.turnId) ?? null
               : null
           }

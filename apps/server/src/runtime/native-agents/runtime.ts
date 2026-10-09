@@ -16,7 +16,7 @@ import { invalidateNativeAgent } from "./setup.js";
 import { createNativeAgentApprovals } from "./approvals.js";
 import { createTaskCoordinationMcp, type TaskCoordinationBridge } from "../task-inbox/codex-mcp.js";
 
-type RunningSession = { turn: Turn | null; startedAt: string; firstTokenMs: number | null; visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; additionalDirectories: string[]; turnId: string | null; replaying: boolean; session: Session; coordinated: boolean; close(): Promise<void> };
+type RunningSession = { requestId: string; requestOrdinal: number; turn: Turn | null; startedAt: string; firstTokenMs: number | null; visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; additionalDirectories: string[]; turnId: string | null; replaying: boolean; session: Session; coordinated: boolean; close(): Promise<void> };
 export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "store" | "storageHome" | "updateSession" | "appendRuntimeEvent" | "upsertApproval">) {
   const runtimes = new Map<string, RunningSession>();
   const approvals = createNativeAgentApprovals(deps);
@@ -53,7 +53,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
         if (update.sessionUpdate === "usage_update" && runtime.session.provider === "claude-code") {
           await persistUsage(createProviderRequestUsageRecord({ session: runtime.session, turn: runtime.turn,
             provider: runtime.session.provider, model: typeof update.model === "string" ? update.model : "unknown",
-            requestId: `claude:${runtime.session.id}:${runtime.turnId}`, requestOrdinal: 0,
+            requestId: runtime.requestId, requestOrdinal: runtime.requestOrdinal,
             startedAt: runtime.startedAt, completedAt: new Date().toISOString(), firstTokenMs: runtime.firstTokenMs,
             usage: update.usage, status: update.status === "failed" ? "failed" : update.status === "interrupted" ? "interrupted" : "completed" }));
         }
@@ -75,7 +75,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
         ? await client.loadSession(session.nativeAgent.sessionId, cwd, servers)
         : await client.createSession(cwd, servers);
       const updated = await deps.updateSession(session.id, { nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd }, metadata: { ...session.metadata, nativeHistoryProjection: false } });
-      runtime = { turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: Boolean(bridge), close: async () => { await client.stop(); await closeBridge(); } };
+      runtime = { requestId: "", requestOrdinal: 0, turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: Boolean(bridge), close: async () => { await client.stop(); await closeBridge(); } };
       runtimes.set(session.id, runtime);
       await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "diagnostic", action: "native_configuration", source: "provider", data: { provider: session.provider, nativeSessionId: native.sessionId, capabilities: info.agentCapabilities, models: native.models, modes: native.modes, configOptions: native.configOptions } }));
       return runtime;
@@ -83,12 +83,14 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
   }
   return {
     resolveApproval: approvals.resolve,
-    async run(input: { session: Session; turn: Turn; cwd: string; prompt: string; model?: string | null; mode?: string | null; signal: AbortSignal; content?: AcpObject[]; coordination?: TaskCoordinationBridge; preparePrompt?: (prompt: string) => Promise<string>; settlePrompt?: (outcome: "resolved" | "failed") => Promise<void> }): Promise<string> {
+    async run(input: { session: Session; turn: Turn; cwd: string; prompt: string; model?: string | null; mode?: string | null; signal: AbortSignal; requestId?: string; requestOrdinal?: number; content?: AcpObject[]; coordination?: TaskCoordinationBridge; preparePrompt?: (prompt: string) => Promise<string>; settlePrompt?: (outcome: "resolved" | "failed") => Promise<void> }): Promise<string> {
       const runtime = await ensure(input.session, input.cwd, input.coordination);
       if (input.content?.some((part) => part.type === "image") && !runtime.imageInput) throw new Error("This native agent does not advertise image input. Choose a supported model/agent or attach text instead.");
       if (runtime.turnId) throw new Error("Native conversation already has an active turn.");
       runtime.turnId = input.turn.id;
       runtime.turn = input.turn;
+      runtime.requestId = input.requestId ?? `native:${input.session.id}:${input.turn.id}`;
+      runtime.requestOrdinal = input.requestOrdinal ?? 0;
       runtime.startedAt = new Date().toISOString();
       runtime.firstTokenMs = null;
       runtime.visibleUpdates = 0;
@@ -114,7 +116,12 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
         }
         const prompt = input.preparePrompt ? await input.preparePrompt(input.prompt) : input.prompt;
         if (input.signal.aborted) throw new Error("Native agent turn interrupted before dispatch.");
-        await deps.store.updateTurn(input.turn.id, (turn) => ({ ...turn, metadata: { ...turn.metadata, nativePromptHash: createHash("sha256").update(prompt).digest("hex") } }));
+        const promptHash = createHash("sha256").update(prompt).digest("hex");
+        await deps.store.updateTurn(input.turn.id, (turn) => {
+          const hashes = Array.isArray(turn.metadata?.nativePromptHashes) ? turn.metadata.nativePromptHashes : [];
+          return { ...turn, metadata: { ...turn.metadata, nativePromptHash: promptHash,
+            nativePromptHashes: [...new Set([...hashes, promptHash])] } };
+        });
         const result = await runtime.client.prompt(runtime.native.sessionId, [{ type: "text", text: prompt }, ...(input.content ?? [])], input.signal);
         if (input.signal.aborted || result.stopReason === "cancelled") throw new Error("Native agent turn interrupted.");
         if (result.stopReason === "refusal") throw new Error("Native agent declined the request.");
