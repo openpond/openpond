@@ -10,6 +10,7 @@ const skippedDirectories = new Set([
   ".stage",
   "coverage",
   "dist",
+  "dist-types",
   "node_modules",
   "output",
   "release",
@@ -25,6 +26,7 @@ const skippedFiles = new Set([
 ]);
 
 const compatibilityFiles = new Set([
+  "apps/desktop/src/desktop-executable-path-bun-compat.ts",
   "apps/cli/src/cli/project-source-upload.ts",
   "apps/server/src/openpond/command-access.ts",
   "apps/server/src/openpond/context-compaction/file-ledger.ts",
@@ -42,6 +44,7 @@ const compatibilityFiles = new Set([
   "packages/codex-provider/src/binary.ts",
   "packages/contracts/src/subagents.ts",
   "tests/openpond-command-access.test.ts",
+  "tests/desktop-executable-path.test.ts",
   "tests/profile-source-upload.test.ts",
   "tests/release-workflow.test.ts",
 ]);
