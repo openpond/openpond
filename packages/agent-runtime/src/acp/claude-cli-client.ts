@@ -20,6 +20,7 @@ export class ClaudeCliClient {
   private turn: { resolve(value: { stopReason: string }): void; reject(error: Error): void; signal?: AbortSignal; resultReceived: boolean } | null = null;
   private messageId = "";
   private lastTextMessageId: string | null = null;
+  private completedResultIds = new Set<string>();
   private permissions = new Set<AbortController>();
   private updates: Promise<void> = Promise.resolve();
   private closed = false;
@@ -127,6 +128,9 @@ export class ClaudeCliClient {
     if (typeof message.session_id === "string" && message.session_id !== this.sessionId) {
       this.fail(new Error("Claude changed native session identity.")); void this.stop(); return;
     }
+    // A replayed completion can arrive after the following prompt starts.
+    // Fence it before observations or settlement can affect that new turn.
+    if (message.type === "result" && typeof message.uuid === "string" && this.completedResultIds.has(message.uuid)) return;
     if (this.turn && !this.turn.resultReceived) this.observations.observe(message);
     if (message.type === "control_response") {
       const response = record(message.response), id = String(response.request_id), pending = this.pending.get(id);
@@ -162,6 +166,7 @@ export class ClaudeCliClient {
       for (const block of Array.isArray(content) ? content.map(record) : []) if (block.type === "tool_result") this.observations.tool({ sessionUpdate: "tool_call_update", toolCallId: block.tool_use_id, status: block.is_error ? "failed" : "completed", content: block.content });
     } else if (message.type === "result") {
       if (!this.turn || this.turn.resultReceived) return;
+      if (typeof message.uuid === "string") this.completedResultIds.add(message.uuid);
       this.turn.resultReceived = true;
       if (message.session_id && message.session_id !== this.sessionId) { this.fail(new Error("Claude changed native session identity.")); return; }
       // Claude's result is the authoritative final answer. It replaces the
