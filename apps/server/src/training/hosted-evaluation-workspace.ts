@@ -25,7 +25,7 @@ import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
   ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution",
-  "prepareOperation", "acknowledgeOperation", "retainOperation", "pendingOperations", "feedbackSummary", "harnessSources", "profileEvaluationDiscovery",
+  "prepareOperation", "acknowledgeOperation", "retainOperation", "pendingOperations", "feedbackSummary", "harnessSources", "profileEvaluationDiscovery", "diagnostics",
   "datasetExperiments", "experiments", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
 const Identity = z.object({ id: Id }).passthrough();
@@ -132,6 +132,11 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
         const evidence=await experiments.result(data.id);
         return experimentFeedbackSummary({experimentId:data.id,executionManifestHash:run.summary.manifestHash,total:run.summary.totalCount,graders:run.configuration.graders,evidence});
       });
+    }
+    if (request.operation === "diagnostics") {
+      const data=z.object({id:Id,afterSequence:z.number().int().nonnegative().optional(),afterCallId:z.string().min(1).max(500).optional()}).strict().parse(request.value);
+      const execution=await ownedExecution(data.id);
+      return experiments.diagnostics(data.id,{...data,manifestHash:execution.summary.manifestHash});
     }
     if (request.operation === "caseUsage") { const data = z.object({ id: Id, receiptId: z.string().min(1).max(500) }).strict().parse(request.value); const run = await ownedExecution(data.id); const result = await new OpenPondModelTasksetRunsClient(options).result(data.id); return projectHostedCaseUsage(run, result, data.receiptId); }
     if (request.operation === "case") { const data = z.object({ id: Id, receiptId: z.string().min(1).max(500), afterId: z.string().max(500).optional() }).parse(request.value); const execution = await ownedExecution(data.id); return new OpenPondExperimentInspectionClient(options).case(data.id, data.receiptId, { afterId: data.afterId, manifestHash: execution.summary.manifestHash }); }

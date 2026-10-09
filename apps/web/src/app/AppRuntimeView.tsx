@@ -615,6 +615,19 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     },
     [beginNewChat, setSidebarOpen]
   );
+  useEffect(() => {
+    const open = (event: Event) => {
+      const prompt = (event as CustomEvent<{ prompt?: unknown }>).detail?.prompt;
+      if (typeof prompt !== "string" || !prompt || prompt.length > 250000) return;
+      beginNewChat(null);
+      setDraftExperience("work");
+      composerDraftStore.set(prompt);
+      setView("chat");
+      setSidebarOpen(true);
+    };
+    window.addEventListener("openpond:diagnostic-draft", open);
+    return () => window.removeEventListener("openpond:diagnostic-draft", open);
+  }, [beginNewChat, composerDraftStore, setDraftExperience, setSidebarOpen, setView]);
   const startRefinerAuthoring = useCallback((objective: string) => {
     beginNewChat(null);
     setDraftExperience("work");

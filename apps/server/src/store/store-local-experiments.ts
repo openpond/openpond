@@ -156,9 +156,9 @@ export class SqliteLocalExperimentStore extends SqliteStoreDomain {
   async readLocalExecutionCharges(teamId:string,id:string) {
     return this.localWrite(db=> {
       localExecution(db,teamId,id);
-      return db.all<{request_id:string;case_id:string;status:string;cost_usd:number|null;usage:string|null}>(
-        "SELECT request_id,case_id,status,cost_usd,usage FROM local_experiment_charges WHERE team_id=? AND execution_id=? ORDER BY request_id",[teamId,id])
-        .map(row=>({requestId:row.request_id,caseId:row.case_id,status:row.status,costUsd:row.cost_usd,
+      return db.all<{request_id:string;case_id:string;status:string;maximum_usd:number;cost_usd:number|null;usage:string|null}>(
+        "SELECT request_id,case_id,status,maximum_usd,cost_usd,usage FROM local_experiment_charges WHERE team_id=? AND execution_id=? ORDER BY request_id",[teamId,id])
+        .map(row=>({requestId:row.request_id,caseId:row.case_id,status:row.status,maximumUsd:row.maximum_usd,costUsd:row.cost_usd,
           usage:row.usage?JSON.parse(row.usage) as unknown:null}));
     });
   }
@@ -183,6 +183,15 @@ export class SqliteLocalExperimentStore extends SqliteStoreDomain {
       const rows=db.all<{sequence:number;type:string;payload:string}>("SELECT sequence,type,payload FROM local_experiment_events WHERE team_id=? AND execution_id=? AND case_id=? AND sequence>? ORDER BY sequence LIMIT ?",[input.teamId,input.id,input.caseId,input.afterSequence??0,input.limit+1]);
       const items=rows.slice(0,input.limit).map(row=>({sequence:row.sequence,type:row.type,payload:JSON.parse(row.payload) as unknown}));
       return {items,nextCursor:rows.length>input.limit?items.at(-1)!.sequence:null};
+    });
+  }
+  async localExperimentDiagnosticTrace(input:{teamId:string;id:string;afterSequence?:number}) {
+    return this.localWrite(db=> {
+      localExecution(db,input.teamId,input.id);
+      const rows=db.all<{sequence:number;case_id:string;type:string;payload:string}>("SELECT sequence,case_id,type,payload FROM local_experiment_events WHERE team_id=? AND execution_id=? AND sequence>? ORDER BY sequence LIMIT 101",[input.teamId,input.id,input.afterSequence??-1]);
+      const count=db.get<{count:number}>("SELECT count(*) AS count FROM local_experiment_events WHERE team_id=? AND execution_id=?",[input.teamId,input.id])!.count;
+      const admissions=new Map(localCases(db,input.teamId,input.id).map(row=>[row.admission.receiptId,row.admission.taskId]));
+      return {items:rows.slice(0,100).map(row=>({...row,taskId:admissions.get(row.case_id)??null,payload:JSON.parse(row.payload) as unknown})),count,nextCursor:rows.length>100?rows[99]!.sequence:null};
     });
   }
   async startLocalScoringPass(input:{operationId:string;intentHash:string;ownerId:string;execution:LocalExperimentExecution;admissions:LocalExperimentAdmission[];package:unknown;graders:LocalExperimentDefinition["graders"]}) {

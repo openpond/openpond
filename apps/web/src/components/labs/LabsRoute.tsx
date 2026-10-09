@@ -208,7 +208,7 @@ export function LabsRoute(props: LabsRouteProps) {
   }
   else if (route.page === "runs" && route.resourceId?.startsWith("hosted-run:")) {
     const teamId = training.settingsPreferences.defaultTeamId, actorId=props.account?.profile?.id;
-    page = profileView.connection && teamId && actorId ? <HostedTrainingRunRoute key={`${workspaceKey}:${route.resourceId}`} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId??null} jobId={route.resourceId.slice(11)} onOpenExperiment={id => open(modelsLocation("experiments",null,{resourceId:id,projectId:route.projectId}))} /> : unavailable("Sign in and select a workspace to open this training run.");
+    page = profileView.connection && teamId && actorId ? <HostedTrainingRunRoute key={`${workspaceKey}:${route.resourceId}`} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId??null} jobId={route.resourceId.slice(11)} diagnostics={route.detailTab==="diagnostics"} onDiagnostics={value=>open({...route,detailTab:value?"diagnostics":"details"})} onOpenExperiment={id => open(modelsLocation("experiments",null,{resourceId:id,projectId:route.projectId}))} /> : unavailable("Sign in and select a workspace to open this training run.");
   }
   else if (route.modelId && !state) page = <p role="status">Loading model…</p>;
   else if (route.modelId && !selected) page = unavailable("This model is not available in the active profile and team.");
