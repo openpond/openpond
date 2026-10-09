@@ -65,6 +65,7 @@ jobs:
       - if: steps.scope.outputs.package == 'true'
         run: pnpm run desktop:package:check
       - run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: xvfb-run -a pnpm exec tsx scripts/smoke-html-visual-capture.ts
       - run: xvfb-run -a pnpm run smoke:desktop:dev --skip-chat --json release-smoke/dev-render-commits.json
       - if: steps.scope.outputs.package == 'true'
         run: xvfb-run -a pnpm run smoke:desktop:packaged --json release-smoke/packaged.json

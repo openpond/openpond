@@ -168,6 +168,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@openpond/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@openpond/logging':
         specifier: workspace:*
         version: link:../../packages/logging

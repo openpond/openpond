@@ -168,6 +168,14 @@
     "./enclave": {
       "types": "./dist/enclave.d.ts",
       "import": "./dist/enclave.js"
+    },
+    "./html-visuals": {
+      "types": "./dist/html-visuals.d.ts",
+      "import": "./dist/html-visuals.js"
+    },
+    "./html-visual-document": {
+      "types": "./dist/html-visual-document.d.ts",
+      "import": "./dist/html-visual-document.js"
     }
   },
   "scripts": {

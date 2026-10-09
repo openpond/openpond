@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createDesktopVisualRuntime } from "./visuals/visual-runtime.js";
 import { withUrlModels } from "./enclave/provider.js";
 import { createLocalByokChatStream } from "./openpond/local-byok-chat-stream.js";
 import { createModelUsagePersistence } from "./runtime/model-usage-persistence.js";
@@ -157,7 +158,6 @@ import { createPonderDesktopManager } from "./openpond/ponder-desktop-manager.js
 import { createDeviceUserSessionOwner } from "./remote-relay/session-owner.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
-import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
 import { createLocalAgentScheduleLoop } from "./agents/local-agent-scheduler.js";
 import { createChatWorkflowRuntime } from "./workflows/chat-workflow-runtime.js";
 import {
@@ -313,7 +313,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     subscribe: subscribeRuntimeEvents, loadAppPreferences: () => loadAppPreferences(), warn: message => logger.warn(message) });
   onStartupFailure(() => ponderActivityBridge.close());
   const workQueues = createServerWorkQueues(logger);
-  const browserControlQueue = createBrowserControlQueue();
+  const { browserControlQueue, htmlVisuals, http: desktopVisualHttp } = await createDesktopVisualRuntime({ home: storeDir, store, appendRuntimeEvent });
   const codexSessions = new Map<string, RuntimeCodexSession>();
   const workspaceLocks = new Map<string, Promise<unknown>>();
   let actualPort = port;
@@ -1048,6 +1048,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     executeWebSearch: executeWebSearch ?? undefined,
     createScheduledWork: chatWorkflows.createScheduledWork,
     executeConnectedAppTool,
+    htmlVisuals,
     browserToolExecutor: browserControlQueue.executor,
     manageSidebarFile: async ({ session, action, path: requestedPath }) => {
       if (action === "list") {
@@ -1830,10 +1831,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       disableRemoteAccessPayload: remoteAccess.disable,
       voiceTranscriptionStatusPayload: voiceTranscription.status,
       transcribeVoicePayload: voiceTranscription.transcribe,
-      browserControlRegister: browserControlQueue.registerDesktopExecutor,
-      browserControlNext: browserControlQueue.claimNext,
-      browserControlComplete: browserControlQueue.completeRequest,
-      browserControlStatus: browserControlQueue.status,
+      ...desktopVisualHttp,
       agentRuntime,
       ...desktopManagedAgentRoutes,
       ponderDesktopConnectionPayload: ponderDesktopManager.connection,
