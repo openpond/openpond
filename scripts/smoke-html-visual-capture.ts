@@ -19,6 +19,8 @@ try {
       import assert from 'node:assert/strict';
       import { captureHtmlVisual } from './apps/desktop/src/desktop-html-preview';
       app.setPath('userData', ${JSON.stringify(path.join(scratch, "profile"))});
+      // CI runs under Xvfb without a reliable GPU compositor.
+      if (process.env.CI) app.disableHardwareAcceleration();
       void app.whenReady().then(async () => {
         const owner = new BrowserWindow({show:false});
         try {
