@@ -34,6 +34,7 @@ type TerminalClientMessage =
       type: "input";
       terminalId: string;
       data: string;
+      waitForPrompt?: boolean;
     }
   | {
       type: "resize";
@@ -61,6 +62,9 @@ type TerminalSession = {
   cols: number;
   rows: number;
   outputBuffer: string;
+  promptReady: boolean;
+  pendingPromptInput: string[];
+  promptInputTimer: NodeJS.Timeout | null;
 };
 
 const DISCONNECTED_SESSION_TTL_MS = 8000;
@@ -207,6 +211,7 @@ function zshShellLaunch(command: string, label: string) {
     label,
     env: {
       ZDOTDIR: integrationDir,
+      OPENPOND_INTEGRATION_ZDOTDIR: integrationDir,
       OPENPOND_ORIGINAL_ZDOTDIR: process.env.ZDOTDIR ?? process.env.HOME ?? "",
     },
     integrationDir,
@@ -301,12 +306,19 @@ function zshEnvScript(): string {
   return String.raw`if [[ -n "${parameter}{OPENPOND_ORIGINAL_ZDOTDIR:-}" && -r "${parameter}{OPENPOND_ORIGINAL_ZDOTDIR}/.zshenv" ]]; then
   source "${parameter}{OPENPOND_ORIGINAL_ZDOTDIR}/.zshenv"
 fi
+# A user's .zshenv may relocate their configuration. Keep that location for
+# .zshrc, but let zsh load our wrapper before restoring it.
+if [[ "$ZDOTDIR" != "$OPENPOND_INTEGRATION_ZDOTDIR" ]]; then
+  export OPENPOND_ORIGINAL_ZDOTDIR="${parameter}{ZDOTDIR:-$HOME}"
+fi
+export ZDOTDIR="$OPENPOND_INTEGRATION_ZDOTDIR"
 `;
 }
 
 function zshIntegrationScript(): string {
   const parameter = "$";
-  return String.raw`if [[ -n "${parameter}{OPENPOND_ORIGINAL_ZDOTDIR:-}" && -r "${parameter}{OPENPOND_ORIGINAL_ZDOTDIR}/.zshrc" ]]; then
+  return String.raw`export ZDOTDIR="$OPENPOND_ORIGINAL_ZDOTDIR"
+if [[ -n "${parameter}{OPENPOND_ORIGINAL_ZDOTDIR:-}" && -r "${parameter}{OPENPOND_ORIGINAL_ZDOTDIR}/.zshrc" ]]; then
   source "${parameter}{OPENPOND_ORIGINAL_ZDOTDIR}/.zshrc"
 fi
 
@@ -474,6 +486,17 @@ export function createTerminalWebSocketHandler(deps: {
   }
 
   function sendIntegrationEvent(session: TerminalSession, event: TerminalIntegrationEvent): void {
+    if (event.type === "command_start") session.promptReady = false;
+    if (event.type === "prompt_ready") {
+      session.promptReady = true;
+      if (session.promptInputTimer) clearTimeout(session.promptInputTimer);
+      session.promptInputTimer = null;
+      const pending = session.pendingPromptInput.splice(0);
+      if (pending.length) {
+        session.promptReady = false;
+        session.pty.write(pending.join(""));
+      }
+    }
     if (!session.socket) return;
     send(session.socket, { ...event, terminalId: session.id });
   }
@@ -496,6 +519,7 @@ export function createTerminalWebSocketHandler(deps: {
     if (!session) return;
     sessions.delete(terminalId);
     if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
+    if (session.promptInputTimer) clearTimeout(session.promptInputTimer);
     if (session.socket) removeSocketTerminal(session.socket, terminalId);
     for (const disposable of session.disposables) disposable.dispose();
     session.disposables = [];
@@ -612,6 +636,9 @@ export function createTerminalWebSocketHandler(deps: {
         cols,
         rows,
         outputBuffer: "",
+        promptReady: false,
+        pendingPromptInput: [],
+        promptInputTimer: null,
       };
       session.disposables.push(
         pty.onData((data) => handleSessionData(session, data)),
@@ -619,6 +646,7 @@ export function createTerminalWebSocketHandler(deps: {
           sessions.delete(message.terminalId);
           if (session.socket) removeSocketTerminal(session.socket, message.terminalId);
           if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
+          if (session.promptInputTimer) clearTimeout(session.promptInputTimer);
           for (const disposable of session.disposables) disposable.dispose();
           session.disposables = [];
           removeShellIntegrationDir(session.integrationDir);
@@ -650,6 +678,7 @@ export function createTerminalWebSocketHandler(deps: {
         shell: shell.label,
       });
     } catch (error) {
+      removeShellIntegrationDir(shell.integrationDir ?? null);
       const messageText = error instanceof Error ? error.message : String(error);
       deps.logger.error("terminal start failed", { terminalId: message.terminalId, cwd, shell: shell.label, error });
       send(socket, {
@@ -668,6 +697,18 @@ export function createTerminalWebSocketHandler(deps: {
     const session = sessions.get(message.terminalId);
     if (!session) return;
     if (message.type === "input") {
+      if (message.waitForPrompt && ["bash", "zsh"].includes(session.shell) && !session.promptReady) {
+        session.pendingPromptInput.push(message.data);
+        if (!session.promptInputTimer) session.promptInputTimer = setTimeout(() => {
+          session.pendingPromptInput = [];
+          session.promptInputTimer = null;
+          if (session.socket) send(session.socket, {
+            type: "error", terminalId: session.id,
+            message: "The shell did not finish starting. Run the sign-in command in your normal Terminal, then refresh the connection.",
+          });
+        }, 30_000);
+        return;
+      }
       session.pty.write(message.data);
       return;
     }
