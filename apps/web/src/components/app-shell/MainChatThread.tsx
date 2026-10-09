@@ -12,9 +12,11 @@ import { useNewMessageIds } from "../../hooks/useNewMessageIds";
 import { useSessionTurnCache } from "../../hooks/useSessionTurnCache";
 import {
   buildChatTimelineRows,
+  chatTimelineMessages,
 } from "../../lib/chat-timeline-rows";
 import { ConversationFormalReview } from "../human-review/ConversationFormalReview";
-import { MessageRow, ThinkingIndicator } from "../chat/Messages";
+import { ChatTimelineEntry } from "../chat/ChatTimelineEntry";
+import { MessageRow } from "../chat/Messages";
 
 const TrainingStatusReceipt = lazy(() =>
   import("../training/TrainingCreationPanel").then((module) => ({
@@ -78,10 +80,7 @@ export function MainChatThread({
   workspaceRootPath: string | null;
 }) {
   const messages = useMemo(
-    () =>
-      rows.flatMap((row) =>
-        row.type === "message" ? [row.message] : []
-      ),
+    () => chatTimelineMessages(rows),
     [rows]
   );
   const newMessageIds = useNewMessageIds(messages, conversationKey);
@@ -100,9 +99,7 @@ export function MainChatThread({
       ref={threadRef}
       onScroll={onScroll}
     >
-      {rows.map((row) => row.type === "thinking" ? (
-        <ThinkingIndicator key={row.id} />
-      ) : (
+      {rows.map((row) => <ChatTimelineEntry key={row.id} row={row} renderMessage={(row) => (
         <MessageRow
           activeWorkspaceAppId={activeWorkspaceAppId}
           accountBaseUrl={accountBaseUrl}
@@ -131,7 +128,7 @@ export function MainChatThread({
           workspaceRootPath={workspaceRootPath}
           showFooter={row.showFooter}
         />
-      ))}
+      )} />)}
       {connection && formalReviewTeamId && formalReviewActorId && formalReviewScopeKey && sessionId && onFormalReviewOpen ? <ConversationFormalReview key={formalReviewScopeKey + sessionId} connection={connection} teamId={formalReviewTeamId} actorId={formalReviewActorId} scopeKey={formalReviewScopeKey} sessionId={sessionId} running={turnRunning} onOpen={onFormalReviewOpen} /> : null}
       {creation ? (
         <Suspense fallback={null}>

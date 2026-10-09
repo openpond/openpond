@@ -49,6 +49,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   const peerMessages = new Map<string, ChatMessage>();
   const pendingSourcesByTurnId = new Map<string, ChatMessage["sources"]>();
   const nativeToolNames = new Map<string, string>();
+  const turnStarts = new Map<string, string>();
   const nativeMessagesById = new Map<string, NativeAssistantMessage>();
 
   for (const original of items) {
@@ -76,11 +77,12 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       if (parsed.success && parsed.data.senderKind === "user" && parsed.data.kind === "steer" && !displayedTaskInputIds.has(parsed.data.id)) {
         displayedTaskInputIds.add(parsed.data.id);
         messages.push({ id: `task-input:${parsed.data.id}`, role: "user", content: parsed.data.body,
-          timestamp: item.timestamp, turnId: parsed.data.turnId ?? undefined });
+          timestamp: item.timestamp, turnId: parsed.data.turnId ?? undefined, interactionKind: "steer" });
       }
       continue;
     }
     if (item.name === "turn.started") {
+      if (item.turnId) turnStarts.set(item.turnId, item.timestamp);
       settleRunningActivityGroups(messages, item);
       removeSupersededSteerInterruption(messages, item);
       const prompt = extractPrompt(item.args);
@@ -111,6 +113,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
           id: item.id,
           role: "user",
           content: prompt,
+          ...(asRecord(item.args)?.interactionKind === "steer" ? { interactionKind: "steer" as const } : {}),
           attachments: extractAttachments(item.args),
           timestamp: item.timestamp,
           turnId: item.turnId,
@@ -266,7 +269,11 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       const finalAnswer = findLast(messages, (candidate) =>
         candidate.role === "assistant" && candidate.turnId === item.turnId && Boolean(candidate.content?.trim()),
       );
-      if (finalAnswer) finalAnswer.finalAnswer = true;
+      if (finalAnswer) {
+        finalAnswer.finalAnswer = true;
+        finalAnswer.turnStartedAt = item.turnId ? turnStarts.get(item.turnId) : undefined;
+        finalAnswer.turnCompletedAt = item.timestamp;
+      }
       completeActivityGroup(messages, item, "completed");
       continue;
     }

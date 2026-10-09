@@ -486,7 +486,6 @@ describe("chat message projection", () => {
         },
       })
     );
-    expect(html).toContain("Worked for 1m 24s · Searched code");
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("Found 2 resources.");
     expect(html).not.toContain("Searched resources");

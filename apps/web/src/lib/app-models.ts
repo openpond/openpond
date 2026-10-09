@@ -226,6 +226,9 @@ export type ChatMessage = {
   id: string;
   /** The wrap-up response of a successfully completed turn. */
   finalAnswer?: boolean;
+  turnStartedAt?: string;
+  turnCompletedAt?: string;
+  interactionKind?: "steer";
   visual?: HtmlVisualReference;
   role: "visual" | "user" | "assistant" | "activity_group" | "error" | "status_divider" | "task_message";
   content?: string;

@@ -20,7 +20,7 @@
   flex: 0 1 auto;
   max-width: min(860px, 100%);
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -994,4 +994,31 @@ button.activity-artifact-name:focus-visible {
   .chat-create-receipt {
     width: 100%;
   }
+}
+
+.chat-work-history {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+}
+
+.chat-work-history-summary {
+  width: 100%;
+  max-width: 100%;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0;
+}
+
+.chat-work-history-summary .activity-summary-text {
+  flex: 0 1 auto;
+}
+
+.chat-work-history-summary .activity-summary-toggle {
+  opacity: 1;
+}
+
+.chat-work-history-content {
+  display: grid;
+  gap: 18px;
 }
