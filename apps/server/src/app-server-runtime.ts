@@ -117,6 +117,8 @@ export type OpenPondAppServerOptions = {
   version?: string;
   maxHostedWorkspaceToolRounds?: number;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
+  /** Transport-owned tools/policy composed after the harness resolves its tools. */
+  resolveModelTools?: import("./runtime/app-server-embedding.js").ResolveAppServerModelTools;
   /** Internal native Experiment authority, bound before session admission. */
   resolveSessionModelStream?: (session:import("@openpond/contracts").Session,turn:import("@openpond/contracts").Turn)=>Promise<typeof defaultStreamOpenPondHostedChatTurn|null>;
   sandboxRequest?: AppServerSandboxRequest;
@@ -134,6 +136,8 @@ export type OpenPondAppServerOptions = {
 };
 
 export type OpenPondAppServerInstance = AppServerInstance & {
+  updateSession(id: string, patch: Partial<import("@openpond/contracts").Session>): Promise<import("@openpond/contracts").Session>;
+  pinSessionHarness(id: string): Promise<{ id: string; contentHash: string } | null>;
   storePath: string;
   workspaceDir: string;
   composition: readonly AppServerCompositionService[];
@@ -397,7 +401,12 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     finalizeWorkTurn: options.finalizeWorkTurn,
     isolatedProfileEvaluationForTurn:isolatedProfileTools?async(session)=>{if(session.metadata?.profileEvaluationRun===undefined)return false;if(!isolatedProfileTools.ownsSession(session.id))throw new Error("A Profile evaluation target has no actual admitted case owner.");return true;}:undefined,
     executeProfileEvaluationAction:isolatedProfileTools?.executeAction,
-    resolveModelTools:isolatedProfileTools?context=>isolatedProfileTools.ownsSession(context.session.id)?isolatedProfileTools.resolveTools(context):embeddedToolResolver?.(context)??Promise.resolve([]):embeddedToolResolver,
+    resolveModelTools: options.resolveModelTools || isolatedProfileTools || embeddedToolResolver ? async context => {
+      const tools = isolatedProfileTools
+        ? isolatedProfileTools.ownsSession(context.session.id) ? await isolatedProfileTools.resolveTools(context) : await embeddedToolResolver?.(context) ?? []
+        : embeddedToolResolver ? await embeddedToolResolver(context) : context.tools;
+      return options.resolveModelTools ? options.resolveModelTools({ ...context, tools }) : tools;
+    } : undefined,
     ...(embedded ? { hostedToolFlags: { toolMode: "native" as const, nativeToolTransport: true, nativeToolProviderDenylist: [], textToolFallback: false } } : {}),
     attachmentRootDir: path.join(storeDir, "attachments"),
     store: coreStore,
@@ -620,6 +629,14 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   });
   return {
     ...instance,
+    updateSession,
+    pinSessionHarness: async id => {
+      const runtime = await loadLocalHarnessRuntimeForSession(store, await getSession(id));
+      if (!runtime) return null;
+      const reference = { id: runtime.release.harnessRelease.id, contentHash: runtime.release.harnessRelease.contentHash };
+      await ensureLocalHarnessRunOverlay({ store, runId: id, workspace: runtime.workspace, harnessRelease: reference, admittedAt: now() });
+      return reference;
+    },
     storePath: store.storePath,
     workspaceDir,
     composition,
