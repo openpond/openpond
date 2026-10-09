@@ -1,3 +1,5 @@
+import { ExperimentDiagnostics } from "./ExperimentDiagnostics";
+import { ExperimentRunPins } from "./ExperimentRunPins";
 import { AdvancedRefinerEvaluationControl } from "./AdvancedRefinerEvaluationControl";
 import { ReviewedExperimentScheduleControl } from "./ReviewedExperimentScheduleControl";
 import { useRef, useState } from "react";
@@ -36,7 +38,7 @@ export function LocalExperimentsPage({
   const setup = useEvaluationSetup(),
     detail = useLocalExperimentDetail(api, route),
     execution = detail.execution.data,
-    tab = route.detailTab ?? "overview";
+    tab = route.detailTab === "cases" ? "tasks" : route.detailTab ?? "tasks";
   const [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     active = useRef(false);
@@ -112,7 +114,7 @@ export function LocalExperimentsPage({
       ) : execution ? (
         <>
           <nav className="evaluation-workspace-tabs" aria-label="Experiment tabs">
-            {["overview", "cases", "compare", "configuration"].map((value) => (
+            {["tasks", "graders", "versions", "diagnostics", "configuration", "compare"].map((value) => (
               <button
                 key={value}
                 aria-selected={tab === value}
@@ -209,6 +211,8 @@ export function LocalExperimentsPage({
               tokenNote="This local result contract does not retain token counts. Usage stays unknown; measured spend is shown separately."
             />
           ) : null}
+          {tab === "diagnostics" ? <ExperimentDiagnostics key={api.key+execution.id} api={api} id={execution.id} manifestHash={execution.executionHash}/> : null}
+          {tab === "graders" || tab === "versions" ? <ExperimentRunPins configuration={{...execution.configuration,configurationHash:execution.configurationHash,graders:execution.graders}} section={tab}/> : null}
           {tab === "configuration" ? (
             <>
               <EvaluationCard title="Immutable run configuration">
@@ -288,7 +292,7 @@ export function LocalExperimentsPage({
             />
           ) : null}
           {detail.result.data ? (
-            <div hidden={tab !== "cases"}>
+            <div hidden={tab !== "tasks"}>
               <LocalExperimentCases
                 key={detail.resultId}
                 api={api}
@@ -301,7 +305,7 @@ export function LocalExperimentsPage({
                 onOpenGrader={openGrader}
               />
             </div>
-          ) : tab === "cases" ? (
+          ) : tab === "tasks" ? (
             <CaseTableState
               headers={["Task", "Seed", "Status", "Overall score"]}
               loading={detail.result.isFetching}

@@ -8,13 +8,13 @@ import { createPortal } from "react-dom";
 dayjs.extend(relativeTime);
 export const evaluationRelativeTime = (value: string) => dayjs(value).isValid() ? dayjs(value).fromNow() : "Unknown time";
 
-export function EvaluationStatus({ status }: { status: string }) {
+export function EvaluationStatus({ status, iconOnly=false }: { status: string; iconOnly?:boolean }) {
   const value = status.toLowerCase();
   const success = ["completed", "passed", "ready", "published", "scored"].includes(value);
   const failure = ["failed", "error", "rejected"].includes(value);
   const progress = ["queued", "running", "cancelling", "checking", "pending"].includes(value);
   const Icon = success ? Check : failure ? X : progress ? LoaderCircle : Circle;
-  return <span className={`evaluation-status evaluation-status-${success ? "success" : failure ? "error" : progress ? "progress" : "neutral"}`}><Icon size={13} aria-hidden="true" />{status.replaceAll("_", " ")}</span>;
+  return <span title={status.replaceAll("_", " ")} aria-label={status.replaceAll("_", " ")} className={`evaluation-status evaluation-status-${success ? "success" : failure ? "error" : progress ? "progress" : "neutral"}`}><Icon size={13} aria-hidden="true" />{iconOnly ? null : status.replaceAll("_", " ")}</span>;
 }
 
 export function EvaluationModel({ name, onOpen }: { name: string; onOpen?: () => void }) {

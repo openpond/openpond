@@ -8,6 +8,7 @@ import { PrepareHarnessExperimentSchema, PreparedHarnessExperimentSchema } from 
 import { verifyHarnessExperimentManifest } from "./model-taskset-runs-contracts.js";
 import { ExperimentScoringRequestSchema, verifyExperimentScoringPass, type ExperimentScoringRequest } from "./experiment-scoring-contracts.js";
 import { ExperimentHarnessCatalogSchema } from "./experiment-harness-catalog.js";
+import { RunDiagnosticsQuerySchema, verifyRunDiagnostics } from "./run-diagnostics.js";
 
 const Id = z.string().trim().min(1).max(200);
 export class OpenPondExperimentError extends Error {
@@ -88,6 +89,11 @@ export class OpenPondExperimentsClient {
   }
   async get(id: string, options: {signal?: AbortSignal} = {}) {
     return this.details(await this.request(`/${encodeURIComponent(Id.parse(id))}`, "GET", undefined, options.signal), id);
+  }
+  async diagnostics(id: string, options: { afterSequence?: number; afterCallId?: string; manifestHash?: string; signal?: AbortSignal } = {}) {
+    const query = RunDiagnosticsQuerySchema.parse({ afterSequence: options.afterSequence, afterCallId: options.afterCallId });
+    const params = new URLSearchParams(Object.entries(query).filter(([,value])=>value!==undefined).map(([key,value])=>[key,String(value)]));
+    return verifyRunDiagnostics(await this.request(`/${encodeURIComponent(Id.parse(id))}/diagnostics?${params}`,"GET",undefined,options.signal),{teamId:this.options.teamId,runId:id,manifestHash:options.manifestHash,afterSequence:options.afterSequence,afterCallId:options.afterCallId});
   }
   async list(value: z.input<typeof ExperimentListQuerySchema> = {}, signal?: AbortSignal) {
     const query = ExperimentListQuerySchema.parse(value);
