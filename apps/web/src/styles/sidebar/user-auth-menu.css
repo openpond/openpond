@@ -199,12 +199,20 @@
   cursor: wait;
 }
 
+.user-auth-update-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .user-auth-update-status {
-  margin: 3px 9px 7px 32px;
+  flex: 0 0 auto;
+  margin-left: auto;
   color: var(--muted-strong);
-  font-size: 12px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .user-auth-update-status[role="alert"] {

@@ -1,46 +1,39 @@
 import { useState } from "react";
 import { Loader2, RefreshCw } from "../icons";
-import { useDesktopUpdates } from "../../hooks/useDesktopUpdates";
-import { DesktopUpdateButton } from "./DesktopUpdateButton";
+import { useDesktopUpdateAction } from "../../hooks/useDesktopUpdateAction";
 
 export function DesktopUpdateMenu({ hasRunningWork }: { hasRunningWork: boolean }) {
-  const state = useDesktopUpdates();
-  const [pending, setPending] = useState(false);
-  const [requestError, setRequestError] = useState<string | null>(null);
+  const { state, busy, pendingAction, error, run } = useDesktopUpdateAction(hasRunningWork);
+  const [checked, setChecked] = useState(false);
   const bridge = window.openpond?.updates;
   if (!state || state.status === "unsupported" || !bridge) return null;
-  const busy = pending || ["checking", "downloading", "restarting"].includes(state.status);
-  const error = requestError ?? (state.retry === "check" ? state.error : null);
-  const message = error ?? (state.status === "checking" ? "Checking for updates…"
-    : state.status === "current" ? `OpenPond ${state.installedVersion} is up to date.`
-    : state.status === "available" ? `OpenPond ${state.version} is available.`
-    : state.status === "downloading" ? `Downloading OpenPond ${state.version}${state.progress === null ? "" : ` (${state.progress}%)`}…`
-    : state.status === "ready" ? `OpenPond ${state.version} is ready to install.`
-    : state.status === "restarting" ? "Restarting OpenPond…" : null);
+  const ready = state.status === "ready" || state.status === "restarting" || state.retry === "restart";
+  const available = state.status === "available" || state.retry === "download";
+  const checking = state.status === "checking" || pendingAction === "check";
+  const restarting = state.status === "restarting" || pendingAction === "restart";
+  const downloading = state.status === "downloading" || pendingAction === "download";
+  const action = ready ? "restart" : checked && available ? "download" : "check";
+  const status = error ? "Try again" : checking ? "Checking…" : restarting ? "Restarting…"
+    : downloading ? `Downloading${state.progress === null ? "…" : ` ${state.progress}%`}`
+    : ready ? "Restart to update" : checked && available ? "Update available"
+    : checked && state.status === "current" ? "Up to date" : null;
+  const description = error ?? (action === "restart" ? "Restart OpenPond to install the downloaded update."
+    : action === "download" ? `Download OpenPond ${state.version}.` : "Check for OpenPond updates.");
 
-  async function check() {
+  async function activate() {
     if (busy || !bridge) return;
-    setPending(true);
-    setRequestError(null);
-    try {
-      await bridge.check();
-    } catch (error) {
-      setRequestError(error instanceof Error ? error.message : "Could not check for updates. Try again.");
-    } finally {
-      setPending(false);
-    }
+    setChecked(true);
+    await run(action);
   }
 
-  // Keep the menu open so a manual check always has a visible result. Updates
-  // share the sidebar action, including draft recovery and running-work checks.
-  return <>
-    <button type="button" className="user-auth-menu-link" role="menuitem"
-      disabled={busy} aria-busy={busy} onClick={() => void check()}>
-      {state.status === "checking" || pending ? <span className="sidebar-update-icon sidebar-update-spinner" aria-hidden="true"><Loader2 size={15} /></span>
+  // A second click on the same row downloads an available update. Keep the
+  // result inline and share restart/draft safeguards with the toolbar action.
+  return <button type="button" className="user-auth-menu-link user-auth-update-check" role="menuitem"
+      title={description} aria-description={description}
+      disabled={busy} aria-busy={busy} onClick={() => void activate()}>
+      {busy ? <span className="sidebar-update-icon sidebar-update-spinner" aria-hidden="true"><Loader2 size={15} /></span>
         : <RefreshCw size={15} aria-hidden="true" />}
-      <span>{state.status === "checking" || pending ? "Checking for updates…" : "Check for updates"}</span>
-    </button>
-    {message ? <p className="user-auth-update-status" role={error ? "alert" : "status"}>{message}</p> : null}
-    {state.version && state.retry !== "check" ? <DesktopUpdateButton hasRunningWork={hasRunningWork} placement="menu" /> : null}
-  </>;
+      <span className="user-auth-update-label">Check for updates</span>
+      {status ? <span className="user-auth-update-status" role={error ? "alert" : "status"}>{status}</span> : null}
+    </button>;
 }
