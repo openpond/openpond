@@ -372,3 +372,18 @@ identity and all snapshot hashes. Use `acceptanceGroupVerdict` from
 These methods only read evidence. They do not dispatch checks, bypass server-side
 acceptance, start training or activate serving. An empty page means this Job has
 no recorded independent group; its existing trainer validation is separate.
+
+### Experiment spending defaults and comparisons
+
+`OpenPondExperimentsClient.defaults()` returns the hosted global spend defaults.
+`prepareHarness()` and `run()` accept an omitted `maximumCostUsd`; explicit
+per-run limits and retained run limits take precedence. Token allocation is
+managed within model capacity and the available monetary reservation.
+
+Use `createComparisonBudget({ id, operationIds, maximumSpendUsd? })` before
+admitting any member runs to enforce one aggregate cap across a comparison.
+Register fresh, unique operation IDs and retain the returned grant. Membership
+is immutable and owner-scoped. `comparisonBudget(id)` returns each operation's
+run ID, known settled spend, pending reservations and remaining allowance.
+Registering a comparison does not start any work. Independent experiments do
+not implicitly share a spending cap.

@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { OpenPondExperimentsClient, RunExperimentSchema, ExperimentListQuerySchema, OpenPondExperimentInspectionClient, PrepareHarnessExperimentSchema, ExperimentScoringRequestSchema } from "openpond-sdk/experiments";
+import { OpenPondExperimentsClient, ExperimentListQuerySchema, OpenPondExperimentInspectionClient, ExperimentScoringRequestSchema } from "openpond-sdk/experiments";
 import { loadConfig } from "../config";
 import { DEFAULT_OPENPOND_API_BASE_URL } from "../urls";
 import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl } from "./common";
@@ -10,21 +10,31 @@ export async function runExperimentsCommand(options: Record<string, string | boo
   if(options.revision!==undefined||options.contentHash!==undefined)throw new Error("Experiments retain their immutable configuration on the run; definition revisions are not selectable.");
   const [action, id] = rest;
   const teamId = optionString(options, "team");
-  if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
+  if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <defaults|create-comparison|comparison-budget|prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
   const config = await loadConfig();
   const credentials = { teamId, apiKey: await ensureApiKey(config, resolveBaseUrl(config)),
     baseUrl: resolveApiBaseUrlOption(options) ?? config.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL };
   const experiments = new OpenPondExperimentsClient(credentials);
   let result: unknown;
-  if (action === "prepare-harness") {
+  if (action === "defaults") {
+    if (id) throw new Error("Defaults does not accept an id.");
+    result = await experiments.defaults();
+  } else if (action === "create-comparison") {
     const file = optionString(options, "inputFile");
-    if (!file || id || (await stat(file)).size > 1_048_576) throw new Error("Harness preparation requires a bounded --input-file with its released target, model and ceiling.");
-    result = await experiments.prepareHarness(PrepareHarnessExperimentSchema.parse(JSON.parse(await readFile(file, "utf8"))));
+    if (!file || id || (await stat(file)).size > 1_048_576) throw new Error("Create comparison requires a bounded input file with an id, fresh operationIds and optional maximumSpendUsd.");
+    result = await experiments.createComparisonBudget(JSON.parse(await readFile(file, "utf8")));
+  } else if (action === "comparison-budget") {
+    if (!id) throw new Error("Comparison budget requires an id.");
+    result = await experiments.comparisonBudget(id);
+  } else if (action === "prepare-harness") {
+    const file = optionString(options, "inputFile");
+    if (!file || id || (await stat(file)).size > 1_048_576) throw new Error("Harness preparation requires a bounded --input-file with its released target, model and optional ceiling.");
+    result = await experiments.prepareHarness(JSON.parse(await readFile(file, "utf8")));
   } else if (action === "run") {
     const file = optionString(options, "inputFile");
     if (!file || id) throw new Error("Run requires --input-file with the reviewed configuration and stable operationId.");
     if ((await stat(file)).size > 1_048_576) throw new Error("Experiment input exceeds one MiB.");
-    result = await experiments.run(RunExperimentSchema.parse(JSON.parse(await readFile(file, "utf8"))));
+    result = await experiments.run(JSON.parse(await readFile(file, "utf8")));
   } else if (action === "list") {
     if (id) throw new Error("List does not accept an Experiment id.");
     const limit = optionString(options, "limit");

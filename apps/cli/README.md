@@ -179,3 +179,30 @@ pnpm dev
 Cache:
 
 - `~/.openpond/cache.json` caches app/tool lists for 1 hour and refreshes automatically on next use.
+
+### Experiment spending
+
+`openpond experiments defaults --team <team-id>` reads the hosted global
+spending defaults. New experiments use that default when `maximumCostUsd` is
+omitted from the input file; include it to override a single run. The resolved
+ceiling is retained with the experiment. Model calls, grading and compute count
+against it, including reservations whose final charge is not yet known.
+
+For multiple models, register one shared ceiling **before admitting any runs**:
+
+```json
+{
+  "id": "comparison-unique-id",
+  "maximumSpendUsd": 10,
+  "operationIds": ["fresh-operation-a", "fresh-operation-b"]
+}
+```
+
+Run `openpond experiments create-comparison --team <team-id> --input-file <path>`
+with that file, then use those exact operation IDs in the normal
+`prepare-harness` and `run` commands. Registration does not start models. Each
+child keeps its per-experiment cap and also consumes the comparison's shared
+cap. Read settled, reserved and remaining amounts with
+`openpond experiments comparison-budget <id> --team <team-id>`.
+Membership and the shared ceiling are immutable; an uncertain response is
+retried with the same comparison ID and input, never a fresh set of runs.
