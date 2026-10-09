@@ -89,7 +89,9 @@ export function verifyHarnessExperimentManifest(request: ModelTasksetRunRequest,
     || manifest.policy.configurationHash !== policy.modelConfigurationHash
     || manifest.tasksetRelease.id !== request.taskset.id || manifest.tasksetRelease.contentHash !== request.taskset.contentHash
     || canonicalJson(manifest.population) !== canonicalJson(request.population)
-    || manifest.population.some(member => member.receiptId !== `evaluation-${contentHash([manifest.id, member.taskId, member.seed]).slice(0, 32)}`))
+    || manifest.population.some(member => member.receiptId !== `evaluation-${contentHash(manifest.profileEvaluation?.externalDatasetBinding
+      ? [manifest.id, member.taskId, member.seed, member.fixtureId]
+      : [manifest.id, member.taskId, member.seed]).slice(0, 32)}`))
     throw new Error("Harness evaluation differs from its admitted source, package or model configuration.");
 }
 

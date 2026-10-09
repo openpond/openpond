@@ -27,29 +27,30 @@ export class AgentHostStorageClient {
     if (Buffer.byteLength(JSON.stringify(message)) > (experiment ? 8_388_608 : 256_000)) {
       throw new Error("Host storage request is too large.");
     }
+    const send = this.#send;
     const response = new Promise<unknown>((resolve, reject) => {
       // Execution owners include provisioning/cleanup in their bounded RPC
       // budget. Ordinary storage still has its shorter transport ceiling.
       const capMs = params.operation === "profile-evaluations/grade" ? 420_000
         : params.operation === "sandbox/request" || params.operation === "profile-evaluations/sandbox" || experiment
           ? 300_000 : 60_000;
+      const deadlineMs = Math.max(1, Math.min(capMs, timeoutMs));
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        reject(new Error("Host storage request timed out."));
-      }, Math.max(1, Math.min(capMs, timeoutMs)));
+        reject(new Error(`Host storage request timed out: operation=${params.operation}, request=${id}, deadlineMs=${deadlineMs}.`));
+      }, deadlineMs);
       this.#pending.set(id, { resolve, reject, timer,
         maxResponseBytes: params.operation === "experiment/environment" ? 1_600_000 : 1_000_000 });
     });
-    try {
-      await this.#send(message);
-    } catch (error) {
+    // Observe the response immediately, even while the transport is backpressured.
+    void Promise.resolve().then(() => send(message)).catch((error: unknown) => {
       const pending = this.#pending.get(id);
       if (pending) {
         clearTimeout(pending.timer);
         this.#pending.delete(id);
         pending.reject(error instanceof Error ? error : new Error(String(error)));
       }
-    }
+    });
     return response;
   }
 
