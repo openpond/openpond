@@ -229,7 +229,7 @@ export function ProviderSettingsSection({
 
   return (
     <section className="account-settings provider-connections-settings">
-      <h1>Providers</h1>
+      <div className="provider-connections-heading"><h1>Providers</h1><AcpAgentBrowser connection={connection} onChanged={onProvidersChanged} onAdded={id => setDetailsProviderId(id)} /></div>
       <div className="provider-connections-intro"><p>Manage your installed agents and login. Sync their conversations from Connections.</p><button type="button" className="settings-secondary" onClick={() => void navigateDesktopRoute({ kind: "view", view: "apps" })}>Connections & apps</button></div>
 
       {providers ? (
@@ -293,7 +293,6 @@ export function ProviderSettingsSection({
       ) : null}
 
       {removalError ? <p role="alert">{removalError}</p> : null}
-      <AcpAgentBrowser connection={connection} onChanged={onProvidersChanged} onAdded={id => setDetailsProviderId(id)} />
 
       <UrlModelConnections connection={connection} onChanged={async () => { if (connection) onProvidersChanged(await api.providerSettings(connection)); }} />
 
