@@ -46,12 +46,6 @@
   max-width: 360px;
 }
 
-.remote-access-task-title {
-  flex: 1 1 250px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .remote-access-settings .account-summary-actions a {
   text-decoration: none;
 }
