@@ -44,7 +44,7 @@ Clients advertising terminal authentication receive a login action that appends 
 }
 ```
 
-Open a project and select OpenPond for a new external-agent conversation. This configuration follows Zed's documented schema; interactive Zed/JetBrains qualification remains a release gate. Current automated proof covers the official TypeScript ACP client, OpenPond's independent ACP client, and the experimental ACP TCK on Linux x64.
+Open a project and select OpenPond for a new external-agent conversation. This configuration follows Zed's documented schema. An interactive Zed/JetBrains session has not been verified. Current automated proof covers the official TypeScript ACP client, OpenPond's independent ACP client, and the experimental ACP TCK on Linux x64.
 
 ## Sessions, models and permissions
 
