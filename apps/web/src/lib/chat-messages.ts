@@ -28,7 +28,7 @@ import { asRecord, findLast } from "./chat-message-utils";
 import { mergeChatSources, webSearchSourcesFromEvent } from "./chat-sources";
 import { taskMessageFromEvent } from "./chat-task-messages";
 import { projectNativeHistoryTool } from "./chat-native-history";
-import { appendNativeAssistantMessage } from "./chat-native-message-stream";
+import { appendNativeAssistantMessage, type NativeAssistantMessage } from "./chat-native-message-stream";
 
 export { activityGroupSummary } from "./chat-activities";
 
@@ -48,7 +48,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   const peerMessages = new Map<string, ChatMessage>();
   const pendingSourcesByTurnId = new Map<string, ChatMessage["sources"]>();
   const nativeToolNames = new Map<string, string>();
-  const nativeMessagesById = new Map<string, ChatMessage>();
+  const nativeMessagesById = new Map<string, NativeAssistantMessage>();
 
   for (const original of items) {
     const item = projectNativeHistoryTool(original, nativeToolNames);
@@ -252,6 +252,12 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     }
 
     if (item.name === "turn.completed") {
+      // Completion is shared by hosted OpenPond, Codex, and native agents.
+      // Keep progress/reasoning rows free of footers, even while text streams.
+      const finalAnswer = findLast(messages, (candidate) =>
+        candidate.role === "assistant" && candidate.turnId === item.turnId && Boolean(candidate.content?.trim()),
+      );
+      if (finalAnswer) finalAnswer.finalAnswer = true;
       completeActivityGroup(messages, item, "completed");
       continue;
     }

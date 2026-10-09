@@ -1,6 +1,7 @@
 import type { RuntimeEvent } from "@openpond/contracts";
 import type { ChatMessage } from "./app-models";
 import { buildChatMessages } from "./chat-messages";
+import { asRecord } from "./chat-message-utils";
 
 export type IncrementalChatProjection = {
   events: RuntimeEvent[];
@@ -72,6 +73,9 @@ function appendTextDeltas(
     previous.createImproveRun ||
     events.some((event) =>
       (event.name !== "assistant.delta" && event.name !== "assistant.reasoning.delta") ||
+      // Native deltas carry message identity and final snapshots replace text.
+      // Replay them through the native projector instead of concatenating them.
+      typeof asRecord(event.data)?.nativeMessageId === "string" ||
       event.turnId !== previous.turnId ||
       !event.output
     )

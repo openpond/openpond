@@ -1,9 +1,50 @@
 import { describe, expect, test } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
+import { buildChatTimelineRows } from "../apps/web/src/lib/chat-timeline-rows";
 import { IncrementalChatProjector } from "../apps/web/src/lib/incremental-chat-projector";
 
 describe("IncrementalChatProjector", () => {
+  // Progress must never acquire the wrap-up controls during streaming or
+  // after reload; completed turns retain their footer as the next turn starts.
+  test.each(["openpond", "codex", "claude-code"])("exposes only completed wrap-up footers for %s", (provider) => {
+    const native = provider === "claude-code";
+    const codex = provider === "codex";
+    const events = [
+      event("start", "turn.started", "turn-1", { args: { prompt: "Work" } }),
+      event("progress", codex ? "assistant.reasoning.delta" : "assistant.delta", "turn-1", {
+        output: "Working",
+        data: { phase: "commentary", ...(native ? { nativeMessageId: "native-progress" } : {}) },
+      }),
+      event("tool", "tool.started", "turn-1", { action: "read", data: { callId: "read" } }),
+      event("tool-done", "tool.completed", "turn-1", { action: "read", data: { callId: "read" } }),
+      event("answer", "assistant.delta", "turn-1", {
+        output: "Done",
+        data: native ? { nativeMessageId: "native-final", phase: "final_answer", nativeMessageSnapshot: true }
+          : codex ? { phase: "final_answer" } : {},
+      }),
+    ];
+    const projector = new IncrementalChatProjector();
+    const footerContents = (messages: ReturnType<typeof buildChatMessages>) => buildChatTimelineRows(messages)
+      .flatMap(row => row.type === "message" && row.showFooter ? [row.message.content] : []);
+    for (let end = 1; end <= events.length; end++) {
+      expect(footerContents(projector.project(events.slice(0, end)))).toEqual([]);
+    }
+    events.push(event("complete", "turn.completed", "turn-1"));
+    expect(footerContents(projector.project([...events]))).toEqual(["Done"]);
+    events.push(
+      event("next", "turn.started", "turn-2", { args: { prompt: "Next" } }),
+      event("next-progress", "assistant.delta", "turn-2", { output: "Still working" }),
+      event("stop", "turn.interrupted", "turn-2"),
+      event("third", "turn.started", "turn-3", { args: { prompt: "Try again" } }),
+      event("third-progress", "assistant.delta", "turn-3", { output: "Trying" }),
+      event("failed", "turn.failed", "turn-3", { error: "Provider failed" }),
+    );
+    const streamed = projector.project([...events]);
+    expect(streamed).toEqual(buildChatMessages(JSON.parse(JSON.stringify(events))));
+    expect(footerContents(streamed)).toEqual(["Done"]);
+  });
+
   test("matches full replay after every mixed-event batch", () => {
     const events = mixedEvents(18);
     const projector = new IncrementalChatProjector();

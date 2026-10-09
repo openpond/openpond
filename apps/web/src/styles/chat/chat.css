@@ -1711,13 +1711,9 @@ button.user-message-attachment {
   color: rgba(255, 255, 255, 0.58);
 }
 
-.message-row .assistant-message-footer,
 .ponder-transcript-message > .assistant-message-footer { opacity: 0; transition: opacity 120ms ease; }
-.message-row:hover .assistant-message-footer,
-.message-row:focus-within .assistant-message-footer,
 .ponder-transcript-message:hover > .assistant-message-footer,
 .ponder-transcript-message:focus-within > .assistant-message-footer { opacity: 1; }
 @media (hover: none) {
-  .message-row .assistant-message-footer,
   .ponder-transcript-message > .assistant-message-footer { opacity: 1; }
 }

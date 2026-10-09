@@ -52,6 +52,6 @@ export function createLocalManagedReadiness(deps: {
       const status = await deps.nativeStatus(session);
       if (!status.available) return unavailable(status.reason ?? "The original local agent is unavailable.");
     }
-    return { available: true, canSteer: false, reason: null };
+    return { available: true, canSteer: true, reason: null };
   };
 }

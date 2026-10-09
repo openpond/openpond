@@ -15,6 +15,7 @@ import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src
 
 import { createSubagentCompletionRuntime } from "../apps/server/src/runtime/subagents/completion-runtime";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
+import { restoreQueuedTaskInput } from "../apps/web/src/components/chat/TaskInboxPanel";
 
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const dispose of cleanup.splice(0).reverse()) await dispose(); });
@@ -38,6 +39,33 @@ function input(overrides: Partial<TaskInputAdmission> = {}): TaskInputAdmission 
   return { id: "input-1", sessionId: "a", senderSessionId: null, senderKind: "user", kind: "steer",
     body: "Preserve the API", payload: {}, idempotencyKey: "intent-1", replyTo: null, expectedTurnId: "turn-a", ...overrides };
 }
+
+// Failure story: editing a queued message puts it in the composer while the
+// saved copy can still run, or restores stale text after another client edits it.
+test("editing a queued message restores it only after cancelling its saved revision", async () => {
+  const f = await fixture();
+  const queued = await f.store.admitTaskInput(input({ kind: "queued", expectedTurnId: null }));
+  const restore = vi.fn();
+  const inbox = {
+    mutate: async (row: typeof queued, change: Parameters<typeof f.store.mutateTaskInput>[2]) => {
+      try {
+        await f.store.mutateTaskInput(row.sessionId, row.id, change);
+        return true;
+      } catch { return false; }
+    },
+  };
+  const edited = await f.store.mutateTaskInput("a", queued.id, {
+    action: "edit", expectedRevision: queued.revision, body: "Updated instruction",
+  });
+  await restoreQueuedTaskInput(inbox, queued, restore);
+  expect(restore).not.toHaveBeenCalled();
+  expect((await f.store.taskInboxSnapshot("a")).inputs[0]).toMatchObject({ state: "pending", body: edited.body });
+
+  await restoreQueuedTaskInput(inbox, edited, restore);
+  expect(restore).toHaveBeenCalledExactlyOnceWith(edited.body);
+  expect((await f.store.taskInboxSnapshot("a")).inputs[0]).toMatchObject({ state: "cancelled" });
+  expect(await f.store.reserveTaskFollowup("a", "next-turn", "owner")).toBeNull();
+});
 
 // Failure story: a remote/unauthenticated request bypasses desktop Send, or an
 // ambiguous HTTP retry duplicates a persisted message after a runtime restart.
@@ -341,9 +369,9 @@ test("peer follow-up remains queued until the current assignment completes", asy
   expect(await f.store.includeTaskInputs("a", "future-turn", "owner", "future-request")).toEqual([expect.objectContaining({ id: receipt.id })]);
 });
 
-// Failure story: native active steering slips through input promotion, or a late
-// message is lost while a completed native request is sealed for the next turn.
-test("native requests reject steering through both entry points and preserve late messages across restart", async () => {
+// Failure story: a late message is lost while a completed native request is
+// sealed for the next turn. Stale corrections must remain explicitly rejected.
+test("native request sealing preserves late messages across restart", async () => {
   const f = await fixture();
   await f.store.updateSession("a", (session) => ({ ...session, provider: "opencode" }));
   const runtime = createTaskInboxRuntime({ store: f.store,
@@ -353,9 +381,7 @@ test("native requests reject steering through both entry points and preserve lat
     startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: (work) => work(), appendRuntimeEvent: async () => {},
   });
   await f.store.openTaskInboxTurn("a", "turn-a", runtime.ownerId);
-  await expect(runtime.steer("a", { prompt: "Do not interrupt", expectedTurnId: "turn-a", idempotencyKey: "steer" })).rejects.toThrow("Queue");
   const queued = await f.store.admitTaskInput(input({ kind: "queued", expectedTurnId: null }));
-  await expect(runtime.mutate("a", queued.id, { action: "steer", expectedRevision: queued.revision, expectedTurnId: "turn-a" })).rejects.toThrow("queued");
   expect(await f.store.getTaskInput(queued.id)).toMatchObject({ kind: "queued", state: "pending", turnId: null });
   const included = await f.store.admitTaskInput(input({ id: "before-dispatch", kind: "message", idempotencyKey: "before", expectedTurnId: null }));
   expect(await runtime.include("a", "turn-a", "native-request")).toEqual([expect.objectContaining({ id: included.id, state: "included" })]);
