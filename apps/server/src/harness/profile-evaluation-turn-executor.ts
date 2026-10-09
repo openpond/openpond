@@ -81,6 +81,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       },
     });
     const prompt = [
+      ...(workCase ? ["This is an evaluation run. Complete the requested task using its public inputs. Save each required output with work_save_output, then send your final response to finish the case. Saving a file alone does not finish the case. Private grading runs after your final response; do not wait for grader feedback."] : []),
       typeof member.task.input === "string" ? member.task.input : JSON.stringify(member.task.input),
       ...(Object.keys(member.task.policyVisibleContext).length
         ? [`Policy-visible task context:\n${JSON.stringify(member.task.policyVisibleContext)}`]
@@ -88,8 +89,9 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     ].join("\n\n") || " ";
     await input.admitSession?.(session);
     try {
+    let timedOut = false;
     const turn = await awaitProfileEvaluationTurn({signal:member.signal,timeoutMs:input.manifest.limits.timeoutMs,
-      onInterrupt:input.onInterrupt,
+      onInterrupt:(kind)=>{ timedOut = kind === "timed_out"; input.onInterrupt?.(kind); },
       ...(input.interruptSessionTurn?{interrupt:(reason:string)=>input.interruptSessionTurn!(session.id,reason)}:{}),
       send:()=>input.sendTurn(session.id, {
       prompt,
@@ -174,7 +176,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       latencyMs: Math.max(0, Date.parse(turn.completedAt) - Date.parse(turn.startedAt)),
       costUsd: null,
       terminal: turn.status === "completed"&&!outputOverflow,
-      failureClass: turn.status === "completed"&&!outputOverflow ? null : turn.status === "interrupted" ? "cancelled" : "infrastructure_failure",
+      failureClass: turn.status === "completed"&&!outputOverflow ? null : turn.status === "interrupted" ? (timedOut ? "timeout" : "cancelled") : "infrastructure_failure",
     };
     }finally{await input.settleSession?.(session.id);}
   };
