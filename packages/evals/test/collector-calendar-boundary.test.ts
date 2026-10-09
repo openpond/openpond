@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { execFileSync } from "node:child_process";
 import { runInNewContext } from "node:vm";
 import { expect, test, vi } from "vitest";
 import { collectorServiceFiles } from "../src/native-conversations/collector-service-files.js";
@@ -36,12 +37,14 @@ test("cron worker, next-run display, and generated calendar gate agree on actual
   expect(scheduledSyncDue(eitherDay, null, new Date(2026, 9, 5))).toBe(true); // Monday, not the first
   expect(scheduledSyncDue(eitherDay, null, new Date(2026, 9, 6))).toBe(false);
   expect(nextScheduledSync({ frequency: "cron", expression: "0 0 29 feb *" }, new Date(2026, 9, 9))).toBe(new Date(2028, 1, 29).toISOString());
-  const timezone = process.env.TZ;
-  process.env.TZ = "America/New_York";
-  try {
-    expect(nextScheduledSync({ frequency: "cron", expression: "30 2 * * *" }, new Date("2026-03-08T06:59:00Z")))
-      .toBe("2026-03-09T06:30:00.000Z");
-  } finally { if (timezone === undefined) delete process.env.TZ; else process.env.TZ = timezone; }
+  // Worker threads cannot change the process timezone after startup. Start a
+  // real process in the target timezone so CI exercises the same DST boundary.
+  const scheduler = new URL("../src/native-conversations/collector-schedule.ts", import.meta.url).href;
+  const nextAfterDst = execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", `
+    import { nextScheduledSync } from ${JSON.stringify(scheduler)};
+    console.log(nextScheduledSync({ frequency: "cron", expression: "30 2 * * *" }, new Date("2026-03-08T06:59:00Z")));
+  `], { encoding: "utf8", env: { ...process.env, TZ: "America/New_York" } });
+  expect(nextAfterDst.trim()).toBe("2026-03-09T06:30:00.000Z");
   for (const expression of ["* * * * *", "*/15 * * * *", "0,30 * * * *", "* * * * * *", "61 * * * *", "0 0 L * *", "0 0 31 2 *", "H * * * *", "0 0 * * $(cmd)"])
     expect(() => validateCollectorSchedule({ frequency: "cron", expression })).toThrow();
 });
