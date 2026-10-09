@@ -1,3 +1,6 @@
+import { AdmittedExperimentTasks } from "./AdmittedExperimentTasks";
+import { ExperimentDiagnostics } from "./ExperimentDiagnostics";
+import { ExperimentRunPins } from "./ExperimentRunPins";
 import { RunExperimentSchema } from "openpond-sdk/experiments";
 import { AdvancedRefinerEvaluationControl } from "./AdvancedRefinerEvaluationControl";
 import { ReviewedExperimentScheduleControl } from "./ReviewedExperimentScheduleControl";
@@ -12,8 +15,6 @@ import { useWorkspaceActions, useWorkspaceResourceName } from "./WorkspacePanel"
 import { useRef, useState } from "react";
 import type { ModelsRoute } from "../models-route";
 import { useEvaluationSetup } from "./EvaluationSetupState";
-import { CaseTableState } from "./CaseTableState";
-import { ExperimentGraderLabel } from "./ExperimentGraderLabel";
 import type { ExperimentGraderPin } from "openpond-sdk/experiments";
 import { ExperimentCases } from "./ExperimentCases";
 import { ExperimentConfiguration } from "./ExperimentConfiguration";
@@ -43,7 +44,7 @@ export function HostedExperimentsPage({
   const setup = useEvaluationSetup(),
     detail = useHostedExperimentDetail(api, route),
     run = detail.execution.data,
-    tab = route.detailTab ?? "overview";
+    tab = route.detailTab === "cases" ? "tasks" : route.detailTab ?? "tasks";
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     active = useRef(false);
@@ -157,7 +158,7 @@ export function HostedExperimentsPage({
       ) : run ? (
         <>
           <nav className="evaluation-workspace-tabs" aria-label="Experiment tabs">
-            {["overview", "cases", "compare", "configuration"].map((value) => (
+            {["tasks", "graders", "versions", "diagnostics", "configuration", "compare"].map((value) => (
               <button
                 key={value}
                 aria-selected={tab === value}
@@ -263,6 +264,8 @@ export function HostedExperimentsPage({
               tokenNote="First 20 persisted cases from this Experiment or the explicitly selected scoring pass. Unknown usage stays unknown."
             />
           ) : null}
+          {tab === "diagnostics" ? <ExperimentDiagnostics key={api.key+run.summary.id} api={api} id={run.summary.id} manifestHash={run.summary.manifestHash}/> : null}
+          {tab === "graders" || tab === "versions" ? <ExperimentRunPins configuration={run.configuration} section={tab}/> : null}
           {tab === "configuration" ? (
             <ExperimentConfiguration
               execution={run}
@@ -281,7 +284,7 @@ export function HostedExperimentsPage({
             />
           ) : null}
           {detail.evidence.data ? (
-            <div hidden={tab !== "cases"}>
+            <div hidden={tab !== "tasks"}>
               <ExperimentCases
                 key={`${run.summary.id}:${route.passId ?? "original"}`}
                 evidence={detail.evidence.data}
@@ -298,23 +301,8 @@ export function HostedExperimentsPage({
                 onSelectPass={(passId) => navigate({ ...route, passId, detailTab: "cases" })}
               />
             </div>
-          ) : tab === "cases" ? (
-            <CaseTableState
-              headers={[
-                "Case",
-                "Status",
-                ...selectedGraders.map((grader) => (
-                  <ExperimentGraderLabel key={grader.id} grader={grader} onOpen={openGrader} />
-                )),
-                "Tokens",
-                "Spend",
-              ]}
-              loading={
-                detail.evidence.isPending && Boolean(run.summary.resultAvailable || route.passId)
-              }
-              error={detail.evidence.error?.message}
-              retry={() => void detail.evidence.refetch()}
-            />
+          ) : tab === "tasks" ? (
+            <AdmittedExperimentTasks api={api} run={run}/>
           ) : null}
         </>
       ) : (
@@ -325,7 +313,7 @@ export function HostedExperimentsPage({
         </p>
       )}
       <AdvancedRefinerEvaluationControl api={api} evidence={detail.evidence.data?.result.status==="completed"?{id:detail.evidence.data.manifest.id,contentHash:detail.evidence.data.result.contentHash}:null}/>
-      <ReviewedExperimentScheduleControl api={api} configuration={run?RunExperimentSchema.parse({...run.configuration,operationId:run.configuration.request.operationId,graders:run.configuration.graders.map(grader=>({...grader,mappings:grader.mappings??[]}))}):null} onOpenExperiment={id=>navigate({...route,page:"experiments",resourceId:id,passId:null,detailTab:"overview"})}/>
+      <ReviewedExperimentScheduleControl api={api} configuration={run?RunExperimentSchema.parse({request:run.request,maximumCostUsd:run.configuration.maximumCostUsd,operationId:run.request.operationId,graders:run.configuration.graders.map(({id,version,contentHash,mappings})=>({id,version,contentHash,mappings:mappings??[]}))}):null} onOpenExperiment={id=>navigate({...route,page:"experiments",resourceId:id,passId:null,detailTab:"overview"})}/>
       <ExperimentImproveSidebar api={api} evidence={detail.evidence.data??null} onOpenWork={onOpenWork}/>
     </>
   );

@@ -1,4 +1,5 @@
 import {readLocalProfileArtifacts} from "./local-profile-artifacts.js";
+import {readLocalRunDiagnostics} from "./local-run-diagnostics.js";
 import { ScheduledTransportNotInvokedError, currentScheduledAdmissionGuard,type ScheduledAdmissionGuard } from "./evaluation-schedule-admission-guard.js";
 import {retainClaudeProcessEvidence} from "./claude-process-evidence.js";
 import { randomUUID } from "node:crypto";
@@ -223,6 +224,11 @@ export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:str
   async function publicExecution(teamId:string,id:string) {const value=(await ownedExecution(teamId,id)).execution;
     if(value.kind==="target")return ownedRecord(teamId,id);const {definition,...receipt}=value;void definition;return receipt;}
   async function status(raw:unknown) {const input=LocalExperimentReadSchema.parse(raw);await requireTeam(input.teamId);return publicExecution(input.teamId,input.id);}
+  async function diagnostics(raw:unknown) {
+    const input=z.object({teamId:z.string().min(1),id:z.string().min(1),afterSequence:z.number().int().nonnegative().optional(),afterCallId:z.string().min(1).optional()}).strict().parse(raw);
+    const record=await ownedRecord(input.teamId,input.id);
+    return readLocalRunDiagnostics(deps.store,record,{afterSequence:input.afterSequence,afterCallId:input.afterCallId});
+  }
   async function cancel(raw:unknown) {
     const input=LocalExperimentReadSchema.parse(raw);await requireTeam(input.teamId);
     await ownedExecution(input.teamId,input.id);
@@ -276,13 +282,13 @@ export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:str
     });
   }
   async function request(raw:unknown) {
-    const command=z.object({teamId:z.string().min(1).max(200),projectId:z.string().min(1).max(200).nullable().optional(),action:z.enum(["claudeReadiness","claudeControl","localInferenceChoices","sourceDataset","sourceChoices","prepareHarness","run","runFromRelease","read","get","list","status","cancel","result","score","scoreRetained","passes","pass","compare","feedbackSummary","case"]),payload:z.unknown()}).strict().parse(raw);
+    const command=z.object({teamId:z.string().min(1).max(200),projectId:z.string().min(1).max(200).nullable().optional(),action:z.enum(["claudeReadiness","claudeControl","localInferenceChoices","sourceDataset","sourceChoices","prepareHarness","run","runFromRelease","read","get","list","status","cancel","result","score","scoreRetained","passes","pass","compare","feedbackSummary","case","diagnostics"]),payload:z.unknown()}).strict().parse(raw);
     const actor=await deps.actorId();
     if(!actor.trim())throw new LocalExperimentError("local_account_required","Sign in before accessing local Experiments.",403);
     const reply=await projectScope.run(command.projectId??null,()=>handleCommand(command));
     await requireTeam(command.teamId);await requireActor(actor);return reply;
   }
-  async function handleCommand(command:{teamId:string;projectId?:string|null;action:"claudeReadiness"|"claudeControl"|"localInferenceChoices"|"sourceDataset"|"sourceChoices"|"prepareHarness"|"run"|"runFromRelease"|"read"|"get"|"list"|"status"|"cancel"|"result"|"score"|"scoreRetained"|"passes"|"pass"|"compare"|"feedbackSummary"|"case";payload:unknown}) {
+  async function handleCommand(command:{teamId:string;projectId?:string|null;action:"claudeReadiness"|"claudeControl"|"localInferenceChoices"|"sourceDataset"|"sourceChoices"|"prepareHarness"|"run"|"runFromRelease"|"read"|"get"|"list"|"status"|"cancel"|"result"|"score"|"scoreRetained"|"passes"|"pass"|"compare"|"feedbackSummary"|"case"|"diagnostics";payload:unknown}) {
     await requireTeam(command.teamId);
     const scoped=()=>({...z.record(z.string(),z.unknown()).parse(command.payload),teamId:command.teamId,...(command.projectId&&command.action==="list"?{projectId:command.projectId}:{})});
     if(command.action==="claudeReadiness"){if(!deps.localInference?.claudeReadiness)throw new LocalExperimentError("claude_runtime_unavailable","Claude process owner is unavailable.",503);return deps.localInference.claudeReadiness();}
@@ -322,7 +328,7 @@ export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:str
     }
     const methods={read,get:read,list,status,cancel,result,
       passes:async(input:unknown)=>{const page=await scoring.passes(input);return {...page,items:page.items.map(item=>{const {definition,...receipt}=item;void definition;return receipt;})};},
-      pass:async(input:unknown)=>{const pass=await scoring.pass(input);const {definition,...execution}=pass.execution;void definition;return {...pass,execution};},compare,feedbackSummary,case:inspectCase};
+      pass:async(input:unknown)=>{const pass=await scoring.pass(input);const {definition,...execution}=pass.execution;void definition;return {...pass,execution};},compare,feedbackSummary,case:inspectCase,diagnostics};
     return methods[command.action](scoped());
   }
   async function readHumanTaskPackage(scope:string,projectId:string,release:{id:string;revision:number;contentHash:string}) {

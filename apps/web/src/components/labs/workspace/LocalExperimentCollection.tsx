@@ -1,3 +1,4 @@
+import { ExperimentIdentity, useExperimentClock } from "./ExperimentIdentity";
 import { useState } from "react";
 import type { z } from "zod";
 import { useEvaluationSetup } from "./EvaluationSetupState";
@@ -7,7 +8,7 @@ import { ExperimentFeedbackCell, graderColumnKey } from "./ExperimentFeedbackCel
 import { EvaluationTableState } from "./EvaluationTableState";
 import { useQuery } from "@tanstack/react-query";
 import { LocalExperimentRecordPageSchema } from "@openpond/contracts";
-import { EvaluationModel, EvaluationStatus, EvaluationTime } from "./EvaluationPresentation";
+import { EvaluationModel, EvaluationStatus } from "./EvaluationPresentation";
 import { localRequest } from "./local-workspace-api";
 import type { WorkspaceApi } from "./workspace-api";
 import type { ModelsRoute } from "../models-route";
@@ -53,6 +54,11 @@ export function LocalExperimentCollection({
     queryFn: ({ signal }) =>
       localRequest(api, LocalExperimentRecordPageSchema, "list", query, signal),
   });
+  const now = useExperimentClock(
+    (definitions.data?.items ?? []).some((item) =>
+      ["queued", "running", "cancelling"].includes(item.status),
+    ),
+  );
   const scoreColumns = [
     ...new Map(
       (definitions.data?.items ?? [])
@@ -67,25 +73,27 @@ export function LocalExperimentCollection({
           Duplicate and edit
         </button>
       ) : null}
-      <table className="training-data-table evaluation-workspace-table">
+      <table className="training-data-table evaluation-workspace-table evaluation-history-table">
         <thead>
           <tr>
             <th>
               <span className="sr-only">Select Experiment</span>
             </th>
+            <th>
+              <span className="sr-only">Status</span>
+            </th>
             <th>Experiment</th>
-            <th>Graders</th>
-            <th>Model</th>
+            <th>Target</th>
             <th>Dataset</th>
-            <th>Status</th>
-            <th>Cases</th>
-            <th>Started</th>
+            <th>Model</th>
+            <th>Tasks</th>
             {scoreColumns.map((grader) => (
               <th key={graderColumnKey(grader)}>
                 {grader.name ?? "Grader"}
                 <small>Mean score · this run</small>
               </th>
             ))}
+            <th>Errors</th>
           </tr>
         </thead>
         <tbody>
@@ -102,7 +110,7 @@ export function LocalExperimentCollection({
                   contentHash: undefined,
                   collection: "default",
                   resourceId: item.id,
-                  detailTab: "overview",
+                  detailTab: "tasks",
                   after: null,
                 })
               }
@@ -116,7 +124,7 @@ export function LocalExperimentCollection({
                     contentHash: undefined,
                     collection: "default",
                     resourceId: item.id,
-                    detailTab: "overview",
+                    detailTab: "tasks",
                     after: null,
                   });
               }}
@@ -130,72 +138,54 @@ export function LocalExperimentCollection({
                   onChange={(event) => setSelected(event.target.checked ? item : null)}
                 />
               </td>
-              <td>{item.configuration.request.name}</td>
               <td>
-                <div className="evaluation-grader-badges">
-                  {item.graders.map((grader) =>
-                    grader.release ? (
-                      <button
-                        className="evaluation-model-badge"
-                        key={grader.id}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          navigate({
-                            ...route,
-                            page: "graders",
-                            resourceId: grader.release!.id,
-                            revision: grader.release!.revision,
-                            contentHash: grader.release!.contentHash,
-                            datasetKind: undefined,
-                            detailTab: "overview",
-                            executionId: null,
-                            passId: null,
-                            after: null,
-                          });
-                        }}
-                      >
-                        {grader.name ?? "Grader name unavailable"}
-                      </button>
-                    ) : (
-                      <span className="evaluation-model-badge" key={grader.id}>
-                        {grader.name ?? "Dataset grader"}
-                      </span>
-                    ),
-                  )}
-                </div>
-              </td>
-              <td>
-                <EvaluationModel
-                  name={item.model.modelId}
-                  onOpen={() =>
-                    navigate({
-                      ...route,
-                      page: "experiments",
-                      datasetKind: undefined,
-                      revision: undefined,
-                      contentHash: undefined,
-                      collection: "default",
-                      resourceId: item.id,
-                      detailTab: "configuration",
-                      executionId: null,
-                      passId: null,
-                      after: null,
-                    })
+                <EvaluationStatus
+                  iconOnly
+                  status={
+                    item.status === "completed" && item.counts.failed > 0 ? "failed" : item.status
                   }
                 />
               </td>
               <td>
-                {item.configuration.request.taskset.id} · Revision{" "}
-                {item.configuration.request.taskset.revision}
+                <ExperimentIdentity
+                  id={item.id}
+                  title={item.configuration.request.name}
+                  createdAt={item.createdAt}
+                  startedAt={null}
+                  completedAt={item.completedAt}
+                  now={now}
+                  onOpen={() =>
+                    navigate({
+                      ...route,
+                      page: "experiments",
+                      resourceId: item.id,
+                      detailTab: "tasks",
+                      passId: null,
+                    })
+                  }
+                />
+              </td>
+              <td
+                title={
+                  item.configuration.request.policy.kind === "hosted_harness"
+                    ? item.configuration.request.policy.source.definitionId
+                    : "Model"
+                }
+              >
+                {item.configuration.request.policy.kind === "hosted_harness"
+                  ? item.configuration.request.policy.source.definitionId
+                  : "Model"}
+              </td>
+              <td title={item.configuration.request.taskset.id}>
+                {item.configuration.request.taskset.id}
+                <small>v{item.configuration.request.taskset.revision}</small>
               </td>
               <td>
-                <EvaluationStatus status={item.status} />
+                <EvaluationModel name={item.model.modelId} />
               </td>
               <td>
-                {item.counts.completed} completed · {item.counts.failed} failed
-              </td>
-              <td>
-                <EvaluationTime value={item.createdAt} />
+                {item.counts.completed}/
+                {Object.values(item.counts).reduce((sum, count) => sum + count, 0)}
               </td>
               {scoreColumns.map((grader) => (
                 <td key={graderColumnKey(grader)}>
@@ -209,6 +199,29 @@ export function LocalExperimentCollection({
                   />
                 </td>
               ))}
+              <td onClick={(event) => event.stopPropagation()}>
+                {item.error ? (
+                  <details>
+                    <summary>Failure</summary>
+                    <p>{item.error}</p>
+                    <button
+                      onClick={() =>
+                        navigate({
+                          ...route,
+                          page: "experiments",
+                          resourceId: item.id,
+                          detailTab: "diagnostics",
+                          passId: null,
+                        })
+                      }
+                    >
+                      Diagnostics
+                    </button>
+                  </details>
+                ) : (
+                  "—"
+                )}
+              </td>
             </tr>
           ))}
           <EvaluationTableState
