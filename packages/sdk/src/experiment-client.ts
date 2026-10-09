@@ -23,6 +23,26 @@ export class OpenPondExperimentsClient {
       throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");
   }
+  async defaults(signal?: AbortSignal) {
+    return z.object({ maximumSpendUsd: z.number().finite().min(0.000001).max(10_000), maximumComparisonSpendUsd: z.number().finite().min(0.000001).max(10_000), initialOutputTokens: z.number().int().positive() }).strict()
+      .parse(await this.request("/defaults", "GET", undefined, signal));
+  }
+  async createComparisonBudget(value: { id: string; operationIds: string[]; maximumSpendUsd?: number }, signal?: AbortSignal) {
+    const request = z.object({ id: Id, operationIds: z.array(Id).min(1).max(100), maximumSpendUsd: z.number().finite().min(0.000001).max(10_000).optional() }).strict().parse(value);
+    const result = this.comparisonBudgetResult(await this.request("/comparison-budgets", "POST", request, signal), request.id);
+    if (contentHash(result.operations.map(item => item.operationId).sort()) !== contentHash([...request.operationIds].sort())
+      || request.maximumSpendUsd !== undefined && result.maximumSpendUsd !== request.maximumSpendUsd)
+      throw new Error("Comparison admission differs from its requested operations or ceiling.");
+    return result;
+  }
+  async comparisonBudget(id: string, signal?: AbortSignal) {
+    return this.comparisonBudgetResult(await this.request(`/comparison-budgets/${encodeURIComponent(Id.parse(id))}`, "GET", undefined, signal), id);
+  }
+  private comparisonBudgetResult(value: unknown, id: string) {
+    const result = z.object({ id: Id, teamId: Id, maximumSpendUsd: z.number().finite().positive(), settledUsd: z.number().finite().nonnegative(), reservedUsd: z.number().finite().nonnegative(), remainingUsd: z.number().finite().nonnegative(), operations: z.array(z.object({ operationId: Id, runId: Id.nullable() }).strict()).min(1).max(100) }).strict().parse(value);
+    if (result.id !== id || result.teamId !== this.options.teamId) throw new Error("Comparison budget scope mismatch.");
+    return result;
+  }
   /** Discover released workspace Harnesses independently of Project targets. */
   async harnessSources(options: {cursor?: string; signal?: AbortSignal} = {}) {
     const cursor = options.cursor === undefined ? undefined : z.string().min(1).max(8192).parse(options.cursor);
@@ -36,8 +56,8 @@ export class OpenPondExperimentsClient {
     return page;
   }
   /** Resolves a released target without saving a definition or dispatching it. */
-  async prepareHarness(value: z.input<typeof PrepareHarnessExperimentSchema>, signal?: AbortSignal) {
-    const request = PrepareHarnessExperimentSchema.parse(value);
+  async prepareHarness(value: Omit<z.input<typeof PrepareHarnessExperimentSchema>, "maximumCostUsd"> & { maximumCostUsd?: number }, signal?: AbortSignal) {
+    const request = PrepareHarnessExperimentSchema.parse({ ...value, maximumCostUsd: value.maximumCostUsd ?? (await this.defaults(signal)).maximumSpendUsd });
     const result = PreparedHarnessExperimentSchema.parse(await this.request("/harness-setup", "POST", request, signal));
     verifyHarnessExperimentManifest(result.request, result.manifest);
     const policy = result.request.policy;
@@ -49,10 +69,13 @@ export class OpenPondExperimentsClient {
       throw new Error("Harness preparation differs from its requested scope or configuration.");
     return result;
   }
-  async run(value: z.input<typeof RunExperimentSchema>, signal?: AbortSignal) {
-    const request = RunExperimentSchema.parse(value);
+  async run(value: Omit<z.input<typeof RunExperimentSchema>, "maximumCostUsd"> & { maximumCostUsd?: number }, signal?: AbortSignal) {
+    const request = RunExperimentSchema.parse({ ...value, maximumCostUsd: value.maximumCostUsd ?? (await this.defaults(signal)).maximumSpendUsd });
     if (request.request.teamId !== this.options.teamId) throw new Error("Experiment workspace mismatch.");
-    const result = await this.details(await this.request("", "POST", request, signal));
+    // Omission is resolved by the server against a retained operation first,
+    // so a global default change cannot change a lost-response retry's cap.
+    const result = await this.details(await this.request("", "POST", { ...request, maximumCostUsd: value.maximumCostUsd }, signal));
+    if (value.maximumCostUsd === undefined) request.maximumCostUsd = result.configuration.maximumCostUsd;
     if (contentHash(experimentConfigurationRequest(result.request)) !== contentHash(experimentConfigurationRequest(request.request))
       || result.configuration.maximumCostUsd !== request.maximumCostUsd
       || result.configuration.sourceExperimentId !== request.sourceExperimentId
