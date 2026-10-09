@@ -34,8 +34,9 @@ export function RunDiagnosticsView({
 }) {
   const [task, setTask] = useState(
       () =>
-        new URLSearchParams(window.location.hash.slice(1)).get("diagnostic-task")?.slice(0, 500) ??
-        "",
+        new URLSearchParams(typeof window === "undefined" ? "" : window.location.hash.slice(1))
+          .get("diagnostic-task")
+          ?.slice(0, 500) ?? "",
     ),
     [reviewing, setReviewing] = useState(false),
     [notice, setNotice] = useState<string | null>(null);
