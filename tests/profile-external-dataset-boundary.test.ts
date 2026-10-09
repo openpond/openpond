@@ -17,7 +17,8 @@ const close:Array<()=>Promise<void>>=[];
 afterEach(async()=>{for(const action of close.splice(0).reverse())await action();vi.restoreAllMocks();});
 // Failure story: an external selected subset was prepared correctly, but case/run
 // admission still used the Profile's declared Dataset or exposed private gold to
-// an ordinary target command. Exercise compiler, real SQLite, bwrap, turn loop,
+// an ordinary target command, or named skill reads missed their immutable public
+// package or escaped into private aliases. Exercise compiler, real SQLite, bwrap, turn loop,
 // actual private grading and retained paired comparison together without paid I/O.
 it("executes the selected ordered external population against two actual compiled sources with gold outside target tools",async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),"profile-external-"));close.push(()=>rm(root,{recursive:true,force:true}));
@@ -32,6 +33,7 @@ it("executes the selected ordered external population against two actual compile
  const release={...releaseBody,graders:verifierSet.graders,verifierSetRelease:{id:verifierSet.id,contentHash:verifierSet.contentHash},policy:{...releaseBody.policy,hiddenGraderRefs:[...releaseBody.policy.hiddenGraderRefs,processGrader.id]}};
  const value=createTasksetPackage({schemaVersion:"openpond.tasksetPackage.v1",taskset:{...release,contentHash:contentHash(release)},environment:portable.environmentRelease,verifierSet,files:[{asset,base64:source.toString('base64')}]}),graders=value.taskset.graders.map(grader=>({id:grader.id,version:grader.version,contentHash:contentHash(grader),feedbackKey:grader.id,release:null}));
  const catalog={schemaVersion:"openpond.profileEvaluations.v1",definitions:[{id:"declared-unused",label:"Verifier private",description:gold,target:{kind:"profile"},tasksetRelease:{id:value.taskset.id,contentHash:value.taskset.contentHash},split:"frozen_eval",taskIds:["task_unused"],seeds:["declared"],criterion:{minimumPassRate:1,requireComplete:true}}],suites:[]};
+ const skillName="case-instructions-from-the-owned-immutable-profile-source",skillText=`---\nname: ${skillName}\ndescription: Controlled public case instructions.\n---\nUse only this admitted public policy source.`,resourceText="Public skill resource";
  const requests:unknown[]=[],executed:string[]=[],configHash=contentHash("unpaid controlled provider configuration");let authorized=true;
  const host=new AgentHostStorageClient();close.push(async()=>host.close());host.bind(async message=>{const request=message.params as {operation:string;params:{bindingHash:string;taskId?:string;seed?:string}};if(!authorized){host.accept({jsonrpc:"2.0",id:message.id,error:{code:-32000,message:"Source access revoked"}});return;}expect(request.operation).toBe("profile.externalDataset.authorize");host.accept({jsonrpc:"2.0",id:message.id,result:{authorized:true,bindingHash:request.params.bindingHash}});});
  const fetched=vi.spyOn(globalThis,"fetch").mockRejectedValue(new Error("Unexpected paid or connected request"));
@@ -40,9 +42,42 @@ it("executes the selected ordered external population against two actual compile
   await mkdir(path.join(profilePath,"settings"),{recursive:true});await mkdir(path.join(profilePath,"instructions"));await mkdir(path.join(profilePath,"evals","tasksets"),{recursive:true});
   await writeFile(path.join(repoPath,"openpond-profile.json"),JSON.stringify({schema:"openpond.profileRepo.v1",defaultProfile:"team",profiles:{team:{path:"profiles/team",defaultAgent:"",enabledAgents:[]}}}));
   await writeFile(path.join(profilePath,"settings","profile.yaml"),"schema: openpond.profile.v1\nprofile: team\nagents: []\n");await writeFile(path.join(profilePath,"instructions","system.md"),`${kind} executable instruction\n`);
+  const skillDir=path.join(profilePath,"skills",skillName);await mkdir(path.join(skillDir,"references"),{recursive:true});
+  await writeFile(path.join(skillDir,"SKILL.md"),skillText);await writeFile(path.join(skillDir,"references","public.md"),resourceText);
+  // A policy-shaped resource with the same hash as private grading source must
+  // remain unavailable, even through a correctly resolved named skill.
+  await writeFile(path.join(skillDir,"references","private-catalog.json"),JSON.stringify(catalog));
   await writeFile(path.join(profilePath,"evals","catalog.json"),JSON.stringify(catalog));await writeFile(path.join(profilePath,"evals","tasksets",`${value.taskset.contentHash}.json`),JSON.stringify(value));
-  const options:OpenPondAppServerOptions={storeDir,workspaceDir:path.join(root,kind,"work"),profileSource:{repoPath,repositoryId:"owned-repository",profileId:"team",sourceRevision:contentHash(`accepted-${kind}`)},embedding:{allowedTools:[],authorizeTool:async()=>{}},services:{backgroundReview:false},streamOpenPondHostedChatTurn:async function*(request){requests.push(request);const text=JSON.stringify(request.messages);expect(text).not.toContain(gold);expect(text).not.toContain("task_unused");expect(text).toContain(`${kind} executable instruction`);const prompt=text.match(/Public case ([ab])/);expect(prompt).toBeTruthy();if(!text.includes('"tool_call_id"')){executed.push(`${kind}:${prompt![1]}`);yield{type:"tool_call_delta",raw:null,toolCalls:[{id:"confined-command",type:"function",function:{name:"exec_command",arguments:JSON.stringify({command:`test ! -e '${profilePath}/evals/catalog.json' && test ! -e /workspace/work/evals/catalog.json && test ! -e /workspace/work/evals/tasksets/${value.taskset.contentHash}.json && printf confined > outputs/proof.txt && printf '# Confined case output' > /workspace/outputs/proof.md && cat instructions/system.md`})}}]};yield{type:"finish",raw:null,finishReason:"tool_calls"};}else if(!text.includes("save-proof")){yield{type:"tool_call_delta",raw:null,toolCalls:[{id:"save-proof",type:"function",function:{name:"work_save_output",arguments:JSON.stringify({path:"/workspace/outputs/proof.md"})}}]};yield{type:"finish",raw:null,finishReason:"tool_calls"};}else{expect(text).toContain("confined-command");const tool=request.messages.find(message=>message.role==="tool");expect(tool).toBeTruthy();const content=typeof tool!.content==="string"?tool!.content:JSON.stringify(tool!.content);expect(JSON.parse(content).code).toBe(0);yield{type:"text_delta",raw:null,text:kind==="candidate"?"candidate answer":"baseline answer"};yield{type:"finish",raw:null,finishReason:"stop"};}}};
+  const options:OpenPondAppServerOptions={storeDir,workspaceDir:path.join(root,kind,"work"),profileSource:{repoPath,repositoryId:"owned-repository",profileId:"team",sourceRevision:contentHash(`accepted-${kind}`)},embedding:{allowedTools:[],authorizeTool:async()=>{}},services:{backgroundReview:false},streamOpenPondHostedChatTurn:async function*(request){
+   requests.push(request);const text=JSON.stringify(request.messages);expect(text).not.toContain(gold);expect(text).not.toContain("task_unused");expect(text).toContain(`${kind} executable instruction`);const prompt=text.match(/Public case ([ab])/);expect(prompt).toBeTruthy();
+   const toolValue=(id:string)=>{const message=request.messages.find(message=>message.role==="tool"&&message.tool_call_id===id);expect(message).toBeTruthy();return JSON.parse(typeof message!.content==="string"?message!.content:JSON.stringify(message!.content));};
+   if(!text.includes('"tool_call_id"')){
+    executed.push(`${kind}:${prompt![1]}`);
+    const reads=[
+     {id:"skill-instructions",name:"profile_skill_read",args:{name:skillName,path:"SKILL.md"}},
+     {id:"skill-default",name:"profile_skill_read",args:{name:skillName}},
+     {id:"skill-resource",name:"skill_inspect",args:{name:skillName,path:"references/public.md"}},
+     {id:"context-instructions",name:"context_read",args:{path:"instructions/system.md"}},
+     {id:"skill-traversal",name:"profile_skill_read",args:{name:skillName,path:"../../instructions/system.md"}},
+     {id:"skill-absolute",name:"profile_skill_read",args:{name:skillName,path:"/workspace/work/instructions/system.md"}},
+     {id:"skill-private-alias",name:"profile_skill_read",args:{name:skillName,path:"references/private-catalog.json"}},
+     {id:"skill-unadmitted",name:"profile_skill_read",args:{name:"../evals",path:"catalog.json"}},
+     {id:"context-private",name:"context_read",args:{path:"evals/catalog.json"}},
+    ];
+    yield{type:"tool_call_delta",raw:null,toolCalls:reads.map(read=>({id:read.id,type:"function" as const,function:{name:read.name,arguments:JSON.stringify(read.args)}}))};yield{type:"finish",raw:null,finishReason:"tool_calls"};
+   }else if(!text.includes("confined-command")){
+    expect(toolValue("skill-instructions").text).toBe(skillText);expect(toolValue("skill-default").text).toBe(skillText);
+    expect(toolValue("skill-resource").text).toBe(resourceText);expect(toolValue("context-instructions").text).toBe(`${kind} executable instruction\n`);
+    for(const id of ["skill-traversal","skill-absolute","skill-private-alias","skill-unadmitted","context-private"])expect(toolValue(id).ok).toBe(false);
+    yield{type:"tool_call_delta",raw:null,toolCalls:[{id:"confined-command",type:"function",function:{name:"exec_command",arguments:JSON.stringify({command:`test ! -e '${profilePath}/evals/catalog.json' && test ! -e /workspace/work/evals/catalog.json && test ! -e /workspace/work/evals/tasksets/${value.taskset.contentHash}.json && printf confined > outputs/proof.txt && printf '# Confined case output' > /workspace/outputs/proof.md && cat instructions/system.md`})}}]};yield{type:"finish",raw:null,finishReason:"tool_calls"};
+   }else if(!text.includes("save-proof")){
+    yield{type:"tool_call_delta",raw:null,toolCalls:[{id:"save-proof",type:"function",function:{name:"work_save_output",arguments:JSON.stringify({path:"/workspace/outputs/proof.md"})}}]};yield{type:"finish",raw:null,finishReason:"tool_calls"};
+   }else{
+    expect(toolValue("confined-command").code).toBe(0);yield{type:"text_delta",raw:null,text:kind==="candidate"?"candidate answer":"baseline answer"};yield{type:"finish",raw:null,finishReason:"stop"};
+   }
+  }};
   const seed=await createOpenPondAppServer(options),store=new SqliteStore(storeDir);let release:LocalHarnessReleaseRecord;try{const workspaces=await store.listHarnessWorkspaces({ownerKind:"personal",ownerId:"desktop-personal"}),workspace=workspaces.find(row=>row.id.startsWith("profile-"))!;release=(await store.getHarnessReleaseRecord(workspace.currentChannel.release!.contentHash))!;}finally{await store.close();await seed.close();}
+  const publicSkill=release.agentSnapshot.skills.find(asset=>asset.path.endsWith("/SKILL.md"))!;expect(publicSkill).toBeTruthy();expect(publicSkill.path).not.toBe(`skills/${skillName}/SKILL.md`);
   const binding=createProfileExternalDatasetBinding({schemaVersion:"openpond.profileExternalDatasetBinding.v1",dataset:{id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash},packageHash:value.contentHash,profileId:"team",target:{kind:"profile"},declaredProfileCatalogHash:contentHash(catalog),protectedProfileClosureHash:contentHash(release.harnessRelease.files.filter(file=>file.visibility!=="policy").map(asset=>({path:asset.path,asset}))),split:"frozen_eval",population:[{taskId:"task_b",seed:"seed-b",fixtureId:null},{taskId:"task_a",seed:"seed-a",fixtureId:null}],evaluators:graders.map(pin=>({release:{id:pin.id,revision:pin.version,contentHash:pin.contentHash},feedbackKey:pin.feedbackKey,configurationHash:contentHash({graderHash:pin.contentHash,mappings:[]}),output:"score",categories:[]})),fieldMappingsHash:contentHash([]),fieldMappings:[],environmentHash:contentHash(value.taskset.environment),privateDatasetClosureHash:contentHash(value.files.filter(file=>file.asset.visibility!=="policy").map(file=>file.asset)),criterion:{minimumPassRate:1,requireComplete:true}});
   // The real read-only hosted companion must admit the same bounded Work
   // population as execution; otherwise every hosted start fails before dispatch.

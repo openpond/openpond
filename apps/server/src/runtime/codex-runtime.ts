@@ -68,6 +68,7 @@ export function createCodexRuntimeManager({
   storeDir,
   updateSession,
 }: CodexRuntimeInput) {
+  const coordinationSignatures = new Map<string, string>();
   const coordinationServers = new Map<string, Awaited<ReturnType<typeof createTaskCoordinationMcp>>>();
   async function ensureCodexRuntime(
     session: Session,
@@ -78,13 +79,14 @@ export function createCodexRuntimeManager({
       existing?.permissionMode === turnInput.codexPermissionMode &&
       existing.reasoningEffort === (turnInput.codexReasoningEffort ?? null) &&
       existing.cwd === session.cwd &&
-      coordinationServers.has(session.id) === Boolean(turnInput.coordination)
+      coordinationSignatures.get(session.id) === JSON.stringify(turnInput.coordination?.tools.map(tool => tool.name) ?? [])
     ) return existing;
     if (existing) {
       codexSessions.delete(session.id);
       await existing.client.stop().catch(() => undefined);
       await coordinationServers.get(session.id)?.close();
       coordinationServers.delete(session.id);
+      coordinationSignatures.delete(session.id);
     }
 
     setCodexStatus({ ...getCodexStatus(), appServer: { status: "starting", lastError: null } });
@@ -112,6 +114,7 @@ export function createCodexRuntimeManager({
     try {
       const coordination = turnInput.coordination ? await createTaskCoordinationMcp(turnInput.coordination) : null;
       if (coordination) coordinationServers.set(session.id, coordination);
+      coordinationSignatures.set(session.id, JSON.stringify(turnInput.coordination?.tools.map(tool => tool.name) ?? []));
       const config = { ...codexSessionConfig(turnInput.codexPermissionMode, turnInput.codexReasoningEffort),
         ...(coordination ? { "mcp_servers.openpond_task": coordination.config } : {}) };
       const personalization = await loadPersonalizationSettings(store, storeDir);
@@ -171,6 +174,7 @@ export function createCodexRuntimeManager({
       await client.stop().catch(() => undefined);
       await coordinationServers.get(session.id)?.close();
       coordinationServers.delete(session.id);
+      coordinationSignatures.delete(session.id);
       setCodexStatus({
         ...getCodexStatus(),
         appServer: {
@@ -185,5 +189,6 @@ export function createCodexRuntimeManager({
   return { ensureCodexRuntime, closeCoordination: async () => {
     await Promise.all([...coordinationServers.values()].map((server) => server.close()));
     coordinationServers.clear();
+    coordinationSignatures.clear();
   } };
 }

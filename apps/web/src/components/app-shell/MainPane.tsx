@@ -1,3 +1,6 @@
+import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
+import { OpenHtmlVisualContext } from "../visuals/html-visual-context";
+import { HtmlVisualPanel } from "../visuals/HtmlVisualPanel";
 import { htmlContentPreviewUrl, isHtmlFilePath } from "../../lib/html-preview";
 import {
   lazy,
@@ -1296,7 +1299,18 @@ export function MainPane({
       trainingSummary={trainingSidebarSummary}
     />
   ) : null;
-  const browserPanel = showBrowserPanel ? (
+  const [expandedVisual, setExpandedVisual] = useState<HtmlVisualReference | null>(null);
+  useEffect(() => { setExpandedVisual(null); }, [selectedSessionId]);
+  useEffect(() => { if (rightPanelMode !== "browser") setExpandedVisual(null); }, [rightPanelMode]);
+  const openHtmlVisual = useCallback((visual: HtmlVisualReference) => {
+    setExpandedVisual(visual);
+    onShowBrowserPanel();
+  }, [onShowBrowserPanel]);
+  const browserPanel = showBrowserPanel && expandedVisual ? (
+    <HtmlVisualPanel visual={expandedVisual} connection={connection} expanded={diffPanelExpanded}
+      onResizeStart={onDiffPanelResizeStart} onToggleExpanded={onToggleDiffPanelExpanded}
+      onClose={() => { setExpandedVisual(null); if (diffPanelExpanded) onToggleDiffPanelExpanded(); }} />
+  ) : showBrowserPanel ? (
     <BrowserSidebar
       conversationId={browserConversationId}
       expanded={diffPanelExpanded}
@@ -1504,6 +1518,7 @@ export function MainPane({
     </Suspense>
   );
   return (
+    <OpenHtmlVisualContext.Provider value={openHtmlVisual}>
     <main
       className={`main-pane ${viewClass} ${
         terminalOpen ? "terminal-open" : ""
@@ -1958,6 +1973,7 @@ export function MainPane({
         </>
       )}
     </main>
+    </OpenHtmlVisualContext.Provider>
   );
 }
 
