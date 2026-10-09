@@ -22,6 +22,8 @@ import {
 import { closeBrowserSidebarManagers, registerBrowserSidebarIpc } from "./desktop-browser-ipc.js";
 import { createReadyLineParser } from "./child-process-ready.js";
 import { DesktopBackendManager } from "./desktop-backend-manager.js";
+import { createDesktopUpdater } from "./desktop-updater.js";
+import type { DesktopUpdateController } from "./desktop-update-controller.js";
 import { isTrustedDesktopIpcFrameUrl } from "./desktop-ipc-trust.js";
 import {
   isAllowedExternalDesktopUrl,
@@ -76,6 +78,7 @@ const browserControlInstanceId = `desktop_${randomUUID()}`;
 const localRequestTracker = new DesktopRequestTracker();
 const serverProcessSampler = new DesktopProcessTreeSampler();
 const backendManager = new DesktopBackendManager();
+let desktopUpdater: DesktopUpdateController | null = null;
 
 async function requestMicrophoneAccess(): Promise<boolean> {
   if (process.platform !== "darwin") return true;
@@ -503,6 +506,16 @@ function registerIpcHandlers(): void {
   if (ipcHandlersRegistered) return;
   ipcHandlersRegistered = true;
   registerBrowserSidebarIpc(() => mainWindow, handleTrackedIpc);
+  handleTrackedIpc("openpond:updates:state", () => desktopUpdater!.getState());
+  handleTrackedIpc("openpond:updates:check", () => desktopUpdater!.check());
+  handleTrackedIpc("openpond:updates:download", () => desktopUpdater!.download());
+  handleTrackedIpc("openpond:updates:restart", (_event, payload: unknown) => {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+        typeof (payload as Record<string, unknown>).hasRunningWork !== "boolean") {
+      throw new Error("Invalid update restart request.");
+    }
+    return desktopUpdater!.restart((payload as { hasRunningWork: boolean }).hasRunningWork);
+  });
   handleTrackedIpc("openpond:connection", () => ensureServer());
   handleTrackedIpc("openpond:desktop:runtimeInfo", () => {
     const devMode =
@@ -897,12 +910,29 @@ const ownsSingleInstanceLock = ownsPreviousBrowserLock && app.requestSingleInsta
 if (!ownsSingleInstanceLock) app.quit();
 app.on("second-instance", () => showMainWindow());
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!ownsSingleInstanceLock) return;
   configureApplicationMenu();
   app.dock?.setIcon(appIconPath());
   desktopLogger().info("desktop app ready", { packaged: app.isPackaged });
+  desktopUpdater = await createDesktopUpdater({
+    publish: (state) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("openpond:updates:state", state);
+    },
+    shutdown: shutdownDesktop,
+    recoverAfterShutdown: async (error) => {
+      desktopLogger().error("update restart failed after shutdown", { error });
+      await dialog.showMessageBox({
+        type: "error", title: "Update could not be installed",
+        message: "OpenPond could not finish the update and will reopen. You can try again or install the latest release manually.",
+      });
+      app.relaunch(process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : {});
+      desktopShutdownComplete = true;
+      app.quit();
+    },
+  });
   void createWindow();
+  desktopUpdater.start();
 });
 
 app.on("activate", () => {
@@ -916,15 +946,29 @@ app.on("window-all-closed", () => {
 
 let desktopShutdownStarted = false;
 let desktopShutdownComplete = false;
+let desktopShutdownPromise: Promise<void> | null = null;
+
+function shutdownDesktop(): Promise<void> {
+  if (desktopShutdownPromise) return desktopShutdownPromise;
+  desktopShutdownStarted = true;
+  desktopShutdownPromise = (async () => {
+    desktopLogger().info("desktop app shutting down");
+    stopBrowserControlWorker();
+    serverProcessSampler.stop();
+    const results = await Promise.allSettled([closeBrowserSidebarManagers(), backendManager.close()]);
+    await desktopLogger().flush();
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+    desktopShutdownComplete = true;
+  })();
+  return desktopShutdownPromise;
+}
+
 app.on("before-quit", (event) => {
   if (desktopShutdownComplete) return;
   event.preventDefault();
-  if (desktopShutdownStarted) return;
-  desktopShutdownStarted = true;
-  desktopLogger().info("desktop app quitting");
-  stopBrowserControlWorker();
-  serverProcessSampler.stop();
-  void Promise.all([closeBrowserSidebarManagers(), backendManager.close()])
+  if (desktopShutdownStarted || desktopUpdater?.getState().status === "restarting") return;
+  void shutdownDesktop()
     .catch((error) => desktopLogger().error("desktop backend shutdown failed", { error }))
     .finally(async () => {
       await desktopLogger().flush();
@@ -932,6 +976,8 @@ app.on("before-quit", (event) => {
       app.quit();
     });
 });
+
+app.on("will-quit", () => desktopUpdater?.stop());
 
 process.on("uncaughtException", (error) => {
   desktopLogger().error("uncaught exception", { error });

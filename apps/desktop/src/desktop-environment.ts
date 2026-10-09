@@ -29,9 +29,12 @@ export function releaseChannel(): ReleaseChannel {
   if (process.env.OPENPOND_APP_CHANNEL === "nightly") return "nightly";
   if (cachedReleaseChannel) return cachedReleaseChannel;
   try {
-    const raw = readFileSync(path.join(desktopDirname, "release-channel.json"), "utf8");
-    const parsed = JSON.parse(raw) as { channel?: unknown };
-    cachedReleaseChannel = parsed.channel === "nightly" ? "nightly" : "stable";
+    const raw = readFileSync(app.isPackaged
+      ? path.join(app.getAppPath(), "package.json")
+      : path.join(desktopDirname, "release-channel.json"), "utf8");
+    const parsed = JSON.parse(raw) as { channel?: unknown; openpondReleaseChannel?: unknown };
+    const channel = app.isPackaged ? parsed.openpondReleaseChannel : parsed.channel;
+    cachedReleaseChannel = channel === "nightly" ? "nightly" : "stable";
   } catch {
     cachedReleaseChannel = "stable";
   }
