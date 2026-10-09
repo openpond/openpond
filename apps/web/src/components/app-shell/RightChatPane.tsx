@@ -20,8 +20,6 @@ import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import { IncrementalChatProjector } from "../../lib/incremental-chat-projector";
 import {
   buildChatTimelineRows,
-  isLatestAssistantMessageForTurn,
-  latestAssistantMessageIdsByTurn,
   shouldShowThinkingIndicator,
 } from "../../lib/chat-timeline-rows";
 import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
@@ -195,10 +193,6 @@ export function RightChatPane({
     activePanelView.sessionId ?? `draft:${activePanelView.id}`
   );
   const latestMessage = activePanelView.messages.at(-1);
-  const latestAssistantByTurn = useMemo(
-    () => latestAssistantMessageIdsByTurn(activePanelView.messages),
-    [activePanelView.messages],
-  );
   const turnCache = useSessionTurnCache({
     connection,
     latestTurnId: latestMessage?.turnId ?? null,
@@ -294,7 +288,7 @@ export function RightChatPane({
             }
             key={row.id}
             kvCacheSummary={
-              isLatestAssistantMessageForTurn(row.message, latestAssistantByTurn) && row.message.turnId
+              row.showFooter && row.message.turnId
                 ? turnCache.get(row.message.turnId) ?? null
                 : null
             }

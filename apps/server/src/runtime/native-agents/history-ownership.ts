@@ -16,6 +16,6 @@ export function ownedNativeBoundaryIds(native: Pick<ConnectedSession, "events" |
     if (boundary.projection !== "turn" || !request?.occurredAt) return false;
     const promptHash = createHash("sha256").update(nativeEventText(request.content)).digest("hex");
     const occurred = Date.parse(request.occurredAt);
-    return turns.some((turn) => turn.metadata?.nativePromptHash === promptHash && occurred >= Date.parse(turn.startedAt) && (!turn.completedAt || occurred <= Date.parse(turn.completedAt)));
+    return turns.some((turn) => (turn.metadata?.nativePromptHash === promptHash || (Array.isArray(turn.metadata?.nativePromptHashes) && turn.metadata.nativePromptHashes.includes(promptHash))) && occurred >= Date.parse(turn.startedAt) && (!turn.completedAt || occurred <= Date.parse(turn.completedAt)));
   }).map((boundary) => boundary.id));
 }

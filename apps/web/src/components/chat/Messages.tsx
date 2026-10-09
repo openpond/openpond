@@ -256,7 +256,8 @@ export const MessageRow = memo(function MessageRow({
           onResolve={onResolveUserQuestion}
         />
       ) : null}
-      {(showFooter || kvCacheSummary) ? <MessageFooter content={message.content} timestamp={message.timestamp} kvCacheSummary={kvCacheSummary} /> : null}
+      {/* Keep the footer implementation; interim messages intentionally hide the entire row. */}
+      {showFooter && message.finalAnswer ? <MessageFooter content={message.content} timestamp={message.timestamp} kvCacheSummary={kvCacheSummary} /> : null}
     </article>
   );
 },
@@ -367,6 +368,7 @@ function chatMessageShallowEqual(
     previous.id === next.id &&
     previous.role === next.role &&
     previous.content === next.content &&
+    previous.finalAnswer === next.finalAnswer &&
     previous.timestamp === next.timestamp &&
     previous.turnId === next.turnId &&
     previous.statusKind === next.statusKind &&

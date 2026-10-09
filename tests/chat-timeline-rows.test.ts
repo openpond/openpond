@@ -2,9 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
 import {
   buildChatTimelineRows,
-  isLatestAssistantMessageForTurn,
   latestAssistantMessageId,
-  latestAssistantMessageIdsByTurn,
   shouldShowThinkingIndicator,
 } from "../apps/web/src/lib/chat-timeline-rows";
 
@@ -39,23 +37,6 @@ describe("chat timeline rows", () => {
       ["thinking", "thinking"],
     ]);
     expect(shouldShowThinkingIndicator([message("turn-1:assistant", "assistant", "Done")])).toBe(false);
-  });
-
-  test("selects one final assistant response for each turn", () => {
-    const messages = [
-      message("turn-1:user", "user", "Request one"),
-      message("turn-1:status", "assistant", "Working"),
-      message("turn-1:assistant", "assistant", "Response one"),
-      message("turn-2:assistant", "assistant", "Response two"),
-    ];
-    const latestByTurn = latestAssistantMessageIdsByTurn(messages);
-
-    expect([...latestByTurn.entries()]).toEqual([
-      ["turn-1", "turn-1:assistant"],
-      ["turn-2", "turn-2:assistant"],
-    ]);
-    expect(isLatestAssistantMessageForTurn(messages[1]!, latestByTurn)).toBe(false);
-    expect(isLatestAssistantMessageForTurn(messages[2]!, latestByTurn)).toBe(true);
   });
 
   test("does not show thinking while status or activity rows are actively running", () => {
