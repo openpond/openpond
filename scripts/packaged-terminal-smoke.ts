@@ -38,8 +38,12 @@ export const packagedTerminalSmokeExpression = `
         completed = true;
       }
       // PowerShell currently has no shell-integration command_end event.
-      if (connection.platform === 'win32' && output.includes('\\r\\n' + marker + '\\r\\n')) completed = true;
-      if (completed && output.split(/\\r?\\n/).some(line => line.trim() === marker)) {
+      // Bash can prepend bracketed-paste control bytes to the first output
+      // line. Compare rendered text while still rejecting echoed input.
+      const lines = output.replace(/\\x1b\\[[0-?]*[ -/]*[@-~]/g, '').split(/\\r?\\n/);
+      const outputReceived = lines.some(line => line.trim() === marker);
+      if (connection.platform === 'win32' && outputReceived) completed = true;
+      if (completed && outputReceived) {
         cleanup();
         resolve({ spawned, commandCompleted: true, outputReceived: true });
       }
