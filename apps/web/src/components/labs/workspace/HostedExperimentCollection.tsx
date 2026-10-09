@@ -121,12 +121,18 @@ export function HostedExperimentCollection({
                   onOpen={() => navigate(destination(item))}
                 />
               </td>
-              <td>
+              <td
+                title={
+                  item.request.policy.kind === "hosted_harness"
+                    ? item.request.policy.source.definitionId
+                    : "Model"
+                }
+              >
                 {item.request.policy.kind === "hosted_harness"
                   ? item.request.policy.source.definitionId
                   : "Model"}
               </td>
-              <td>
+              <td title={item.request.taskset.id}>
                 {item.request.taskset.id}
                 <small>v{item.request.taskset.revision}</small>
               </td>
