@@ -13,18 +13,24 @@ const zsh = ["/bin/zsh", "/usr/bin/zsh"].find(existsSync);
 
 // Mac login commands must survive slow shell startup and relocated zsh config.
 // This uses the authenticated WebSocket and a real PTY, not simulated hook events.
-it.skipIf(!zsh).each([false, true])("runs setup after zsh startup (relocated config: %s) and reports login failure", async (relocated) => {
+it.skipIf(process.platform === "win32" || !zsh).each([
+  { shell: zsh!, relocated: false },
+  { shell: zsh!, relocated: true },
+  { shell: "/bin/bash", relocated: false },
+])("runs setup after shell startup ($shell, relocated: $relocated) and reports login failure", async ({ shell, relocated }) => {
   const home = await mkdtemp(join(tmpdir(), "native-setup-terminal-"));
   const config = relocated ? join(home, "config") : home;
   const bin = join(home, "bin");
   await mkdir(config, { recursive: true });
   await mkdir(bin);
   await writeFile(join(home, ".zshenv"), relocated ? `export ZDOTDIR='${config}'\n` : "");
-  await writeFile(join(config, ".zshrc"), `read -t 0.4 startup_input\nif [[ -n "$startup_input" ]]; then print 'STARTUP_CONSUMED_COMMAND'; fi\nexport PATH=/usr/bin:/bin\nPROMPT='setup> '\n`);
+  const rc = `read -t 0.4 startup_input\nif [[ -n "$startup_input" ]]; then printf 'STARTUP_CONSUMED_COMMAND\\n'; fi\nexport PATH=/usr/bin:/bin\nPROMPT='setup> '\nPS1='setup> '\n`;
+  await writeFile(join(config, ".zshrc"), rc);
+  await writeFile(join(home, ".bashrc"), rc);
   await writeFile(join(bin, "claude"), "#!/bin/sh\nprintf 'LOGIN_FAILURE_VISIBLE\\n'\nexit 17\n", { mode: 0o700 });
   vi.stubEnv("HOME", home);
   vi.stubEnv("ZDOTDIR", home);
-  vi.stubEnv("OPENPOND_TERMINAL_SHELL", zsh!);
+  vi.stubEnv("OPENPOND_TERMINAL_SHELL", shell);
   const http = createServer();
   let port = 0;
   const terminal = createTerminalWebSocketHandler({
