@@ -1,3 +1,4 @@
+import { ChatTimelineEntry } from "../chat/ChatTimelineEntry";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   BootstrapPayload,
@@ -46,7 +47,7 @@ import {
 } from "../chat/Composer";
 import type { ComposerProfileTargetState } from "../chat/ComposerControls";
 import type { ComposerCreateImproveActions } from "../chat/ComposerCreateImproveStrip";
-import { MessageRow, ThinkingIndicator } from "../chat/Messages";
+import { MessageRow } from "../chat/Messages";
 import type { RightChatPanelView, RightChatScrollState } from "./right-chat-panel-types";
 
 export function RightChatPane({
@@ -273,9 +274,7 @@ export function RightChatPane({
           });
         }}
       >
-        {timelineRows.map((row) => row.type === "thinking" ? (
-          <ThinkingIndicator key={row.id} />
-        ) : (
+        {timelineRows.map((row) => <ChatTimelineEntry key={row.id} row={row} renderMessage={(row) => (
           <MessageRow
             activeWorkspaceAppId={activePanelView.activeWorkspaceAppId}
             accountBaseUrl={accountBaseUrl}
@@ -306,7 +305,7 @@ export function RightChatPane({
             workspaceRootPath={activePanelView.workspaceRootPath}
             showFooter={row.showFooter}
           />
-        ))}
+        )} />)}
       </div>
       <div className={`composer-stack dock right-chat-composer ${activePanelView.pendingApproval ? "has-approval" : ""}`}>
         <ApprovalRequestCard approval={activePanelView.pendingApproval} onResolve={onResolveApproval} />
