@@ -50,6 +50,9 @@ jobs:
       - run: pnpm run build:sdk
       - name: Build the storage test runtime
         run: pnpm exec tsc -b apps/server
+        env:
+          # The Mac runner's default 2 GiB heap cannot compile the server graph.
+          NODE_OPTIONS: --max-old-space-size=4096
       - if: runner.os == 'Linux' || github.event_name == 'workflow_dispatch'
         run: pnpm exec vitest run --project root-system tests/persistence-boundaries.test.ts --testTimeout 60000 --hookTimeout 30000
         env:
