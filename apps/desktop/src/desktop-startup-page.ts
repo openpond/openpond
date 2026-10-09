@@ -1,7 +1,7 @@
 import type { BrowserWindow } from "electron";
 import { appDisplayName } from "./desktop-environment.js";
 
-export async function showLoadError(window: BrowserWindow, error: unknown): Promise<void> {
+export async function showLoadError(window: BrowserWindow, error: unknown, onPageUrl: (url: string) => void): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   const escaped = message.replace(/[&<>"']/g, (char) => {
     const map: Record<string, string> = {
@@ -13,7 +13,7 @@ export async function showLoadError(window: BrowserWindow, error: unknown): Prom
     };
     return map[char] ?? char;
   });
-  await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+  const pageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(`
     <!doctype html>
     <html>
       <head>
@@ -46,20 +46,26 @@ export async function showLoadError(window: BrowserWindow, error: unknown): Prom
         </main>
         <script>
           const status = document.getElementById("status");
-          async function run(label, fn) {
+          async function run(label, fn, button) {
+            if (button && button.disabled) return;
+            if (button) button.disabled = true;
             status.textContent = label;
             try {
               const result = await fn();
               status.textContent = result && result.error ? result.error : "";
             } catch (error) {
               status.textContent = error && error.message ? error.message : String(error);
+            } finally {
+              if (button) button.disabled = false;
             }
           }
-          document.getElementById("retry").addEventListener("click", () => run("Retrying...", () => window.openpond.retryStartup()));
+          document.getElementById("retry").addEventListener("click", (event) => run("Retrying...", () => window.openpond.retryStartup(), event.currentTarget));
           document.getElementById("logs").addEventListener("click", () => run("Opening logs...", () => window.openpond.openLogsFolder()));
           document.getElementById("diagnostics").addEventListener("click", () => run("Exporting diagnostics...", () => window.openpond.exportDiagnostics()));
         </script>
       </body>
     </html>
-  `)}`);
+  `)}`;
+  onPageUrl(pageUrl);
+  await window.loadURL(pageUrl);
 }

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { describe, expect, test } from "vitest";
 import { createReadyLineParser } from "@openpond/runtime";
+import { singleFlightDesktopStartup } from "../apps/desktop/src/desktop-server-startup";
 import { DesktopBackendManager } from "../apps/desktop/src/desktop-backend-manager";
 
 describe("desktop backend ownership", () => {
@@ -58,3 +59,26 @@ async function waitUntilGone(pid: number): Promise<void> {
   }
   throw new Error(`owned descendant ${pid} remained alive`);
 }
+
+// Simultaneous load/retry/connection calls must not launch multiple server processes.
+test("shares an in-flight server launch and permits another attempt after failure", async () => {
+  let attempts = 0;
+  let rejectLaunch: (error: Error) => void = () => {};
+  const start = singleFlightDesktopStartup(() => {
+    attempts += 1;
+    return attempts === 1
+      ? new Promise<string>((_resolve, reject) => { rejectLaunch = reject; })
+      : Promise.resolve("ready");
+  });
+  const first = start();
+  expect(start()).toBe(first);
+  await Promise.resolve();
+  expect(attempts).toBe(1);
+  const failure = expect(first).rejects.toThrow("startup failed");
+  rejectLaunch(new Error("startup failed"));
+  await failure;
+  const retry = start();
+  expect(start()).toBe(retry);
+  await expect(retry).resolves.toBe("ready");
+  expect(attempts).toBe(2);
+});
