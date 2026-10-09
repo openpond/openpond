@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { LocalManagedMessageTarget, RemoteTask, Session } from "@openpond/contracts";
-import { localSessionOwnershipRevision } from "./session-ownership.js";
+import { remoteCommandTargetRevision } from "./command-target.js";
 import { remoteApprovalSupported } from "./approvals.js";
 import { CURRENT_SQLITE_SCHEMA_VERSION } from "../store/store-schema.js";
 import { deviceOwnsLocalSession, type DeviceLocalOwner } from "./local-scope.js";
@@ -19,7 +19,7 @@ export function observeRemoteHistorySequence(sequence: number) {
 }
 
 export function remoteTaskRevision(target: LocalManagedMessageTarget, session: Session) {
-  return Number.parseInt(localSessionOwnershipRevision(session, target.latestTurnId).slice(0, 13), 16);
+  return remoteCommandTargetRevision(session, target.latestTurnId, target);
 }
 export function remoteHistoryGeneration(session: Session) {
   return createHash("sha256").update(JSON.stringify([historyIncarnation, session.id, session.createdAt, CURRENT_SQLITE_SCHEMA_VERSION])).digest("hex");
@@ -47,10 +47,12 @@ export async function captureRemoteTaskCatalog(input: {
       projectId: session.localProjectId ?? null, projectLabel: session.workspaceName ?? null,
       provider: session.provider, revision: remoteTaskRevision(target, session), historyGeneration: remoteHistoryGeneration(session),
       createdAt: session.createdAt, updatedAt: session.updatedAt,
-      lastEventSequence: 0, activeTurnId: target.activeTurnId, approvalId: approval?.id ?? null,
+      lastEventSequence: 0, paused: target.paused, latestTurnId: target.latestTurnId, activeTurnId: target.activeTurnId, approvalId: approval?.id ?? null,
       archived: session.archived ?? false, deleted: false,
       state: approval ? "attention" : target.activeTurnId ? "running" : latest?.status === "failed" ? "failed" : latest?.status === "completed" ? "completed" : "idle",
-      capabilities: { followUp: target.canSendFollowup, steer: target.canSteer,
+      capabilities: { followUp: target.canSendFollowup,
+        resume: target.canSendFollowup && target.paused && target.activeTurnId === null
+          && !!latest && ["completed", "failed", "interrupted"].includes(latest.status), steer: target.canSteer,
         stop: target.activeTurnId !== null && target.managedSessionId !== null, approval: !!approval, artifacts: false },
     });
   }
