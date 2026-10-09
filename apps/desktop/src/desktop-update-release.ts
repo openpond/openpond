@@ -23,16 +23,21 @@ export function validateDesktopUpdateManifest(
   }
   const prefix = target.channel === "nightly" ? "openpond-nightly" : "openpond";
   const platform = target.platform === "darwin" ? "mac" : "linux";
-  const basename = `${prefix}-${selectedVersion}-${platform}-${target.arch}`;
   const extensions = installKind === "mac" ? ["zip"] : ["AppImage", "deb"];
+  // electron-builder uses each Linux package format's native architecture name.
+  const artifactName = (extension: string) => {
+    const arch = target.platform === "linux" && target.arch === "x64"
+      ? extension === "deb" ? "amd64" : "x86_64" : target.arch;
+    return `${prefix}-${selectedVersion}-${platform}-${arch}.${extension}`;
+  };
   for (const file of raw.files) {
-    if (!extensions.some((extension) => file.url === `${basename}.${extension}`) ||
+    if (!extensions.some((extension) => file.url === artifactName(extension)) ||
         typeof file.sha512 !== "string" || !/^[A-Za-z0-9+/]{86}==$/.test(file.sha512)) {
       throw new Error("Desktop update manifest contains an unexpected artifact.");
     }
   }
   const extension = installKind === "mac" ? "zip" : installKind === "deb" ? "deb" : "AppImage";
-  const selected = raw.files.find((file) => file.url === `${basename}.${extension}`);
+  const selected = raw.files.find((file) => file.url === artifactName(extension));
   if (!selected) throw new Error("Desktop update manifest is missing the installed package format.");
   return selected;
 }
