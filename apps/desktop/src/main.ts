@@ -25,7 +25,7 @@ import { createReadyLineParser } from "./child-process-ready.js";
 import { DesktopBackendManager } from "./desktop-backend-manager.js";
 import { createDesktopUpdater } from "./desktop-updater.js";
 import type { DesktopUpdateController } from "./desktop-update-controller.js";
-import { isTrustedDesktopIpcFrameUrl } from "./desktop-ipc-trust.js";
+import { assertTrustedDesktopIpcEvent } from "./desktop-ipc-trust.js";
 import {
   isAllowedExternalDesktopUrl,
   isTrustedDesktopNavigationUrl,
@@ -40,6 +40,8 @@ import {
   openLogsFolder,
   readRecentLogs,
 } from "./desktop-diagnostics.js";
+import { recoverDesktopHomeRuntime } from "./desktop-home-runtime.js";
+import { singleFlightDesktopStartup } from "./desktop-server-startup.js";
 import { showLoadError } from "./desktop-startup-page.js";
 import { minimizeWindow } from "./desktop-window-controls.js";
 import { DesktopBrowserControlWorker } from "./desktop-browser-control-worker.js";
@@ -74,6 +76,7 @@ let connection: ServerConnection | null = null;
 let ipcHandlersRegistered = false;
 let browserControlWorker: DesktopBrowserControlWorker | null = null;
 let trustedRendererUrl: string | null = null;
+let startupPageUrl: string | null = null;
 const browserControlExecutorToken = randomUUID();
 const browserControlInstanceId = `desktop_${randomUUID()}`;
 const localRequestTracker = new DesktopRequestTracker();
@@ -104,7 +107,7 @@ async function readToken(): Promise<string | null> {
 
 async function health(url: string): Promise<DesktopServerHealth | null> {
   try {
-    const response = await fetch(`${url}/health`);
+    const response = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5_000) });
     if (!response.ok) return null;
     return (await response.json()) as DesktopServerHealth;
   } catch {
@@ -114,7 +117,7 @@ async function health(url: string): Promise<DesktopServerHealth | null> {
 
 async function urlAvailable(url: string): Promise<boolean> {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
     return response.ok;
   } catch {
     return false;
@@ -180,6 +183,7 @@ async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: 
       child.stdout.off("data", onStdout);
       child.stderr.off("data", onStderr);
       child.off("exit", onExit);
+      child.off("error", onError);
     };
     const finish = (url: string) => {
       if (settled) return;
@@ -217,13 +221,17 @@ async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: 
       parser.flush();
       fail(new Error(`OpenPond App server exited with code ${code ?? "unknown"}`));
     };
+    const onError = (error: Error) => fail(error);
     child.stdout.on("data", onStdout);
     child.stderr.on("data", onStderr);
     child.once("exit", onExit);
+    child.once("error", onError);
   });
 }
 
-async function ensureServer(): Promise<ServerConnection> {
+const ensureServer = singleFlightDesktopStartup(startServer);
+
+async function startServer(): Promise<ServerConnection> {
   await initializeDesktopExecutablePath(desktopLogger());
   const desktopVersion = app.getVersion();
   if (connection) {
@@ -242,6 +250,14 @@ async function ensureServer(): Promise<ServerConnection> {
   const existingUrl = process.env.OPENPOND_SERVER_URL || `http://127.0.0.1:${serverPort}`;
   const explicitServerUrl = Boolean(process.env.OPENPOND_SERVER_URL);
   const existingToken = await readToken();
+  if (app.isPackaged && !explicitServerUrl) {
+    const existing = await recoverDesktopHomeRuntime({ home: appHomePath(), desktopVersion, token: existingToken,
+      log: (message, context) => desktopLogger().info(message, context) });
+    if (existing) {
+      backendManager.useReusedServer();
+      return connection = { ...existing, platform: process.platform, arch: process.arch };
+    }
+  }
   let existingHealth = app.isPackaged && !explicitServerUrl ? null : await health(existingUrl);
   if (explicitServerUrl && process.env.OPENPOND_REUSE_SERVER === "1" && !existingHealth?.ok) {
     existingHealth = await waitForServerHealth(existingUrl);
@@ -460,6 +476,7 @@ async function loadMainWindow(window: BrowserWindow): Promise<void> {
   try {
     if (browserHomeError) throw browserHomeError;
     const server = await ensureServer();
+    startupPageUrl = null;
     if ((await health(server.serverUrl))?.recovery) {
       const recoveryUrl = new URL(server.serverUrl);
       if (!app.isPackaged) recoveryUrl.hash = new URLSearchParams({ returnTo: await ensureRenderer() }).toString();
@@ -478,7 +495,7 @@ async function loadMainWindow(window: BrowserWindow): Promise<void> {
     ensureBrowserControlWorker(server);
   } catch (error) {
     desktopLogger().error("main window load failed", { error });
-    await showLoadError(window, error);
+    await showLoadError(window, error, (url) => { startupPageUrl = url; });
   }
 }
 
@@ -685,27 +702,9 @@ function registerIpcHandlers(): void {
 
 function handleTrackedIpc(channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void {
   ipcMain.handle(channel, localRequestTracker.wrap(channel, (event, ...args) => {
-    assertTrustedDesktopIpcEvent(event);
+    assertTrustedDesktopIpcEvent(event, { window: mainWindow, packaged: app.isPackaged, trustedRendererUrl, startupPageUrl, channel });
     return listener(event, ...args);
   }));
-}
-
-function assertTrustedDesktopIpcEvent(event: Electron.IpcMainInvokeEvent): void {
-  const window = mainWindow;
-  if (!window || window.isDestroyed() || event.sender.id !== window.webContents.id) {
-    throw new Error("Untrusted IPC sender.");
-  }
-  if (event.senderFrame && event.senderFrame !== event.sender.mainFrame) {
-    throw new Error("Untrusted IPC frame.");
-  }
-  const frameUrl = event.senderFrame?.url ?? event.sender.getURL();
-  if (!isTrustedDesktopIpcFrameUrl({
-    frameUrl,
-    packaged: app.isPackaged,
-    trustedRendererUrl,
-  })) {
-    throw new Error("Untrusted IPC origin.");
-  }
 }
 
 function installMediaPermissionHandlers(window: BrowserWindow): void {

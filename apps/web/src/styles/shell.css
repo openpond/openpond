@@ -120,7 +120,13 @@
 }
 
 .platform-macos.sidebar-closed .app-titlebar {
-  padding-left: 78px;
+  /* The 52px navigation rail already occupies part of the native controls row. */
+  padding-left: 36px;
+}
+
+.platform-macos.sidebar-closed .titlebar-left > .titlebar-icon:first-child {
+  width: 28px;
+  height: 28px;
 }
 
 .titlebar-left,
