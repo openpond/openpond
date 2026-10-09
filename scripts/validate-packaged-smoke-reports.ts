@@ -38,6 +38,7 @@ type SmokeReport = {
     exitedAfterClose?: unknown;
   };
   timings?: Record<string, unknown>;
+  terminal?: { spawned?: unknown; commandCompleted?: unknown; outputReceived?: unknown };
 };
 
 const DEFAULT_EXPECTED_REPORTS: ExpectedReport[] = [
@@ -89,6 +90,9 @@ export async function validatePackagedSmokeReports(input: {
 
 function validateSmokeReport(report: SmokeReport, expected: ExpectedReport, file: string): void {
   if (report.ok !== true) throw new Error(`${file}: smoke report ok must be true`);
+  if (report.terminal?.spawned !== true || report.terminal.commandCompleted !== true || report.terminal.outputReceived !== true) {
+    throw new Error(`${file}: packaged terminal must spawn, execute a command, and return its output`);
+  }
   if (report.platform !== expected.platform) {
     throw new Error(`${file}: expected platform ${expected.platform}, got ${String(report.platform)}`);
   }

@@ -126,6 +126,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/terminal-one-shot.test.ts",
   "tests/terminal-process-ownership.test.ts",
   "tests/terminal-websocket-auth.test.ts",
+  "tests/native-setup-terminal.test.ts",
   "tests/training-api-synthetic-preference.test.ts",
   "tests/training-artifact-package.test.ts",
   "tests/training-bundle.test.ts",

@@ -179,7 +179,7 @@ export function createServerPayloads(deps: {
   version: string;
   runtimeVersion: string;
   getCodexStatus: () => CodexStatus;
-  refreshCodexStatus?: () => Promise<CodexStatus>;
+  refreshCodexStatus?: (force?: boolean) => Promise<CodexStatus>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   isClosing: () => boolean;
   changeAccountAuthority?: import("../runtime/account-authority-change.js").AccountAuthorityChange;
@@ -590,7 +590,7 @@ export function createServerPayloads(deps: {
 
         if (providerId === "codex") {
           const codex = refreshCodexStatus
-            ? await refreshCodexStatus()
+            ? await refreshCodexStatus(true)
             : getCodexStatus();
           const modelId =
             request.modelId ??
@@ -1830,7 +1830,7 @@ export function createServerPayloads(deps: {
         if (input.action === "login") {
           const binary = getCodexStatus().binaryPath;
           if (!binary) throw new Error("Install Codex before signing in.");
-          return { command: nativeTerminalCommand(binary, ["login"], process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}) };
+          return { command: nativeTerminalCommand(binary, ["login"], { PATH: process.env.PATH ?? "", ...(process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}) }) };
         }
         signal?.throwIfAborted();
         const validation = await validateProviderCredentialPayload("codex", {}) as { nativeStatus: string; errors: string[]; providers: ProviderSettings };
@@ -1843,7 +1843,7 @@ export function createServerPayloads(deps: {
         const launch = nativeAgentLaunch(provider, file.providers[provider]);
         if (isRegisteredAcpProvider(provider)) throw new Error("Choose an advertised ACP authentication method to sign in.");
         const definition = NATIVE_AGENTS[provider];
-        return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { [definition.homeVariable]: launch.sourceHome }) };
+        return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { PATH: launch.env.PATH ?? "", [definition.homeVariable]: launch.sourceHome }) };
       }
       if (isRegisteredAcpProvider(provider) && input.action === "authenticate") {
         const authMethodId = z.string().min(1).max(200).parse(input.authMethodId);
