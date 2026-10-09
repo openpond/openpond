@@ -56,6 +56,7 @@ export async function selectCollectorBranch(directory: string, connectionId: str
       store.set(key(connectionId, nativeSessionId), JSON.stringify({ leafId: branch.leafId, chainHash: branch.chainHash, sourceInstanceId: connection.source.instanceId }));
       // Never admit previously queued sibling evidence after a changed choice.
       for (const table of ["source_scans", "checkpoints", "pending"]) store.database.prepare(`DELETE FROM ${table} WHERE connection_id=?`).run(connectionId);
+      store.snapshots.collect();
       const errors = new CollectorErrors(store);
       errors.set(connectionId, "source", errors.source(connectionId));
       store.progress.reset(connectionId);

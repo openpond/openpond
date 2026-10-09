@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BootstrapPayload, ProviderSettings } from "@openpond/contracts";
 import { type ClientConnection } from "../../api";
-import { apiFetch } from "../../api/api-client";
 import { normalizePreferences } from "../../lib/app-models";
 import { ProviderDetailsDialog } from "../settings/ProviderSettingsSection";
 import { useProviderSettings } from "../settings/useProviderSettings";
@@ -10,6 +9,7 @@ import { AGENT_SOURCES, type AgentSource } from "./agent-connections";
 import { AgentConnectionCard } from "./AgentConnectionCard";
 import { useNativeAgentConnections } from "./useNativeAgentConnections";
 import { useAgentProjects } from "./useAgentProjects";
+import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import { useAgentInventory } from "./useAgentInventory";
 import { useAgentDialogFocus } from "./useAgentDialogFocus";
 import type { ReactNode } from "react";
@@ -33,9 +33,8 @@ export function ConnectedAgentsView({
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 }) {
   const { inventory, error, loading, refresh } = useAgentInventory(connection);
-  const [selected, setSelected] = useState<AgentSource | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [actionBusy, setActionBusy] = useState(false);
+  const [selected, setSelected] = useState<AgentSource | null>(null);
   const [providerRevision, setProviderRevision] = useState(0);
   const visibilityKey = `openpond-agent-cards:${JSON.stringify(payload?.account.activeProfile ?? null)}`;
   const [hidden, setHidden] = useState<string[]>(() => {
@@ -92,7 +91,10 @@ export function ConnectedAgentsView({
     payload?.preferences.defaultTeamId ??
     account?.accounts.find((item) => item.isActive)?.apiKeyAccess?.teamId ??
     null;
-  const onError = useCallback((message: string | null) => setActionError(message), []);
+  const onError = useCallback((message: string | null) => {
+    setActionError(message);
+    if (message) onToast?.(message, "error");
+  }, [onToast]);
   const onProviders = useCallback((providers: ProviderSettings) => {
     const current = latest.current;
     if (alive.current && current.payload) current.onPayload({ ...current.payload, providers });
@@ -149,24 +151,6 @@ export function ConnectedAgentsView({
     baseUrl && teamId
       ? `${baseUrl.replace(/\/$/u, "")}/console/connections?${new URLSearchParams({ teamId, ...(projectId ? { project: projectId } : {}) })}`
       : null;
-  async function service(action: "start" | "stop" | "sync") {
-    if (!connection || actionBusy) return;
-    setActionBusy(true);
-    setActionError(null);
-    try {
-      await apiFetch(connection, "/v1/native-history/collector", {
-        method: "POST",
-        body: JSON.stringify({ command: action }),
-      });
-      await refresh();
-    } catch (failure) {
-      const message = failure instanceof Error ? failure.message : "Importer action failed.";
-      setActionError(message);
-      onToast?.(message, "error");
-    } finally {
-      setActionBusy(false);
-    }
-  }
   const provider = selected?.provider;
   const status = provider ? payload?.providers.statuses[provider] : null;
   const conversationPanel = selected ? (
@@ -285,31 +269,8 @@ export function ConnectedAgentsView({
       </div>
       {inventory ? (
         <div className="agent-importer-footer">
-          <span>
-            {inventory.collector.desiredState === "stopped"
-              ? "Importer stopped"
-              : inventory.collector.running
-                ? "Importer running"
-                : "Importer offline"}
-          </span>
-          <button
-            type="button"
-            disabled={actionBusy || !inventory.collector.running}
-            onClick={() => void service("sync")}
-          >
-            Sync now
-          </button>
-          <button
-            type="button"
-            disabled={actionBusy}
-            onClick={() => void service(inventory.collector.running ? "stop" : "start")}
-          >
-            {inventory.collector.running ? "Stop" : "Start"} importer
-          </button>
-          <details>
-            <summary>CLI state</summary>
-            <code>{inventory.statusCommand}</code>
-          </details>
+          <span>{inventory.collector.running ? "Import in progress" : "No import running"}</span>
+          <button type="button" onClick={() => navigateDesktopRoute({ kind: "settings", section: "conversation-imports" })}>Conversation import settings</button>
         </div>
       ) : null}
       {selected && provider && status && payload ? (

@@ -55,11 +55,13 @@ export function collectionState(
 ) {
   if (connection.state === "disconnected") return "Disconnected";
   if (connection.state === "paused") return "Paused";
-  if (connection.error) return "Needs attention";
-  if (!status.running)
-    return status.desiredState === "stopped"
-      ? "Importer stopped"
-      : "Importer offline";
-  if (connection.backfill.stage !== "complete") return "Importing history";
-  return connection.queued ? "Uploading updates" : "Watching for conversations";
+  if (status.running && connection.run?.state === "running") return "Importing conversations";
+  if (connection.error || connection.run?.state === "failed") return "Needs attention";
+  const schedule = connection.schedule;
+  if (schedule?.frequency === "hourly") return "Hourly";
+  if (schedule?.frequency === "cron") return `Cron: ${schedule.expression}`;
+  if (schedule?.frequency === "daily") return `Daily at ${schedule.time}`;
+  if (schedule?.frequency === "weekly")
+    return `Weekly on ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][schedule.day]} at ${schedule.time}`;
+  return "Manual imports";
 }

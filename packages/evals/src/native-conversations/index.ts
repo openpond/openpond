@@ -9,3 +9,4 @@ export * from "./supervisor.js";
 export * from "./location.js";
 export * from "./collector-branches.js";
 export * from "./collector-destinations.js";
+export * from "./collector-schedule.js";

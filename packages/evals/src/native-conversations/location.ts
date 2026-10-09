@@ -3,9 +3,11 @@ import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile } from "node:fs/promises";
 export function collectorDirectory(
-  home = process.env.OPENPOND_HOME || join(homedir(), ".openpond"),
+  home = join(homedir(), ".openpond"),
 ) {
-  return resolve(home, "conversation-importer");
+  return process.env.OPENPOND_COLLECTOR_DIR
+    ? resolve(process.env.OPENPOND_COLLECTOR_DIR)
+    : resolve(home, "conversation-importer");
 }
 export async function collectorMachineId(directory = collectorDirectory()) {
   await mkdir(directory, { recursive: true, mode: 0o700 });

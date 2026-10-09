@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 dayjs.extend(relativeTime);
@@ -37,7 +38,6 @@ export function AgentConversationSetup({
   );
   const [destination, setDestination] = useState(projectId);
   const [range, setRange] = useState("week");
-  const [keepSyncing, setKeepSyncing] = useState(true);
   const [command, setCommand] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +72,6 @@ export function AgentConversationSetup({
                     accountBaseUrl,
                     apiBaseUrl,
                     range,
-                    keepSyncing,
                   },
                 }
               : {}),
@@ -272,15 +271,8 @@ export function AgentConversationSetup({
             <option value="all">All history</option>
           </select>
         </label>
-        <label className="agent-sync-checkbox">
-          <input
-            type="checkbox"
-            checked={keepSyncing}
-            disabled={disabled}
-            onChange={(event) => setKeepSyncing(event.target.checked)}
-          />
-          Keep syncing new conversations
-        </label>
+        <p>This imports the selected history once and shows progress in the CLI. Continual imports are off by default and can be scheduled in Settings.</p>
+        <button type="button" onClick={() => navigateDesktopRoute({ kind: "settings", section: "conversation-imports" })}>Manage continual imports in Settings</button>
         {account?.state !== "signed_in" || !teamId ? (
           <small>
             Sign in and select a default team in Account settings to choose a

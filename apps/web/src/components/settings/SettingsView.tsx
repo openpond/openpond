@@ -81,6 +81,8 @@ function harnessPageForSection(section: SettingsSection) {
   return "overview" as const;
 }
 
+const ConversationImportsSettings = lazy(() => import("./ConversationImportsSettings").then(module => ({ default: module.ConversationImportsSettings })));
+
 const UsageSettingsSection = lazy(() =>
   import("./UsageSettingsSection").then((module) => ({ default: module.UsageSettingsSection })),
 );
@@ -367,6 +369,8 @@ export function SettingsView({
             providers={payload?.providers ?? null}
             {...providerSettings}
           />
+        ) : section === "conversation-imports" ? (
+          <Suspense fallback={<p role="status">Loading conversation imports…</p>}><ConversationImportsSettings connection={connection} /></Suspense>
         ) : section === "dataset-storage" ? (
           <DatasetStorageSettingsSection
             state={datasetStorageState.state}
