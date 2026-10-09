@@ -34,7 +34,7 @@ describe("startup recovery IPC boundary", () => {
   const input = { packaged: true, trustedRendererUrl: null, startupPageUrl };
 
   test("permits recovery only from the exact registered page, before a renderer exists", () => {
-    for (const channel of ["openpond:startup:retry", "openpond:logs:open", "openpond:diagnostics:export"]) {
+    for (const channel of ["openpond:startup:retry", "openpond:desktop:restart", "openpond:logs:open", "openpond:diagnostics:export"]) {
       expect(isTrustedDesktopIpcRequest({ ...input, frameUrl: startupPageUrl, channel })).toBe(true);
       expect(isTrustedDesktopIpcRequest({ ...input, frameUrl: startupPageUrl + "%20", channel })).toBe(false);
       expect(isTrustedDesktopIpcRequest({ ...input, startupPageUrl: null, frameUrl: startupPageUrl, channel })).toBe(false);
