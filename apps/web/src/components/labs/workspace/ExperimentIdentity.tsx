@@ -61,7 +61,11 @@ export function ExperimentIdentity({
         <EvaluationTime value={startedAt ?? createdAt} />
       </small>
       <small>
-        {seconds === null ? "Queued" : `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`}
+        {seconds === null
+          ? completedAt
+            ? "Elapsed unavailable"
+            : "—"
+          : `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`}
       </small>
     </>
   );

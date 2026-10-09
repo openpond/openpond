@@ -67,3 +67,5 @@
 
 .evaluation-identity { display:flex; align-items:center; gap:8px; }
 .evaluation-copy-id { font-size:11px; color:var(--muted-foreground); }
+
+.evaluation-history-table td:nth-child(4), .evaluation-history-table td:nth-child(5) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

@@ -248,7 +248,7 @@ export function ExperimentCases({
       <table className="training-data-table evaluation-workspace-table">
         <thead>
           <tr>
-            <th>Case</th>
+            <th>Task</th>
             <th>Status</th>
             {evidence.manifest.evaluators.map((grader) => (
               <th key={grader.feedbackKey}>

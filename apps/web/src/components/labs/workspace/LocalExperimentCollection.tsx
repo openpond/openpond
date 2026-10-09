@@ -151,7 +151,7 @@ export function LocalExperimentCollection({
                   id={item.id}
                   title={item.configuration.request.name}
                   createdAt={item.createdAt}
-                  startedAt={item.status === "queued" ? null : item.createdAt}
+                  startedAt={null}
                   completedAt={item.completedAt}
                   now={now}
                   onOpen={() =>
@@ -165,12 +165,18 @@ export function LocalExperimentCollection({
                   }
                 />
               </td>
-              <td>
+              <td
+                title={
+                  item.configuration.request.policy.kind === "hosted_harness"
+                    ? item.configuration.request.policy.source.definitionId
+                    : "Model"
+                }
+              >
                 {item.configuration.request.policy.kind === "hosted_harness"
                   ? item.configuration.request.policy.source.definitionId
                   : "Model"}
               </td>
-              <td>
+              <td title={item.configuration.request.taskset.id}>
                 {item.configuration.request.taskset.id}
                 <small>v{item.configuration.request.taskset.revision}</small>
               </td>

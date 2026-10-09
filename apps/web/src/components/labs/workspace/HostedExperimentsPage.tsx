@@ -313,7 +313,7 @@ export function HostedExperimentsPage({
         </p>
       )}
       <AdvancedRefinerEvaluationControl api={api} evidence={detail.evidence.data?.result.status==="completed"?{id:detail.evidence.data.manifest.id,contentHash:detail.evidence.data.result.contentHash}:null}/>
-      <ReviewedExperimentScheduleControl api={api} configuration={run?RunExperimentSchema.parse({...run.configuration,operationId:run.configuration.request.operationId,graders:run.configuration.graders.map(grader=>({...grader,mappings:grader.mappings??[]}))}):null} onOpenExperiment={id=>navigate({...route,page:"experiments",resourceId:id,passId:null,detailTab:"overview"})}/>
+      <ReviewedExperimentScheduleControl api={api} configuration={run?RunExperimentSchema.parse({request:run.request,maximumCostUsd:run.configuration.maximumCostUsd,operationId:run.request.operationId,graders:run.configuration.graders.map(({id,version,contentHash,mappings})=>({id,version,contentHash,mappings:mappings??[]}))}):null} onOpenExperiment={id=>navigate({...route,page:"experiments",resourceId:id,passId:null,detailTab:"overview"})}/>
       <ExperimentImproveSidebar api={api} evidence={detail.evidence.data??null} onOpenWork={onOpenWork}/>
     </>
   );

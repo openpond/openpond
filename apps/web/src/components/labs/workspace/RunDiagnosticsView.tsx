@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   diagnosticAnalysisPrompt,
   diagnosticSpans,
@@ -35,6 +35,7 @@ export function RunDiagnosticsView({
   const [task, setTask] = useState(""),
     [reviewing, setReviewing] = useState(false),
     [notice, setNotice] = useState<string | null>(null);
+  const evidenceDetails = useRef<HTMLDetailsElement>(null);
   const value = pages[0];
   const events = [
     ...new Map(pages.flatMap((page) => page.events).map((event) => [event.id, event])).values(),
@@ -162,7 +163,14 @@ export function RunDiagnosticsView({
                     <td>{duration(span.durationMs)}</td>
                     <td>
                       {span.evidenceIds.map((id) => (
-                        <a key={id} href={`#diagnostic-event-${encodeURIComponent(id)}`} title={id}>
+                        <a
+                          key={id}
+                          href={`#diagnostic-event-${encodeURIComponent(id)}`}
+                          title={id}
+                          onClick={() => {
+                            if (evidenceDetails.current) evidenceDetails.current.open = true;
+                          }}
+                        >
                           {id.slice(0, 12)}{" "}
                         </a>
                       ))}
@@ -217,7 +225,7 @@ export function RunDiagnosticsView({
           {!calls.length ? (
             <p>No call receipts are available. This does not establish zero usage.</p>
           ) : null}
-          <details>
+          <details ref={evidenceDetails}>
             <summary>Lifecycle evidence</summary>
             <div className="diagnostic-scroll">
               <table>
