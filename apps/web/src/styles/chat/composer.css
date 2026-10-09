@@ -998,3 +998,39 @@
 .composer-create-spin {
   animation: topbar-spin 0.9s linear infinite;
 }
+
+.composer-workspace-notice {
+  margin: 0 0 8px;
+  color: #9b9b9b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.native-conversation-unavailable {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.native-conversation-unavailable p {
+  flex: 1;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.native-conversation-unavailable button {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: transparent;
+  padding: 5px 9px;
+  color: #d7d7d7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.native-conversation-unavailable button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
