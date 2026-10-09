@@ -8,6 +8,7 @@ import type { NativeSession, NativeSource } from "@openpond/evals/native-convers
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { createNativeHistory } from "../apps/server/src/runtime/native-agents/history.js";
 import { nativeAgentLaunch } from "../apps/server/src/runtime/native-agents/config.js";
+import { nativeHistoryWorkspaceAvailable } from "../apps/server/src/runtime/native-agents/history-workspace.js";
 import { createNativeCapabilityProbe } from "../apps/server/src/runtime/native-agents/capability-probes.js";
 import { previewAgentImport } from "@openpond/evals/connected-evidence";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages.js";
@@ -78,7 +79,7 @@ async function fixture() {
   let store = new SqliteStore(home);
   cleanup.push(async () => { await store.close(); await rm(home, { recursive: true, force: true }); });
   const events: RuntimeEvent[] = [];
-  const api = (canResume?: Parameters<typeof createNativeHistory>[0]["canResume"]) => createNativeHistory({ store, storeDir: home, canResume, appendRuntimeEvent: async (value) => {
+  const api = (canResume?: Parameters<typeof createNativeHistory>[0]["canResume"], workspace: Pick<Parameters<typeof createNativeHistory>[0], "workspaceAvailable" | "qualifyWorkspace"> = {}) => createNativeHistory({ store, storeDir: home, canResume, ...workspace, appendRuntimeEvent: async (value) => {
     const event = RuntimeEventSchema.parse(value); events.push(event); await store.appendRuntimeEvent(event);
   } });
   return { home, get store() { return store; }, events, api,
@@ -248,4 +249,77 @@ test("explicit open qualifies an acquisition-only history after native identity 
   acquisition.read.mockImplementationOnce(async () => ({ preview: { sessions: [{ sessionId: "foreign-native-id" }] } }));
   await expect(handle("open", { id })).rejects.toThrow("does not match");
   expect(canResume).not.toHaveBeenCalled();
+});
+
+// Failure story: a removed temporary cwd (or absent source cwd) leaves usable
+// native history permanently read-only, or reopening restores the missing path
+// and drops the user's pins/draft. Admission must preserve the exact native ID.
+test("automatically resumes missing-folder history in a persistent app workspace", async () => {
+  for (const originalCwd of ["/removed-temporary-folder", null]) {
+    const f = await fixture();
+    const selectedSource = source("missing-folder-account", false);
+    const original = { ...native(selectedSource.instanceId), cwd: originalCwd };
+    acquisition.discover.mockResolvedValue([selectedSource]);
+    acquisition.list.mockResolvedValue({ items: [original], nextCursor: null });
+    acquisition.read.mockImplementation(historyRead);
+    const qualifyWorkspace = vi.fn(async () => undefined);
+    const workspace = { workspaceAvailable: nativeHistoryWorkspaceAvailable, qualifyWorkspace };
+    const handle = f.api(undefined, workspace);
+    await handle("list", { retain: true });
+    const id = selectionId(selectedSource.instanceId);
+    const sessionId = `native-${id}`;
+    await f.store.updateSession(sessionId, current => ({ ...current, pinned: true, title: "Keep my title", metadata: { ...current.metadata, composerDraft: "Keep my draft" } }));
+    const cwd = join(f.home, "workspaces", "native", id);
+    const opened = await handle("open", { id }) as Session;
+    expect(opened).toMatchObject({ id: sessionId, cwd, pinned: true, title: "Keep my title",
+      nativeAgent: { provider: "opencode", sessionId: original.nativeSessionId, cwd },
+      metadata: { nativeOriginalCwd: originalCwd, nativeWorkspaceRecovered: true, nativeResumeAvailable: true, nativeReadOnlyReason: null, composerDraft: "Keep my draft" } });
+    expect(qualifyWorkspace).toHaveBeenCalledExactlyOnceWith({ provider: "opencode", sessionId: original.nativeSessionId, instanceId: nativeAgentLaunch("opencode", { sourceHome: "/fixture-account" }).instanceId, cwd });
+    expect(await nativeHistoryWorkspaceAvailable(cwd)).toBe(true);
+    await f.reopen();
+    await f.api(undefined, workspace)("list", { retain: true });
+    expect(await f.api(undefined, workspace)("open", { id })).toMatchObject({ id: sessionId, cwd, pinned: true, nativeAgent: { sessionId: original.nativeSessionId, cwd }, metadata: { nativeReadOnlyReason: null, composerDraft: "Keep my draft" } });
+    expect(qualifyWorkspace).toHaveBeenCalledTimes(1);
+    expect((await f.store.sessionShells()).filter(session => session.id === sessionId)).toHaveLength(1);
+  }
+});
+
+// Failure story: rejected or active native sessions acquire false continuation
+// authority or lose their cwd; background following repeatedly launches agents.
+// Only an explicit retry may reattempt a rejected resume in the same process.
+test("failed automatic recovery retains history and authority until an explicit retry succeeds", async () => {
+  const f = await fixture();
+  const selectedSource = source("recovery-denied-account", false);
+  const original = { ...native(selectedSource.instanceId), cwd: join(f.home, "removed") };
+  acquisition.discover.mockResolvedValue([selectedSource]);
+  acquisition.list.mockResolvedValue({ items: [original], nextCursor: null });
+  acquisition.read.mockImplementation(historyRead);
+  const qualifyWorkspace = vi.fn(async () => { throw new Error("Native session cannot be loaded"); });
+  const handle = f.api(undefined, { workspaceAvailable: nativeHistoryWorkspaceAvailable, qualifyWorkspace });
+  const id = selectionId(selectedSource.instanceId);
+  const failed = await handle("open", { id }) as Session;
+  expect(failed).toMatchObject({ cwd: original.cwd, nativeAgent: null, metadata: { nativeHistoryLoaded: true, nativeResumeAvailable: false } });
+  expect(failed.metadata?.nativeReadOnlyReason).toContain("Native session cannot be loaded");
+  await handle("open", { id });
+  expect(qualifyWorkspace).toHaveBeenCalledTimes(1);
+  await f.store.updateSession(failed.id, current => ({ ...current, status: "active" }));
+  await handle("open", { id, retryWorkspace: true });
+  expect(qualifyWorkspace).toHaveBeenCalledTimes(1);
+  expect(await f.store.getSession(failed.id)).toMatchObject({ cwd: original.cwd, nativeAgent: null });
+  await f.store.updateSession(failed.id, current => ({ ...current, status: "idle" }));
+  qualifyWorkspace.mockImplementation(async () => undefined);
+  expect(await handle("open", { id, retryWorkspace: true })).toMatchObject({ id: failed.id, nativeAgent: { sessionId: original.nativeSessionId }, metadata: { nativeReadOnlyReason: null } });
+  expect(qualifyWorkspace).toHaveBeenCalledTimes(2);
+
+  // A saved branch snapshot and mismatched source identity must never enter
+  // the automatic workspace admission path.
+  const claudeSource: NativeSource = { ...source("read-only-branch", false), source: "claude_code" };
+  acquisition.discover.mockResolvedValue([claudeSource]);
+  acquisition.list.mockResolvedValue({ items: [{ ...original, sourceInstanceId: claudeSource.instanceId }], nextCursor: null });
+  await handle("list");
+  await handle("open", { id: selectionId(claudeSource.instanceId), branch: { leafId: "leaf", revision: "a".repeat(64) } });
+  expect(qualifyWorkspace).toHaveBeenCalledTimes(2);
+  acquisition.read.mockResolvedValueOnce({ preview: { sessions: [{ sessionId: "different-native-id" }] } });
+  await expect(handle("open", { id })).rejects.toThrow("Source history does not match");
+  expect(qualifyWorkspace).toHaveBeenCalledTimes(2);
 });

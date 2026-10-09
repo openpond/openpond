@@ -3,7 +3,6 @@ import { z } from "zod";
 import { createAcpRegistrationService } from "../runtime/native-agents/acp-registrations.js";
 import { withUrlModels } from "../enclave/provider.js";
 import { randomUUID } from "node:crypto";
-import { stat } from "node:fs/promises";
 import path from "node:path";
 import {createLocalExternalDatasetPreparation} from "../harness/local-external-dataset-preparation.js";
 import {resolveHostedApiAccess} from "../openpond/hosted-api-access.js";
@@ -13,6 +12,7 @@ import { NATIVE_AGENTS, nativeAgentLaunch } from "../runtime/native-agents/confi
 import { applyNativeAgentStatus, probeNativeAgent } from "../runtime/native-agents/setup.js";
 import { isNativeAgentId } from "../runtime/native-agents/config.js";
 import { createNativeHistory } from "../runtime/native-agents/history.js";
+import { createNativeHistoryWorkspace } from "../runtime/native-agents/history-workspace.js";
 import {
   AccountStateSchema,
   BootstrapPayloadSchema,
@@ -209,15 +209,7 @@ export function createServerPayloads(deps: {
     return readPlanUsage(provider, file.providers[provider]);
   }
   const nativeHistoryPayload = createNativeHistory({ store, storeDir, appendRuntimeEvent,
-    canResume: async (provider, cwd) => {
-      const file = await readProvidersFile(path.join(storeDir, "providers.json"));
-      if (!file.providers[provider]?.enabled) return { available: false, reason: "Enable the original agent in Connections before continuing this conversation." };
-      const available = await stat(cwd).then((value) => value.isDirectory()).catch(() => false);
-      if (!available) return { available: false, reason: "The original working folder is missing or inaccessible. Restore it, then reopen this conversation." };
-      const status = await probeNativeAgent(provider, file.providers[provider]);
-      const qualified = status.status === "ready" && status.capabilities?.loadSession === true;
-      return { available: qualified, reason: qualified ? null : status.error ?? "This agent does not advertise original-session continuation. Check its installation and login in Connections, then reopen the conversation." };
-    },
+    ...createNativeHistoryWorkspace(providersFilePath),
   });
   const {
     appendAppPage,
