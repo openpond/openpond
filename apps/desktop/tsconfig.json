@@ -22,6 +22,9 @@
     },
     {
       "path": "../../packages/persistence"
+    },
+    {
+      "path": "../../packages/contracts"
     }
   ],
   "include": [

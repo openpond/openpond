@@ -2,7 +2,7 @@ import { createPublicKey, verify } from "node:crypto";
 import { remoteDeviceCanonicalContent, remoteDevicePermitMessage, type RemoteDispatchCommand, type RemoteDeviceServicePublicKey, type Session } from "@openpond/contracts";
 import type { OpenPondSqliteConnection } from "../store/sqlite/sqlite-driver.js";
 import { DeviceLocalOwnerSchema, deviceOwnsLocalSession } from "./local-scope.js";
-import { localSessionOwnershipRevision } from "./session-ownership.js";
+import { readRemoteCommandTargetState, remoteCommandTargetRevision } from "./command-target.js";
 import { remoteStarterRevision } from "./starters.js";
 import { readLocalSessionReservation } from "../store/local-session-reservation.js";
 
@@ -15,6 +15,7 @@ export const REMOTE_LOCAL_SCHEMA = `CREATE TABLE IF NOT EXISTS remote_device_aut
 
 /** Run inside canonical admission's BEGIN IMMEDIATE: logout and admission linearize here. */
 export function assertRemoteAdmission(db: OpenPondSqliteConnection, command: RemoteDispatchCommand, session: Session) {
+  if (command.payload.resume === true && command.action !== "follow_up") throw new Error("remote_resume_action_invalid");
   const cancelled = db.get<{ payload_hash: string }>("SELECT payload_hash FROM remote_device_cancellations WHERE id=?", [command.id]);
   if (cancelled) throw new Error(cancelled.payload_hash === command.payloadHash ? "remote_command_cancelled" : "remote_command_identity_changed");
   const row = db.get<{ payload: string }>("SELECT payload FROM remote_device_authority WHERE id=1");
@@ -45,6 +46,6 @@ export function assertRemoteAdmission(db: OpenPondSqliteConnection, command: Rem
     return;
   }
   const latest = db.get<{ id: string }>("SELECT id FROM turns WHERE session_id=? ORDER BY sort_index DESC LIMIT 1", [session.id]);
-  const revision = Number.parseInt(localSessionOwnershipRevision(session, latest?.id ?? null).slice(0, 13), 16);
+  const revision = remoteCommandTargetRevision(session, latest?.id ?? null, readRemoteCommandTargetState(db, session.id));
   if (command.localSessionId !== session.id || revision !== command.expectedRevision) throw new Error("remote_target_changed");
 }

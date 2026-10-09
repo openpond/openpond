@@ -447,6 +447,7 @@ export type TurnRunnerDependencies = {
   ) => Promise<Record<string, unknown>>;
   executeConnectedAppTool?: ConnectedAppToolExecutor;
   browserToolExecutor?: BrowserHarnessToolExecutor;
+  htmlVisuals?: import("../../visuals/visual-service.js").HtmlVisualService;
   manageSidebarFile?: (input: {
     session: Session;
     action: "pin" | "save_for_later" | "remove" | "list";
