@@ -7,6 +7,7 @@ export type ComposerDraftStore = {
   applyAppAction: (action: AppAction) => void;
   getScopeKey: () => string;
   getSnapshot: () => string;
+  getDrafts: () => Record<string, string>;
   set: (value: SetStateAction<string>) => void;
   setForScope: (scopeKey: string, value: SetStateAction<string>) => void;
   subscribe: (listener: () => void) => () => void;
@@ -25,10 +26,11 @@ export function createComposerDraftStore(
     selectedProjectId: null,
     selectedSessionId: null,
   },
+  initialDrafts: Record<string, string> = {},
 ): ComposerDraftStore {
   let selection = initialSelection;
-  let value = "";
-  const drafts = new Map<string, string>();
+  const drafts = new Map(Object.entries(initialDrafts));
+  let value = drafts.get(draftKey(selection)) ?? "";
   const listeners = new Set<() => void>();
 
   const publish = (nextValue: string) => {
@@ -62,6 +64,7 @@ export function createComposerDraftStore(
   const store: ComposerDraftStore = {
     getScopeKey: () => draftKey(selection),
     getSnapshot: () => value,
+    getDrafts: () => { saveCurrent(); return Object.fromEntries(drafts); },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

@@ -9,11 +9,12 @@ type NativeRuntime = ReturnType<typeof createNativeAgentRuntime>;
 type NativeInput = Parameters<NativeRuntime["run"]>[0];
 
 /** Replace only the native request on Steer; Stop still cancels the entire turn. */
-export async function runSteeredNativeTurn({ runtime, inbox, store, getSession, input }: {
+export async function runSteeredNativeTurn({ runtime, inbox, store, getSession, taskToolInstructions, input }: {
   runtime: Pick<NativeRuntime, "run">;
   inbox: TaskInboxRuntime;
   store: TaskInboxRepository;
   getSession(sessionId: string): Promise<Session>;
+  taskToolInstructions: string;
   input: Omit<NativeInput, "preparePrompt" | "settlePrompt" | "requestId" | "requestOrdinal">;
 }): Promise<string> {
   const sessionId = input.session.id;
@@ -31,7 +32,7 @@ export async function runSteeredNativeTurn({ runtime, inbox, store, getSession, 
         requestId,
         requestOrdinal: ordinal,
         signal: request.signal,
-        preparePrompt: async (prompt) => {
+        preparePrompt: async (prompt, capabilities) => {
           const included = await inbox.include(sessionId, input.turn.id, requestId);
           const corrections = await store.taskAssignmentInputs(input.turn.id);
           const messages = included.filter((message) => message.kind !== "steer" && message.id !== input.turn.metadata?.taskInputId);
@@ -39,7 +40,7 @@ export async function runSteeredNativeTurn({ runtime, inbox, store, getSession, 
             "Continue the same assignment with the corrections below. Preserve completed work and the original objective unless the user explicitly changes it. Do not repeat completed actions.",
             `Original assignment: ${input.turn.prompt}`,
           ].join("\n\n");
-          return [assignment, ...corrections.map(taskInputModelText), ...messages.map(taskInputModelText)].join("\n\n");
+          return [assignment, capabilities.taskTools ? taskToolInstructions : "", ...corrections.map(taskInputModelText), ...messages.map(taskInputModelText)].join("\n\n");
         },
       });
       input.signal.throwIfAborted();

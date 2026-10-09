@@ -1,3 +1,4 @@
+import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { ComposerSubmissionControls } from "./ComposerSubmissionControls";
 import { NativeAgentControls } from "./NativeAgentControls";
 import { useCallback, useMemo, useState, type CSSProperties, type RefObject } from "react";
@@ -166,7 +167,7 @@ export function ComposerPrimaryControls({
   const receiveNativeSettings = useCallback((value: { provider: string; settings: ProviderSettings }) => {
     if (connection) setNativeSettings({ connection, provider: value.provider, instance, settings: value.settings });
   }, [connection, instance]);
-  const nativeProvider = ["claude-code", "opencode", "grok-build"].includes(provider);
+  const nativeProvider = isRegisteredAcpProvider(provider) || ["claude-code", "opencode", "grok-build"].includes(provider);
   const displayedModel = modelValue || defaultModelForProvider(provider, providerSettings);
   const [voiceInputActive, setVoiceInputActive] = useState(false);
   const showModelReasoningMenu = providerModelSupportsReasoning(
@@ -264,7 +265,7 @@ export function ComposerPrimaryControls({
         <ComposerSubmissionControls
           running={running}
           sendDisabled={sendDisabled}
-        hasComposerInput={hasComposerInput}
+          hasComposerInput={hasComposerInput}
           sendTooltip={sendTooltip}
           stopIcon={stopIcon}
           stopLabel={stopLabel}

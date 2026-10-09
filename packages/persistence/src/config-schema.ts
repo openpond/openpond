@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProviderIdSchema } from "./schemas/providers.js";
+import { AcpAgentConfigSchema, ProviderIdSchema } from "./schemas/providers.js";
 import { CodexPermissionModeSchema, CodexReasoningEffortSchema, OpenPondCommandAccessModeSchema } from "./schemas/settings.js";
 import { SubagentDelegationModeSchema, SubagentIsolationModeSchema, SubagentToolPolicySchema, SubagentPeerMessagesSchema, SubagentRoleIdSchema } from "./schemas/subagents.js";
 
@@ -20,7 +20,10 @@ export const CredentialReferenceSchema = z.discriminatedUnion("source", [
   z.strictObject({ source: z.literal("env"), name: string.regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(160) }),
 ]);
 const account = z.strictObject({ handle: string, base_url: endpoint.optional(), api_base_url: endpoint.optional(), chat_api_base_url: endpoint.optional(), environment: string.optional(), credential: CredentialReferenceSchema.optional(), enabled: z.boolean().optional() });
-const provider = z.strictObject({ enabled: z.boolean().optional(), binary_path: string.max(4096).optional(), source_home: string.max(4096).optional(), native_mode: string.max(200).optional(), native_options: z.record(z.string().max(200), z.string().max(300)).optional(), base_url: endpoint.optional(), default_model: string.max(300).optional(), model_overrides: z.array(string.max(300)).max(500).optional(), credential: CredentialReferenceSchema.optional() });
+const acpAgent = AcpAgentConfigSchema.omit({ registryId: true, version: true, installUrl: true, authMethodId: true }).extend({
+  registryId: string.max(160).optional(), version: string.max(200).optional(), installUrl: z.string().url().optional(), authMethodId: string.max(200).optional(),
+});
+const provider = z.strictObject({ acp: acpAgent.optional(), enabled: z.boolean().optional(), binary_path: string.max(4096).optional(), source_home: string.max(4096).optional(), native_mode: string.max(200).optional(), native_options: z.record(z.string().max(200), z.string().max(300)).optional(), base_url: endpoint.optional(), default_model: string.max(300).optional(), model_overrides: z.array(string.max(300)).max(500).optional(), credential: CredentialReferenceSchema.optional() });
 const language = z.strictObject({ mode: z.enum(["auto", "disabled", "custom"]).optional(), custom_command: pathString.optional() });
 const cap = z.union([z.number().int().min(1).max(32), z.literal("unlimited")]);
 const role = z.strictObject({

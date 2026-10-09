@@ -1,5 +1,7 @@
+import { acpPreset, type ServerProviderPreset, type ProviderPresetModel } from "./provider-presets.js";
 import {
   PROVIDER_IDS,
+  isRegisteredAcpProvider,
   ProviderCapabilitiesSchema,
   ProviderCatalogProviderSchema,
   ProviderConfigSchema,
@@ -16,50 +18,20 @@ import {
   type CodexStatus,
   type ProviderCatalog,
   type ProviderCatalogProvider,
-  type ProviderCapabilities,
   type ProviderConfig,
-  type ProviderCredentialMode,
   type ProviderCredentialSource,
   type ProviderId,
-  type ProviderLifecycleStatus,
   type ProviderModel,
   type ProviderModelCache,
   type ProviderModelCapabilities,
-  type ProviderModelDiscovery,
   type ProviderModelsRefreshRequest,
   type ProviderModelsRequest,
-  type ProviderRouting,
   type ProviderSettings,
   type ProviderStatus,
   type ProviderValidationRequest,
 } from "@openpond/contracts";
 import type { ProvidersFile } from "../types.js";
 import type { ProviderSecretRecord, ProviderSecrets } from "./provider-secrets.js";
-
-type ProviderPresetModel = {
-  id: string;
-  displayName: string;
-  contextWindow?: number | null;
-  outputLimit?: number | null;
-  lifecycleStatus?: ProviderLifecycleStatus;
-  capabilities?: Partial<ProviderModelCapabilities>;
-};
-
-type ServerProviderPreset = {
-  id: ProviderId;
-  displayName: string;
-  lifecycleStatus?: ProviderLifecycleStatus;
-  credentialModes: ProviderCredentialMode[];
-  routing: Partial<ProviderRouting>;
-  capabilities: Partial<ProviderCapabilities> & {
-    modelDiscovery?: ProviderModelDiscovery;
-  };
-  defaultEnabled?: boolean;
-  defaultBaseUrl?: string | null;
-  defaultModel?: string | null;
-  modelCacheSource: ProviderModelCache["source"];
-  models: readonly ProviderPresetModel[];
-};
 
 const COMMON_OPENAI_COMPATIBLE_MODELS: Partial<ProviderModelCapabilities> = {
   streaming: true,
@@ -627,7 +599,7 @@ export function getProviderPreset(
   providerId: ProviderId,
   catalog?: ProviderCatalog | null,
 ): ServerProviderPreset {
-  const preset = providerPresetMap(catalog).get(providerId);
+  const preset = providerPresetMap(catalog).get(providerId) ?? (isRegisteredAcpProvider(providerId) ? acpPreset(providerId, providerId) : undefined);
   if (!preset) throw new Error(`Unknown provider: ${providerId}`);
   return preset;
 }
@@ -664,6 +636,7 @@ function providerConfigForPreset(
         ? preset.defaultModel
       : stored?.defaultModel;
   return ProviderConfigSchema.parse({
+    acp: stored?.acp ?? null,
     nativeMode: stored?.nativeMode ?? null,
     nativeOptions: stored?.nativeOptions ?? {},
     binaryPath: stored?.binaryPath ?? null,
@@ -948,7 +921,8 @@ export function buildProviderSettings(input: {
   const modelCaches: Record<string, ProviderModelCache> = { ...(input.file.modelCaches ?? {}) };
   const statuses: Record<string, ProviderStatus> = {};
 
-  for (const preset of listProviderPresets(input.catalog)) {
+  const registered = Object.entries(input.file.providers).flatMap(([id, config]) => isRegisteredAcpProvider(id) && config.acp ? [acpPreset(id, config.acp.displayName)] : []);
+  for (const preset of [...listProviderPresets(input.catalog).filter(preset => !isRegisteredAcpProvider(preset.id)), ...registered]) {
     const providerId = preset.id;
     const config = providerConfigForPreset(preset, providers[providerId]);
     const cache = modelCacheForSettings(preset, config, modelCaches[providerId], Boolean(input.catalog));

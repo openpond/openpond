@@ -32,7 +32,7 @@ import {
   DEFAULT_CODEX_REASONING_EFFORT,
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   DEFAULT_OPENPOND_CHAT_MODEL,
-  PROVIDER_IDS,
+  isRegisteredAcpProvider,
   SubagentPreferencesSchema,
   defaultSubagentPreferences,
 } from "@openpond/contracts";
@@ -605,7 +605,7 @@ function uniqueDropdownOptions(options: DropdownOption[]): DropdownOption[] {
 }
 
 export function isRunnableChatProvider(provider: ChatProvider): boolean {
-  return RUNNABLE_CHAT_PROVIDER_ID_SET.has(provider);
+  return isRegisteredAcpProvider(provider) || RUNNABLE_CHAT_PROVIDER_ID_SET.has(provider);
 }
 
 export function providerOptionsFromSettings(
@@ -616,9 +616,9 @@ export function providerOptionsFromSettings(
   const includeUnavailable = options.includeUnavailable ?? false;
   const enabledOnly = options.enabledOnly ?? false;
   const rows: Array<DropdownOption & { value: ChatProvider }> = [];
-  for (const providerId of PROVIDER_IDS) {
-    if (!["openpond", "codex", "openai", "claude-code", "grok-build", "opencode", "custom-openai-compatible"].includes(providerId)) continue;
-    if (!RUNNABLE_CHAT_PROVIDER_ID_SET.has(providerId)) continue;
+  for (const providerId of Object.keys(settings.statuses) as ChatProvider[]) {
+    if (!isRegisteredAcpProvider(providerId) && !["openpond", "codex", "openai", "claude-code", "grok-build", "opencode", "custom-openai-compatible"].includes(providerId)) continue;
+    if (!isRunnableChatProvider(providerId)) continue;
     if (options.localOnly && providerId === "openpond") continue;
     const status = providerStatus(settings, providerId);
     if (!status) continue;
@@ -753,6 +753,7 @@ export function normalizeChatModel(
   const trimmed = model?.trim();
   // Native catalogs are session-scoped and loaded lazily. Preserve an explicit
   // choice until the runtime validates it against that session's live catalog.
+  if (isRegisteredAcpProvider(provider)) return trimmed ?? "";
   if (trimmed && ["opencode", "grok-build", "claude-code"].includes(provider)) return trimmed;
   if (provider === "codex" && (trimmed === "codex-default" || trimmed === "gpt-5.5")) {
     return DEFAULT_CODEX_CHAT_MODEL;
@@ -963,7 +964,7 @@ export function chatModelLabel(model: string, settings?: ProviderSettings | null
     if (option) return option.label;
   }
   if (settings) {
-    for (const providerId of PROVIDER_IDS) {
+    for (const providerId of Object.keys(settings.statuses) as ChatProvider[]) {
       const option = modelOptionsForProvider(providerId, settings).find((candidate) => candidate.value === model);
       if (option) return option.label;
     }
