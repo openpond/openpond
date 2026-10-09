@@ -1,3 +1,4 @@
+import { HtmlVisual } from "../visuals/HtmlVisual";
 import { memo, useState } from "react";
 import {
   CheckCircle2,
@@ -90,6 +91,7 @@ export const MessageRow = memo(function MessageRow({
   userAttachmentDisplay = "full",
   workspaceRootPath = null,
 }: MessageRowProps) {
+  if (message.role === "visual" && message.visual) return <article className="message-row assistant"><HtmlVisual key={message.visual.publicationId} visual={message.visual} connection={connection} /></article>;
   if (message.role === "task_message") return <TaskMessageRow message={message} onOpenSession={onOpenSession}
     onOpenPonder={onOpenPonder} connection={connection} />;
   if (message.role === "status_divider") {
@@ -367,6 +369,7 @@ function chatMessageShallowEqual(
   return (
     previous.id === next.id &&
     previous.role === next.role &&
+    previous.visual?.publicationId === next.visual?.publicationId &&
     previous.content === next.content &&
     previous.finalAnswer === next.finalAnswer &&
     previous.timestamp === next.timestamp &&
