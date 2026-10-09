@@ -60,7 +60,8 @@ export function createRemoteCommandExecutor(deps: {
         sessionId = session.id;
       } else {
         const target = await deps.inspect(sessionId);
-        if (!target.canSendFollowup || (command.action === "steer" && !target.canSteer)) throw new Error("remote_target_unavailable");
+        if (!target.canSendFollowup || (command.action === "steer" && !target.canSteer)
+          || (command.payload.resume === true && (command.action !== "follow_up" || !target.paused || target.activeTurnId !== null))) throw new Error("remote_target_unavailable");
       }
       if (!command.payload.text?.trim()) throw new Error("remote_message_required");
       input = await deps.admit({ id: `remote-input:${command.id}`, sessionId, senderSessionId: null,

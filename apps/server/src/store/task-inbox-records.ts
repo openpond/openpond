@@ -7,6 +7,7 @@ import { LocalManagedMessageError } from "../runtime/task-inbox/local-managed-me
 import { assertPonderDesktopInput } from "./ponder-desktop-input.js";
 import { assertRemoteAdmission } from "../remote-relay/admission.js";
 import type { RemoteDispatchCommand } from "@openpond/contracts";
+import { resumeRemoteTaskInput } from "../remote-relay/command-target.js";
 import { remoteExecutionSnapshot } from "../remote-relay/session-ownership.js";
 
 export type TaskInboxOwner = {
@@ -101,6 +102,12 @@ export function admitTaskInput(db: OpenPondSqliteConnection, admission: TaskInpu
       ? owner.turn_id : null,
     createdAt: timestamp, updatedAt: timestamp,
   });
+  if (admission.payload.remoteDevice !== undefined) {
+    const command = admission.payload.remoteDevice as RemoteDispatchCommand;
+    if (command.payload.resume === true && (admission.kind !== "queued" || admission.expectedTurnId !== command.expectedTurnId))
+      throw new Error("remote_resume_input_invalid");
+    resumeRemoteTaskInput(db, command);
+  }
   db.run("INSERT INTO task_inputs (id, session_id, sender_key, idempotency_key, kind, state, turn_id, payload, admission) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [
     input.id, input.sessionId, senderKey, input.idempotencyKey, input.kind, input.state, input.turnId, JSON.stringify(input), JSON.stringify(admission),
   ]);

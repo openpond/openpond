@@ -6,9 +6,11 @@ import { expect, it } from "vitest";
 import { remoteDevicePermitMessage, type RemoteDispatchCommand } from "@openpond/contracts";
 import { SqliteStore } from "../store/store.js";
 import { createSessionStore } from "../store/session-store.js";
-import { localSessionOwnershipRevision } from "./session-ownership.js";
+import { remoteCommandTargetRevision } from "./command-target.js";
 import { normalizeRemoteEventTurn, projectRemoteEvent } from "./history.js";
 import { createRemoteCommandExecutor } from "./executor.js";
+import { captureRemoteTaskCatalog } from "./catalog.js";
+import { createLocalManagedMessaging } from "../runtime/task-inbox/local-managed-messaging.js";
 
 // Losing the cloud acknowledgement cannot duplicate input after restart, while
 // changed owners, forged permits and revoked authority cannot admit new input.
@@ -27,7 +29,7 @@ it.each([null, "team"])("fences %s scope at canonical SQLite admission and recov
     await store.setRemoteDeviceAuthority(authority);
     const command = (id = randomUUID(), scopeTeamId: string | null = teamId): RemoteDispatchCommand => {
       const unsigned = { id, idempotencyKey: id, action: "follow_up" as const, targetId: "cloud-task", localSessionId: session.id,
-        expectedRevision: Number.parseInt(localSessionOwnershipRevision(session, null).slice(0, 13), 16),
+        expectedRevision: remoteCommandTargetRevision(session, null, { paused: false, activeTurnId: null }),
         payload: { text: "Continue the original task" }, deviceId: authority.deviceId, payloadHash: "a".repeat(64),
         scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: scopeTeamId },
         grantRevision: 1, fence: 1, deadline: new Date(Date.now() + 30000).toISOString(), actor: "remote-human" as const };
@@ -86,7 +88,7 @@ it("maps provider approval identity to the active local turn and fences competin
       source: "server", status: "completed", data: { decision: "accept", approvalId: approval.id } }, 2)?.status).toBe("accepted");
     const command = (expectedTurnId: string = turn.id, expectedApprovalId: string = approval.id): RemoteDispatchCommand => {
       const id = randomUUID(); const unsigned = { id, idempotencyKey: id, action: "approval" as const, targetId: "cloud-task", localSessionId: session.id,
-        expectedRevision: Number.parseInt(localSessionOwnershipRevision(session, turn.id).slice(0, 13), 16), expectedTurnId, expectedApprovalId,
+        expectedRevision: remoteCommandTargetRevision(session, turn.id, { paused: false, activeTurnId: null }), expectedTurnId, expectedApprovalId,
         payload: { response: "approve" as const }, deviceId: authority.deviceId, payloadHash: "a".repeat(64),
         scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: owner.teamId },
         grantRevision: 1, fence: 1, deadline: new Date(Date.now() + 30000).toISOString(), actor: "remote-human" as const };
@@ -148,5 +150,101 @@ it.each(["codex", "openpond"] as const)("starts one owned %s task from a canonic
     expect((await recover(command)).localSessionId).toBe(target.id);
     expect(await store.taskInputsForSession(target.id)).toHaveLength(1);
     expect(await store.sessionCount()).toBe(2);
+  } finally { await store.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+// A fresh explicit resume must survive a lost acknowledgement without admitting
+// twice or undoing a newer Stop; stale clicks and ordinary sends keep work paused.
+it("atomically resumes qualified paused work and never lets replay undo a later Stop", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "remote-resume-"));
+  let store = new SqliteStore(directory);
+  const owner = { version: 1 as const, installationId: randomUUID(), profileId: "profile", ownerUserId: "owner", teamId: "team", audience: "https://fixture.invalid" };
+  const keys = generateKeyPairSync("ed25519");
+  const authority = { deviceId: randomUUID(), owner, fence: 1, grantRevision: 1,
+    leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
+    publicKeys: [{ keyId: "fixture", publicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString() }] };
+  try {
+    await store.initializeRemoteDeviceStore();
+    const sessions = createSessionStore({ store, defaultSessionCwd: () => directory,
+      appendRuntimeEvent: async event => { await store.appendRuntimeEvent(event); }, captureUserOwner: async () => owner });
+    const session = await sessions.createUserSession({ provider: "openpond", experience: "work", title: "Paused owned task", cwd: directory });
+    const inspect = (id: string) => createLocalManagedMessaging({ store, getSession: id => store.getSession(id),
+      latestTurn: id => store.latestTurnForSession(id), readiness: async () => ({ available: true, reason: null, canSteer: true }),
+      approvalBlocked: async () => false, admit: input => store.admitTaskInput(input) }).inspect(id);
+    const catalog = async () => (await captureRemoteTaskCatalog({ owner, sessions: [(await store.getSession(session.id))!], inspect,
+      latestTurn: id => store.latestTurnForSession(id) }))[0]!;
+    const command = (revision: number, expectedTurnId: string | null, resume = false, id = randomUUID()): RemoteDispatchCommand => {
+      const unsigned = { id, idempotencyKey: id, action: "follow_up" as const, targetId: "cloud-task", localSessionId: session.id,
+        expectedRevision: revision, expectedTurnId, payload: { text: "Continue the owned task", ...(resume ? { resume: true } : {}) },
+        deviceId: authority.deviceId, payloadHash: id.replaceAll("-", "").padEnd(64, "0"),
+        scope: { installationId: owner.installationId, profileId: owner.profileId, ownerUserId: owner.ownerUserId, teamId: owner.teamId },
+        grantRevision: 1, fence: 1, deadline: new Date(Date.now() + 30000).toISOString(), actor: "remote-human" as const };
+      const expiresAt = new Date(Date.now() + 15000).toISOString();
+      return { ...unsigned, permit: { keyId: "fixture", expiresAt,
+        signature: sign(null, Buffer.from(remoteDevicePermitMessage(unsigned, expiresAt, "fixture")), keys.privateKey).toString("base64") } };
+    };
+    const admit = (value: RemoteDispatchCommand, id = `remote-input:${value.id}`) => store.admitTaskInput({ id, sessionId: session.id,
+      senderSessionId: null, senderKind: "user", kind: "queued", body: value.payload.text!, payload: { remoteDevice: value },
+      idempotencyKey: `remote:${value.id}`, expectedTurnId: value.expectedTurnId ?? null, replyTo: null });
+    const turn = (id = randomUUID()) => ({ id, sessionId: session.id, providerTurnId: null, prompt: "Controlled work",
+      startedAt: new Date().toISOString(), completedAt: null, status: "in_progress" as const, error: null, metadata: {}, createImproveRun: null });
+    const first = turn();
+    await store.insertTurn(first); await store.openTaskInboxTurn(session.id, first.id, "fixture-owner");
+    await store.setRemoteDeviceAuthority(authority);
+    const running = await catalog();
+    await store.updateTurn(first.id, current => ({ ...current, status: "interrupted", completedAt: new Date().toISOString() }));
+    await store.closeTaskInboxTurn(session.id, first.id, "fixture-owner", "interrupted");
+    const paused = await catalog();
+    expect(paused).toMatchObject({ paused: true, latestTurnId: first.id, activeTurnId: null, capabilities: { resume: true } });
+    expect(paused.revision).not.toBe(running.revision);
+    const ordinary = await admit(command(paused.revision, null));
+    expect(await store.taskInboxPaused(session.id)).toBe(true);
+    expect(await store.reserveTaskFollowup(session.id, randomUUID(), "fixture-owner")).toBeNull();
+    await expect(admit(command(running.revision, first.id, true))).rejects.toThrow("remote_target_changed");
+    await expect(admit(command(paused.revision, "older-turn", true))).rejects.toThrow("remote_resume_target_changed");
+    // An INSERT failure after the clear must roll back both changes.
+    await expect(admit(command(paused.revision, first.id, true), ordinary.id)).rejects.toThrow();
+    expect(await store.taskInboxPaused(session.id)).toBe(true);
+    expect(await store.taskInputsForSession(session.id)).toHaveLength(1);
+    const resume = command(paused.revision, first.id, true);
+    const execute = createRemoteCommandExecutor({ store: { getTaskInput: id => store.getTaskInput(id),
+      getRemoteDeviceReceipt: id => store.getRemoteDeviceReceipt(id), saveRemoteDeviceReceipt: async () => { throw new Error("lost acknowledgement"); },
+      admitRemoteDeviceStop: value => store.admitRemoteDeviceStop(value), getTurn: id => store.getTurn(id),
+      admitRemoteDeviceApproval: value => store.admitRemoteDeviceApproval(value), getApproval: id => store.getApproval(id) },
+      inspect, admit: input => store.admitTaskInput(input), interrupt: async () => null });
+    await expect(execute(resume)).rejects.toThrow("lost acknowledgement");
+    expect(await store.taskInboxPaused(session.id)).toBe(false);
+    const resumedInput = (await store.getTaskInput(`remote-input:${resume.id}`))!;
+    expect(await store.taskInputsForSession(session.id)).toHaveLength(2);
+    const afterResume = await catalog();
+    expect(afterResume.revision).not.toBe(paused.revision);
+    expect(afterResume.capabilities.resume).toBe(false);
+    // Restart with no mutable inspection/admission allowed: input is recovery authority.
+    await store.close(); store = new SqliteStore(directory); await store.initializeRemoteDeviceStore();
+    const recover = createRemoteCommandExecutor({ store,
+      inspect: async () => { throw new Error("Replay must not inspect mutable state"); },
+      admit: async () => { throw new Error("Replay must not repeat admission"); }, interrupt: async () => null });
+    const receipt = await recover(resume);
+    expect(receipt.inputId).toBe(resumedInput.id);
+    expect(await store.taskInputsForSession(session.id)).toHaveLength(2);
+    // Preserve canonical FIFO: explicit resume authorizes the existing queue too.
+    const next = turn();
+    expect((await store.reserveTaskFollowup(session.id, next.id, "fixture-owner"))?.id).toBe(ordinary.id);
+    await store.insertTurn(next);
+    await store.updateTurn(next.id, current => ({ ...current, status: "interrupted", completedAt: new Date().toISOString() }));
+    await store.closeTaskInboxTurn(session.id, next.id, "fixture-owner", "interrupted");
+    expect(await recover(resume)).toEqual(receipt);
+    expect((await admit(resume)).id).toBe(resumedInput.id);
+    expect(await store.taskInboxPaused(session.id)).toBe(true);
+    expect(await store.taskInputsForSession(session.id)).toHaveLength(2);
+    await store.setRemoteDeviceAuthority(authority);
+    await expect(admit(command(paused.revision, first.id, true))).rejects.toThrow("remote_target_changed");
+    const latest = await catalog();
+    await expect(admit(command(latest.revision, first.id, true))).rejects.toThrow("remote_resume_target_changed");
+    expect(await store.taskInboxPaused(session.id)).toBe(true);
+    expect(await store.taskInputsForSession(session.id)).toHaveLength(2);
+    await admit(command(latest.revision, next.id, true));
+    expect(await store.taskInboxPaused(session.id)).toBe(false);
+    expect(await store.taskInputsForSession(session.id)).toHaveLength(3);
   } finally { await store.close(); await rm(directory, { recursive: true, force: true }); }
 });
