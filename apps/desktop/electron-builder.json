@@ -4,6 +4,12 @@
   "artifactName": "openpond-${version}-${os}-${arch}.${ext}",
   "asar": true,
   "compression": "maximum",
+  "electronUpdaterCompatibility": ">=6.6.2",
+  "generateUpdatesFilesForAllChannels": false,
+  "publish": {
+    "provider": "generic",
+    "url": "https://github.com/openpond/openpond/releases/latest/download"
+  },
   "directories": {
     "app": "apps/desktop/stage/app",
     "output": "release",
@@ -18,6 +24,7 @@
   ],
   "npmRebuild": false,
   "extraMetadata": {
+    "openpondReleaseChannel": "stable",
     "main": "dist/main.js",
     "homepage": "https://openpond.ai",
     "license": "MIT"
@@ -87,7 +94,8 @@
       "libuuid1",
       "libsecret-1-0",
       "libasound2t64 | libasound2",
-      "libgbm1"
+      "libgbm1",
+      "pkexec"
     ],
     "recommends": []
   }

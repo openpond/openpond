@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { writeReleaseVersion } from "./release-version";
+import { desktopUpdateFeedChannel } from "../packages/contracts/src/desktop-updates.js";
 
 type ReleaseChannel = "stable" | "nightly";
 
@@ -66,6 +67,11 @@ const releaseChannelPath = path.join(root, "apps", "desktop", "dist", "release-c
 const baseConfig = JSON.parse(await readFile(baseConfigPath, "utf8")) as ElectronBuilderConfig;
 const releaseConfig: ElectronBuilderConfig = {
   ...baseConfig,
+  publish: {
+    provider: "generic",
+    url: `https://github.com/openpond/openpond/releases/download/v${version}/`,
+    channel: desktopUpdateFeedChannel(channel, process.arch === "arm64" ? "arm64" : "x64"),
+  },
   appId,
   productName,
   artifactName: `${artifactPrefix}-${version}-\${os}-\${arch}.\${ext}`,
