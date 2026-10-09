@@ -6,10 +6,12 @@ import { RuntimeEventSchema, SessionSchema, type RuntimeEvent } from "@openpond/
 import { ClaudeCliClient } from "../packages/agent-runtime/src/acp/claude-cli-client.js";
 import { nativeAgentEvent } from "../apps/server/src/runtime/native-agents/events.js";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages.js";
+import { IncrementalChatProjector } from "../apps/web/src/lib/incremental-chat-projector.js";
 
 // The result repeats (or revises) streamed text. Cover the complete CLI-to-chat
 // boundary so it cannot duplicate the answer, erase progress, or publish a
 // successful summary for an interrupted/failed turn, including after replay.
+// Progress must stay visible as text, while actual thinking remains separate.
 it.skipIf(process.platform === "win32")("promotes Claude's authoritative result once and persists it before settling the turn", async () => {
   const directory = await mkdtemp(join(tmpdir(), "openpond-claude-final-"));
   const executable = join(directory, "claude");
@@ -88,9 +90,11 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
     await finalReady;
     expect(settled).toBe(false);
     const live = buildChatMessages(events);
-    expect(live.some((message) => message.role === "assistant" && message.content)).toBe(false);
+    expect(live.filter((message) => message.role === "assistant" && message.content).map((message) => message.content)).toEqual([
+      "Progress for stream", "Provisional answer",
+    ]);
     expect(live.map((message) => message.reasoningContent).filter(Boolean)).toEqual([
-      "Progress for stream", "Checked the result", "Provisional answer",
+      "Checked the result",
     ]);
     persistFinal();
     expect(await first).toEqual({ stopReason: "end_turn" });
@@ -105,14 +109,14 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
     expect(events.find((event) => event.action === "native_usage")?.data).toMatchObject({ model: "claude-fixture", usage: { input_tokens: 300, cache_read_input_tokens: 2400 }, scope: "main_loop_turn" });
     expect(finished.filter((message) => message.statusKind === "compaction").map((message) => message.statusState)).toEqual(["completed"]);
     expect(finished.at(-1)?.content).toBe("Final for stream");
-    expect(finished.map((message) => message.role === "assistant" ? message.content : "").filter(Boolean)).toEqual(["Final for stream"]);
-    expect(finished.map((message) => message.reasoningContent).filter(Boolean)).toEqual(["Progress for stream", "Checked the result"]);
+    expect(finished.map((message) => message.role === "assistant" ? message.content : "").filter(Boolean)).toEqual(["Progress for stream", "Final for stream"]);
+    expect(finished.map((message) => message.reasoningContent).filter(Boolean)).toEqual(["Checked the result"]);
 
     turnId = "result-only";
     await prompt();
     const second = buildChatMessages(events).filter((message) => message.turnId === turnId);
     expect(second.at(-1)?.content).toBe("Final for result-only");
-    expect(second.some((message) => message.reasoningContent === "Progress for result-only")).toBe(true);
+    expect(second.some((message) => message.content === "Progress for result-only")).toBe(true);
 
     turnId = "error";
     await expect(prompt()).rejects.toThrow("Fixture failure");
@@ -127,9 +131,27 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
     // A fresh projection of the persisted event payloads is the reload path.
     const replayed = buildChatMessages(JSON.parse(JSON.stringify(events)));
     expect(replayed.filter((message) => message.role === "assistant" && message.content).map((message) => [message.turnId, message.content])).toEqual([
-      ["stream", "Final for stream"], ["result-only", "Final for result-only"],
+      ["stream", "Progress for stream"], ["stream", "Final for stream"],
+      ["result-only", "Progress for result-only"], ["result-only", "Final for result-only"],
+      ["error", "Progress for error"], ["cancel", "Progress for cancel"],
     ]);
-    expect(replayed.filter((message) => ["error", "cancel"].includes(message.turnId ?? "")).every((message) => message.role !== "assistant" || !message.content)).toBe(true);
+    // This fixture captures provider events, without the turn runner's lifecycle
+    // events. Check streaming/replay parity within each provider turn.
+    for (const id of ["stream", "result-only", "error", "cancel"]) {
+      const projector = new IncrementalChatProjector();
+      const turnEvents = events.filter((event) => event.turnId === id);
+      for (let end = 1; end <= turnEvents.length; end++) {
+        const prefix = turnEvents.slice(0, end);
+        expect(projector.project(prefix)).toEqual(buildChatMessages(prefix));
+      }
+    }
+    // Already-saved commentary used the reasoning event name. Its explicit
+    // phase still identifies visible progress when the user reopens the chat.
+    expect(buildChatMessages(events.map((event) =>
+      (event.data as { phase?: string } | null)?.phase === "commentary"
+        ? { ...event, name: "assistant.reasoning.delta" as const }
+        : event,
+    ))).toEqual(replayed);
   } finally {
     persistFinal();
     await client.stop();

@@ -222,6 +222,8 @@ export type HarnessRefinerActivity = {
 
 export type ChatMessage = {
   id: string;
+  /** The wrap-up response of a successfully completed turn. */
+  finalAnswer?: boolean;
   role: "user" | "assistant" | "activity_group" | "error" | "status_divider" | "task_message";
   content?: string;
   errorKind?: "opchat_quota_exceeded";

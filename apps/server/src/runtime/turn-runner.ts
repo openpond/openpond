@@ -1,3 +1,4 @@
+import { runSteeredNativeTurn } from "./native-agents/steered-turn.js";
 import { nativeImageContent } from "./native-agents/attachments.js";
 import { assertPonderDesktopExecution } from "../store/ponder-desktop-input.js";
 import { assertRemoteExecution } from "../remote-relay/session-ownership.js";
@@ -1717,16 +1718,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
         const definitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
-        let nativeRequestId: string | null = null;
-        const providerTurnId = await nativeAgents.run({ content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
-          preparePrompt: async (prompt, capabilities) => {
-            nativeRequestId = `native-start:${turn.id}`;
-            const inputs = await taskInbox.include(sessionId, turn.id, nativeRequestId);
-            return [capabilities.taskTools ? codexPromptWithHarnessContext(prompt, TASK_COORDINATION_INSTRUCTIONS) : prompt, ...inputs.filter((input) => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n");
-          },
-          settlePrompt: async (outcome) => {
-            if (nativeRequestId) await inboxStore.settleTaskInputRequest(nativeRequestId, outcome);
-          },
+        const providerTurnId = await runSteeredNativeTurn({ runtime: nativeAgents, inbox: taskInbox, store: inboxStore, getSession,
+          taskToolInstructions: TASK_COORDINATION_INSTRUCTIONS,
+          input: { content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
           coordination: definitions.length ? {
             tools: definitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
             execute: async (name, args, callId, signal) => {
@@ -1741,9 +1735,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               return result.contentText;
             },
           } : undefined,
-        });
+        } });
         throwIfInterrupted(controller.signal);
-        await taskInbox.finishNative(sessionId, turn.id);
         await appendWorkspaceDiffEvent(session, turn.id, { baseline: initialWorkspaceDiff });
         const completed = await completeTurn(sessionId, turn.id, providerTurnId);
         await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", appId: session.appId, status: "completed", data: { provider: session.provider } }));

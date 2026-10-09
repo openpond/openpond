@@ -1,4 +1,3 @@
-import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import {
   lazy,
@@ -226,9 +225,8 @@ export function Composer({
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
-  const canSteerNativeTurn = !(isRegisteredAcpProvider(provider) || ["claude-code", "opencode", "grok-build"].includes(provider));
-  const useActiveSteering = steerActiveResponses && canSteerNativeTurn;
-  const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents, canSteerNativeTurn);
+  const useActiveSteering = steerActiveResponses;
+  const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -432,7 +430,7 @@ export function Composer({
   const sendTooltip = serializingAttachments
     ? "Preparing files"
     : running
-      ? useActiveSteering ? "Steer" : "Queue for next turn"
+      ? useActiveSteering ? "Steer" : "Queue"
       : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments;
@@ -1615,8 +1613,10 @@ export function Composer({
         </Suspense>
       ) : null}
       {taskInbox.enabled ? <TaskInboxPanel inbox={taskInbox} onRestore={(body) => {
-        onPromptChange(prompt.trim() ? `${prompt}\n\n${body}` : body);
-        inputRef.current?.focusAtPromptIndex(0);
+        const currentScope = !getCurrentSubmissionScopeKey || getCurrentSubmissionScopeKey() === submissionScopeKey;
+        const currentPrompt = currentScope ? inputRef.current?.getPrompt() ?? prompt : prompt;
+        onPromptChange(currentPrompt.trim() ? `${currentPrompt}\n\n${body}` : body);
+        if (currentScope) inputRef.current?.focusAtPromptIndex(0);
       }} /> : <ComposerSteerQueue
         drafts={steerDrafts}
         sendingDraftId={sendingSteerDraftId}
@@ -1640,10 +1640,6 @@ export function Composer({
           {composeNotice.message}
         </div>
       )}
-        {taskInbox.enabled && running && hasComposerInput && <div className="task-input-actions">
-          <button type="button" disabled={Boolean(taskInbox.busyId) || !taskInbox.snapshot?.acceptingInput} onClick={() => void submitImmediateSteer()}>Steer now</button>
-          <button type="button" disabled={Boolean(taskInbox.busyId)} onClick={() => void stageCurrentSteerDraft()}>Queue for next turn</button>
-        </div>}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
@@ -1960,6 +1956,7 @@ export function Composer({
           providerOptions={providerOptions}
           running={running}
           sendDisabled={sendDisabled}
+          hasComposerInput={hasComposerInput}
           sendTooltip={sendTooltip}
           showToast={showToast}
           stopIcon={stopControlIcon}

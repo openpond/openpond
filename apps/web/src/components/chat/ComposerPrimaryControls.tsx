@@ -1,13 +1,11 @@
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
+import { ComposerSubmissionControls } from "./ComposerSubmissionControls";
 import { NativeAgentControls } from "./NativeAgentControls";
 import { useCallback, useMemo, useState, type CSSProperties, type RefObject } from "react";
 import {
-  ArrowUp,
-  Pause,
   Plus,
   Shield,
   SquareTerminal,
-  Square,
 } from "../icons";
 import type {
   ChatProvider,
@@ -95,6 +93,7 @@ export function ComposerPrimaryControls({
   providerOptions,
   running,
   sendDisabled,
+  hasComposerInput,
   sendTooltip,
   showToast,
   stopIcon = "stop",
@@ -145,6 +144,7 @@ export function ComposerPrimaryControls({
   providerOptions: DropdownOption[];
   running: boolean;
   sendDisabled: boolean;
+  hasComposerInput: boolean;
   sendTooltip: string;
   showToast: ShowAppToast;
   stopIcon?: "pause" | "stop";
@@ -167,7 +167,7 @@ export function ComposerPrimaryControls({
   const receiveNativeSettings = useCallback((value: { provider: string; settings: ProviderSettings }) => {
     if (connection) setNativeSettings({ connection, provider: value.provider, instance, settings: value.settings });
   }, [connection, instance]);
-  const nativeProvider = (isRegisteredAcpProvider(provider) || ["claude-code", "opencode", "grok-build"].includes(provider));
+  const nativeProvider = isRegisteredAcpProvider(provider) || ["claude-code", "opencode", "grok-build"].includes(provider);
   const displayedModel = modelValue || defaultModelForProvider(provider, providerSettings);
   const [voiceInputActive, setVoiceInputActive] = useState(false);
   const showModelReasoningMenu = providerModelSupportsReasoning(
@@ -265,6 +265,7 @@ export function ComposerPrimaryControls({
         <ComposerSubmissionControls
           running={running}
           sendDisabled={sendDisabled}
+          hasComposerInput={hasComposerInput}
           sendTooltip={sendTooltip}
           stopIcon={stopIcon}
           stopLabel={stopLabel}
@@ -432,6 +433,7 @@ export function ComposerPrimaryControls({
       <ComposerSubmissionControls
         running={running}
         sendDisabled={sendDisabled}
+        hasComposerInput={hasComposerInput}
         sendTooltip={sendTooltip}
         stopIcon={stopIcon}
         stopLabel={stopLabel}
@@ -440,47 +442,5 @@ export function ComposerPrimaryControls({
         onStop={onStop}
       />
     </div>
-  );
-}
-
-function ComposerSubmissionControls({
-  running,
-  sendDisabled,
-  sendTooltip,
-  stopIcon,
-  stopLabel,
-  voiceInputActive,
-  onSend,
-  onStop,
-}: {
-  running: boolean;
-  sendDisabled: boolean;
-  sendTooltip: string;
-  stopIcon: "pause" | "stop";
-  stopLabel: string;
-  voiceInputActive: boolean;
-  onSend: () => void;
-  onStop: (reason?: string) => Promise<boolean | void> | boolean | void;
-}) {
-  const controlLabel = running ? stopLabel : sendTooltip;
-  return (
-    <button
-      type="button"
-      className={`send-button ${running ? "stop-button" : ""}`.trim()}
-      disabled={!running && sendDisabled && !voiceInputActive}
-      data-tooltip={controlLabel}
-      aria-label={controlLabel}
-      onClick={running ? () => void onStop() : onSend}
-    >
-      {running ? (
-        stopIcon === "pause" ? (
-          <Pause size={15} />
-        ) : (
-          <Square size={13} fill="currentColor" />
-        )
-      ) : (
-        <ArrowUp size={18} />
-      )}
-    </button>
   );
 }
