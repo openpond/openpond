@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ProviderIdSchema } from "@openpond/harness/models";
-export { PROVIDER_IDS, ProviderIdSchema, ChatModelRefSchema } from "@openpond/harness/models";
+export { isRegisteredAcpProvider, AcpProviderIdSchema, PROVIDER_IDS, ProviderIdSchema, ChatModelRefSchema } from "@openpond/harness/models";
 export type { ProviderId, ChatModelRef } from "@openpond/harness/models";
 
 export const ProviderLifecycleStatusSchema = z.enum([
@@ -137,7 +137,20 @@ export const ProviderModelCacheSchema = z.object({
 
 export type ProviderModelCache = z.infer<typeof ProviderModelCacheSchema>;
 
+export const AcpAgentConfigSchema = z.object({
+  displayName: z.string().trim().min(1).max(160),
+  command: z.string().trim().min(1).max(4096),
+  args: z.array(z.string().max(4096)).max(100).default([]),
+  env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(20000)).default({}),
+  registryId: z.string().max(160).nullable().default(null),
+  version: z.string().max(200).nullable().default(null),
+  installUrl: z.string().url().nullable().default(null),
+  authMethodId: z.string().max(200).nullable().default(null),
+});
+export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
+
 export const ProviderConfigSchema = z.object({
+  acp: AcpAgentConfigSchema.nullable().default(null),
   nativeMode: z.string().max(200).nullable().default(null),
   nativeOptions: z.record(z.string().max(200), z.string().max(300)).default({}),
   binaryPath: z.string().trim().min(1).max(4096).nullable().default(null),
@@ -152,6 +165,7 @@ export const ProviderConfigSchema = z.object({
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 
 export const ProviderConfigPatchSchema = z.object({
+  acp: AcpAgentConfigSchema.nullable().optional(),
   nativeMode: z.string().max(200).nullable().optional(),
   nativeOptions: z.record(z.string().max(200), z.string().max(300)).optional(),
   binaryPath: z.string().trim().min(1).max(4096).nullable().optional(),

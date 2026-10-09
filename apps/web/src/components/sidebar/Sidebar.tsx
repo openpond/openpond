@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import { Download, PanelLeft } from "../icons";
-import { isDesktopShell } from "../app-shell/WindowControls";
+import { PanelLeft } from "../icons";
+import { DesktopUpdateButton } from "./DesktopUpdateButton";
 import {
   SidebarNavigation,
   SidebarNewTask,
@@ -9,7 +9,6 @@ import { SidebarSectionList } from "./SidebarSectionList";
 import { NativeConversationControls, useNativeConversationHistory } from "./NativeConversationSources";
 import { OPENPOND_ICON_URL, OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
 import type { SidebarProps } from "./Sidebar.types";
-import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
 import { HarnessLearningSidebarCard } from "./HarnessLearningSidebarCard";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import type { SidebarSectionMenuId } from "../../app/app-state";
@@ -17,10 +16,7 @@ import type { SidebarSectionMenuId } from "../../app/app-state";
 export function Sidebar(props: SidebarProps & { open?: boolean }) {
 
   const {
-    arch,
-    currentVersion,
     productArea,
-    platform,
     setSectionMenuOpen,
     setSelectedAppId,
     setSelectedProjectId,
@@ -39,14 +35,6 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
     },
     [setSectionMenuOpen],
   );
-  const updateCheck = useReleaseUpdateCheck({
-    currentVersion,
-    platform,
-    arch,
-    enabled: isDesktopShell(),
-  });
-  const availableUpdate =
-    updateCheck.status === "available" ? updateCheck.update : null;
 
   const selectSession = useCallback(async (session: import("@openpond/contracts").Session) => {
     if (!await navigateDesktopRoute({ kind: "chat", sessionId: session.id })) return false;
@@ -70,18 +58,7 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
         <div className="sidebar-brand">
           <img className="sidebar-wordmark" src={OPENPOND_WORDMARK_WHITE_URL} alt="OpenPond" />
         </div>
-        {availableUpdate && (
-          <button
-            type="button"
-            className="sidebar-update-pill"
-            title={`Download OpenPond ${availableUpdate.version}: ${availableUpdate.assetName}`}
-            aria-label={`Download OpenPond ${availableUpdate.version}`}
-            onClick={() => void openUpdateDownload(availableUpdate.downloadUrl)}
-          >
-            <Download size={14} />
-            <span>Update</span>
-          </button>
-        )}
+        <DesktopUpdateButton hasRunningWork={props.runningSessionIds.size > 0 || Object.values(props.terminalSummaries).some((summary) => summary.tabCount > 0)} />
       </div>
 
       {productArea === "chat" ? <div className="sidebar-fixed-actions">
@@ -133,16 +110,4 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
       </div>
     </aside>
   );
-}
-
-async function openUpdateDownload(url: string): Promise<void> {
-  const browser = window.openpond?.browser;
-  if (browser?.openExternal) {
-    const result = await browser.openExternal({
-      conversationId: "openpond-update",
-      url,
-    });
-    if (result.ok) return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
 }

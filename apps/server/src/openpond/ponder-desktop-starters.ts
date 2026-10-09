@@ -1,3 +1,4 @@
+import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import type { PonderDesktopWorkspace } from "./ponder-desktop-workspaces.js";
 import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
@@ -94,7 +95,7 @@ export async function capturePonderDesktopStarters(input: {
         ...provider.modelIds,
         ...(provider.defaultModel ? [provider.defaultModel] : []),
       ]);
-      const native = ["codex", "claude-code", "opencode", "grok-build"].includes(provider.id);
+      const native = isRegisteredAcpProvider(provider.id) || ["codex", "claude-code", "opencode", "grok-build"].includes(provider.id);
       // Native adapters can expose their own default without a model catalog. BYOK
       // models require current model-level agent capability, not a copied session.
       const selections: Array<string | null> = models.size

@@ -11,10 +11,16 @@
     "build": "node ../../scripts/run-typescript.mjs tsc -b"
   },
   "dependencies": {
+    "@openpond/contracts": "workspace:*",
     "@openpond/logging": "workspace:*",
+    "@openpond/persistence": "workspace:*",
     "@openpond/runtime": "workspace:*",
     "electron": "43.1.1",
-    "@openpond/persistence": "workspace:*",
+    "electron-updater": "6.6.2",
+    "semver": "7.7.4",
     "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/semver": "7.7.1"
   }
 }

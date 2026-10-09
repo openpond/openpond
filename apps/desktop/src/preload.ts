@@ -1,6 +1,20 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { DesktopUpdateState, DesktopUpdatesBridge } from "@openpond/contracts";
+
+const updates: DesktopUpdatesBridge = {
+  getState: () => ipcRenderer.invoke("openpond:updates:state"),
+  check: () => ipcRenderer.invoke("openpond:updates:check"),
+  download: () => ipcRenderer.invoke("openpond:updates:download"),
+  restartAndInstall: (request) => ipcRenderer.invoke("openpond:updates:restart", request),
+  onState: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => callback(state);
+    ipcRenderer.on("openpond:updates:state", listener);
+    return () => ipcRenderer.removeListener("openpond:updates:state", listener);
+  },
+};
 
 contextBridge.exposeInMainWorld("openpond", {
+  updates,
   notify: (payload: unknown) => ipcRenderer.invoke("openpond:notification", payload),
   onPonderNotification: (callback: (payload: { id: string }) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: { id: string }) => callback(payload);

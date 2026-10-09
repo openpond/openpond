@@ -1,3 +1,4 @@
+import { acpCategoryOption, acpSelectValues, acpSessionModels, acpSessionModes } from "./session-controls.js";
 import { createProviderRequestUsageRecord } from "../model-usage-recorder.js";
 import { createSafeModelUsagePersistence } from "../turns/model-usage-persistence.js";
 import { join } from "node:path";
@@ -16,7 +17,7 @@ import { invalidateNativeAgent } from "./setup.js";
 import { createNativeAgentApprovals } from "./approvals.js";
 import { createTaskCoordinationMcp, type TaskCoordinationBridge } from "../task-inbox/codex-mcp.js";
 
-type RunningSession = { requestId: string; requestOrdinal: number; turn: Turn | null; startedAt: string; firstTokenMs: number | null; visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; additionalDirectories: string[]; turnId: string | null; replaying: boolean; session: Session; coordinated: boolean; close(): Promise<void> };
+type RunningSession = { requestId: string; requestOrdinal: number; turn: Turn | null; startedAt: string; firstTokenMs: number | null; visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; additionalDirectories: string[]; turnId: string | null; replaying: boolean; session: Session; coordinated: boolean; taskTools: boolean; close(): Promise<void> };
 export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "store" | "storageHome" | "updateSession" | "appendRuntimeEvent" | "upsertApproval">) {
   const runtimes = new Map<string, RunningSession>();
   const approvals = createNativeAgentApprovals(deps);
@@ -48,7 +49,10 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
     const Client = session.provider === "claude-code" ? ClaudeCliClient : AcpClient;
     const client = new Client({ ...launch, cwd, additionalDirectories,
       onUpdate: async (_nativeSessionId, update) => {
-        if (!runtime || runtime.replaying || !runtime.turnId) return;
+        if (!runtime) return;
+        if (update.sessionUpdate === "config_option_update" && Array.isArray(update.configOptions)) runtime.native.configOptions = update.configOptions as AcpObject[];
+        if (update.sessionUpdate === "current_mode_update" && runtime.native.modes && typeof update.currentModeId === "string") runtime.native.modes.currentModeId = update.currentModeId;
+        if (runtime.replaying || !runtime.turnId) return;
         if (runtime.firstTokenMs === null && ["agent_message_chunk", "agent_thought_chunk", "tool_call"].includes(String(update.sessionUpdate))) runtime.firstTokenMs = Math.max(0, Date.now() - Date.parse(runtime.startedAt));
         if (update.sessionUpdate === "usage_update" && runtime.session.provider === "claude-code") {
           await persistUsage(createProviderRequestUsageRecord({ session: runtime.session, turn: runtime.turn,
@@ -68,14 +72,19 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
     });
     try {
       const info = await client.initialize();
-      if (bridge && !info.agentCapabilities?.mcpCapabilities?.http) throw new Error("This native agent does not advertise HTTP MCP support required for OpenPond task tools.");
-      const servers = bridge ? [{ type: "http", name: "openpond_task", url: bridge.config.url, headers: Object.entries(bridge.config.http_headers).map(([name, value]) => ({ name, value })) }] : [];
-      if (session.provider === "grok-build" && info.authMethods?.some((method) => method.id === "cached_token")) await client.authenticate("cached_token");
+      const taskTools = Boolean(bridge && info.agentCapabilities?.mcpCapabilities?.http);
+      if (bridge && !taskTools) {
+        await closeBridge();
+        await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "diagnostic", action: "native_capabilities", source: "provider", output: "This ACP agent does not support HTTP MCP. OpenPond task tools are unavailable for this connection." }));
+      }
+      const servers = taskTools && bridge ? [{ type: "http", name: "openpond_task", url: bridge.config.url, headers: Object.entries(bridge.config.http_headers).map(([name, value]) => ({ name, value })) }] : [];
+      if (config.acp?.authMethodId) await client.authenticate(config.acp.authMethodId);
+      else if (session.provider === "grok-build" && info.authMethods?.some((method) => method.id === "cached_token")) await client.authenticate("cached_token");
       const native = session.nativeAgent
         ? await client.loadSession(session.nativeAgent.sessionId, cwd, servers)
         : await client.createSession(cwd, servers);
-      const updated = await deps.updateSession(session.id, { nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd }, metadata: { ...session.metadata, nativeHistoryProjection: false } });
-      runtime = { requestId: "", requestOrdinal: 0, turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: Boolean(bridge), close: async () => { await client.stop(); await closeBridge(); } };
+      const updated = await deps.updateSession(session.id, { nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd }, metadata: { ...session.metadata, nativeHistoryProjection: false, ...(config.acp ? { acpAgentName: config.acp.displayName } : {}) } });
+      runtime = { requestId: "", requestOrdinal: 0, turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: Boolean(coordination), taskTools, close: async () => { await client.stop(); await closeBridge(); } };
       runtimes.set(session.id, runtime);
       await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "diagnostic", action: "native_configuration", source: "provider", data: { provider: session.provider, nativeSessionId: native.sessionId, capabilities: info.agentCapabilities, models: native.models, modes: native.modes, configOptions: native.configOptions } }));
       return runtime;
@@ -83,7 +92,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
   }
   return {
     resolveApproval: approvals.resolve,
-    async run(input: { session: Session; turn: Turn; cwd: string; prompt: string; model?: string | null; mode?: string | null; signal: AbortSignal; requestId?: string; requestOrdinal?: number; content?: AcpObject[]; coordination?: TaskCoordinationBridge; preparePrompt?: (prompt: string) => Promise<string>; settlePrompt?: (outcome: "resolved" | "failed") => Promise<void> }): Promise<string> {
+    async run(input: { session: Session; turn: Turn; cwd: string; prompt: string; model?: string | null; mode?: string | null; signal: AbortSignal; requestId?: string; requestOrdinal?: number; content?: AcpObject[]; coordination?: TaskCoordinationBridge; preparePrompt?: (prompt: string, capabilities: { taskTools: boolean }) => Promise<string>; settlePrompt?: (outcome: "resolved" | "failed") => Promise<void> }): Promise<string> {
       const runtime = await ensure(input.session, input.cwd, input.coordination);
       if (input.content?.some((part) => part.type === "image") && !runtime.imageInput) throw new Error("This native agent does not advertise image input. Choose a supported model/agent or attach text instead.");
       if (runtime.turnId) throw new Error("Native conversation already has an active turn.");
@@ -95,26 +104,38 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
       runtime.firstTokenMs = null;
       runtime.visibleUpdates = 0;
       try {
-        if (input.model && input.model !== runtime.native.models?.currentModelId) {
-          if (!runtime.native.models?.availableModels.some((model) => model.modelId === input.model)) throw new Error("Selected model is not advertised by this agent session.");
-          await runtime.client.setModel(runtime.native.sessionId, input.model);
-          runtime.native.models.currentModelId = input.model;
+        const models = acpSessionModels(runtime.native);
+        if (input.model && input.model !== models?.currentModelId) {
+          if (!models?.availableModels.some(model => model.modelId === input.model)) throw new Error("Selected model is not advertised by this agent session.");
+          const option = acpCategoryOption(runtime.native, "model");
+          if (option && runtime.client instanceof AcpClient) {
+            const result = await runtime.client.setConfigOption(runtime.native.sessionId, option.id as string, input.model);
+            if (result.configOptions) runtime.native.configOptions = result.configOptions;
+          } else {
+            await runtime.client.setModel(runtime.native.sessionId, input.model);
+            runtime.native.models!.currentModelId = input.model;
+          }
         }
         const file = await readProvidersFile(join(deps.storageHome!, "providers.json"));
         const config = file.providers[input.session.provider];
         const selectedMode = input.mode ?? config?.nativeMode;
         if (selectedMode) {
-          if (!runtime.native.modes?.availableModes.some((mode) => mode.id === selectedMode)) throw new Error("Selected mode is not advertised by this agent session.");
-          await runtime.client.setMode(runtime.native.sessionId, selectedMode);
+          if (!acpSessionModes(runtime.native)?.availableModes.some(mode => mode.id === selectedMode)) throw new Error("Selected mode is not advertised by this agent session.");
+          const option = acpCategoryOption(runtime.native, "mode");
+          if (option && runtime.client instanceof AcpClient) {
+            const result = await runtime.client.setConfigOption(runtime.native.sessionId, option.id as string, selectedMode);
+            if (result.configOptions) runtime.native.configOptions = result.configOptions;
+          } else await runtime.client.setMode(runtime.native.sessionId, selectedMode);
         }
         for (const [configId, value] of Object.entries(config?.nativeOptions ?? {})) {
           const option = runtime.native.configOptions?.find((candidate) => candidate.id === configId);
-          const values = Array.isArray(option?.options) ? option.options.flatMap((entry) => { const group = entry as AcpObject; return Array.isArray(group.options) ? group.options : [group]; }) : [];
+          const values = acpSelectValues(option);
+          if (option?.category === "model" || option?.category === "mode") continue;
           if (!option || !values.some((entry) => (entry as AcpObject).value === value) || !(runtime.client instanceof AcpClient)) throw new Error("Selected setting is not advertised by this native session. Refresh its settings.");
           const result = await runtime.client.setConfigOption(runtime.native.sessionId, configId, value);
           if (result.configOptions) runtime.native.configOptions = result.configOptions;
         }
-        const prompt = input.preparePrompt ? await input.preparePrompt(input.prompt) : input.prompt;
+        const prompt = input.preparePrompt ? await input.preparePrompt(input.prompt, { taskTools: runtime.taskTools }) : input.prompt;
         if (input.signal.aborted) throw new Error("Native agent turn interrupted before dispatch.");
         const promptHash = createHash("sha256").update(prompt).digest("hex");
         await deps.store.updateTurn(input.turn.id, (turn) => {

@@ -580,6 +580,9 @@ jobs:
       - name: Validate packaged smoke reports
         run: pnpm run smoke:desktop:packaged:validate --dir release-smoke-artifacts
 
+      - name: Validate desktop updater metadata and artifacts
+        run: pnpm exec tsx scripts/check-desktop-update-assets.ts --dir release-assets --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
+
       - name: Generate SBOM
         run: pnpm run release:sbom
 
