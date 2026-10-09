@@ -268,33 +268,6 @@ export function AccountRemoteAccessSettings({
           act={act}
         />
       ))}
-      {!!status?.unresolvedTasks.length && (
-        <>
-          <h2>Choose ownership for older tasks</h2>
-          <p>
-            These tasks have no recorded account owner. Only add tasks that
-            belong to you. Their local history is preserved.
-          </p>
-          {status.unresolvedTasks.map((task) => (
-            <div className="account-summary" key={task.id}>
-              <strong className="remote-access-task-title">{task.title}</strong>
-              <button
-                className="settings-secondary"
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void act("attach", {
-                    sessionId: task.id,
-                    expectedRevision: task.revision,
-                  })
-                }
-              >
-                Add to my account
-              </button>
-            </div>
-          ))}
-        </>
-      )}
     </section>
   );
 }
