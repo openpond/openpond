@@ -32,7 +32,11 @@ export function RunDiagnosticsView({
   onRefresh: () => void;
   onAnalyze?: (prompt: string) => void | Promise<void>;
 }) {
-  const [task, setTask] = useState(""),
+  const [task, setTask] = useState(
+      () =>
+        new URLSearchParams(window.location.hash.slice(1)).get("diagnostic-task")?.slice(0, 500) ??
+        "",
+    ),
     [reviewing, setReviewing] = useState(false),
     [notice, setNotice] = useState<string | null>(null);
   const evidenceDetails = useRef<HTMLDetailsElement>(null);
@@ -129,7 +133,19 @@ export function RunDiagnosticsView({
             <h3>Timeline</h3>
             <label>
               Task{" "}
-              <select value={task} onChange={(event) => setTask(event.target.value)}>
+              <select
+                value={task}
+                onChange={(event) => {
+                  setTask(event.target.value);
+                  const selection = new URLSearchParams();
+                  if (event.target.value) selection.set("diagnostic-task", event.target.value);
+                  window.history.replaceState(
+                    window.history.state,
+                    "",
+                    `${window.location.pathname}${window.location.search}${selection.size ? `#${selection}` : ""}`,
+                  );
+                }}
+              >
                 <option value="">All retained events</option>
                 {[...new Set(events.flatMap((event) => (event.taskId ? [event.taskId] : [])))].map(
                   (id) => (
@@ -165,7 +181,7 @@ export function RunDiagnosticsView({
                       {span.evidenceIds.map((id) => (
                         <a
                           key={id}
-                          href={`#diagnostic-event-${encodeURIComponent(id)}`}
+                          href={`#${new URLSearchParams({ "diagnostic-task": task, event: id })}`}
                           title={id}
                           onClick={() => {
                             if (evidenceDetails.current) evidenceDetails.current.open = true;
@@ -241,7 +257,13 @@ export function RunDiagnosticsView({
                   {events
                     .filter((event) => !task || event.taskId === task)
                     .map((event) => (
-                      <tr key={event.id} id={`diagnostic-event-${encodeURIComponent(event.id)}`}>
+                      <tr
+                        key={event.id}
+                        id={new URLSearchParams({
+                          "diagnostic-task": task,
+                          event: event.id,
+                        }).toString()}
+                      >
                         <td>
                           {event.sequence}
                           <small title={event.id}>{event.id}</small>
