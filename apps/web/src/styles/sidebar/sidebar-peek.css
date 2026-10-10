@@ -7,14 +7,14 @@
   place-items: center;
   width: 34px;
   height: 34px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 17px;
-  background: rgba(24, 24, 24, 0.88);
-  color: var(--muted-strong);
+  background: var(--state-selected);
+  color: var(--text-secondary);
   backdrop-filter: blur(12px);
 }
 
 .sidebar-peek-button:hover {
-  color: var(--text);
-  background: #252525;
+  color: var(--text-primary);
+  background: var(--state-hover);
 }

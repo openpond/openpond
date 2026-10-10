@@ -1,3 +1,5 @@
+import { UI_THEME_CSS } from "@openpond/contracts/ui-theme.generated";
+import { getResolvedTheme } from "../../theme/appearance";
 import type { SandboxTemplateManifest, WorkspaceToolResult } from "@openpond/contracts";
 import {
   sandboxTemplateExecutableEntries,
@@ -36,7 +38,7 @@ export function openSandboxPreviewPopup(): Window | null {
   const previewWindow = window.open("", "_blank");
   if (!previewWindow) return null;
   previewWindow.document.write(
-    '<!doctype html><title>Opening sandbox preview</title><body style="margin:0;background:#05070a;color:#f5f5f4;font:14px system-ui,sans-serif;display:grid;place-items:center;height:100vh;">Opening sandbox preview...</body>'
+    `<!doctype html><html data-theme="${getResolvedTheme()}"><head><title>Opening sandbox preview</title><style>${UI_THEME_CSS}</style></head><body style="margin:0;background:var(--surface-page);color:var(--text-primary);font:14px system-ui,sans-serif;display:grid;place-items:center;height:100vh;">Opening sandbox preview...</body></html>`
   );
   previewWindow.document.close();
   return previewWindow;

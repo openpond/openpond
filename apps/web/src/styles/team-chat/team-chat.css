@@ -31,7 +31,7 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  background: var(--bg);
+  background: var(--surface-page);
 }
 
 .team-chat-pro-view {
@@ -54,13 +54,13 @@
   margin-bottom: 6px;
   place-items: center;
   border-radius: 14px;
-  background: rgba(45, 212, 191, 0.1);
-  color: #67d4c0;
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  color: var(--accent-primary);
 }
 
 .team-chat-pro-content h1 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 22px;
   font-weight: 650;
 }
@@ -71,13 +71,13 @@
 }
 
 .team-chat-pro-content p {
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
 .team-chat-pro-content small {
   max-width: 390px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -100,10 +100,10 @@
   left: 50%;
   max-width: min(520px, calc(100% - 32px));
   transform: translateX(-50%);
-  border: 1px solid rgba(248, 113, 113, 0.35);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 35%, transparent);
   border-radius: 6px;
-  background: #321b1d;
-  color: #fecaca;
+  background: color-mix(in srgb, var(--status-danger) 12%, var(--surface-panel));
+  color: var(--status-danger);
   padding: 8px 11px;
   font-size: 12px;
 }
@@ -124,7 +124,7 @@
 
 .team-chat-error button:hover,
 .team-chat-error button:focus-visible {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .team-chat-error button:focus-visible {
@@ -136,7 +136,7 @@
 .team-ai-thread-messages {
   min-height: 0;
   overflow-y: auto;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
@@ -148,7 +148,7 @@
   display: grid;
   min-height: 180px;
   place-items: center;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -159,13 +159,13 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #67d4c0;
+  color: var(--accent-primary);
   padding: 0 8px;
   font-size: 11px;
 }
 
 .team-chat-load-older:hover:not(:disabled) {
-  background: rgba(45, 212, 191, 0.09);
+  background: color-mix(in srgb, var(--accent-primary) 9%, transparent);
 }
 
 .team-chat-load-older:disabled {
@@ -181,13 +181,13 @@
 }
 
 .team-chat-message:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--state-hover);
 }
 
 .team-chat-message:focus {
   outline: none;
-  background: rgba(45, 212, 191, 0.07);
-  box-shadow: inset 2px 0 #2dd4bf;
+  background: color-mix(in srgb, var(--accent-primary) 7%, transparent);
+  box-shadow: inset 2px 0 var(--focus-ring);
 }
 
 .team-chat-avatar {
@@ -196,8 +196,8 @@
   place-items: center;
   overflow: hidden;
   border-radius: 6px;
-  background: #29433b;
-  color: #d1fae5;
+  background: color-mix(in srgb, var(--status-success) 12%, var(--surface-panel));
+  color: var(--status-success);
   object-fit: cover;
   font-weight: 700;
 }
@@ -210,7 +210,7 @@
 
 .team-chat-message-content {
   min-width: 0;
-  color: #e8e8e8;
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -223,18 +223,18 @@
 }
 
 .team-chat-message-content > header strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .team-chat-message-content > header time,
 .team-chat-message-content > header > span {
-  color: #777;
+  color: var(--text-muted);
   font-size: 10px;
 }
 
 .team-chat-message-content > header > span.failed {
-  color: #d97a70;
+  color: var(--status-danger);
 }
 
 .team-chat-message-content > div:not(.team-chat-message-actions) {
@@ -243,7 +243,7 @@
 }
 
 .team-chat-message-content .deleted {
-  color: #777;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -253,21 +253,21 @@
   min-width: 0;
   margin: 3px 0 5px;
   border: 0;
-  border-left: 3px solid #2dd4bf;
+  border-left: 3px solid var(--accent-primary);
   border-radius: 4px;
-  background: rgba(45, 212, 191, 0.075);
-  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--accent-primary) 7.5%, transparent);
+  color: var(--text-secondary);
   padding: 6px 9px;
   text-align: left;
 }
 
 .team-chat-message-reply-quote:hover {
-  background: rgba(45, 212, 191, 0.12);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
 }
 
 .team-chat-message-reply-quote strong {
   overflow: hidden;
-  color: #67d4c0;
+  color: var(--accent-primary);
   font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -298,9 +298,9 @@
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: #181818;
+  background: var(--surface-panel);
   object-fit: cover;
 }
 
@@ -314,19 +314,19 @@
 
 .team-chat-message-image-loading,
 .team-chat-message-image-retry {
-  background: #202020;
+  background: var(--surface-raised);
 }
 
 .team-chat-message-image-retry {
   display: grid;
   place-items: center;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   padding: 0;
 }
 
 .team-chat-message-image-retry:hover {
-  background: #292929;
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .team-chat-load-older:focus-visible,
@@ -336,7 +336,7 @@
 .team-chat-thread-link:focus-visible,
 .team-chat-message-images > a:focus-visible,
 .team-chat-message-image-retry:focus-visible {
-  outline: 2px solid #67d4c0;
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -362,13 +362,13 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .team-chat-message-actions button:hover,
 .team-chat-icon-button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .team-chat-thread-link {
@@ -380,18 +380,18 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #67d4c0;
+  color: var(--accent-primary);
   padding: 0 6px;
   font-size: 12px;
   font-weight: 600;
 }
 
 .team-chat-thread-link:hover {
-  background: rgba(45, 212, 191, 0.09);
+  background: color-mix(in srgb, var(--accent-primary) 9%, transparent);
 }
 
 .team-chat-thread-link small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 500;
 }
@@ -400,10 +400,10 @@
   width: 100%;
   min-height: 72px;
   resize: vertical;
-  border: 1px solid rgba(45, 212, 191, 0.45);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
   border-radius: 6px;
-  background: #191919;
-  color: var(--text);
+  background: var(--surface-input);
+  color: var(--text-primary);
   padding: 8px;
   font: inherit;
 }
@@ -417,10 +417,10 @@
 
 .team-chat-message-edit button {
   min-height: 27px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 5px;
-  background: #202020;
-  color: var(--text);
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 0 9px;
   font-size: 11px;
 }
@@ -428,7 +428,7 @@
 .team-chat-composer-shell,
 .team-ai-thread-composer {
   padding: 10px max(22px, calc((100% - 790px) / 2)) 16px;
-  background: linear-gradient(to bottom, transparent, var(--bg) 14px);
+  background: linear-gradient(to bottom, transparent, var(--surface-page) 14px);
 }
 
 .team-chat-composer-reply {
@@ -438,11 +438,11 @@
   gap: 9px;
   min-height: 48px;
   margin-bottom: 6px;
-  border: 1px solid var(--border);
-  border-left: 3px solid #2dd4bf;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--accent-primary);
   border-radius: 7px;
-  background: #1d2422;
-  color: #67d4c0;
+  background: var(--state-hover);
+  color: var(--accent-primary);
   padding: 5px 7px 5px 10px;
 }
 
@@ -468,16 +468,16 @@
 }
 
 .team-chat-composer-reply-target span {
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
 .team-chat-composer-reply-target:hover span {
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .team-chat-composer-reply-target:focus-visible {
-  outline: 2px solid #67d4c0;
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -487,9 +487,9 @@
   width: 150px;
   border: 0;
   border-radius: 7px;
-  background: #222;
+  background: var(--surface-floating);
   padding: 4px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 12px 30px var(--shadow-color);
 }
 
 .team-chat-message-context-menu button {
@@ -501,7 +501,7 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 0 9px;
   font-size: 12px;
   text-align: left;
@@ -510,8 +510,8 @@
 .team-chat-message-context-menu button:hover,
 .team-chat-message-context-menu button:focus-visible {
   outline: none;
-  background: rgba(45, 212, 191, 0.12);
-  color: #a7f3d0;
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--status-success);
 }
 
 .team-chat-composer-shell .composer,
@@ -524,13 +524,13 @@
   align-items: center;
   gap: 6px;
   min-height: 28px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
   white-space: nowrap;
 }
 
 .team-chat-model-toggle input {
-  accent-color: #2dd4bf;
+  accent-color: var(--accent-primary);
 }
 
 .team-ai-thread-panel {
@@ -538,8 +538,8 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
-  border-left: 1px solid var(--border);
-  background: #171717;
+  border-left: 1px solid var(--border-default);
+  background: var(--surface-panel);
 }
 
 .team-ai-thread-panel > header {
@@ -548,7 +548,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   padding: 8px 12px 8px 16px;
 }
 
@@ -565,7 +565,7 @@
 
 .team-ai-thread-panel > header span,
 .team-ai-message-author span {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -575,13 +575,13 @@
 
 .team-ai-message {
   padding: 10px 0 14px;
-  color: #e6e6e6;
+  color: var(--text-primary);
   font-size: 12px;
   line-height: 1.55;
 }
 
 .team-ai-message + .team-ai-message {
-  border-top: 1px solid rgba(255, 255, 255, 0.055);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .team-ai-message > .markdown-message {
@@ -590,7 +590,7 @@
 }
 
 .team-ai-message.assistant .team-ai-message-author {
-  color: #67d4c0;
+  color: var(--accent-primary);
 }
 
 .team-ai-message.streaming {
@@ -598,23 +598,23 @@
 }
 
 .team-ai-running {
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 12px 0;
   font-size: 11px;
 }
 
 .team-ai-turn-state {
   margin-top: 8px;
-  border-left: 2px solid #777;
-  color: var(--muted);
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-muted);
   padding: 7px 9px;
   font-size: 11px;
 }
 
 .team-ai-turn-state.failed,
 .team-ai-turn-state.interrupted {
-  border-left-color: #f87171;
-  color: #fca5a5;
+  border-left-color: var(--status-danger);
+  color: var(--status-danger);
 }
 
 .team-ai-thread-composer {
@@ -632,7 +632,7 @@
     z-index: 5;
     inset: 0 0 0 auto;
     width: min(430px, 100%);
-    box-shadow: -12px 0 30px rgba(0, 0, 0, 0.28);
+    box-shadow: -12px 0 30px var(--shadow-color);
   }
 }
 

@@ -838,8 +838,9 @@ export function SidebarSectionList({
           ) : null}
           {inboxView ? listControls : null}
           <button type="button" className={`sidebar-icon${inboxView ? " active" : ""}`}
-            aria-label={inboxView ? "Show grouped threads" : "Show thread inbox"}
-            title={inboxView ? "Grouped threads" : "Thread inbox"} aria-pressed={inboxView}
+            aria-label={inboxView ? "Show Projects View" : "Show thread inbox"}
+            data-tooltip={inboxView ? "Projects View" : "Thread inbox"}
+            data-tooltip-placement="bottom" aria-pressed={inboxView}
             onClick={() => { const next = inboxView ? "grouped" : "inbox"; setPresentation(next); clientChoiceStorage.setItem("openpond.sidebar.presentation.v1", next); }}>
             {inboxView ? <List size={16} /> : <Inbox size={16} />}
           </button>

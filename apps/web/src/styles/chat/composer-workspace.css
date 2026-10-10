@@ -4,8 +4,8 @@
 }
 
 .environment-info-button.active {
-  color: #f3f3f3;
-  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-primary);
+  background: var(--state-selected);
 }
 
 .environment-popover {
@@ -18,12 +18,12 @@
   width: min(336px, calc(100vw - 34px));
   max-height: min(520px, calc(100vh - 126px));
   overflow: auto;
-  scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-thumb);
   scrollbar-width: thin;
   border: 0;
   border-radius: 10px;
-  background: #2b2b2b;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  background: var(--surface-floating);
+  box-shadow: 0 18px 48px var(--shadow-color);
   padding: 8px;
 }
 
@@ -48,20 +48,20 @@
 .environment-popover::-webkit-scrollbar-corner,
 .environment-branch-list::-webkit-scrollbar-track,
 .environment-branch-list::-webkit-scrollbar-corner {
-  background: #1f1f1f;
+  background: var(--surface-floating);
 }
 
 .environment-popover::-webkit-scrollbar-thumb,
 .environment-branch-list::-webkit-scrollbar-thumb {
-  border: 2px solid #1f1f1f;
+  border: 2px solid var(--scrollbar-thumb);
   border-radius: 999px;
-  background: #5a5a5a;
+  background: var(--scrollbar-thumb);
   background-clip: padding-box;
 }
 
 .environment-popover::-webkit-scrollbar-thumb:hover,
 .environment-branch-list::-webkit-scrollbar-thumb:hover {
-  background: #777;
+  background: var(--scrollbar-hover);
   background-clip: padding-box;
 }
 
@@ -71,7 +71,7 @@
   justify-content: space-between;
   min-height: 30px;
   padding: 0 8px 4px;
-  color: #ededed;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
 }
@@ -86,7 +86,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #eeeeee;
+  color: var(--text-primary);
   padding: 6px 8px;
   text-align: left;
 }
@@ -101,7 +101,7 @@
 
 .environment-row svg,
 .environment-action svg {
-  color: #a2a2a2;
+  color: var(--text-muted);
 }
 
 .environment-row > span,
@@ -112,7 +112,7 @@
 .environment-row strong {
   display: block;
   overflow: hidden;
-  color: #f0f0f0;
+  color: var(--text-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
@@ -122,7 +122,7 @@
 .environment-row small {
   display: block;
   overflow: hidden;
-  color: #9a9a9a;
+  color: var(--text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
@@ -134,18 +134,18 @@
 .environment-action:hover:not(:disabled),
 .environment-action:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--state-hover);
 }
 
 .environment-row:disabled,
 .environment-action:disabled {
-  color: #777;
+  color: var(--text-muted);
   cursor: default;
 }
 
 .environment-row:disabled svg,
 .environment-action:disabled svg {
-  color: #737373;
+  color: var(--text-muted);
 }
 
 .environment-change-counts {
@@ -158,23 +158,23 @@
 }
 
 .environment-row-action {
-  color: #d8d8d8;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .environment-change-counts .diff-addition {
-  color: #44d487;
+  color: var(--status-success);
 }
 
 .environment-change-counts .diff-deletion {
-  color: #ff706a;
+  color: var(--status-danger);
 }
 
 .environment-section-title {
   padding: 10px 8px 4px;
-  color: #949494;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -185,7 +185,7 @@
   gap: 4px;
   margin: 1px 0 4px 29px;
   padding: 4px 0 7px 9px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--border-default);
 }
 
 .environment-branch-search {
@@ -194,7 +194,7 @@
   gap: 7px;
   min-width: 0;
   height: 31px;
-  color: #898989;
+  color: var(--text-muted);
   padding: 0 7px;
 }
 
@@ -204,19 +204,19 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: #f1f1f1;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .environment-branch-search input::placeholder {
-  color: #9a9a9a;
+  color: var(--text-muted);
 }
 
 .environment-branch-list {
   display: grid;
   max-height: 174px;
   overflow: auto;
-  scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-thumb);
   scrollbar-width: thin;
 }
 
@@ -230,7 +230,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #ededed;
+  color: var(--text-primary);
   padding: 6px 7px;
   text-align: left;
   font-size: 13px;
@@ -246,12 +246,12 @@
 .environment-branch-create:hover:not(:disabled),
 .environment-branch-create:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--state-hover);
 }
 
 .environment-branch-list button:disabled,
 .environment-branch-create:disabled {
-  color: #777;
+  color: var(--text-muted);
 }
 
 .environment-branch-list button > span {
@@ -268,13 +268,13 @@
 }
 
 .environment-branch-list small {
-  color: #9a9a9a;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .environment-branch-empty {
   padding: 13px 7px 15px;
-  color: #8f8f8f;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -285,7 +285,7 @@
   display: grid;
   place-items: center;
   padding: 18px;
-  background: rgba(0, 0, 0, 0.58);
+  background: var(--backdrop);
 }
 
 .agent-setup-dialog {
@@ -294,10 +294,10 @@
   width: min(560px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 32px));
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: #242424;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.5);
+  background: var(--surface-floating);
+  box-shadow: 0 22px 70px var(--shadow-color);
 }
 
 .agent-setup-dialog header {
@@ -305,13 +305,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border-default);
   padding: 14px 16px;
 }
 
 .agent-setup-dialog h3 {
   margin: 0;
-  color: #f4f4f4;
+  color: var(--text-primary);
   font-size: 15px;
 }
 
@@ -324,21 +324,21 @@
 .agent-setup-dialog header button,
 .agent-setup-dialog-actions button {
   min-height: 31px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 0 11px;
 }
 
 .agent-setup-dialog-actions button:last-child {
-  border-color: rgba(74, 222, 128, 0.36);
-  background: rgba(74, 222, 128, 0.16);
-  color: #eafff1;
+  border-color: color-mix(in srgb, var(--status-success) 36%, transparent);
+  background: color-mix(in srgb, var(--status-success) 16%, transparent);
+  color: var(--text-primary);
 }
 
 .agent-setup-dialog button:disabled {
-  color: #888;
+  color: var(--text-muted);
   cursor: default;
 }
 
@@ -353,7 +353,7 @@
 .agent-setup-fields label {
   display: grid;
   gap: 6px;
-  color: #cfcfcf;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -362,21 +362,21 @@
 .agent-setup-fields select {
   min-height: 34px;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
   outline: 0;
-  background: #181818;
-  color: #f0f0f0;
+  background: var(--surface-input);
+  color: var(--text-primary);
   padding: 0 10px;
 }
 
 .agent-setup-fields pre,
 .agent-setup-summary {
   overflow: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: #181818;
-  color: #d9d9d9;
+  background: var(--surface-panel);
+  color: var(--text-secondary);
   padding: 11px;
   font-size: 12px;
 }
@@ -407,10 +407,10 @@
 
 .agent-setup-error {
   margin: 12px 16px 0;
-  border: 1px solid rgba(248, 113, 113, 0.28);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 28%, transparent);
   border-radius: 7px;
-  background: rgba(248, 113, 113, 0.1);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+  color: var(--status-danger);
   padding: 9px 10px;
   font-size: 12px;
 }

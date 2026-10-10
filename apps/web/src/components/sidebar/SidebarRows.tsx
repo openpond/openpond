@@ -358,12 +358,6 @@ export function SidebarSessionRow({
           ) : null}
         </span>
         {taskActions}
-        {inbox ? <button type="button" className="sidebar-inbox-done"
-          aria-label={`${archived ? "Reopen" : "Mark done"}: ${session.title}`}
-          title={archived ? "Reopen" : "Mark done (does not stop running work)"}
-          onClick={(event) => { event.stopPropagation(); onArchive(); }}>
-          {archived ? <RotateCcw size={19} /> : <Check size={21} />}
-        </button> : null}
         {session.pinned ? (
           <button type="button" className="sidebar-thread-pin"
             aria-label={`Unpin thread: ${session.title}`} title="Unpin thread"
@@ -371,6 +365,12 @@ export function SidebarSessionRow({
             <Pin size={16} aria-hidden="true" />
           </button>
         ) : null}
+        {inbox ? <button type="button" className="sidebar-inbox-done"
+          aria-label={`${archived ? "Reopen" : "Mark done"}: ${session.title}`}
+          title={archived ? "Reopen" : "Mark done (does not stop running work)"}
+          onClick={(event) => { event.stopPropagation(); onArchive(); }}>
+          {archived ? <RotateCcw size={19} /> : <Check size={21} />}
+        </button> : null}
       </div>
     </SidebarInteractiveRow>
   );

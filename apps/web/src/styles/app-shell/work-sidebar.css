@@ -21,9 +21,9 @@
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--surface-raised);
 }
 
 .work-output-card > header {
@@ -43,15 +43,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .work-output-version select {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 5px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
   padding: 2px 5px;
   font: inherit;
 }
@@ -67,14 +67,14 @@
 
 .work-output-card strong,
 .work-context strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
 }
 
 .work-output-card small,
 .work-context small,
 .work-context p {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -82,7 +82,7 @@
   display: flex;
   gap: 6px;
   align-items: center;
-  color: #78b986;
+  color: var(--status-success);
   font-size: 11px;
 }
 
@@ -99,10 +99,10 @@
   gap: 5px;
   min-height: 27px;
   padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--muted);
+  background: var(--surface-raised);
+  color: var(--text-muted);
   font: inherit;
   font-size: 11px;
   cursor: pointer;
@@ -110,12 +110,12 @@
 
 .work-output-actions button:hover,
 .work-output-preview header button:hover {
-  color: var(--text);
-  border-color: rgba(255, 255, 255, 0.17);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .work-output-actions button.danger:hover {
-  color: #e28b8b;
+  color: var(--status-danger);
 }
 
 .work-output-actions button:disabled {
@@ -141,7 +141,7 @@
 
 .work-output-preview > iframe {
   min-height: 58vh;
-  background: white;
+  background: var(--surface-panel);
 }
 
 .work-output-preview > audio {
@@ -153,11 +153,11 @@
   gap: 7px;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .work-output-annotation label {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -165,10 +165,10 @@
 .work-output-annotation textarea {
   min-height: 72px;
   resize: vertical;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
   padding: 8px;
   font: inherit;
   font-size: 12px;
@@ -176,10 +176,10 @@
 
 .work-output-annotation button {
   justify-self: end;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--panel-soft);
-  color: var(--text);
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 6px 9px;
   font: inherit;
   font-size: 12px;
@@ -199,14 +199,14 @@
 
 .work-output-preview > header strong {
   overflow: hidden;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .work-activity-row {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--border-default);
   padding: 2px 0 9px;
 }
 
@@ -216,7 +216,7 @@
   align-items: center;
   gap: 7px;
   min-height: 28px;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
   cursor: pointer;
   list-style: none;
@@ -227,19 +227,19 @@
 }
 
 .work-activity-row summary small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
   text-transform: capitalize;
 }
 
 .work-activity-row.failed summary small {
-  color: #dc8585;
+  color: var(--status-danger);
 }
 
 .work-activity-row p,
 .work-activity-row pre {
   margin: 5px 0 0 21px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -250,12 +250,12 @@
   max-height: 220px;
   padding: 8px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--state-selected);
 }
 
 .work-context h3 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
 }
 
@@ -284,12 +284,12 @@
   justify-items: center;
   gap: 7px;
   padding: 48px 20px;
-  color: var(--muted);
+  color: var(--text-muted);
   text-align: center;
 }
 
 .work-sidebar-empty strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 13px;
 }
 

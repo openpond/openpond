@@ -80,7 +80,7 @@
 .composer-primary-controls .dropdown-select.compact .dropdown-trigger:focus-visible,
 .composer-primary-controls .codex-model-trigger:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--state-hover);
 }
 
 .composer.has-create-runtime .composer-primary-controls {
@@ -104,8 +104,8 @@
 .composer-icon:hover:not(:disabled),
 .composer-icon:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .composer-add-control {
@@ -190,7 +190,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #d8d8d8;
+  color: var(--text-secondary);
   padding: 0 7px;
   font-size: 12px;
   font-weight: 600;
@@ -215,7 +215,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #d8d8d8;
+  color: var(--text-secondary);
   padding: 0;
   transition:
     background-color 140ms ease,
@@ -252,7 +252,7 @@
 .workspace-action-trigger svg,
 .workspace-upload-trigger svg {
   flex: 0 0 auto;
-  color: #969696;
+  color: var(--text-muted);
 }
 
 .workspace-target-hybrid-icon {
@@ -266,14 +266,14 @@
 }
 
 .workspace-target-hybrid-icon .hybrid-folder {
-  color: #9c9c9c;
+  color: var(--text-muted);
 }
 
 .workspace-target-hybrid-icon .hybrid-cloud {
   position: absolute;
   left: 3px;
   bottom: 2px;
-  color: #67b7ff;
+  color: var(--accent-info);
   stroke-width: 3;
 }
 
@@ -283,15 +283,15 @@
 
 .composer-project-trigger.cloud > svg:first-child,
 .workspace-action-trigger.cloud > svg:first-child {
-  color: #67b7ff;
+  color: var(--accent-info);
 }
 
 .workspace-upload-trigger.upload_cloud > svg:first-child {
-  color: #9ccfff;
+  color: var(--accent-info);
 }
 
 .workspace-action-trigger.hybrid .workspace-target-hybrid-icon .hybrid-folder {
-  color: #9b97ff;
+  color: var(--accent-info);
 }
 
 .composer-project-trigger:hover:not(:disabled),
@@ -304,8 +304,8 @@
 .workspace-upload-trigger:hover:not(:disabled),
 .workspace-upload-trigger:focus-visible {
   outline: 0;
-  color: #f1f1f1;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--state-hover);
 }
 
 .composer-project-trigger:disabled,
@@ -329,8 +329,8 @@
   overflow: hidden;
   border: 0;
   border-radius: 11px;
-  background: #1f1f1f;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  background: var(--surface-floating);
+  box-shadow: 0 14px 36px var(--shadow-color);
   padding: 6px;
 }
 
@@ -348,8 +348,8 @@
   width: min(272px, calc(100vw - 28px));
   border: 0;
   border-radius: 11px;
-  background: #1f1f1f;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  background: var(--surface-floating);
+  box-shadow: 0 14px 36px var(--shadow-color);
   padding: 6px;
 }
 
@@ -366,7 +366,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #8f8f8f;
+  color: var(--text-muted);
   padding: 0 7px;
   text-align: left;
   font-size: 11px;
@@ -377,8 +377,8 @@
 .composer-project-new-menu-back:hover,
 .composer-project-new-menu-back:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.07);
-  color: #d8d8d8;
+  background: var(--state-hover);
+  color: var(--text-secondary);
 }
 
 .composer-profile-target.open-up .composer-project-menu {
@@ -400,10 +400,10 @@
   overflow: auto;
   border: 0;
   border-radius: 11px;
-  background: #1f1f1f;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  background: var(--surface-floating);
+  box-shadow: 0 14px 36px var(--shadow-color);
   padding: 6px;
-  scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-thumb);
   scrollbar-width: thin;
 }
 
@@ -421,7 +421,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-thumb);
   scrollbar-width: thin;
   transform: translateY(calc(-100% - 5px));
 }
@@ -432,18 +432,18 @@
 
 .composer-project-menu.composer-slash-menu::-webkit-scrollbar-track,
 .composer-project-menu.composer-slash-menu::-webkit-scrollbar-corner {
-  background: #1f1f1f;
+  background: var(--surface-floating);
 }
 
 .composer-project-menu.composer-slash-menu::-webkit-scrollbar-thumb {
-  border: 2px solid #1f1f1f;
+  border: 2px solid var(--scrollbar-thumb);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.24);
+  background: var(--scrollbar-thumb);
   background-clip: padding-box;
 }
 
 .composer-project-menu.composer-slash-menu::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--scrollbar-hover);
   background-clip: padding-box;
 }
 
@@ -451,7 +451,7 @@
   gap: 0;
   box-sizing: border-box;
   border: 0;
-  background: #242424;
+  background: var(--surface-floating);
   padding: 7px;
 }
 
@@ -483,9 +483,9 @@
   min-height: 25px;
   margin: 1px 2px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--surface-raised);
   padding: 4px 7px;
-  color: #a7a7a7;
+  color: var(--text-muted);
   font-size: 11.5px;
   font-weight: 600;
   line-height: 17px;
@@ -545,22 +545,22 @@
 .composer-menu-search input {
   width: 100%;
   height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #111;
-  color: #f3f3f3;
+  background: var(--surface-floating);
+  color: var(--text-primary);
   padding: 0 9px;
   font-size: 12px;
   outline: none;
 }
 
 .composer-menu-search input:focus {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-strong);
 }
 
 .composer-menu-title {
   padding: 6px 7px 3px;
-  color: #8f8f8f;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -569,13 +569,13 @@
 .composer-menu-items {
   max-height: 214px;
   overflow: auto;
-  scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-thumb);
   scrollbar-width: thin;
 }
 
 .composer-menu-empty {
   padding: 10px 8px;
-  color: #7d7d7d;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -589,13 +589,13 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #d8d8d8;
+  color: var(--text-secondary);
   padding: 7px 8px;
   text-align: left;
 }
 
 .composer-project-option svg {
-  color: #9c9c9c;
+  color: var(--text-muted);
 }
 
 .composer-provider-mention-icon {
@@ -616,34 +616,34 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #d8d8d8;
+  color: var(--text-secondary);
   padding: 6px 8px;
   text-align: left;
 }
 
 .workspace-target-option svg {
-  color: #9c9c9c;
+  color: var(--text-muted);
   margin-top: 0;
 }
 
 .workspace-target-option.cloud svg:first-child {
-  color: #67b7ff;
+  color: var(--accent-info);
 }
 
 .workspace-target-option.hybrid svg:first-child {
-  color: #9b97ff;
+  color: var(--accent-info);
 }
 
 .workspace-target-option.hybrid .workspace-target-hybrid-icon .hybrid-folder {
-  color: #9b97ff;
+  color: var(--accent-info);
 }
 
 .workspace-target-option.hybrid .workspace-target-hybrid-icon .hybrid-cloud {
-  color: #67b7ff;
+  color: var(--accent-info);
 }
 
 .workspace-target-option.upload_cloud svg:first-child {
-  color: #9ccfff;
+  color: var(--accent-info);
 }
 
 .workspace-target-option span {
@@ -670,7 +670,7 @@
 
 .workspace-target-option small {
   overflow: hidden;
-  color: #9a9a9a;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.25;
@@ -679,7 +679,7 @@
 }
 
 .composer-project-option.cloud > svg:first-child {
-  color: #67b7ff;
+  color: var(--accent-info);
 }
 
 .composer-project-option span {
@@ -699,7 +699,7 @@
 
 .composer-project-option small {
   overflow: hidden;
-  color: #898989;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -710,18 +710,18 @@
 .composer-project-option.selected,
 .workspace-target-option:hover:not(:disabled),
 .workspace-target-option.selected {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f3f3f3;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .composer-project-actions {
   display: grid;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--border-default);
   padding-top: 4px;
 }
 
 .composer-project-new-trigger > svg:last-child {
-  color: #747474;
+  color: var(--text-muted);
 }
 
 .composer-project-target .composer-project-menu {
@@ -740,32 +740,32 @@
 }
 
 .workspace-target-option:disabled {
-  color: #8c8c8c;
+  color: var(--text-muted);
 }
 
 .workspace-target-option:disabled svg {
-  color: #6e6e6e;
+  color: var(--text-disabled);
 }
 
 .workspace-target-option:disabled.cloud svg:first-child {
-  color: #4e83ac;
+  color: var(--accent-info);
 }
 
 .workspace-target-option:disabled.hybrid svg:first-child,
 .workspace-target-option:disabled.hybrid .workspace-target-hybrid-icon .hybrid-folder {
-  color: #706e9d;
+  color: var(--accent-info);
 }
 
 .workspace-target-option:disabled.hybrid .workspace-target-hybrid-icon .hybrid-cloud {
-  color: #4e83ac;
+  color: var(--accent-info);
 }
 
 .workspace-target-option:disabled.upload_cloud svg:first-child {
-  color: #6897b5;
+  color: var(--accent-info);
 }
 
 .workspace-target-option:disabled small {
-  color: #858585;
+  color: var(--text-muted);
 }
 
 @media (max-width: 560px) {

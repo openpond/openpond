@@ -1,19 +1,17 @@
 .app-shell {
   /* Match Sandbox's Console navigation and workspace surfaces. */
-  --shell-navigation-bg: #191919;
-  --bg: #101010;
   position: relative;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  background: var(--shell-navigation-bg);
+  background: var(--surface-navigation);
   overflow: hidden;
   transition: grid-template-columns 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .app-shell.sidebar-open {
-  background: var(--shell-navigation-bg);
+  background: var(--surface-navigation);
 }
 
 .app-shell.sidebar-closed {
@@ -46,10 +44,10 @@
   width: min(var(--sidebar-width), 86vw);
   min-height: 0;
   overflow: hidden;
-  background: var(--shell-navigation-bg);
-  color: var(--text);
+  background: var(--surface-navigation);
+  color: var(--text-primary);
   transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
-  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .sidebar-resize-handle {
@@ -65,7 +63,7 @@
   place-items: center;
   width: 6px;
   cursor: col-resize;
-  color: #9b9b9b;
+  color: var(--text-muted);
 }
 
 .sidebar-closed .sidebar {
@@ -81,7 +79,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--shell-navigation-bg);
+  background: var(--surface-navigation);
 }
 
 .content-shell::before {
@@ -102,11 +100,11 @@
 
 .app-shell:has(.sidebar-resize-handle:hover) .content-shell::before,
 .app-shell.sidebar-resizing .content-shell::before {
-  border-color: rgba(255, 255, 255, 0.28);
+  border-color: var(--border-strong);
 }
 
 .app-titlebar {
-  background: var(--shell-navigation-bg);
+  background: var(--surface-navigation);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -114,7 +112,7 @@
   min-width: 0;
   height: 43px;
   padding: 0 10px 0 14px;
-  color: var(--muted);
+  color: var(--text-muted);
   -webkit-app-region: drag;
   app-region: drag;
 }
@@ -178,7 +176,7 @@
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: #8f8f8f;
+  color: var(--text-muted);
   padding: 0;
 }
 
@@ -187,13 +185,13 @@
 }
 
 .window-control:hover {
-  color: #f3f3f3;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  background: var(--state-hover);
 }
 
 .window-control.close:hover {
-  background: #d94b42;
-  color: #fff;
+  background: var(--status-danger-fill);
+  color: var(--text-on-accent);
 }
 
 .titlebar-title {
@@ -204,7 +202,7 @@
 .titlebar-breadcrumbs {
   gap: 4px;
   padding-left: 2px;
-  color: #8c8c8c;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -226,22 +224,22 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #9c9c9c;
+  color: var(--text-muted);
   padding: 3px 5px;
 }
 
 .titlebar-breadcrumb-item button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .titlebar-breadcrumb-item strong {
-  color: #f1f1f1;
+  color: var(--text-primary);
 }
 
 .titlebar-breadcrumb-item svg {
   flex: 0 0 auto;
-  color: #6f6f6f;
+  color: var(--text-disabled);
 }
 
 .titlebar-title strong {
@@ -249,7 +247,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #f1f1f1;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
 }
@@ -258,7 +256,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #8c8c8c;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -270,18 +268,18 @@
   border: 0;
   border-radius: 14px;
   background: transparent;
-  color: #8d8d8d;
+  color: var(--text-muted);
   padding: 0;
 }
 
 .titlebar-icon:hover {
-  color: #f3f3f3;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--state-hover);
 }
 
 .titlebar-icon.active {
-  color: #f3f3f3;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  background: var(--state-selected);
 }
 
 .topbar-diff-button {
@@ -292,7 +290,7 @@
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: #8d8d8d;
+  color: var(--text-muted);
   padding: 0 8px;
   font-size: 12px;
   white-space: nowrap;
@@ -301,14 +299,14 @@
 }
 
 .topbar-diff-button:hover {
-  color: #f3f3f3;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--state-hover);
 }
 
 .topbar-diff-button.active {
-  color: #f3f3f3;
-  background: rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--state-selected);
+  box-shadow: inset 0 0 0 1px var(--shadow-color);
 }
 
 .topbar-diff-counts {
@@ -318,11 +316,11 @@
 }
 
 .topbar-diff-button .diff-addition {
-  color: #44d487;
+  color: var(--status-success);
 }
 
 .topbar-diff-button .diff-deletion {
-  color: #ff706a;
+  color: var(--status-danger);
 }
 
 /* Anchored below the workspace top bar, independently of lazy page content. */
@@ -336,23 +334,23 @@ body:has(dialog[open], [role="dialog"][aria-modal="true"]) .app-toast-anchor { v
 .app-toast-position { position: absolute; top: 0; right: 0; width: min(360px, 100%); max-width: 400px; transform: translateY(var(--toast-y, 0px)); transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); pointer-events: auto; }
 .app-toast-position.parked { visibility: hidden; pointer-events: none; }
 .app-toast-position[inert] { pointer-events: none; }
-.app-toast { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 60px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: #202020; color: var(--text); box-shadow: 0 18px 46px rgba(0,0,0,.36); padding: 8px 40px 8px 12px; font-size: 13px; line-height: 18px; }
+.app-toast { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 60px; border: 0; border-radius: 8px; background: var(--surface-floating); color: var(--text-primary); box-shadow: 0 18px 46px var(--shadow-color); padding: 8px 40px 8px 12px; font-size: 13px; line-height: 18px; }
 .app-toast.entering { animation: app-toast-enter 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 .app-toast.exiting { animation: app-toast-exit 160ms ease-in both; pointer-events: none; }
-.app-toast .app-toast-close { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: var(--muted); cursor: pointer; }
+.app-toast .app-toast-close { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: var(--text-muted); cursor: pointer; }
 .app-toast .app-toast-body { display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 2px; min-width: 0; margin: 0; border: 0; border-radius: 3px; padding: 0; width: 100%; color: inherit; font: inherit; text-align: center; background: transparent; }
 .app-toast button.app-toast-body { cursor: pointer; }
 .app-toast-title { font-weight: 500; }
 .app-toast-title, .app-toast-description { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.app-toast-description { color: var(--muted); font-size: 11px; line-height: 16px; }
-.app-toast.error .app-toast-title { color: #ff706a; }
+.app-toast-description { color: var(--text-muted); font-size: 11px; line-height: 16px; }
+.app-toast.error .app-toast-title { color: var(--status-danger); }
 .app-toast-actions { display: flex; align-items: center; justify-content: center; }
-.app-toast-actions button { max-width: 124px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; background: rgba(255,255,255,.08); color: var(--text); padding: 6px 9px; font: inherit; line-height: 1.2; cursor: pointer; }
-.app-toast .app-toast-close:hover, .app-toast-actions button:hover { background: rgba(255,255,255,.12); }
-.app-toast button:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
-.app-toast button.app-toast-body:hover { color: #fff; }
+.app-toast-actions button { max-width: 124px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--state-hover); color: var(--text-primary); padding: 6px 9px; font: inherit; line-height: 1.2; cursor: pointer; }
+.app-toast .app-toast-close:hover, .app-toast-actions button:hover { background: var(--state-hover); }
+.app-toast button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
+.app-toast button.app-toast-body:hover { color: var(--text-primary); }
 .app-toast button:disabled { cursor: wait; opacity: .7; }
-.app-toast-description.app-toast-action-error { color: #ff706a; }
+.app-toast-description.app-toast-action-error { color: var(--status-danger); }
 @keyframes app-toast-enter { from { opacity: 0; transform: translateX(-32px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes app-toast-exit { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-12px); } }
 @media (max-width: 640px) { .app-toast-region { inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px 12px; } }

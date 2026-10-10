@@ -4,7 +4,7 @@
   z-index: 90;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.48);
+  background: var(--backdrop);
 }
 
 .git-dialog {
@@ -12,11 +12,11 @@
   display: grid;
   gap: 16px;
   width: min(420px, calc(100vw - 34px));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 14px;
-  background: #2b2b2b;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.52);
-  color: #f3f3f3;
+  background: var(--surface-floating);
+  box-shadow: 0 22px 70px var(--shadow-color);
+  color: var(--text-primary);
   padding: 20px;
 }
 
@@ -42,14 +42,14 @@
   min-height: 41px;
   padding: 0 12px;
   gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: #2b2b2b;
-  color: #a9a9a9;
+  background: var(--state-hover);
+  color: var(--text-muted);
 }
 
 .new-project-name-field:focus-within {
-  border-color: #4c8dff;
+  border-color: var(--accent-info);
 }
 
 .new-project-name-field input {
@@ -59,7 +59,7 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: #f3f3f3;
+  color: var(--text-primary);
   font: inherit;
   font-size: 13px;
 }
@@ -75,11 +75,11 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #aaa;
+  color: var(--text-muted);
 }
 
 .new-project-source-box {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
   overflow: hidden;
 }
@@ -94,7 +94,7 @@
   display: grid;
   justify-items: center;
   gap: 12px;
-  color: #aaa;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -106,8 +106,8 @@
   border: 0;
   border-radius: 12px;
   padding: 1px 9px;
-  background: #3a3a3a;
-  color: #f3f3f3;
+  background: var(--state-hover);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
@@ -123,7 +123,7 @@
   min-height: 48px;
   gap: 10px;
   padding: 0 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border-default);
   font-size: 13px;
 }
 
@@ -137,24 +137,24 @@
 
 .new-project-folder-row > svg {
   flex: 0 0 auto;
-  color: #aaa;
+  color: var(--text-muted);
 }
 
 .new-project-primary-pill,
 .new-project-make-primary {
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
   padding: 5px 9px;
   background: transparent;
-  color: #c8c8c8;
+  color: var(--text-secondary);
   font: inherit;
   white-space: nowrap;
 }
 
 .new-project-make-primary {
   border-color: transparent;
-  background: rgba(255, 255, 255, 0.04);
-  color: #aaa;
+  background: var(--surface-raised);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
@@ -165,7 +165,7 @@
   height: 24px;
   border: 0;
   background: transparent;
-  color: #aaa;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
@@ -178,7 +178,7 @@
   padding: 0 12px;
   border: 0;
   background: transparent;
-  color: #f3f3f3;
+  color: var(--text-primary);
   text-align: left;
   font: inherit;
   font-size: 13px;
@@ -188,7 +188,7 @@
 .new-project-add-row:hover,
 .new-project-make-primary:hover,
 .new-project-remove:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--state-hover);
 }
 
 .new-project-manual-path {
@@ -197,8 +197,8 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  color: #aaa;
+  border-top: 1px solid var(--border-default);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -206,10 +206,10 @@
   flex: 1 1 200px;
   min-width: 0;
   min-height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: #232323;
-  color: #f3f3f3;
+  background: var(--surface-input);
+  color: var(--text-primary);
   padding: 4px 8px;
 }
 
@@ -224,7 +224,7 @@
 .new-project-cancel {
   border: 0;
   background: transparent;
-  color: #aaa;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
@@ -235,7 +235,7 @@
 }
 
 .new-project-error {
-  color: #ff9d9d !important;
+  color: var(--status-danger) !important;
 }
 
 .commit-dialog {
@@ -272,8 +272,8 @@
 
 .sandbox-start-dialog-footer {
   margin: 0 -16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: #2b2b2b;
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-floating);
   padding: 12px 16px;
 }
 
@@ -309,7 +309,7 @@
 }
 
 .sandbox-start-section-title {
-  color: #f3f3f3;
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -317,18 +317,18 @@
 .sandbox-start-env-section {
   display: grid;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #252525;
+  background: var(--state-hover);
   padding: 10px;
 }
 
 .sandbox-start-env-warning {
   margin: 0;
-  border: 1px solid rgba(255, 190, 110, 0.24);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 24%, transparent);
   border-radius: 8px;
-  background: rgba(255, 190, 110, 0.1);
-  color: #ffd39b;
+  background: color-mix(in srgb, var(--status-warning) 10%, transparent);
+  color: var(--status-warning);
   padding: 8px 10px;
   font-size: 12px;
   line-height: 1.35;
@@ -342,9 +342,9 @@
 .sandbox-start-schedule-row {
   display: grid;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #252525;
+  background: var(--state-hover);
   padding: 10px;
 }
 
@@ -359,14 +359,14 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #aaa;
+  color: var(--text-muted);
   padding: 0;
 }
 
 .git-dialog-close:hover:not(:disabled),
 .git-dialog-close:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f3f3f3;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .git-dialog-icon {
@@ -375,8 +375,8 @@
   width: 34px;
   height: 34px;
   border-radius: 11px;
-  background: #252525;
-  color: #f3f3f3;
+  background: var(--surface-floating);
+  color: var(--text-primary);
 }
 
 .git-dialog h2 {
@@ -387,7 +387,7 @@
 
 .git-dialog p {
   margin: 0;
-  color: #9f9f9f;
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -396,10 +396,10 @@
   width: 100%;
   min-width: 0;
   min-height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 11px;
-  background: #272727;
-  color: #f3f3f3;
+  background: var(--surface-input);
+  color: var(--text-primary);
   outline: 0;
   padding: 10px 12px;
   font: inherit;
@@ -407,8 +407,8 @@
 }
 
 .rename-chat-input:focus {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: #2f2f2f;
+  border-color: var(--border-strong);
+  background: var(--surface-input);
 }
 
 .git-dialog-row {
@@ -417,7 +417,7 @@
   justify-content: space-between;
   gap: 18px;
   min-width: 0;
-  color: #c9c9c9;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -426,7 +426,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  color: #f3f3f3;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -441,11 +441,11 @@
 
 .git-dialog-additions {
   margin-left: 8px;
-  color: #44d487;
+  color: var(--status-success);
 }
 
 .git-dialog-deletions {
-  color: #ff706a;
+  color: var(--status-danger);
 }
 
 .git-dialog-field {
@@ -460,13 +460,13 @@
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
-  color: #f0f0f0;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
 }
 
 .git-dialog-field small {
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 400;
 }
@@ -474,7 +474,7 @@
 .git-dialog-inline-action {
   border: 0;
   background: transparent;
-  color: #b8b8b8;
+  color: var(--text-secondary);
   padding: 0;
   font: inherit;
   font-size: 12px;
@@ -482,7 +482,7 @@
 
 .git-dialog-inline-action:hover:not(:disabled),
 .git-dialog-inline-action:focus-visible {
-  color: #f3f3f3;
+  color: var(--text-primary);
   outline: 0;
   text-decoration: underline;
 }
@@ -492,10 +492,10 @@
 .git-dialog-field select {
   width: 100%;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 11px;
-  background: #272727;
-  color: #f3f3f3;
+  background: var(--surface-floating);
+  color: var(--text-primary);
   outline: 0;
   padding: 12px;
   font: inherit;
@@ -509,8 +509,8 @@
 .git-dialog-field input:focus,
 .git-dialog-field textarea:focus,
 .git-dialog-field select:focus {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: #2f2f2f;
+  border-color: var(--border-strong);
+  background: var(--surface-floating);
 }
 
 .run-once-dialog-grid {
@@ -532,14 +532,14 @@
 }
 
 .run-once-error {
-  color: #ff8b85;
+  color: var(--status-danger);
 }
 
 .git-dialog-toggle {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #f0f0f0;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
@@ -554,7 +554,7 @@
   width: 30px;
   height: 18px;
   border-radius: 999px;
-  background: #575757;
+  background: var(--surface-floating);
   transition: background 120ms ease;
 }
 
@@ -566,12 +566,13 @@
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: #fff;
+  background: var(--action-primary);
   transition: transform 120ms ease;
 }
 
 .git-dialog-toggle input:checked + span {
-  background: #3e9df5;
+  background: var(--status-info-fill);
+  color: var(--text-on-accent);
 }
 
 .git-dialog-toggle input:checked + span::after {
@@ -588,13 +589,13 @@
   overflow: hidden;
   border: 0;
   border-radius: 11px;
-  background: #292929;
+  background: var(--surface-floating);
   margin: 0;
   padding: 0;
 }
 
 .git-dialog-next legend {
-  color: #f0f0f0;
+  color: var(--text-primary);
   font-size: 13px;
   padding: 0 0 8px;
 }
@@ -606,9 +607,9 @@
   gap: 10px;
   min-height: 36px;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--border-default);
   background: transparent;
-  color: #f3f3f3;
+  color: var(--text-primary);
   padding: 0 12px;
   text-align: left;
   font-size: 13px;
@@ -621,16 +622,16 @@
 .git-dialog-next button:hover:not(:disabled),
 .git-dialog-next button:focus-visible,
 .git-dialog-next button.active {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--state-hover);
   outline: 0;
 }
 
 .git-dialog-next button:disabled {
-  color: #777;
+  color: var(--text-muted);
 }
 
 .git-dialog-check {
-  color: #f3f3f3;
+  color: var(--text-primary);
   font-size: 18px;
 }
 
@@ -650,8 +651,8 @@
   height: 34px;
   border: 0;
   border-radius: 9px;
-  background: #f4f4f4;
-  color: #242424;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
   padding: 0 18px;
   font-size: 13px;
 }
@@ -660,15 +661,15 @@
   height: 34px;
   border: 0;
   border-radius: 9px;
-  background: #222;
-  color: #f0f0f0;
+  background: var(--surface-floating);
+  color: var(--text-primary);
   padding: 0 16px;
   font-size: 13px;
 }
 
 .git-dialog-secondary:hover:not(:disabled),
 .git-dialog-secondary:focus-visible {
-  background: #333;
+  background: var(--state-hover);
   outline: 0;
 }
 
@@ -678,18 +679,18 @@
 
 .git-dialog-primary:hover:not(:disabled),
 .git-dialog-primary:focus-visible {
-  background: #fff;
+  background: var(--action-primary);
   outline: 0;
 }
 
 .git-dialog-primary.danger {
-  background: #ff6f6f;
-  color: #1b1111;
+  background: var(--status-danger);
+  color: var(--text-on-primary);
 }
 
 .git-dialog-primary.danger:hover:not(:disabled),
 .git-dialog-primary.danger:focus-visible {
-  background: #ff8585;
+  background: var(--status-danger);
 }
 
 .git-dialog-primary:disabled {
@@ -722,36 +723,36 @@
 .cloud-setup-next {
   display: grid;
   gap: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: #252525;
+  background: var(--state-hover);
   padding: 11px 12px;
 }
 
 .cloud-setup-progress {
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
-  color: #e9e9e9;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .cloud-setup-upload-result strong,
 .cloud-setup-upload-preview strong,
 .cloud-setup-next span {
-  color: #f2f2f2;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .cloud-setup-upload-preview span,
 .cloud-setup-upload-result span {
-  color: #9a9a9a;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .cloud-setup-error {
-  border-color: rgba(255, 99, 99, 0.2);
-  background: rgba(255, 99, 99, 0.08);
-  color: #ffb4b4;
+  border-color: color-mix(in srgb, var(--status-danger) 20%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 8%, transparent);
+  color: var(--status-danger);
   font-size: 13px;
 }
 
@@ -761,7 +762,7 @@
   align-items: center;
   gap: 6px;
   width: fit-content;
-  color: #f8f8f8;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;

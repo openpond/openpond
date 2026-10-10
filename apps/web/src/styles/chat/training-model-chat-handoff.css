@@ -6,10 +6,10 @@
   width: min(760px, calc(100vw - 48px));
   margin: 0 auto 8px;
   padding: 9px 10px 9px 12px;
-  border: 1px solid color-mix(in srgb, var(--cyan) 36%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 36%, var(--border-default));
   border-radius: 9px;
-  background: color-mix(in srgb, var(--cyan) 7%, var(--panel));
-  box-shadow: 0 8px 24px color-mix(in srgb, #000 16%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 7%, var(--surface-panel));
+  box-shadow: 0 8px 24px var(--shadow-color);
 }
 
 .training-chat-handoff-copy {
@@ -26,7 +26,7 @@
 .training-chat-handoff-copy span,
 .training-chat-handoff-copy small {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -46,20 +46,20 @@
   min-width: 29px;
   height: 29px;
   padding: 0 7px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  color: var(--text);
-  background: var(--panel);
+  color: var(--text-primary);
+  background: var(--surface-panel);
   cursor: pointer;
 }
 
 .training-chat-handoff-actions button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--cyan) 55%, var(--border));
-  background: var(--panel-soft);
+  border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-default));
+  background: var(--surface-raised);
 }
 
 .training-chat-handoff-actions button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--cyan) 42%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent-primary) 42%, transparent);
   outline-offset: 2px;
 }
 
@@ -70,7 +70,7 @@
 
 .training-chat-handoff-actions .training-chat-handoff-load {
   min-width: max-content;
-  color: var(--cyan);
+  color: var(--accent-primary);
   font-size: 11px;
   font-weight: 650;
 }
@@ -78,7 +78,7 @@
 .training-chat-handoff-actions .training-chat-handoff-stop {
   width: auto;
   padding: 0 10px;
-  color: var(--danger, #e75b5b);
+  color: var(--status-danger);
 }
 
 @media (max-width: 680px) {

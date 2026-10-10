@@ -37,7 +37,7 @@ export function ProviderPlanUsage({ connection, provider, compact = false, onOpe
 
   if (compact) return <button type="button" role="menuitem" className="plan-usage-compact" onClick={onOpen}
     title={stale ? `Usage needs refreshing. ${detail ?? ""}` : detail || usage?.message || "View plan usage in Providers"}>
-    <span>{name}</span>
+    <span className="plan-usage-compact-provider"><img src={`/agent-sources/${provider}.svg`} alt="" aria-hidden="true" />{name}</span>
     <span className="plan-usage-compact-values">{!stale && available && sharedWindows.length ? sharedWindows.map(window => <span className="plan-usage-compact-value" key={window.id}><small>{window.label}</small><strong>{percent(window.remainingPercent)}</strong></span>) : <strong>{stale ? "Unavailable" : label}</strong>}</span>
   </button>;
 

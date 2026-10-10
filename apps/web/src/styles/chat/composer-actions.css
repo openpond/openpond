@@ -5,21 +5,22 @@
   height: 30px;
   border: 0;
   border-radius: 15px;
-  background: #a7a7a7;
-  color: #202020;
+  background: var(--state-hover);
+  color: var(--text-on-primary);
 }
 
 .send-button:hover:not(:disabled) {
-  background: #efefef;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
 }
 
 .send-button.stop-button {
-  background: #3a3a3a;
-  color: #fff;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .send-button.stop-button:hover:not(:disabled) {
-  background: #4a4a4a;
+  background: var(--state-hover);
 }
 
 .send-button.stop-button svg {
@@ -40,8 +41,8 @@
   height: 30px;
   border: 0;
   border-radius: 15px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #efefef;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 0 9px;
   font-size: 12px;
   font-weight: 650;
@@ -50,7 +51,7 @@
 .composer-queue-control:hover:not(:disabled),
 .composer-queue-control:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.13);
+  background: var(--state-hover);
 }
 
 .composer-queue-control:disabled {

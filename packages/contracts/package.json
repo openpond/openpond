@@ -1,6 +1,6 @@
 {
   "name": "@openpond/contracts",
-  "version": "0.2.54",
+  "version": "0.2.55",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "private": true,
@@ -180,6 +180,10 @@
     "./html-visual-document": {
       "types": "./dist/html-visual-document.d.ts",
       "import": "./dist/html-visual-document.js"
+    },
+    "./ui-theme.generated": {
+      "types": "./dist/ui-theme.generated.d.ts",
+      "import": "./dist/ui-theme.generated.js"
     }
   },
   "scripts": {
