@@ -26,7 +26,7 @@ export async function captureHtmlVisual(raw: unknown, appWindow: BrowserWindow, 
   signal.addEventListener('abort', stop, { once: true });
   try {
     signal.throwIfAborted();
-    const theme = HtmlVisualThemeSchema.parse(await appWindow.webContents.executeJavaScript(`Object.fromEntries(${JSON.stringify(Object.keys(HTML_VISUAL_THEME))}.map(k=>[k,k==='--color-scheme'?(document.documentElement.dataset.theme||'dark'):getComputedStyle(document.documentElement).getPropertyValue(${JSON.stringify(HTML_VISUAL_THEME_TOKENS)}[k]||k).trim()||${JSON.stringify(HTML_VISUAL_THEME)}[k]]))`));
+    const theme = HtmlVisualThemeSchema.parse(await appWindow.webContents.executeJavaScript(`Object.fromEntries(${JSON.stringify(Object.keys(HTML_VISUAL_THEME))}.map(k=>[k,k==='--color-scheme'?(document.documentElement.dataset.theme||'dark'):getComputedStyle(document.querySelector(".app-shell")??document.documentElement).getPropertyValue(${JSON.stringify(HTML_VISUAL_THEME_TOKENS)}[k]||k).trim()||${JSON.stringify(HTML_VISUAL_THEME)}[k]]))`));
     window.setBackgroundColor(theme["--bg"]);
     const html = htmlVisualDocument(request.input.html, request.id, theme);
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
