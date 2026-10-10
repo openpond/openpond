@@ -102,7 +102,7 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       const instance = launch.instanceId;
       const shells = await deps.store.sessionShells();
       let owned = !branch ? matchingNativeHistorySession(shells, { id, source: item.source, session: item.session, provider: item.provider, instanceId: instance }) : undefined;
-      let cwd = owned?.metadata?.nativeWorkspaceRecovered === true ? owned.cwd : item.session.cwd;
+      let cwd = owned?.metadata?.nativeWorkspaceRecovered === true ? owned.nativeAgent?.cwd ?? owned.cwd : item.session.cwd;
       let workspaceAvailable = Boolean(cwd && (!deps.workspaceAvailable || await deps.workspaceAvailable(cwd)));
       let workspaceRecoveryError: string | null = null;
       let recoveredMetadata: Record<string, unknown> = {};

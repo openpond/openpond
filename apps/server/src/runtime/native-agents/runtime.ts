@@ -83,7 +83,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
       const native = session.nativeAgent
         ? await client.loadSession(session.nativeAgent.sessionId, cwd, servers)
         : await client.createSession(cwd, servers);
-      const updated = await deps.updateSession(session.id, { nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd }, metadata: { ...session.metadata, nativeHistoryProjection: false, ...(config.acp ? { acpAgentName: config.acp.displayName } : {}) } });
+      const updated = await deps.updateSession(session.id, { cwd, nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd }, metadata: { ...session.metadata, nativeHistoryProjection: false, ...(config.acp ? { acpAgentName: config.acp.displayName } : {}) } });
       runtime = { requestId: "", requestOrdinal: 0, turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: JSON.stringify(coordination?.tools.map(tool => tool.name) ?? []), taskTools, close: async () => { await client.stop(); await closeBridge(); } };
       runtimes.set(session.id, runtime);
       await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "diagnostic", action: "native_configuration", source: "provider", data: { provider: session.provider, nativeSessionId: native.sessionId, capabilities: info.agentCapabilities, models: native.models, modes: native.modes, configOptions: native.configOptions } }));

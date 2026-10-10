@@ -3,10 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { RuntimeEventSchema, SessionSchema, type RuntimeEvent, type Session } from "@openpond/contracts";
+import { AppPreferencesSchema, RuntimeEventSchema, SessionSchema, type BootstrapPayload, type RuntimeEvent, type Session } from "@openpond/contracts";
 import type { NativeSession, NativeSource } from "@openpond/evals/native-conversations";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { createNativeHistory } from "../apps/server/src/runtime/native-agents/history.js";
+import { createServerWorkspacePayloads } from "../apps/server/src/workspace/server-workspace-payloads.js";
 import { nativeAgentLaunch } from "../apps/server/src/runtime/native-agents/config.js";
 import { nativeHistoryWorkspaceAvailable } from "../apps/server/src/runtime/native-agents/history-workspace.js";
 import { createNativeCapabilityProbe } from "../apps/server/src/runtime/native-agents/capability-probes.js";
@@ -276,6 +277,13 @@ test("automatically resumes missing-folder history in a persistent app workspace
       metadata: { nativeOriginalCwd: originalCwd, nativeWorkspaceRecovered: true, nativeResumeAvailable: true, nativeReadOnlyReason: null, composerDraft: "Keep my draft" } });
     expect(qualifyWorkspace).toHaveBeenCalledExactlyOnceWith({ provider: "opencode", sessionId: original.nativeSessionId, instanceId: nativeAgentLaunch("opencode", { sourceHome: "/fixture-account" }).instanceId, cwd });
     expect(await nativeHistoryWorkspaceAvailable(cwd)).toBe(true);
+    const workspacePayloads = createServerWorkspacePayloads({ store: f.store, storeDir: f.home, openPondCacheScope: () => "test",
+      findOpenPondApp: async () => { throw new Error("Must use the admitted native workspace"); },
+      loadAppPreferences: async () => AppPreferencesSchema.parse({}), bootstrapPayload: async () => ({}) as BootstrapPayload });
+    // Old child-worktree/profile cwd hints must not send the next turn back to
+    // the removed directory after native continuation has been admitted.
+    expect(await workspacePayloads.resolveSessionWorkspaceCwd({ ...opened, cwd: originalCwd, subagentRunId: "old-child-job",
+      metadata: { ...opened.metadata, subagentWorkspace: { repoPath: "/removed-worktree" } } })).toBe(cwd);
     await f.reopen();
     await f.api(undefined, workspace)("list", { retain: true });
     expect(await f.api(undefined, workspace)("open", { id })).toMatchObject({ id: sessionId, cwd, pinned: true, nativeAgent: { sessionId: original.nativeSessionId, cwd }, metadata: { nativeReadOnlyReason: null, composerDraft: "Keep my draft" } });
