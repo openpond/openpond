@@ -196,7 +196,10 @@ let active, session, count = 0, timer;
 const finish = cancelled => {
  if (!active) return;
  clearInterval(timer);
- if (claude) send({type:'result', session_id:session, is_error:false, result:cancelled ? 'Cancelled answer must not appear' : 'Finished with corrections'});
+ if (claude) {
+  send({type:'result', session_id:session, is_error:false, result:cancelled ? 'Cancelled answer must not appear' : 'Finished with corrections'});
+  send({type:'system', subtype:'session_state_changed', session_id:session, state:'idle'});
+ }
  else {
   if (!cancelled) send({jsonrpc:'2.0',method:'session/update',params:{sessionId:session,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Finished with corrections'}}}});
   send({jsonrpc:'2.0',id:active.id,result:{stopReason:cancelled?'cancelled':'end_turn'}});
