@@ -65,7 +65,6 @@ export type SidebarProps = {
   account: AccountState | null;
   connection: ClientConnection | null;
   profile: BootstrapPayload["profile"] | null | undefined;
-  pinnedCollapsed: boolean;
   cloudProjectsCollapsed: boolean;
   chatsCollapsed: boolean;
   savedForLaterCollapsed: boolean;
@@ -109,7 +108,6 @@ export type SidebarProps = {
   setSettingsSection: Dispatch<SetStateAction<SettingsSection>>;
   onSelectTeam: (teamId: string | null) => Promise<void>;
   onLogOut: () => Promise<void>;
-  onTogglePinnedCollapsed: () => void;
   onToggleCloudProjectsCollapsed: () => void;
   onToggleChatsCollapsed: () => void;
   onToggleSavedForLaterCollapsed: () => void;

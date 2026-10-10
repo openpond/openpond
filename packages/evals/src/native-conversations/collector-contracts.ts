@@ -1,5 +1,6 @@
 import type { NativeSource } from "./contracts.js";
 import type { CollectorBackfillProgress } from "./collector-progress.js";
+import type { CollectorCoverageManifest, CollectorCoverageSummary } from "../connected-evidence/collector-coverage-contracts.js";
 export const COLLECTOR_DEFAULTS = {
   heartbeatMs: 10000,
   staleMs: 60000,
@@ -82,6 +83,7 @@ export interface CollectorStatus {
     nextRunAt: string | null;
     lastSuccessfulSyncAt: string | null;
     run: CollectorRun | null;
+    coverage: CollectorCoverageSummary | null;
     requestedSyncRevision: number;
     completedSyncRevision: number;
     acknowledgedSyncRevision: number;
@@ -99,6 +101,7 @@ export interface CollectorAdmission {
 }
 /** Credentials are resolved by the process host, never persisted in source metadata or queue entries. */
 export interface CollectorTransport {
+  publishCoverage(connection: CollectorConnection, manifest: CollectorCoverageManifest, signal?: AbortSignal): Promise<void>;
   heartbeat(
     connection: CollectorConnection,
     input: { pendingOperations: number; error: string | null; completedSyncRevision: number },

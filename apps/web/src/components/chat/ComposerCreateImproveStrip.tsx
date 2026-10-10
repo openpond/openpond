@@ -75,7 +75,7 @@ export function ComposerCreateImproveStrip({
   }
 
   return (
-    <section className={`composer-create-strip ${tone}`} aria-label="Create or improve status">
+    <section data-notification-run={run.id} className={`composer-create-strip ${tone}`} aria-label="Create or improve status">
       <div className="composer-create-strip-heading">
         {tone === "danger" ? (
           <CircleAlert size={15} />

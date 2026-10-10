@@ -325,61 +325,36 @@
   color: #ff706a;
 }
 
-.app-toast {
-  position: fixed;
-  right: 22px;
-  bottom: 22px;
-  z-index: 80;
-  width: min(420px, calc(100vw - 44px));
-  max-width: calc(100vw - 44px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  background: #202020;
-  color: var(--text);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.36);
-  padding: 10px 12px;
-  font-size: 13px;
-  line-height: 1.35;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.app-toast.top-right {
-  top: 22px;
-  bottom: auto;
-}
-
-.app-toast.error span {
-  color: #ff706a;
-}
-
-.app-toast-message {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.app-toast-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.app-toast button {
-  flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  padding: 6px 9px;
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.app-toast button:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
+/* Anchored below the workspace top bar, independently of lazy page content. */
+.app-toast-anchor { position: absolute; inset: 43px 0 0; pointer-events: none; z-index: 80; overflow: hidden; }
+/* Nested page dialogs can own a separate stacking context. Keep their entire
+   interaction surface clear while a modal is open. */
+body:has(dialog[open], [role="dialog"][aria-modal="true"]) .app-toast-anchor { visibility: hidden; }
+.app-settings-shell { position: relative; height: 100%; min-height: 0; }
+.app-settings-shell > .app-toast-anchor { left: 300px; }
+.app-toast-region { position: absolute; inset: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 16px 16px; pointer-events: none; }
+.app-toast-position { position: absolute; top: 0; right: 0; width: min(360px, 100%); max-width: 400px; transform: translateY(var(--toast-y, 0px)); transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); pointer-events: auto; }
+.app-toast-position.parked { visibility: hidden; pointer-events: none; }
+.app-toast-position[inert] { pointer-events: none; }
+.app-toast { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 60px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: #202020; color: var(--text); box-shadow: 0 18px 46px rgba(0,0,0,.36); padding: 8px 40px 8px 12px; font-size: 13px; line-height: 18px; }
+.app-toast.entering { animation: app-toast-enter 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.app-toast.exiting { animation: app-toast-exit 160ms ease-in both; pointer-events: none; }
+.app-toast .app-toast-close { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: var(--muted); cursor: pointer; }
+.app-toast .app-toast-body { display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 2px; min-width: 0; margin: 0; border: 0; border-radius: 3px; padding: 0; width: 100%; color: inherit; font: inherit; text-align: center; background: transparent; }
+.app-toast button.app-toast-body { cursor: pointer; }
+.app-toast-title { font-weight: 500; }
+.app-toast-title, .app-toast-description { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.app-toast-description { color: var(--muted); font-size: 11px; line-height: 16px; }
+.app-toast.error .app-toast-title { color: #ff706a; }
+.app-toast-actions { display: flex; align-items: center; justify-content: center; }
+.app-toast-actions button { max-width: 124px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; background: rgba(255,255,255,.08); color: var(--text); padding: 6px 9px; font: inherit; line-height: 1.2; cursor: pointer; }
+.app-toast .app-toast-close:hover, .app-toast-actions button:hover { background: rgba(255,255,255,.12); }
+.app-toast button:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.app-toast button.app-toast-body:hover { color: #fff; }
+.app-toast button:disabled { cursor: wait; opacity: .7; }
+.app-toast-description.app-toast-action-error { color: #ff706a; }
+@keyframes app-toast-enter { from { opacity: 0; transform: translateX(-32px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes app-toast-exit { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-12px); } }
+@media (max-width: 640px) { .app-toast-region { inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px 12px; } }
+@media (max-width: 980px) { .app-settings-shell > .app-toast-anchor { left: 0; top: 86px; } }
+@media (prefers-reduced-motion: reduce) { .app-toast-position { transition: none; } .app-toast.entering, .app-toast.exiting { animation: none; } }

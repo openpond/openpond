@@ -34,6 +34,10 @@
     "zod": "^4.1.13"
   },
   "exports": {
+    "./dataset-preparation-authoring": {
+      "import": "./dist/dataset-preparation-authoring.js",
+      "types": "./dist/dataset-preparation-authoring.d.ts"
+    },
     "./acp-agent": {
       "import": "./dist/acp-agent.js",
       "types": "./dist/acp-agent.d.ts"

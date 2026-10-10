@@ -3,7 +3,7 @@ import { collectorTransport } from "./transport";
 import { monitorImport } from "./monitor";
 
 export async function runImportJob(input: {
-  directory: string; connectionId?: string; json: boolean; scheduled?: boolean; retainedStart?: boolean;
+  directory: string; connectionId?: string; json: boolean; scheduled?: boolean; retainedStart?: boolean; until?: string;
 }) {
   const controller = new AbortController();
   const stop = () => controller.abort(new Error("Import cancelled."));
@@ -13,6 +13,7 @@ export async function runImportJob(input: {
   let status: CollectorStatus;
   try {
     const job = runCollector({ directory: input.directory, signal: controller.signal,
+      until: input.until,
       ...(input.connectionId ? { connectionIds: [input.connectionId] } : {}),
       ...(input.retainedStart ? {} : { trigger: input.scheduled ? "scheduled" as const : "manual" as const }),
       transport: collectorTransport,

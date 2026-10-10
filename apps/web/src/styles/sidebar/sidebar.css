@@ -177,34 +177,7 @@
   .sidebar-update-spinner { animation: none; }
 }
 
-.sidebar-fixed-actions {
-  flex: 0 0 auto;
-  overflow: hidden;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-}
 
-.sidebar-fixed-actions::-webkit-scrollbar {
-  width: 9px;
-}
-
-.sidebar-new-task {
-  flex: 0 0 auto;
-  padding: 0;
-  font-family: var(--font-web);
-}
-
-.sidebar .sidebar-row.sidebar-new-task-entry {
-  min-height: 36px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 400;
-}
-
-.sidebar-new-task + .sidebar-scroll > .sidebar-nav {
-  padding-top: 0;
-}
 
 .sidebar-nav {
   display: grid;
@@ -220,92 +193,6 @@
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.2;
-}
-
-.sidebar-bottom-stack {
-  position: relative;
-  z-index: 30;
-  display: block;
-  flex: 0 0 auto;
-  margin-top: auto;
-  min-width: 0;
-}
-
-.sidebar-learning-notice {
-  position: absolute;
-  right: 10px;
-  bottom: calc(100% + 8px);
-  left: 10px;
-  z-index: 2;
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #1d1d1d;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
-  padding: 11px;
-}
-
-.sidebar-learning-notice > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.sidebar-learning-notice strong {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.sidebar-learning-notice p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.sidebar-learning-status {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-}
-
-.sidebar-learning-status > span {
-  color: var(--muted);
-  font-size: 10px;
-  text-transform: capitalize;
-}
-
-.sidebar-learning-status + .sidebar-learning-status {
-  margin-top: 2px;
-}
-
-.sidebar-learning-notice-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sidebar-learning-notice-action {
-  display: inline-grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  padding: 0;
-}
-
-.sidebar-learning-notice-action:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
 }
 
 .nav-command {

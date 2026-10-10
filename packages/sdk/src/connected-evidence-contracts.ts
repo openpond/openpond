@@ -4,6 +4,7 @@ import { ConnectedSourceKindSchema, ConnectedBoundarySchema, ConnectedUsageSumma
 const Id = z.string().trim().min(1).max(500), Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const ConnectedScopeSchema = z.object({ teamId: Id, ownerUserId: Id }).strict();
 export const ConnectedCaseRefSchema = z.object({ id: Id, snapshotHash: Hash, boundaryId: Id, boundaryRevisionHash: Hash }).strict();
+export type ConnectedCaseRef = z.infer<typeof ConnectedCaseRefSchema>;
 export const ConnectedSourceSummarySchema = z.object({ sourceId: Id, source: ConnectedSourceKindSchema, sessionId: Id,
   snapshotHash: Hash, title: z.string().max(500), projectId: Id.nullable(), capturedAt: z.string().datetime(),
   boundaries: z.array(ConnectedBoundarySchema.omit({ start: true, end: true })).max(CONNECTED_EVIDENCE_LIMITS.boundaries) }).strict();

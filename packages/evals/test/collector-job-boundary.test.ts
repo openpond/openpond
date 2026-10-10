@@ -7,14 +7,48 @@ import { runCollector } from "../src/native-conversations/collector.js";
 import { scheduledSyncDue, scheduledMinute, nextScheduledSync } from "../src/native-conversations/collector-schedule.js";
 import { collectorServiceFiles } from "../src/native-conversations/collector-service-files.js";
 import type { CollectorConnection, CollectorAdmission } from "../src/native-conversations/collector-contracts.js";
+import { summarizeCollectorCoverage, type CollectorCoverageManifest } from "../src/connected-evidence/collector-coverage-contracts.js";
 
 const connection = (root: string): CollectorConnection => ({ id: "source", projectId: "project", teamId: "team", apiBaseUrl: "https://example.test", revision: 1, since: null, keepSyncing: false, state: "active",
   source: { source: "pi", root, machineId: "machine", instanceId: "instance", acquisition: "files", available: true, capabilities: { history: true, live: true, nativeResume: false } } });
 const transcript = [
   { type: "session", version: 3, id: "conversation", timestamp: "2026-10-02T00:00:00Z" },
-  { type: "message", id: "u", parentId: null, message: { role: "user", content: "A durable request" } },
-  { type: "message", id: "a", parentId: "u", message: { role: "assistant", content: "A durable answer", stopReason: "stop" } },
+  { type: "message", id: "u", parentId: null, timestamp: "2026-10-02T00:00:01Z", message: { role: "user", content: "A durable request" } },
+  { type: "message", id: "a", parentId: "u", timestamp: "2026-10-02T00:00:02Z", message: { role: "assistant", content: "A durable answer", stopReason: "stop" } },
 ].map(row => JSON.stringify(row)).join("\n") + "\n";
+
+// Failure story: a moving cutoff or guessed timestamp declares complete study
+// coverage even though a requested turn was omitted or newer work was admitted.
+test("retains fixed-window coverage and refuses to certify unknown event times", async () => {
+  const root = await mkdtemp(join(tmpdir(), "collector-window-"));
+  const file = join(root, "conversation.jsonl"), directory = join(root, "state");
+  const rows = transcript.trim().split("\n").map(row => JSON.parse(row));
+  rows.push({ type: "message", id: "u2", parentId: "a", timestamp: "2026-10-04T00:00:00Z", message: { role: "user", content: "Newer request" } },
+    { type: "message", id: "a2", parentId: "u2", timestamp: "2026-10-04T00:00:01Z", message: { role: "assistant", content: "Newer answer", stopReason: "stop" } });
+  const store = await CollectorStore.open(directory);
+  let admitted = 0;
+  const manifests: CollectorCoverageManifest[] = [];
+  const transport = { heartbeat: async (current: CollectorConnection) => ({ revision: current.revision, state: current.state }),
+    admit: async (_: CollectorConnection, entry: CollectorAdmission) => { admitted += entry.boundaryIds.length; },
+    publishCoverage: async (_: CollectorConnection, manifest: CollectorCoverageManifest) => { manifests.push(manifest); } };
+  try {
+    store.put({ ...connection(file), since: "2026-10-01T00:00:00Z" });
+    await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+    const scan = () => runCollector({ directory, signal: new AbortController().signal, trigger: "manual",
+      until: "2026-10-03T00:00:00Z", transport });
+    await scan();
+    expect(admitted).toBe(1);
+    expect(summarizeCollectorCoverage(manifests.at(-1)!)).toMatchObject({ complete: true, eligibleTurns: 1, pendingOperations: 0,
+      from: "2026-10-01T00:00:00Z", to: "2026-10-03T00:00:00Z" });
+    delete rows[1].timestamp;
+    await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+    await scan();
+    expect(admitted).toBe(1);
+    expect(store.status().connections[0]?.coverage).toMatchObject({ complete: false, unknownTimeBoundaries: 1, eligibleTurns: 0 });
+    expect(JSON.stringify(manifests.at(-1))).not.toContain(file);
+    expect(JSON.stringify(manifests.at(-1))).not.toContain("A durable answer");
+  } finally { store.close(); await rm(root, { recursive: true, force: true }); }
+});
 
 // Failure story: a missed calendar event starts a backfill on wake, a second
 // process duplicates today's import, or an opt-out starts importing anyway.
@@ -27,6 +61,7 @@ test("scheduled launches require an explicit due time and run at most once per s
   vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(now);
   let admissions = 0, heartbeats = 0;
   const transport = {
+    publishCoverage: async () => {},
     heartbeat: async (current: CollectorConnection) => { heartbeats++; return { state: current.state, revision: current.revision }; },
     admit: async () => { admissions++; },
   };
@@ -103,6 +138,7 @@ test("upgrades retained snapshots, caps admission retries and exits before acqui
       store.database.prepare("INSERT INTO pending(id,connection_id,payload,bytes,created_at) VALUES(?,?,?,?,?)").run(id, current.id, payload, Buffer.byteLength(payload), 0);
     }
     await runCollector({ directory, signal: new AbortController().signal, trigger: "manual", transport: {
+      publishCoverage: async () => {},
       heartbeat: async current => ({ revision: current.revision, state: current.state }),
       admit: async (_, retained) => { attempts++; expect(retained.files).toEqual(entry.files); throw new Error("Upload unavailable"); },
     } });
@@ -124,6 +160,7 @@ test("fences concurrent jobs and propagates cancellation to in-flight admission"
   let markReady!: () => void;
   const ready = new Promise<void>(resolve => { markReady = resolve; });
   const transport = {
+    publishCoverage: async () => {},
     heartbeat: async (current: CollectorConnection) => ({ revision: current.revision, state: current.state }),
     admit: async (_: CollectorConnection, __: CollectorAdmission, signal?: AbortSignal) => {
       markReady();

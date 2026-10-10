@@ -2,15 +2,18 @@ import { DatasetWorkspaceListQuerySchema, DatasetWorkspaceBeginVersionSchema, Da
 import { validateTasksetDraftWorkspace } from "./taskset-draft-workspace.js";
 import type { z } from "zod";
 import { DatasetWorkspaceOperationKindSchema, DatasetWorkspaceOperationResultSchema } from "./dataset-workspace-operations.js";
+import { OpenPondDatasetPreparationClient } from "./dataset-preparation-client.js";
 
 /** Hosted independent authoring. Writes use explicit revision/operation identity;
  * callers retain the operation ID when retrying an uncertain response. */
 export class OpenPondDatasetWorkspaceClient {
   private readonly baseUrl: string;
+  readonly preparations: OpenPondDatasetPreparationClient;
   constructor(private readonly options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof fetch }) {
     const url = new URL(options.baseUrl);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim()) throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");
+    this.preparations = new OpenPondDatasetPreparationClient(options);
   }
   async list(options: z.input<typeof DatasetWorkspaceListQuerySchema> & { signal?: AbortSignal } = {}) {
     const { signal, ...input } = options;

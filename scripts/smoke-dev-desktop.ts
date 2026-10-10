@@ -271,8 +271,7 @@ async function main(): Promise<void> {
 
 async function verifyDesktopNavigation(cdp: CdpClient): Promise<{
   keyboardNavigationPassed: boolean;
-  workModeSelected: boolean;
-  workComposerAvailable: boolean;
+  composerAvailable: boolean;
 }> {
   // Exercise destination changes with real keyboard input. The rail replaced
   // the old product menu; successful navigation must still reveal usable views.
@@ -291,12 +290,15 @@ async function verifyDesktopNavigation(cdp: CdpClient): Promise<{
     "Training controls did not render after keyboard navigation."
   );
   await selectDesktopDestination(cdp, "Home");
-  await selectTaskMode(cdp, "work", "Work");
-  const workComposerAvailable = await evaluateValue<boolean>(cdp,
-    `Boolean(document.querySelector(".composer-inline-input[role='textbox']"))`);
-  if (!workComposerAvailable) throw new Error("Work task mode did not render the composer.");
-  await selectTaskMode(cdp, "chat", "Chat");
-  return { keyboardNavigationPassed: true, workModeSelected: true, workComposerAvailable };
+  // Home opens the unified thread composer directly; there is no task-mode
+  // selection step. Wait for the lazy view before testing its keyboard input.
+  await waitFor(
+    () => evaluateValue<boolean>(cdp,
+      `Boolean(document.querySelector(".composer-inline-input[role='textbox']"))`),
+    DEFAULT_TIMEOUT_MS,
+    "Home did not render the thread composer after keyboard navigation."
+  );
+  return { keyboardNavigationPassed: true, composerAvailable: true };
 }
 
 async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<void> {
@@ -329,40 +331,6 @@ async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<
     })()`),
     5_000,
     `${label} did not become the active destination.`
-  );
-}
-
-async function selectTaskMode(
-  cdp: CdpClient,
-  experience: "chat" | "work",
-  label: string
-): Promise<void> {
-  await waitFor(
-    async () =>
-      evaluateValue<boolean>(
-        cdp,
-        `(() => {
-          const option = document.querySelector(
-            ${JSON.stringify(`.new-experience-option[data-experience="${experience}"]`)}
-          );
-          if (!(option instanceof HTMLButtonElement)) return false;
-          option.click();
-          return true;
-        })()`
-      ),
-    5_000,
-    `Could not select the ${label} task mode.`
-  );
-  await waitFor(
-    async () =>
-      evaluateValue<boolean>(
-        cdp,
-        `document.querySelector(
-          ${JSON.stringify(`.new-experience-option[data-experience="${experience}"]`)}
-        )?.getAttribute("aria-checked") === "true"`
-      ),
-    5_000,
-    `${label} did not become the active task mode.`
   );
 }
 

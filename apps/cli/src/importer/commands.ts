@@ -1,5 +1,5 @@
 import { collectorStatus, controlCollector, setCollectorSchedule, uninstallCollectorService, installCollectorService, type CollectorServiceSetup } from "@openpond/evals/native-conversations";
-import { parseBooleanOption } from "../cli/common";
+import { parseBooleanOption, optionString } from "../cli/common";
 import { runImportJob } from "./run";
 import { importSchedule } from "./schedule";
 
@@ -25,7 +25,7 @@ export async function runImporterControl(directory: string, action: string, id: 
     if (id && !status.connections.some(connection => connection.id === id && connection.state === "active"))
       throw new Error("Select an active connection from import status; resume or reconnect it first.");
     if (!status.connections.some(connection => connection.state === "active")) throw new Error("No active sources. Connect or resume a source first.");
-    await runImportJob({ directory, connectionId: id, json }); return true;
+    await runImportJob({ directory, connectionId: id, json, until: optionString(options, "until") || undefined }); return true;
   }
   if (action !== "service") return false;
   if (id === "status") print(await collectorStatus(directory));

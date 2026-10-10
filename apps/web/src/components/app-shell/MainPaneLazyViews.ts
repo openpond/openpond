@@ -12,9 +12,6 @@ export const RightSidebarHomePanel = lazy(() =>
 export const WorkSidebarPanel = lazy(() =>
   import("./WorkSidebarPanel").then((module) => ({ default: module.WorkSidebarPanel })),
 );
-export const NewExperienceSwitcher = lazy(() =>
-  import("./NewExperienceSwitcher").then((module) => ({ default: module.NewExperienceSwitcher })),
-);
 export const CollaborationTabs = lazy(() =>
   import("../collaboration/CollaborationTabs").then((module) => ({ default: module.CollaborationTabs })),
 );

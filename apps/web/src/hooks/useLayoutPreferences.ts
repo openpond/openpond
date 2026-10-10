@@ -43,7 +43,6 @@ export function useLayoutPreferences({
   const [diffPanelWidth, setDiffPanelWidth] = useState(DEFAULT_DIFF_PANEL_WIDTH);
   const [diffPanelResizing, setDiffPanelResizing] = useState(false);
   const {
-    pinned: pinnedCollapsed,
     projects: projectsCollapsed,
     cloudProjects: cloudProjectsCollapsed,
     chats: chatsCollapsed,
@@ -137,11 +136,6 @@ export function useLayoutPreferences({
     [persistSidebarSectionsCollapsed]
   );
 
-  const togglePinnedCollapsed = useCallback(() => {
-    const current = sidebarSectionsCollapsedRef.current;
-    updateSidebarSectionsCollapsed({ ...current, pinned: !current.pinned });
-  }, [updateSidebarSectionsCollapsed]);
-
   const toggleProjectsCollapsed = useCallback(() => {
     const current = sidebarSectionsCollapsedRef.current;
     updateSidebarSectionsCollapsed({ ...current, projects: !current.projects });
@@ -221,7 +215,6 @@ export function useLayoutPreferences({
   );
 
   return {
-    pinnedCollapsed,
     projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
@@ -230,7 +223,6 @@ export function useLayoutPreferences({
     sidebarResizing,
     diffPanelWidth,
     diffPanelResizing,
-    togglePinnedCollapsed,
     toggleProjectsCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,

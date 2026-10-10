@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { connectionQueryScope } from "../lib/query-scope";
+import type { ThreadToastTarget } from "../lib/app-toasts";
+import { requestThreadNotificationReveal } from "../hooks/useThreadNotificationReveal";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RuntimeEvent,
   Session,
@@ -212,15 +215,37 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       viewWorkspaceKind,
       workspaceDiffPanelViewState,
     });
+  const navigationScope = JSON.stringify([connectionQueryScope(connection), bootstrap?.server.id,
+    bootstrap?.account.activeProfile, bootstrap?.account.profile?.id, bootstrap?.preferences.defaultTeamId]);
+  const navigationScopeRef = useRef(navigationScope);
+  navigationScopeRef.current = navigationScope;
   const openSessionInChat = useCallback(
-    (sessionId: string) => {
-      navigateDesktopRoute({ kind: "chat", sessionId });
+    async (sessionId: string, target?: ThreadToastTarget, isOriginCurrent: () => boolean = () => true): Promise<boolean> => {
+      const isCurrent = () => navigationScopeRef.current === navigationScope && isOriginCurrent();
+      if (!connection || !isCurrent()) return false;
+      let session = sidebarSessions.find(item => item.id === sessionId);
+      if (!session) {
+        const payload = await api.bootstrap(connection);
+        if (!isCurrent()) return false;
+        session = payload.sessions.find(item => item.id === sessionId);
+        if (!session) throw new Error("This thread is no longer available.");
+      }
+      if (target) {
+        // The canonical inbox read verifies that a cached toast target still exists.
+        await api.taskInbox(connection, sessionId);
+        if (!isCurrent()) return false;
+      }
+      if (!await navigateDesktopRoute({ kind: "chat", sessionId }, "push", isCurrent)) return false;
+      if (!isCurrent()) return false;
+      setSessions(current => upsertSessionPreservingLocalSidebarStateAndRecency(current, session!));
       setSelectedSessionId(sessionId);
       setSelectedAppId(null);
       setSelectedProjectId(null);
       setView("chat");
+      if (target) requestThreadNotificationReveal(target);
+      return true;
     },
-    [setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView]
+    [connection, navigationScope, sidebarSessions, setSessions, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView]
   );
   const openExistingProjectPathDialog = useCallback(() => {
     setNewProjectMode("existing-local");

@@ -256,6 +256,7 @@ export function RightChatPane({
 
   return (
     <section
+      data-thread-session={activePanelView.sessionId ?? undefined}
       className={`right-chat-pane ${activePanelView.pendingApproval ? "has-approval" : ""}`}
       id={`right-chat-panel-${activePanelView.id}`}
       role="tabpanel"

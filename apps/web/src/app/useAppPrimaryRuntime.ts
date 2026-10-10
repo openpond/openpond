@@ -1,25 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  Experience,
   RuntimeEvent,
   SidebarFileBookmark,
   SubagentDelegationMode,
   WorkspaceState,
   TerminalScope,
 } from "@openpond/contracts";
-import {
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_CHAT_PROVIDER,
-} from "@openpond/contracts";
 import { useProjectConfirmDialog } from "../components/app-shell/ProjectConfirmDialog";
 import type { CloudSetupDialogState } from "../components/workspace/CloudSetupDialog";
 import {
-  defaultModelForProvider,
   projectSelectionKey,
-  providerOptionsFromSettings,
 } from "../lib/app-models";
 import { openPondOrganizationCacheKey } from "../lib/openpond-organization-memory";
-import { sidebarSessionsForExperience } from "../lib/experience-sessions";
+import { desktopExperience } from "../lib/experience-options";
 import {
   migrateDraftTerminalTabs,
   terminalScopeForSelection,
@@ -52,6 +45,7 @@ import { useApprovalResolver } from "../hooks/useApprovalResolver";
 import { useAppDerivedRows } from "../hooks/useAppDerivedRows";
 import { useBeginNewChat } from "../hooks/useBeginNewChat";
 import { navigateDesktopRoute } from "../components/labs/lab-primary-tab-state";
+import { connectionQueryScope } from "../lib/query-scope";
 import { useAppConversationContext } from "../hooks/useAppConversationContext";
 import { useCodexPreferenceActions } from "../hooks/useCodexPreferenceActions";
 import { useCodexHistoryEvents } from "../hooks/useCodexHistoryEvents";
@@ -81,7 +75,6 @@ import { useTeamChatIncomingToast } from "../hooks/useTeamChatIncomingToast";
 import { useCommunityController } from "../hooks/useCommunityController";
 import { useOpenPondOrganizations } from "../hooks/useOpenPondOrganizations";
 import { useConnectedAppStatusRows } from "../hooks/useConnectedAppStatusRows";
-import { rememberLastChatTaskModeInBrowser } from "../lib/product-area";
 import { api } from "../api";
 
 export function useAppPrimaryRuntime() {
@@ -176,7 +169,7 @@ export function useAppPrimaryRuntime() {
     commitDraft,
     branchDialogOpen,
     branchDialogName,
-    toast,
+    toasts,
     error,
   } = appState;
   const labDetailNavigation = useLabDetailNavigation(view === "labs");
@@ -235,6 +228,7 @@ export function useAppPrimaryRuntime() {
     connection,
     events,
     runtimeEventStore,
+    notificationAfterSequence,
     approvals,
     sessions,
     startup,
@@ -332,7 +326,6 @@ export function useAppPrimaryRuntime() {
     profileId: bootstrap?.profile?.activeProfile ?? "default",
   });
   const {
-    pinnedCollapsed,
     projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
@@ -341,7 +334,6 @@ export function useAppPrimaryRuntime() {
     sidebarResizing,
     diffPanelWidth,
     diffPanelResizing,
-    togglePinnedCollapsed,
     toggleProjectsCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,
@@ -377,14 +369,7 @@ export function useAppPrimaryRuntime() {
     selectedSessionId,
     sessions,
   });
-  const activeExperience = selectedSession?.experience ?? draftExperience;
-  useEffect(() => {
-    rememberLastChatTaskModeInBrowser(activeExperience);
-  }, [activeExperience]);
-  const experienceSidebarSessions = useMemo(
-    () => sidebarSessionsForExperience(sidebarSessions, activeExperience),
-    [activeExperience, sidebarSessions]
-  );
+  const activeExperience = desktopExperience(selectedSession?.experience ?? draftExperience);
   const runtimeIndexes = useRuntimeIndexes(events, approvals);
   const { chatMentionApps, connectedAppMentions, pendingApproval } =
     useAppConversationContext({
@@ -457,6 +442,7 @@ export function useAppPrimaryRuntime() {
   const teamChatTeamId = teamChatOrganization?.teamId ?? null;
   const teamChat = useTeamChat({
     connection,
+    accountScopeKey,
     teamId: teamChatTeamId,
     currentUserId: account?.profile?.id ?? null,
     refreshToken: bootstrap?.accountMeta.asOf ?? null,
@@ -468,6 +454,7 @@ export function useAppPrimaryRuntime() {
     refreshDirectory: teamChat.refreshDirectory,
   });
   useTeamChatIncomingToast({
+    scope: JSON.stringify([connectionQueryScope(connection), bootstrap?.server.id, accountScopeKey, teamChatTeamId]),
     notification: teamChat.incomingNotification,
     dismiss: teamChat.dismissIncomingNotification,
     selectThread: teamChat.selectThread,
@@ -556,7 +543,6 @@ export function useAppPrimaryRuntime() {
   useAppShellEffects({
     activeWorkspaceId,
     activeWorkspaceKind,
-    appDispatch,
     connection,
     expandProject,
     linkedProjectByAppId,
@@ -573,7 +559,6 @@ export function useAppPrimaryRuntime() {
     setSelectedProjectId,
     setSessions,
     setTerminalOpen,
-    toast,
   });
 
   const { changeCodexPermissionMode, changeCodexReasoningEffort } =
@@ -605,7 +590,7 @@ export function useAppPrimaryRuntime() {
     onBeginNewChat: () => {
       navigateDesktopRoute({ kind: "chat", sessionId: null });
       setDraftSubagentDelegationMode(null);
-      setDraftExperience((current) => current === "development" ? "work" : current);
+      setDraftExperience("work");
     },
     setMentionedAppId,
   });
@@ -700,7 +685,7 @@ export function useAppPrimaryRuntime() {
     localProjects: bootstrap?.localProjects ?? [],
     cloudProjects: bootstrap?.cloudProjects ?? [],
     teamId: appDefaults.defaultTeamId,
-    sessions: experienceSidebarSessions,
+    sessions: sidebarSessions,
     runtimeIndexes: selectedRuntimeIndexes,
     appPreferences,
     selectedSessionId,
@@ -710,116 +695,13 @@ export function useAppPrimaryRuntime() {
     chatRowsVisibleCount,
     sidebarFileBookmarks,
   });
-  const changeExperience = useCallback(
-    (experience: Experience) => {
-      setDraftExperience(experience);
-      const nextSession =
-        [...experienceSidebarSessions]
-          .filter((session) =>
-            experience === "work"
-              ? session.experience === "work" || session.experience === "development"
-              : session.experience === experience
-          )
-          .sort((left, right) =>
-            right.updatedAt.localeCompare(left.updatedAt)
-          )[0] ??
-        [...sidebarSessions]
-          .filter((session) => session.experience === experience)
-          .sort((left, right) =>
-            right.updatedAt.localeCompare(left.updatedAt)
-          )[0] ??
-        null;
-      if (nextSession) {
-        appDispatch({
-          type: "selectSession",
-          sessionId: nextSession.id,
-          appId: experience !== "chat" ? nextSession.appId : null,
-          projectId:
-            experience !== "chat"
-              ? sidebarProjectIdBySessionId[nextSession.id] ?? null
-              : null,
-        });
-      } else {
-        appDispatch({ type: "beginNewChat", appId: null });
-        if (experience === "chat" && activeProvider === "codex") {
-          const provider =
-            providerOptionsFromSettings(bootstrap?.providers, {
-              enabledOnly: true,
-            }).find((option) => option.value !== "codex")?.value ??
-            DEFAULT_CHAT_PROVIDER;
-          setDraftProvider(provider);
-          setDraftModel(
-            defaultModelForProvider(provider, bootstrap?.providers) ??
-              DEFAULT_CHAT_MODEL
-          );
-        }
-      }
-      if (experience === "chat") {
-        setTerminalOpen(false);
-        setDiffPanelExpanded(false);
-        setRightPanelMode("home");
-      }
+  const beginNewThread = useCallback(
+    () => {
+      setDraftExperience("work");
+      appDispatch({ type: "beginNewChat", appId: null });
       setView("chat");
     },
-    [
-      appDispatch,
-      activeProvider,
-      bootstrap?.providers,
-      experienceSidebarSessions,
-      setDiffPanelExpanded,
-      setDraftExperience,
-      setDraftModel,
-      setDraftProvider,
-      setRightPanelMode,
-      setTerminalOpen,
-      setView,
-      sidebarProjectIdBySessionId,
-      sidebarSessions,
-    ]
-  );
-  const changeNewExperience = useCallback(
-    (experience: Experience) => {
-      const draft = composerDraftStore.getSnapshot();
-      setDraftExperience(experience);
-      if (selectedSessionId || selectedAppId || selectedProjectId) {
-        appDispatch({ type: "beginNewChat", appId: null });
-        if (draft) composerDraftStore.set(draft);
-      }
-      if (experience === "chat" && activeProvider === "codex") {
-        const provider =
-          providerOptionsFromSettings(bootstrap?.providers, {
-            enabledOnly: true,
-          }).find((option) => option.value !== "codex")?.value ??
-          DEFAULT_CHAT_PROVIDER;
-        setDraftProvider(provider);
-        setDraftModel(
-          defaultModelForProvider(provider, bootstrap?.providers) ??
-            DEFAULT_CHAT_MODEL
-        );
-      }
-      if (experience === "chat") {
-        setTerminalOpen(false);
-        setDiffPanelExpanded(false);
-        setRightPanelMode("home");
-      }
-      setView("chat");
-    },
-    [
-      activeProvider,
-      appDispatch,
-      bootstrap?.providers,
-      composerDraftStore,
-      selectedAppId,
-      selectedProjectId,
-      selectedSessionId,
-      setDiffPanelExpanded,
-      setDraftExperience,
-      setDraftModel,
-      setDraftProvider,
-      setRightPanelMode,
-      setTerminalOpen,
-      setView,
-    ]
+    [appDispatch, setDraftExperience, setView]
   );
   const {
     pendingChatUserMessages,
@@ -1072,8 +954,7 @@ export function useAppPrimaryRuntime() {
     draftModel,
     draftExperience,
     activeExperience,
-    changeExperience,
-    changeNewExperience,
+    beginNewThread,
     codexPermissionMode,
     codexReasoningEffort,
     openPondCommandAccessMode,
@@ -1096,7 +977,7 @@ export function useAppPrimaryRuntime() {
     commitDraft,
     branchDialogOpen,
     branchDialogName,
-    toast,
+    toasts,
     error,
     labDetailNavigation,
     setQuery,
@@ -1144,6 +1025,7 @@ export function useAppPrimaryRuntime() {
     connection,
     events,
     runtimeEventStore,
+    notificationAfterSequence,
     sessions,
     startup,
     setAppPreferences,
@@ -1151,7 +1033,6 @@ export function useAppPrimaryRuntime() {
     setEvents,
     setSessions,
     training,
-    pinnedCollapsed,
     projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
@@ -1160,7 +1041,6 @@ export function useAppPrimaryRuntime() {
     sidebarResizing,
     diffPanelWidth,
     diffPanelResizing,
-    togglePinnedCollapsed,
     toggleProjectsCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,
