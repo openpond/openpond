@@ -13,7 +13,10 @@ function fail(message:string):never {throw new LocalExperimentError("local_infer
 export function createLocalInferenceOwner(state:LocalInferenceState){
   async function resolve(modelId:string){const current=await state(),config=current.settings.providers["custom-openai-compatible"],model=current.settings.modelCaches["custom-openai-compatible"]?.models.find(m=>m.id===modelId);
     if(!config?.enabled||!model)fail("Enable the local OpenAI-compatible provider and refresh its model catalog.");
-    const provider=resolveOpenAiCompatibleProvider({providerId:"custom-openai-compatible",settings:current.settings,secrets:current.secrets,modelId}),url=new URL(provider.baseUrl);
+    let provider;
+    try {provider=resolveOpenAiCompatibleProvider({providerId:"custom-openai-compatible",settings:current.settings,secrets:current.secrets,modelId});}
+    catch(error) {fail(error instanceof Error ? error.message : "The local provider configuration is incomplete.");}
+    const url=new URL(provider.baseUrl);
     if(!["localhost","127.0.0.1","[::1]","::1"].includes(url.hostname))fail("This local inference adapter requires an explicit loopback endpoint.");
     if(!model!.contextWindow||!model!.outputLimit||!model!.capabilities.streaming)fail("The current local model catalog must report context/output bounds and streaming support.");
     const closure={providerId:provider.providerId,modelId,endpointHash:contentHash(provider.baseUrl),contextWindow:model!.contextWindow,outputLimit:model!.outputLimit,capabilities:model!.capabilities};return{current,model:model!,configurationHash:contentHash(closure)};

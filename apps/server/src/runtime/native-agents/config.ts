@@ -43,7 +43,15 @@ export function nativeAgentLaunch(provider: NativeAgentId, config?: Partial<Prov
   if (config?.binaryPath && !isAbsolute(config.binaryPath)) throw new Error("A configured agent executable must be an absolute path.");
   if (config?.sourceHome && !isAbsolute(config.sourceHome)) throw new Error("A configured agent home must be an absolute path.");
   const sourceHome = resolve(config?.sourceHome || process.env[definition.homeVariable] || definition.defaultHome());
-  const env = { ...process.env, [definition.homeVariable]: sourceHome };
-  const instanceId = createHash("sha256").update(JSON.stringify({ provider, command, sourceHome, uid: process.getuid?.() ?? homedir() })).digest("hex");
+  const env: NodeJS.ProcessEnv = { ...process.env, [definition.homeVariable]: sourceHome };
+  // On macOS, setting CLAUDE_CONFIG_DIR (even to ~/.claude) selects a
+  // different Keychain item. Keep the native login's original namespace.
+  if (provider === "claude-code" && !config?.sourceHome) {
+    if (process.env.CLAUDE_CONFIG_DIR === undefined) delete env.CLAUDE_CONFIG_DIR;
+    else env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
+  }
+  const credentialNamespace = provider === "claude-code"
+    ? { credentialNamespace: [env.CLAUDE_CONFIG_DIR ?? null, env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? null] } : {};
+  const instanceId = createHash("sha256").update(JSON.stringify({ provider, command, sourceHome, ...credentialNamespace, uid: process.getuid?.() ?? homedir() })).digest("hex");
   return { command, args: definition.args, env, instanceId, sourceHome };
 }

@@ -1,0 +1,22 @@
+.chat-resource-summary { width: 100%; margin-block: 12px; color: var(--text-primary); }
+.chat-resource-summary > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.chat-resource-summary > header > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chat-resource-summary > header strong { font-size: 14px; overflow-wrap: anywhere; }
+.chat-resource-summary > header span, .chat-resource-meta { color: var(--text-muted); font-size: 12px; }
+.chat-resource-meta { margin: 8px 0; }
+.chat-resource-table { height: 164px; overflow: auto; border: 1px solid var(--border-default); border-radius: 8px; }
+.chat-resource-table.expanded { height: min(440px, 55vh); }
+.chat-resource-table table { width: 100%; table-layout: fixed; }
+.chat-resource-table th { position: sticky; top: 0; background: var(--surface-panel); }
+.chat-resource-table td { overflow-wrap: anywhere; vertical-align: top; }
+.chat-resource-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chat-resource-run-setup { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 12px; margin-top: 12px; background: var(--surface-panel); border-radius: 8px; }
+.chat-resource-run-setup > p { width: 100%; margin: 0; font-size: 12px; }
+.chat-resource-run-setup label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.chat-resource-run-setup input { width: 120px; background: var(--surface-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: 6px; padding: 6px; }
+.chat-resource-checks { font-size: 12px; padding: 12px; }
+.chat-resource-error { color: var(--status-danger); font-size: 12px; }
+@media (max-width: 520px) { .chat-resource-summary > header { align-items: flex-start; flex-wrap: wrap; } .chat-resource-table { height: 184px; } }
+
+.chat-resource-grader-editor { padding: 12px; margin-top: 12px; background: var(--surface-panel); border-radius: 8px; }
+.chat-resource-grader-editor textarea { width: 100%; min-height: 140px; }

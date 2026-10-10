@@ -24,6 +24,7 @@ export function SidebarTaskProjectGroup({
   onOpenProject,
   onRemoveProject,
   project,
+  actions,
 }: {
   children: ReactNode;
   expanded: boolean;
@@ -35,6 +36,7 @@ export function SidebarTaskProjectGroup({
   onOpenProject?: () => void;
   onRemoveProject?: () => void;
   project?: SidebarProjectItem | null;
+  actions?: ReactNode;
 }) {
   const contentId = `sidebar-task-group-${groupKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const FallbackIcon = kind === "draft" ? FileText : MessageSquare;
@@ -72,7 +74,8 @@ export function SidebarTaskProjectGroup({
             {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           </span>
         </button>
-        {project && hasProjectActions ? (
+        {actions ? <div className="sidebar-task-project-group-actions">{actions}</div> : null}
+        {!actions && project && hasProjectActions ? (
           <div className="sidebar-task-project-group-actions">
             {(onOpenProject || onRemoveProject) ? (
               <button

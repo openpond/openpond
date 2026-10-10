@@ -469,7 +469,7 @@ export function createCodexBridge(deps: {
             source: "provider",
             appId: session?.appId,
             action: type,
-            status: "completed",
+            status: item?.status === "failed" ? "failed" : "completed",
             output,
             data,
           })

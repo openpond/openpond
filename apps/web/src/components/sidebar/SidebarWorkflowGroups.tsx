@@ -1,17 +1,23 @@
 import { useState, type ReactNode } from "react";
-import type { PonderDesktopHandoffPresentation, Session } from "@openpond/contracts";
+import type { Session } from "@openpond/contracts";
+import type { SidebarWorkflowRow } from "../../lib/sidebar-workflow-list";
 import { clientChoiceStorage, useHydratedClientChoice } from "../../lib/client-choice-storage";
 import { SidebarTaskProjectGroup } from "./SidebarTaskProjectGroup";
+import { Check, Pin, RotateCcw } from "../icons";
 
 /** Display membership only; native subagent ancestry and session identity remain authoritative. */
 export function SidebarWorkflowGroups({
   groups,
-  sessions,
   renderSession,
+  toggleSessionPinned,
+  archiveSession,
+  restoreSession,
 }: {
-  groups: PonderDesktopHandoffPresentation[];
-  sessions: Session[];
+  groups: SidebarWorkflowRow[];
   renderSession(session: Session): ReactNode;
+  toggleSessionPinned(session: Session, pinned?: boolean): void;
+  archiveSession(session: Session): void;
+  restoreSession(session: Session): void;
 }) {
   const readCollapsed = () => {
     try {
@@ -24,27 +30,40 @@ export function SidebarWorkflowGroups({
   };
   const [collapsed, setCollapsed] = useState(readCollapsed);
   useHydratedClientChoice(() => setCollapsed(readCollapsed()));
-  const byId = new Map(sessions.map((session) => [session.id, session]));
-  return groups.map((group) => {
-    const ids = [
-      ...new Set(
-        [group.prerequisite.sessionId, group.successor.sessionId, group.workflow?.preparationSessionId].filter((id): id is string =>
-          Boolean(id),
-        ),
-      ),
-    ];
-    const children = ids
-      .map((id) => byId.get(id))
-      .filter((session): session is Session => Boolean(session && !session.pinned));
-    if (!children.length) return null;
+  return groups.map(({ group, members, sessions: children, pinned, archived }) => {
     const expanded = !collapsed.has(group.id);
+    const togglePin = () => {
+      for (const session of members) {
+        if (session.pinned === pinned || (!pinned && (session.savedForLater || session.archived))) {
+          toggleSessionPinned(session, !pinned);
+        }
+      }
+    };
+    const toggleDone = () => {
+      for (const session of members) {
+        if (archived) restoreSession(session);
+        else if (!session.archived) archiveSession(session);
+      }
+    };
     return (
-      <div key={group.id} className="sidebar-workflow-group">
+      <div key={group.id} className={`sidebar-workflow-group${pinned ? " is-pinned" : ""}`}>
         <SidebarTaskProjectGroup
           groupKey={group.id}
           kind="projectless"
           label={group.title}
           expanded={expanded}
+          actions={<>
+            <button type="button" className="sidebar-thread-pin sidebar-workflow-pin"
+              aria-label={`${pinned ? "Unpin" : "Pin"} group: ${group.title}`}
+              aria-pressed={pinned} title={pinned ? "Unpin group" : "Pin group"} onClick={togglePin}>
+              <Pin size={16} aria-hidden="true" />
+            </button>
+            <button type="button" className="sidebar-inbox-done"
+              aria-label={`${archived ? "Reopen" : "Mark done"} group: ${group.title}`}
+              title={archived ? "Reopen group" : "Mark group done (does not stop running work)"} onClick={toggleDone}>
+              {archived ? <RotateCcw size={19} /> : <Check size={21} />}
+            </button>
+          </>}
           onToggle={() => {
             const next = new Set(collapsed);
             if (expanded) next.add(group.id);

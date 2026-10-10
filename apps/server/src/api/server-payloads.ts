@@ -1840,7 +1840,15 @@ export function createServerPayloads(deps: {
         const launch = nativeAgentLaunch(provider, file.providers[provider]);
         if (isRegisteredAcpProvider(provider)) throw new Error("Choose an advertised ACP authentication method to sign in.");
         const definition = NATIVE_AGENTS[provider];
-        return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), { PATH: launch.env.PATH ?? "", [definition.homeVariable]: launch.sourceHome }) };
+        return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), {
+          PATH: launch.env.PATH ?? "",
+          [definition.homeVariable]: launch.env[definition.homeVariable] ?? "",
+          ...(provider === "claude-code" ? {
+            // Pin login to the same store as probes/turns, even if the terminal
+            // startup files export another Claude profile.
+            CLAUDE_SECURESTORAGE_CONFIG_DIR: launch.env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? launch.env.CLAUDE_CONFIG_DIR ?? "",
+          } : {}),
+        }) };
       }
       if (isRegisteredAcpProvider(provider) && input.action === "authenticate") {
         const authMethodId = z.string().min(1).max(200).parse(input.authMethodId);

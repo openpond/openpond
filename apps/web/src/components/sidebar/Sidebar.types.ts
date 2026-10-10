@@ -32,6 +32,7 @@ export type SidebarProps = {
   workflowGroups?: import("@openpond/contracts").PonderDesktopHandoffPresentation[];
   allSessions?: Session[];
   workflowSessions?: Session[];
+  trainingSessionIds?: ReadonlySet<string>;
   onOpenTeamChat: () => void;
   onSelectSession?: (session: Session) => void;
   activityTimes?: Readonly<Record<string, string>>;
@@ -123,7 +124,7 @@ export type SidebarProps = {
   discoverCommunities: () => void;
   selectCommunity: (communityId: string) => void;
   selectCommunityChannel: (channelId: string) => void;
-  toggleSessionPinned: (session: Session) => void;
+  toggleSessionPinned: (session: Session, pinned?: boolean) => void;
   toggleProjectPinned: (item: SidebarProjectItem) => void;
   toggleSessionSavedForLater: (session: Session) => void;
   openSidebarFile: (file: SidebarFileBookmark) => void;

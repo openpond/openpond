@@ -11,7 +11,7 @@ const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const LocalExperimentStatusSchema=z.enum(["queued","running","cancelling","completed","failed","cancelled","interrupted"]);
 
 export const ExperimentModelConfigurationSchema = z.object({
-  providerId: z.enum(["openpond","custom-openai-compatible","claude-code"]), modelId: z.string().trim().min(1).max(500), configurationHash: Hash,
+  providerId: z.enum(["openpond","custom-openai-compatible","claude-code","codex"]), modelId: z.string().trim().min(1).max(500), configurationHash: Hash,
   maxOutputTokens: z.number().int().positive().max(262_144),
   temperature: z.number().min(0).max(2).optional(),
   topP: z.number().positive().max(1).optional(),

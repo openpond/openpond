@@ -127,6 +127,7 @@ export type HttpRouteDeps = {
     signal?: AbortSignal,
   ) => Promise<unknown>;
   localExperimentPayload?: (payload:unknown) => Promise<unknown>;
+  chatResourcePayload?: (kind:"dataset"|"experiment",payload:unknown) => Promise<unknown>;
   experimentImprovementPayload?: (payload:unknown) => Promise<unknown>;
   experimentEvaluationSchedulePayload?: (payload:unknown) => Promise<unknown>;
   advancedRefinerEvaluationPayload?: (payload:unknown) => Promise<unknown>;

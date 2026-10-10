@@ -1,4 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
+import {mkdtemp,rm} from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import {SqliteStore} from "../../store/store.js";
+import {createDatasetImportService} from "./import-service.js";
+import {createChatDatasetSourceAction} from "../chat-dataset-sources.js";
+import {createLocalDatasetService} from "../local-dataset-service.js";
+import type {LocalDatasetRecord} from "@openpond/contracts";
 import {
   huggingFaceResolveUrl,
   inspectHuggingFaceDataset,
@@ -39,6 +47,7 @@ describe("Hugging Face Dataset adapter", () => {
   });
 
   test("pins source and conversion revisions and suggests semantic mapping", async () => {
+    let previewAnswer="2",declaredLicense="apache-2.0";
     const request = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       if (url === "https://huggingface.co/api/datasets/org/dataset") {
@@ -49,7 +58,7 @@ describe("Hugging Face Dataset adapter", () => {
           cardData: {
             pretty_name: "Math Dataset",
             description: "A fixture.",
-            license: "apache-2.0",
+            license: declaredLicense,
           },
           tags: ["license:apache-2.0"],
         });
@@ -70,7 +79,7 @@ describe("Hugging Face Dataset adapter", () => {
               row: {
                 id: "row-1",
                 prompt: [{ role: "user", content: "1 + 1?" }],
-                answer: "2",
+                answer: previewAnswer,
               },
             },
           ],
@@ -180,6 +189,40 @@ describe("Hugging Face Dataset adapter", () => {
     ).toBe(
       `https://huggingface.co/datasets/org/dataset/resolve/${PARQUET_REVISION}/default/train/0000.parquet`,
     );
+    // Selected source bytes must survive upstream changes without claiming
+    // full-source qualification or leaking non-selected/private source rows.
+    const home=await mkdtemp(path.join(os.tmpdir(),"openpond-hf-chat-")),store=new SqliteStore(home);
+    try{
+      const imports=createDatasetImportService({store,workerProjectDir:home,datasetStorageRoot:async()=>null,request:request as unknown as typeof fetch});
+      const datasets=createLocalDatasetService({store,home,sourceAction:createChatDatasetSourceAction({store,imports,create:input=>datasets.request(input)})});
+      const job=await datasets.request({action:"inspect_source",payload:{url:"org/dataset",configuration:"default",split:"test"}}) as Awaited<ReturnType<typeof imports.inspectHuggingFace>>;
+      expect(job.inspection?.metadata.selectedPreview).toEqual({configuration:"default",split:"test"});
+      const input={action:"import_source",payload:{importId:job.id,operationId:"selected-rows",name:"Selected sample",objective:"Check examples",rows:[0],promptField:"id",expectedField:"answer"}};
+      const saved=await datasets.request(input) as {record:LocalDatasetRecord};
+      expect(saved.record.workspace.draft.tasks).toHaveLength(1);
+      expect(saved.record.workspace.draft.tasks[0]).toMatchObject({input:{prompt:"row-1"},expectedOutput:{text:"2"}});
+      const snapshot=JSON.parse(Buffer.from(saved.record.workspace.files[0]!.base64,"base64").toString());
+      expect(snapshot).toMatchObject({split:"test",selected:[{index:0,row:{id:"row-1",answer:"2"}}],transformation:{promptField:"id",expectedField:"answer"}});
+      expect(saved.record.workspace.draft.sourceRefs[0]).toMatchObject({licensingStatus:"approved",secretScanStatus:"passed",piiScanStatus:"passed",metadata:{scope:"Selected inspection preview",previewRevisionVerified:false,privacyScanner:"openpond-evidence-v1",findings:[]}});
+      expect((await datasets.request(input) as {record:LocalDatasetRecord}).record).toEqual(saved.record);
+      await expect(datasets.request({...input,payload:{...input.payload,rows:[24]}})).rejects.toThrow(/outside/);
+      const calls=request.mock.calls.length;await datasets.read(saved.record.workspace.draft.id);expect(request.mock.calls).toHaveLength(calls);
+      const recheck={action:"check_sources",id:saved.record.workspace.draft.id,expectedRevision:1,operationId:"recheck-source",payload:{}};
+      const reviewed=await datasets.request(recheck) as {record:LocalDatasetRecord};
+      expect(reviewed.record.workspace.draft.revision).toBe(2);
+      expect(reviewed.record.workspace.files).toEqual(saved.record.workspace.files);
+      expect((await datasets.request(recheck) as {record:LocalDatasetRecord}).record).toEqual(reviewed.record);
+      expect((await datasets.read(saved.record.workspace.draft.id,1)).workspace).toEqual(saved.record.workspace);
+      // A declared license or public source never bypasses findings in the
+      // actual captured bytes; retain the draft but block its qualification.
+      previewAnswer="sk-SYNTHETIC_NOT_A_REAL_KEY_123456789";declaredLicense="unknown";
+      const unsafeJob=await datasets.request({action:"inspect_source",payload:{url:"org/dataset",configuration:"default",split:"test"}}) as Awaited<ReturnType<typeof imports.inspectHuggingFace>>;
+      const unsafe=await datasets.request({...input,payload:{...input.payload,importId:unsafeJob.id,operationId:"unsafe-sample"}}) as {record:LocalDatasetRecord};
+      expect(unsafe.record.workspace.draft.sourceRefs[0]).toMatchObject({licensingStatus:"review",secretScanStatus:"blocked",metadata:{findings:["OpenAI-style API key"]}});
+      expect(unsafe.record.workspace.draft.tasks[0]?.expectedOutput).toEqual({text:previewAnswer});
+      const failed=await datasets.request({action:"validate",id:unsafe.record.workspace.draft.id,expectedRevision:1}) as {record:LocalDatasetRecord};
+      expect(failed.record.checks[0]?.status).toBe("failed");
+    }finally{await store.close();await rm(home,{recursive:true,force:true});}
   });
 
   test("rejects metadata that exceeds the inspection byte limit", async () => {
