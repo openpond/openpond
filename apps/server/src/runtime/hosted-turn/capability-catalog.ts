@@ -1,4 +1,5 @@
 import { visualTools } from "../../visuals/visual-tools.js";
+import { chatResourceToolDefinitions } from "../../openpond/chat-resource-tool-definitions.js";
 import {candidateFileToolDefinitions} from "../../harness/experiment-candidate-tool-catalog.js";
 import type {
   HarnessActionBinding,
@@ -44,6 +45,7 @@ export function createCapabilityCatalogRuntime(deps: {
   createScheduledWork: TurnRunnerDependencies["createScheduledWork"];
   executeProfileAction: TurnRunnerDependencies["executeProfileAction"];
   executeProjectAction: TurnRunnerDependencies["executeProjectAction"];
+  executeChatResourceAction?: TurnRunnerDependencies["executeChatResourceAction"];
   loadOpenPondProfileStateForRef: TurnRunnerDependencies["loadOpenPondProfileStateForRef"];
   resolveCandidateProfile?: TurnRunnerDependencies["resolveCandidateProfile"];
   executeCandidateAgentCommand?: TurnRunnerDependencies["executeCandidateAgentCommand"];
@@ -87,6 +89,7 @@ export function createCapabilityCatalogRuntime(deps: {
         trainingHarness: options.trainingHarness,
       });
     }
+    definitions.push(...chatResourceToolDefinitions(deps.executeChatResourceAction));
     if (!options.disableWorkflowDelegationTools) {
       const handlers: CapabilityHandlers = {
         ...(deps.handlers.manageSidebarFile

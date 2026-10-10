@@ -1,4 +1,5 @@
 import { HtmlVisual } from "../visuals/HtmlVisual";
+import { ChatResourceSummary } from "./ChatResourceSummary";
 import { memo, useState } from "react";
 import {
   CheckCircle2,
@@ -85,6 +86,7 @@ export const MessageRow = memo(function MessageRow({
   userAttachmentDisplay = "full",
   workspaceRootPath = null,
 }: MessageRowProps) {
+  if (message.role === "resources") return <article className="message-row assistant" data-resource-response={message.turnId}>{message.resources?.map(resource=><ChatResourceSummary key={`${resource.kind}:${resource.id}`} initial={resource} connection={connection} context={message.resourceSessionId && message.turnId ? {sessionId:message.resourceSessionId,turnId:message.turnId} : undefined} />)}</article>;
   if (message.role === "visual" && message.visual) return <article className="message-row assistant" data-notification-turn={message.turnId} data-notification-final={message.finalAnswer ? "true" : undefined}><HtmlVisual key={message.visual.publicationId} visual={message.visual} connection={connection} /></article>;
   if (message.role === "task_message") return <TaskMessageRow message={message} onOpenSession={onOpenSession}
     onOpenPonder={onOpenPonder} connection={connection} />;
@@ -301,6 +303,7 @@ function chatMessageShallowEqual(
     previous.errorKind === next.errorKind &&
     messageAttachmentsEqual(previous.attachments, next.attachments) &&
     previous.activities === next.activities &&
+    previous.resources === next.resources &&
     previous.sources === next.sources &&
     previous.actionRun === next.actionRun &&
     previous.changeSummary === next.changeSummary &&

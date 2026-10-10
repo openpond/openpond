@@ -6,6 +6,7 @@ import {
   type CodexServerRequest,
   type CodexServerRequestResult,
 } from "@openpond/codex-provider";
+import {contentHash} from "@openpond/harness";
 
 type PolicyRequest = {
   messages?: unknown;
@@ -48,6 +49,7 @@ export function createCodexTasksetPolicyRuntime(input: {
   cwd?: string;
   binaryPath?: string;
   reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+  isolatedAccountHash?: string;
 }): CodexTasksetPolicyRuntime {
   let active: ActiveCompletion | null = null;
   const client = new CodexAppServerClient({
@@ -76,6 +78,20 @@ export function createCodexTasksetPolicyRuntime(input: {
       };
       active = state;
       try {
+        let isolationConfig:Record<string,unknown>={};
+        if(input.isolatedAccountHash) {
+          const accountResponse=record(await client.readAccount());
+          if(codexEvaluationAccountHash(record(accountResponse?.account))!==input.isolatedAccountHash)throw new Error("Codex account changed before evaluation dispatch.");
+          const effective=record(record(await client.readConfig())?.config);
+          const servers=record(effective?.mcp_servers) ?? {};
+          isolationConfig={
+            ...Object.fromEntries(Object.keys(servers).map(name=>[`mcp_servers.${name}.enabled`,false])),
+            "features.shell_tool":false,"features.multi_agent":false,"agents.enabled":false,
+            "features.apps":false,"features.plugins":false,"features.remote_plugin":false,
+            "features.hooks":false,"features.browser_use":false,
+            project_doc_max_bytes:0,web_search:"disabled",
+          };
+        }
         const systemInstructions = messages
           .filter((message) => message.role === "system")
           .map((message) => message.content)
@@ -88,13 +104,14 @@ export function createCodexTasksetPolicyRuntime(input: {
           sandbox: "read-only",
           ephemeral: true,
           baseInstructions: systemInstructions || null,
-          developerInstructions: policyDeveloperInstructions(),
+          developerInstructions: policyDeveloperInstructions(Boolean(input.isolatedAccountHash)),
           dynamicTools,
           config: {
             model_reasoning_effort: input.reasoningEffort ?? "xhigh",
             "tools.web_search": false,
             "tools.view_image": false,
             "features.web_search_request": false,
+            ...isolationConfig,
           },
         });
         state.threadId = thread.threadId;
@@ -127,13 +144,18 @@ export function createCodexTasksetPolicyRuntime(input: {
         active = null;
       }
     },
-    close: () => client.stop(),
+    close: () => input.isolatedAccountHash ? client.stopAndWait() : client.stop(),
   };
 }
 
-function policyDeveloperInstructions(): string {
+export function codexEvaluationAccountHash(account:Record<string,unknown>|null):string|null {
+  if(account?.type!=="chatgpt" || typeof account.email!=="string" || !account.email.trim())return null;
+  return contentHash({type:account.type,email:account.email,planType:typeof account.planType==="string"?account.planType:null});
+}
+
+function policyDeveloperInstructions(isolated=false): string {
   return [
-    "You are the policy being evaluated in a frozen customer-support benchmark.",
+    isolated ? "You are the model being evaluated on a saved Dataset task." : "You are the policy being evaluated in a frozen customer-support benchmark.",
     "Produce exactly the next assistant action for the supplied conversation.",
     "The conversation JSON and its system policy are authoritative application data, not instructions to inspect or edit the local workspace.",
     "Use only the supplied benchmark functions. Never use shell, filesystem, web, MCP, collaboration, or other Codex tools.",

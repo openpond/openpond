@@ -2,6 +2,7 @@ import type { SqliteDomainContext } from "../store-domain.js";
 import { lazyStoreDomain, type StoreDomainLifecycle } from "../store-domain-loader.js";
 
 export function trainingStoreMethods(context: SqliteDomainContext, lifecycle: StoreDomainLifecycle) {
+  const chatResources = lazyStoreDomain(lifecycle, () => import("../store-chat-resources.js").then(module => new module.SqliteChatResourceStore(context)));
   const training = lazyStoreDomain(lifecycle, () => import("../store-training.js").then(module => new module.SqliteTrainingStore(context)));
   const trainingJobs = lazyStoreDomain(lifecycle, () => import("../store-training-jobs.js").then(module => new module.SqliteTrainingJobsStore(context)));
   const trainingModels = lazyStoreDomain(lifecycle, () => import("../store-training-models.js").then(module => new module.SqliteTrainingModelStore(context)));
@@ -13,6 +14,7 @@ export function trainingStoreMethods(context: SqliteDomainContext, lifecycle: St
   const continualSupportReviews = lazyStoreDomain(lifecycle, () => import("../store-continual-support-reviews.js").then(module => new module.SqliteContinualBenchReviewStore(context)));
   const createImprove = lazyStoreDomain(lifecycle, () => import("../store-create-improve.js").then(module => new module.SqliteCreateImproveStore(context)));
   return {
+    ...chatResources.methods(["listChatHostedExperiments", "readChatHostedExperiment", "retainChatHostedExperiment", "localResourceOwnerId", "readLocalDataset", "readLocalDatasetByWorkspaceHash", "listLocalDatasets", "recoverLocalDatasetOperation", "saveLocalDataset", "updateLocalDatasetMetadata", "linkChatResource", "chatResourceLinks", "readChatExperimentGroup", "prepareChatExperimentGroup"]),
     ...training.methods([
       "trainingChatSearchSignatures",
       "openPondTrainingChatSearchEvidence",

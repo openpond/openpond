@@ -3,8 +3,10 @@ import { OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "op
 import { loadConfig } from "../config";
 import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl, parseBooleanOption } from "./common";
 import { DATASET_PREPARATION_USAGE, runDatasetPreparationCommand } from "./datasets-preparation";
+import { runLocalDatasetsCommand } from "./datasets-local";
 
 export async function runDatasetsCommand(options: Record<string, string | boolean>, rest: string[]) {
+  if (parseBooleanOption(options.local)) return runLocalDatasetsCommand(options,rest);
   const [action, id] = rest;
   const teamId = optionString(options, "team"); const baseUrl = resolveApiBaseUrlOption(options);
   if (action === "preparation") {

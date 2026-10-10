@@ -1604,3 +1604,6 @@ button.sidebar-project-location-row:disabled {
 .sidebar-workflow-group .sidebar-task-project-group-content { margin-top: 0; padding: 0; }
 .sidebar .sidebar-workflow-group .sidebar-row.sidebar-task-row { border-color: color-mix(in srgb, var(--accent-primary) 33.33%, transparent); }
 .sidebar-workflow-plan { padding: 3px 7px 5px; color: var(--text-muted); font-size: 11px; }
+
+.sidebar-resource-filter { padding: 4px 12px 8px; }
+.sidebar-resource-filter .dropdown-select { width: 100%; }

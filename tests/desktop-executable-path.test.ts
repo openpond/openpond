@@ -4,13 +4,16 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, test } from "vitest";
-import { resolveDesktopExecutablePath } from "../apps/desktop/src/desktop-executable-path.js";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { initializeDesktopExecutablePath, resolveDesktopExecutablePath } from "../apps/desktop/src/desktop-executable-path.js";
 
 const execute = promisify(execFile);
 const zsh = ["/bin/zsh", "/usr/bin/zsh"].find(existsSync);
 const fixtures: string[] = [];
-afterEach(async () => { await Promise.all(fixtures.splice(0).map((fixture) => rm(fixture, { recursive: true, force: true }))); });
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await Promise.all(fixtures.splice(0).map((fixture) => rm(fixture, { recursive: true, force: true })));
+});
 
 async function fixture() {
   const home = await mkdtemp(path.join(tmpdir(), "openpond-desktop-path-"));
@@ -32,6 +35,31 @@ async function expectAgentsLaunch(searchPath: string) {
 }
 
 describe.skipIf(process.platform === "win32")("desktop executable discovery", () => {
+  // Installing a native CLI after opening Providers must not require restarting
+  // the app just because ~/.local/bin did not exist at desktop startup.
+  test("discovers providers installed after the search path was initialized", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "openpond-late-install-"));
+    fixtures.push(home);
+    const searchPath = await resolveDesktopExecutablePath({ home, env: { HOME: home, SHELL: path.join(home, "missing-shell"), PATH: path.dirname(process.execPath) } });
+    await mkdir(path.join(home, ".local", "bin"), { recursive: true });
+    await writeFile(path.join(home, ".local", "bin", "claude"), '#!/usr/bin/env node\nconsole.log("claude");\n', { mode: 0o755 });
+    const { stdout } = await execute("claude", ["--version"], { env: { PATH: searchPath }, timeout: 5_000 });
+    expect(stdout.trim()).toBe("claude");
+  });
+
+  test.skipIf(process.platform !== "linux")("recovers native tools for a Linux desktop launch", async () => {
+    const home = await fixture();
+    const runtime = path.join(home, "runtime");
+    await mkdir(runtime);
+    await symlink(process.execPath, path.join(runtime, "node"));
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("BUN_INSTALL", path.join(home, ".bun"));
+    vi.stubEnv("SHELL", path.join(home, "missing-shell"));
+    vi.stubEnv("PATH", runtime);
+    await initializeDesktopExecutablePath({ info() {} } as Parameters<typeof initializeDesktopExecutablePath>[0]);
+    await expectAgentsLaunch(process.env.PATH!);
+  });
+
   // Failure story: a GUI launch can find neither CLI wrappers nor the Node
   // interpreter they need, even though every provider works in a terminal.
   test.skipIf(!zsh)("loads macOS zsh profile and rc paths before launching all four agents", async () => {

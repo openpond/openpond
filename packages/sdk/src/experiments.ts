@@ -12,6 +12,7 @@ export * from "./experiment-run-contracts.js";
 export * from "./experiment-run-details.js";
 export * from "./experiment-harness-catalog.js";
 export * from "./claude-code-runtime.js";
+export * from "./codex-experiment-runtime.js";
 export * from "./profile-external-dataset-package.js";
 export * from "./profile-evaluation-discovery.js";
 export * from "./run-diagnostics.js";

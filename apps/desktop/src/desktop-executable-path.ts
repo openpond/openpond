@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import type { Logger } from "@openpond/logging";
@@ -55,10 +55,12 @@ function installationPaths(home: string, env: NodeJS.ProcessEnv): string[] {
     versions.sort((left, right) => right.localeCompare(left, "en", { numeric: true }));
     directories.push(...versions.map((version) => path.join(nvmRoot, version, "bin")));
   } catch { /* nvm is optional. */ }
-  return directories.filter((directory) => path.isAbsolute(directory) && existsSync(directory));
+  // Keep installer destinations even before they exist: providers can be
+  // installed while the desktop app and its server are already running.
+  return directories.filter((directory) => path.isAbsolute(directory));
 }
 
-/** macOS desktop launchers omit the shell's installed tools and their runtimes. */
+/** Desktop launchers can omit the shell's installed tools and their runtimes. */
 export async function resolveDesktopExecutablePath(options: {
   env?: NodeJS.ProcessEnv;
   home?: string;
@@ -76,7 +78,7 @@ export async function resolveDesktopExecutablePath(options: {
 let executablePathReady: Promise<void> | null = null;
 
 export async function initializeDesktopExecutablePath(logger: Logger): Promise<void> {
-  if (process.platform !== "darwin") return;
+  if (process.platform !== "darwin" && process.platform !== "linux") return;
   await (executablePathReady ??= resolveDesktopExecutablePath().then((searchPath) => {
     process.env.PATH = searchPath;
     logger.info("desktop executable search path", { path: searchPath });

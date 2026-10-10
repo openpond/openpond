@@ -29,6 +29,11 @@ import { LocalExperimentSaveFromReleaseSchema, LocalExperimentReadSchema, LocalE
 
 export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:string)=>Promise<import("@openpond/contracts").RuntimeEvent[]>;storeDir?:string;store:LocalExperimentStorage;teamId:()=>Promise<string>;actorId:()=>Promise<string>;
   stream?:typeof streamOpenPondHostedChatTurn;catalog?:typeof loadOpenPondHostedModels;ownerId?:string;
+  /** A server can expose several scoped services under one execution lease.
+   * The primary service owns recovery, renewal and release for that process. */
+  managesRuntimeLease?:boolean;
+  prepareModel?:(configuration:LocalExperimentDefinition["configuration"])=>Promise<LocalModelAdmission>;
+  authorizeTransport?:(executionId:string)=>Promise<void>;
   nativeHarness?:QualifiedLocalNativeHarness;
   resolveSelectedRewards?:import("./local-reward-grading.js").LocalRewardGradingResolver;sourceChoices?:()=>Promise<LocalExperimentSourceChoices>;
   sourceDataset?:(payload:unknown,teamId:string)=>Promise<unknown>;
@@ -87,6 +92,7 @@ export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:str
     const scheduled=executionId?scheduledGuards.get(executionId):undefined;
     try {
       await requireActor(actorId);await requireTeam(teamId);
+      if(executionId)await deps.authorizeTransport?.(executionId);
       if(scheduled&&executionId){request.signal?.throwIfAborted();scheduled.assertExecution(executionId);}
     } catch(error) {
       if(scheduled&&executionId&&request.requestId)throw new ScheduledTransportNotInvokedError(executionId,request.requestId,error);
@@ -131,7 +137,7 @@ export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:str
     if(!deps.profile)throw new LocalExperimentError("local_profile_not_qualified","This local server has no qualified exact Profile owner.",422);
     await deps.profile.resolve(configuration,value);return true;
   }
-  const admission=createLocalExperimentRunAdmission({localInference:deps.localInference,store:deps.store,ownerId,catalog:deps.catalog,actorId:deps.actorId,
+  const admission=createLocalExperimentRunAdmission({localInference:deps.localInference,prepareModel:deps.prepareModel,store:deps.store,ownerId,catalog:deps.catalog,actorId:deps.actorId,
     requireActor,requireTeam,ownedRecord,closing:()=>closing,
     assertScope:configuration=>{if(projectScope.getStore()&&configuration.request.project?.id!==projectScope.getStore())
       throw new LocalExperimentError("local_project_resource_denied","This Experiment does not belong to the selected Project.",404);},
@@ -342,6 +348,7 @@ export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:str
   }
   return {authorize:admission.authorize,findRunOperation,readHumanTaskPackage,run:admission.run,runFromRelease:admission.runFromRelease,read,list,status,cancel,result,inspectCase,compare,score:scoring.score,scoreSelected:async(teamId:string,payload:unknown)=>{if(closing)throw new LocalExperimentError("local_runtime_closing","The local owner is closing.",503);const score=await scoring.scoreSelected(payload,teamId);return publicExecution(teamId,score.id);},passes:scoring.passes,pass:scoring.pass,request,
     async recover(){
+      if(deps.managesRuntimeLease===false)return [];
       await deps.store.claimLocalExperimentOwner(ownerId);
       const recovered=await deps.store.recoverLocalExperiments(ownerId);
       heartbeat=setInterval(()=>{void deps.store.renewLocalExperimentOwner(ownerId).catch(()=>{
@@ -350,7 +357,7 @@ export function createLocalExperimentService(deps:{runtimeEventsForTurn?:(id:str
       return recovered;
     },
     async close(){closing=true;for(const controller of controllers.values())controller.abort(new Error("local_runtime_closed"));await cases.close();await Promise.allSettled([...active.values()]);
-      if(heartbeat)clearInterval(heartbeat);await deps.store.releaseLocalExperimentOwner(ownerId);},
+      if(heartbeat)clearInterval(heartbeat);if(deps.managesRuntimeLease!==false)await deps.store.releaseLocalExperimentOwner(ownerId);},
     async wait(id:string){await active.get(id);},
   };
 }

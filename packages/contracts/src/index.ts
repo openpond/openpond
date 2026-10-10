@@ -102,6 +102,7 @@ export * from "./task-inbox.js";
 export * from "./local-managed-messaging.js";
 
 export * from "./local-experiments.js";
+export * from "./chat-resources.js";
 export * from "./local-experiment-sources.js";
 export * from "./local-experiment-runs.js";
 

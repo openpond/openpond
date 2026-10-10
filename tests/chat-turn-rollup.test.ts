@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
+import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import { buildChatTimelineRows, chatTimelineMessages } from "../apps/web/src/lib/chat-timeline-rows";
@@ -67,4 +68,57 @@ test("failed work and unanswered questions never get hidden by a turn rollup", (
   const question = { id: "question", role: "assistant", timestamp: projected[0]!.timestamp,
     userQuestion: { status: "pending" } } as ChatMessage;
   expect(buildChatTimelineRows([...projected, question]).at(-1)).toMatchObject({ type: "message", message: question });
+});
+
+// Completing or steering a turn used to move the iframe into a disclosure,
+// hiding the published output and destroying the user's interactive state.
+test("published visuals retain top-level identity at the response bottom across streaming, completion and steering", () => {
+  const visual: HtmlVisualReference = {
+    visualId: `visual_${"a".repeat(32)}`, publicationId: `visual_pub_${"b".repeat(32)}`,
+    sessionId: "chat", turnId: "turn", heights: [{ width: 680, height: 320 }],
+    output: { id: "output", title: "Interactive project map", sourceTaskId: "chat", sourceTurnId: "turn",
+      revision: 1, createdAt: event("date", "date", 0).timestamp, kind: "file", contentType: "text/html",
+      sizeBytes: 100, sha256: "c".repeat(64), validation: [],
+      location: { kind: "managed", fileId: "file", downloadPath: "/visual.html" } },
+  };
+  for (const provider of ["openpond", "codex", "claude-code"]) {
+    const native = (id: string, phase: string) => provider === "openpond" ? undefined
+      : { nativeMessageId: id, phase, ...(phase === "final_answer" ? { nativeMessageSnapshot: true } : {}) };
+    const events = [
+      event("start", "turn.started", 0, { args: { prompt: "Visualize this project", provider } }),
+      event("before", "assistant.delta", 10, { output: "Preparing the visual", data: native("before", "commentary") }),
+      event("visual", "visual.published", 20, { data: { visual } }),
+      event("after", "assistant.delta", 30, { output: "Checking the published output", data: native("after", "commentary") }),
+    ];
+    const live = buildChatTimelineRows(buildChatMessages(events));
+    const original = live.find(row => row.type === "message" && row.message.visual);
+    expect(original).toMatchObject({ id: `message:${visual.publicationId}`, type: "message" });
+    expect(live.at(-1)).toEqual(original);
+    for (const ending of [
+      [event("answer", "assistant.delta", 40, { output: "Done", data: native("answer", "final_answer") }),
+        event("complete", "turn.completed", 50)],
+      [event("steer", "turn.started", 40, { turnId: "next", args: { prompt: "Focus on runtime", interactionKind: "steer" } })],
+    ]) {
+      const messages = buildChatMessages([...events, ...ending]);
+      const rows = buildChatTimelineRows(messages);
+      expect(rows.find(row => row.id === original!.id)).toEqual(original);
+      expect(rows.filter(row => row.type === "work").length).toBeGreaterThan(0);
+      expect(rows.filter(row => row.type === "work").flatMap(row => row.messages).some(row => row.message.visual)).toBe(false);
+      // Presentation reorders the output, but loses neither messages nor identity.
+      expect(chatTimelineMessages(rows).map(message => message.id).sort()).toEqual(messages.map(message => message.id).sort());
+      const visualIndex = rows.findIndex(row => row.id === original!.id);
+      expect(chatTimelineMessages(rows.slice(0, visualIndex)).some(message => message.content?.includes("Checking the published output"))).toBe(true);
+      const nextUser = rows.findIndex(row => row.type === "message" && row.message.turnId === "next");
+      expect(visualIndex).toBe(nextUser < 0 ? rows.length - 1 : nextUser - 1);
+      expect(buildChatTimelineRows(buildChatMessages([...events, ...ending]))).toEqual(rows);
+      const resource: ChatMessage = { id: "chat-resources:turn", role: "resources", turnId: "turn", timestamp: visual.output.createdAt, resources: [] };
+      const withResource = [...messages];
+      const lastTurnIndex = withResource.findLastIndex(message => message.turnId === "turn");
+      withResource.splice(lastTurnIndex + 1, 0, resource);
+      const resourceRows = buildChatTimelineRows(withResource);
+      const resourceIndex = resourceRows.findIndex(row => row.type === "message" && row.message.id === resource.id);
+      expect(resourceIndex).toBeGreaterThanOrEqual(0);
+      expect(resourceRows.findIndex(row => row.id === original!.id)).toBe(resourceIndex + 1);
+    }
+  }
 });

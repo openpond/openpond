@@ -2,6 +2,7 @@ import { useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   CircleAlert,
   Bot,
+  ChartColumnStacked,
   FileText,
   FolderOpen,
   Globe2,
@@ -219,7 +220,8 @@ function ActivityToolRow({
       <ChatActivitySummary
         className="activity-tool-summary"
         controls={detailsId}
-        danger={activity.controlKind === "turn_aborted"}
+        danger={activity.controlKind === "turn_aborted" || activity.state === "failed"}
+        running={activity.state === "running" || activity.state === "pending"}
         expanded={expanded}
         icon={
           activity.kind === "command" ? (
@@ -228,7 +230,8 @@ function ActivityToolRow({
               className="activity-summary-kind-icon"
               size={12}
             />
-          ) : undefined
+          ) : activity.action === "openpond_dataset" ? <ListFilter aria-hidden className="activity-summary-kind-icon" size={12}/>
+            : activity.action === "openpond_experiment" ? <ChartColumnStacked aria-hidden className="activity-summary-kind-icon" size={12}/> : undefined
         }
         onToggle={() => setExpanded((current) => !current)}
       >

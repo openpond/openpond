@@ -76,8 +76,8 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({options,rest}) => (await import("./import")).runImportCommand(options,rest) },
   {
     name: "datasets",
-    usage: "openpond datasets <upload|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]\n  openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]",
-    optionSchema: { team: "string", operationId: "string", expectedRevision: "integer", publish: "boolean", project: "string", datasetId: "string", cursor: "string", workspaceHash: "string", packageHash: "string", inputFile: "string", json: "boolean" },
+    usage: "openpond datasets <schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]\n  openpond datasets <upload|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]\n  openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]",
+    optionSchema: { team: "string", operationId: "string", expectedRevision: "integer", publish: "boolean", project: "string", datasetId: "string", cursor: "string", workspaceHash: "string", packageHash: "string", inputFile: "string", json: "boolean",local:"boolean",serverUrl:"string" },
     handler: async ({ options, rest }) => (await import("./datasets")).runDatasetsCommand(options, rest),
   },
   {
@@ -112,7 +112,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "experiments",
-    usage: "openpond experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]",
+    usage: "openpond experiments <models|run|run-cloud|list|read|status|cancel|result|compare|case> [id] [candidate-id] --local [--server-url <loopback-origin>] [--input-file <path>] [--receipt-id <id>] [--json]\n  openpond experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]",
     optionSchema: { team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", status: "string", afterId: "string", limit: "integer", json: "boolean",local:"boolean",serverUrl:"string",receiptId:"string",afterSequence:"integer",revision:"integer",contentHash:"string" },
     handler: async ({ options, rest }) => (await import("./experiments")).runExperimentsCommand(options, rest),
   },
