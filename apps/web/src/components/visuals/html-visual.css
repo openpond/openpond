@@ -3,13 +3,12 @@
 .html-visual-toolbar > :first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .html-visual-toolbar button, .html-visual-status button { border: 0; background: transparent; color: var(--text-muted); font: inherit; padding: 4px; cursor: pointer; }
 .html-visual-toolbar button:hover, .html-visual-status button:hover { color: var(--text-primary); }
-.html-visual-toolbar button:focus-visible, .html-visual-preview:focus-visible { outline: 2px solid var(--accent-info); outline-offset: 2px; }
+.html-visual-toolbar button:focus-visible { outline: 2px solid var(--accent-info); outline-offset: 2px; }
 .html-visual-toolbar button:disabled { opacity: .45; cursor: default; }
 .html-visual-content { position: relative; }
 .html-visual-placeholder { position: absolute; inset: 0; overflow: hidden; }
 .html-visual-content iframe { display: block; width: 100%; border: 0; background: transparent; }
-.html-visual-preview { display: block; width: 100%; border: 0; padding: 0; background: transparent; cursor: pointer; }
-.html-visual-preview img { display: block; width: 100%; object-fit: contain; object-position: top; }
+.html-visual-placeholder img { display: block; width: 100%; object-fit: contain; object-position: top; }
 .html-visual-source { max-height: 70vh; overflow: auto; padding: 12px; background: var(--surface-panel); color: var(--text-primary); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .html-visual-status { color: var(--text-muted); font-size: 12px; padding: 8px 0; }
 .html-visual-panel { position: relative; display: flex; flex-direction: column; min-width: 0; }

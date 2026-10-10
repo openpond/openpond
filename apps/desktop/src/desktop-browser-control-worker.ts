@@ -24,6 +24,7 @@ type NextResponse = {
 };
 
 const WORKER_RETRY_MS = 2_000;
+const WORKER_REQUEST_TIMEOUT_MS = 35_000;
 
 export class DesktopBrowserControlWorker {
   private controller: AbortController | null = null;
@@ -180,7 +181,7 @@ export class DesktopBrowserControlWorker {
   ): Promise<T> {
     const response = await fetch(`${this.options.serverUrl}${pathname}`, {
       method: options.method,
-      signal: options.signal,
+      signal: AbortSignal.any([options.signal, AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS)]),
       headers: {
         Authorization: `Bearer ${this.options.token}`,
         ...(options.desktopExecutor

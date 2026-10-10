@@ -46,7 +46,7 @@ export function createPlanUsageService(options: {
 async function prepareUsageRead(provider: PlanUsageProvider, config?: Partial<ProviderConfig>): Promise<PreparedRead> {
   if (provider === "claude-code") {
     const launch = nativeAgentLaunch(provider, config);
-    const credentials = await readClaudePlanCredentials(launch, config?.sourceHome);
+    const credentials = await readClaudePlanCredentials(launch);
     return {
       key: `${launch.instanceId}:${hash(credentials?.token ?? "signed-out")}`,
       read: async () => {

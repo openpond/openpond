@@ -34,6 +34,7 @@ export class CodexAppServerClient {
   private pending = new Map<JsonRpcId, PendingRequest>();
   private turnWaiters = new Map<string, TurnWaiter>();
   private initialized = false;
+  private stopping: Promise<void> | null = null;
 
   constructor(options: CodexClientOptions = {}) {
     this.binaryPath = options.binaryPath ?? "codex";
@@ -92,6 +93,11 @@ export class CodexAppServerClient {
   async readAccount(): Promise<unknown> {
     await this.initialize();
     return this.request("account/read", {});
+  }
+
+  async readConfig(): Promise<unknown> {
+    await this.initialize();
+    return this.request("config/read", { includeLayers: false });
   }
 
   async readRateLimits(): Promise<unknown> {
@@ -238,6 +244,21 @@ export class CodexAppServerClient {
     if (!child) return;
     this.child = null;
     child.kill("SIGTERM");
+  }
+
+  /** Evaluation cleanup must acknowledge process exit before sealing results. */
+  stopAndWait(): Promise<void> {
+    if(this.stopping)return this.stopping;
+    const child=this.child;
+    if(!child)return Promise.resolve();
+    this.stopping=new Promise<void>((resolve,reject)=>{
+      const finished=()=>{clearTimeout(force);clearTimeout(deadline);resolve();};
+      child.once("exit",finished);
+      const force=setTimeout(()=>{child.kill("SIGKILL");},1500);
+      const deadline=setTimeout(()=>{child.off("exit",finished);reject(new Error("Codex evaluation process exit was not confirmed."));},3000);
+      child.kill("SIGTERM");
+    }).finally(()=>{this.stopping=null;});
+    return this.stopping;
   }
 
   private request(method: string, params: unknown): Promise<unknown> {

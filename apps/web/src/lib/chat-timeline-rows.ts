@@ -39,17 +39,26 @@ export function buildChatTimelineRows(
 ): ChatTimelineRow[] {
   const rows: ChatTimelineRow[] = [];
   let pending: ChatTimelineMessageRow[] = [];
+  let resources: ChatTimelineMessageRow[] = [];
+  let visuals: ChatTimelineMessageRow[] = [];
+  const flushOutputs = () => {
+    rows.push(...resources, ...visuals);
+    resources = [];
+    visuals = [];
+  };
   let startedAt: string | undefined;
   let turnId: string | undefined;
-  const flush = (label?: string) => {
+  const flush = (label?: string | ((count: number) => string)) => {
     if (pending.length === 0) return;
-    if (label) rows.push({ id: `work:${pending[0]!.message.id}`, type: "work", label, messages: pending });
+    if (label) rows.push({ id: `work:${pending[0]!.message.id}`, type: "work",
+      label: typeof label === "function" ? label(pending.length) : label, messages: pending });
     else rows.push(...pending);
     pending = [];
   };
   for (const message of messages) {
     if (message.role === "user") {
-      flush(message.interactionKind === "steer" ? `${pending.length} previous ${pending.length === 1 ? "message" : "messages"}` : undefined);
+      flush(message.interactionKind === "steer" ? count => `${count} previous ${count === 1 ? "message" : "messages"}` : undefined);
+      flushOutputs();
       rows.push(messageRow(message));
       startedAt = message.timestamp;
       turnId = message.turnId;
@@ -57,9 +66,20 @@ export function buildChatTimelineRows(
     }
     if (turnId && message.turnId && message.turnId !== turnId) {
       flush();
+      flushOutputs();
       startedAt = undefined;
     }
     turnId = message.turnId ?? turnId;
+    // Keep interactive outputs below the response text and saved-resource area.
+    // Their top-level keys remain stable as streaming text or completion adds rows.
+    if (message.role === "visual") {
+      visuals.push(messageRow(message));
+      continue;
+    }
+    if (message.role === "resources") {
+      resources.push(messageRow(message));
+      continue;
+    }
     if (message.role === "error" || message.userQuestion?.status === "pending") {
       flush();
       rows.push(messageRow(message));
@@ -84,6 +104,7 @@ export function buildChatTimelineRows(
     pending.push(messageRow(message));
   }
   flush();
+  flushOutputs();
   if (options.showThinkingIndicator) {
     rows.push({
       id: "thinking",

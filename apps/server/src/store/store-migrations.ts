@@ -147,4 +147,7 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 66, run: (store) => store.createTrainingTables() },
   // Desktop authority and receipts were added after the task inbox shipped.
   { version: 67, run: (store) => store.createTaskInboxTables() },
+  { version: 68, run: (store) => store.createChatResourceTables() },
+  { version: 69, run: (store) => store.createChatResourceTables() },
+  { version: 70, run: (store) => store.createChatResourceTables() },
 ];

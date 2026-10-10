@@ -232,7 +232,9 @@ export type ChatMessage = {
   turnCompletedAt?: string;
   interactionKind?: "steer";
   visual?: HtmlVisualReference;
-  role: "visual" | "user" | "assistant" | "activity_group" | "error" | "status_divider" | "task_message";
+  role: "visual" | "user" | "assistant" | "activity_group" | "error" | "status_divider" | "task_message" | "resources";
+  resources?: import("@openpond/contracts").ChatResourceSummary[];
+  resourceSessionId?: string;
   content?: string;
   errorKind?: "opchat_quota_exceeded";
   attachments?: ChatAttachmentSummary[];

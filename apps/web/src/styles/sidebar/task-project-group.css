@@ -29,6 +29,23 @@
   position: relative;
 }
 
+.sidebar-workflow-group .sidebar-task-project-group-header {
+  padding-right: 72px;
+}
+
+.sidebar-workflow-group .sidebar-workflow-pin {
+  color: var(--text-muted);
+}
+
+.sidebar-workflow-group.is-pinned .sidebar-workflow-pin {
+  color: var(--text-primary);
+}
+
+.sidebar-workflow-group .sidebar-task-project-group-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .sidebar-task-project-group-header:hover,
 .sidebar-task-project-group-header:focus-visible {
   background: var(--state-hover);

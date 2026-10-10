@@ -62,6 +62,7 @@ export function normalizeHuggingFaceDatasetLocator(
 export async function inspectHuggingFaceDataset(
   locatorInput: HuggingFaceDatasetLocator,
   request: typeof fetch = fetch,
+  selection:{configuration?:string;split?:string}={},
 ): Promise<HuggingFaceDatasetInspection> {
   const locator = HuggingFaceDatasetLocatorSchema.parse(locatorInput);
   const revisionSuffix = locator.requestedRevision
@@ -94,7 +95,8 @@ export async function inspectHuggingFaceDataset(
     );
   }
   const configurations = [...new Set(rawSplits.map((split) => split.configuration))];
-  const selected = rawSplits[0]!;
+  const selected = rawSplits.find(split=>(!selection.configuration || split.configuration===selection.configuration) && (!selection.split || split.split===selection.split));
+  if(!selected)throw new Error("The selected Dataset configuration and split are unavailable.");
   const [firstRows, sizes, parquetResult, parquetRevision] = await Promise.all([
     fetchJson(
       request,
@@ -181,6 +183,9 @@ export async function inspectHuggingFaceDataset(
     sourceFiles,
     inspectedAt: new Date().toISOString(),
     metadata: {
+      selectedPreview:{configuration:selected.configuration,split:selected.split},
+      previewHash:contentHash(previewRows),
+      previewRevisionVerified:firstRows.dataset_git_revision===resolvedRevision,
       sourceSchemaHash: contentHash(
         columns.map(({ path, logicalType, nullable }) => ({
           path,
@@ -208,12 +213,13 @@ export function suggestedHuggingFaceMapping(
     typeof inspection.metadata.sourceSchemaHash === "string"
       ? inspection.metadata.sourceSchemaHash
       : contentHash(inspection.columns);
+  const configuration=(inspection.metadata.selectedPreview as {configuration?:string}|undefined)?.configuration ?? inspection.splits[0]!.configuration;
   return {
     schemaVersion: "openpond.datasetImportMapping.v1",
     sourceSchemaHash,
-    configuration: inspection.splits[0]!.configuration,
+    configuration,
     upstreamSplits: inspection.splits
-      .filter((split) => split.configuration === inspection.splits[0]!.configuration)
+      .filter((split) => split.configuration === configuration)
       .map((split) => split.split),
     preset:
       suggestion?.preset === "prompt_expected_answer"

@@ -28,19 +28,25 @@ export function sidebarInboxTime(session: Session, activity: Readonly<Record<str
 }
 
 export function sidebarInboxDateGroups(sessions: readonly Session[], activity: Readonly<Record<string, string>>, runningSessionIds: ReadonlySet<string>, now = new Date()) {
+  return sidebarInboxEntryDateGroups(sessions, session => ({
+    time: sidebarInboxTime(session, activity), running: runningSessionIds.has(session.id),
+  }), now).map(group => ({ key: group.key, label: group.label, sessions: group.entries }));
+}
+
+export function sidebarInboxEntryDateGroups<T>(entries: readonly T[], resolve: (entry: T) => { time: number; running: boolean }, now = new Date()) {
   const day = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
-  const groups: Array<{ key: string; label: string | null; sessions: Session[] }> = [];
-  for (const session of sessions) {
-    const date = new Date(sidebarInboxTime(session, activity));
-    const running = runningSessionIds.has(session.id);
+  const groups: Array<{ key: string; label: string | null; entries: T[] }> = [];
+  for (const entry of entries) {
+    const { time, running } = resolve(entry);
+    const date = new Date(time);
     const key = running ? "running" : day(date);
     let group = groups.at(-1);
     if (group?.key !== key) {
-      group = { key, label: running || key === day(now) ? null : key === day(yesterday) ? "Yesterday" : date.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) }), sessions: [] };
+      group = { key, label: running || key === day(now) ? null : key === day(yesterday) ? "Yesterday" : date.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) }), entries: [] };
       groups.push(group);
     }
-    group.sessions.push(session);
+    group.entries.push(entry);
   }
   return groups;
 }

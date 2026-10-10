@@ -1,8 +1,9 @@
-import type { Session } from "@openpond/contracts";
+import type { PonderDesktopHandoffPresentation, Session } from "@openpond/contracts";
 import { describe, expect, test } from "vitest";
 
 import { tasksetNameFromId } from "../apps/web/src/lib/session-tasksets";
-import { orderSidebarInbox, sidebarActivityTimes, sidebarInboxDateGroups } from "../apps/web/src/lib/sidebar-inbox";
+import { orderSidebarInbox, sidebarActivityTimes, sidebarInboxDateGroups, sidebarInboxEntryDateGroups } from "../apps/web/src/lib/sidebar-inbox";
+import { sidebarWorkflowInbox, sidebarWorkflowRows } from "../apps/web/src/lib/sidebar-workflow-list";
 import {
   mergeSidebarTaskOrder,
   sidebarTaskEmptyLabel,
@@ -11,6 +12,57 @@ import {
 } from "../apps/web/src/lib/sidebar-task-list";
 
 const NOW = "2026-07-29T12:00:00.000Z";
+
+// Workflow members must never leak into the inbox twice or lose their group
+// when filtered, pinned, archived, or moved by a member's runtime activity.
+test("workflow groups retain membership through inbox ordering, pinning and done filters", () => {
+  const prerequisite = session({ id: "prerequisite", createdAt: "2026-07-27T12:00:00.000Z" });
+  const successor = session({ id: "successor", parentSessionId: prerequisite.id, createdAt: "2026-07-28T12:00:00.000Z" });
+  const preparation = session({ id: "preparation", hiddenFromDefaultSidebar: true, createdAt: prerequisite.createdAt });
+  const ordinary = session({ id: "ordinary" });
+  const group: PonderDesktopHandoffPresentation = {
+    id: "review", revision: 1, title: "Review workflow", state: "completed", reason: null,
+    scope: { installationId: "00000000-0000-4000-8000-000000000001", profileId: "profile", ownerUserId: "owner", teamId: "team", bindingId: "binding", bindingRevision: 1 },
+    cancellationRequested: false, waitingForDesktop: false,
+    prerequisite: { sessionId: prerequisite.id, title: prerequisite.title, turnId: null },
+    successor: { sessionId: successor.id, operationId: "operation", providerId: "openpond", modelId: null, workspaceLabel: "Workspace" },
+    workflow: { kind: "review", preparationSessionId: preparation.id, preparationState: "completed", sourceReady: true, preparationCleanupPending: false },
+    successCriteria: "Review complete", canEdit: false, canCancel: false,
+  };
+  const members = [prerequisite, successor, preparation];
+  const ids = new Set(members.map(member => member.id));
+  const running = new Set<string>();
+  const rows = sidebarWorkflowRows([group], members, [prerequisite, successor]);
+  expect(rows[0]?.members).toEqual(members);
+  expect(rows[0]?.sessions).toEqual([prerequisite, successor]);
+  const inbox = sidebarWorkflowInbox([ordinary, successor, successor], rows, ids, {}, running);
+  expect(inbox.map(entry => entry.id)).toEqual(["session:ordinary", "workflow:review"]);
+  const buckets = sidebarInboxEntryDateGroups(inbox, entry => entry, new Date(NOW));
+  expect(buckets.map(bucket => bucket.entries.map(entry => entry.id))).toEqual([["session:ordinary"], ["workflow:review"]]);
+  expect(buckets[1]?.key).toBe(sidebarInboxDateGroups([successor], {}, running, new Date(NOW))[0]?.key);
+
+  const filtered = sidebarWorkflowRows([group], members, [successor]);
+  expect(filtered[0]?.members).toEqual(members);
+  const activity = { [successor.id]: "2026-07-29T12:01:00.000Z" };
+  expect(sidebarWorkflowInbox([ordinary, successor], filtered, ids, activity, running).map(entry => entry.id)).toEqual(["workflow:review", "session:ordinary"]);
+  expect(sidebarWorkflowInbox([ordinary], filtered, ids, {}, new Set([preparation.id]))[0]?.running).toBe(true);
+
+  const pinnedMembers = members.map(member => ({ ...member, pinned: true }));
+  const pinned = sidebarWorkflowRows([group], pinnedMembers, pinnedMembers.filter(member => !member.hiddenFromDefaultSidebar));
+  expect(pinned[0]?.pinned).toBe(true);
+  expect(pinned[0]?.sessions.map(member => member.id)).toEqual([prerequisite.id, successor.id]);
+  expect(sidebarWorkflowInbox([ordinary, ...pinnedMembers], pinned, ids, {}, running).map(entry => entry.id)).toEqual(["session:ordinary"]);
+  const partlyPinned = [pinnedMembers[0]!, successor, preparation];
+  expect(sidebarWorkflowRows([group], partlyPinned, partlyPinned)[0]?.sessions.map(member => member.id)).not.toContain(prerequisite.id);
+
+  const doneMembers = members.map(member => ({ ...member, archived: true, pinned: false }));
+  const doneVisible = sidebarTaskRows({ activeSessions: [], doneSessions: doneMembers.filter(member => !member.hiddenFromDefaultSidebar), filter: "done", inProgressSessionIds: running, sort: "recent" });
+  const done = sidebarWorkflowRows([group], doneMembers, doneVisible);
+  expect(done[0]?.archived).toBe(true);
+  expect(done[0]?.pinned).toBe(false);
+  expect(sidebarWorkflowRows([group], doneMembers, [])).toEqual([]);
+  expect(sidebarWorkflowInbox(doneMembers, done, ids, {}, running).map(entry => entry.id)).toEqual(["workflow:review"]);
+});
 
 // Running work stays reachable at the top. On completion it moves to the
 // newest recent position, which persists after reload without diagnostics bumps.
