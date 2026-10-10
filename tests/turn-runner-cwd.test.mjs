@@ -320,6 +320,7 @@ function createManualQueue() {
 function runnerDependencies({
   session,
   store,
+  storageHome,
   approvals,
   events,
   queue,
@@ -329,6 +330,7 @@ function runnerDependencies({
   let currentSession = session;
   return {
     store,
+    storageHome,
     upsertApproval: upsertApprovalInto(approvals),
     getSession: async () => currentSession,
     updateSession: async (_sessionId, patch) => {
@@ -373,7 +375,9 @@ function runnerDependencies({
 }
 
 describe("turn runner workspace cwd", () => {
-  test("uses one revisioned Agent Create/Improve run for approval and queued execution", async () => {
+  test("uses one revisioned Agent Create/Improve run for approval and queued execution", async (t) => {
+    const storageHome = await mkdtemp(path.join(os.tmpdir(), "openpond-create-contract-"));
+    t.after(() => rm(storageHome, { recursive: true, force: true }));
     const run = createImproveRun();
     const turns = [baseTurn(run)];
     const events = [];
@@ -390,6 +394,7 @@ describe("turn runner workspace cwd", () => {
       runnerDependencies({
         session: baseSession({ cwd: "/tmp/openpond-profile" }),
         store,
+        storageHome,
         approvals,
         events,
         queue,
@@ -443,6 +448,7 @@ describe("turn runner workspace cwd", () => {
       runnerDependencies({
         session: baseSession(),
         store,
+        storageHome: home,
         approvals,
         events,
         queue: createManualQueue(),
