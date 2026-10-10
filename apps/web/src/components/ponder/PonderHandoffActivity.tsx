@@ -22,26 +22,28 @@ export function PonderHandoffActivity({
 }) {
   if (!items.length) return null;
   return (
-    <section className="ponder-linked-work" aria-label="Completion handoffs">
+    <section className="ponder-linked-work" aria-label="Agent workflows">
       {items.map((item) => (
         <article key={item.id}>
           <strong>{item.title}</strong>
           <p>
-            {item.cancellationRequested
+            {item.cancellationRequested || item.workflow?.preparationCleanupPending
               ? "Cancellation requested; awaiting the actual stop outcome."
               : item.state === "waiting"
-                ? "Waiting for the original task’s verified result."
+                ? "Waiting for the implementation and its validated source before review."
                 : item.state === "ready"
-                  ? "Prerequisite verified; awaiting desktop admission."
+                  ? "Implementation verified; starting the review on desktop."
                   : item.state === "dispatching"
-                    ? "Desktop claimed the successor; reconciling admission."
+                    ? "Starting the review on desktop."
                     : item.state === "admitted"
-                      ? "Successor admitted; awaiting its result."
+                      ? "Review task started; waiting for its findings."
                       : item.state === "attention"
-                        ? "The prerequisite needs review before its successor can start."
+                        ? "The implementation needs attention before review can start."
                         : item.state === "blocked"
-                          ? "Handoff blocked."
-                          : `Handoff ${item.state}.`}
+                          ? "Workflow needs attention."
+                          : item.state === "completed" ? "Review completed."
+                            : item.state === "failed" ? "Review failed."
+                              : "Workflow stopped."}
           </p>
           {item.waitingForDesktop && (
             <p>
@@ -54,6 +56,14 @@ export function PonderHandoffActivity({
             {item.successor.modelId ?? item.successor.providerId} ·{" "}
             {item.successor.workspaceLabel}
           </small>
+          {item.workflow ? <p>
+            {item.workflow.preparationSessionId
+              ? "Reviewer created for the checklist and implementation handoff."
+              : ["failed", "cancelled", "expired", "attention"].includes(item.workflow.preparationState)
+                ? "Reviewer preparation needs attention."
+                : "Waiting to create the reviewer for its checklist."}{" "}
+            {item.workflow.sourceReady ? "Validated implementation is ready for review." : "Review waits for the validated implementation."}
+          </p> : null}
           <details>
             <summary>Success criteria</summary>
             <p>{item.successCriteria}</p>
@@ -63,7 +73,12 @@ export function PonderHandoffActivity({
               type="button"
               onClick={() => onOpenTask(item, item.prerequisite.sessionId!)}
             >
-              Open original task
+              {item.workflow ? "Open implementation task" : "Open original task"}
+            </button>
+          )}
+          {!item.successor.sessionId && item.workflow?.preparationSessionId && (
+            <button type="button" onClick={() => onOpenTask(item, item.workflow!.preparationSessionId!)}>
+              Open reviewer task
             </button>
           )}
           {item.successor.sessionId && (
@@ -71,7 +86,7 @@ export function PonderHandoffActivity({
               type="button"
               onClick={() => onOpenTask(item, item.successor.sessionId!)}
             >
-              Open successor task
+              {item.workflow ? "Open reviewer task" : "Open successor task"}
             </button>
           )}
           {item.canCancel && (

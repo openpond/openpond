@@ -26,6 +26,7 @@ import {
   messageScrollTop,
   nextUserMessageTarget,
   userMessageNavigationState,
+  userMessageRows,
   type UserMessageNavigationState,
 } from "./main-pane-helpers";
 import type { MainPaneProps } from "./main-pane-types";
@@ -663,7 +664,7 @@ export function useMainPaneChatScroll({
   useLayoutEffect(() => {
     if (chatSubmissionVersion === 0 || chatSubmissionVersion === observedSubmissionRef.current || view !== "chat" || !showChatThread) return;
     const element = chatThreadRef.current;
-    const row = Array.from(element?.querySelectorAll<HTMLElement>(".message-row.user") ?? []).filter((row) => row.parentElement === element).at(-1);
+    const row = element ? userMessageRows(element).at(-1) : undefined;
     if (!element || !row || row === previousUserRowRef.current) return;
     observedSubmissionRef.current = chatSubmissionVersion;
     cancelScheduledChatBottomScroll();
@@ -678,7 +679,7 @@ export function useMainPaneChatScroll({
 
   useLayoutEffect(() => {
     const element = chatThreadRef.current;
-    previousUserRowRef.current = Array.from(element?.querySelectorAll<HTMLElement>(".message-row.user") ?? []).filter((row) => row.parentElement === element).at(-1) ?? null;
+    previousUserRowRef.current = element ? userMessageRows(element).at(-1) ?? null : null;
   });
 
   useEffect(() => {

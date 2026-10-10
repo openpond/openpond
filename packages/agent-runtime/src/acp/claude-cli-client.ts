@@ -1,4 +1,5 @@
 import { ClaudeObservations } from "./claude-observations.js";
+import { ClaudeBackgroundTasks } from "./claude-background-tasks.js";
 import { signalNativeProcess } from "./process-tree.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -17,7 +18,7 @@ export class ClaudeCliClient {
   private child: ChildProcessWithoutNullStreams | null = null;
   private sessionId: string | null = null;
   private pending = new Map<string, { resolve(value: AcpObject): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
-  private turn: { resolve(value: { stopReason: string }): void; reject(error: Error): void; signal?: AbortSignal; resultReceived: boolean } | null = null;
+  private turn: { resolve(value: { stopReason: string }): void; reject(error: Error): void; signal?: AbortSignal; resultReceived: boolean; idle: boolean; cancellationAcknowledged: boolean; settled: boolean; replyOrdinal: number } | null = null;
   private messageId = "";
   private lastTextMessageId: string | null = null;
   private completedResultIds = new Set<string>();
@@ -26,9 +27,10 @@ export class ClaudeCliClient {
   private closed = false;
   private model = "default";
   private contextWindows = new Map<string, number>();
-  private observations = new ClaudeObservations((update) => this.emit(update), this.contextWindows);
+  private observations = this.createObservations();
+  private backgroundTasks = new ClaudeBackgroundTasks((update) => this.observations.tool(update));
   private stderrTail = "";
-  constructor(private readonly options: AcpClientOptions & { additionalDirectories?: string[] }) {}
+  constructor(private readonly options: AcpClientOptions & { additionalDirectories?: string[]; reportingOnly?: boolean }) {}
   async initialize(): Promise<AcpInitializeResult> {
     return { protocolVersion: 1, agentCapabilities: { loadSession: true, mcpCapabilities: { http: true }, promptCapabilities: { image: true, embeddedContext: true } }, authMethods: [], agentInfo: { name: "Claude Code CLI", version: "native" } };
   }
@@ -45,7 +47,9 @@ export class ClaudeCliClient {
       "--input-format", "stream-json", "--output-format", "stream-json",
       "--include-partial-messages",
       // Enable selecting YOLO through set_permission_mode without opting in at launch.
-      "--allow-dangerously-skip-permissions",
+      ...(this.options.reportingOnly
+        ? ["--restricted", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })]
+        : ["--allow-dangerously-skip-permissions"]),
       "--permission-prompt-tool", "stdio",
       "--append-system-prompt",
       "When you create files for the user, link each deliverable using Markdown with its absolute local path so OpenPond can open it. For example: [Report](/absolute/path/report.pdf).",
@@ -54,7 +58,7 @@ export class ClaudeCliClient {
       resume ? "--resume" : "--session-id", sessionId,
     ];
     const child = spawn(this.options.command, args, {
-      cwd, env: this.options.env ?? process.env,
+      cwd, env: { ...(this.options.env ?? process.env), CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1" },
       stdio: ["pipe", "pipe", "pipe"], shell: false, detached: process.platform !== "win32",
     });
     this.child = child;
@@ -88,17 +92,30 @@ export class ClaudeCliClient {
   async setModel(sessionId: string, modelId: string): Promise<void> { this.assertSession(sessionId); await this.control({ subtype: "set_model", model: modelId }); this.model = modelId; }
   async setMode(sessionId: string, modeId: string): Promise<void> {
     this.assertSession(sessionId); if (!permissionModes.some((mode) => mode.id === modeId)) throw new Error("Unsupported Claude permission mode.");
+    if (this.options.reportingOnly && modeId !== "manual") throw new Error("Reporting-only Claude cannot enable an editing or bypass mode.");
     await this.control({ subtype: "set_permission_mode", mode: modeId });
   }
   async prompt(sessionId: string, prompt: AcpObject[], signal?: AbortSignal): Promise<{ stopReason: string }> {
     this.assertSession(sessionId); if (this.turn) throw new Error("A prompt is already active for this native session."); if (signal?.aborted) throw new Error("Claude turn cancelled.");
-    this.observations = new ClaudeObservations((update) => this.emit(update), this.contextWindows);
+    this.observations = this.createObservations();
+    this.backgroundTasks.beginTurn();
     this.stderrTail = "";
     this.messageId = randomUUID();
     this.lastTextMessageId = null;
-    const promise = new Promise<{ stopReason: string }>((resolve, reject) => { this.turn = { resolve, reject, signal, resultReceived: false }; });
+    const promise = new Promise<{ stopReason: string }>((resolve, reject) => { this.turn = { resolve, reject, signal, resultReceived: false, idle: false, cancellationAcknowledged: false, settled: false, replyOrdinal: 0 }; });
     let kill: ReturnType<typeof setTimeout> | undefined;
-    const abort = () => { for (const controller of this.permissions) controller.abort(); void this.control({ subtype: "interrupt" }).catch(() => undefined); kill = setTimeout(() => { void this.stop(); }, 5_000); kill.unref(); };
+    const abort = () => {
+      const turn = this.turn;
+      for (const controller of this.permissions) controller.abort();
+      kill = setTimeout(() => { void this.stop(); }, 5_000); kill.unref();
+      // Interrupt only stops the main loop. Explicitly stop its background work
+      // as well, including when the main loop is already idle between replies.
+      void Promise.all([...this.backgroundTasks.ids.map(task_id => this.control({ subtype: "stop_task", task_id })), this.control({ subtype: "interrupt", cancel_queued: true })]).then(() => {
+        if (turn && this.turn === turn && !turn.settled) {
+          turn.cancellationAcknowledged = true; this.settleCancellation();
+        }
+      }).catch(() => { void this.stop(); });
+    };
     signal?.addEventListener("abort", abort, { once: true });
     try {
       this.write({ type: "user", session_id: sessionId, parent_tool_use_id: null, message: { role: "user", content: prompt.map((part) => part.type === "image" ? { type: "image", source: { type: "base64", media_type: part.mimeType, data: part.data } } : part) } });
@@ -124,6 +141,17 @@ export class ClaudeCliClient {
     this.updates = this.updates.then(async () => { await this.options.onUpdate?.(id, update); });
     void this.updates.catch((error: Error) => { this.fail(error); void this.stop(); });
   }
+  private createObservations(): ClaudeObservations {
+    return new ClaudeObservations((update) => this.emit(update.sessionUpdate === "usage_update"
+      ? { ...update, replyOrdinal: this.turn?.replyOrdinal ?? 0 } : update), this.contextWindows);
+  }
+  private tool(update: AcpObject): void { this.backgroundTasks.tool(update); this.observations.tool(update); }
+  private settleCancellation(): void {
+    const turn = this.turn;
+    if (turn && !turn.settled && turn.cancellationAcknowledged && turn.resultReceived && turn.idle) {
+      this.backgroundTasks.interrupt(); turn.settled = true; turn.resolve({ stopReason: "cancelled" });
+    }
+  }
   private receive(message: AcpObject): void {
     if (typeof message.session_id === "string" && message.session_id !== this.sessionId) {
       this.fail(new Error("Claude changed native session identity.")); void this.stop(); return;
@@ -131,6 +159,24 @@ export class ClaudeCliClient {
     // A replayed completion can arrive after the following prompt starts.
     // Fence it before observations or settlement can affect that new turn.
     if (message.type === "result" && typeof message.uuid === "string" && this.completedResultIds.has(message.uuid)) return;
+    this.backgroundTasks.observe(message);
+    if (message.type === "system" && message.subtype === "session_state_changed") {
+      const turn = this.turn;
+      if (!turn || turn.settled) return;
+      turn.idle = message.state === "idle";
+      if (message.state === "running" && turn.resultReceived) {
+        turn.resultReceived = false; turn.replyOrdinal++;
+        this.observations = this.createObservations();
+        this.messageId = randomUUID(); this.lastTextMessageId = null;
+      }
+      // A result ends a reply, not the process's background jobs. Only settle
+      // on a later idle signal, after the completion follow-up has also ended.
+      if (message.state === "idle" && turn.resultReceived && !this.backgroundTasks.running && !turn.signal?.aborted) {
+        turn.settled = true; turn.resolve({ stopReason: "end_turn" });
+      }
+      this.settleCancellation();
+      return;
+    }
     if (this.turn && !this.turn.resultReceived) this.observations.observe(message);
     if (message.type === "control_response") {
       const response = record(message.response), id = String(response.request_id), pending = this.pending.get(id);
@@ -138,7 +184,7 @@ export class ClaudeCliClient {
       if (response.subtype === "error") pending.reject(new Error(String(response.error ?? "Claude control failed."))); else pending.resolve(record(response.response));
     } else if (message.type === "control_request") { void this.permission(message); }
     else if (message.type === "stream_event") {
-      if (!this.turn || this.turn.resultReceived || message.parent_tool_use_id) return;
+      if (!this.turn || this.turn.settled || this.turn.resultReceived || message.parent_tool_use_id) return;
       const raw = record(message.event), delta = record(raw.delta), block = record(raw.content_block);
       if (raw.type === "message_start") {
         const id = record(raw.message).id;
@@ -152,20 +198,21 @@ export class ClaudeCliClient {
       }
       if (raw.type === "content_block_start" && block.type === "tool_use") {
         this.lastTextMessageId = null;
-        this.observations.tool({ sessionUpdate: "tool_call", toolCallId: block.id, title: block.name, kind: "other", status: "in_progress", rawInput: block.input });
+        this.tool({ sessionUpdate: "tool_call", toolCallId: block.id, title: block.name, kind: "other", status: "in_progress", rawInput: block.input });
       }
     } else if (message.type === "assistant") {
-      if (!this.turn || this.turn.resultReceived) return;
+      if (!this.turn || this.turn.settled || this.turn.resultReceived) return;
       const assistant = record(message.message), content = assistant.content;
       if (!message.parent_tool_use_id && typeof assistant.id === "string" && Array.isArray(content) && content.some((part) => record(part).type === "text")) this.lastTextMessageId = assistant.id;
       if (!message.parent_tool_use_id && Array.isArray(content) && content.some((part) => record(part).type === "tool_use")) this.lastTextMessageId = null;
-      for (const block of Array.isArray(content) ? content.map(record) : []) if (block.type === "tool_use") this.observations.tool({ sessionUpdate: "tool_call_update", toolCallId: block.id, title: block.name, status: "in_progress", rawInput: block.input });
+      for (const block of Array.isArray(content) ? content.map(record) : []) if (block.type === "tool_use") this.tool({ sessionUpdate: "tool_call_update", toolCallId: block.id, title: block.name, status: "in_progress", rawInput: block.input });
     } else if (message.type === "user") {
-      if (!this.turn || this.turn.resultReceived) return;
+      if (!this.turn || this.turn.settled || this.turn.resultReceived) return;
       const content = record(message.message).content;
-      for (const block of Array.isArray(content) ? content.map(record) : []) if (block.type === "tool_result") this.observations.tool({ sessionUpdate: "tool_call_update", toolCallId: block.tool_use_id, status: block.is_error ? "failed" : "completed", content: block.content });
+      for (const block of Array.isArray(content) ? content.map(record) : []) if (block.type === "tool_result") this.observations.tool(this.backgroundTasks.result(block, record(message.tool_use_result))
+        ?? { sessionUpdate: "tool_call_update", toolCallId: block.tool_use_id, status: block.is_error ? "failed" : "completed", content: block.content });
     } else if (message.type === "result") {
-      if (!this.turn || this.turn.resultReceived) return;
+      if (!this.turn || this.turn.settled || this.turn.resultReceived) return;
       if (typeof message.uuid === "string") this.completedResultIds.add(message.uuid);
       this.turn.resultReceived = true;
       if (message.session_id && message.session_id !== this.sessionId) { this.fail(new Error("Claude changed native session identity.")); return; }
@@ -175,12 +222,14 @@ export class ClaudeCliClient {
         this.emit({ sessionUpdate: "agent_message_final", messageId: this.lastTextMessageId ?? randomUUID(), content: { type: "text", text: message.result } });
       }
       this.observations.result(message, Boolean(this.turn.signal?.aborted));
-      if (message.is_error) this.turn?.reject(new Error(Array.isArray(message.errors) ? message.errors.map(String).join("; ") : "Claude turn failed.")); else this.turn?.resolve({ stopReason: "end_turn" });
+      if (message.is_error && !this.turn.signal?.aborted) {
+        this.turn.settled = true; this.turn.reject(new Error(Array.isArray(message.errors) ? message.errors.map(String).join("; ") : "Claude turn failed."));
+      }
     }
   }
   private async permission(message: AcpObject): Promise<void> {
     const request = record(message.request), id = String(message.request_id);
-    if (request.subtype !== "can_use_tool" || !this.turn || !this.sessionId) { this.write({ type: "control_response", response: { subtype: "error", request_id: id, error: "Unsupported or inactive control request." } }); return; }
+    if (request.subtype !== "can_use_tool" || !this.turn || this.turn.settled || this.turn.signal?.aborted || !this.sessionId) { this.write({ type: "control_response", response: { subtype: "error", request_id: id, error: "Unsupported or inactive control request." } }); return; }
     const controller = new AbortController(); this.permissions.add(controller);
     try {
       const input = record(request.input);
@@ -193,6 +242,7 @@ export class ClaudeCliClient {
     finally { this.permissions.delete(controller); }
   }
   private fail(error: Error): void {
+    this.backgroundTasks.interrupt();
     this.observations.finishCompaction();
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); } this.pending.clear(); this.turn?.reject(error); this.turn = null;
     for (const controller of this.permissions) controller.abort(); this.permissions.clear(); this.options.onExit?.(error);

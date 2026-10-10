@@ -913,7 +913,9 @@ app.whenReady().then(async () => {
   if (!ownsSingleInstanceLock) return;
   await initializeDesktopExecutablePath(desktopLogger());
   configureApplicationMenu(desktopRecoveryActions);
-  app.dock?.setIcon(appIconPath());
+  // Packaged macOS apps use the bundle's multi-resolution icon in Dock and Finder.
+  // Only development needs an override for the generic Electron host bundle.
+  if (!app.isPackaged) app.dock?.setIcon(appIconPath());
   desktopLogger().info("desktop app ready", { packaged: app.isPackaged });
   desktopUpdater = await createDesktopUpdater({
     publish: (state) => {

@@ -1055,6 +1055,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           dragItem,
           taskDragSessionId,
           taskPreviewSessionIds,
+          allSessions: sidebarSessions,
           activeSessions,
           archivedSessions,
           pinnedRows,

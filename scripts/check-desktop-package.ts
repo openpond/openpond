@@ -39,7 +39,10 @@ export async function checkDesktopPackage(input: {
 
   assertMinimalAsar(asarPath);
   await verifyRuntimeInventory(resourcesRoot, packagedInventory, platform);
-  if (platform === "darwin") await verifyDarwinAppBundleSignature(unpackedRoot);
+  if (platform === "darwin") {
+    await verifyDarwinAppBundleIcon(input.root, unpackedRoot);
+    await verifyDarwinAppBundleSignature(unpackedRoot);
+  }
   if (JSON.stringify(stageInventory.files) !== JSON.stringify(packagedInventory.files)) {
     throw new Error("Packaged runtime inventory differs from the staged runtime inventory.");
   }
@@ -105,6 +108,26 @@ export async function verifyDarwinAppBundleSignature(unpackedRoot: string): Prom
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Packaged macOS app bundle failed code-signature verification: ${detail}`);
+  }
+}
+
+async function verifyDarwinAppBundleIcon(root: string, unpackedRoot: string): Promise<void> {
+  const contents = path.join(unpackedRoot, firstAppBundle(unpackedRoot), "Contents");
+  const { stdout } = await execFileAsync("plutil", [
+    "-extract", "CFBundleIconFile", "raw", "-o", "-", path.join(contents, "Info.plist"),
+  ]);
+  const iconName = stdout.trim();
+  if (!iconName || path.basename(iconName) !== iconName) {
+    throw new Error("Packaged macOS app has an invalid CFBundleIconFile.");
+  }
+  const filename = iconName.endsWith(".icns") ? iconName : `${iconName}.icns`;
+  const iconFiles = [[filename, "icon.icns"], ["icon-mac.png", "icon-mac.png"]] as const;
+  for (const [bundledName, sourceName] of iconFiles) {
+    const [bundled, source] = await Promise.all([
+      fs.readFile(path.join(contents, "Resources", bundledName)),
+      fs.readFile(path.join(root, "apps", "desktop", "build", sourceName)),
+    ]);
+    if (!bundled.equals(source)) throw new Error(`Packaged macOS icon differs from the source asset: ${bundledName}.`);
   }
 }
 

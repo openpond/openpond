@@ -1,3 +1,4 @@
+import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
 import { Inbox, List } from "../icons";
 import { clientChoiceStorage } from "../../lib/client-choice-storage";
 import { orderSidebarInbox, sidebarInboxDateGroups, sidebarInboxTime } from "../../lib/sidebar-inbox";
@@ -122,6 +123,8 @@ export function groupSidebarTaskRows(
 
 export function SidebarSectionList({
   activeSessions,
+  workflowGroups = [],
+  workflowSessions = [],
   activityTimes = {},
   onSelectSession,
   archiveSession,
@@ -325,9 +328,14 @@ export function SidebarSectionList({
       ),
     [inProgressSessionIds, onlyRunningTasks, pinnedRows, showCodexChats],
   );
+  const workflowTaskRows = sidebarTaskRows({ activeSessions: workflowSessions.filter(session => !session.archived && !session.hiddenFromDefaultSidebar),
+    doneSessions: workflowSessions.filter(session => session.archived && !session.hiddenFromDefaultSidebar),
+    filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: taskSort });
+  const workflowSessionIds = useMemo(() => new Set(workflowGroups.flatMap(group => [group.prerequisite.sessionId, group.successor.sessionId,
+    group.workflow?.preparationSessionId].filter((id): id is string => Boolean(id)))), [workflowGroups]);
   const ordinaryFilteredTaskRows = useMemo(
-    () => filteredTaskRows.filter((session) => !isSidebarTaskPinned(session)),
-    [filteredTaskRows],
+    () => filteredTaskRows.filter((session) => !isSidebarTaskPinned(session) && !workflowSessionIds.has(session.id)),
+    [filteredTaskRows, workflowSessionIds],
   );
   const visibleTaskRows = useMemo(
     () =>
@@ -805,7 +813,7 @@ export function SidebarSectionList({
             tasksets={tasksetOptions}
           />;
   const inboxChildren = sidebarTaskRows({ activeSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => !session.archived), doneSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => session.archived), filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: "recent" });
-  const inboxRows = orderSidebarInbox([...filteredTaskRows, ...inboxChildren].filter((session) => !isSidebarTaskPinned(session)), activityTimes, inProgressSessionIds);
+  const inboxRows = orderSidebarInbox([...ordinaryFilteredTaskRows, ...inboxChildren].filter((session) => !isSidebarTaskPinned(session)), activityTimes, inProgressSessionIds);
 
   return (
     <div className="sidebar-sections">
@@ -831,6 +839,8 @@ export function SidebarSectionList({
           {visiblePinnedRows.map(renderPinnedRow)}
         </SidebarSection>
       ) : null}
+      <SidebarWorkflowGroups groups={workflowGroups} sessions={workflowTaskRows}
+        renderSession={session => renderTaskSession(session, { projectLabel: projectLabelForSession(session) })} />
       {inboxView ? <section className="sidebar-thread-inbox" aria-label="Thread inbox">
         {sidebarInboxDateGroups(inboxRows, activityTimes, inProgressSessionIds).map((group) => <div key={group.key}>
           {group.label ? <h3 className="sidebar-inbox-date">{group.label}</h3> : null}

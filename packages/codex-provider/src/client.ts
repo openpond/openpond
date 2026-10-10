@@ -99,6 +99,11 @@ export class CodexAppServerClient {
     return this.request("account/rateLimits/read", {});
   }
 
+  async listModels(params: { cursor?: string | null; limit?: number; includeHidden?: boolean } = {}): Promise<unknown> {
+    await this.initialize();
+    return this.request("model/list", params);
+  }
+
   async startThread(params: {
     cwd?: string | null;
     model?: string | null;

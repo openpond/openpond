@@ -93,6 +93,24 @@ export function createWorkEvidenceArtifactStore(storeDir: string) {
   }
 
   return {
+    async persistPortableBytes(bytes: Uint8Array) {
+      const buffer = Buffer.from(bytes);
+      const hash = sha256(buffer);
+      await writeImmutable(artifactPath(root, "portable", hash, "bin"), buffer);
+      return hash;
+    },
+    async readPortableBytes(hash: string) {
+      if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid artifact hash.");
+      const bytes = await readFile(artifactPath(root, "portable", hash, "bin"));
+      if (sha256(bytes) !== hash) throw new Error("Source artifact content changed.");
+      return bytes;
+    },
+    async readPortableJson(hash: string) {
+      if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid artifact hash.");
+      const value: unknown = JSON.parse(await readFile(artifactPath(root, "portable", hash, "json"), "utf8"));
+      if (contentHash(value) !== hash) throw new Error("Source manifest content changed.");
+      return value;
+    },
     existingOutputArtifact,
     persistPortableJson,
     persistPrivateBytes,

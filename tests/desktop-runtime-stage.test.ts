@@ -1,6 +1,8 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { PNG } from "pngjs";
 import { describe, expect, test } from "vitest";
 import {
   artifactArchitectureLabel,
@@ -14,6 +16,71 @@ import {
 } from "../scripts/stage-desktop-runtime";
 
 describe("desktop runtime staging", () => {
+  // Failure story: small PNG-based ICNS entries disappeared in Finder while a
+  // full-bleed runtime override made the Dock icon larger than neighboring apps.
+  // Decode the shipped assets, including small ARGB entries and Retina sizes.
+  test("ships padded macOS icons with decodable Finder and Retina representations", async () => {
+    const build = fileURLToPath(new URL("../apps/desktop/build/", import.meta.url));
+    const icns = await readFile(path.join(build, "icon.icns"));
+    const dockPng = await readFile(path.join(build, "icon-mac.png"));
+    expect(icns.toString("ascii", 0, 4)).toBe("icns");
+    expect(icns.readUInt32BE(4)).toBe(icns.length);
+    const expected = new Map([
+      ["ic04", 16], ["ic05", 32], ["ic07", 128], ["ic08", 256], ["ic09", 512],
+      ["ic10", 1024], ["ic11", 32], ["ic12", 64], ["ic13", 256], ["ic14", 512],
+    ]);
+    for (let offset = 8; offset < icns.length;) {
+      const type = icns.toString("ascii", offset, offset + 4);
+      const length = icns.readUInt32BE(offset + 4);
+      expect(length).toBeGreaterThan(8);
+      expect(offset + length).toBeLessThanOrEqual(icns.length);
+      const size = expected.get(type);
+      expect(size, `Unexpected or duplicate ICNS entry ${type}`).toBeDefined();
+      expected.delete(type);
+      const payload = icns.subarray(offset + 8, offset + length);
+      let image: PNG;
+      if (type === "ic04" || type === "ic05") {
+        expect(payload.toString("ascii", 0, 4)).toBe("ARGB");
+        image = new PNG({ width: size!, height: size! });
+        let cursor = 4;
+        for (const channel of [3, 0, 1, 2]) {
+          let pixel = 0;
+          while (pixel < size! * size!) {
+            expect(cursor).toBeLessThan(payload.length);
+            const control = payload[cursor++]!;
+            const count = control < 128 ? control + 1 : control - 125;
+            expect(pixel + count).toBeLessThanOrEqual(size! * size!);
+            const repeated = control >= 128 ? payload[cursor++] : undefined;
+            for (let index = 0; index < count; index++) {
+              const value = repeated ?? payload[cursor++];
+              expect(value).toBeDefined();
+              image.data[pixel++ * 4 + channel] = value!;
+            }
+          }
+        }
+        expect(cursor).toBe(payload.length);
+      } else {
+        image = PNG.sync.read(payload);
+      }
+      expect([image.width, image.height]).toEqual([size, size]);
+      const inset = Math.round(size! * 96 / 1024);
+      let hasVisibleLogo = false;
+      for (let y = 0; y < size!; y++) {
+        for (let x = 0; x < size!; x++) {
+          const pixel = (y * size! + x) * 4;
+          if (x < inset || y < inset || x >= size! - inset || y >= size! - inset) {
+            if (image.data[pixel + 3] !== 0) throw new Error(`${type} is missing transparent macOS padding.`);
+          }
+          if (image.data[pixel] > 128 && image.data[pixel + 3] > 128) hasVisibleLogo = true;
+        }
+      }
+      expect(hasVisibleLogo, `${type} has no visible logo`).toBe(true);
+      if (type === "ic09") expect(payload.equals(dockPng)).toBe(true);
+      offset += length;
+    }
+    expect(expected.size).toBe(0);
+  });
+
   test("selects only runtime node-pty files for each target", () => {
     expect(nodePtyPrebuildFiles("linux")).toEqual(["pty.node"]);
     expect(nodePtyPrebuildFiles("darwin")).toEqual([
