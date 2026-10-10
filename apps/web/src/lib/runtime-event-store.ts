@@ -47,6 +47,7 @@ export class RuntimeEventStore {
   private readonly entries = new Map<string, SessionEntry>();
   private readonly eventKeyById = new Map<string, string>();
   private readonly listenersByKey = new Map<string, Set<Listener>>();
+  private readonly liveListeners = new Set<(events: readonly RuntimeEvent[]) => void>();
   private readonly allListeners = new Set<Listener>();
   private readonly summaryListeners = new Set<Listener>();
   private readonly retainedKeys = new Set<string>();
@@ -71,6 +72,19 @@ export class RuntimeEventStore {
       throw new Error("totalLimit must be greater than or equal to perSessionLimit");
     }
   }
+
+  /** Only the stream path publishes live batches; history/bootstrap never does. */
+  appendLive(events: readonly RuntimeEvent[]): RuntimeEventStoreAppendResult {
+    const fresh = events.filter(event => !this.eventKeyById.has(event.id));
+    const result = this.append(events);
+    if (fresh.length) for (const listener of this.liveListeners) listener(fresh);
+    return result;
+  }
+
+  subscribeLive = (listener: (events: readonly RuntimeEvent[]) => void): (() => void) => {
+    this.liveListeners.add(listener);
+    return () => this.liveListeners.delete(listener);
+  };
 
   append(events: readonly RuntimeEvent[]): RuntimeEventStoreAppendResult {
     if (events.length === 0) return emptyAppendResult();

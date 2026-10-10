@@ -85,7 +85,7 @@ export const MessageRow = memo(function MessageRow({
   userAttachmentDisplay = "full",
   workspaceRootPath = null,
 }: MessageRowProps) {
-  if (message.role === "visual" && message.visual) return <article className="message-row assistant"><HtmlVisual key={message.visual.publicationId} visual={message.visual} connection={connection} /></article>;
+  if (message.role === "visual" && message.visual) return <article className="message-row assistant" data-notification-turn={message.turnId} data-notification-final={message.finalAnswer ? "true" : undefined}><HtmlVisual key={message.visual.publicationId} visual={message.visual} connection={connection} /></article>;
   if (message.role === "task_message") return <TaskMessageRow message={message} onOpenSession={onOpenSession}
     onOpenPonder={onOpenPonder} connection={connection} />;
   if (message.role === "status_divider") {
@@ -107,7 +107,7 @@ export const MessageRow = memo(function MessageRow({
   if (message.role === "error") {
     if (message.errorKind === "opchat_quota_exceeded") {
       return (
-        <article className="message-row assistant">
+        <article className="message-row assistant" data-notification-turn={message.turnId} data-notification-final={message.finalAnswer ? "true" : undefined}>
           <OpChatQuotaErrorCard
             accountBaseUrl={accountBaseUrl}
             billingOrganizationSlug={billingOrganizationSlug}
@@ -118,7 +118,7 @@ export const MessageRow = memo(function MessageRow({
       );
     }
     return (
-      <article className="message-row assistant">
+      <article className="message-row assistant" data-notification-turn={message.turnId} data-notification-final={message.finalAnswer ? "true" : undefined}>
         <div className="assistant-message error-message">
           {message.content ?? ""}
         </div>
@@ -159,7 +159,7 @@ export const MessageRow = memo(function MessageRow({
       : null;
 
   return (
-    <article className="message-row assistant">
+    <article className="message-row assistant" data-notification-turn={message.turnId} data-notification-final={message.finalAnswer ? "true" : undefined}>
       {message.reasoningContent ? (
         <div className="assistant-message">
           <StreamingMarkdownText
@@ -334,6 +334,7 @@ function UserQuestionCard({
   };
   return (
     <section
+      data-notification-question={question.id}
       className={`user-question-card ${question.status}`}
       aria-label="Question from OpenPond"
     >

@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { ChatProvider, ProviderSettings, Session, WorkspaceKind } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
-import type { AppAction, AppToast } from "../app/app-state";
 import { modelSelectionForSession, normalizeChatModel, projectSelectionKey } from "../lib/app-models";
 import { isCloudWorkspaceKind, isHybridWorkspaceSession } from "../lib/workspace-location";
 
@@ -26,7 +25,6 @@ export function sessionModelSelectionSyncKey(
 export function useAppShellEffects({
   activeWorkspaceId,
   activeWorkspaceKind,
-  appDispatch,
   connection,
   expandProject,
   linkedProjectByAppId,
@@ -43,11 +41,9 @@ export function useAppShellEffects({
   setSelectedProjectId,
   setSessions,
   setTerminalOpen,
-  toast,
 }: {
   activeWorkspaceId: string | null;
   activeWorkspaceKind: WorkspaceKind | null;
-  appDispatch: Dispatch<AppAction>;
   connection: ClientConnection | null;
   expandProject: (projectId: string) => void;
   linkedProjectByAppId: Map<string, string>;
@@ -64,7 +60,6 @@ export function useAppShellEffects({
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
   setSessions: Dispatch<SetStateAction<Session[]>>;
   setTerminalOpen: Dispatch<SetStateAction<boolean>>;
-  toast: AppToast | null;
 }) {
   const lastSyncedModelSelectionRef = useRef<string | null>(null);
 
@@ -87,18 +82,6 @@ export function useAppShellEffects({
     setSelectedAppId,
     setSelectedProjectId,
   ]);
-
-  useEffect(() => {
-    if (!toast) return undefined;
-    if (toast.persistent) return undefined;
-    const timeout = window.setTimeout(
-      () => {
-        appDispatch({ type: "clearToast", toastId: toast.id });
-      },
-      toast.durationMs ?? (toast.tone === "error" ? 7000 : 3500),
-    );
-    return () => window.clearTimeout(timeout);
-  }, [appDispatch, toast]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {

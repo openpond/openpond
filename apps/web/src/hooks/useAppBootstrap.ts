@@ -104,7 +104,7 @@ export function useAppBootstrap(params: {
     runtimeEventStore.replace(next);
   }, [runtimeEventStore]);
   const appendRuntimeEvents = useCallback((nextEvents: readonly RuntimeEvent[]) => {
-    runtimeEventStore.append(nextEvents);
+    runtimeEventStore.appendLive(nextEvents);
   }, [runtimeEventStore]);
   const [runtimeEventStreamStart, setRuntimeEventStreamStart] = useState<{
     afterSequence: number;
@@ -555,6 +555,7 @@ export function useAppBootstrap(params: {
     connection,
     events,
     runtimeEventStore,
+    notificationAfterSequence: runtimeEventStreamStart?.afterSequence ?? null,
     refreshOpenPondAccount,
     sessions,
     startup: appStartupState(startupStage),

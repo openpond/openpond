@@ -45,6 +45,7 @@ import { useApprovalResolver } from "../hooks/useApprovalResolver";
 import { useAppDerivedRows } from "../hooks/useAppDerivedRows";
 import { useBeginNewChat } from "../hooks/useBeginNewChat";
 import { navigateDesktopRoute } from "../components/labs/lab-primary-tab-state";
+import { connectionQueryScope } from "../lib/query-scope";
 import { useAppConversationContext } from "../hooks/useAppConversationContext";
 import { useCodexPreferenceActions } from "../hooks/useCodexPreferenceActions";
 import { useCodexHistoryEvents } from "../hooks/useCodexHistoryEvents";
@@ -168,7 +169,7 @@ export function useAppPrimaryRuntime() {
     commitDraft,
     branchDialogOpen,
     branchDialogName,
-    toast,
+    toasts,
     error,
   } = appState;
   const labDetailNavigation = useLabDetailNavigation(view === "labs");
@@ -227,6 +228,7 @@ export function useAppPrimaryRuntime() {
     connection,
     events,
     runtimeEventStore,
+    notificationAfterSequence,
     approvals,
     sessions,
     startup,
@@ -324,7 +326,6 @@ export function useAppPrimaryRuntime() {
     profileId: bootstrap?.profile?.activeProfile ?? "default",
   });
   const {
-    pinnedCollapsed,
     projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
@@ -333,7 +334,6 @@ export function useAppPrimaryRuntime() {
     sidebarResizing,
     diffPanelWidth,
     diffPanelResizing,
-    togglePinnedCollapsed,
     toggleProjectsCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,
@@ -442,6 +442,7 @@ export function useAppPrimaryRuntime() {
   const teamChatTeamId = teamChatOrganization?.teamId ?? null;
   const teamChat = useTeamChat({
     connection,
+    accountScopeKey,
     teamId: teamChatTeamId,
     currentUserId: account?.profile?.id ?? null,
     refreshToken: bootstrap?.accountMeta.asOf ?? null,
@@ -453,6 +454,7 @@ export function useAppPrimaryRuntime() {
     refreshDirectory: teamChat.refreshDirectory,
   });
   useTeamChatIncomingToast({
+    scope: JSON.stringify([connectionQueryScope(connection), bootstrap?.server.id, accountScopeKey, teamChatTeamId]),
     notification: teamChat.incomingNotification,
     dismiss: teamChat.dismissIncomingNotification,
     selectThread: teamChat.selectThread,
@@ -541,7 +543,6 @@ export function useAppPrimaryRuntime() {
   useAppShellEffects({
     activeWorkspaceId,
     activeWorkspaceKind,
-    appDispatch,
     connection,
     expandProject,
     linkedProjectByAppId,
@@ -558,7 +559,6 @@ export function useAppPrimaryRuntime() {
     setSelectedProjectId,
     setSessions,
     setTerminalOpen,
-    toast,
   });
 
   const { changeCodexPermissionMode, changeCodexReasoningEffort } =
@@ -977,7 +977,7 @@ export function useAppPrimaryRuntime() {
     commitDraft,
     branchDialogOpen,
     branchDialogName,
-    toast,
+    toasts,
     error,
     labDetailNavigation,
     setQuery,
@@ -1025,6 +1025,7 @@ export function useAppPrimaryRuntime() {
     connection,
     events,
     runtimeEventStore,
+    notificationAfterSequence,
     sessions,
     startup,
     setAppPreferences,
@@ -1032,7 +1033,6 @@ export function useAppPrimaryRuntime() {
     setEvents,
     setSessions,
     training,
-    pinnedCollapsed,
     projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
@@ -1041,7 +1041,6 @@ export function useAppPrimaryRuntime() {
     sidebarResizing,
     diffPanelWidth,
     diffPanelResizing,
-    togglePinnedCollapsed,
     toggleProjectsCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,

@@ -219,7 +219,6 @@ export function VoiceInputButton({
 
     showToast(VOICE_SETUP_NOTICE_MESSAGE, "info", {
       actionLabel: "Continue",
-      persistent: true,
       onAction: () => {
         setupNoticeAcknowledgedRef.current = true;
         writeVoiceSetupNoticeAcknowledged();

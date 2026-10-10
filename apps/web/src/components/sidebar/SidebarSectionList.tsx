@@ -1,3 +1,6 @@
+import { SidebarNewThreadButton } from "./SidebarNavigation";
+import { SidebarTeamAvatars } from "./SidebarTeamAvatars";
+import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
 import { Inbox, List } from "../icons";
 import { clientChoiceStorage } from "../../lib/client-choice-storage";
@@ -122,6 +125,15 @@ export function groupSidebarTaskRows(
 
 export function SidebarSectionList({
   activeSessions,
+  beginNewChat,
+  account,
+  teamChatEnabled,
+  teamChatOrganization,
+  selectedTeamId,
+  teamMembers,
+  currentUserId,
+  openTeamDm,
+  onOpenPonder,
   workflowGroups = [],
   workflowSessions = [],
   activityTimes = {},
@@ -139,7 +151,6 @@ export function SidebarSectionList({
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
   localProjectRows,
   openSidebarFile,
-  pinnedCollapsed,
   pinnedRows,
   previewTaskDrop,
   previewPinnedDrop,
@@ -169,7 +180,6 @@ export function SidebarSectionList({
   clearTaskDrag,
   removeProject,
   toggleProjectPinned,
-  onTogglePinnedCollapsed,
   setSidebarFileStatus,
   commitPinnedDrop,
   commitPinnedPreviewDrop,
@@ -813,6 +823,19 @@ export function SidebarSectionList({
       <div className="sidebar-threads-header">
         <span>Threads</span>
         <div className="sidebar-threads-header-actions">
+          {teamChatEnabled && teamChatOrganization?.teamId === selectedTeamId ? (
+            <SidebarTeamAvatars
+              key={`${account?.activeProfile ?? ""}:${selectedTeamId}`}
+              members={teamMembers}
+              currentUserId={currentUserId}
+              teamName={teamChatOrganization.displayName}
+              onOpenDm={(userId) => {
+                void (async () => {
+                  if (await navigateDesktopRoute({ kind: "view", view: "team" })) openTeamDm(userId);
+                })();
+              }}
+            />
+          ) : null}
           {inboxView ? listControls : null}
           <button type="button" className={`sidebar-icon${inboxView ? " active" : ""}`}
             aria-label={inboxView ? "Show grouped threads" : "Show thread inbox"}
@@ -820,17 +843,19 @@ export function SidebarSectionList({
             onClick={() => { const next = inboxView ? "grouped" : "inbox"; setPresentation(next); clientChoiceStorage.setItem("openpond.sidebar.presentation.v1", next); }}>
             {inboxView ? <List size={16} /> : <Inbox size={16} />}
           </button>
+          <SidebarNewThreadButton beginNewChat={beginNewChat} />
         </div>
       </div>
+      {account?.activeProfile && onOpenPonder ? (
+        <button type="button" className="sidebar-row sidebar-task-row sidebar-ponder-entry" onClick={onOpenPonder}>
+          <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
+          <span>Ponder Pal</span>
+        </button>
+      ) : null}
       {visiblePinnedRows.length > 0 ? (
-        <SidebarSection
-          label="Pinned"
-          className="sidebar-pinned-section"
-          collapsed={pinnedCollapsed}
-          onToggleCollapsed={onTogglePinnedCollapsed}
-        >
+        <div className="sidebar-pinned-rows">
           {visiblePinnedRows.map(renderPinnedRow)}
-        </SidebarSection>
+        </div>
       ) : null}
       <SidebarWorkflowGroups groups={workflowGroups} sessions={workflowTaskRows}
         renderSession={session => renderTaskSession(session, { projectLabel: projectLabelForSession(session) })} />
@@ -872,7 +897,7 @@ export function SidebarSectionList({
         className="sidebar-task-section sidebar-ordinary-section"
         collapsed={ordinaryCollapsed}
         onToggleCollapsed={() => setOrdinaryCollapsed((current) => !current)}
-        actionsVisible={sectionMenuOpen === "chats" || sectionMenuOpen === "tasks-filter" || taskFilter !== "active" || onlyRunningTasks || !showCodexChats}
+        actionsVisible={sectionMenuOpen === "tasks-filter" || taskFilter !== "active" || onlyRunningTasks || !showCodexChats}
         actions={listControls}
       >
         {(!groupByProject

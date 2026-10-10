@@ -1,3 +1,7 @@
+import { useToastPresentation } from "../hooks/useToastPresentation";
+import { useThreadNotifications } from "../hooks/useThreadNotifications";
+import { useThreadNotificationReveal } from "../hooks/useThreadNotificationReveal";
+import { connectionQueryScope } from "../lib/query-scope";
 import { sidebarActivityTimes } from "../lib/sidebar-inbox";
 import { usePonderActivity } from "../components/ponder/usePonderActivity";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -124,7 +128,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     commitDraft,
     branchDialogOpen,
     branchDialogName,
-    toast,
+    toasts,
     labDetailNavigation,
     setQuery,
     setSearchOpen,
@@ -164,7 +168,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     connection,
     startup,
     training,
-    pinnedCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
     savedForLaterCollapsed,
@@ -172,7 +175,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     sidebarResizing,
     diffPanelWidth,
     diffPanelResizing,
-    togglePinnedCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,
     toggleSavedForLaterCollapsed,
@@ -186,6 +188,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     sidebarSessions,
     runtimeIndexes,
     runtimeEventStore,
+    notificationAfterSequence,
     chatMentionApps,
     connectedAppMentions,
     pendingApproval,
@@ -341,6 +344,26 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     toggleRightSidebar,
     removeProject,
   } = secondary;
+  const notificationScope = JSON.stringify([connectionQueryScope(connection), bootstrap?.server.id,
+    bootstrap?.account.activeProfile, bootstrap?.account.profile?.id, teamChatTeamId]);
+  const dismissToast = useCallback((toastId: number) => appDispatch({ type: "clearToast", toastId }), [appDispatch]);
+  const toastPresentation = useToastPresentation(toasts, dismissToast, notificationScope);
+  useThreadNotificationReveal(notificationScope);
+  const visibleNotificationSessionIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (view === "chat" && selectedSessionId) ids.add(selectedSessionId);
+    if (diffPanelOpen && rightPanelMode === "chat") {
+      for (const panel of rightChatPanelViews) if (panel.sessionId) ids.add(panel.sessionId);
+    }
+    return ids;
+  }, [view, selectedSessionId, diffPanelOpen, rightPanelMode, rightChatPanelViews]);
+  const openNotificationThread = useCallback((target: import("../lib/app-toasts").ThreadToastTarget, isCurrent: () => boolean) =>
+    openSessionInChat(target.sessionId, target, isCurrent), [openSessionInChat]);
+  useThreadNotifications({ scope: notificationScope, afterSequence: notificationAfterSequence,
+    store: runtimeEventStore, indexes: runtimeIndexes, sessions: sidebarSessions,
+    visibleSessionIds: visibleNotificationSessionIds, toasts, showToast, dispatch: appDispatch,
+    openThread: openNotificationThread });
+
   usePonderActivity(connection, bootstrap?.account.activeProfile && bootstrap.preferences.defaultTeamId
     ? JSON.stringify([bootstrap.account.baseUrl, bootstrap.account.activeProfile, bootstrap.account.profile?.id, bootstrap.account.state, bootstrap.preferences.defaultTeamId]) : null, () => {
       void navigateDesktopRoute({ kind: "chat", sessionId: null }).then(accepted => {
@@ -892,9 +915,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             },
           }}
           toast={{
-            toast,
-            onDismiss: () =>
-              appDispatch({ type: "field", key: "toast", value: null }),
+            ...toastPresentation,
           }}
         />
       </AppToastProvider>
@@ -1044,7 +1065,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           account,
           connection,
           profile: bootstrap?.profile,
-          pinnedCollapsed,
           cloudProjectsCollapsed,
           chatsCollapsed,
           savedForLaterCollapsed,
@@ -1089,7 +1109,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setSettingsSection,
           onSelectTeam: selectSidebarTeam,
           onLogOut: logOutOpenPondAccount,
-          onTogglePinnedCollapsed: togglePinnedCollapsed,
           onToggleCloudProjectsCollapsed: toggleCloudProjectsCollapsed,
           onToggleChatsCollapsed: toggleChatsCollapsed,
           onToggleSavedForLaterCollapsed: toggleSavedForLaterCollapsed,
@@ -1491,9 +1510,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           submitNewProjectDialog,
         }}
         toast={{
-          toast,
-          onDismiss: () =>
-            appDispatch({ type: "field", key: "toast", value: null }),
+          ...toastPresentation,
         }}
       />
     </AppToastProvider>

@@ -10,8 +10,9 @@ export function MessageFooter({ content, timestamp, kvCacheSummary }: {
 }) {
   const time = formatMessageTimestamp(timestamp);
   const rate = kvCacheSummary?.cacheHitRate;
-  const cache = typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1
-    ? `${Math.round(rate * 100)}%` : null;
+  const cachePercent = typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1
+    ? Math.round(rate * 100) : 0;
+  const cache = cachePercent > 0 ? `${cachePercent}%` : null;
   return <div className="assistant-message-footer">
     {time ? <time className="message-timestamp" dateTime={timestamp}
       title={formatMessageTimestampTitle(timestamp)}>{time}</time> : null}
