@@ -231,13 +231,14 @@ test("authorization, cycle prevention and generation-specific event waits share 
   cleanup.push(runtime.close);
   await expect(runtime.send({ senderSessionId: "outsider", sessionId: "a", body: "secret", idempotencyKey: "denied" })).rejects.toThrow("authorized project");
   await f.store.insertTurn({ ...f.turn, id: "old-b", sessionId: "b", status: "completed" });
-  const receipt = await runtime.send({ senderSessionId: "a", sessionId: "b", body: "New work", kind: "followup", idempotencyKey: "new" });
-  expect((await runtime.send({ senderSessionId: "a", sessionId: "b", body: "New work", kind: "followup", idempotencyKey: "new" })).id).toBe(receipt.id);
+  const receipt = await runtime.send({ senderSessionId: "a", sessionId: "b", body: "New work", kind: "followup", reportingOnly: true, idempotencyKey: "new" });
+  expect((await runtime.send({ senderSessionId: "a", sessionId: "b", body: "New work", kind: "followup", reportingOnly: true, idempotencyKey: "new" })).id).toBe(receipt.id);
   for (const [sessionId, direction, peerId] of [["a", "sent", "b"], ["b", "received", "a"]]) {
     const messages = buildChatMessages(await f.store.runtimeEventsForSession(sessionId!));
     expect(messages.filter(message => message.role === "task_message")).toHaveLength(1);
     expect(messages[0]?.taskMessage).toMatchObject({ direction, peer: { sessionId: peerId }, input: { id: receipt.id, state: "pending" } });
   }
+  expect((await f.store.getTaskInput(receipt.id))?.payload.taskReportingOnly).toBe(true);
   const waiting = runtime.wait({ sessionId: "a", turnId: "turn-a", callId: "wait-new", targetSessionId: "b", targetInputId: receipt.id, signal: new AbortController().signal });
   await vi.waitFor(async () => expect(await f.store.taskWaitsForSession("a")).toHaveLength(1));
   await expect(f.store.createTaskWait(TaskWaitSchema.parse({ id: "cycle", sessionId: "b", turnId: "new-b", targetSessionId: "a", targetTurnId: "turn-a", afterSequence: 0,

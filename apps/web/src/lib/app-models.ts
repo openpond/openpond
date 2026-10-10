@@ -81,6 +81,7 @@ export type ActivityItem = {
   action?: string;
   controlKind?: "goal_context" | "turn_aborted";
   callId?: string;
+  backgroundTaskId?: string;
   detail?: string;
   terminal?: {
     exitCode?: number | null;

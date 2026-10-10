@@ -29,6 +29,9 @@ import type { ClientConnection } from "../../api";
 
 export type SidebarProps = {
   onOpenPonder?: () => void;
+  workflowGroups?: import("@openpond/contracts").PonderDesktopHandoffPresentation[];
+  allSessions?: Session[];
+  workflowSessions?: Session[];
   onOpenTeamChat: () => void;
   onSelectSession?: (session: Session) => void;
   activityTimes?: Readonly<Record<string, string>>;

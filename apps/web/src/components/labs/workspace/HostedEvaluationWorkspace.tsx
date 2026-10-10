@@ -18,6 +18,7 @@ import { LocalProfileDatasetPage } from "./LocalProfileDatasetPage";
 import { HostedDatasetsPage } from "./HostedDatasetsPage";
 import { HostedGradersPage } from "./HostedGradersPage";
 import { ProjectScopePicker } from "./ProjectScopePicker";
+import { DropdownSelect } from "../../DropdownSelect";
 import { EvaluationSetupProvider, useEvaluationSetup } from "./EvaluationSetupState";
 import { ExperimentSetupPanel } from "./ExperimentSetupPanel";
 import "../../../styles/labs/evaluation-workspace.css";
@@ -128,7 +129,7 @@ function HostedEvaluationWorkspaceContent({
           aria-label="Hosted Models workspace"
         >
           <div className="evaluation-workspace-main">
-            <div className="evaluation-workspace-scope">
+            <div className="evaluation-workspace-scope evaluation-scope-bar">
               <ProjectScopePicker
                 key={api.key}
                 api={api}
@@ -136,37 +137,33 @@ function HostedEvaluationWorkspaceContent({
                 selectedId={route.projectId ?? null}
                 onChange={changeProject}
               />
-              <label>
-                Execution location
-                <select
-                  value={api.location}
-                  onChange={(event) =>
-                    onNavigate({
-                      ...route,
-                      executionLocation: event.target.value as "local" | "hosted",
-                      resourceId: null,
-                      detailTab: null,
-                      executionId: null,
-                      passId: null,
-                      after: null,
-                      revision: undefined,
-                      contentHash: undefined,
-                    })
-                  }
-                >
-                  <option value="hosted">Hosted</option>
-                  <option value="local">Local Desktop</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className="training-button secondary"
-                aria-expanded={panel?.open}
-                onClick={panel?.toggle}
-              >
-                {panel?.open ? "Hide sidebar" : "Open sidebar"}
-              </button>
-              <small>Datasets / {inventory.data?.apiOrigin ?? "Connecting"}</small>
+              <DropdownSelect
+                className="evaluation-scope-select"
+                label="Execution location"
+                value={api.location}
+                options={[
+                  {
+                    value: "hosted",
+                    label: "Hosted",
+                    description:
+                      api.location === "hosted" ? inventory.data?.apiOrigin : undefined,
+                  },
+                  { value: "local", label: "Local Desktop", description: "Runs on this computer" },
+                ]}
+                onChange={(value) =>
+                  onNavigate({
+                    ...route,
+                    executionLocation: value as "local" | "hosted",
+                    resourceId: null,
+                    detailTab: null,
+                    executionId: null,
+                    passId: null,
+                    after: null,
+                    revision: undefined,
+                    contentHash: undefined,
+                  })
+                }
+              />
             </div>
             {inventory.error ? (
               <div role="alert">

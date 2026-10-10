@@ -1708,3 +1708,12 @@ button.sidebar-project-location-row:disabled {
 .native-branch-picker > button > span, .native-branch-picker code { overflow-wrap: anywhere; }
 .native-branch-picker small, .native-branch-picker code { color: var(--text-muted); font-size: 11px; }
 .native-branch-picker > div { display: flex; justify-content: space-between; gap: 8px; }
+
+.sidebar-workflow-group { margin-bottom: 14px; }
+.sidebar-workflow-group .sidebar-task-project-group-header { padding: 5px 7px; gap: 7px; }
+.sidebar-workflow-group .sidebar-task-project-group-icon { display: none; }
+.sidebar-workflow-group .sidebar-task-project-group-name { font-size: 12px; font-weight: 500; }
+.sidebar-workflow-group .sidebar-task-project-group-caret { margin-left: auto; opacity: 1; }
+.sidebar-workflow-group .sidebar-task-project-group-content { margin-top: 0; padding: 0; }
+.sidebar .sidebar-workflow-group .sidebar-row.sidebar-task-row { border-color: #64c7d655; }
+.sidebar-workflow-plan { padding: 3px 7px 5px; color: var(--text-muted); font-size: 11px; }

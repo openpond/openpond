@@ -76,6 +76,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/starter-tool-attempt.test.ts",
   "tests/model-usage-store.test.ts",
   "tests/native-agent-boundaries.test.ts",
+  "tests/native-agent-background-tasks.test.ts",
   "tests/native-agent-final-response.test.ts",
   "tests/native-history-sidebar.test.ts",
   "tests/openpond-command-access.test.ts",

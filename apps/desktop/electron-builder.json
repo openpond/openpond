@@ -45,6 +45,12 @@
   ],
   "mac": {
     "icon": "apps/desktop/build/icon.icns",
+    "extraResources": [
+      {
+        "from": "apps/desktop/build/icon-mac.png",
+        "to": "icon-mac.png"
+      }
+    ],
     "category": "public.app-category.developer-tools",
     "forceCodeSigning": true,
     "hardenedRuntime": true,

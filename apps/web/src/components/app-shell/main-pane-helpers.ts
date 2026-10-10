@@ -30,10 +30,10 @@ export const EMPTY_USER_MESSAGE_NAVIGATION: UserMessageNavigationState = {
   canGoNext: false,
 };
 
-function userMessageRows(element: HTMLElement): HTMLElement[] {
-  return Array.from(
-    element.querySelectorAll<HTMLElement>(".message-row.user")
-  ).filter((row) => row.parentElement === element);
+export function userMessageRows(element: HTMLElement): HTMLElement[] {
+  return Array.from(element.children).filter((row): row is HTMLElement =>
+    row instanceof HTMLElement &&
+    (row.matches(".message-row.user") || row.dataset.chatUserMessage === "true"));
 }
 
 export function billingTargetForContext({

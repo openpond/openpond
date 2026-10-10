@@ -37,6 +37,7 @@ export const PonderDesktopHandoffPresentationSchema = z
         workspaceLabel: z.string().min(1),
       })
       .strict(),
+    workflow: z.object({ kind: z.literal("review"), preparationSessionId: z.string().nullable(), preparationState: z.string(), sourceReady: z.boolean(), preparationCleanupPending: z.boolean() }).strict().optional(),
     successCriteria: z.string().min(1),
     canEdit: z.boolean(),
     canCancel: z.boolean(),

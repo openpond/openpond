@@ -16,6 +16,7 @@ export type PonderLinkedLocalWork = {
     localTurnId: string;
     ponderTurnId: string | null;
     status: "claimed" | "acknowledged" | "attention";
+    outcome?: "completed" | "failed" | "cancelled";
     attentionAt: string | null;
     attentionReason: string | null;
     outputs: PonderLocalMessagePresentation["outputs"];
